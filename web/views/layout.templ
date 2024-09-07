@@ -1,0 +1,46 @@
+package views
+
+templ baseLayout(pageTitle string) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ pageTitle }</title>
+			<link rel="stylesheet" href="https://rsms.me/inter/inter.css"/>
+			<link rel="icon" type="image/x-svg" href="/images/favicon.svg"/>
+			<link rel="stylesheet" href="/styles/main.css"/>
+			<script src="/js/vendor/htmx.lib.js"></script>
+			<script defer src="/js/main.js"></script>
+		</head>
+		<body>
+			@container() {
+				@navbar()
+			}
+			<div class="pb-5">
+				{ children... }
+			</div>
+			<script>
+				document.body.addEventListener("htmx:beforeSwap", function (ev) {
+					const status = ev.detail.xhr.status
+					const statusesToShowResponseOn = [401, 403, 409, 422]
+					if (statusesToShowResponseOn.includes(status)) {
+						ev.detail.shouldSwap = true;
+						ev.detail.isError = false;
+					}
+				})
+			</script>
+		</body>
+	</html>
+}
+
+templ navbar() {
+	<nav class="flex gap-6 items-start my-4">
+		<div hx-boost="true" class="flex gap-6 justify-between w-full">
+			<div class="flex gap-6 items-start">
+				@navlink("/")
+			</div>
+			<!-- <div class="flex gap-6 items-start"></div> -->
+		</div>
+	</nav>
+}

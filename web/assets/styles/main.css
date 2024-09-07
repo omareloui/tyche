@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+@tailwind variants;
+
+.input-label {
+  @apply mb-1 block text-sm font-medium text-gray-900;
+}
+
+.input-field {
+  @apply bg-gray-50 border-2 border-gray-300 text-gray-900 text-sm rounded-lg focus:border-blue-300 block w-full p-2.5 focus:outline-none h-11;
+}
+
+textarea.input-field {
+  @apply h-32;
+}
+
+.form-visibility-button {
+  @apply rounded-full grid place-items-center;
+
+  --size: 40px;
+  width: var(--size);
+  height: var(--size);
+}
+
+.form-error-message {
+  @apply flex gap-1 text-red-400 mt-1 ml-2 items-center text-sm;
+}

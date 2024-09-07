@@ -1,0 +1,12 @@
+package views
+
+templ HomePage() {
+	@baseLayout("Homepage") {
+		@container() {
+			<h1>Financial Planner</h1>
+			@form("post", "/") {
+				@input("nothing", "text", "money", "money placeholder", "", FormInputData{})
+			}
+		}
+	}
+}

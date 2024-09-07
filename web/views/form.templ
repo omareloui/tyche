@@ -1,0 +1,55 @@
+package views
+
+import (
+	"strings"
+	"fmt"
+)
+
+type FormInputData struct {
+	Value string `json:"value"`
+	Error string `json:"error"`
+}
+
+templ form(action, path string, attrs ...templ.Attributes) {
+	<form
+		class="grid gap-2 entry-container"
+		{ templ.Attributes{fmt.Sprintf("hx-%s", action): string(templ.SafeURL(path))}... }
+		hx-swap="outerHTML"
+		if attrs != nil {
+			{ attrs[0]... }
+		}
+	>
+		{ children... }
+	</form>
+}
+
+templ input(label, kind, name, placeholder, idSuffix string, data FormInputData) {
+	<div>
+		<label class="input-label" for={ join(name, idSuffix) }>{ label }</label>
+		<input
+			id={ join(name, idSuffix) }
+			type={ kind }
+			name={ name }
+			placeholder={ placeholder }
+			class="input-field"
+			value={ data.Value }
+		/>
+		@errorMessage(data.Error)
+	</div>
+}
+
+templ errorMessage(message string) {
+	if message != "" {
+		<div class="form-error-message">
+			@errIcon("18px")
+			<span>{ message }</span>
+		</div>
+	}
+}
+
+func join(prefix, suffix string) string {
+	if suffix == "" {
+		return prefix
+	}
+	return strings.Join([]string{prefix, suffix}, "-")
+}
