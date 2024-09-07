@@ -1,12 +1,25 @@
 package views
 
-templ HomePage() {
+templ HomePage(monthlyIncome, monthlyExpenses string) {
 	@baseLayout("Homepage") {
 		@container() {
 			<h1>Financial Planner</h1>
+			<h2>Income and Essential Expenses</h2>
 			@form("post", "/") {
-				@input("nothing", "text", "money", "money placeholder", "", FormInputData{})
+				@input("Monthly Income", "number", "income", "Income", "", FormInputData{Value: monthlyIncome})
+				@input("Monthly Expenses", "number", "expenses", "Expenses", "", FormInputData{Value: monthlyExpenses})
+				<!-- <input type="submit" value="submit"/> -->
 			}
+			<hr/>
+			<h2>Wants</h2>
+			@form("post", "/") {
+				@input("Monthly Income", "number", "income", "Income", "", FormInputData{Value: monthlyIncome})
+				@input("Monthly Expenses", "number", "expenses", "Expenses", "", FormInputData{Value: monthlyExpenses})
+				<!-- <input type="submit" value="submit"/> -->
+			}
+			<div>
+				<h2>plan: WIP...</h2>
+			</div>
 		}
 	}
 }

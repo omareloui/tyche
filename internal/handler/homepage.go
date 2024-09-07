@@ -8,5 +8,8 @@ import (
 )
 
 func HomePageHandler(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	return views.HomePage(), nil
+	monthlyIncome := "14000"
+	monthlyExpenses := "6500"
+
+	return views.HomePage(monthlyIncome, monthlyExpenses), nil
 }

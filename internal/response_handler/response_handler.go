@@ -2,7 +2,6 @@ package response_handler
 
 import (
 	"errors"
-	"io"
 	"log"
 	"net/http"
 
@@ -21,15 +20,15 @@ func (rh *ResponseHandler) Handler(fun func(w http.ResponseWriter, r *http.Reque
 		if err != nil {
 			var httperr *resperr.RespError
 			if errors.As(err, &httperr) {
-				rh.ErrorResponse(w, r, httperr.Code)
+				rh.ErrorResponse(w, httperr)
 				return
 			}
-			rh.ErrorResponse(w, r, http.StatusInternalServerError)
+			rh.ErrorResponse(w, resperr.NewRespError(http.StatusInternalServerError))
 			return
 		}
 
 		if err := comp.Render(r.Context(), w); err != nil {
-			rh.ErrorResponse(w, r, http.StatusInternalServerError)
+			rh.ErrorResponse(w, resperr.NewRespError(http.StatusInternalServerError))
 			return
 		}
 
@@ -37,25 +36,13 @@ func (rh *ResponseHandler) Handler(fun func(w http.ResponseWriter, r *http.Reque
 	}
 }
 
-func (rh *ResponseHandler) ErrorResponse(w http.ResponseWriter, r *http.Request, code int) {
-	rh.PrepareResponse(w, code)
-	_, err := io.WriteString(w, http.StatusText(code))
-	if err != nil {
-		rh.ErrorResponse(w, r, http.StatusInternalServerError)
-	}
-}
-
-func (rh *ResponseHandler) OkResponse(w http.ResponseWriter, r *http.Request, body string) {
-	rh.PrepareResponse(w, http.StatusOK)
-	_, err := io.WriteString(w, body)
-	if err != nil {
-		rh.ErrorResponse(w, r, http.StatusInternalServerError)
-	}
+func (rh *ResponseHandler) ErrorResponse(w http.ResponseWriter, err *resperr.RespError) {
+	http.Error(w, http.StatusText(err.Code), err.Code)
 }
 
 func (rh *ResponseHandler) PrepareResponse(w http.ResponseWriter, code int) {
 	if code != 0 {
 		w.WriteHeader(code)
 	}
-	w.Header().Set("Content-Type", "text/html")
+	w.Header().Add("Content-Type", "text/html")
 }

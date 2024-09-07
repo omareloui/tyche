@@ -9,6 +9,9 @@ templ:
 	@echo "Generating the templates..."
 	@templ generate
 
+templ-dev:
+	@templ generate --watch
+
 start: build
 	@echo "Starting the service..."
 	@./tmp/main
@@ -18,3 +21,6 @@ css-dev:
 
 css:
 	@pnpm dlx tailwindcss -c ./config/.tailwind.config.js -i ./web/assets/styles/main.css -o ./web/public/styles/main.css --minify
+
+dev-assets:
+	make -j2 templ-dev css-dev

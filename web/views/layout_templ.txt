@@ -1,0 +1,6 @@
+<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><title>
+</title><link rel=\"stylesheet\" href=\"https://rsms.me/inter/inter.css\"><link rel=\"icon\" type=\"image/x-svg\" href=\"/images/favicon.svg\"><link rel=\"stylesheet\" href=\"/styles/main.css\"><script src=\"/js/vendor/htmx.lib.js\"></script><script defer src=\"/js/main.js\"></script></head><body>
+<div class=\"pb-5\">
+</div><script>\n\t\t\t\tdocument.body.addEventListener(\"htmx:beforeSwap\", function (ev) {\n\t\t\t\t\tconst status = ev.detail.xhr.status\n\t\t\t\t\tconst statusesToShowResponseOn = [401, 403, 409, 422]\n\t\t\t\t\tif (statusesToShowResponseOn.includes(status)) {\n\t\t\t\t\t\tev.detail.shouldSwap = true;\n\t\t\t\t\t\tev.detail.isError = false;\n\t\t\t\t\t}\n\t\t\t\t})\n\t\t\t</script></body></html>
+<nav class=\"flex gap-6 items-start my-4\"><div hx-boost=\"true\" class=\"flex gap-6 justify-between w-full\"><div class=\"flex gap-6 items-start\">
+</div><!-- <div class=\"flex gap-6 items-start\"></div> --></div></nav>
