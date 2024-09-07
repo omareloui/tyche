@@ -1,24 +1,29 @@
-package routes
+package router
 
 import (
 	"fmt"
 	"net/http"
 
+	"github.com/omareloui/financial-plans/internal/db"
 	"github.com/omareloui/financial-plans/internal/handler"
 	"github.com/omareloui/financial-plans/internal/response_handler"
 )
 
-func Router() http.Handler {
+type Router interface {
+	http.Handler
+}
+
+func NewRouter(queries *db.Queries) Router {
 	rh := response_handler.NewResponseHandler()
+	h := handler.NewHandler(queries)
+
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /{$}", rh.Handler(handler.HomePageHandler))
-
-	mux.HandleFunc("GET /500", rh.Handler(handler.InternalServerErrorHandler))
+	mux.HandleFunc("GET /{$}", rh.Handler(h.HomePageHandler))
 
 	static(mux, []string{"styles", "js"}, "./web/public")
 
-	mux.HandleFunc("/", rh.Handler(handler.NotFoundHandler))
+	mux.HandleFunc("/", rh.Handler(h.NotFoundHandler))
 
 	return mux
 }

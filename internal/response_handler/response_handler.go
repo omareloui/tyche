@@ -11,7 +11,9 @@ import (
 
 type ResponseHandler struct{}
 
-func NewResponseHandler() *ResponseHandler { return new(ResponseHandler) }
+func NewResponseHandler() *ResponseHandler {
+	return &ResponseHandler{}
+}
 
 func (rh *ResponseHandler) Handler(fun func(w http.ResponseWriter, r *http.Request) (templ.Component, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

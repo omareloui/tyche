@@ -7,10 +7,10 @@ import (
 	"github.com/omareloui/financial-plans/internal/resperr"
 )
 
-func NotFoundHandler(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+func (h Handler) NotFoundHandler(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	return nil, resperr.NewRespError(http.StatusNotFound)
 }
 
-func InternalServerErrorHandler(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+func (h Handler) InternalServerErrorHandler(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	return nil, resperr.NewRespError(http.StatusInternalServerError)
 }

@@ -5,16 +5,33 @@ import (
 	"log"
 	"net/http"
 
+	_ "embed"
+
+	"github.com/joho/godotenv"
+	_ "github.com/mattn/go-sqlite3"
+
 	"github.com/omareloui/financial-plans/config"
-	"github.com/omareloui/financial-plans/internal/routes"
+	"github.com/omareloui/financial-plans/internal/dbconn"
+	"github.com/omareloui/financial-plans/internal/router"
 )
 
 func main() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
 	port := config.GetApplicationPort()
+
+	queries, err := dbconn.Connect(config.GetDataSource())
+	if err != nil {
+		log.Fatalln("error connecting to the database", err)
+		return
+	}
 
 	srv := http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
-		Handler: routes.Router(),
+		Handler: router.NewRouter(queries),
 	}
 
 	log.Printf("Starting to listen on http://localhost:%d\n", port)
