@@ -21,7 +21,7 @@ func main() {
 
 	port := config.GetApplicationPort()
 
-	queries, err := dbconn.Connect(config.GetDataSource())
+	db, err := dbconn.Connect(config.GetDataSource())
 	if err != nil {
 		log.Fatalln("error connecting to the database", err)
 		return
@@ -29,7 +29,7 @@ func main() {
 
 	srv := http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
-		Handler: router.NewRouter(queries),
+		Handler: router.NewRouter(db),
 	}
 
 	log.Printf("Starting to listen on http://localhost:%d\n", port)
