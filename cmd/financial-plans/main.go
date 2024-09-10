@@ -5,8 +5,6 @@ import (
 	"log"
 	"net/http"
 
-	_ "embed"
-
 	"github.com/joho/godotenv"
 	_ "github.com/mattn/go-sqlite3"
 

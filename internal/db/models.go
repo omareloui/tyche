@@ -8,8 +8,56 @@ import (
 	"database/sql"
 )
 
-type Author struct {
-	ID   int64
-	Name string
-	Bio  sql.NullString
+type Balance struct {
+	ID         string
+	Amount     int64
+	CurrencyID string
+}
+
+type Currency struct {
+	ID       string
+	Currency string
+}
+
+type Goal struct {
+	ID          string
+	Title       string
+	IsActive    bool
+	AchievedOn  sql.NullTime
+	StartedOn   sql.NullTime
+	SumTotalEgp sql.NullInt64
+	CreatedAt   sql.NullTime
+}
+
+type GoalItem struct {
+	ID         string
+	Title      string
+	Amount     int64
+	CurrencyID string
+	GoalID     string
+}
+
+type GoalPlanEntry struct {
+	ID                string
+	Amount            int64
+	CurrencyID        string
+	TransactionKindID string
+	GoalID            string
+}
+
+type Transaction struct {
+	ID                string
+	Amount            int64
+	CurrencyID        string
+	TransactionKindID string
+	CanRepeat         bool
+	FulfilledOn       sql.NullTime
+	ScheduledTo       sql.NullTime
+	CreatedAt         sql.NullTime
+}
+
+type TransactionKind struct {
+	ID              string
+	Kind            string
+	IncreaseBalance sql.NullBool
 }
