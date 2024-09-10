@@ -8,7 +8,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 
 	"github.com/joho/godotenv"
-	"github.com/omareloui/financial-plans/config"
+	"github.com/omareloui/financial-plans/internal/config"
 	"github.com/omareloui/financial-plans/internal/db"
 	"github.com/omareloui/financial-plans/internal/dbconn"
 	"github.com/omareloui/financial-plans/internal/idgen"
