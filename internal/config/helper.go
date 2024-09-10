@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"slices"
 	"strconv"
 )
 
@@ -21,4 +22,12 @@ func getEnvironmentInt(key string) int {
 		log.Fatalf("%s: %s is invalid integer", key, envStr)
 	}
 	return prasedInt
+}
+
+func getEnvironmentValueFromOptions(key string, options []string) string {
+	v := getEnvironmentValue(key)
+	if idx := slices.Index(options, v); idx == -1 {
+		log.Fatalf("%s environment variable should be one of: %v", key, options)
+	}
+	return v
 }
