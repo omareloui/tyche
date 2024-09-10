@@ -45,3 +45,67 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 	)
 	return err
 }
+
+const getTransactions = `-- name: GetTransactions :many
+SELECT
+    t.id,
+    t.amount,
+    t.currency_id,
+    t.transaction_kind_id,
+    t.can_repeat,
+    t.fulfilled_on,
+    t.scheduled_to,
+    t.created_at,
+    c.currency,
+    k.kind
+FROM transactions AS t
+LEFT JOIN currencies AS c ON c.id = transactions.currency_id
+LEFT JOIN transaction_kinds AS k ON k.id = transactions.transaction_kind_id
+`
+
+type GetTransactionsRow struct {
+	ID                string
+	Amount            int64
+	CurrencyID        string
+	TransactionKindID string
+	CanRepeat         bool
+	FulfilledOn       sql.NullTime
+	ScheduledTo       sql.NullTime
+	CreatedAt         interface{}
+	Currency          sql.NullString
+	Kind              sql.NullString
+}
+
+func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getTransactions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetTransactionsRow
+	for rows.Next() {
+		var i GetTransactionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Amount,
+			&i.CurrencyID,
+			&i.TransactionKindID,
+			&i.CanRepeat,
+			&i.FulfilledOn,
+			&i.ScheduledTo,
+			&i.CreatedAt,
+			&i.Currency,
+			&i.Kind,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
