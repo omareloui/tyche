@@ -13,9 +13,9 @@ type Router interface {
 	http.Handler
 }
 
-func NewRouter(queries *db.Queries) Router {
+func NewRouter(db *db.Queries) Router {
 	rh := response_handler.NewResponseHandler()
-	h := handler.NewHandler(queries)
+	h := handler.NewHandler(db)
 
 	mux := http.NewServeMux()
 

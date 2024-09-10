@@ -31,10 +31,10 @@ migrate-create:
 	@fi
 
 templ:
-	@templ generate
+	@templ generate --path web/views
 
 templ-dev:
-	@templ generate --watch
+	@templ generate --path web/views --watch
 
 css:
 	@pnpm dlx tailwindcss -c internal/config/.tailwind.config.js -i ./web/assets/styles/main.css -o ./web/public/styles/main.css --minify

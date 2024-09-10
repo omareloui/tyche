@@ -29,25 +29,21 @@ func (q *Queries) CreateTransactionKind(ctx context.Context, arg CreateTransacti
 const getTransactionKinds = `-- name: GetTransactionKinds :many
 SELECT
     id,
-    kind
+    kind,
+    increase_balance
 FROM transaction_kinds
 `
 
-type GetTransactionKindsRow struct {
-	ID   string
-	Kind string
-}
-
-func (q *Queries) GetTransactionKinds(ctx context.Context) ([]GetTransactionKindsRow, error) {
+func (q *Queries) GetTransactionKinds(ctx context.Context) ([]TransactionKind, error) {
 	rows, err := q.db.QueryContext(ctx, getTransactionKinds)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []GetTransactionKindsRow
+	var items []TransactionKind
 	for rows.Next() {
-		var i GetTransactionKindsRow
-		if err := rows.Scan(&i.ID, &i.Kind); err != nil {
+		var i TransactionKind
+		if err := rows.Scan(&i.ID, &i.Kind, &i.IncreaseBalance); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

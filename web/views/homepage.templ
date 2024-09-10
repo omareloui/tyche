@@ -1,25 +1,20 @@
 package views
 
-templ HomePage(monthlyIncome, monthlyExpenses string) {
+import (
+	"github.com/omareloui/financial-plans/internal/db"
+)
+
+templ HomePage(currencies []db.Currency, kinds []db.TransactionKind) {
 	@baseLayout("Homepage") {
 		@container() {
 			<h1>Financial Planner</h1>
-			<h2>Income and Essential Expenses</h2>
-			@form("post", "/") {
-				@input("Monthly Income", "number", "income", "Income", "", FormInputData{Value: monthlyIncome})
-				@input("Monthly Expenses", "number", "expenses", "Expenses", "", FormInputData{Value: monthlyExpenses})
-				<!-- <input type="submit" value="submit"/> -->
+			<h2>Create Transaction</h2>
+			for _, cur := range currencies {
+				<p>{ cur.Currency }</p>
 			}
-			<hr/>
-			<h2>Wants</h2>
-			@form("post", "/") {
-				@input("Monthly Income", "number", "income", "Income", "", FormInputData{Value: monthlyIncome})
-				@input("Monthly Expenses", "number", "expenses", "Expenses", "", FormInputData{Value: monthlyExpenses})
-				<!-- <input type="submit" value="submit"/> -->
+			for _, k := range kinds {
+				<p>{ k.Kind }</p>
 			}
-			<div>
-				<h2>plan: WIP...</h2>
-			</div>
 		}
 	}
 }

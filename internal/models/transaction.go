@@ -29,6 +29,7 @@ func DBTransactionToTransaction(dbTransaction db.Transaction) *Transaction {
 		CanRepeat:         dbTransaction.CanRepeat,
 		FulfilledOn:       dbTransaction.FulfilledOn.Time,
 		ScheduledTo:       dbTransaction.ScheduledTo.Time,
-		CreatedAt:         dbTransaction.CreatedAt.Time,
+		// TODO: test
+		CreatedAt: dbTransaction.CreatedAt.(time.Time),
 	}
 }
