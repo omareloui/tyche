@@ -1,13 +1,14 @@
 # Financial
 
-To start the application on development mode, run
+To start the application on development mode run
 
 ```bash
-docker compose --profile dev up --watch
+make dev
 ```
 
-Or to start in production mode, run:
+Or to start in production mode run:
 
 ```bash
+# FIXME:
 docker compose --profile prod up
 ```
