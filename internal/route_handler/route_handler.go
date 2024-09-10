@@ -33,7 +33,6 @@ func errorResponse(l *zap.Logger, w http.ResponseWriter, err error) {
 	var httperr *resperr.RespError
 	if !errors.As(err, &httperr) {
 		err = resperr.NewRespError(http.StatusInternalServerError)
-		return
 	}
 
 	l.Error("server error", zap.Error(err))
