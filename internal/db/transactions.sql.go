@@ -10,53 +10,38 @@ import (
 	"database/sql"
 )
 
-const createTransactionKind = `-- name: CreateTransactionKind :exec
-INSERT INTO transaction_kinds (id, kind, increase_balance)
-VALUES (?, ?, ?)
-`
-
-type CreateTransactionKindParams struct {
-	ID              string
-	Kind            string
-	IncreaseBalance sql.NullBool
-}
-
-func (q *Queries) CreateTransactionKind(ctx context.Context, arg CreateTransactionKindParams) error {
-	_, err := q.db.ExecContext(ctx, createTransactionKind, arg.ID, arg.Kind, arg.IncreaseBalance)
-	return err
-}
-
-const getTransactionKinds = `-- name: GetTransactionKinds :many
-SELECT
+const createTransaction = `-- name: CreateTransaction :exec
+INSERT INTO transactions (
     id,
-    kind
-FROM transaction_kinds
+    amount,
+    currency_id,
+    transaction_kind_id,
+    can_repeat,
+    fulfilled_on,
+    scheduled_to
+)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 `
 
-type GetTransactionKindsRow struct {
-	ID   string
-	Kind string
+type CreateTransactionParams struct {
+	ID                string
+	Amount            int64
+	CurrencyID        string
+	TransactionKindID string
+	CanRepeat         bool
+	FulfilledOn       sql.NullTime
+	ScheduledTo       sql.NullTime
 }
 
-func (q *Queries) GetTransactionKinds(ctx context.Context) ([]GetTransactionKindsRow, error) {
-	rows, err := q.db.QueryContext(ctx, getTransactionKinds)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetTransactionKindsRow
-	for rows.Next() {
-		var i GetTransactionKindsRow
-		if err := rows.Scan(&i.ID, &i.Kind); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionParams) error {
+	_, err := q.db.ExecContext(ctx, createTransaction,
+		arg.ID,
+		arg.Amount,
+		arg.CurrencyID,
+		arg.TransactionKindID,
+		arg.CanRepeat,
+		arg.FulfilledOn,
+		arg.ScheduledTo,
+	)
+	return err
 }

@@ -24,7 +24,7 @@ CREATE TABLE transactions (
     can_repeat BOOLEAN DEFAULT 0 NOT NULL,
     fulfilled_on DATE,
     scheduled_to DATE,
-    created_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW,
     FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE,
     FOREIGN KEY (transaction_kind_id) REFERENCES transaction_kinds (id)
 );
@@ -35,7 +35,7 @@ CREATE TABLE goals (
     achieved_on DATE,
     started_on DATE,
     sum_total_egp INT,
-    created_at TIMESTAMP
+    created_at TIMESTAMP NOT NULL DEFAULT NOW
 );
 CREATE TABLE goal_items (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
@@ -66,5 +66,5 @@ DROP TABLE transaction_kinds;
 DROP TABLE transactions;
 DROP TABLE goals;
 DROP TABLE goal_items;
-DROP TABLE goal_plan_entries
+DROP TABLE goal_plan_entries;
 -- +goose StatementEnd

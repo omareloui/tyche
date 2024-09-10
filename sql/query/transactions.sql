@@ -1,10 +1,11 @@
--- name: GetTransactionKinds :many
-SELECT
+-- name: CreateTransaction :exec
+INSERT INTO transactions (
     id,
-    kind
-FROM transaction_kinds;
-
-
--- name: CreateTransactionKind :exec
-INSERT INTO transaction_kinds (id, kind, increase_balance)
-VALUES (?, ?, ?);
+    amount,
+    currency_id,
+    transaction_kind_id,
+    can_repeat,
+    fulfilled_on,
+    scheduled_to
+)
+VALUES (?, ?, ?, ?, ?, ?, ?);

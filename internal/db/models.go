@@ -26,7 +26,7 @@ type Goal struct {
 	AchievedOn  sql.NullTime
 	StartedOn   sql.NullTime
 	SumTotalEgp sql.NullInt64
-	CreatedAt   sql.NullTime
+	CreatedAt   interface{}
 }
 
 type GoalItem struct {
@@ -53,7 +53,7 @@ type Transaction struct {
 	CanRepeat         bool
 	FulfilledOn       sql.NullTime
 	ScheduledTo       sql.NullTime
-	CreatedAt         sql.NullTime
+	CreatedAt         interface{}
 }
 
 type TransactionKind struct {
