@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/omareloui/financial-plans/internal/db"
 	"github.com/omareloui/financial-plans/internal/handler"
 	"github.com/omareloui/financial-plans/internal/response_handler"
 )
@@ -13,10 +12,7 @@ type Router interface {
 	http.Handler
 }
 
-func NewRouter(db *db.Queries) Router {
-	rh := response_handler.NewResponseHandler()
-	h := handler.NewHandler(db)
-
+func New(h *handler.Handler, rh *response_handler.ResponseHandler) Router {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /{$}", rh.Handler(h.HomePageHandler))

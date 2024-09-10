@@ -11,7 +11,7 @@ import (
 
 type ResponseHandler struct{}
 
-func NewResponseHandler() *ResponseHandler {
+func New() *ResponseHandler {
 	return &ResponseHandler{}
 }
 

@@ -10,6 +10,9 @@ import (
 
 	"github.com/omareloui/financial-plans/internal/config"
 	"github.com/omareloui/financial-plans/internal/dbconn"
+	"github.com/omareloui/financial-plans/internal/handler"
+	"github.com/omareloui/financial-plans/internal/repository"
+	"github.com/omareloui/financial-plans/internal/response_handler"
 	"github.com/omareloui/financial-plans/internal/router"
 )
 
@@ -26,10 +29,13 @@ func main() {
 		log.Fatalln("error connecting to the database", err)
 		return
 	}
+	repo := repository.New(db)
+	h := handler.New(repo)
+	rh := response_handler.New()
 
 	srv := http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
-		Handler: router.NewRouter(db),
+		Handler: router.New(h, rh),
 	}
 
 	log.Printf("Starting to listen on http://localhost:%d\n", port)

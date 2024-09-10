@@ -1,10 +1,10 @@
 package views
 
 import (
-	"github.com/omareloui/financial-plans/internal/db"
+	"github.com/omareloui/financial-plans/internal/models"
 )
 
-templ HomePage(currencies []db.Currency, kinds []db.TransactionKind) {
+templ HomePage(currencies []models.Currency, kinds []models.TransactionKind) {
 	@baseLayout("Homepage") {
 		@container() {
 			<h1>Financial Planner</h1>

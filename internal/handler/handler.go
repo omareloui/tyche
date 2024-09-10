@@ -1,11 +1,13 @@
 package handler
 
-import "github.com/omareloui/financial-plans/internal/db"
+import (
+	"github.com/omareloui/financial-plans/internal/repository"
+)
 
 type Handler struct {
-	db *db.Queries
+	db *repository.Repository
 }
 
-func NewHandler(queries *db.Queries) *Handler {
-	return &Handler{db: queries}
+func New(repo *repository.Repository) *Handler {
+	return &Handler{db: repo}
 }

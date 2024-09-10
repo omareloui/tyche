@@ -9,10 +9,10 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 import (
-	"github.com/omareloui/financial-plans/internal/db"
+	"github.com/omareloui/financial-plans/internal/models"
 )
 
-func HomePage(currencies []db.Currency, kinds []db.TransactionKind) templ.Component {
+func HomePage(currencies []models.Currency, kinds []models.TransactionKind) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
