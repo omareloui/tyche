@@ -23,8 +23,12 @@ migrate:
 migrate-down:
 	@goose down
 
+.ONESHELL:
 migrate-create:
-	@if [[ -n "$(MIGRATION_NAME)" ]]; then goose create "$(MIGRATION_NAME)" sql; else echo "MIGRATION_NAME env variable is missing."; fi
+	@read -p "Migration Name: " _res
+	@if [[ -n $$_res ]]; then
+	@  goose create "$$_res" sql;
+	@fi
 
 templ:
 	@templ generate
@@ -40,3 +44,14 @@ css-dev:
 
 dev: migrate sqlgen
 	@make -j3 run templ-dev css-dev
+
+.ONESHELL:
+regen-db:
+	@read -p "Are you sure you want to delete the current database (y/N) " _res
+	@if [[ $$_res == "y" || $$_res == "Y" ]]; then
+	@  rm -rf data/db.sqlite internal/db
+	@  make --no-print-directory migrate &&
+	@  make --no-print-directory sqlgen &&
+	@  make --no-print-directory seed
+	@fi
+
