@@ -3,7 +3,7 @@ export GOOSE_DBSTRING=./data/db.sqlite
 export GOOSE_MIGRATION_DIR=./sql/schema
 
 run:
-	@air -c config/.air.toml
+	@air -c internal/config/.air.toml
 
 build: sqlgen migrate templ css
 	@go build -o ./tmp/main ./cmd/odinls
@@ -37,10 +37,10 @@ templ-dev:
 	@templ generate --watch
 
 css:
-	@pnpm dlx tailwindcss -c ./config/.tailwind.config.js -i ./web/assets/styles/main.css -o ./web/public/styles/main.css --minify
+	@pnpm dlx tailwindcss -c internal/config/.tailwind.config.js -i ./web/assets/styles/main.css -o ./web/public/styles/main.css --minify
 
 css-dev:
-	@pnpm dlx tailwindcss -c ./config/.tailwind.config.js -i ./web/assets/styles/main.css -o ./web/public/styles/main.css --minify --watch
+	@pnpm dlx tailwindcss -c internal/config/.tailwind.config.js -i ./web/assets/styles/main.css -o ./web/public/styles/main.css --minify --watch
 
 dev: migrate sqlgen
 	@make -j3 run templ-dev css-dev
