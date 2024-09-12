@@ -1,20 +1,9 @@
 package views
 
-import (
-	"github.com/omareloui/financial-plans/internal/models"
-)
-
-templ HomePage(currencies []models.Currency, kinds []models.TransactionKind) {
+templ HomePage() {
 	@baseLayout("Homepage") {
 		@container() {
-			<h1>Financial Planner</h1>
-			<h2>Create Transaction</h2>
-			for _, cur := range currencies {
-				<p>{ cur.Currency }</p>
-			}
-			for _, k := range kinds {
-				<p>{ k.Kind }</p>
-			}
+			<h1>Homepage!</h1>
 		}
 	}
 }

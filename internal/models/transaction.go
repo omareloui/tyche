@@ -7,14 +7,14 @@ import (
 )
 
 type Transaction struct {
-	ID                string
-	Amount            int64
-	CurrencyID        string
-	TransactionKindID string
-	CanRepeat         bool
-	FulfilledOn       time.Time
-	ScheduledTo       time.Time
-	CreatedAt         time.Time
+	ID          string `validate:"omitempty"`
+	Amount      int64  `validate:"required,min=1"`
+	CurrencyID  string `validate:"required"`
+	KindID      string `validate:"required"`
+	IsRecurrent bool
+	FulfilledOn time.Time `validate:"omitempty"`
+	ScheduledTo time.Time `validate:"omitempty"`
+	CreatedAt   time.Time `validate:"required"`
 
 	Kind     string
 	Currency string
@@ -22,14 +22,12 @@ type Transaction struct {
 
 func DBTransactionToTransaction(dbTransaction db.Transaction) *Transaction {
 	return &Transaction{
-		ID:                dbTransaction.ID,
-		Amount:            dbTransaction.Amount,
-		CurrencyID:        dbTransaction.CurrencyID,
-		TransactionKindID: dbTransaction.TransactionKindID,
-		CanRepeat:         dbTransaction.CanRepeat,
-		FulfilledOn:       dbTransaction.FulfilledOn.Time,
-		ScheduledTo:       dbTransaction.ScheduledTo.Time,
-		// TODO: test
-		CreatedAt: dbTransaction.CreatedAt.(time.Time),
+		ID:          dbTransaction.ID,
+		Amount:      dbTransaction.Amount,
+		CurrencyID:  dbTransaction.CurrencyID,
+		KindID:      dbTransaction.KindID,
+		FulfilledOn: dbTransaction.FulfilledOn.Time,
+		ScheduledTo: dbTransaction.ScheduledTo.Time,
+		CreatedAt:   dbTransaction.CreatedAt.(time.Time),
 	}
 }

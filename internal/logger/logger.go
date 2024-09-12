@@ -3,8 +3,6 @@ package logger
 import (
 	"context"
 	"os"
-	"runtime/debug"
-	"strconv"
 	"sync"
 
 	"github.com/omareloui/financial-plans/internal/config"
@@ -31,12 +29,7 @@ func Get() *zap.Logger {
 			Compress:   true,
 		})
 
-		logLevel, err := strconv.Atoi(os.Getenv("LOG_LEVEL"))
-		if err != nil {
-			logLevel = int(zap.InfoLevel)
-		}
-
-		level := zap.NewAtomicLevelAt(zapcore.Level(logLevel))
+		level := zap.NewAtomicLevelAt(zapcore.Level(config.GetLogLevel()))
 
 		productionCfg := zap.NewProductionEncoderConfig()
 		productionCfg.TimeKey = "timestamp"
@@ -55,20 +48,21 @@ func Get() *zap.Logger {
 				zapcore.NewCore(fileEncoder, file, level),
 			)
 		}
-		var gitRevision string
+		// var gitRevision string
 
-		buildInfo, ok := debug.ReadBuildInfo()
-		if ok {
-			for _, v := range buildInfo.Settings {
-				if v.Key == "vcs.revision" {
-					gitRevision = v.Value
-					break
-				}
-			}
-		}
+		// buildInfo, ok := debug.ReadBuildInfo()
+		// if ok {
+		// 	for _, v := range buildInfo.Settings {
+		// 		if v.Key == "vcs.revision" {
+		// 			gitRevision = v.Value
+		// 			break
+		// 		}
+		// 	}
+		// }
 
-		logger = zap.New(core).
-			With(zap.String("git_revision", gitRevision), zap.String("go_version", buildInfo.GoVersion))
+		// logger = zap.New(core).
+		// 	With(zap.String("git_revision", gitRevision), zap.String("go_version", buildInfo.GoVersion))
+		logger = zap.New(core)
 	})
 
 	return logger

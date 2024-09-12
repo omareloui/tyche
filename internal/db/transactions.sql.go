@@ -15,22 +15,20 @@ INSERT INTO transactions (
     id,
     amount,
     currency_id,
-    transaction_kind_id,
-    can_repeat,
+    kind_id,
     fulfilled_on,
     scheduled_to
 )
-VALUES (?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?)
 `
 
 type CreateTransactionParams struct {
-	ID                string
-	Amount            int64
-	CurrencyID        string
-	TransactionKindID string
-	CanRepeat         bool
-	FulfilledOn       sql.NullTime
-	ScheduledTo       sql.NullTime
+	ID          string
+	Amount      int64
+	CurrencyID  string
+	KindID      string
+	FulfilledOn sql.NullTime
+	ScheduledTo sql.NullTime
 }
 
 func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionParams) error {
@@ -38,8 +36,7 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 		arg.ID,
 		arg.Amount,
 		arg.CurrencyID,
-		arg.TransactionKindID,
-		arg.CanRepeat,
+		arg.KindID,
 		arg.FulfilledOn,
 		arg.ScheduledTo,
 	)
@@ -51,8 +48,7 @@ SELECT
     t.id,
     t.amount,
     t.currency_id,
-    t.transaction_kind_id,
-    t.can_repeat,
+    t.kind_id,
     t.fulfilled_on,
     t.scheduled_to,
     t.created_at,
@@ -60,20 +56,19 @@ SELECT
     k.kind
 FROM transactions AS t
 LEFT JOIN currencies AS c ON c.id = transactions.currency_id
-LEFT JOIN transaction_kinds AS k ON k.id = transactions.transaction_kind_id
+LEFT JOIN transaction_kinds AS k ON k.id = transactions.kind_id
 `
 
 type GetTransactionsRow struct {
-	ID                string
-	Amount            int64
-	CurrencyID        string
-	TransactionKindID string
-	CanRepeat         bool
-	FulfilledOn       sql.NullTime
-	ScheduledTo       sql.NullTime
-	CreatedAt         interface{}
-	Currency          sql.NullString
-	Kind              sql.NullString
+	ID          string
+	Amount      int64
+	CurrencyID  string
+	KindID      string
+	FulfilledOn sql.NullTime
+	ScheduledTo sql.NullTime
+	CreatedAt   interface{}
+	Currency    sql.NullString
+	Kind        sql.NullString
 }
 
 func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, error) {
@@ -89,8 +84,7 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.ID,
 			&i.Amount,
 			&i.CurrencyID,
-			&i.TransactionKindID,
-			&i.CanRepeat,
+			&i.KindID,
 			&i.FulfilledOn,
 			&i.ScheduledTo,
 			&i.CreatedAt,

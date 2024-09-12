@@ -20,13 +20,12 @@ CREATE TABLE transactions (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
     amount INT DEFAULT 0 NOT NULL,
     currency_id VARCHAR(16) NOT NULL,
-    transaction_kind_id VARCHAR(16) NOT NULL,
-    can_repeat BOOLEAN DEFAULT FALSE NOT NULL,
+    kind_id VARCHAR(16) NOT NULL,
     fulfilled_on DATE,
     scheduled_to DATE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW,
     FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE,
-    FOREIGN KEY (transaction_kind_id) REFERENCES transaction_kinds (id)
+    FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id)
 );
 CREATE TABLE goals (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
@@ -50,11 +49,11 @@ CREATE TABLE goal_plan_entries (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
     amount INT DEFAULT 0 NOT NULL,
     currency_id VARCHAR(16) NOT NULL,
-    transaction_kind_id VARCHAR(16) NOT NULL,
+    kind_id VARCHAR(16) NOT NULL,
     goal_id VARCHAR(16) NOT NULL,
     FOREIGN KEY (currency_id) REFERENCES currencies (id),
     FOREIGN KEY (goal_id) REFERENCES goals (id) ON DELETE CASCADE,
-    FOREIGN KEY (transaction_kind_id) REFERENCES transaction_kinds (id)
+    FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id)
 );
 -- +goose StatementEnd
 

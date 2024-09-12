@@ -33,7 +33,7 @@ func RequestLogger(next http.Handler) http.Handler {
 				"incoming request",
 				zap.String("method", r.Method),
 				zap.String("url", r.URL.RequestURI()),
-				zap.String("user_agent", r.UserAgent()),
+				// zap.String("user_agent", r.UserAgent()),
 				zap.Int("status_code", lrw.statusCode),
 				zap.Duration("elapsed_ms", time.Since(start)),
 			)

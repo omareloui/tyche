@@ -16,10 +16,12 @@ type Router interface {
 func New(h *handler.Handler) Router {
 	mux := http.NewServeMux()
 
-	mux.Handle("GET /{$}", handle(h.HomePageHandler))
+	mux.Handle("GET /{$}", handle(h.HomePage))
+	mux.Handle("GET /transactions", handle(h.Transactions))
+	mux.Handle("POST /transactions", handle(h.CreateTransaction))
 
 	static(mux, []string{"styles", "js"}, "./web/public")
-	mux.Handle("/", handle(h.NotFoundHandler))
+	mux.Handle("/", handle(h.NotFound))
 
 	return mux
 }

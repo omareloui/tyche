@@ -1,0 +1,29 @@
+package views
+
+type TransactionFormData struct {
+	Amount      FormInputData
+	CurrencyID  FormInputData
+	KindID      FormInputData
+	IsRecurrent FormInputData
+}
+
+templ Transactions(currencies map[string]string, kinds map[string]string, formdata *TransactionFormData) {
+	@baseLayout("Transactions") {
+		@container() {
+			<h1>Financial Planner</h1>
+			<h2>Create Transaction</h2>
+			@CreateTransactionForm(currencies, kinds, formdata)
+		}
+	}
+}
+
+templ CreateTransactionForm(currencies map[string]string, kinds map[string]string, formdata *TransactionFormData) {
+	@form("post", "/transactions") {
+		@input("Amount", "number", "amount", "1000$", "", formdata.Amount)
+		@selectInput("Currency", "currency_id", "Select a Currency", "", currencies, formdata.CurrencyID)
+		@selectInput("Kind", "kind_id", "Selected a Kind", "", kinds, formdata.KindID)
+		// TODO: show a date picker to select when to end the repeatation if this is true
+		@checkbox("Is Recurrent", "is_recurrent", "", formdata.IsRecurrent)
+		@sumbitButton("Create Transaction")
+	}
+}

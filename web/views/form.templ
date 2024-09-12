@@ -23,6 +23,46 @@ templ form(action, path string, attrs ...templ.Attributes) {
 	</form>
 }
 
+templ creationForm(title, postTo, submitStr string, close ...bool) {
+	<div
+		x-data={ fmt.Sprintf("{open: %v, toggle() {this.open = !this.open}}", close == nil || !close[0]) }
+		class="px-6 py-3 mb-6 bg-gray-100 rounded-lg"
+		hx-target="this"
+	>
+		<div
+			class="flex flex-column justify-between items-center"
+			@click="toggle"
+		>
+			<h2 class="text-xl font-bold">{ title }</h2>
+			<button
+				x-show="!open"
+				class="form-visibility-button bg-gray-300"
+				aria-label="expand form"
+				type="button"
+			>
+				@downIcon("20px")
+			</button>
+			<button
+				x-show="open"
+				class="form-visibility-button bg-red-500 text-white"
+				aria-label="collapse form"
+				type="button"
+			>
+				@closeIcon("15px")
+			</button>
+		</div>
+		@form("post", postTo, templ.Attributes{"x-show": "open", "x-collapse.duration.1000ms": true}) {
+			{ children... }
+			<button
+				type="submit"
+				class="text-white bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-lg w-full sm:w-auto px-5 py-2.5 text-center"
+			>
+				{ submitStr }
+			</button>
+		}
+	</div>
+}
+
 templ input(label, kind, name, placeholder, idSuffix string, data FormInputData) {
 	<div>
 		<label class="input-label" for={ join(name, idSuffix) }>{ label }</label>
@@ -36,6 +76,47 @@ templ input(label, kind, name, placeholder, idSuffix string, data FormInputData)
 		/>
 		@errorMessage(data.Error)
 	</div>
+}
+
+templ selectInput(label, name, placeholder, idSuffix string, options map[string]string, data FormInputData, classes ...string) {
+	<div class={ strings.Join(classes, " ") }>
+		<label for={ join(name, idSuffix) } class="input-label">{ label }</label>
+		<select
+			id={ join(name, idSuffix) }
+			name={ name }
+			class="input-field"
+		>
+			<option value="" disabled selected>{ placeholder }</option>
+			for k, v := range options {
+				if k == data.Value {
+					<option value={ k } selected>{ v }</option>
+				} else {
+					<option value={ k }>{ v }</option>
+				}
+			}
+		</select>
+		@errorMessage(data.Error)
+	</div>
+}
+
+templ checkbox(label, name, idSuffix string, data FormInputData) {
+	<div>
+		if data.Value == "on" {
+			<input id={ join(name, idSuffix) } type="checkbox" name={ name } checked/>
+		} else {
+			<input id={ join(name, idSuffix) } type="checkbox" name={ name }/>
+		}
+		<label for={ join(name, idSuffix) } class="cursor-pointer">{ label }</label>
+	</div>
+}
+
+templ sumbitButton(submitStr string) {
+	<button
+		type="submit"
+		class="text-white bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-lg w-full sm:w-auto px-5 py-2.5 text-center"
+	>
+		{ submitStr }
+	</button>
 }
 
 templ errorMessage(message string) {

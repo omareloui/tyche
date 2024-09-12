@@ -38,22 +38,21 @@ type GoalItem struct {
 }
 
 type GoalPlanEntry struct {
-	ID                string
-	Amount            int64
-	CurrencyID        string
-	TransactionKindID string
-	GoalID            string
+	ID         string
+	Amount     int64
+	CurrencyID string
+	KindID     string
+	GoalID     string
 }
 
 type Transaction struct {
-	ID                string
-	Amount            int64
-	CurrencyID        string
-	TransactionKindID string
-	CanRepeat         bool
-	FulfilledOn       sql.NullTime
-	ScheduledTo       sql.NullTime
-	CreatedAt         interface{}
+	ID          string
+	Amount      int64
+	CurrencyID  string
+	KindID      string
+	FulfilledOn sql.NullTime
+	ScheduledTo sql.NullTime
+	CreatedAt   interface{}
 }
 
 type TransactionKind struct {

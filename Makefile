@@ -43,7 +43,7 @@ css-dev:
 	@pnpm dlx tailwindcss -c internal/config/.tailwind.config.js -i ./web/assets/styles/main.css -o ./web/public/styles/main.css --minify --watch
 
 dev: migrate sqlgen
-	@make -j3 run templ-dev css-dev
+	@make -j4 run templ-dev css-dev
 
 .ONESHELL:
 regen-db:
