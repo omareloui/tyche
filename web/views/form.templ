@@ -63,8 +63,8 @@ templ creationForm(title, postTo, submitStr string, close ...bool) {
 	</div>
 }
 
-templ input(label, kind, name, placeholder, idSuffix string, data FormInputData) {
-	<div>
+templ input(label, kind, name, placeholder, idSuffix string, data FormInputData, classes ...string) {
+	<div class={ strings.Join(classes, " ") }>
 		<label class="input-label" for={ join(name, idSuffix) }>{ label }</label>
 		<input
 			id={ join(name, idSuffix) }
