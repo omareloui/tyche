@@ -3,6 +3,16 @@
 @tailwind utilities;
 @tailwind variants;
 
+.no-entries:empty:before {
+  content: "No entries yet!";
+  @apply text-gray-400 italic;
+}
+
+.entry-container {
+  @apply py-5 px-8 bg-gray-50 rounded-lg;
+}
+
+/* ============ FORM ============ */
 .input-label {
   @apply mb-1 block text-sm font-medium text-gray-900;
 }

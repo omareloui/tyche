@@ -26,9 +26,18 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 	}
 
 	l := logger.FromCtx(r.Context())
-	l.Debug("Create Transaction From Data", zap.Any("formdata", formdata))
+
+	transactions, err := h.repo.GetTransactions(r.Context())
+	if err != nil {
+		l.Error("Error on getting the transactions from database", zap.Error(err))
+		return nil, err
+	}
+
+	l.Debug("Transaction from data", zap.Any("formdata", formdata))
+	l.Debug("Returning transactions count", zap.Int("transactions_count", len(transactions)))
 
 	return views.Transactions(
+		transactions,
 		h.repo.CurrenciesToMap(currencies),
 		h.repo.TransactionKindsToMap(kinds), formdata), nil
 }

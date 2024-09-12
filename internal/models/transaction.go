@@ -1,6 +1,8 @@
 package models
 
 import (
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/omareloui/financial-plans/internal/db"
@@ -18,6 +20,16 @@ type Transaction struct {
 
 	Kind     string
 	Currency string
+}
+
+func (t *Transaction) ViewAmount() string {
+	strBuilder := new(strings.Builder)
+	strBuilder.WriteString(strconv.Itoa(int(t.Amount)))
+	if t.Currency != "" {
+		strBuilder.WriteString(" ")
+		strBuilder.WriteString(t.Currency)
+	}
+	return strBuilder.String()
 }
 
 func DBTransactionToTransaction(dbTransaction *db.Transaction) *Transaction {
@@ -43,5 +55,8 @@ func DBTransactionRawToTransaction(dbTransaction *db.GetTransactionsRow) *Transa
 		FulfilledOn: dbTransaction.FulfilledOn.Time,
 		ScheduledTo: dbTransaction.ScheduledTo.Time,
 		CreatedAt:   dbTransaction.CreatedAt.(time.Time),
+
+		Currency: dbTransaction.Currency.String,
+		Kind:     dbTransaction.Kind.String,
 	}
 }
