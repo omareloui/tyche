@@ -13,6 +13,7 @@ import (
 	"github.com/omareloui/financial-plans/internal/handler"
 	"github.com/omareloui/financial-plans/internal/repository"
 	"github.com/omareloui/financial-plans/internal/router"
+	"github.com/omareloui/financial-plans/internal/sanitizer"
 	"github.com/omareloui/financial-plans/internal/valid"
 )
 
@@ -31,7 +32,8 @@ func main() {
 	}
 	repo := repository.New(db)
 	valid := valid.New()
-	h := handler.New(repo, valid)
+	sani := sanitizer.New()
+	h := handler.New(repo, valid, sani)
 
 	srv := http.Server{
 		Addr:    fmt.Sprintf(":%d", port),

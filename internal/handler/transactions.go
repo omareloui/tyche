@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"slices"
 	"time"
@@ -20,10 +19,11 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 	if err != nil {
 		return nil, err
 	}
-	formdata, err := h.mapTransactionToFormData(defaultTransaction(currencies, kinds), nil)
+	formdata, err := h.mapTransactionToFormData(defaultTransaction(currencies, kinds), new(errs.ValidationError))
 	if err != nil {
 		return nil, err
 	}
+
 	l := logger.FromCtx(r.Context())
 	l.Debug("Create Transaction From Data", zap.Any("formdata", formdata))
 
@@ -39,8 +39,11 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 	if err != nil {
 		return nil, err
 	}
-
 	transaction.CreatedAt = time.Now()
+
+	if err := h.sani.SanitizeStruct(transaction); err != nil {
+		return nil, errs.ErrSanitizer
+	}
 
 	l.Debug("Create transaction", zap.Any("transaction", transaction))
 
@@ -113,7 +116,6 @@ func defaultTransaction(currencies []models.Currency, kinds []models.Transaction
 	defaultCurrency := "EGP"
 	defaultKind := "EXPENSES"
 	defaultCurrencyIdx := slices.IndexFunc(currencies, func(cur models.Currency) bool {
-		fmt.Println(cur)
 		return cur.Currency == defaultCurrency
 	})
 	defaultKindIdx := slices.IndexFunc(kinds, func(knd models.TransactionKind) bool {
@@ -124,6 +126,6 @@ func defaultTransaction(currencies []models.Currency, kinds []models.Transaction
 		Amount:      0,
 		CurrencyID:  currencies[defaultCurrencyIdx].ID,
 		KindID:      kinds[defaultKindIdx].ID,
-		IsRecurrent: true,
+		IsRecurrent: false,
 	}
 }
