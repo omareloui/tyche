@@ -21,6 +21,7 @@ CREATE TABLE transactions (
     amount INT DEFAULT 0 NOT NULL,
     currency_id VARCHAR(16) NOT NULL,
     kind_id VARCHAR(16) NOT NULL,
+    is_recurrent BOOLEAN NOT NULL DEFAULT FALSE,
     fulfilled_on DATE,
     scheduled_to DATE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW,

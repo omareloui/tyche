@@ -16,8 +16,8 @@ INSERT INTO transactions (
     amount,
     currency_id,
     kind_id,
-    fulfilled_on,
-    scheduled_to
+    is_recurrent,
+    created_at
 )
 VALUES (?, ?, ?, ?, ?, ?)
 `
@@ -27,8 +27,8 @@ type CreateTransactionParams struct {
 	Amount      int64
 	CurrencyID  string
 	KindID      string
-	FulfilledOn sql.NullTime
-	ScheduledTo sql.NullTime
+	IsRecurrent bool
+	CreatedAt   interface{}
 }
 
 func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionParams) error {
@@ -37,8 +37,8 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 		arg.Amount,
 		arg.CurrencyID,
 		arg.KindID,
-		arg.FulfilledOn,
-		arg.ScheduledTo,
+		arg.IsRecurrent,
+		arg.CreatedAt,
 	)
 	return err
 }
@@ -49,6 +49,7 @@ SELECT
     t.amount,
     t.currency_id,
     t.kind_id,
+    t.is_recurrent,
     t.fulfilled_on,
     t.scheduled_to,
     t.created_at,
@@ -64,6 +65,7 @@ type GetTransactionsRow struct {
 	Amount      int64
 	CurrencyID  string
 	KindID      string
+	IsRecurrent bool
 	FulfilledOn sql.NullTime
 	ScheduledTo sql.NullTime
 	CreatedAt   interface{}
@@ -85,6 +87,7 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.Amount,
 			&i.CurrencyID,
 			&i.KindID,
+			&i.IsRecurrent,
 			&i.FulfilledOn,
 			&i.ScheduledTo,
 			&i.CreatedAt,

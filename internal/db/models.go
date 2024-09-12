@@ -50,6 +50,7 @@ type Transaction struct {
 	Amount      int64
 	CurrencyID  string
 	KindID      string
+	IsRecurrent bool
 	FulfilledOn sql.NullTime
 	ScheduledTo sql.NullTime
 	CreatedAt   interface{}

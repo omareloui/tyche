@@ -4,8 +4,8 @@ INSERT INTO transactions (
     amount,
     currency_id,
     kind_id,
-    fulfilled_on,
-    scheduled_to
+    is_recurrent,
+    created_at
 )
 VALUES (?, ?, ?, ?, ?, ?);
 
@@ -15,6 +15,7 @@ SELECT
     t.amount,
     t.currency_id,
     t.kind_id,
+    t.is_recurrent,
     t.fulfilled_on,
     t.scheduled_to,
     t.created_at,

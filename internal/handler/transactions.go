@@ -8,6 +8,7 @@ import (
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/financial-plans/internal/errs"
+	"github.com/omareloui/financial-plans/internal/idgen"
 	"github.com/omareloui/financial-plans/internal/logger"
 	"github.com/omareloui/financial-plans/internal/models"
 	"github.com/omareloui/financial-plans/web/views"
@@ -39,6 +40,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 	if err != nil {
 		return nil, err
 	}
+	transaction.ID = idgen.New()
 	transaction.CreatedAt = time.Now()
 
 	if err := h.sani.SanitizeStruct(transaction); err != nil {
@@ -49,28 +51,31 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 
 	currencies, kinds, err := h.getCurrenciesAndKinds(r.Context())
 	if err != nil {
-		return nil, err
-	}
-
-	formdata, err := h.mapTransactionToFormData(transaction, new(errs.ValidationError))
-	if err != nil {
+		l.Error("Failed getting the currencies and kinds")
 		return nil, err
 	}
 
 	if valerr := h.valid.Validate(transaction); valerr != nil {
 		l.Error("Validation failed for creation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-		formdata, err = h.mapTransactionToFormData(transaction, valerr)
+		formdata, err := h.mapTransactionToFormData(transaction, valerr)
 		if err != nil {
 			return nil, err
 		}
+		return views.CreateTransactionForm(
+			h.repo.CurrenciesToMap(currencies),
+			h.repo.TransactionKindsToMap(kinds), formdata), nil
 	}
 
-	l.Debug("Create transaction form data", zap.Any("formdata", formdata))
+	if err := h.repo.CreateTransaction(r.Context(), transaction); err != nil {
+		l.Error("Failed creating transaction")
+		return nil, err
+	}
+	l.Info("Created transaction successfully")
 
-	// TODO:
-	// - [ ] save the transaction
-	// - [x] validate it and return if invalid
-	// - [ ] add the created transaction to the list
+	formdata, err := h.mapTransactionToFormData(defaultTransaction(currencies, kinds), new(errs.ValidationError))
+	if err != nil {
+		return nil, err
+	}
 
 	return views.CreateTransactionForm(
 		h.repo.CurrenciesToMap(currencies),
