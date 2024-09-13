@@ -47,6 +47,58 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 	return err
 }
 
+const getTransaction = `-- name: GetTransaction :one
+SELECT
+    t.id,
+    t.amount,
+    t.currency_id,
+    t.kind_id,
+    t.is_recurrent,
+    t.fulfilled_on,
+    t.scheduled_to,
+    t.created_at,
+    c.currency,
+    c.symbol,
+    k.kind
+FROM transactions AS t
+LEFT JOIN currencies AS c ON t.currency_id = c.id
+LEFT JOIN transaction_kinds AS k ON t.kind_id = k.id
+WHERE t.id = ? LIMIT 1
+`
+
+type GetTransactionRow struct {
+	ID          string
+	Amount      int64
+	CurrencyID  string
+	KindID      string
+	IsRecurrent bool
+	FulfilledOn sql.NullTime
+	ScheduledTo time.Time
+	CreatedAt   interface{}
+	Currency    sql.NullString
+	Symbol      sql.NullString
+	Kind        sql.NullString
+}
+
+func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransactionRow, error) {
+	row := q.db.QueryRowContext(ctx, getTransaction, id)
+	var i GetTransactionRow
+	err := row.Scan(
+		&i.ID,
+		&i.Amount,
+		&i.CurrencyID,
+		&i.KindID,
+		&i.IsRecurrent,
+		&i.FulfilledOn,
+		&i.ScheduledTo,
+		&i.CreatedAt,
+		&i.Currency,
+		&i.Symbol,
+		&i.Kind,
+	)
+	return i, err
+}
+
 const getTransactions = `-- name: GetTransactions :many
 SELECT
     t.id,

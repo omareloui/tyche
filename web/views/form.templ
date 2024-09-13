@@ -154,6 +154,31 @@ templ sumbitButton(submitStr string) {
 	</button>
 }
 
+templ editFormButtons(entryGetUrl string) {
+	<div class="flex gap-2 mt-2">
+		<button
+			type="submit"
+			class="text-white bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center grow"
+		>
+			Update
+		</button>
+		<button
+			type="button"
+			class="text-white bg-red-500 hover:bg-red-600 focus:outline-none focus:ring-4 focus:ring-red-200 font-medium rounded-lg text-sm px-5 py-2.5 text-center w-1/6"
+			hx-get={ string(templ.SafeURL(entryGetUrl)) }
+			hx-trigger="click, keyup[key === 'Escape'] from:body"
+		>Cancel</button>
+	</div>
+}
+
+templ editButton(getEditUrl string) {
+	<button
+		class="px-5 py-2.5 my-2 text-white bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm sm:w-auto text-center"
+		hx-get={ string(templ.SafeURL(getEditUrl)) }
+		hx-swap="outerHTML"
+	>Edit</button>
+}
+
 templ errorMessage(message string) {
 	if message != "" {
 		<div class="form-error-message">

@@ -140,6 +140,59 @@ func (h Handler) AmountInputs(w http.ResponseWriter, r *http.Request) (templ.Com
 	return views.AmountInputs(formdata, h.repo.CurrenciesToMap(curs), currency.Symbol), nil
 }
 
+func (h Handler) Transaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	tx, err := h.repo.GetTransaction(r.Context(), id)
+	if err != nil {
+		return nil, err
+	}
+
+	return views.Transaction(tx), nil
+}
+
+func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+
+	tx, err := h.repo.GetTransaction(r.Context(), id)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := h.sani.SanitizeStruct(tx); err != nil {
+		return nil, errs.ErrSanitizer
+	}
+
+	l.Debug("create transaction", zap.Any("transaction", tx))
+
+	currencies, kinds, err := h.getCurrenciesAndKinds(r.Context())
+	if err != nil {
+		l.Error("fetching currencies and kinds")
+		return nil, err
+	}
+
+	fd, err := h.mapTransactionToFormData(tx, new(errs.ValidationError))
+	if err != nil {
+		return nil, err
+	}
+
+	return views.EditTransaction(tx, fd,
+		h.repo.CurrenciesToMap(currencies),
+		h.repo.TransactionKindsToMap(kinds)), nil
+}
+
+func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	return nil, nil
+}
+
 func (h Handler) getCurrenciesAndKinds(ctx context.Context) ([]models.Currency, []models.TransactionKind, error) {
 	curs, err := h.repo.GetCurrencies(ctx)
 	if err != nil {

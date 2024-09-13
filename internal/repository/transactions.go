@@ -31,7 +31,15 @@ func (r *Repository) GetTransactions(ctx context.Context) ([]models.Transaction,
 
 	tx := make([]models.Transaction, len(dbTransactions))
 	for i, t := range dbTransactions {
-		tx[i] = *models.DBTransactionRawToTransaction(&t)
+		tx[i] = *models.DBTransactionsRawToTransaction(&t)
 	}
 	return tx, nil
+}
+
+func (r *Repository) GetTransaction(ctx context.Context, id string) (*models.Transaction, error) {
+	dbTx, err := r.db.GetTransaction(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return models.DBTransactionRawToTransaction(&dbTx), nil
 }

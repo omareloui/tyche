@@ -47,7 +47,27 @@ func DBTransactionToTransaction(dbTransaction *db.Transaction) *Transaction {
 	}
 }
 
-func DBTransactionRawToTransaction(dbTransaction *db.GetTransactionsRow) *Transaction {
+func DBTransactionRawToTransaction(dbTransaction *db.GetTransactionRow) *Transaction {
+	return &Transaction{
+		ID:          dbTransaction.ID,
+		Amount:      dbTransaction.Amount,
+		IsRecurrent: dbTransaction.IsRecurrent,
+		FulfilledOn: dbTransaction.FulfilledOn.Time,
+		ScheduledTo: dbTransaction.ScheduledTo,
+		CreatedAt:   dbTransaction.CreatedAt.(time.Time),
+		Currency: Currency{
+			ID:       dbTransaction.CurrencyID,
+			Currency: dbTransaction.Currency.String,
+			Symbol:   dbTransaction.Symbol.String,
+		},
+		Kind: TransactionKind{
+			ID:   dbTransaction.KindID,
+			Kind: dbTransaction.Kind.String,
+		},
+	}
+}
+
+func DBTransactionsRawToTransaction(dbTransaction *db.GetTransactionsRow) *Transaction {
 	return &Transaction{
 		ID:          dbTransaction.ID,
 		Amount:      dbTransaction.Amount,
