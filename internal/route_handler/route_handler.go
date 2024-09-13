@@ -22,6 +22,7 @@ func (fn RouteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := comp.Render(r.Context(), w); err != nil {
+		l.Error("rendering the component")
 		errorResponse(l, w, err)
 		return
 	}

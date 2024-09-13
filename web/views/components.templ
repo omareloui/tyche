@@ -6,6 +6,10 @@ templ container() {
 	</div>
 }
 
+templ mainHeader(text string) {
+	<h1 class="text-3xl font-bold mb-3 text-center">{ text }</h1>
+}
+
 templ link(href templ.SafeURL, text string) {
 	<a href={ href } class="text font-bold text-blue-500 rounded-sm focus:ring focus:ring-blue-300 focus:outline-none">
 		{ text }

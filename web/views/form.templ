@@ -110,13 +110,16 @@ templ dateInput(label, name, idSuffix string, data FormInputData, classes ...str
 	</div>
 }
 
-templ selectInput(label, name, placeholder, idSuffix string, options map[string]string, data FormInputData, classes ...string) {
-	<div class={ strings.Join(classes, " ") }>
+templ selectInput(label, name, placeholder, idSuffix string, options map[string]string, data FormInputData, inputAttrs ...templ.Attributes) {
+	<div>
 		<label for={ join(name, idSuffix) } class="input-label">{ label }</label>
 		<select
 			id={ join(name, idSuffix) }
 			name={ name }
 			class="input-field"
+			if inputAttrs != nil {
+				{ inputAttrs[0]... }
+			}
 		>
 			<option value="" disabled selected>{ placeholder }</option>
 			for k, v := range options {

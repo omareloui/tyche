@@ -1,7 +1,9 @@
 package views
 
-import "github.com/omareloui/financial-plans/internal/models"
-import "time"
+import (
+	"time"
+	"github.com/omareloui/financial-plans/internal/models"
+)
 
 type TransactionFormData struct {
 	Amount      FormInputData
@@ -19,7 +21,7 @@ templ Transactions(
 	defaultCurrencySymbol string) {
 	@baseLayout("Transactions") {
 		@container() {
-			<h2 class="text-3xl font-bold mb-3">Transactions</h2>
+			@mainHeader("Transactions")
 			@CreateTransactionForm(formdata, currencies, kinds, defaultCurrencySymbol)
 			@transactionsList(transactions)
 		}
@@ -28,15 +30,26 @@ templ Transactions(
 
 templ CreateTransactionForm(formdata *TransactionFormData, currencies map[string]string, kinds map[string]string, currencySymbol string) {
 	@creationForm("Create Transaction", "/transactions", "Create Transaction") {
-		<div class="grid grid-cols-3 gap-4">
-			@moneyInput("Amount", "amount", currencySymbol, "", formdata.Amount, "col-span-2")
-			@selectInput("Currency", "currency_id", "Select a Currency", "", currencies, formdata.CurrencyID)
-		</div>
+		@AmountInputs(formdata, currencies, currencySymbol)
 		@selectInput("Kind", "kind_id", "Selected a Kind", "", kinds, formdata.KindID)
 		// TODO: show how recurrent it is on check
 		@checkbox("Is Recurrent", "is_recurrent", "", formdata.IsRecurrent)
 		@dateInput("Date", "scheduled_to", "", formdata.ScheduledTo)
 	}
+}
+
+templ AmountInputs(formdata *TransactionFormData, currencies map[string]string, currencySymbol string) {
+	<div data-amount class="grid grid-cols-3 gap-4">
+		@moneyInput("Amount", "amount", currencySymbol, "", formdata.Amount, "col-span-2")
+		@selectInput("Currency", "currency_id", "Select a Currency", "", currencies, formdata.CurrencyID,
+			templ.Attributes{
+				"hx-post":    "/transactions/amount-inputs",
+				"hx-trigger": "change",
+				"hx-target":  "closest [data-amount]",
+				"hx-swap":    "outerHTML",
+				"hx-sync":    "closest form:abort",
+			})
+	</div>
 }
 
 templ TransactionOOB(tx *models.Transaction) {

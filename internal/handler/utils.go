@@ -22,11 +22,11 @@ func hxRespondWithRedirect(w http.ResponseWriter, path string) error {
 }
 
 func parseIntIfExists(str string) (int, error) {
+	str = nonDigitRegexp.ReplaceAllLiteralString(str, "")
 	if str != "" {
-		str = nonDigitRegexp.ReplaceAllLiteralString(str, "")
 		num, err := strconv.Atoi(str)
 		if err != nil {
-			return 0, errs.ErrInvalidFloat
+			return 0, errs.ErrInvalidNumber
 		}
 		return num, nil
 	}

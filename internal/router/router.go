@@ -19,6 +19,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("GET /{$}", handle(h.HomePage))
 	mux.Handle("GET /transactions", handle(h.Transactions))
 	mux.Handle("POST /transactions", handle(h.CreateTransaction))
+	mux.Handle("POST /transactions/amount-inputs", handle(h.AmountInputs))
 
 	static(mux, []string{"styles", "js"}, "./web/public")
 	mux.Handle("/", handle(h.NotFound))

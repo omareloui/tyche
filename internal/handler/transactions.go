@@ -31,12 +31,12 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 
 	transactions, err := h.repo.GetTransactions(r.Context())
 	if err != nil {
-		l.Error("Error on getting the transactions from database", zap.Error(err))
+		l.Error("fetch transaction from db", zap.Error(err))
 		return nil, err
 	}
 
-	l.Debug("Transaction from data", zap.Any("formdata", formdata))
-	l.Debug("Returning transactions count", zap.Int("transactions_count", len(transactions)))
+	l.Debug("transaction from data", zap.Any("formdata", formdata))
+	l.Debug("transactions count", zap.Int("transactions_count", len(transactions)))
 
 	defaultCurrency := slicesutils.Find(currencies, func(cur models.Currency) bool { return cur.Currency == config.GetDefaultCurrency() })
 	comp := views.Transactions(formdata, transactions,
@@ -61,17 +61,17 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		return nil, errs.ErrSanitizer
 	}
 
-	l.Debug("Create transaction", zap.Any("transaction", tx))
+	l.Debug("create transaction", zap.Any("transaction", tx))
 
 	currencies, kinds, err := h.getCurrenciesAndKinds(r.Context())
 	if err != nil {
-		l.Error("Failed getting the currencies and kinds")
+		l.Error("fetching currencies and kinds")
 		return nil, err
 	}
 	defaultCurrency := slicesutils.Find(currencies, func(cur models.Currency) bool { return cur.Currency == config.GetDefaultCurrency() })
 
 	if valerr := h.valid.Validate(tx); valerr != nil {
-		l.Error("Validation failed for creation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
+		l.Error("create transaction validation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
 		formdata, err := h.mapTransactionToFormData(tx, valerr)
 		if err != nil {
 			return nil, err
@@ -86,10 +86,10 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 	}
 
 	if err := h.repo.CreateTransaction(r.Context(), tx); err != nil {
-		l.Error("Failed creating transaction", zap.Error(err))
+		l.Error("creating transaction", zap.Error(err))
 		return nil, err
 	}
-	l.Info("Created transaction successfully")
+	l.Info("created transaction")
 
 	c := slicesutils.Find(currencies, func(cur models.Currency) bool { return cur.ID == tx.Currency.ID })
 	tx.Currency = *c
@@ -97,7 +97,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 	tx.Kind = *k
 
 	if err = renderToBody(w, r, views.TransactionOOB(tx)); err != nil {
-		l.Error("Failed rendering the OOB transaction")
+		l.Error("rendering OOB transaction")
 		return nil, err
 	}
 
@@ -112,6 +112,32 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		defaultCurrency.Symbol)
 
 	return comp, nil
+}
+
+func (h Handler) AmountInputs(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	l := logger.FromCtx(r.Context())
+
+	curs, err := h.repo.GetCurrencies(r.Context())
+	if err != nil {
+		l.Error("fetching currencies")
+		return nil, err
+	}
+
+	tx, err := h.mapFormDataToTransaction(r)
+	if err != nil {
+		return nil, err
+	}
+
+	currency := slicesutils.Find(curs, func(cur models.Currency) bool {
+		return cur.ID == tx.Currency.ID
+	})
+
+	formdata := &views.TransactionFormData{
+		Amount:     views.FormInputData{Value: r.FormValue("amount")},
+		CurrencyID: views.FormInputData{Value: currency.ID},
+	}
+
+	return views.AmountInputs(formdata, h.repo.CurrenciesToMap(curs), currency.Symbol), nil
 }
 
 func (h Handler) getCurrenciesAndKinds(ctx context.Context) ([]models.Currency, []models.TransactionKind, error) {
