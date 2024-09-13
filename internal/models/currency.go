@@ -1,6 +1,8 @@
 package models
 
-import "github.com/omareloui/financial-plans/internal/db"
+import (
+	"github.com/omareloui/financial-plans/internal/db"
+)
 
 type Currency struct {
 	ID       string

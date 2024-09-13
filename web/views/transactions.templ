@@ -12,8 +12,7 @@ type TransactionFormData struct {
 templ Transactions(transactions []models.Transaction, currencies map[string]string, kinds map[string]string, formdata *TransactionFormData) {
 	@baseLayout("Transactions") {
 		@container() {
-			<h1>Financial Planner</h1>
-			<h2>Create Transaction</h2>
+			<h2 class="text-3xl font-bold mb-3">Transactions</h2>
 			@CreateTransactionForm(currencies, kinds, formdata)
 			@transactionsList(transactions)
 		}
@@ -33,8 +32,14 @@ templ CreateTransactionForm(currencies map[string]string, kinds map[string]strin
 	}
 }
 
+templ TransactionOOB(tx *models.Transaction) {
+	<div id="tx-list" hx-swap-oob="beforeend">
+		@transaction(tx)
+	</div>
+}
+
 templ transactionsList(transactions []models.Transaction) {
-	@list("transactions-list") {
+	@list("tx-list") {
 		for _, t := range transactions {
 			@transaction(&t)
 		}

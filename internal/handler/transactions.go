@@ -11,6 +11,7 @@ import (
 	"github.com/omareloui/financial-plans/internal/idgen"
 	"github.com/omareloui/financial-plans/internal/logger"
 	"github.com/omareloui/financial-plans/internal/models"
+	"github.com/omareloui/financial-plans/internal/slicesutils"
 	"github.com/omareloui/financial-plans/web/views"
 	"go.uber.org/zap"
 )
@@ -45,18 +46,18 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	l := logger.FromCtx(r.Context())
 
-	transaction, err := h.mapFormDataToTransaction(r)
+	tx, err := h.mapFormDataToTransaction(r)
 	if err != nil {
 		return nil, err
 	}
-	transaction.ID = idgen.New()
-	transaction.CreatedAt = time.Now()
+	tx.ID = idgen.New()
+	tx.CreatedAt = time.Now()
 
-	if err := h.sani.SanitizeStruct(transaction); err != nil {
+	if err := h.sani.SanitizeStruct(tx); err != nil {
 		return nil, errs.ErrSanitizer
 	}
 
-	l.Debug("Create transaction", zap.Any("transaction", transaction))
+	l.Debug("Create transaction", zap.Any("transaction", tx))
 
 	currencies, kinds, err := h.getCurrenciesAndKinds(r.Context())
 	if err != nil {
@@ -64,9 +65,9 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		return nil, err
 	}
 
-	if valerr := h.valid.Validate(transaction); valerr != nil {
+	if valerr := h.valid.Validate(tx); valerr != nil {
 		l.Error("Validation failed for creation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-		formdata, err := h.mapTransactionToFormData(transaction, valerr)
+		formdata, err := h.mapTransactionToFormData(tx, valerr)
 		if err != nil {
 			return nil, err
 		}
@@ -75,11 +76,18 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 			h.repo.TransactionKindsToMap(kinds), formdata), nil
 	}
 
-	if err := h.repo.CreateTransaction(r.Context(), transaction); err != nil {
+	if err := h.repo.CreateTransaction(r.Context(), tx); err != nil {
 		l.Error("Failed creating transaction")
 		return nil, err
 	}
 	l.Info("Created transaction successfully")
+
+	tx.Currency = slicesutils.Find(currencies, func(cur models.Currency) bool { return cur.ID == tx.CurrencyID }).Currency
+
+	if err = renderToBody(w, r, views.TransactionOOB(tx)); err != nil {
+		l.Error("Failed rendering the OOB transaction")
+		return nil, err
+	}
 
 	formdata, err := h.mapTransactionToFormData(defaultTransaction(currencies, kinds), new(errs.ValidationError))
 	if err != nil {
