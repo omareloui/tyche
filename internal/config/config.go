@@ -15,3 +15,7 @@ func GetAppEnv() string {
 func GetLogLevel() int {
 	return getEnvironmentIntWithDefault("LOG_LEVEL", 0)
 }
+
+func GetDefaultCurrency() string {
+	return "EGP"
+}

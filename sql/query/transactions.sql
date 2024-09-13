@@ -5,9 +5,10 @@ INSERT INTO transactions (
     currency_id,
     kind_id,
     is_recurrent,
+    scheduled_to,
     created_at
 )
-VALUES (?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetTransactions :many
 SELECT
@@ -20,6 +21,7 @@ SELECT
     t.scheduled_to,
     t.created_at,
     c.currency,
+    c.symbol,
     k.kind
 FROM transactions AS t
 LEFT JOIN currencies AS c ON t.currency_id = c.id

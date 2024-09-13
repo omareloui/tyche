@@ -11,24 +11,22 @@ import (
 type Transaction struct {
 	ID          string `validate:"required"`
 	Amount      int64  `validate:"required,min=1"`
-	CurrencyID  string `validate:"required"`
-	KindID      string `validate:"required"`
 	IsRecurrent bool
 	FulfilledOn time.Time `validate:"omitempty"`
-	ScheduledTo time.Time `validate:"omitempty"`
+	ScheduledTo time.Time `validate:"required"`
 	CreatedAt   time.Time `validate:"required"`
 
-	Kind     string
-	Currency string
+	Kind     TransactionKind
+	Currency Currency
 }
 
 func (t *Transaction) ViewAmount() string {
 	strBuilder := new(strings.Builder)
-	strBuilder.WriteString(strconv.Itoa(int(t.Amount)))
-	if t.Currency != "" {
+	if t.Currency.Currency != "" {
+		strBuilder.WriteString(t.Currency.Symbol)
 		strBuilder.WriteString(" ")
-		strBuilder.WriteString(t.Currency)
 	}
+	strBuilder.WriteString(strconv.Itoa(int(t.Amount)))
 	return strBuilder.String()
 }
 
@@ -36,12 +34,16 @@ func DBTransactionToTransaction(dbTransaction *db.Transaction) *Transaction {
 	return &Transaction{
 		ID:          dbTransaction.ID,
 		Amount:      dbTransaction.Amount,
-		CurrencyID:  dbTransaction.CurrencyID,
-		KindID:      dbTransaction.KindID,
 		IsRecurrent: dbTransaction.IsRecurrent,
 		FulfilledOn: dbTransaction.FulfilledOn.Time,
-		ScheduledTo: dbTransaction.ScheduledTo.Time,
+		ScheduledTo: dbTransaction.ScheduledTo,
 		CreatedAt:   dbTransaction.CreatedAt.(time.Time),
+		Kind: TransactionKind{
+			ID: dbTransaction.KindID,
+		},
+		Currency: Currency{
+			ID: dbTransaction.CurrencyID,
+		},
 	}
 }
 
@@ -49,14 +51,18 @@ func DBTransactionRawToTransaction(dbTransaction *db.GetTransactionsRow) *Transa
 	return &Transaction{
 		ID:          dbTransaction.ID,
 		Amount:      dbTransaction.Amount,
-		CurrencyID:  dbTransaction.CurrencyID,
-		KindID:      dbTransaction.KindID,
 		IsRecurrent: dbTransaction.IsRecurrent,
 		FulfilledOn: dbTransaction.FulfilledOn.Time,
-		ScheduledTo: dbTransaction.ScheduledTo.Time,
+		ScheduledTo: dbTransaction.ScheduledTo,
 		CreatedAt:   dbTransaction.CreatedAt.(time.Time),
-
-		Currency: dbTransaction.Currency.String,
-		Kind:     dbTransaction.Kind.String,
+		Currency: Currency{
+			ID:       dbTransaction.CurrencyID,
+			Currency: dbTransaction.Currency.String,
+			Symbol:   dbTransaction.Symbol.String,
+		},
+		Kind: TransactionKind{
+			ID:   dbTransaction.KindID,
+			Kind: dbTransaction.Kind.String,
+		},
 	}
 }

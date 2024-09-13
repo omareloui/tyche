@@ -23,6 +23,7 @@ func hxRespondWithRedirect(w http.ResponseWriter, path string) error {
 
 func parseIntIfExists(str string) (int, error) {
 	if str != "" {
+		str = nonDigitRegexp.ReplaceAllLiteralString(str, "")
 		num, err := strconv.Atoi(str)
 		if err != nil {
 			return 0, errs.ErrInvalidFloat
@@ -33,10 +34,7 @@ func parseIntIfExists(str string) (int, error) {
 }
 
 func parseBoolean(str string) bool {
-	if str == "on" {
-		return true
-	}
-	return false
+	return str == "on"
 }
 
 func parseFloatIfExists(str string) (float64, error) {

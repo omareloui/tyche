@@ -6,6 +6,7 @@ package db
 
 import (
 	"database/sql"
+	"time"
 )
 
 type Balance struct {
@@ -17,6 +18,7 @@ type Balance struct {
 type Currency struct {
 	ID       string
 	Currency string
+	Symbol   string
 }
 
 type Goal struct {
@@ -52,7 +54,7 @@ type Transaction struct {
 	KindID      string
 	IsRecurrent bool
 	FulfilledOn sql.NullTime
-	ScheduledTo sql.NullTime
+	ScheduledTo time.Time
 	CreatedAt   interface{}
 }
 

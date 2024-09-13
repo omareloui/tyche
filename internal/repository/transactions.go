@@ -11,9 +11,10 @@ func (r *Repository) CreateTransaction(ctx context.Context, t *models.Transactio
 	err := r.db.CreateTransaction(ctx, db.CreateTransactionParams{
 		ID:          t.ID,
 		Amount:      t.Amount,
-		KindID:      t.KindID,
-		CurrencyID:  t.CurrencyID,
+		KindID:      t.Kind.ID,
+		CurrencyID:  t.Currency.ID,
 		IsRecurrent: t.IsRecurrent,
+		ScheduledTo: t.ScheduledTo,
 		CreatedAt:   t.CreatedAt,
 	})
 	if err != nil {

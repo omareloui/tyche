@@ -5,14 +5,16 @@ import (
 )
 
 type Currency struct {
-	ID       string
+	ID       string `validate:"required"`
 	Currency string
+	Symbol   string
 }
 
 func DBCurrencyToCurrency(dbCurrency *db.Currency) *Currency {
 	return &Currency{
 		ID:       dbCurrency.ID,
 		Currency: dbCurrency.Currency,
+		Symbol:   dbCurrency.Symbol,
 	}
 }
 

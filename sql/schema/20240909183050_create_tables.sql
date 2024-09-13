@@ -2,7 +2,8 @@
 -- +goose StatementBegin
 CREATE TABLE currencies (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
-    currency VARCHAR(3) UNIQUE NOT NULL
+    currency VARCHAR(3) UNIQUE NOT NULL,
+    symbol VARCHAR(5) NOT NULL
 );
 CREATE TABLE transaction_kinds (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
@@ -23,7 +24,7 @@ CREATE TABLE transactions (
     kind_id VARCHAR(16) NOT NULL,
     is_recurrent BOOLEAN NOT NULL DEFAULT FALSE,
     fulfilled_on DATE,
-    scheduled_to DATE,
+    scheduled_to DATE NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW,
     FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE,
     FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id)

@@ -8,6 +8,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"time"
 )
 
 const createTransaction = `-- name: CreateTransaction :exec
@@ -17,9 +18,10 @@ INSERT INTO transactions (
     currency_id,
     kind_id,
     is_recurrent,
+    scheduled_to,
     created_at
 )
-VALUES (?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateTransactionParams struct {
@@ -28,6 +30,7 @@ type CreateTransactionParams struct {
 	CurrencyID  string
 	KindID      string
 	IsRecurrent bool
+	ScheduledTo time.Time
 	CreatedAt   interface{}
 }
 
@@ -38,6 +41,7 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 		arg.CurrencyID,
 		arg.KindID,
 		arg.IsRecurrent,
+		arg.ScheduledTo,
 		arg.CreatedAt,
 	)
 	return err
@@ -54,6 +58,7 @@ SELECT
     t.scheduled_to,
     t.created_at,
     c.currency,
+    c.symbol,
     k.kind
 FROM transactions AS t
 LEFT JOIN currencies AS c ON t.currency_id = c.id
@@ -67,9 +72,10 @@ type GetTransactionsRow struct {
 	KindID      string
 	IsRecurrent bool
 	FulfilledOn sql.NullTime
-	ScheduledTo sql.NullTime
+	ScheduledTo time.Time
 	CreatedAt   interface{}
 	Currency    sql.NullString
+	Symbol      sql.NullString
 	Kind        sql.NullString
 }
 
@@ -92,6 +98,7 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.ScheduledTo,
 			&i.CreatedAt,
 			&i.Currency,
+			&i.Symbol,
 			&i.Kind,
 		); err != nil {
 			return nil, err

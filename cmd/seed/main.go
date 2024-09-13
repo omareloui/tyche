@@ -31,7 +31,11 @@ func main() {
 		log.Fatalln("error while getting the currencies", err)
 	}
 
-	currenciesSeed := []db.Currency{{ID: idgen.New(), Currency: "EGP"}, {ID: idgen.New(), Currency: "USD"}}
+	currenciesSeed := []db.Currency{
+		{ID: idgen.New(), Currency: "EGP", Symbol: "EG£"},
+		{ID: idgen.New(), Currency: "USD", Symbol: "US$"},
+	}
+
 	if len(currencies) != len(currenciesSeed) {
 		for _, cur := range currenciesSeed {
 			if err := queries.CreateCurrency(context.Background(), db.CreateCurrencyParams(cur)); err != nil {

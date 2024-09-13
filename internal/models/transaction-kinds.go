@@ -3,7 +3,7 @@ package models
 import "github.com/omareloui/financial-plans/internal/db"
 
 type TransactionKind struct {
-	ID              string
+	ID              string `validate:"required"`
 	Kind            string
 	IncreaseBalance bool
 }

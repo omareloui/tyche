@@ -39,7 +39,7 @@ func baseLayout(pageTitle string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("</title><link rel=\"stylesheet\" href=\"https://rsms.me/inter/inter.css\"><link rel=\"icon\" type=\"image/x-svg\" href=\"/images/favicon.svg\"><link rel=\"stylesheet\" href=\"/styles/main.css\"><script src=\"/js/vendor/htmx.lib.js\"></script><script defer src=\"/js/main.js\"></script></head><body>")
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("</title><link rel=\"stylesheet\" href=\"https://rsms.me/inter/inter.css\"><link rel=\"icon\" type=\"image/x-svg\" href=\"/images/favicon.svg\"><link rel=\"stylesheet\" href=\"/styles/main.css\"><script src=\"/js/vendor/htmx.lib.js\"></script><script src=\"/js/vendor/litepicker.lib.js\"></script><script defer src=\"/js/datepickers.js\"></script><script defer src=\"/js/main.js\"></script><script defer src=\"/js/vendor/alpine.mask.lib.js\"></script><script defer src=\"/js/vendor/alpine.collapse.lib.js\"></script><script defer src=\"/js/vendor/alpine.lib.js\"></script></head><body>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/a-h/templ"
+	"github.com/omareloui/financial-plans/internal/config"
 	"github.com/omareloui/financial-plans/internal/errs"
 	"github.com/omareloui/financial-plans/internal/idgen"
 	"github.com/omareloui/financial-plans/internal/logger"
@@ -37,10 +38,13 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 	l.Debug("Transaction from data", zap.Any("formdata", formdata))
 	l.Debug("Returning transactions count", zap.Int("transactions_count", len(transactions)))
 
-	return views.Transactions(
-		transactions,
+	defaultCurrency := slicesutils.Find(currencies, func(cur models.Currency) bool { return cur.Currency == config.GetDefaultCurrency() })
+	comp := views.Transactions(formdata, transactions,
 		h.repo.CurrenciesToMap(currencies),
-		h.repo.TransactionKindsToMap(kinds), formdata), nil
+		h.repo.TransactionKindsToMap(kinds),
+		defaultCurrency.Symbol)
+
+	return comp, nil
 }
 
 func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -64,6 +68,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		l.Error("Failed getting the currencies and kinds")
 		return nil, err
 	}
+	defaultCurrency := slicesutils.Find(currencies, func(cur models.Currency) bool { return cur.Currency == config.GetDefaultCurrency() })
 
 	if valerr := h.valid.Validate(tx); valerr != nil {
 		l.Error("Validation failed for creation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
@@ -71,18 +76,25 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		if err != nil {
 			return nil, err
 		}
-		return views.CreateTransactionForm(
+
+		comp := views.CreateTransactionForm(formdata,
 			h.repo.CurrenciesToMap(currencies),
-			h.repo.TransactionKindsToMap(kinds), formdata), nil
+			h.repo.TransactionKindsToMap(kinds),
+			defaultCurrency.Symbol)
+
+		return comp, nil
 	}
 
 	if err := h.repo.CreateTransaction(r.Context(), tx); err != nil {
-		l.Error("Failed creating transaction")
+		l.Error("Failed creating transaction", zap.Error(err))
 		return nil, err
 	}
 	l.Info("Created transaction successfully")
 
-	tx.Currency = slicesutils.Find(currencies, func(cur models.Currency) bool { return cur.ID == tx.CurrencyID }).Currency
+	c := slicesutils.Find(currencies, func(cur models.Currency) bool { return cur.ID == tx.Currency.ID })
+	tx.Currency = *c
+	k := slicesutils.Find(kinds, func(k models.TransactionKind) bool { return k.ID == tx.Kind.ID })
+	tx.Kind = *k
 
 	if err = renderToBody(w, r, views.TransactionOOB(tx)); err != nil {
 		l.Error("Failed rendering the OOB transaction")
@@ -94,9 +106,12 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		return nil, err
 	}
 
-	return views.CreateTransactionForm(
+	comp := views.CreateTransactionForm(formdata,
 		h.repo.CurrenciesToMap(currencies),
-		h.repo.TransactionKindsToMap(kinds), formdata), nil
+		h.repo.TransactionKindsToMap(kinds),
+		defaultCurrency.Symbol)
+
+	return comp, nil
 }
 
 func (h Handler) getCurrenciesAndKinds(ctx context.Context) ([]models.Currency, []models.TransactionKind, error) {
@@ -114,9 +129,10 @@ func (h Handler) getCurrenciesAndKinds(ctx context.Context) ([]models.Currency, 
 func (h Handler) mapTransactionToFormData(t *models.Transaction, err *errs.ValidationError) (*views.TransactionFormData, error) {
 	return &views.TransactionFormData{
 		Amount:      views.FormInputData{Value: formatIntIfNonZero(int(t.Amount)), Error: err.Errors.MsgFor("Amount")},
-		CurrencyID:  views.FormInputData{Value: t.CurrencyID, Error: err.Errors.MsgFor("CurrencyID")},
-		KindID:      views.FormInputData{Value: t.KindID, Error: err.Errors.MsgFor("KindID")},
+		CurrencyID:  views.FormInputData{Value: t.Currency.ID, Error: err.Errors.MsgFor("Currency.ID")},
+		KindID:      views.FormInputData{Value: t.Kind.ID, Error: err.Errors.MsgFor("Kind.ID")},
 		IsRecurrent: views.FormInputData{Value: formatBooleanIfNonZero(t.IsRecurrent), Error: err.Errors.MsgFor("IsRecurrent")},
+		ScheduledTo: views.FormInputData{Value: formatDateOnlyIfNonZero(t.ScheduledTo), Error: err.Errors.MsgFor("ScheduledTo")},
 	}, nil
 }
 
@@ -126,16 +142,22 @@ func (h Handler) mapFormDataToTransaction(r *http.Request) (*models.Transaction,
 		return nil, err
 	}
 
+	ScheduledTo, err := parseDateOnlyIfExists(r.FormValue("scheduled_to"))
+	if err != nil {
+		return nil, err
+	}
+
 	return &models.Transaction{
 		Amount:      int64(amount),
-		CurrencyID:  r.FormValue("currency_id"),
-		KindID:      r.FormValue("kind_id"),
-		IsRecurrent: parseBoolean(r.FormValue("is_recurring")),
+		Currency:    models.Currency{ID: r.FormValue("currency_id")},
+		Kind:        models.TransactionKind{ID: r.FormValue("kind_id")},
+		IsRecurrent: parseBoolean(r.FormValue("is_recurrent")),
+		ScheduledTo: ScheduledTo,
 	}, nil
 }
 
 func defaultTransaction(currencies []models.Currency, kinds []models.TransactionKind) *models.Transaction {
-	defaultCurrency := "EGP"
+	defaultCurrency := config.GetDefaultCurrency()
 	defaultKind := "EXPENSES"
 	defaultCurrencyIdx := slices.IndexFunc(currencies, func(cur models.Currency) bool {
 		return cur.Currency == defaultCurrency
@@ -146,8 +168,9 @@ func defaultTransaction(currencies []models.Currency, kinds []models.Transaction
 
 	return &models.Transaction{
 		Amount:      0,
-		CurrencyID:  currencies[defaultCurrencyIdx].ID,
-		KindID:      kinds[defaultKindIdx].ID,
+		Currency:    models.Currency{ID: currencies[defaultCurrencyIdx].ID},
+		Kind:        models.TransactionKind{ID: kinds[defaultKindIdx].ID},
 		IsRecurrent: false,
+		ScheduledTo: time.Now(),
 	}
 }

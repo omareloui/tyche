@@ -1,15 +1,17 @@
 -- name: GetCurrency :one
 SELECT
     id,
-    currency
+    currency,
+    symbol
 FROM currencies WHERE id = ? LIMIT 1;
 
 -- name: GetCurrencies :many
 SELECT
     id,
-    currency
+    currency,
+    symbol
 FROM currencies;
 
 -- name: CreateCurrency :exec
-INSERT INTO currencies (id, currency)
-VALUES (?, ?);
+INSERT INTO currencies (id, currency, symbol)
+VALUES (?, ?, ?);
