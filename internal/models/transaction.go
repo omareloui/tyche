@@ -1,12 +1,16 @@
 package models
 
 import (
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/omareloui/financial-plans/internal/db"
+	"golang.org/x/text/language"
+	"golang.org/x/text/message"
+	"golang.org/x/text/number"
 )
+
+var p *message.Printer = message.NewPrinter(language.English)
 
 type Transaction struct {
 	ID          string `validate:"required"`
@@ -14,10 +18,9 @@ type Transaction struct {
 	IsRecurrent bool
 	FulfilledOn time.Time `validate:"omitempty"`
 	ScheduledTo time.Time `validate:"required"`
-	CreatedAt   time.Time `validate:"required"`
-
-	Kind     TransactionKind
-	Currency Currency
+	CreatedAt   time.Time
+	Kind        TransactionKind
+	Currency    Currency
 }
 
 func (t *Transaction) ViewAmount() string {
@@ -26,7 +29,7 @@ func (t *Transaction) ViewAmount() string {
 		strBuilder.WriteString(t.Currency.Symbol)
 		strBuilder.WriteString(" ")
 	}
-	strBuilder.WriteString(strconv.Itoa(int(t.Amount)))
+	strBuilder.WriteString(p.Sprintf("%v", number.Decimal(t.Amount)))
 	return strBuilder.String()
 }
 

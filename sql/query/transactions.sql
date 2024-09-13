@@ -44,3 +44,14 @@ FROM transactions AS t
 LEFT JOIN currencies AS c ON t.currency_id = c.id
 LEFT JOIN transaction_kinds AS k ON t.kind_id = k.id
 WHERE t.id = ? LIMIT 1;
+
+-- name: UpdateTransaction :exec
+UPDATE transactions
+SET
+amount = ?,
+currency_id = ?,
+kind_id = ?,
+is_recurrent = ?,
+fulfilled_on = ?,
+scheduled_to = ?
+WHERE id = ?;

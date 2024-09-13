@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/omareloui/financial-plans/internal/db"
 	"github.com/omareloui/financial-plans/internal/models"
@@ -42,4 +43,16 @@ func (r *Repository) GetTransaction(ctx context.Context, id string) (*models.Tra
 		return nil, err
 	}
 	return models.DBTransactionRawToTransaction(&dbTx), nil
+}
+
+func (r *Repository) UpdateTransaction(ctx context.Context, tx *models.Transaction) error {
+	return r.db.UpdateTransaction(ctx, db.UpdateTransactionParams{
+		ID:          tx.ID,
+		Amount:      tx.Amount,
+		CurrencyID:  tx.Currency.ID,
+		KindID:      tx.Kind.ID,
+		IsRecurrent: tx.IsRecurrent,
+		FulfilledOn: sql.NullTime{Time: tx.FulfilledOn, Valid: !tx.FulfilledOn.IsZero()},
+		ScheduledTo: tx.ScheduledTo,
+	})
 }

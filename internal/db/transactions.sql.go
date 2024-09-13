@@ -165,3 +165,38 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 	}
 	return items, nil
 }
+
+const updateTransaction = `-- name: UpdateTransaction :exec
+UPDATE transactions
+SET
+amount = ?,
+currency_id = ?,
+kind_id = ?,
+is_recurrent = ?,
+fulfilled_on = ?,
+scheduled_to = ?
+WHERE id = ?
+`
+
+type UpdateTransactionParams struct {
+	Amount      int64
+	CurrencyID  string
+	KindID      string
+	IsRecurrent bool
+	FulfilledOn sql.NullTime
+	ScheduledTo time.Time
+	ID          string
+}
+
+func (q *Queries) UpdateTransaction(ctx context.Context, arg UpdateTransactionParams) error {
+	_, err := q.db.ExecContext(ctx, updateTransaction,
+		arg.Amount,
+		arg.CurrencyID,
+		arg.KindID,
+		arg.IsRecurrent,
+		arg.FulfilledOn,
+		arg.ScheduledTo,
+		arg.ID,
+	)
+	return err
+}
