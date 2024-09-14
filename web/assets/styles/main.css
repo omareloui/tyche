@@ -12,6 +12,10 @@
   @apply py-5 px-8 bg-gray-50 rounded-lg;
 }
 
+.entry-container.stale {
+  @apply bg-gray-200;
+}
+
 /* ============ FORM ============ */
 .input-label {
   @apply mb-1 block text-sm font-medium text-gray-900;

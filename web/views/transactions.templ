@@ -6,7 +6,7 @@ import (
 	"github.com/omareloui/financial-planner/internal/models"
 )
 
-type TransactionFormData struct {
+type TransactionFD struct {
 	Amount      FormInputData
 	CurrencyID  FormInputData
 	KindID      FormInputData
@@ -16,7 +16,7 @@ type TransactionFormData struct {
 
 templ Transactions(
 	balances []models.Balance,
-	fd *TransactionFormData,
+	fd *TransactionFD,
 	transactions []models.Transaction,
 	currencies map[string]string,
 	kinds map[string]string,
@@ -30,13 +30,13 @@ templ Transactions(
 	}
 }
 
-templ CreateTransactionForm(fd *TransactionFormData, currencies map[string]string, kinds map[string]string, currencySymbol string) {
+templ CreateTransactionForm(fd *TransactionFD, currencies map[string]string, kinds map[string]string, currencySymbol string) {
 	@creationForm("Create Transaction", "/transactions", "Create Transaction") {
 		@transactionFormBody(fd, currencies, kinds, currencySymbol)
 	}
 }
 
-templ transactionFormBody(fd *TransactionFormData, currencies map[string]string, kinds map[string]string, currencySymbol string) {
+templ transactionFormBody(fd *TransactionFD, currencies map[string]string, kinds map[string]string, currencySymbol string) {
 	@AmountInputs(fd, currencies, currencySymbol)
 	@selectInput("Kind", "kind_id", "Selected a Kind", "", kinds, fd.KindID)
 	// TODO: show how recurrent it is on check
@@ -44,7 +44,7 @@ templ transactionFormBody(fd *TransactionFormData, currencies map[string]string,
 	@dateInput("Date", "scheduled_to", "", fd.ScheduledTo)
 }
 
-templ AmountInputs(fd *TransactionFormData, currencies map[string]string, currencySymbol string) {
+templ AmountInputs(fd *TransactionFD, currencies map[string]string, currencySymbol string) {
 	<div data-amount class="grid grid-cols-3 gap-4">
 		@moneyInput("Amount", "amount", currencySymbol, "", fd.Amount, "col-span-2")
 		@selectInput("Currency", "currency_id", "Select a Currency", "", currencies, fd.CurrencyID,
@@ -64,7 +64,7 @@ templ TransactionOOB(tx *models.Transaction) {
 	</div>
 }
 
-templ EditTransaction(tx *models.Transaction, fd *TransactionFormData, currencies map[string]string, kinds map[string]string) {
+templ EditTransaction(tx *models.Transaction, fd *TransactionFD, currencies map[string]string, kinds map[string]string) {
 	@form("put", fmt.Sprintf("/transactions/%s", tx.ID), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { tx.ID }</p>
 		@transactionFormBody(fd, currencies, kinds, tx.Currency.Symbol)
@@ -81,7 +81,14 @@ templ transactionsList(transactions []models.Transaction) {
 }
 
 templ Transaction(tx *models.Transaction) {
-	<div hx-target="this" class="entry-container">
+	<div
+		hx-target="this"
+		if tx.FulfilledOn.IsZero() {
+			class="entry-container"
+		} else {
+			class="entry-container stale"
+		}
+	>
 		<p>ID: { tx.ID }</p>
 		<p>Amount: { tx.ViewAmount() }</p>
 		<p>Kind: { tx.Kind.Kind }</p>
@@ -91,8 +98,14 @@ templ Transaction(tx *models.Transaction) {
 			<p>Is Recurrent?: no</p>
 		}
 		<p>Scheduled To: { tx.ScheduledTo.Format(time.DateOnly) }</p>
+		if !tx.FulfilledOn.IsZero() {
+			<p>Fulfilled On: { tx.FulfilledOn.Format(time.RFC1123Z) }</p>
+		}
 		<p>Created At: { tx.CreatedAt.Format(time.RFC1123Z) }</p>
 		<div class="flex gap-4">
+			if tx.FulfilledOn.IsZero() {
+				@saveButton("Fulfill", fmt.Sprintf("/transactions/%s/fulfill", tx.ID))
+			}
 			@editButton(fmt.Sprintf("/transactions/%s/edit", tx.ID))
 			@deleteButton(fmt.Sprintf("/transactions/%s", tx.ID))
 		</div>

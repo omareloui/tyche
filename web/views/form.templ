@@ -192,6 +192,14 @@ templ deleteButton(deleteUrl string) {
 	>Delete</button>
 }
 
+templ saveButton(text, putUrl string) {
+	<button
+		class="px-5 py-2.5 my-2 text-white bg-green-500 hover:bg-green-600 focus:outline-none focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm sm:w-auto text-center"
+		hx-put={ string(templ.SafeURL(putUrl)) }
+		hx-swap="outerHTML"
+	>{ text }</button>
+}
+
 templ errorMessage(message string) {
 	if message != "" {
 		<div class="form-error-message">

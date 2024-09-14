@@ -19,9 +19,10 @@ INSERT INTO transactions (
     kind_id,
     is_recurrent,
     scheduled_to,
+    fulfilled_on,
     created_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateTransactionParams struct {
@@ -31,6 +32,7 @@ type CreateTransactionParams struct {
 	KindID      string
 	IsRecurrent bool
 	ScheduledTo time.Time
+	FulfilledOn sql.NullTime
 	CreatedAt   interface{}
 }
 
@@ -42,6 +44,7 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 		arg.KindID,
 		arg.IsRecurrent,
 		arg.ScheduledTo,
+		arg.FulfilledOn,
 		arg.CreatedAt,
 	)
 	return err
@@ -54,6 +57,23 @@ WHERE id = ?
 
 func (q *Queries) DeleteTransaction(ctx context.Context, id string) error {
 	_, err := q.db.ExecContext(ctx, deleteTransaction, id)
+	return err
+}
+
+const fulfillTransaction = `-- name: FulfillTransaction :exec
+UPDATE transactions
+SET
+fulfilled_on = ?
+WHERE id = ?
+`
+
+type FulfillTransactionParams struct {
+	FulfilledOn sql.NullTime
+	ID          string
+}
+
+func (q *Queries) FulfillTransaction(ctx context.Context, arg FulfillTransactionParams) error {
+	_, err := q.db.ExecContext(ctx, fulfillTransaction, arg.FulfilledOn, arg.ID)
 	return err
 }
 
@@ -189,7 +209,6 @@ amount = ?,
 currency_id = ?,
 kind_id = ?,
 is_recurrent = ?,
-fulfilled_on = ?,
 scheduled_to = ?
 WHERE id = ?
 `
@@ -199,7 +218,6 @@ type UpdateTransactionParams struct {
 	CurrencyID  string
 	KindID      string
 	IsRecurrent bool
-	FulfilledOn sql.NullTime
 	ScheduledTo time.Time
 	ID          string
 }
@@ -210,7 +228,6 @@ func (q *Queries) UpdateTransaction(ctx context.Context, arg UpdateTransactionPa
 		arg.CurrencyID,
 		arg.KindID,
 		arg.IsRecurrent,
-		arg.FulfilledOn,
 		arg.ScheduledTo,
 		arg.ID,
 	)

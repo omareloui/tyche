@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/omareloui/financial-planner/internal/db"
 	"github.com/omareloui/financial-planner/internal/models"
@@ -16,6 +17,7 @@ func (r *Repository) CreateTransaction(ctx context.Context, t *models.Transactio
 		CurrencyID:  t.Currency.ID,
 		IsRecurrent: t.IsRecurrent,
 		ScheduledTo: t.ScheduledTo,
+		FulfilledOn: sql.NullTime{Time: t.FulfilledOn, Valid: !t.FulfilledOn.IsZero()},
 		CreatedAt:   t.CreatedAt,
 	})
 	if err != nil {
@@ -56,7 +58,13 @@ func (r *Repository) UpdateTransaction(ctx context.Context, tx *models.Transacti
 		CurrencyID:  tx.Currency.ID,
 		KindID:      tx.Kind.ID,
 		IsRecurrent: tx.IsRecurrent,
-		FulfilledOn: sql.NullTime{Time: tx.FulfilledOn, Valid: !tx.FulfilledOn.IsZero()},
 		ScheduledTo: tx.ScheduledTo,
+	})
+}
+
+func (r *Repository) FulfillTransaction(ctx context.Context, id string, fulfilledOn time.Time) error {
+	return r.db.FulfillTransaction(ctx, db.FulfillTransactionParams{
+		ID:          id,
+		FulfilledOn: sql.NullTime{Time: fulfilledOn, Valid: !fulfilledOn.IsZero()},
 	})
 }

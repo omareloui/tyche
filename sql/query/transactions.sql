@@ -6,9 +6,10 @@ INSERT INTO transactions (
     kind_id,
     is_recurrent,
     scheduled_to,
+    fulfilled_on,
     created_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetTransactions :many
 SELECT
@@ -54,8 +55,13 @@ amount = ?,
 currency_id = ?,
 kind_id = ?,
 is_recurrent = ?,
-fulfilled_on = ?,
 scheduled_to = ?
+WHERE id = ?;
+
+-- name: FulfillTransaction :exec
+UPDATE transactions
+SET
+fulfilled_on = ?
 WHERE id = ?;
 
 -- name: DeleteTransaction :exec
