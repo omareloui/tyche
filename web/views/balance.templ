@@ -1,0 +1,17 @@
+package views
+
+import "github.com/omareloui/financial-plans/internal/models"
+
+templ Balance(balances []models.Balance) {
+	<div id="balance" class="flex gap-6 items-start">
+		for _, b := range balances {
+			<div>{ b.ViewAmount() }</div>
+		}
+	</div>
+}
+
+templ BalanceOOB(balances []models.Balance) {
+	<div id="balance" hx-swap-oob="outerHTML">
+		@Balance(balances)
+	</div>
+}

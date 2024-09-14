@@ -48,11 +48,7 @@ templ navbar(balances []models.Balance) {
 				@navlink("/")
 				@navlink("/transactions")
 			</div>
-			<div class="flex gap-6 items-start">
-				for _, b := range balances {
-					<div>{ b.ViewAmount() }</div>
-				}
-			</div>
+			@Balance(balances)
 		</div>
 	</nav>
 }

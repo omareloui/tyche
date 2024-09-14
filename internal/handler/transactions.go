@@ -51,6 +51,7 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 }
 
 func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	// TODO: use a transaction here
 	l := logger.FromCtx(r.Context())
 
 	tx, err := h.mapFormDataToTransaction(r)
@@ -100,9 +101,32 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 	tx.Kind = *k
 
 	if err = renderToBody(w, r, views.TransactionOOB(tx)); err != nil {
-		l.Error("rendering OOB transaction")
+		l.Error("rendering transaction OOB")
 		return nil, err
 	}
+	l.Debug("rendered transaction OOB")
+
+	upBalance := h.repo.RemoveFromBalance
+	if k.IncreaseBalance {
+		upBalance = h.repo.AddToBalance
+	}
+	if err := upBalance(r.Context(), tx.Currency.ID, tx.Amount); err != nil {
+		l.Error("updating the balance", zap.Error(err))
+		return nil, err
+	}
+
+	balances, err := h.repo.GetBalances(r.Context())
+	if err != nil {
+		l.Error("fetching balances")
+		return nil, err
+	}
+	l.Debug("fetched balances")
+
+	if err = renderToBody(w, r, views.BalanceOOB(balances)); err != nil {
+		l.Error("rendering balance OOB")
+		return nil, err
+	}
+	l.Debug("rendered balance OOB")
 
 	formdata, err := h.mapTransactionToFormData(defaultTransaction(currencies, kinds), new(errs.ValidationError))
 	if err != nil {
@@ -115,32 +139,6 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		defaultCurrency.Symbol)
 
 	return comp, nil
-}
-
-func (h Handler) AmountInputs(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	l := logger.FromCtx(r.Context())
-
-	curs, err := h.repo.GetCurrencies(r.Context())
-	if err != nil {
-		l.Error("fetching currencies")
-		return nil, err
-	}
-
-	tx, err := h.mapFormDataToTransaction(r)
-	if err != nil {
-		return nil, err
-	}
-
-	currency := slicesutils.Find(curs, func(cur models.Currency) bool {
-		return cur.ID == tx.Currency.ID
-	})
-
-	formdata := &views.TransactionFormData{
-		Amount:     views.FormInputData{Value: r.FormValue("amount")},
-		CurrencyID: views.FormInputData{Value: currency.ID},
-	}
-
-	return views.AmountInputs(formdata, h.repo.CurrenciesToMap(curs), currency.Symbol), nil
 }
 
 func (h Handler) Transaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -243,6 +241,32 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 	}
 
 	return views.Transaction(tx), nil
+}
+
+func (h Handler) AmountInputs(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	l := logger.FromCtx(r.Context())
+
+	curs, err := h.repo.GetCurrencies(r.Context())
+	if err != nil {
+		l.Error("fetching currencies")
+		return nil, err
+	}
+
+	tx, err := h.mapFormDataToTransaction(r)
+	if err != nil {
+		return nil, err
+	}
+
+	currency := slicesutils.Find(curs, func(cur models.Currency) bool {
+		return cur.ID == tx.Currency.ID
+	})
+
+	formdata := &views.TransactionFormData{
+		Amount:     views.FormInputData{Value: r.FormValue("amount")},
+		CurrencyID: views.FormInputData{Value: currency.ID},
+	}
+
+	return views.AmountInputs(formdata, h.repo.CurrenciesToMap(curs), currency.Symbol), nil
 }
 
 func (h Handler) getCurrenciesAndKinds(ctx context.Context) ([]models.Currency, []models.TransactionKind, error) {

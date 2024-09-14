@@ -10,6 +10,20 @@ import (
 	"database/sql"
 )
 
+const addToBalance = `-- name: AddToBalance :exec
+UPDATE balances SET amount = amount + ? WHERE currency_id = ?
+`
+
+type AddToBalanceParams struct {
+	Amount     float64
+	CurrencyID string
+}
+
+func (q *Queries) AddToBalance(ctx context.Context, arg AddToBalanceParams) error {
+	_, err := q.db.ExecContext(ctx, addToBalance, arg.Amount, arg.CurrencyID)
+	return err
+}
+
 const createBalance = `-- name: CreateBalance :exec
 INSERT INTO balances (id, currency_id, amount, fx_rate) VALUES (?, ?, ?, ?)
 `
@@ -80,4 +94,18 @@ func (q *Queries) GetBalances(ctx context.Context) ([]GetBalancesRow, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const removeFromBalance = `-- name: RemoveFromBalance :exec
+UPDATE balances SET amount = amount - ? WHERE currency_id = ?
+`
+
+type RemoveFromBalanceParams struct {
+	Amount     float64
+	CurrencyID string
+}
+
+func (q *Queries) RemoveFromBalance(ctx context.Context, arg RemoveFromBalanceParams) error {
+	_, err := q.db.ExecContext(ctx, removeFromBalance, arg.Amount, arg.CurrencyID)
+	return err
 }
