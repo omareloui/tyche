@@ -44,9 +44,11 @@ templ baseLayout(pageTitle string, balances []models.Balance) {
 templ navbar(balances []models.Balance) {
 	<nav class="flex gap-6 items-start my-4">
 		<div hx-boost="true" class="flex gap-6 justify-between w-full">
-			<div class="flex gap-6 items-start">
+			<div class="flex gap-4 items-start">
 				@navlink("/")
 				@navlink("/transactions")
+				@navlink("/items")
+				@navlink("/goals")
 			</div>
 			@Balance(balances)
 		</div>

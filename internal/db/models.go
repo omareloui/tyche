@@ -25,27 +25,24 @@ type Currency struct {
 type Goal struct {
 	ID          string
 	Title       string
-	IsActive    bool
 	AchievedOn  sql.NullTime
 	StartedOn   sql.NullTime
 	SumTotalEgp sql.NullInt64
 	CreatedAt   interface{}
 }
 
-type GoalItem struct {
-	ID         string
-	Title      string
-	Amount     float64
-	CurrencyID string
-	GoalID     string
+type GoalsItem struct {
+	ID     string
+	GoalID string
+	ItemID string
 }
 
-type GoalPlanEntry struct {
+type Item struct {
 	ID         string
+	Name       string
 	Amount     float64
 	CurrencyID string
-	KindID     string
-	GoalID     string
+	Bought     sql.NullBool
 }
 
 type Transaction struct {

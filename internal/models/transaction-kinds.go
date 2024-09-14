@@ -4,7 +4,7 @@ import "github.com/omareloui/financial-planner/internal/db"
 
 type TransactionKind struct {
 	ID              string `validate:"required"`
-	Kind            string
+	Kind            string `conform:"trim,upper"`
 	IncreaseBalance bool
 }
 

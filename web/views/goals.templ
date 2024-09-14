@@ -1,0 +1,11 @@
+package views
+
+import "github.com/omareloui/financial-planner/internal/models"
+
+templ Goals(balances []models.Balance) {
+	@baseLayout("Goals", balances) {
+		@container() {
+			@mainHeader("Goals")
+		}
+	}
+}

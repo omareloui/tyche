@@ -101,7 +101,7 @@ func navbar(balances []models.Balance) templ.Component {
 			templ_7745c5c3_Var4 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("<nav class=\"flex gap-6 items-start my-4\"><div hx-boost=\"true\" class=\"flex gap-6 justify-between w-full\"><div class=\"flex gap-6 items-start\">")
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("<nav class=\"flex gap-6 items-start my-4\"><div hx-boost=\"true\" class=\"flex gap-6 justify-between w-full\"><div class=\"flex gap-4 items-start\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -110,6 +110,14 @@ func navbar(balances []models.Balance) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		templ_7745c5c3_Err = navlink("/transactions").Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = navlink("/items").Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = navlink("/goals").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

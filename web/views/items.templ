@@ -1,0 +1,72 @@
+package views
+
+import (
+	"fmt"
+
+	"github.com/omareloui/financial-planner/internal/models"
+)
+
+type ItemFD struct {
+	Name FDInput
+	AmountFD
+}
+
+templ Items(
+	balances []models.Balance,
+	fd *ItemFD,
+	items []models.Item,
+	currencies map[string]string,
+	defaultCurrencySymbol string) {
+	@baseLayout("Items", balances) {
+		@container() {
+			@mainHeader("Items")
+			@CreateItemForm(fd, currencies, defaultCurrencySymbol)
+			@itemsList(items)
+		}
+	}
+}
+
+templ CreateItemForm(fd *ItemFD, currencies map[string]string, currencySymbol string) {
+	@creationForm("Create Item", "/items", "Create Item") {
+		@itemFormBody(fd, currencies, currencySymbol)
+	}
+}
+
+templ EditItem(id string, fd *ItemFD, currencies map[string]string, currencySymbol string) {
+	@form("put", fmt.Sprintf("/items/%s", id), templ.Attributes{"hx-target": "this"}) {
+		<p>ID: { id }</p>
+		@itemFormBody(fd, currencies, currencySymbol)
+		@editFormButtons(fmt.Sprintf("/items/%s", id))
+	}
+}
+
+templ itemFormBody(fd *ItemFD, currencies map[string]string, currencySymbol string) {
+	@input("Name", "text", "name", "Enter item name", "", fd.Name)
+	@AmountInputs(&fd.AmountFD, currencies, currencySymbol)
+}
+
+templ itemsList(items []models.Item) {
+	@list("items-list") {
+		for _, it := range items {
+			@Item(&it)
+		}
+	}
+}
+
+templ Item(it *models.Item) {
+	<div hx-target="this" class="entry-container">
+		<p>ID: { it.ID }</p>
+		<p>Name: { it.Name }</p>
+		<p>Amount: { it.ViewAmount() }</p>
+		<div class="flex gap-4">
+			@editButton(fmt.Sprintf("/items/%s/edit", it.ID))
+			@deleteButton(fmt.Sprintf("/items/%s", it.ID))
+		</div>
+	</div>
+}
+
+templ ItemOOB(it *models.Item) {
+	<div id="items-list" hx-swap-oob="afterbegin">
+		@Item(it)
+	</div>
+}

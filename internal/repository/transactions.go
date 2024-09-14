@@ -34,7 +34,7 @@ func (r *Repository) GetTransactions(ctx context.Context) ([]models.Transaction,
 
 	tx := make([]models.Transaction, len(dbTransactions))
 	for i, t := range dbTransactions {
-		tx[i] = *models.DBTransactionsRawToTransaction(&t)
+		tx[i] = *models.DBTransactionsRowToTransaction(&t)
 	}
 	return tx, nil
 }
@@ -44,7 +44,7 @@ func (r *Repository) GetTransaction(ctx context.Context, id string) (*models.Tra
 	if err != nil {
 		return nil, err
 	}
-	return models.DBTransactionRawToTransaction(&dbTx), nil
+	return models.DBTransactionRowToTransaction(&dbTx), nil
 }
 
 func (r *Repository) DeleteTransaction(ctx context.Context, id string) error {

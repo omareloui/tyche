@@ -1,8 +1,6 @@
 package models
 
 import (
-	"strings"
-
 	"github.com/omareloui/financial-planner/internal/db"
 )
 
@@ -13,13 +11,7 @@ type Balance struct {
 }
 
 func (b *Balance) ViewAmount() string {
-	strBuilder := new(strings.Builder)
-	if b.Currency.Currency != "" {
-		strBuilder.WriteString(b.Currency.Symbol)
-		strBuilder.WriteString(" ")
-	}
-	strBuilder.WriteString(formatNum(b.Amount))
-	return strBuilder.String()
+	return formatAmount(b.Amount, b.Currency)
 }
 
 func DBBalanceToBalance(dbBalance *db.GetBalancesRow) *Balance {

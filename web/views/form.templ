@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-type FormInputData struct {
+type FDInput struct {
 	Value string `json:"value"`
 	Error string `json:"error"`
 }
@@ -67,7 +67,21 @@ templ creationForm(title, postTo, submitStr string, close ...bool) {
 	</div>
 }
 
-templ input(label, kind, name, placeholder, idSuffix string, data FormInputData, classes ...string) {
+templ AmountInputs(fd *AmountFD, currencies map[string]string, currencySymbol string) {
+	<div data-amount class="grid grid-cols-3 gap-4">
+		@moneyInput("Amount", "amount", currencySymbol, "", fd.Amount, "col-span-2")
+		@selectInput("Currency", "currency_id", "Select a Currency", "", currencies, fd.CurrencyID,
+			templ.Attributes{
+				"hx-post":    "/amount-inputs",
+				"hx-trigger": "change",
+				"hx-target":  "closest [data-amount]",
+				"hx-swap":    "outerHTML",
+				"hx-sync":    "closest form:abort",
+			})
+	</div>
+}
+
+templ input(label, kind, name, placeholder, idSuffix string, data FDInput, classes ...string) {
 	<div class={ strings.Join(classes, " ") }>
 		<label class="input-label" for={ join(name, idSuffix) }>{ label }</label>
 		<input
@@ -82,7 +96,7 @@ templ input(label, kind, name, placeholder, idSuffix string, data FormInputData,
 	</div>
 }
 
-templ moneyInput(label, name, currencySymbol, idSuffix string, data FormInputData, classes ...string) {
+templ moneyInput(label, name, currencySymbol, idSuffix string, data FDInput, classes ...string) {
 	<div class={ strings.Join(classes, " ") }>
 		<label class="input-label" for={ join(name, idSuffix) }>{ label }</label>
 		<input
@@ -97,7 +111,7 @@ templ moneyInput(label, name, currencySymbol, idSuffix string, data FormInputDat
 	</div>
 }
 
-templ dateInput(label, name, idSuffix string, data FormInputData, classes ...string) {
+templ dateInput(label, name, idSuffix string, data FDInput, classes ...string) {
 	<div class={ strings.Join(classes, "") }>
 		<label class="input-label" for={ join(name, idSuffix) }>{ label }</label>
 		<input
@@ -114,7 +128,7 @@ templ dateInput(label, name, idSuffix string, data FormInputData, classes ...str
 	</div>
 }
 
-templ selectInput(label, name, placeholder, idSuffix string, options map[string]string, data FormInputData, inputAttrs ...templ.Attributes) {
+templ selectInput(label, name, placeholder, idSuffix string, options map[string]string, data FDInput, inputAttrs ...templ.Attributes) {
 	<div>
 		<label for={ join(name, idSuffix) } class="input-label">{ label }</label>
 		<select
@@ -138,7 +152,7 @@ templ selectInput(label, name, placeholder, idSuffix string, options map[string]
 	</div>
 }
 
-templ checkbox(label, name, idSuffix string, data FormInputData) {
+templ checkbox(label, name, idSuffix string, data FDInput) {
 	<div>
 		if data.Value == "on" {
 			<input id={ join(name, idSuffix) } type="checkbox" name={ name } checked/>

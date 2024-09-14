@@ -1,7 +1,6 @@
 package models
 
 import (
-	"strings"
 	"time"
 
 	"github.com/omareloui/financial-planner/internal/db"
@@ -19,13 +18,7 @@ type Transaction struct {
 }
 
 func (t *Transaction) ViewAmount() string {
-	strBuilder := new(strings.Builder)
-	if t.Currency.Currency != "" {
-		strBuilder.WriteString(t.Currency.Symbol)
-		strBuilder.WriteString(" ")
-	}
-	strBuilder.WriteString(formatNum(t.Amount))
-	return strBuilder.String()
+	return formatAmount(t.Amount, t.Currency)
 }
 
 func DBTransactionToTransaction(dbTransaction *db.Transaction) *Transaction {
@@ -45,7 +38,7 @@ func DBTransactionToTransaction(dbTransaction *db.Transaction) *Transaction {
 	}
 }
 
-func DBTransactionRawToTransaction(dbTransaction *db.GetTransactionRow) *Transaction {
+func DBTransactionRowToTransaction(dbTransaction *db.GetTransactionRow) *Transaction {
 	return &Transaction{
 		ID:          dbTransaction.ID,
 		Amount:      dbTransaction.Amount,
@@ -66,7 +59,7 @@ func DBTransactionRawToTransaction(dbTransaction *db.GetTransactionRow) *Transac
 	}
 }
 
-func DBTransactionsRawToTransaction(dbTransaction *db.GetTransactionsRow) *Transaction {
+func DBTransactionsRowToTransaction(dbTransaction *db.GetTransactionsRow) *Transaction {
 	return &Transaction{
 		ID:          dbTransaction.ID,
 		Amount:      dbTransaction.Amount,

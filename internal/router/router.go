@@ -20,12 +20,23 @@ func New(h *handler.Handler) Router {
 
 	mux.Handle("GET /transactions", handle(h.Transactions))
 	mux.Handle("POST /transactions", handle(h.CreateTransaction))
-	mux.Handle("POST /transactions/amount-inputs", handle(h.AmountInputs))
 	mux.Handle("GET /transactions/{id}", handle(h.Transaction))
 	mux.Handle("GET /transactions/{id}/edit", handle(h.GetEditTransaction))
 	mux.Handle("PUT /transactions/{id}", handle(h.EditTransaction))
 	mux.Handle("PUT /transactions/{id}/fulfill", handle(h.FulfillTransaction))
 	mux.Handle("DELETE /transactions/{id}", handle(h.DeleteTransaction))
+
+	mux.Handle("GET /goals", handle(h.Goals))
+	mux.Handle("POST /goals", handle(h.CreateGoals))
+
+	mux.Handle("GET /items", handle(h.Items))
+	mux.Handle("POST /items", handle(h.CreateItem))
+	mux.Handle("GET /items/{id}", handle(h.Item))
+	mux.Handle("GET /items/{id}/edit", handle(h.GetEditItem))
+	mux.Handle("PUT /items/{id}", handle(h.EditItem))
+	mux.Handle("DELETE /items/{id}", handle(h.DeleteItem))
+
+	mux.Handle("POST /amount-inputs", handle(h.AmountInputs))
 
 	static(mux, []string{"styles", "js"}, "./web/public")
 	mux.Handle("/", handle(h.NotFound))

@@ -6,8 +6,8 @@ import (
 
 type Currency struct {
 	ID       string `validate:"required"`
-	Currency string
-	Symbol   string
+	Currency string `conform:"trim,upper"`
+	Symbol   string `conform:"trim,upper"`
 }
 
 func DBCurrencyToCurrency(dbCurrency *db.Currency) *Currency {

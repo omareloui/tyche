@@ -22,10 +22,7 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 	if err != nil {
 		return nil, err
 	}
-	fd, err := h.mapTransactionToFD(defaultTransaction(currencies, kinds), new(errs.ValidationError))
-	if err != nil {
-		return nil, err
-	}
+	fd := h.mapTransactionToFD(defaultTransaction(currencies, kinds), new(errs.ValidationError))
 
 	l := logger.FromCtx(r.Context())
 
@@ -85,10 +82,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 
 	if valerr := h.valid.Validate(tx); valerr != nil {
 		l.Error("create transaction validation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-		fd, err := h.mapTransactionToFD(tx, valerr)
-		if err != nil {
-			return nil, err
-		}
+		fd := h.mapTransactionToFD(tx, valerr)
 
 		comp := views.CreateTransactionForm(fd,
 			h.repo.CurrenciesToMap(currencies),
@@ -124,10 +118,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		}
 	}
 
-	fd, err := h.mapTransactionToFD(defaultTransaction(currencies, kinds), new(errs.ValidationError))
-	if err != nil {
-		return nil, err
-	}
+	fd := h.mapTransactionToFD(defaultTransaction(currencies, kinds), new(errs.ValidationError))
 
 	comp := views.CreateTransactionForm(fd,
 		h.repo.CurrenciesToMap(currencies),
@@ -150,7 +141,7 @@ func (h Handler) Transaction(w http.ResponseWriter, r *http.Request) (templ.Comp
 		l.Error("fetching transaction", zap.Error(err))
 		return nil, err
 	}
-	l.Debug("fetched transaction", zap.Any("tx", tx))
+	l.Info("fetched transaction", zap.Any("tx", tx))
 
 	return views.Transaction(tx), nil
 }
@@ -180,10 +171,7 @@ func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (tem
 		return nil, err
 	}
 
-	fd, err := h.mapTransactionToFD(tx, new(errs.ValidationError))
-	if err != nil {
-		return nil, err
-	}
+	fd := h.mapTransactionToFD(tx, new(errs.ValidationError))
 
 	return views.EditTransaction(tx, fd,
 		h.repo.CurrenciesToMap(currencies),
@@ -213,10 +201,7 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 
 	if valerr := h.valid.Validate(tx); valerr != nil {
 		l.Error("update transaction validation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-		fd, err := h.mapTransactionToFD(tx, valerr)
-		if err != nil {
-			return nil, err
-		}
+		fd := h.mapTransactionToFD(tx, valerr)
 		fd.Amount.Value = r.FormValue("amount")
 
 		currencies, kinds, err := h.getCurrenciesAndKinds(r.Context())
@@ -285,7 +270,7 @@ func (h Handler) FulfillTransaction(w http.ResponseWriter, r *http.Request) (tem
 		l.Error("fulfilling transaction", zap.Error(err))
 		return nil, err
 	}
-	l.Debug("fulfilled transaction")
+	l.Info("fulfilled transaction")
 
 	tx, err := h.repo.GetTransaction(r.Context(), id)
 	if err != nil {
@@ -323,7 +308,7 @@ func (h Handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) (temp
 		l.Error("deleting transaction", zap.Error(err))
 		return nil, err
 	}
-	l.Debug("deleted transaction")
+	l.Info("deleted transaction")
 
 	if !tx.FulfilledOn.IsZero() {
 		if err := h.undoTransactionOnBalance(r, tx); err != nil {
@@ -337,32 +322,6 @@ func (h Handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) (temp
 	return nil, nil
 }
 
-func (h Handler) AmountInputs(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	l := logger.FromCtx(r.Context())
-
-	curs, err := h.repo.GetCurrencies(r.Context())
-	if err != nil {
-		l.Error("fetching currencies")
-		return nil, err
-	}
-
-	tx, err := h.mapFDToTransaction(r)
-	if err != nil {
-		return nil, err
-	}
-
-	currency := slicesutils.Find(curs, func(cur models.Currency) bool {
-		return cur.ID == tx.Currency.ID
-	})
-
-	fd := &views.TransactionFD{
-		Amount:     views.FormInputData{Value: r.FormValue("amount")},
-		CurrencyID: views.FormInputData{Value: currency.ID},
-	}
-
-	return views.AmountInputs(fd, h.repo.CurrenciesToMap(curs), currency.Symbol), nil
-}
-
 func (h Handler) applyTransactionToBalance(r *http.Request, tx *models.Transaction) error {
 	l := logger.FromCtx(r.Context())
 	upBalance := h.repo.RemoveFromBalance
@@ -373,7 +332,7 @@ func (h Handler) applyTransactionToBalance(r *http.Request, tx *models.Transacti
 		l.Error("applying transaction to balance", zap.Error(err))
 		return err
 	}
-	l.Debug("applyed transaction to balance")
+	l.Info("applied transaction to balance")
 	return nil
 }
 
@@ -387,7 +346,7 @@ func (h Handler) undoTransactionOnBalance(r *http.Request, tx *models.Transactio
 		l.Error("undoing transaction on balance", zap.Error(err))
 		return err
 	}
-	l.Debug("undone transaction on balance")
+	l.Info("undone transaction on balance")
 	return nil
 }
 
@@ -420,14 +379,16 @@ func (h Handler) getCurrenciesAndKinds(ctx context.Context) ([]models.Currency, 
 	return curs, knds, nil
 }
 
-func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationError) (*views.TransactionFD, error) {
+func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationError) *views.TransactionFD {
 	return &views.TransactionFD{
-		Amount:      views.FormInputData{Value: formatIntIfNonZero(int(t.Amount)), Error: err.Errors.MsgFor("Amount")},
-		CurrencyID:  views.FormInputData{Value: t.Currency.ID, Error: err.Errors.MsgFor("Currency.ID")},
-		KindID:      views.FormInputData{Value: t.Kind.ID, Error: err.Errors.MsgFor("Kind.ID")},
-		IsRecurrent: views.FormInputData{Value: formatBooleanIfNonZero(t.IsRecurrent), Error: err.Errors.MsgFor("IsRecurrent")},
-		ScheduledTo: views.FormInputData{Value: formatDateOnlyIfNonZero(t.ScheduledTo), Error: err.Errors.MsgFor("ScheduledTo")},
-	}, nil
+		AmountFD: views.AmountFD{
+			Amount:     views.FDInput{Value: formatIntIfNonZero(int(t.Amount)), Error: err.Errors.MsgFor("Amount")},
+			CurrencyID: views.FDInput{Value: t.Currency.ID, Error: err.Errors.MsgFor("Currency.ID")},
+		},
+		KindID:      views.FDInput{Value: t.Kind.ID, Error: err.Errors.MsgFor("Kind.ID")},
+		IsRecurrent: views.FDInput{Value: formatBooleanIfNonZero(t.IsRecurrent), Error: err.Errors.MsgFor("IsRecurrent")},
+		ScheduledTo: views.FDInput{Value: formatDateOnlyIfNonZero(t.ScheduledTo), Error: err.Errors.MsgFor("ScheduledTo")},
+	}
 }
 
 func (h Handler) mapFDToTransaction(r *http.Request) (*models.Transaction, error) {

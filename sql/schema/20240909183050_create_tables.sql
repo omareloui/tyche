@@ -33,31 +33,36 @@ CREATE TABLE transactions (
 CREATE TABLE goals (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
-    is_active BOOLEAN DEFAULT FALSE NOT NULL,
     achieved_on DATE,
     started_on DATE,
     sum_total_egp INT,
     created_at TIMESTAMP NOT NULL DEFAULT NOW
 );
-CREATE TABLE goal_items (
+CREATE TABLE goals_items (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
-    title VARCHAR(255) NOT NULL,
+    goal_id VARCHAR(16) NOT NULL,
+    item_id VARCHAR(16) NOT NULL,
+    FOREIGN KEY (goal_id) REFERENCES goals (id),
+    FOREIGN KEY (item_id) REFERENCES items (id) ON DELETE CASCADE
+);
+CREATE TABLE items (
+    id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
     amount FLOAT DEFAULT 0 NOT NULL,
     currency_id VARCHAR(16) NOT NULL,
-    goal_id VARCHAR(16) NOT NULL,
-    FOREIGN KEY (goal_id) REFERENCES goals (id) ON DELETE CASCADE,
+    bought BOOLEAN DEFAULT FALSE,
     FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE
 );
-CREATE TABLE goal_plan_entries (
-    id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
-    amount FLOAT DEFAULT 0 NOT NULL,
-    currency_id VARCHAR(16) NOT NULL,
-    kind_id VARCHAR(16) NOT NULL,
-    goal_id VARCHAR(16) NOT NULL,
-    FOREIGN KEY (currency_id) REFERENCES currencies (id),
-    FOREIGN KEY (goal_id) REFERENCES goals (id) ON DELETE CASCADE,
-    FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id)
-);
+-- CREATE TABLE goal_plan_entries (
+--     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
+--     amount FLOAT DEFAULT 0 NOT NULL,
+--     currency_id VARCHAR(16) NOT NULL,
+--     kind_id VARCHAR(16) NOT NULL,
+--     goal_id VARCHAR(16) NOT NULL,
+--     FOREIGN KEY (currency_id) REFERENCES currencies (id),
+--     FOREIGN KEY (goal_id) REFERENCES goals (id) ON DELETE CASCADE,
+--     FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id)
+-- );
 -- +goose StatementEnd
 
 -- +goose Down
@@ -67,6 +72,7 @@ DROP TABLE currencies;
 DROP TABLE transaction_kinds;
 DROP TABLE transactions;
 DROP TABLE goals;
-DROP TABLE goal_items;
-DROP TABLE goal_plan_entries;
+DROP TABLE goals_items;
+DROP TABLE items;
+-- DROP TABLE goal_plan_entries;
 -- +goose StatementEnd
