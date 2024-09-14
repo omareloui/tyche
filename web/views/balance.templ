@@ -3,15 +3,23 @@ package views
 import "github.com/omareloui/financial-plans/internal/models"
 
 templ Balance(balances []models.Balance) {
-	<div id="balance" class="flex gap-6 items-start">
-		for _, b := range balances {
-			<div>{ b.ViewAmount() }</div>
-		}
+	<div id="balance" class="flex gap-6 items-start text-sm">
+		@balance(balances)
 	</div>
 }
 
 templ BalanceOOB(balances []models.Balance) {
-	<div id="balance" hx-swap-oob="outerHTML">
-		@Balance(balances)
+	<div id="balance" hx-swap-oob="innerHTML">
+		@balance(balances)
 	</div>
+}
+
+templ balance(balances []models.Balance) {
+	for _, b := range balances {
+		<div
+			if b.Amount < 0 {
+				class="text-red-500"
+			}
+		>{ b.ViewAmount() }</div>
+	}
 }
