@@ -10,7 +10,7 @@ import (
 	"github.com/omareloui/financial-plans/internal/errs"
 )
 
-var nonDigitRegexp *regexp.Regexp = regexp.MustCompile(`\D+`)
+var nonDigitRegexp *regexp.Regexp = regexp.MustCompile(`[^0-9\.]`)
 
 func renderToBody(w http.ResponseWriter, r *http.Request, template templ.Component) error {
 	return template.Render(r.Context(), w)
