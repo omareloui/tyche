@@ -12,12 +12,12 @@ type FormInputData struct {
 
 templ form(action, path string, attrs ...templ.Attributes) {
 	<form
-		class="grid gap-2 entry-container"
 		{ templ.Attributes{fmt.Sprintf("hx-%s", action): string(templ.SafeURL(path))}... }
-		hx-swap="outerHTML"
 		if attrs != nil {
 			{ attrs[0]... }
 		}
+		class="grid gap-2 entry-container"
+		hx-swap="outerHTML"
 	>
 		{ children... }
 	</form>
@@ -51,7 +51,11 @@ templ creationForm(title, postTo, submitStr string, close ...bool) {
 				@closeIcon("15px")
 			</button>
 		</div>
-		@form("post", postTo, templ.Attributes{"x-show": "open", "x-collapse.duration.1000ms": true}) {
+		@form("post", postTo, templ.Attributes{
+			"x-show":                    "open",
+			"x-collapse.duration.300ms": true,
+			"class":                     "grid gap-2 entry-container mt-2",
+		}) {
 			{ children... }
 			<button
 				type="submit"

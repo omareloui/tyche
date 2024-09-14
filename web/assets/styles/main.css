@@ -28,7 +28,7 @@ textarea.input-field {
 .form-visibility-button {
   @apply rounded-full grid place-items-center;
 
-  --size: 40px;
+  --size: 30px;
   width: var(--size);
   height: var(--size);
 }
