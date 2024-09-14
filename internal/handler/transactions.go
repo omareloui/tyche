@@ -38,8 +38,11 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 	l.Debug("transaction from data", zap.Any("formdata", formdata))
 	l.Debug("transactions count", zap.Int("transactions_count", len(transactions)))
 
+	balances, err := h.repo.GetBalances(r.Context())
+
 	defaultCurrency := slicesutils.Find(currencies, func(cur models.Currency) bool { return cur.Currency == config.GetDefaultCurrency() })
-	comp := views.Transactions(formdata, transactions,
+
+	comp := views.Transactions(balances, formdata, transactions,
 		h.repo.CurrenciesToMap(currencies),
 		h.repo.TransactionKindsToMap(kinds),
 		defaultCurrency.Symbol)
@@ -265,7 +268,7 @@ func (h Handler) mapTransactionToFormData(t *models.Transaction, err *errs.Valid
 }
 
 func (h Handler) mapFormDataToTransaction(r *http.Request) (*models.Transaction, error) {
-	amount, err := parseIntIfExists(r.FormValue("amount"))
+	amount, err := parseFloatIfExists(r.FormValue("amount"))
 	if err != nil {
 		return nil, err
 	}
@@ -276,7 +279,7 @@ func (h Handler) mapFormDataToTransaction(r *http.Request) (*models.Transaction,
 	}
 
 	return &models.Transaction{
-		Amount:      int64(amount),
+		Amount:      amount,
 		Currency:    models.Currency{ID: r.FormValue("currency_id")},
 		Kind:        models.TransactionKind{ID: r.FormValue("kind_id")},
 		IsRecurrent: parseBoolean(r.FormValue("is_recurrent")),

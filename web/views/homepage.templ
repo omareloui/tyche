@@ -1,7 +1,9 @@
 package views
 
-templ HomePage() {
-	@baseLayout("Homepage") {
+import "github.com/omareloui/financial-plans/internal/models"
+
+templ HomePage(balances []models.Balance) {
+	@baseLayout("Homepage", balances) {
 		@container() {
 			<h1>Homepage!</h1>
 		}

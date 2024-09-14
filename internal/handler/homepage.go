@@ -10,5 +10,9 @@ import (
 type HandlerMethod func(w http.ResponseWriter, r *http.Request) (templ.Component, error)
 
 func (h Handler) HomePage(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	return views.HomePage(), nil
+	balances, err := h.repo.GetBalances(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	return views.HomePage(balances), nil
 }

@@ -15,12 +15,13 @@ type TransactionFormData struct {
 }
 
 templ Transactions(
+	balances []models.Balance,
 	fd *TransactionFormData,
 	transactions []models.Transaction,
 	currencies map[string]string,
 	kinds map[string]string,
 	defaultCurrencySymbol string) {
-	@baseLayout("Transactions") {
+	@baseLayout("Transactions", balances) {
 		@container() {
 			@mainHeader("Transactions")
 			@CreateTransactionForm(fd, currencies, kinds, defaultCurrencySymbol)

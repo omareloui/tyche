@@ -1,6 +1,8 @@
 package views
 
-templ baseLayout(pageTitle string) {
+import "github.com/omareloui/financial-plans/internal/models"
+
+templ baseLayout(pageTitle string, balances []models.Balance) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
@@ -20,7 +22,7 @@ templ baseLayout(pageTitle string) {
 		</head>
 		<body>
 			@container() {
-				@navbar()
+				@navbar(balances)
 			}
 			<div class="pb-5">
 				{ children... }
@@ -39,14 +41,18 @@ templ baseLayout(pageTitle string) {
 	</html>
 }
 
-templ navbar() {
+templ navbar(balances []models.Balance) {
 	<nav class="flex gap-6 items-start my-4">
 		<div hx-boost="true" class="flex gap-6 justify-between w-full">
 			<div class="flex gap-6 items-start">
 				@navlink("/")
 				@navlink("/transactions")
 			</div>
-			<!-- <div class="flex gap-6 items-start"></div> -->
+			<div class="flex gap-6 items-start">
+				for _, b := range balances {
+					<div>{ b.ViewAmount() }</div>
+				}
+			</div>
 		</div>
 	</nav>
 }
