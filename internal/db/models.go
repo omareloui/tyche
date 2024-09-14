@@ -11,8 +11,9 @@ import (
 
 type Balance struct {
 	ID         string
-	Amount     int64
+	Amount     float64
 	CurrencyID string
+	FxRate     float64
 }
 
 type Currency struct {
@@ -34,14 +35,14 @@ type Goal struct {
 type GoalItem struct {
 	ID         string
 	Title      string
-	Amount     int64
+	Amount     float64
 	CurrencyID string
 	GoalID     string
 }
 
 type GoalPlanEntry struct {
 	ID         string
-	Amount     int64
+	Amount     float64
 	CurrencyID string
 	KindID     string
 	GoalID     string
@@ -49,7 +50,7 @@ type GoalPlanEntry struct {
 
 type Transaction struct {
 	ID          string
-	Amount      int64
+	Amount      float64
 	CurrencyID  string
 	KindID      string
 	IsRecurrent bool

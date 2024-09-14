@@ -11,34 +11,45 @@ import (
 )
 
 const createBalance = `-- name: CreateBalance :exec
-INSERT INTO balances (id, currency_id, amount) VALUES (?, ?, ?)
+INSERT INTO balances (id, currency_id, amount, fx_rate) VALUES (?, ?, ?, ?)
 `
 
 type CreateBalanceParams struct {
 	ID         string
 	CurrencyID string
-	Amount     int64
+	Amount     float64
+	FxRate     float64
 }
 
 func (q *Queries) CreateBalance(ctx context.Context, arg CreateBalanceParams) error {
-	_, err := q.db.ExecContext(ctx, createBalance, arg.ID, arg.CurrencyID, arg.Amount)
+	_, err := q.db.ExecContext(ctx, createBalance,
+		arg.ID,
+		arg.CurrencyID,
+		arg.Amount,
+		arg.FxRate,
+	)
 	return err
 }
 
 const getBalances = `-- name: GetBalances :many
 SELECT
-    balances.amount,
-    balances.currency_id,
-    currencies.currency
-FROM balances
-LEFT JOIN currencies
-    ON balances.currency_id = currencies.id
+    b.id,
+    b.amount,
+    b.currency_id,
+    b.fx_rate,
+    c.currency,
+    c.symbol
+FROM balances AS b
+LEFT JOIN currencies AS c ON b.currency_id = c.id
 `
 
 type GetBalancesRow struct {
-	Amount     int64
+	ID         string
+	Amount     float64
 	CurrencyID string
+	FxRate     float64
 	Currency   sql.NullString
+	Symbol     sql.NullString
 }
 
 func (q *Queries) GetBalances(ctx context.Context) ([]GetBalancesRow, error) {
@@ -50,7 +61,14 @@ func (q *Queries) GetBalances(ctx context.Context) ([]GetBalancesRow, error) {
 	var items []GetBalancesRow
 	for rows.Next() {
 		var i GetBalancesRow
-		if err := rows.Scan(&i.Amount, &i.CurrencyID, &i.Currency); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Amount,
+			&i.CurrencyID,
+			&i.FxRate,
+			&i.Currency,
+			&i.Symbol,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

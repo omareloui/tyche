@@ -1,11 +1,13 @@
 -- name: GetBalances :many
 SELECT
-    balances.amount,
-    balances.currency_id,
-    currencies.currency
-FROM balances
-LEFT JOIN currencies
-    ON balances.currency_id = currencies.id;
+    b.id,
+    b.amount,
+    b.currency_id,
+    b.fx_rate,
+    c.currency,
+    c.symbol
+FROM balances AS b
+LEFT JOIN currencies AS c ON b.currency_id = c.id;
 
 -- name: CreateBalance :exec
-INSERT INTO balances (id, currency_id, amount) VALUES (?, ?, ?);
+INSERT INTO balances (id, currency_id, amount, fx_rate) VALUES (?, ?, ?, ?);

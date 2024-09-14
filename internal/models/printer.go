@@ -9,7 +9,8 @@ import (
 var p *message.Printer = message.NewPrinter(language.English)
 
 type nu interface {
-	~int | ~int64 | ~int32 | ~int16 | ~int8
+	~int | ~int64 | ~int32 | ~int16 | ~int8 |
+		~float64 | ~float32
 }
 
 func formatNum[T nu](num T) string {

@@ -26,7 +26,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?)
 
 type CreateTransactionParams struct {
 	ID          string
-	Amount      int64
+	Amount      float64
 	CurrencyID  string
 	KindID      string
 	IsRecurrent bool
@@ -68,7 +68,7 @@ WHERE t.id = ? LIMIT 1
 
 type GetTransactionRow struct {
 	ID          string
-	Amount      int64
+	Amount      float64
 	CurrencyID  string
 	KindID      string
 	IsRecurrent bool
@@ -119,7 +119,7 @@ LEFT JOIN transaction_kinds AS k ON t.kind_id = k.id
 
 type GetTransactionsRow struct {
 	ID          string
-	Amount      int64
+	Amount      float64
 	CurrencyID  string
 	KindID      string
 	IsRecurrent bool
@@ -179,7 +179,7 @@ WHERE id = ?
 `
 
 type UpdateTransactionParams struct {
-	Amount      int64
+	Amount      float64
 	CurrencyID  string
 	KindID      string
 	IsRecurrent bool

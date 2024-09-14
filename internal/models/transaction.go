@@ -8,8 +8,8 @@ import (
 )
 
 type Transaction struct {
-	ID          string `validate:"required"`
-	Amount      int64  `validate:"required,min=1"`
+	ID          string  `validate:"required"`
+	Amount      float64 `validate:"required,min=1"`
 	IsRecurrent bool
 	FulfilledOn time.Time `validate:"omitempty"`
 	ScheduledTo time.Time `validate:"required"`

@@ -12,14 +12,15 @@ CREATE TABLE transaction_kinds (
 );
 CREATE TABLE balances (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
-    amount INT DEFAULT 0 NOT NULL,
+    amount FLOAT DEFAULT 0 NOT NULL,
     currency_id VARCHAR(16) UNIQUE NOT NULL,
+    fx_rate FLOAT DEFAULT 1 NOT NULL,
     FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE
 );
 
 CREATE TABLE transactions (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
-    amount INT DEFAULT 0 NOT NULL,
+    amount FLOAT DEFAULT 0 NOT NULL,
     currency_id VARCHAR(16) NOT NULL,
     kind_id VARCHAR(16) NOT NULL,
     is_recurrent BOOLEAN NOT NULL DEFAULT FALSE,
@@ -41,7 +42,7 @@ CREATE TABLE goals (
 CREATE TABLE goal_items (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
-    amount INT DEFAULT 0 NOT NULL,
+    amount FLOAT DEFAULT 0 NOT NULL,
     currency_id VARCHAR(16) NOT NULL,
     goal_id VARCHAR(16) NOT NULL,
     FOREIGN KEY (goal_id) REFERENCES goals (id) ON DELETE CASCADE,
@@ -49,7 +50,7 @@ CREATE TABLE goal_items (
 );
 CREATE TABLE goal_plan_entries (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
-    amount INT DEFAULT 0 NOT NULL,
+    amount FLOAT DEFAULT 0 NOT NULL,
     currency_id VARCHAR(16) NOT NULL,
     kind_id VARCHAR(16) NOT NULL,
     goal_id VARCHAR(16) NOT NULL,

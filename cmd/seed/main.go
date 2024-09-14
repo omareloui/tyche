@@ -74,7 +74,10 @@ func main() {
 		}
 
 		for _, cur := range currencies {
-			if err := queries.CreateBalance(context.Background(), db.CreateBalanceParams{ID: idgen.New(), CurrencyID: cur.ID, Amount: 0}); err != nil {
+			if err := queries.CreateBalance(context.Background(), db.CreateBalanceParams{
+				ID: idgen.New(), CurrencyID: cur.ID, Amount: 0, FxRate: 1,
+			},
+			); err != nil {
 				log.Fatalln("error while seeding the balance", err)
 			}
 		}
