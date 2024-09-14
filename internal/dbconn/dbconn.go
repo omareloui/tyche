@@ -3,7 +3,7 @@ package dbconn
 import (
 	"database/sql"
 
-	"github.com/omareloui/financial-plans/internal/db"
+	"github.com/omareloui/financial-planner/internal/db"
 )
 
 func Connect(datasource string) (*db.Queries, error) {

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/a-h/templ"
-	"github.com/omareloui/financial-plans/internal/errs"
+	"github.com/omareloui/financial-planner/internal/errs"
 )
 
 var nonDigitRegexp *regexp.Regexp = regexp.MustCompile(`[^0-9\.]`)

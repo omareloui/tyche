@@ -1,4 +1,4 @@
-module github.com/omareloui/financial-plans
+module github.com/omareloui/financial-planner
 
 go 1.22.5
 

@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"github.com/omareloui/financial-plans/internal/db"
+	"github.com/omareloui/financial-planner/internal/db"
 )
 
 type Repository struct {

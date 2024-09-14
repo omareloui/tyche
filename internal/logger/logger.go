@@ -5,7 +5,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/omareloui/financial-plans/internal/config"
+	"github.com/omareloui/financial-planner/internal/config"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"

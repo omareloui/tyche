@@ -1,0 +1,19 @@
+ 
+ 
+<div data-amount class=\"grid grid-cols-3 gap-4\">
+</div>
+<div id=\"tx-list\" hx-swap-oob=\"beforeend\">
+</div>
+<p>ID: 
+</p>
+ 
+<div hx-target=\"this\" class=\"entry-container\"><p>ID: 
+</p><p>Amount: 
+</p><p>Kind: 
+</p>
+<p>Is Recurrent?: yes</p>
+<p>Is Recurrent?: no</p>
+<p>Scheduled To: 
+</p><p>Created At: 
+</p><div class=\"flex gap-4\">
+</div></div>

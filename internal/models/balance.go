@@ -3,7 +3,7 @@ package models
 import (
 	"strings"
 
-	"github.com/omareloui/financial-plans/internal/db"
+	"github.com/omareloui/financial-planner/internal/db"
 )
 
 type Balance struct {

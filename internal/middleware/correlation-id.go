@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/omareloui/financial-plans/internal/idgen"
+	"github.com/omareloui/financial-planner/internal/idgen"
 )
 
 type correlationIDCtxKey struct{}

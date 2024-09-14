@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/omareloui/financial-plans/internal/logger"
+	"github.com/omareloui/financial-planner/internal/logger"
 	"go.uber.org/zap"
 )
 

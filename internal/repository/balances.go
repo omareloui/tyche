@@ -3,8 +3,8 @@ package repository
 import (
 	"context"
 
-	"github.com/omareloui/financial-plans/internal/db"
-	"github.com/omareloui/financial-plans/internal/models"
+	"github.com/omareloui/financial-planner/internal/db"
+	"github.com/omareloui/financial-planner/internal/models"
 )
 
 func (r *Repository) GetBalances(ctx context.Context) ([]models.Balance, error) {

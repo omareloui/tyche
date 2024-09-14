@@ -6,7 +6,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/go-playground/validator/v10/non-standard/validators"
-	"github.com/omareloui/financial-plans/internal/errs"
+	"github.com/omareloui/financial-planner/internal/errs"
 )
 
 type Validator struct {

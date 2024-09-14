@@ -10,7 +10,7 @@ import templruntime "github.com/a-h/templ/runtime"
 
 import (
 	"fmt"
-	"github.com/omareloui/financial-plans/internal/models"
+	"github.com/omareloui/financial-planner/internal/models"
 	"time"
 )
 

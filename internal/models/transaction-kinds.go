@@ -1,6 +1,6 @@
 package models
 
-import "github.com/omareloui/financial-plans/internal/db"
+import "github.com/omareloui/financial-planner/internal/db"
 
 type TransactionKind struct {
 	ID              string `validate:"required"`

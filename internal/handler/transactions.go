@@ -7,13 +7,13 @@ import (
 	"time"
 
 	"github.com/a-h/templ"
-	"github.com/omareloui/financial-plans/internal/config"
-	"github.com/omareloui/financial-plans/internal/errs"
-	"github.com/omareloui/financial-plans/internal/idgen"
-	"github.com/omareloui/financial-plans/internal/logger"
-	"github.com/omareloui/financial-plans/internal/models"
-	"github.com/omareloui/financial-plans/internal/slicesutils"
-	"github.com/omareloui/financial-plans/web/views"
+	"github.com/omareloui/financial-planner/internal/config"
+	"github.com/omareloui/financial-planner/internal/errs"
+	"github.com/omareloui/financial-planner/internal/idgen"
+	"github.com/omareloui/financial-planner/internal/logger"
+	"github.com/omareloui/financial-planner/internal/models"
+	"github.com/omareloui/financial-planner/internal/slicesutils"
+	"github.com/omareloui/financial-planner/web/views"
 	"go.uber.org/zap"
 )
 

@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/a-h/templ"
-	"github.com/omareloui/financial-plans/web/views"
+	"github.com/omareloui/financial-planner/web/views"
 )
 
 type HandlerMethod func(w http.ResponseWriter, r *http.Request) (templ.Component, error)

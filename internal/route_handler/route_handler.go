@@ -5,8 +5,8 @@ import (
 	"net/http"
 
 	"github.com/a-h/templ"
-	"github.com/omareloui/financial-plans/internal/logger"
-	"github.com/omareloui/financial-plans/internal/resperr"
+	"github.com/omareloui/financial-planner/internal/logger"
+	"github.com/omareloui/financial-planner/internal/resperr"
 	"go.uber.org/zap"
 )
 

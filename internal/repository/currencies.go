@@ -3,7 +3,7 @@ package repository
 import (
 	"context"
 
-	"github.com/omareloui/financial-plans/internal/models"
+	"github.com/omareloui/financial-planner/internal/models"
 )
 
 func (r *Repository) GetCurrencies(ctx context.Context) ([]models.Currency, error) {
