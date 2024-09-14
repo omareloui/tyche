@@ -5,12 +5,7 @@ import (
 	"time"
 
 	"github.com/omareloui/financial-plans/internal/db"
-	"golang.org/x/text/language"
-	"golang.org/x/text/message"
-	"golang.org/x/text/number"
 )
-
-var p *message.Printer = message.NewPrinter(language.English)
 
 type Transaction struct {
 	ID          string `validate:"required"`
@@ -29,7 +24,7 @@ func (t *Transaction) ViewAmount() string {
 		strBuilder.WriteString(t.Currency.Symbol)
 		strBuilder.WriteString(" ")
 	}
-	strBuilder.WriteString(p.Sprintf("%v", number.Decimal(t.Amount)))
+	strBuilder.WriteString(formatNum(t.Amount))
 	return strBuilder.String()
 }
 
