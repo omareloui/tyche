@@ -24,6 +24,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("GET /transactions/{id}", handle(h.Transaction))
 	mux.Handle("GET /transactions/{id}/edit", handle(h.GetEditTransaction))
 	mux.Handle("PUT /transactions/{id}", handle(h.EditTransaction))
+	mux.Handle("DELETE /transactions/{id}", handle(h.DeleteTransaction))
 
 	static(mux, []string{"styles", "js"}, "./web/public")
 	mux.Handle("/", handle(h.NotFound))

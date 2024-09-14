@@ -92,6 +92,9 @@ templ Transaction(tx *models.Transaction) {
 		}
 		<p>Scheduled To: { tx.ScheduledTo.Format(time.DateOnly) }</p>
 		<p>Created At: { tx.CreatedAt.Format(time.RFC1123Z) }</p>
-		@editButton(fmt.Sprintf("/transactions/%s/edit", tx.ID))
+		<div class="flex gap-4">
+			@editButton(fmt.Sprintf("/transactions/%s/edit", tx.ID))
+			@deleteButton(fmt.Sprintf("/transactions/%s", tx.ID))
+		</div>
 	</div>
 }

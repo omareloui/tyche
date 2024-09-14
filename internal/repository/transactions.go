@@ -45,6 +45,10 @@ func (r *Repository) GetTransaction(ctx context.Context, id string) (*models.Tra
 	return models.DBTransactionRawToTransaction(&dbTx), nil
 }
 
+func (r *Repository) DeleteTransaction(ctx context.Context, id string) error {
+	return r.db.DeleteTransaction(ctx, id)
+}
+
 func (r *Repository) UpdateTransaction(ctx context.Context, tx *models.Transaction) error {
 	return r.db.UpdateTransaction(ctx, db.UpdateTransactionParams{
 		ID:          tx.ID,

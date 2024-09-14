@@ -115,18 +115,9 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		return nil, err
 	}
 
-	balances, err := h.repo.GetBalances(r.Context())
-	if err != nil {
-		l.Error("fetching balances")
+	if err := h.getAndRenderBalancesOOB(w, r); err != nil {
 		return nil, err
 	}
-	l.Debug("fetched balances")
-
-	if err = renderToBody(w, r, views.BalanceOOB(balances)); err != nil {
-		l.Error("rendering balance OOB")
-		return nil, err
-	}
-	l.Debug("rendered balance OOB")
 
 	formdata, err := h.mapTransactionToFormData(defaultTransaction(currencies, kinds), new(errs.ValidationError))
 	if err != nil {
@@ -243,6 +234,45 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 	return views.Transaction(tx), nil
 }
 
+func (h Handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+
+	tx, err := h.repo.GetTransaction(r.Context(), id)
+	if err != nil {
+		l.Error("fetching transaction", zap.Error(err))
+		return nil, err
+	}
+	l.Debug("fetched transaction", zap.Any("transaction", tx))
+
+	if err := h.repo.DeleteTransaction(r.Context(), id); err != nil {
+		l.Error("deleting transaction", zap.Error(err))
+		return nil, err
+	}
+	l.Debug("deleted transaction")
+
+	upBalance := h.repo.AddToBalance
+	if tx.Kind.IncreaseBalance {
+		upBalance = h.repo.RemoveFromBalance
+	}
+
+	if err := upBalance(r.Context(), tx.Currency.ID, tx.Amount); err != nil {
+		l.Error("updating balance", zap.Error(err))
+		return nil, err
+	}
+	l.Debug("updated balance")
+
+	if err := h.getAndRenderBalancesOOB(w, r); err != nil {
+		return nil, err
+	}
+
+	return nil, nil
+}
+
 func (h Handler) AmountInputs(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	l := logger.FromCtx(r.Context())
 
@@ -267,6 +297,23 @@ func (h Handler) AmountInputs(w http.ResponseWriter, r *http.Request) (templ.Com
 	}
 
 	return views.AmountInputs(formdata, h.repo.CurrenciesToMap(curs), currency.Symbol), nil
+}
+
+func (h Handler) getAndRenderBalancesOOB(w http.ResponseWriter, r *http.Request) error {
+	l := logger.FromCtx(r.Context())
+	balances, err := h.repo.GetBalances(r.Context())
+	if err != nil {
+		l.Error("fetching balances", zap.Error(err))
+		return err
+	}
+	l.Debug("fetched balances", zap.Any("balances", balances))
+
+	if err = renderToBody(w, r, views.BalanceOOB(balances)); err != nil {
+		l.Error("rendering balance OOB")
+		return err
+	}
+	l.Debug("rendered balance OOB")
+	return nil
 }
 
 func (h Handler) getCurrenciesAndKinds(ctx context.Context) ([]models.Currency, []models.TransactionKind, error) {

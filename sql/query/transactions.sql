@@ -22,7 +22,8 @@ SELECT
     t.created_at,
     c.currency,
     c.symbol,
-    k.kind
+    k.kind,
+    k.increase_balance
 FROM transactions AS t
 LEFT JOIN currencies AS c ON t.currency_id = c.id
 LEFT JOIN transaction_kinds AS k ON t.kind_id = k.id;
@@ -39,7 +40,8 @@ SELECT
     t.created_at,
     c.currency,
     c.symbol,
-    k.kind
+    k.kind,
+    k.increase_balance
 FROM transactions AS t
 LEFT JOIN currencies AS c ON t.currency_id = c.id
 LEFT JOIN transaction_kinds AS k ON t.kind_id = k.id
@@ -54,4 +56,8 @@ kind_id = ?,
 is_recurrent = ?,
 fulfilled_on = ?,
 scheduled_to = ?
+WHERE id = ?;
+
+-- name: DeleteTransaction :exec
+DELETE FROM transactions
 WHERE id = ?;

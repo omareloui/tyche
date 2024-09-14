@@ -47,6 +47,16 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 	return err
 }
 
+const deleteTransaction = `-- name: DeleteTransaction :exec
+DELETE FROM transactions
+WHERE id = ?
+`
+
+func (q *Queries) DeleteTransaction(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteTransaction, id)
+	return err
+}
+
 const getTransaction = `-- name: GetTransaction :one
 SELECT
     t.id,
@@ -59,7 +69,8 @@ SELECT
     t.created_at,
     c.currency,
     c.symbol,
-    k.kind
+    k.kind,
+    k.increase_balance
 FROM transactions AS t
 LEFT JOIN currencies AS c ON t.currency_id = c.id
 LEFT JOIN transaction_kinds AS k ON t.kind_id = k.id
@@ -67,17 +78,18 @@ WHERE t.id = ? LIMIT 1
 `
 
 type GetTransactionRow struct {
-	ID          string
-	Amount      float64
-	CurrencyID  string
-	KindID      string
-	IsRecurrent bool
-	FulfilledOn sql.NullTime
-	ScheduledTo time.Time
-	CreatedAt   interface{}
-	Currency    sql.NullString
-	Symbol      sql.NullString
-	Kind        sql.NullString
+	ID              string
+	Amount          float64
+	CurrencyID      string
+	KindID          string
+	IsRecurrent     bool
+	FulfilledOn     sql.NullTime
+	ScheduledTo     time.Time
+	CreatedAt       interface{}
+	Currency        sql.NullString
+	Symbol          sql.NullString
+	Kind            sql.NullString
+	IncreaseBalance sql.NullBool
 }
 
 func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransactionRow, error) {
@@ -95,6 +107,7 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 		&i.Currency,
 		&i.Symbol,
 		&i.Kind,
+		&i.IncreaseBalance,
 	)
 	return i, err
 }
@@ -111,24 +124,26 @@ SELECT
     t.created_at,
     c.currency,
     c.symbol,
-    k.kind
+    k.kind,
+    k.increase_balance
 FROM transactions AS t
 LEFT JOIN currencies AS c ON t.currency_id = c.id
 LEFT JOIN transaction_kinds AS k ON t.kind_id = k.id
 `
 
 type GetTransactionsRow struct {
-	ID          string
-	Amount      float64
-	CurrencyID  string
-	KindID      string
-	IsRecurrent bool
-	FulfilledOn sql.NullTime
-	ScheduledTo time.Time
-	CreatedAt   interface{}
-	Currency    sql.NullString
-	Symbol      sql.NullString
-	Kind        sql.NullString
+	ID              string
+	Amount          float64
+	CurrencyID      string
+	KindID          string
+	IsRecurrent     bool
+	FulfilledOn     sql.NullTime
+	ScheduledTo     time.Time
+	CreatedAt       interface{}
+	Currency        sql.NullString
+	Symbol          sql.NullString
+	Kind            sql.NullString
+	IncreaseBalance sql.NullBool
 }
 
 func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, error) {
@@ -152,6 +167,7 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.Currency,
 			&i.Symbol,
 			&i.Kind,
+			&i.IncreaseBalance,
 		); err != nil {
 			return nil, err
 		}

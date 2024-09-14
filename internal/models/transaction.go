@@ -59,8 +59,9 @@ func DBTransactionRawToTransaction(dbTransaction *db.GetTransactionRow) *Transac
 			Symbol:   dbTransaction.Symbol.String,
 		},
 		Kind: TransactionKind{
-			ID:   dbTransaction.KindID,
-			Kind: dbTransaction.Kind.String,
+			ID:              dbTransaction.KindID,
+			Kind:            dbTransaction.Kind.String,
+			IncreaseBalance: dbTransaction.IncreaseBalance.Bool,
 		},
 	}
 }
@@ -79,8 +80,9 @@ func DBTransactionsRawToTransaction(dbTransaction *db.GetTransactionsRow) *Trans
 			Symbol:   dbTransaction.Symbol.String,
 		},
 		Kind: TransactionKind{
-			ID:   dbTransaction.KindID,
-			Kind: dbTransaction.Kind.String,
+			ID:              dbTransaction.KindID,
+			Kind:            dbTransaction.Kind.String,
+			IncreaseBalance: dbTransaction.IncreaseBalance.Bool,
 		},
 	}
 }
