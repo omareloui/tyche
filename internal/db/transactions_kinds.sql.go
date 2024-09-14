@@ -26,6 +26,22 @@ func (q *Queries) CreateTransactionKind(ctx context.Context, arg CreateTransacti
 	return err
 }
 
+const getTransactionKind = `-- name: GetTransactionKind :one
+SELECT
+    id,
+    kind,
+    increase_balance
+FROM transaction_kinds
+WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetTransactionKind(ctx context.Context, id string) (TransactionKind, error) {
+	row := q.db.QueryRowContext(ctx, getTransactionKind, id)
+	var i TransactionKind
+	err := row.Scan(&i.ID, &i.Kind, &i.IncreaseBalance)
+	return i, err
+}
+
 const getTransactionKinds = `-- name: GetTransactionKinds :many
 SELECT
     id,

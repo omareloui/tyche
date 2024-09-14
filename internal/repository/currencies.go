@@ -14,6 +14,14 @@ func (r *Repository) GetCurrencies(ctx context.Context) ([]models.Currency, erro
 	return models.DBCurrenciesToCurrencies(dbCurrencies), nil
 }
 
+func (r *Repository) GetCurrency(ctx context.Context, id string) (*models.Currency, error) {
+	dbCurrency, err := r.db.GetCurrency(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return models.DBCurrencyToCurrency(&dbCurrency), nil
+}
+
 func (r *Repository) GetCurrenciesMap(ctx context.Context) (map[string]string, error) {
 	currencies, err := r.GetCurrencies(ctx)
 	if err != nil {

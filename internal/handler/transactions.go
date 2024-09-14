@@ -106,12 +106,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 	}
 	l.Debug("rendered transaction OOB")
 
-	upBalance := h.repo.RemoveFromBalance
-	if k.IncreaseBalance {
-		upBalance = h.repo.AddToBalance
-	}
-	if err := upBalance(r.Context(), tx.Currency.ID, tx.Amount); err != nil {
-		l.Error("updating the balance", zap.Error(err))
+	if err := h.applyTransactionToBalance(r, tx); err != nil {
 		return nil, err
 	}
 
@@ -182,6 +177,7 @@ func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (tem
 }
 
 func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	// TODO: use a transaction here
 	id := r.PathValue("id")
 	if id == "" {
 		return nil, errs.ErrInvalidID
@@ -220,14 +216,43 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 			h.repo.TransactionKindsToMap(kinds)), nil
 	}
 
+	oldTx, err := h.repo.GetTransaction(r.Context(), tx.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	tx.CreatedAt = oldTx.CreatedAt
+
 	if err := h.repo.UpdateTransaction(r.Context(), tx); err != nil {
 		l.Error("updating transaction", zap.Error(err))
 		return nil, err
 	}
 	l.Info("updated transaction")
 
-	tx, err = h.repo.GetTransaction(r.Context(), tx.ID)
+	txKind, err := h.repo.GetTransactionKind(r.Context(), tx.Kind.ID)
 	if err != nil {
+		l.Error("fetching txKind", zap.Error(err))
+		return nil, err
+	}
+
+	txCurrency, err := h.repo.GetCurrency(r.Context(), tx.Currency.ID)
+	if err != nil {
+		l.Error("fetching txCurrency", zap.Error(err))
+		return nil, err
+	}
+
+	tx.Kind = *txKind
+	tx.Currency = *txCurrency
+
+	if err := h.undoTransactionOnBalance(r, oldTx); err != nil {
+		return nil, err
+	}
+
+	if err := h.applyTransactionToBalance(r, tx); err != nil {
+		return nil, err
+	}
+
+	if err := h.getAndRenderBalancesOOB(w, r); err != nil {
 		return nil, err
 	}
 
@@ -255,16 +280,9 @@ func (h Handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) (temp
 	}
 	l.Debug("deleted transaction")
 
-	upBalance := h.repo.AddToBalance
-	if tx.Kind.IncreaseBalance {
-		upBalance = h.repo.RemoveFromBalance
-	}
-
-	if err := upBalance(r.Context(), tx.Currency.ID, tx.Amount); err != nil {
-		l.Error("updating balance", zap.Error(err))
+	if err := h.undoTransactionOnBalance(r, tx); err != nil {
 		return nil, err
 	}
-	l.Debug("updated balance")
 
 	if err := h.getAndRenderBalancesOOB(w, r); err != nil {
 		return nil, err
@@ -297,6 +315,34 @@ func (h Handler) AmountInputs(w http.ResponseWriter, r *http.Request) (templ.Com
 	}
 
 	return views.AmountInputs(formdata, h.repo.CurrenciesToMap(curs), currency.Symbol), nil
+}
+
+func (h Handler) applyTransactionToBalance(r *http.Request, tx *models.Transaction) error {
+	l := logger.FromCtx(r.Context())
+	upBalance := h.repo.RemoveFromBalance
+	if tx.Kind.IncreaseBalance {
+		upBalance = h.repo.AddToBalance
+	}
+	if err := upBalance(r.Context(), tx.Currency.ID, tx.Amount); err != nil {
+		l.Error("applying transaction to balance", zap.Error(err))
+		return err
+	}
+	l.Debug("applyed transaction to balance")
+	return nil
+}
+
+func (h Handler) undoTransactionOnBalance(r *http.Request, tx *models.Transaction) error {
+	l := logger.FromCtx(r.Context())
+	upBalance := h.repo.AddToBalance
+	if tx.Kind.IncreaseBalance {
+		upBalance = h.repo.RemoveFromBalance
+	}
+	if err := upBalance(r.Context(), tx.Currency.ID, tx.Amount); err != nil {
+		l.Error("undoing transaction on balance", zap.Error(err))
+		return err
+	}
+	l.Debug("undone transaction on balance")
+	return nil
 }
 
 func (h Handler) getAndRenderBalancesOOB(w http.ResponseWriter, r *http.Request) error {

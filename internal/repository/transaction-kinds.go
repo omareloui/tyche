@@ -14,6 +14,14 @@ func (r *Repository) GetTransactionKinds(ctx context.Context) ([]models.Transact
 	return models.DBTransactionKindsToTransactionKinds(dbKinds), nil
 }
 
+func (r *Repository) GetTransactionKind(ctx context.Context, id string) (*models.TransactionKind, error) {
+	k, err := r.db.GetTransactionKind(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return models.DBTransactionKindToTransactionKind(&k), nil
+}
+
 func (r *Repository) GetTransactionKindsMap(ctx context.Context) (map[string]string, error) {
 	kinds, err := r.GetTransactionKinds(ctx)
 	if err != nil {
