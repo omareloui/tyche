@@ -59,7 +59,7 @@ templ AmountInputs(fd *TransactionFD, currencies map[string]string, currencySymb
 }
 
 templ TransactionOOB(tx *models.Transaction) {
-	<div id="tx-list" hx-swap-oob="beforeend">
+	<div id="tx-list" hx-swap-oob="afterbegin">
 		@Transaction(tx)
 	</div>
 }
