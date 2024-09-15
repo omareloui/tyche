@@ -32,7 +32,7 @@ CREATE TABLE transactions (
 CREATE TABLE goals (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
-    egp_sum_total FLOAT NOT NULL,
+    egp_subtotal FLOAT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW
 );
 CREATE TABLE goals_items (
@@ -44,11 +44,9 @@ CREATE TABLE goals_items (
 CREATE TABLE items (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
-    -- TODO: rename to price
-    amount FLOAT DEFAULT 0 NOT NULL,
+    price FLOAT DEFAULT 0 NOT NULL,
     currency_id VARCHAR(16) NOT NULL,
-    -- TODO: rename to percussed on
-    bought_on DATE,
+    purchased_on on DATE,
     FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE
 );
 -- CREATE TABLE goal_plan_entries (

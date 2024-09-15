@@ -35,7 +35,7 @@ func (r *Repository) CreateGoal(ctx context.Context, gl *models.Goal) error {
 	if err = qtx.CreateGoal(ctx, db.CreateGoalParams{
 		ID:          gl.ID,
 		Title:       gl.Title,
-		EgpSumTotal: gl.EgpSumTotal,
+		EgpSubtotal: gl.EgpSubtotal,
 		CreatedAt:   gl.CreatedAt,
 	}); err != nil {
 		return err

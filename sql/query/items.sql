@@ -2,21 +2,21 @@
 SELECT
     i.id,
     i.name,
-    i.amount,
-    i.bought_on,
+    i.price,
+    i.purchased_on,
     i.currency_id,
     c.enum,
     c.egp_fx_rate
 FROM items AS i
 LEFT JOIN currencies AS c ON i.currency_id = c.id
-ORDER BY i.amount;
+ORDER BY i.price;
 
 -- name: GetItem :one
 SELECT
     i.id,
     i.name,
-    i.amount,
-    i.bought_on,
+    i.price,
+    i.purchased_on,
     i.currency_id,
     c.enum,
     c.egp_fx_rate
@@ -28,7 +28,7 @@ WHERE i.id = ? LIMIT 1;
 INSERT INTO items (
     id,
     name,
-    amount,
+    price,
     currency_id
 )
 VALUES (?, ?, ?, ?);
@@ -37,7 +37,7 @@ VALUES (?, ?, ?, ?);
 UPDATE items
 SET
 name = ?,
-amount = ?,
+price = ?,
 currency_id = ?
 WHERE id = ?;
 

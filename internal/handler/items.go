@@ -198,7 +198,7 @@ func (h Handler) mapItemToFD(it *models.Item, err *errs.ValidationError) *views.
 	return &views.ItemFD{
 		Name: views.FDInput{Value: it.Name, Error: err.Errors.MsgFor("Name")},
 		AmountFD: views.AmountFD{
-			Amount:     views.FDInput{Value: formatIntIfNonZero(int(it.Amount)), Error: err.Errors.MsgFor("Amount")},
+			Amount:     views.FDInput{Value: formatIntIfNonZero(int(it.Price)), Error: err.Errors.MsgFor("Amount")},
 			CurrencyID: views.FDInput{Value: it.Currency.ID, Error: err.Errors.MsgFor("Currency.ID")},
 		},
 	}
@@ -211,7 +211,7 @@ func (h Handler) mapFDToItem(r *http.Request) (*models.Item, error) {
 	}
 	return &models.Item{
 		Name:     r.FormValue("name"),
-		Amount:   amount,
+		Price:    amount,
 		Currency: models.Currency{ID: r.FormValue("currency_id")},
 	}, nil
 }
@@ -219,7 +219,7 @@ func (h Handler) mapFDToItem(r *http.Request) (*models.Item, error) {
 func dfltItem(dfltCur *models.Currency) *models.Item {
 	return &models.Item{
 		Name:     "",
-		Amount:   0,
+		Price:    0,
 		Currency: models.Currency{ID: dfltCur.ID},
 	}
 }

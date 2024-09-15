@@ -62,7 +62,7 @@ func (h Handler) CreateGoal(w http.ResponseWriter, r *http.Request) (templ.Compo
 	h.populateItemsToGoal(its, gl)
 	gl.ID = idgen.New()
 	gl.CreatedAt = time.Now()
-	gl.EgpSumTotal = gl.CalculateEgpSubtotal()
+	gl.EgpSubtotal = gl.CalculateEgpSubtotal()
 
 	if err = h.sani.SanitizeStruct(gl); err != nil {
 		l.Error("sanitizing goal", zap.Error(err))

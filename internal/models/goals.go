@@ -8,46 +8,37 @@ import (
 )
 
 type Goal struct {
-	ID    string `validate:"required"`
-	Title string `validate:"required" conform:"trim,title"`
-	// TODO: rename to total or subtotal
-	EgpSumTotal float64 `validate:"required,gt=0"`
+	ID          string  `validate:"required"`
+	Title       string  `validate:"required" conform:"trim,title"`
+	EgpSubtotal float64 `validate:"required,gt=0"`
 	CreatedAt   time.Time
 
 	Items []Item `validate:"required,min=1"`
 }
 
 func (gl *Goal) ViewAmount() string {
-	return formatAmount(gl.EgpSumTotal, CurrencyEgp)
+	return formatAmount(gl.EgpSubtotal, CurrencyEgp)
 }
 
 func (gl *Goal) CalculateEgpSubtotal() float64 {
 	sum := float64(0)
 	for _, it := range gl.Items {
-		sum += it.EgpAmount()
+		sum += it.EgpPrice()
 	}
 	return sum
 }
 
-func DBGoalToGoal(dbGl *db.Goal) *Goal {
-	return &Goal{
-		ID:          dbGl.ID,
-		Title:       dbGl.Title,
-		EgpSumTotal: dbGl.EgpSumTotal,
-		CreatedAt:   dbGl.CreatedAt.(time.Time),
-	}
-}
-
+// TEST: does the LIMIT work here?
 func DBGoalRowToGoal(dbGl *db.GetGoalRow) *Goal {
+	// TODO: popuate the items
 	items := []Item{}
 
 	return &Goal{
 		ID:          dbGl.ID,
 		Title:       dbGl.Title,
-		EgpSumTotal: dbGl.EgpSumTotal,
+		EgpSubtotal: dbGl.EgpSubtotal,
 		CreatedAt:   dbGl.CreatedAt.(time.Time),
-
-		Items: items,
+		Items:       items,
 	}
 }
 
@@ -60,7 +51,7 @@ func DBGoalRowsToGoals(dbGls []db.GetGoalsRow) []Goal {
 			gls = append(gls, Goal{
 				ID:          dbGl.ID,
 				Title:       dbGl.Title,
-				EgpSumTotal: dbGl.EgpSumTotal,
+				EgpSubtotal: dbGl.EgpSubtotal,
 				CreatedAt:   dbGl.CreatedAt.(time.Time),
 				Items:       []Item{},
 			})
@@ -68,10 +59,10 @@ func DBGoalRowsToGoals(dbGls []db.GetGoalsRow) []Goal {
 		}
 
 		gls[glIdx].Items = append(gls[glIdx].Items, Item{
-			ID:       dbGl.ItemID.String,
-			Name:     dbGl.ItemName.String,
-			Amount:   dbGl.ItemAmount.Float64,
-			BoughtOn: dbGl.ItemBoughtOn.Time,
+			ID:          dbGl.ItemID.String,
+			Name:        dbGl.ItemName.String,
+			Price:       dbGl.ItemPrice.Float64,
+			PurchasedOn: dbGl.ItemPurchasedOn.(time.Time),
 			Currency: Currency{
 				ID:        dbGl.ItemCurrencyID.String,
 				Enum:      CurrencyEnum(dbGl.ItemCurrency.Int64),
@@ -81,12 +72,4 @@ func DBGoalRowsToGoals(dbGls []db.GetGoalsRow) []Goal {
 	}
 
 	return gls
-}
-
-func DBGoalsToGoals(dbGl []db.Goal) []Goal {
-	goals := make([]Goal, len(dbGl))
-	for i, gl := range dbGl {
-		goals[i] = *DBGoalToGoal(&gl)
-	}
-	return goals
 }

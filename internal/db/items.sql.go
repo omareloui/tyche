@@ -14,7 +14,7 @@ const createItem = `-- name: CreateItem :exec
 INSERT INTO items (
     id,
     name,
-    amount,
+    price,
     currency_id
 )
 VALUES (?, ?, ?, ?)
@@ -23,7 +23,7 @@ VALUES (?, ?, ?, ?)
 type CreateItemParams struct {
 	ID         string
 	Name       string
-	Amount     float64
+	Price      float64
 	CurrencyID string
 }
 
@@ -31,7 +31,7 @@ func (q *Queries) CreateItem(ctx context.Context, arg CreateItemParams) error {
 	_, err := q.db.ExecContext(ctx, createItem,
 		arg.ID,
 		arg.Name,
-		arg.Amount,
+		arg.Price,
 		arg.CurrencyID,
 	)
 	return err
@@ -51,8 +51,8 @@ const getItem = `-- name: GetItem :one
 SELECT
     i.id,
     i.name,
-    i.amount,
-    i.bought_on,
+    i.price,
+    i.purchased_on,
     i.currency_id,
     c.enum,
     c.egp_fx_rate
@@ -62,13 +62,13 @@ WHERE i.id = ? LIMIT 1
 `
 
 type GetItemRow struct {
-	ID         string
-	Name       string
-	Amount     float64
-	BoughtOn   sql.NullTime
-	CurrencyID string
-	Enum       sql.NullInt64
-	EgpFxRate  sql.NullFloat64
+	ID          string
+	Name        string
+	Price       float64
+	PurchasedOn interface{}
+	CurrencyID  string
+	Enum        sql.NullInt64
+	EgpFxRate   sql.NullFloat64
 }
 
 func (q *Queries) GetItem(ctx context.Context, id string) (GetItemRow, error) {
@@ -77,8 +77,8 @@ func (q *Queries) GetItem(ctx context.Context, id string) (GetItemRow, error) {
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
-		&i.Amount,
-		&i.BoughtOn,
+		&i.Price,
+		&i.PurchasedOn,
 		&i.CurrencyID,
 		&i.Enum,
 		&i.EgpFxRate,
@@ -90,24 +90,24 @@ const getItems = `-- name: GetItems :many
 SELECT
     i.id,
     i.name,
-    i.amount,
-    i.bought_on,
+    i.price,
+    i.purchased_on,
     i.currency_id,
     c.enum,
     c.egp_fx_rate
 FROM items AS i
 LEFT JOIN currencies AS c ON i.currency_id = c.id
-ORDER BY i.amount
+ORDER BY i.price
 `
 
 type GetItemsRow struct {
-	ID         string
-	Name       string
-	Amount     float64
-	BoughtOn   sql.NullTime
-	CurrencyID string
-	Enum       sql.NullInt64
-	EgpFxRate  sql.NullFloat64
+	ID          string
+	Name        string
+	Price       float64
+	PurchasedOn interface{}
+	CurrencyID  string
+	Enum        sql.NullInt64
+	EgpFxRate   sql.NullFloat64
 }
 
 func (q *Queries) GetItems(ctx context.Context) ([]GetItemsRow, error) {
@@ -122,8 +122,8 @@ func (q *Queries) GetItems(ctx context.Context) ([]GetItemsRow, error) {
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
-			&i.Amount,
-			&i.BoughtOn,
+			&i.Price,
+			&i.PurchasedOn,
 			&i.CurrencyID,
 			&i.Enum,
 			&i.EgpFxRate,
@@ -145,14 +145,14 @@ const updateItem = `-- name: UpdateItem :exec
 UPDATE items
 SET
 name = ?,
-amount = ?,
+price = ?,
 currency_id = ?
 WHERE id = ?
 `
 
 type UpdateItemParams struct {
 	Name       string
-	Amount     float64
+	Price      float64
 	CurrencyID string
 	ID         string
 }
@@ -160,7 +160,7 @@ type UpdateItemParams struct {
 func (q *Queries) UpdateItem(ctx context.Context, arg UpdateItemParams) error {
 	_, err := q.db.ExecContext(ctx, updateItem,
 		arg.Name,
-		arg.Amount,
+		arg.Price,
 		arg.CurrencyID,
 		arg.ID,
 	)

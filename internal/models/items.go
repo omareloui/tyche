@@ -7,31 +7,31 @@ import (
 )
 
 type Item struct {
-	ID       string  `validate:"required"`
-	Name     string  `validate:"required" conform:"trim,title"`
-	Amount   float64 `validate:"required"`
-	BoughtOn time.Time
-	Currency Currency
+	ID          string  `validate:"required"`
+	Name        string  `validate:"required" conform:"trim,title"`
+	Price       float64 `validate:"required"`
+	PurchasedOn time.Time
+	Currency    Currency
 }
 
-func (it *Item) EgpAmount() float64 {
-	return it.Currency.EgpFxRate * it.Amount
+func (it *Item) EgpPrice() float64 {
+	return it.Currency.EgpFxRate * it.Price
 }
 
-func (it *Item) ViewAmount() string {
-	return formatAmount(it.Amount, it.Currency.Enum)
+func (it *Item) ViewPrice() string {
+	return formatAmount(it.Price, it.Currency.Enum)
 }
 
-func (it *Item) ViewEgpAmount() string {
-	return formatAmount(it.EgpAmount(), CurrencyEgp)
+func (it *Item) ViewEgpPrice() string {
+	return formatAmount(it.EgpPrice(), CurrencyEgp)
 }
 
 func DBItemRowToItem(dbIt *db.GetItemRow) *Item {
 	return &Item{
-		ID:       dbIt.ID,
-		Name:     dbIt.Name,
-		Amount:   dbIt.Amount,
-		BoughtOn: dbIt.BoughtOn.Time,
+		ID:          dbIt.ID,
+		Name:        dbIt.Name,
+		Price:       dbIt.Price,
+		PurchasedOn: dbIt.PurchasedOn.(time.Time),
 		Currency: Currency{
 			ID:        dbIt.CurrencyID,
 			Enum:      CurrencyEnum(dbIt.Enum.Int64),
@@ -40,26 +40,26 @@ func DBItemRowToItem(dbIt *db.GetItemRow) *Item {
 	}
 }
 
-func DBItemToItem(dbIt *db.Item) *Item {
-	return &Item{
-		ID:       dbIt.ID,
-		Name:     dbIt.Name,
-		Amount:   dbIt.Amount,
-		BoughtOn: dbIt.BoughtOn.Time,
-		Currency: Currency{
-			ID: dbIt.CurrencyID,
-		},
-	}
-}
+// func DBItemToItem(dbIt *db.Item) *Item {
+// 	return &Item{
+// 		ID:          dbIt.ID,
+// 		Name:        dbIt.Name,
+// 		Price:       dbIt.Amount,
+// 		PurchasedOn: dbIt.BoughtOn.Time,
+// 		Currency: Currency{
+// 			ID: dbIt.CurrencyID,
+// 		},
+// 	}
+// }
 
 func DBItemsRowToItems(dbIts []db.GetItemsRow) []Item {
 	items := make([]Item, len(dbIts))
 	for i, it := range dbIts {
 		items[i] = Item{
-			ID:       it.ID,
-			Name:     it.Name,
-			Amount:   it.Amount,
-			BoughtOn: it.BoughtOn.Time,
+			ID:          it.ID,
+			Name:        it.Name,
+			Price:       it.Price,
+			PurchasedOn: it.PurchasedOn.(time.Time),
 			Currency: Currency{
 				ID:        it.CurrencyID,
 				Enum:      CurrencyEnum(it.Enum.Int64),

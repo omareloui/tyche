@@ -27,7 +27,7 @@ func (r *Repository) UpdateItem(ctx context.Context, it *models.Item) error {
 	return r.q.UpdateItem(ctx, db.UpdateItemParams{
 		ID:         it.ID,
 		Name:       it.Name,
-		Amount:     it.Amount,
+		Price:      it.Price,
 		CurrencyID: it.Currency.ID,
 	})
 }
@@ -37,7 +37,7 @@ func (r *Repository) CreateItem(ctx context.Context, it *models.Item) error {
 		ID:         it.ID,
 		Name:       it.Name,
 		CurrencyID: it.Currency.ID,
-		Amount:     it.Amount,
+		Price:      it.Price,
 	})
 }
 

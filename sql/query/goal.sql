@@ -2,7 +2,7 @@
 INSERT INTO goals (
     id,
     title,
-    egp_sum_total,
+    egp_subtotal,
     created_at
 )
 VALUES (?, ?, ?, ?);
@@ -18,13 +18,13 @@ VALUES (?, ?);
 SELECT
     gl.id,
     gl.title,
-    gl.egp_sum_total,
+    gl.egp_subtotal,
     gl.created_at,
-    i.bought_on AS item_bought_on,
     i.id AS item_id,
     i.name AS item_name,
-    i.amount AS item_amount,
+    i.price AS item_price,
     i.currency_id AS item_currency_id,
+    i.purchased_on AS item_purchased_on,
     c.enum AS item_currency,
     c.egp_fx_rate AS item_currency_fx_rate
 FROM goals AS gl
@@ -36,13 +36,13 @@ LEFT JOIN currencies AS c ON i.currency_id = c.id;
 SELECT
     gl.id,
     gl.title,
-    gl.egp_sum_total,
+    gl.egp_subtotal,
     gl.created_at,
-    i.bought_on AS item_bought_on,
     i.id AS item_id,
     i.name AS item_name,
-    i.amount AS item_amount,
+    i.price AS item_price,
     i.currency_id AS item_currency_id,
+    i.purchased_on AS item_purchased_on,
     c.enum AS item_currency,
     c.egp_fx_rate AS item_currency_fx_rate
 FROM goals AS gl

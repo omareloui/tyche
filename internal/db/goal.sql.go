@@ -14,7 +14,7 @@ const createGoal = `-- name: CreateGoal :exec
 INSERT INTO goals (
     id,
     title,
-    egp_sum_total,
+    egp_subtotal,
     created_at
 )
 VALUES (?, ?, ?, ?)
@@ -23,7 +23,7 @@ VALUES (?, ?, ?, ?)
 type CreateGoalParams struct {
 	ID          string
 	Title       string
-	EgpSumTotal float64
+	EgpSubtotal float64
 	CreatedAt   interface{}
 }
 
@@ -31,7 +31,7 @@ func (q *Queries) CreateGoal(ctx context.Context, arg CreateGoalParams) error {
 	_, err := q.db.ExecContext(ctx, createGoal,
 		arg.ID,
 		arg.Title,
-		arg.EgpSumTotal,
+		arg.EgpSubtotal,
 		arg.CreatedAt,
 	)
 	return err
@@ -59,13 +59,13 @@ const getGoal = `-- name: GetGoal :one
 SELECT
     gl.id,
     gl.title,
-    gl.egp_sum_total,
+    gl.egp_subtotal,
     gl.created_at,
-    i.bought_on AS item_bought_on,
     i.id AS item_id,
     i.name AS item_name,
-    i.amount AS item_amount,
+    i.price AS item_price,
     i.currency_id AS item_currency_id,
+    i.purchased_on AS item_purchased_on,
     c.enum AS item_currency,
     c.egp_fx_rate AS item_currency_fx_rate
 FROM goals AS gl
@@ -78,13 +78,13 @@ WHERE gl.id = ? LIMIT 1
 type GetGoalRow struct {
 	ID                 string
 	Title              string
-	EgpSumTotal        float64
+	EgpSubtotal        float64
 	CreatedAt          interface{}
-	ItemBoughtOn       sql.NullTime
 	ItemID             sql.NullString
 	ItemName           sql.NullString
-	ItemAmount         sql.NullFloat64
+	ItemPrice          sql.NullFloat64
 	ItemCurrencyID     sql.NullString
+	ItemPurchasedOn    interface{}
 	ItemCurrency       sql.NullInt64
 	ItemCurrencyFxRate sql.NullFloat64
 }
@@ -95,13 +95,13 @@ func (q *Queries) GetGoal(ctx context.Context, id string) (GetGoalRow, error) {
 	err := row.Scan(
 		&i.ID,
 		&i.Title,
-		&i.EgpSumTotal,
+		&i.EgpSubtotal,
 		&i.CreatedAt,
-		&i.ItemBoughtOn,
 		&i.ItemID,
 		&i.ItemName,
-		&i.ItemAmount,
+		&i.ItemPrice,
 		&i.ItemCurrencyID,
+		&i.ItemPurchasedOn,
 		&i.ItemCurrency,
 		&i.ItemCurrencyFxRate,
 	)
@@ -112,13 +112,13 @@ const getGoals = `-- name: GetGoals :many
 SELECT
     gl.id,
     gl.title,
-    gl.egp_sum_total,
+    gl.egp_subtotal,
     gl.created_at,
-    i.bought_on AS item_bought_on,
     i.id AS item_id,
     i.name AS item_name,
-    i.amount AS item_amount,
+    i.price AS item_price,
     i.currency_id AS item_currency_id,
+    i.purchased_on AS item_purchased_on,
     c.enum AS item_currency,
     c.egp_fx_rate AS item_currency_fx_rate
 FROM goals AS gl
@@ -130,13 +130,13 @@ LEFT JOIN currencies AS c ON i.currency_id = c.id
 type GetGoalsRow struct {
 	ID                 string
 	Title              string
-	EgpSumTotal        float64
+	EgpSubtotal        float64
 	CreatedAt          interface{}
-	ItemBoughtOn       sql.NullTime
 	ItemID             sql.NullString
 	ItemName           sql.NullString
-	ItemAmount         sql.NullFloat64
+	ItemPrice          sql.NullFloat64
 	ItemCurrencyID     sql.NullString
+	ItemPurchasedOn    interface{}
 	ItemCurrency       sql.NullInt64
 	ItemCurrencyFxRate sql.NullFloat64
 }
@@ -153,13 +153,13 @@ func (q *Queries) GetGoals(ctx context.Context) ([]GetGoalsRow, error) {
 		if err := rows.Scan(
 			&i.ID,
 			&i.Title,
-			&i.EgpSumTotal,
+			&i.EgpSubtotal,
 			&i.CreatedAt,
-			&i.ItemBoughtOn,
 			&i.ItemID,
 			&i.ItemName,
-			&i.ItemAmount,
+			&i.ItemPrice,
 			&i.ItemCurrencyID,
+			&i.ItemPurchasedOn,
 			&i.ItemCurrency,
 			&i.ItemCurrencyFxRate,
 		); err != nil {

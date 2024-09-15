@@ -55,9 +55,9 @@ templ goalFormBody(id string, fd *GoalFD, its []models.Item) {
 					checked="true"
 				}
 			/>
-			{ it.Name } { it.ViewAmount() }
+			{ it.Name } { it.ViewPrice() }
 			if it.Currency.Enum != models.CurrencyEgp {
-				<i class="text-gray-400">[{ it.ViewEgpAmount() }]</i>
+				<i class="text-gray-400">[{ it.ViewEgpPrice() }]</i>
 			}
 		</label>
 	}
@@ -75,14 +75,14 @@ templ Goal(gl *models.Goal) {
 	<div hx-target="this" class="entry-container">
 		<p>ID: { gl.ID }</p>
 		<p>Name: { gl.Title }</p>
-		<p>Sumtotal In EGP: { gl.ViewAmount() } </p>
+		<p>EGP Subtotal: { gl.ViewAmount() } </p>
 		<div>
 			<h4 class="font-bold text-xl">Items</h4>
 			for _, it := range gl.Items {
 				<p>
 					<strong>{ it.Name }</strong>
 					<span>
-						@itemAmount(&it)
+						@itemPrice(&it)
 					</span>
 				</p>
 			}

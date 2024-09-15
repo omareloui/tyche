@@ -24,7 +24,7 @@ type Currency struct {
 type Goal struct {
 	ID          string
 	Title       string
-	EgpSumTotal float64
+	EgpSubtotal float64
 	CreatedAt   interface{}
 }
 
@@ -34,11 +34,11 @@ type GoalsItem struct {
 }
 
 type Item struct {
-	ID         string
-	Name       string
-	Amount     float64
-	CurrencyID string
-	BoughtOn   sql.NullTime
+	ID          string
+	Name        string
+	Price       float64
+	CurrencyID  string
+	PurchasedOn interface{}
 }
 
 type Transaction struct {

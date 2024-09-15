@@ -58,8 +58,8 @@ templ Item(it *models.Item) {
 		<p>ID: { it.ID }</p>
 		<p>Name: { it.Name }</p>
 		<p>
-			Amount:
-			@itemAmount(it)
+			Price:
+			@itemPrice(it)
 		</p>
 		<div class="flex gap-4">
 			@editButton(fmt.Sprintf("/items/%s/edit", it.ID))
@@ -68,10 +68,10 @@ templ Item(it *models.Item) {
 	</div>
 }
 
-templ itemAmount(it *models.Item) {
-	{ it.ViewAmount() }
+templ itemPrice(it *models.Item) {
+	{ it.ViewPrice() }
 	if it.Currency.Enum != models.CurrencyEgp {
-		<i class="text-gray-400">[{ it.ViewEgpAmount() }]</i>
+		<i class="text-gray-400">[{ it.ViewEgpPrice() }]</i>
 	}
 }
 
