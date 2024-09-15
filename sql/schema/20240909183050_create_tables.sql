@@ -46,7 +46,7 @@ CREATE TABLE items (
     name VARCHAR(255) NOT NULL,
     price FLOAT DEFAULT 0 NOT NULL,
     currency_id VARCHAR(16) NOT NULL,
-    purchased_on on DATE,
+    purchased_on DATE,
     FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE
 );
 -- CREATE TABLE goal_plan_entries (

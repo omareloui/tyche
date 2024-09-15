@@ -62,7 +62,7 @@ func DBGoalRowsToGoals(dbGls []db.GetGoalsRow) []Goal {
 			ID:          dbGl.ItemID.String,
 			Name:        dbGl.ItemName.String,
 			Price:       dbGl.ItemPrice.Float64,
-			PurchasedOn: dbGl.ItemPurchasedOn.(time.Time),
+			PurchasedOn: dbGl.ItemPurchasedOn.Time,
 			Currency: Currency{
 				ID:        dbGl.ItemCurrencyID.String,
 				Enum:      CurrencyEnum(dbGl.ItemCurrency.Int64),

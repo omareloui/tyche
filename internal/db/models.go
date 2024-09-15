@@ -38,7 +38,7 @@ type Item struct {
 	Name        string
 	Price       float64
 	CurrencyID  string
-	PurchasedOn interface{}
+	PurchasedOn sql.NullTime
 }
 
 type Transaction struct {

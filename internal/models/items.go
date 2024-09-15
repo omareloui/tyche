@@ -31,7 +31,7 @@ func DBItemRowToItem(dbIt *db.GetItemRow) *Item {
 		ID:          dbIt.ID,
 		Name:        dbIt.Name,
 		Price:       dbIt.Price,
-		PurchasedOn: dbIt.PurchasedOn.(time.Time),
+		PurchasedOn: dbIt.PurchasedOn.Time,
 		Currency: Currency{
 			ID:        dbIt.CurrencyID,
 			Enum:      CurrencyEnum(dbIt.Enum.Int64),
@@ -40,18 +40,6 @@ func DBItemRowToItem(dbIt *db.GetItemRow) *Item {
 	}
 }
 
-// func DBItemToItem(dbIt *db.Item) *Item {
-// 	return &Item{
-// 		ID:          dbIt.ID,
-// 		Name:        dbIt.Name,
-// 		Price:       dbIt.Amount,
-// 		PurchasedOn: dbIt.BoughtOn.Time,
-// 		Currency: Currency{
-// 			ID: dbIt.CurrencyID,
-// 		},
-// 	}
-// }
-
 func DBItemsRowToItems(dbIts []db.GetItemsRow) []Item {
 	items := make([]Item, len(dbIts))
 	for i, it := range dbIts {
@@ -59,7 +47,7 @@ func DBItemsRowToItems(dbIts []db.GetItemsRow) []Item {
 			ID:          it.ID,
 			Name:        it.Name,
 			Price:       it.Price,
-			PurchasedOn: it.PurchasedOn.(time.Time),
+			PurchasedOn: it.PurchasedOn.Time,
 			Currency: Currency{
 				ID:        it.CurrencyID,
 				Enum:      CurrencyEnum(it.Enum.Int64),

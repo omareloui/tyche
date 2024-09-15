@@ -84,7 +84,7 @@ type GetGoalRow struct {
 	ItemName           sql.NullString
 	ItemPrice          sql.NullFloat64
 	ItemCurrencyID     sql.NullString
-	ItemPurchasedOn    interface{}
+	ItemPurchasedOn    sql.NullTime
 	ItemCurrency       sql.NullInt64
 	ItemCurrencyFxRate sql.NullFloat64
 }
@@ -136,7 +136,7 @@ type GetGoalsRow struct {
 	ItemName           sql.NullString
 	ItemPrice          sql.NullFloat64
 	ItemCurrencyID     sql.NullString
-	ItemPurchasedOn    interface{}
+	ItemPurchasedOn    sql.NullTime
 	ItemCurrency       sql.NullInt64
 	ItemCurrencyFxRate sql.NullFloat64
 }

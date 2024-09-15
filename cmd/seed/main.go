@@ -22,13 +22,13 @@ func main() {
 		log.Fatal("Error loading .env file")
 	}
 
-	queries, err := dbconn.New(config.GetDataSource())
+	_, q, err := dbconn.New(config.GetDataSource())
 	if err != nil {
 		log.Fatalln("error connecting to the database", err)
 		return
 	}
 
-	currencies, err := queries.GetCurrencies(context.Background())
+	currencies, err := q.GetCurrencies(context.Background())
 	if err != nil {
 		log.Fatalln("error while getting the currencies", err)
 	}
@@ -44,13 +44,13 @@ func main() {
 
 	if len(currencies) != len(currenciesSeed) {
 		for _, cur := range currenciesSeed {
-			if err := queries.CreateCurrency(context.Background(), db.CreateCurrencyParams(cur)); err != nil {
+			if err := q.CreateCurrency(context.Background(), db.CreateCurrencyParams(cur)); err != nil {
 				log.Fatalln("error while seeding the currencies", err)
 			}
 		}
 	}
 
-	kinds, err := queries.GetTransactionKinds(context.Background())
+	kinds, err := q.GetTransactionKinds(context.Background())
 	if err != nil {
 		log.Fatalln("error while getting the kinds", err)
 	}
@@ -62,25 +62,25 @@ func main() {
 
 	if len(kinds) != len(kindsSeed) {
 		for _, kind := range kindsSeed {
-			if err := queries.CreateTransactionKind(context.Background(), db.CreateTransactionKindParams(kind)); err != nil {
+			if err := q.CreateTransactionKind(context.Background(), db.CreateTransactionKindParams(kind)); err != nil {
 				log.Fatalln("error while seeding the transaction kinds", err)
 			}
 		}
 	}
 
-	balances, err := queries.GetBalances(context.Background())
+	balances, err := q.GetBalances(context.Background())
 	if err != nil {
 		log.Fatalln("error while getting the balances", err)
 	}
 
 	if len(balances) != len(currenciesSeed) {
-		currencies, err := queries.GetCurrencies(context.Background())
+		currencies, err := q.GetCurrencies(context.Background())
 		if err != nil {
 			log.Fatalln("error while getting the currencies", err)
 		}
 
 		for _, cur := range currencies {
-			if err := queries.CreateBalance(context.Background(), db.CreateBalanceParams{
+			if err := q.CreateBalance(context.Background(), db.CreateBalanceParams{
 				ID:         idgen.New(),
 				CurrencyID: cur.ID,
 				Amount:     0,

@@ -65,7 +65,7 @@ type GetItemRow struct {
 	ID          string
 	Name        string
 	Price       float64
-	PurchasedOn interface{}
+	PurchasedOn sql.NullTime
 	CurrencyID  string
 	Enum        sql.NullInt64
 	EgpFxRate   sql.NullFloat64
@@ -104,7 +104,7 @@ type GetItemsRow struct {
 	ID          string
 	Name        string
 	Price       float64
-	PurchasedOn interface{}
+	PurchasedOn sql.NullTime
 	CurrencyID  string
 	Enum        sql.NullInt64
 	EgpFxRate   sql.NullFloat64
