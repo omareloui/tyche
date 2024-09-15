@@ -20,6 +20,11 @@ templ balance(balances []models.Balance) {
 			if b.Amount < 0 {
 				class="text-red-500"
 			}
-		>{ b.ViewAmount() }</div>
+		>
+			{ b.ViewAmount() }
+			if b.Currency.Enum != models.CurrencyEgp {
+				<i class="text-gray-400">[{ b.ViewEgpAmount() }]</i>
+			}
+		</div>
 	}
 }
