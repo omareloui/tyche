@@ -7,7 +7,7 @@ import (
 )
 
 func (r *Repository) GetTransactionKinds(ctx context.Context) ([]models.TransactionKind, error) {
-	dbKinds, err := r.db.GetTransactionKinds(ctx)
+	dbKinds, err := r.q.GetTransactionKinds(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -15,7 +15,7 @@ func (r *Repository) GetTransactionKinds(ctx context.Context) ([]models.Transact
 }
 
 func (r *Repository) GetTransactionKind(ctx context.Context, id string) (*models.TransactionKind, error) {
-	k, err := r.db.GetTransactionKind(ctx, id)
+	k, err := r.q.GetTransactionKind(ctx, id)
 	if err != nil {
 		return nil, err
 	}

@@ -22,7 +22,7 @@ func main() {
 		log.Fatal("Error loading .env file")
 	}
 
-	queries, err := dbconn.Connect(config.GetDataSource())
+	queries, err := dbconn.New(config.GetDataSource())
 	if err != nil {
 		log.Fatalln("error connecting to the database", err)
 		return
@@ -33,7 +33,7 @@ func main() {
 		log.Fatalln("error while getting the currencies", err)
 	}
 
-	usdToEgp,err := fxrate.UsdToEgp()
+	usdToEgp, err := fxrate.UsdToEgp()
 	if err != nil {
 		log.Fatalln("error while fetching usd fx rate", err)
 	}

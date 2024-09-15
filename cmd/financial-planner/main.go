@@ -25,12 +25,12 @@ func main() {
 
 	port := config.GetApplicationPort()
 
-	db, err := dbconn.Connect(config.GetDataSource())
+	db, q, err := dbconn.New(config.GetDataSource())
 	if err != nil {
 		log.Fatalln("error connecting to the database", err)
 		return
 	}
-	repo := repository.New(db)
+	repo := repository.New(db, q)
 	valid := valid.New()
 	sani := sanitizer.New()
 	h := handler.New(repo, valid, sani)

@@ -27,7 +27,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("DELETE /transactions/{id}", handle(h.DeleteTransaction))
 
 	mux.Handle("GET /goals", handle(h.Goals))
-	mux.Handle("POST /goals", handle(h.CreateGoals))
+	mux.Handle("POST /goals", handle(h.CreateGoal))
 
 	mux.Handle("GET /items", handle(h.Items))
 	mux.Handle("POST /items", handle(h.CreateItem))

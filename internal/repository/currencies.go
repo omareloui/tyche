@@ -7,7 +7,7 @@ import (
 )
 
 func (r *Repository) GetCurrencies(ctx context.Context) ([]models.Currency, error) {
-	dbCurrencies, err := r.db.GetCurrencies(ctx)
+	dbCurrencies, err := r.q.GetCurrencies(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -15,7 +15,7 @@ func (r *Repository) GetCurrencies(ctx context.Context) ([]models.Currency, erro
 }
 
 func (r *Repository) GetCurrency(ctx context.Context, id string) (*models.Currency, error) {
-	dbCurrency, err := r.db.GetCurrency(ctx, id)
+	dbCurrency, err := r.q.GetCurrency(ctx, id)
 	if err != nil {
 		return nil, err
 	}

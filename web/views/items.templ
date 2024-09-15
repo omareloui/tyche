@@ -58,16 +58,21 @@ templ Item(it *models.Item) {
 		<p>ID: { it.ID }</p>
 		<p>Name: { it.Name }</p>
 		<p>
-			Amount: { it.ViewAmount() }
-			if it.Currency.Enum != models.CurrencyEgp {
-				<i class="text-gray-400">[{ it.ViewEgpAmount() }]</i>
-			}
+			Amount:
+			@itemAmount(it)
 		</p>
 		<div class="flex gap-4">
 			@editButton(fmt.Sprintf("/items/%s/edit", it.ID))
 			@deleteButton(fmt.Sprintf("/items/%s", it.ID))
 		</div>
 	</div>
+}
+
+templ itemAmount(it *models.Item) {
+	{ it.ViewAmount() }
+	if it.Currency.Enum != models.CurrencyEgp {
+		<i class="text-gray-400">[{ it.ViewEgpAmount() }]</i>
+	}
 }
 
 templ ItemOOB(it *models.Item) {

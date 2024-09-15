@@ -32,21 +32,22 @@ CREATE TABLE transactions (
 CREATE TABLE goals (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
-    sum_total_egp INT,
+    egp_sum_total FLOAT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW
 );
 CREATE TABLE goals_items (
-    id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
     goal_id VARCHAR(16) NOT NULL,
     item_id VARCHAR(16) NOT NULL,
-    FOREIGN KEY (goal_id) REFERENCES goals (id),
+    FOREIGN KEY (goal_id) REFERENCES goals (id) ON DELETE CASCADE,
     FOREIGN KEY (item_id) REFERENCES items (id) ON DELETE CASCADE
 );
 CREATE TABLE items (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
+    -- TODO: rename to price
     amount FLOAT DEFAULT 0 NOT NULL,
     currency_id VARCHAR(16) NOT NULL,
+    -- TODO: rename to percussed on
     bought_on DATE,
     FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE
 );
@@ -60,6 +61,9 @@ CREATE TABLE items (
 --     FOREIGN KEY (goal_id) REFERENCES goals (id) ON DELETE CASCADE,
 --     FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id)
 -- );
+
+CREATE UNIQUE INDEX idx_goals_items
+ON goals_items (goal_id, item_id);
 -- +goose StatementEnd
 
 -- +goose Down
@@ -71,5 +75,6 @@ DROP TABLE transactions;
 DROP TABLE goals;
 DROP TABLE goals_items;
 DROP TABLE items;
+DROP INDEX idx_goals_items;
 -- DROP TABLE goal_plan_entries;
 -- +goose StatementEnd

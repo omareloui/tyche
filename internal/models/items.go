@@ -14,12 +14,16 @@ type Item struct {
 	Currency Currency
 }
 
+func (it *Item) EgpAmount() float64 {
+	return it.Currency.EgpFxRate * it.Amount
+}
+
 func (it *Item) ViewAmount() string {
 	return formatAmount(it.Amount, it.Currency.Enum)
 }
 
 func (it *Item) ViewEgpAmount() string {
-	return formatAmount(it.Currency.EgpFxRate*it.Amount, CurrencyEgp)
+	return formatAmount(it.EgpAmount(), CurrencyEgp)
 }
 
 func DBItemRowToItem(dbIt *db.GetItemRow) *Item {

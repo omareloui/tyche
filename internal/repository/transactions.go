@@ -10,7 +10,7 @@ import (
 )
 
 func (r *Repository) CreateTransaction(ctx context.Context, t *models.Transaction) error {
-	err := r.db.CreateTransaction(ctx, db.CreateTransactionParams{
+	err := r.q.CreateTransaction(ctx, db.CreateTransactionParams{
 		ID:          t.ID,
 		Amount:      t.Amount,
 		KindID:      t.Kind.ID,
@@ -27,7 +27,7 @@ func (r *Repository) CreateTransaction(ctx context.Context, t *models.Transactio
 }
 
 func (r *Repository) GetTransactions(ctx context.Context) ([]models.Transaction, error) {
-	dbTransactions, err := r.db.GetTransactions(ctx)
+	dbTransactions, err := r.q.GetTransactions(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +40,7 @@ func (r *Repository) GetTransactions(ctx context.Context) ([]models.Transaction,
 }
 
 func (r *Repository) GetTransaction(ctx context.Context, id string) (*models.Transaction, error) {
-	dbTx, err := r.db.GetTransaction(ctx, id)
+	dbTx, err := r.q.GetTransaction(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -48,11 +48,11 @@ func (r *Repository) GetTransaction(ctx context.Context, id string) (*models.Tra
 }
 
 func (r *Repository) DeleteTransaction(ctx context.Context, id string) error {
-	return r.db.DeleteTransaction(ctx, id)
+	return r.q.DeleteTransaction(ctx, id)
 }
 
 func (r *Repository) UpdateTransaction(ctx context.Context, tx *models.Transaction) error {
-	return r.db.UpdateTransaction(ctx, db.UpdateTransactionParams{
+	return r.q.UpdateTransaction(ctx, db.UpdateTransactionParams{
 		ID:          tx.ID,
 		Amount:      tx.Amount,
 		CurrencyID:  tx.Currency.ID,
@@ -63,7 +63,7 @@ func (r *Repository) UpdateTransaction(ctx context.Context, tx *models.Transacti
 }
 
 func (r *Repository) FulfillTransaction(ctx context.Context, id string, fulfilledOn time.Time) error {
-	return r.db.FulfillTransaction(ctx, db.FulfillTransactionParams{
+	return r.q.FulfillTransaction(ctx, db.FulfillTransactionParams{
 		ID:          id,
 		FulfilledOn: sql.NullTime{Time: fulfilledOn, Valid: !fulfilledOn.IsZero()},
 	})

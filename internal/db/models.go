@@ -24,12 +24,11 @@ type Currency struct {
 type Goal struct {
 	ID          string
 	Title       string
-	SumTotalEgp sql.NullInt64
+	EgpSumTotal float64
 	CreatedAt   interface{}
 }
 
 type GoalsItem struct {
-	ID     string
 	GoalID string
 	ItemID string
 }

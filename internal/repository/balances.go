@@ -8,7 +8,7 @@ import (
 )
 
 func (r *Repository) GetBalances(ctx context.Context) ([]models.Balance, error) {
-	dbBalances, err := r.db.GetBalances(ctx)
+	dbBalances, err := r.q.GetBalances(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -16,7 +16,7 @@ func (r *Repository) GetBalances(ctx context.Context) ([]models.Balance, error) 
 }
 
 func (r *Repository) AddToBalance(ctx context.Context, currencyID string, amount float64) error {
-	err := r.db.AddToBalance(ctx, db.AddToBalanceParams{CurrencyID: currencyID, Amount: amount})
+	err := r.q.AddToBalance(ctx, db.AddToBalanceParams{CurrencyID: currencyID, Amount: amount})
 	if err != nil {
 		return err
 	}
@@ -24,7 +24,7 @@ func (r *Repository) AddToBalance(ctx context.Context, currencyID string, amount
 }
 
 func (r *Repository) RemoveFromBalance(ctx context.Context, currencyID string, amount float64) error {
-	err := r.db.RemoveFromBalance(ctx, db.RemoveFromBalanceParams{CurrencyID: currencyID, Amount: amount})
+	err := r.q.RemoveFromBalance(ctx, db.RemoveFromBalanceParams{CurrencyID: currencyID, Amount: amount})
 	if err != nil {
 		return err
 	}

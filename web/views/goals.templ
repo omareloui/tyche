@@ -1,11 +1,101 @@
 package views
 
-import "github.com/omareloui/financial-planner/internal/models"
+import (
+	"fmt"
 
-templ Goals(balances []models.Balance) {
+	"github.com/omareloui/financial-planner/internal/models"
+	"strconv"
+	"slices"
+)
+
+type GoalFD struct {
+	Title FDInput
+	Items []FDInput
+}
+
+templ Goals(
+	balances []models.Balance,
+	its []models.Item,
+	fd *GoalFD,
+	goals []models.Goal) {
 	@baseLayout("Goals", balances) {
 		@container() {
 			@mainHeader("Goals")
+			@CreateGoalForm(fd, its)
+			@goalsList(goals)
 		}
 	}
+}
+
+templ CreateGoalForm(fd *GoalFD, its []models.Item) {
+	@creationForm("Create Goal", "/goals", "Create Goal") {
+		@goalFormBody("", fd, its)
+	}
+}
+
+templ EditGoal(id string, fd *GoalFD, its []models.Item) {
+	@form("put", fmt.Sprintf("/goals/%s", id), templ.Attributes{"hx-target": "this"}) {
+		<p>ID: { id }</p>
+		@goalFormBody(id, fd, its)
+		@editFormButtons(fmt.Sprintf("/goals/%s", id))
+	}
+}
+
+templ goalFormBody(id string, fd *GoalFD, its []models.Item) {
+	@input("Title", "text", "title", "Enter goal title", id, fd.Title)
+	<h3 class="font-bold text-xl mt-2">Items ({ strconv.Itoa(len(its)) })</h3>
+	for _, it := range its {
+		<label class="cursor-pointer">
+			<input
+				type="checkbox"
+				name="item_id"
+				value={ it.ID }
+				class="mr-2"
+				if slices.IndexFunc(fd.Items, func(itFd FDInput) bool {return itFd.Value == it.ID}) > -1 {
+					checked="true"
+				}
+			/>
+			{ it.Name } { it.ViewAmount() }
+			if it.Currency.Enum != models.CurrencyEgp {
+				<i class="text-gray-400">[{ it.ViewEgpAmount() }]</i>
+			}
+		</label>
+	}
+}
+
+templ goalsList(goals []models.Goal) {
+	@list("goals-list") {
+		for _, gl := range goals {
+			@Goal(&gl)
+		}
+	}
+}
+
+templ Goal(gl *models.Goal) {
+	<div hx-target="this" class="entry-container">
+		<p>ID: { gl.ID }</p>
+		<p>Name: { gl.Title }</p>
+		<p>Sumtotal In EGP: { gl.ViewAmount() } </p>
+		<div>
+			<h4 class="font-bold text-xl">Items</h4>
+			for _, it := range gl.Items {
+				<p>
+					<strong>{ it.Name }</strong>
+					<span>
+						@itemAmount(&it)
+					</span>
+				</p>
+			}
+		</div>
+		<div class="flex gap-4">
+			@editButton(fmt.Sprintf("/goals/%s/edit", gl.ID))
+			@deleteButton(fmt.Sprintf("/goals/%s", gl.ID))
+		</div>
+	</div>
+}
+
+templ GoalOOB(gl *models.Goal) {
+	<div id="goals-list" hx-swap-oob="afterbegin">
+		@Goal(gl)
+	</div>
 }
