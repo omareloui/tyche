@@ -25,8 +25,6 @@ type Currency struct {
 type Goal struct {
 	ID          string
 	Title       string
-	AchievedOn  sql.NullTime
-	StartedOn   sql.NullTime
 	SumTotalEgp sql.NullInt64
 	CreatedAt   interface{}
 }
@@ -42,7 +40,7 @@ type Item struct {
 	Name       string
 	Amount     float64
 	CurrencyID string
-	Bought     sql.NullBool
+	BoughtOn   sql.NullTime
 }
 
 type Transaction struct {

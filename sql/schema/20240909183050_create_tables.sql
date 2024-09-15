@@ -33,8 +33,6 @@ CREATE TABLE transactions (
 CREATE TABLE goals (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
-    achieved_on DATE,
-    started_on DATE,
     sum_total_egp INT,
     created_at TIMESTAMP NOT NULL DEFAULT NOW
 );
@@ -50,7 +48,7 @@ CREATE TABLE items (
     name VARCHAR(255) NOT NULL,
     amount FLOAT DEFAULT 0 NOT NULL,
     currency_id VARCHAR(16) NOT NULL,
-    bought BOOLEAN DEFAULT FALSE,
+    bought_on DATE,
     FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE
 );
 -- CREATE TABLE goal_plan_entries (

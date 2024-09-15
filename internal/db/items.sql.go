@@ -52,7 +52,7 @@ SELECT
     i.id,
     i.name,
     i.amount,
-    i.bought,
+    i.bought_on,
     i.currency_id,
     c.currency,
     c.symbol
@@ -65,7 +65,7 @@ type GetItemRow struct {
 	ID         string
 	Name       string
 	Amount     float64
-	Bought     sql.NullBool
+	BoughtOn   sql.NullTime
 	CurrencyID string
 	Currency   sql.NullString
 	Symbol     sql.NullString
@@ -78,7 +78,7 @@ func (q *Queries) GetItem(ctx context.Context, id string) (GetItemRow, error) {
 		&i.ID,
 		&i.Name,
 		&i.Amount,
-		&i.Bought,
+		&i.BoughtOn,
 		&i.CurrencyID,
 		&i.Currency,
 		&i.Symbol,
@@ -91,7 +91,7 @@ SELECT
     i.id,
     i.name,
     i.amount,
-    i.bought,
+    i.bought_on,
     i.currency_id,
     c.currency,
     c.symbol
@@ -104,7 +104,7 @@ type GetItemsRow struct {
 	ID         string
 	Name       string
 	Amount     float64
-	Bought     sql.NullBool
+	BoughtOn   sql.NullTime
 	CurrencyID string
 	Currency   sql.NullString
 	Symbol     sql.NullString
@@ -123,7 +123,7 @@ func (q *Queries) GetItems(ctx context.Context) ([]GetItemsRow, error) {
 			&i.ID,
 			&i.Name,
 			&i.Amount,
-			&i.Bought,
+			&i.BoughtOn,
 			&i.CurrencyID,
 			&i.Currency,
 			&i.Symbol,

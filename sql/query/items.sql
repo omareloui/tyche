@@ -3,7 +3,7 @@ SELECT
     i.id,
     i.name,
     i.amount,
-    i.bought,
+    i.bought_on,
     i.currency_id,
     c.currency,
     c.symbol
@@ -16,7 +16,7 @@ SELECT
     i.id,
     i.name,
     i.amount,
-    i.bought,
+    i.bought_on,
     i.currency_id,
     c.currency,
     c.symbol
