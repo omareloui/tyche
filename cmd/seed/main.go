@@ -11,6 +11,7 @@ import (
 	"github.com/omareloui/financial-planner/internal/config"
 	"github.com/omareloui/financial-planner/internal/db"
 	"github.com/omareloui/financial-planner/internal/dbconn"
+	"github.com/omareloui/financial-planner/internal/fxrate"
 	"github.com/omareloui/financial-planner/internal/idgen"
 	"github.com/omareloui/financial-planner/internal/models"
 )
@@ -32,9 +33,13 @@ func main() {
 		log.Fatalln("error while getting the currencies", err)
 	}
 
+	usdToEgp,err := fxrate.UsdToEgp()
+	if err != nil {
+		log.Fatalln("error while fetching usd fx rate", err)
+	}
 	currenciesSeed := []db.Currency{
 		{ID: idgen.New(), Enum: int64(models.CurrencyEgp), EgpFxRate: 1},
-		{ID: idgen.New(), Enum: int64(models.CurrencyUsd), EgpFxRate: 44.88},
+		{ID: idgen.New(), Enum: int64(models.CurrencyUsd), EgpFxRate: usdToEgp},
 	}
 
 	if len(currencies) != len(currenciesSeed) {
