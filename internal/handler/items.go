@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/a-h/templ"
-	"github.com/omareloui/financial-planner/internal/config"
 	"github.com/omareloui/financial-planner/internal/errs"
 	"github.com/omareloui/financial-planner/internal/idgen"
 	"github.com/omareloui/financial-planner/internal/logger"
@@ -30,7 +29,7 @@ func (h Handler) Items(w http.ResponseWriter, r *http.Request) (templ.Component,
 	}
 	l.Debug("fetched currencies")
 
-	dfltCur := slicesutils.Find(cur, func(cur models.Currency) bool { return cur.Currency == config.GetDefaultCurrency() })
+	dfltCur := slicesutils.Find(cur, func(cur models.Currency) bool { return cur.Enum == models.DfltCurrency })
 	dfltIt := dfltItem(dfltCur)
 	fd := h.mapItemToFD(dfltIt, &errs.ValidationError{})
 
@@ -41,7 +40,7 @@ func (h Handler) Items(w http.ResponseWriter, r *http.Request) (templ.Component,
 	}
 	l.Debug("fetched items")
 
-	return views.Items(b, fd, its, h.repo.CurrenciesToMap(cur), dfltCur.Symbol), nil
+	return views.Items(b, fd, its, h.repo.CurrenciesToMap(cur), dfltCur.Enum.Symbol()), nil
 }
 
 func (h Handler) Item(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -91,11 +90,9 @@ func (h Handler) CreateItem(w http.ResponseWriter, r *http.Request) (templ.Compo
 		}
 		l.Debug("fetched currencies")
 
-		dfltCur := slicesutils.Find(cur, func(cur models.Currency) bool { return cur.Currency == config.GetDefaultCurrency() })
-
 		return views.CreateItemForm(fd,
 			h.repo.CurrenciesToMap(cur),
-			dfltCur.Symbol), nil
+			models.DfltCurrency.Symbol()), nil
 	}
 
 	if err := h.repo.CreateItem(r.Context(), it); err != nil {
@@ -111,7 +108,7 @@ func (h Handler) CreateItem(w http.ResponseWriter, r *http.Request) (templ.Compo
 	}
 	l.Debug("fetched currencies")
 
-	dfltCur := slicesutils.Find(cur, func(cur models.Currency) bool { return cur.Currency == config.GetDefaultCurrency() })
+	dfltCur := slicesutils.Find(cur, func(cur models.Currency) bool { return cur.Enum == models.DfltCurrency })
 	fd := h.mapItemToFD(dfltItem(dfltCur), &errs.ValidationError{})
 	it.Currency = *slicesutils.Find(cur, func(cur models.Currency) bool { return cur.ID == it.Currency.ID })
 
@@ -123,7 +120,7 @@ func (h Handler) CreateItem(w http.ResponseWriter, r *http.Request) (templ.Compo
 
 	return views.CreateItemForm(fd,
 		h.repo.CurrenciesToMap(cur),
-		dfltCur.Symbol), nil
+		dfltCur.Enum.Symbol()), nil
 }
 
 func (h Handler) GetEditItem(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -150,7 +147,7 @@ func (h Handler) GetEditItem(w http.ResponseWriter, r *http.Request) (templ.Comp
 	}
 	l.Debug("fetched currencies")
 
-	curS := slicesutils.Find(cur, func(c models.Currency) bool { return c.ID == it.Currency.ID }).Symbol
+	curS := slicesutils.Find(cur, func(c models.Currency) bool { return c.ID == it.Currency.ID }).Enum.Symbol()
 
 	return views.EditItem(id, fd, h.repo.CurrenciesToMap(cur), curS), nil
 }

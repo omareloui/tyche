@@ -2,8 +2,8 @@
 -- +goose StatementBegin
 CREATE TABLE currencies (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
-    currency VARCHAR(3) UNIQUE NOT NULL,
-    symbol VARCHAR(5) NOT NULL
+    enum INT UNIQUE NOT NULL,
+    egp_fx_rate FLOAT DEFAULT 1 NOT NULL
 );
 CREATE TABLE transaction_kinds (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
@@ -14,7 +14,6 @@ CREATE TABLE balances (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
     amount FLOAT DEFAULT 0 NOT NULL,
     currency_id VARCHAR(16) UNIQUE NOT NULL,
-    fx_rate FLOAT DEFAULT 1 NOT NULL,
     FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE
 );
 

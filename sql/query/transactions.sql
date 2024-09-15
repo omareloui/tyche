@@ -21,8 +21,8 @@ SELECT
     t.fulfilled_on,
     t.scheduled_to,
     t.created_at,
-    c.currency,
-    c.symbol,
+    c.enum,
+    c.egp_fx_rate,
     k.kind,
     k.increase_balance
 FROM transactions AS t
@@ -40,8 +40,8 @@ SELECT
     t.fulfilled_on,
     t.scheduled_to,
     t.created_at,
-    c.currency,
-    c.symbol,
+    c.enum,
+    c.egp_fx_rate,
     k.kind,
     k.increase_balance
 FROM transactions AS t

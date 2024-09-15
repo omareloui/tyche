@@ -33,5 +33,5 @@ func (h Handler) AmountInputs(w http.ResponseWriter, r *http.Request) (templ.Com
 		CurrencyID: views.FDInput{Value: currency.ID},
 	}
 
-	return views.AmountInputs(fd, h.repo.CurrenciesToMap(curs), currency.Symbol), nil
+	return views.AmountInputs(fd, h.repo.CurrenciesToMap(curs), currency.Enum.Symbol()), nil
 }

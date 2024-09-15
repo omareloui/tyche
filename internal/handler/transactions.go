@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/a-h/templ"
-	"github.com/omareloui/financial-planner/internal/config"
 	"github.com/omareloui/financial-planner/internal/errs"
 	"github.com/omareloui/financial-planner/internal/idgen"
 	"github.com/omareloui/financial-planner/internal/logger"
@@ -41,12 +40,12 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 		return nil, err
 	}
 
-	defaultCurrency := slicesutils.Find(currencies, func(cur models.Currency) bool { return cur.Currency == config.GetDefaultCurrency() })
+	defaultCurrency := slicesutils.Find(currencies, func(cur models.Currency) bool { return cur.Enum == models.DfltCurrency })
 
 	comp := views.Transactions(balances, fd, transactions,
 		h.repo.CurrenciesToMap(currencies),
 		h.repo.TransactionKindsToMap(kinds),
-		defaultCurrency.Symbol)
+		defaultCurrency.Enum.Symbol())
 
 	return comp, nil
 }
@@ -78,18 +77,16 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		l.Error("fetching currencies and kinds")
 		return nil, err
 	}
-	defaultCurrency := slicesutils.Find(currencies, func(cur models.Currency) bool { return cur.Currency == config.GetDefaultCurrency() })
+	dfltCurr := slicesutils.Find(currencies, func(cur models.Currency) bool { return cur.Enum == models.DfltCurrency })
 
 	if valerr := h.valid.Validate(tx); valerr != nil {
 		l.Error("create transaction validation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
 		fd := h.mapTransactionToFD(tx, valerr)
 
-		comp := views.CreateTransactionForm(fd,
+		return views.CreateTransactionForm(fd,
 			h.repo.CurrenciesToMap(currencies),
 			h.repo.TransactionKindsToMap(kinds),
-			defaultCurrency.Symbol)
-
-		return comp, nil
+			dfltCurr.Enum.Symbol()), nil
 	}
 
 	if err := h.repo.CreateTransaction(r.Context(), tx); err != nil {
@@ -120,12 +117,10 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 
 	fd := h.mapTransactionToFD(defaultTransaction(currencies, kinds), new(errs.ValidationError))
 
-	comp := views.CreateTransactionForm(fd,
+	return views.CreateTransactionForm(fd,
 		h.repo.CurrenciesToMap(currencies),
 		h.repo.TransactionKindsToMap(kinds),
-		defaultCurrency.Symbol)
-
-	return comp, nil
+		dfltCurr.Enum.Symbol()), nil
 }
 
 func (h Handler) Transaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -412,19 +407,13 @@ func (h Handler) mapFDToTransaction(r *http.Request) (*models.Transaction, error
 }
 
 func defaultTransaction(currencies []models.Currency, kinds []models.TransactionKind) *models.Transaction {
-	defaultCurrency := config.GetDefaultCurrency()
-	defaultKind := "EXPENSES"
-	defaultCurrencyIdx := slices.IndexFunc(currencies, func(cur models.Currency) bool {
-		return cur.Currency == defaultCurrency
-	})
-	defaultKindIdx := slices.IndexFunc(kinds, func(knd models.TransactionKind) bool {
-		return knd.Kind == defaultKind
-	})
+	dfltCurrIdx := slices.IndexFunc(currencies, func(cur models.Currency) bool { return cur.Enum == models.DfltCurrency })
+	dfltKindIdx := slices.IndexFunc(kinds, func(knd models.TransactionKind) bool { return knd.Kind == models.DfltKind })
 
 	return &models.Transaction{
 		Amount:      0,
-		Currency:    models.Currency{ID: currencies[defaultCurrencyIdx].ID},
-		Kind:        models.TransactionKind{ID: kinds[defaultKindIdx].ID},
+		Currency:    models.Currency{ID: currencies[dfltCurrIdx].ID},
+		Kind:        models.TransactionKind{ID: kinds[dfltKindIdx].ID},
 		IsRecurrent: false,
 		ScheduledTo: time.Now(),
 	}

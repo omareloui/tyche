@@ -29,7 +29,7 @@ func (r *Repository) GetCurrenciesMap(ctx context.Context) (map[string]string, e
 	}
 	m := make(map[string]string, len(currencies))
 	for _, c := range currencies {
-		m[c.ID] = c.Currency
+		m[c.ID] = c.Enum.String()
 	}
 	return m, nil
 }
@@ -37,7 +37,7 @@ func (r *Repository) GetCurrenciesMap(ctx context.Context) (map[string]string, e
 func (r *Repository) CurrenciesToMap(currencies []models.Currency) map[string]string {
 	m := make(map[string]string, len(currencies))
 	for _, c := range currencies {
-		m[c.ID] = c.Currency
+		m[c.ID] = c.Enum.String()
 	}
 	return m
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/omareloui/financial-planner/internal/db"
 	"github.com/omareloui/financial-planner/internal/dbconn"
 	"github.com/omareloui/financial-planner/internal/idgen"
+	"github.com/omareloui/financial-planner/internal/models"
 )
 
 func main() {
@@ -32,8 +33,8 @@ func main() {
 	}
 
 	currenciesSeed := []db.Currency{
-		{ID: idgen.New(), Currency: "EGP", Symbol: "EG£"},
-		{ID: idgen.New(), Currency: "USD", Symbol: "US$"},
+		{ID: idgen.New(), Enum: int64(models.CurrencyEgp), EgpFxRate: 1},
+		{ID: idgen.New(), Enum: int64(models.CurrencyUsd), EgpFxRate: 44.88},
 	}
 
 	if len(currencies) != len(currenciesSeed) {
@@ -75,9 +76,10 @@ func main() {
 
 		for _, cur := range currencies {
 			if err := queries.CreateBalance(context.Background(), db.CreateBalanceParams{
-				ID: idgen.New(), CurrencyID: cur.ID, Amount: 0, FxRate: 1,
-			},
-			); err != nil {
+				ID:         idgen.New(),
+				CurrencyID: cur.ID,
+				Amount:     0,
+			}); err != nil {
 				log.Fatalln("error while seeding the balance", err)
 			}
 		}

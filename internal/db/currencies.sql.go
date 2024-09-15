@@ -10,26 +10,26 @@ import (
 )
 
 const createCurrency = `-- name: CreateCurrency :exec
-INSERT INTO currencies (id, currency, symbol)
+INSERT INTO currencies (id, enum, egp_fx_rate)
 VALUES (?, ?, ?)
 `
 
 type CreateCurrencyParams struct {
-	ID       string
-	Currency string
-	Symbol   string
+	ID        string
+	Enum      int64
+	EgpFxRate float64
 }
 
 func (q *Queries) CreateCurrency(ctx context.Context, arg CreateCurrencyParams) error {
-	_, err := q.db.ExecContext(ctx, createCurrency, arg.ID, arg.Currency, arg.Symbol)
+	_, err := q.db.ExecContext(ctx, createCurrency, arg.ID, arg.Enum, arg.EgpFxRate)
 	return err
 }
 
 const getCurrencies = `-- name: GetCurrencies :many
 SELECT
     id,
-    currency,
-    symbol
+    enum,
+    egp_fx_rate
 FROM currencies
 `
 
@@ -42,7 +42,7 @@ func (q *Queries) GetCurrencies(ctx context.Context) ([]Currency, error) {
 	var items []Currency
 	for rows.Next() {
 		var i Currency
-		if err := rows.Scan(&i.ID, &i.Currency, &i.Symbol); err != nil {
+		if err := rows.Scan(&i.ID, &i.Enum, &i.EgpFxRate); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -59,14 +59,14 @@ func (q *Queries) GetCurrencies(ctx context.Context) ([]Currency, error) {
 const getCurrency = `-- name: GetCurrency :one
 SELECT
     id,
-    currency,
-    symbol
+    enum,
+    egp_fx_rate
 FROM currencies WHERE id = ? LIMIT 1
 `
 
 func (q *Queries) GetCurrency(ctx context.Context, id string) (Currency, error) {
 	row := q.db.QueryRowContext(ctx, getCurrency, id)
 	var i Currency
-	err := row.Scan(&i.ID, &i.Currency, &i.Symbol)
+	err := row.Scan(&i.ID, &i.Enum, &i.EgpFxRate)
 	return i, err
 }

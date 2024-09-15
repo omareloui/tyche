@@ -18,64 +18,64 @@ type Transaction struct {
 }
 
 func (t *Transaction) ViewAmount() string {
-	return formatAmount(t.Amount, t.Currency)
+	return formatAmount(t.Amount, t.Currency.Enum)
 }
 
-func DBTransactionToTransaction(dbTransaction *db.Transaction) *Transaction {
+func DBTransactionToTransaction(dbTx *db.Transaction) *Transaction {
 	return &Transaction{
-		ID:          dbTransaction.ID,
-		Amount:      dbTransaction.Amount,
-		IsRecurrent: dbTransaction.IsRecurrent,
-		FulfilledOn: dbTransaction.FulfilledOn.Time,
-		ScheduledTo: dbTransaction.ScheduledTo,
-		CreatedAt:   dbTransaction.CreatedAt.(time.Time),
+		ID:          dbTx.ID,
+		Amount:      dbTx.Amount,
+		IsRecurrent: dbTx.IsRecurrent,
+		FulfilledOn: dbTx.FulfilledOn.Time,
+		ScheduledTo: dbTx.ScheduledTo,
+		CreatedAt:   dbTx.CreatedAt.(time.Time),
 		Kind: TransactionKind{
-			ID: dbTransaction.KindID,
+			ID: dbTx.KindID,
 		},
 		Currency: Currency{
-			ID: dbTransaction.CurrencyID,
+			ID: dbTx.CurrencyID,
 		},
 	}
 }
 
-func DBTransactionRowToTransaction(dbTransaction *db.GetTransactionRow) *Transaction {
+func DBTransactionRowToTransaction(dbTx *db.GetTransactionRow) *Transaction {
 	return &Transaction{
-		ID:          dbTransaction.ID,
-		Amount:      dbTransaction.Amount,
-		IsRecurrent: dbTransaction.IsRecurrent,
-		FulfilledOn: dbTransaction.FulfilledOn.Time,
-		ScheduledTo: dbTransaction.ScheduledTo,
-		CreatedAt:   dbTransaction.CreatedAt.(time.Time),
+		ID:          dbTx.ID,
+		Amount:      dbTx.Amount,
+		IsRecurrent: dbTx.IsRecurrent,
+		FulfilledOn: dbTx.FulfilledOn.Time,
+		ScheduledTo: dbTx.ScheduledTo,
+		CreatedAt:   dbTx.CreatedAt.(time.Time),
 		Currency: Currency{
-			ID:       dbTransaction.CurrencyID,
-			Currency: dbTransaction.Currency.String,
-			Symbol:   dbTransaction.Symbol.String,
+			ID:        dbTx.CurrencyID,
+			Enum:      CurrencyEnum(dbTx.Enum.Int64),
+			EgpFxRate: dbTx.EgpFxRate.Float64,
 		},
 		Kind: TransactionKind{
-			ID:              dbTransaction.KindID,
-			Kind:            dbTransaction.Kind.String,
-			IncreaseBalance: dbTransaction.IncreaseBalance.Bool,
+			ID:              dbTx.KindID,
+			Kind:            dbTx.Kind.String,
+			IncreaseBalance: dbTx.IncreaseBalance.Bool,
 		},
 	}
 }
 
-func DBTransactionsRowToTransaction(dbTransaction *db.GetTransactionsRow) *Transaction {
+func DBTransactionsRowToTransaction(dbTx *db.GetTransactionsRow) *Transaction {
 	return &Transaction{
-		ID:          dbTransaction.ID,
-		Amount:      dbTransaction.Amount,
-		IsRecurrent: dbTransaction.IsRecurrent,
-		FulfilledOn: dbTransaction.FulfilledOn.Time,
-		ScheduledTo: dbTransaction.ScheduledTo,
-		CreatedAt:   dbTransaction.CreatedAt.(time.Time),
+		ID:          dbTx.ID,
+		Amount:      dbTx.Amount,
+		IsRecurrent: dbTx.IsRecurrent,
+		FulfilledOn: dbTx.FulfilledOn.Time,
+		ScheduledTo: dbTx.ScheduledTo,
+		CreatedAt:   dbTx.CreatedAt.(time.Time),
 		Currency: Currency{
-			ID:       dbTransaction.CurrencyID,
-			Currency: dbTransaction.Currency.String,
-			Symbol:   dbTransaction.Symbol.String,
+			ID:        dbTx.CurrencyID,
+			Enum:      CurrencyEnum(dbTx.Enum.Int64),
+			EgpFxRate: dbTx.EgpFxRate.Float64,
 		},
 		Kind: TransactionKind{
-			ID:              dbTransaction.KindID,
-			Kind:            dbTransaction.Kind.String,
-			IncreaseBalance: dbTransaction.IncreaseBalance.Bool,
+			ID:              dbTx.KindID,
+			Kind:            dbTx.Kind.String,
+			IncreaseBalance: dbTx.IncreaseBalance.Bool,
 		},
 	}
 }

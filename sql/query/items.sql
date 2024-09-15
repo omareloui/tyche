@@ -5,8 +5,8 @@ SELECT
     i.amount,
     i.bought_on,
     i.currency_id,
-    c.currency,
-    c.symbol
+    c.enum,
+    c.egp_fx_rate
 FROM items AS i
 LEFT JOIN currencies AS c ON i.currency_id = c.id
 ORDER BY i.amount;
@@ -18,8 +18,8 @@ SELECT
     i.amount,
     i.bought_on,
     i.currency_id,
-    c.currency,
-    c.symbol
+    c.enum,
+    c.egp_fx_rate
 FROM items AS i
 LEFT JOIN currencies AS c ON i.currency_id = c.id
 WHERE i.id = ? LIMIT 1;

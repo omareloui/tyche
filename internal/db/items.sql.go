@@ -54,8 +54,8 @@ SELECT
     i.amount,
     i.bought_on,
     i.currency_id,
-    c.currency,
-    c.symbol
+    c.enum,
+    c.egp_fx_rate
 FROM items AS i
 LEFT JOIN currencies AS c ON i.currency_id = c.id
 WHERE i.id = ? LIMIT 1
@@ -67,8 +67,8 @@ type GetItemRow struct {
 	Amount     float64
 	BoughtOn   sql.NullTime
 	CurrencyID string
-	Currency   sql.NullString
-	Symbol     sql.NullString
+	Enum       sql.NullInt64
+	EgpFxRate  sql.NullFloat64
 }
 
 func (q *Queries) GetItem(ctx context.Context, id string) (GetItemRow, error) {
@@ -80,8 +80,8 @@ func (q *Queries) GetItem(ctx context.Context, id string) (GetItemRow, error) {
 		&i.Amount,
 		&i.BoughtOn,
 		&i.CurrencyID,
-		&i.Currency,
-		&i.Symbol,
+		&i.Enum,
+		&i.EgpFxRate,
 	)
 	return i, err
 }
@@ -93,8 +93,8 @@ SELECT
     i.amount,
     i.bought_on,
     i.currency_id,
-    c.currency,
-    c.symbol
+    c.enum,
+    c.egp_fx_rate
 FROM items AS i
 LEFT JOIN currencies AS c ON i.currency_id = c.id
 ORDER BY i.amount
@@ -106,8 +106,8 @@ type GetItemsRow struct {
 	Amount     float64
 	BoughtOn   sql.NullTime
 	CurrencyID string
-	Currency   sql.NullString
-	Symbol     sql.NullString
+	Enum       sql.NullInt64
+	EgpFxRate  sql.NullFloat64
 }
 
 func (q *Queries) GetItems(ctx context.Context) ([]GetItemsRow, error) {
@@ -125,8 +125,8 @@ func (q *Queries) GetItems(ctx context.Context) ([]GetItemsRow, error) {
 			&i.Amount,
 			&i.BoughtOn,
 			&i.CurrencyID,
-			&i.Currency,
-			&i.Symbol,
+			&i.Enum,
+			&i.EgpFxRate,
 		); err != nil {
 			return nil, err
 		}

@@ -4,17 +4,34 @@ import (
 	"github.com/omareloui/financial-planner/internal/db"
 )
 
-type Currency struct {
-	ID       string `validate:"required"`
-	Currency string `conform:"trim,upper"`
-	Symbol   string `conform:"trim,upper"`
+type CurrencyEnum uint8
+
+const (
+	CurrencyEgp CurrencyEnum = iota
+	CurrencyUsd
+)
+
+const DfltCurrency = CurrencyEgp
+
+func (cs CurrencyEnum) String() string {
+	return [...]string{"EGP", "USD"}[cs]
 }
 
-func DBCurrencyToCurrency(dbCurrency *db.Currency) *Currency {
+func (cs CurrencyEnum) Symbol() string {
+	return [...]string{"EG£", "US$"}[cs]
+}
+
+type Currency struct {
+	ID        string `validate:"required"`
+	Enum      CurrencyEnum
+	EgpFxRate float64
+}
+
+func DBCurrencyToCurrency(dbCurr *db.Currency) *Currency {
 	return &Currency{
-		ID:       dbCurrency.ID,
-		Currency: dbCurrency.Currency,
-		Symbol:   dbCurrency.Symbol,
+		ID:        dbCurr.ID,
+		Enum:      CurrencyEnum(dbCurr.Enum),
+		EgpFxRate: dbCurr.EgpFxRate,
 	}
 }
 

@@ -2,6 +2,8 @@ package models
 
 import "github.com/omareloui/financial-planner/internal/db"
 
+const DfltKind = "EXPENSES"
+
 type TransactionKind struct {
 	ID              string `validate:"required"`
 	Kind            string `conform:"trim,upper"`

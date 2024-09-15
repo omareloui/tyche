@@ -13,13 +13,12 @@ type Balance struct {
 	ID         string
 	Amount     float64
 	CurrencyID string
-	FxRate     float64
 }
 
 type Currency struct {
-	ID       string
-	Currency string
-	Symbol   string
+	ID        string
+	Enum      int64
+	EgpFxRate float64
 }
 
 type Goal struct {

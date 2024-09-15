@@ -11,7 +11,15 @@ type Balance struct {
 }
 
 func (b *Balance) ViewAmount() string {
-	return formatAmount(b.Amount, b.Currency)
+	return formatAmount(b.Amount, b.Currency.Enum)
+}
+
+func (b *Balance) ViewEgpAmount() string {
+	return formatAmount(b.Currency.EgpFxRate*b.Amount, b.Currency.Enum)
+}
+
+func (b *Balance) EgpAmount() float64 {
+	return b.Currency.EgpFxRate * b.Amount
 }
 
 func DBBalanceToBalance(dbBalance *db.GetBalancesRow) *Balance {
@@ -19,9 +27,9 @@ func DBBalanceToBalance(dbBalance *db.GetBalancesRow) *Balance {
 		ID:     dbBalance.ID,
 		Amount: dbBalance.Amount,
 		Currency: Currency{
-			ID:       dbBalance.CurrencyID,
-			Currency: dbBalance.Currency.String,
-			Symbol:   dbBalance.Symbol.String,
+			ID:        dbBalance.CurrencyID,
+			Enum:      CurrencyEnum(dbBalance.Enum.Int64),
+			EgpFxRate: dbBalance.EgpFxRate.Float64,
 		},
 	}
 }

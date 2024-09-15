@@ -25,23 +25,17 @@ func (q *Queries) AddToBalance(ctx context.Context, arg AddToBalanceParams) erro
 }
 
 const createBalance = `-- name: CreateBalance :exec
-INSERT INTO balances (id, currency_id, amount, fx_rate) VALUES (?, ?, ?, ?)
+INSERT INTO balances (id, currency_id, amount) VALUES (?, ?, ?)
 `
 
 type CreateBalanceParams struct {
 	ID         string
 	CurrencyID string
 	Amount     float64
-	FxRate     float64
 }
 
 func (q *Queries) CreateBalance(ctx context.Context, arg CreateBalanceParams) error {
-	_, err := q.db.ExecContext(ctx, createBalance,
-		arg.ID,
-		arg.CurrencyID,
-		arg.Amount,
-		arg.FxRate,
-	)
+	_, err := q.db.ExecContext(ctx, createBalance, arg.ID, arg.CurrencyID, arg.Amount)
 	return err
 }
 
@@ -50,9 +44,8 @@ SELECT
     b.id,
     b.amount,
     b.currency_id,
-    b.fx_rate,
-    c.currency,
-    c.symbol
+    c.enum,
+    c.egp_fx_rate
 FROM balances AS b
 LEFT JOIN currencies AS c ON b.currency_id = c.id
 `
@@ -61,9 +54,8 @@ type GetBalancesRow struct {
 	ID         string
 	Amount     float64
 	CurrencyID string
-	FxRate     float64
-	Currency   sql.NullString
-	Symbol     sql.NullString
+	Enum       sql.NullInt64
+	EgpFxRate  sql.NullFloat64
 }
 
 func (q *Queries) GetBalances(ctx context.Context) ([]GetBalancesRow, error) {
@@ -79,9 +71,8 @@ func (q *Queries) GetBalances(ctx context.Context) ([]GetBalancesRow, error) {
 			&i.ID,
 			&i.Amount,
 			&i.CurrencyID,
-			&i.FxRate,
-			&i.Currency,
-			&i.Symbol,
+			&i.Enum,
+			&i.EgpFxRate,
 		); err != nil {
 			return nil, err
 		}

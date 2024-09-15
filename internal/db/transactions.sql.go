@@ -87,8 +87,8 @@ SELECT
     t.fulfilled_on,
     t.scheduled_to,
     t.created_at,
-    c.currency,
-    c.symbol,
+    c.enum,
+    c.egp_fx_rate,
     k.kind,
     k.increase_balance
 FROM transactions AS t
@@ -106,8 +106,8 @@ type GetTransactionRow struct {
 	FulfilledOn     sql.NullTime
 	ScheduledTo     time.Time
 	CreatedAt       interface{}
-	Currency        sql.NullString
-	Symbol          sql.NullString
+	Enum            sql.NullInt64
+	EgpFxRate       sql.NullFloat64
 	Kind            sql.NullString
 	IncreaseBalance sql.NullBool
 }
@@ -124,8 +124,8 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 		&i.FulfilledOn,
 		&i.ScheduledTo,
 		&i.CreatedAt,
-		&i.Currency,
-		&i.Symbol,
+		&i.Enum,
+		&i.EgpFxRate,
 		&i.Kind,
 		&i.IncreaseBalance,
 	)
@@ -142,8 +142,8 @@ SELECT
     t.fulfilled_on,
     t.scheduled_to,
     t.created_at,
-    c.currency,
-    c.symbol,
+    c.enum,
+    c.egp_fx_rate,
     k.kind,
     k.increase_balance
 FROM transactions AS t
@@ -161,8 +161,8 @@ type GetTransactionsRow struct {
 	FulfilledOn     sql.NullTime
 	ScheduledTo     time.Time
 	CreatedAt       interface{}
-	Currency        sql.NullString
-	Symbol          sql.NullString
+	Enum            sql.NullInt64
+	EgpFxRate       sql.NullFloat64
 	Kind            sql.NullString
 	IncreaseBalance sql.NullBool
 }
@@ -185,8 +185,8 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.FulfilledOn,
 			&i.ScheduledTo,
 			&i.CreatedAt,
-			&i.Currency,
-			&i.Symbol,
+			&i.Enum,
+			&i.EgpFxRate,
 			&i.Kind,
 			&i.IncreaseBalance,
 		); err != nil {

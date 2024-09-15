@@ -57,7 +57,7 @@ templ TransactionOOB(tx *models.Transaction) {
 templ EditTransaction(tx *models.Transaction, fd *TransactionFD, currencies map[string]string, kinds map[string]string) {
 	@form("put", fmt.Sprintf("/transactions/%s", tx.ID), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { tx.ID }</p>
-		@transactionFormBody(fd, currencies, kinds, tx.Currency.Symbol)
+		@transactionFormBody(fd, currencies, kinds, tx.Currency.Enum.Symbol())
 		@editFormButtons(fmt.Sprintf("/transactions/%s", tx.ID))
 	}
 }

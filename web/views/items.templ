@@ -57,7 +57,12 @@ templ Item(it *models.Item) {
 	<div hx-target="this" class="entry-container">
 		<p>ID: { it.ID }</p>
 		<p>Name: { it.Name }</p>
-		<p>Amount: { it.ViewAmount() }</p>
+		<p>
+			Amount: { it.ViewAmount() }
+			if it.Currency.Enum != models.CurrencyEgp {
+				<i class="text-gray-400">[{ it.ViewEgpAmount() }]</i>
+			}
+		</p>
 		<div class="flex gap-4">
 			@editButton(fmt.Sprintf("/items/%s/edit", it.ID))
 			@deleteButton(fmt.Sprintf("/items/%s", it.ID))
