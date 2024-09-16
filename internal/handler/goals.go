@@ -90,6 +90,23 @@ func (h Handler) CreateGoal(w http.ResponseWriter, r *http.Request) (templ.Compo
 	return views.CreateGoalForm(h.mapGlToFD(dfltGoal(), &errs.ValidationError{}), its), nil
 }
 
+func (h Handler) DeleteGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+	l := logger.FromCtx(r.Context())
+
+	err := h.repo.DeleteGoal(r.Context(), id)
+	if err != nil {
+		l.Error("deleting goal", zap.Error(err), zap.String("id", id))
+		return nil, err
+	}
+	l.Info("deleted goal", zap.String("id", id))
+
+	return nil, nil
+}
+
 func (h Handler) populateItemsToGoal(its []models.Item, gl *models.Goal) {
 	for i, glIt := range gl.Items {
 		gl.Items[i] = *slicesutils.Find(its, func(it models.Item) bool { return glIt.ID == it.ID })

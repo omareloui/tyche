@@ -55,6 +55,16 @@ func (q *Queries) CreateGoalItem(ctx context.Context, arg CreateGoalItemParams) 
 	return err
 }
 
+const deleteGoal = `-- name: DeleteGoal :exec
+DELETE FROM goals
+WHERE id = ?
+`
+
+func (q *Queries) DeleteGoal(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteGoal, id)
+	return err
+}
+
 const getGoal = `-- name: GetGoal :one
 SELECT
     gl.id,

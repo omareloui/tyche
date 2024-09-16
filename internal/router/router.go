@@ -28,6 +28,10 @@ func New(h *handler.Handler) Router {
 
 	mux.Handle("GET /goals", handle(h.Goals))
 	mux.Handle("POST /goals", handle(h.CreateGoal))
+	// mux.Handle("GET /goals/{id}", handle(h.Goal))
+	// mux.Handle("GET /goals/{id}/edit", handle(h.GetEditGoal))
+	// mux.Handle("PUT /goals/{id}", handle(h.EditGoal))
+	mux.Handle("DELETE /goals/{id}", handle(h.DeleteGoal))
 
 	mux.Handle("GET /items", handle(h.Items))
 	mux.Handle("POST /items", handle(h.CreateItem))

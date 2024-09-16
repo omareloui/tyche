@@ -52,3 +52,7 @@ func (r *Repository) CreateGoal(ctx context.Context, gl *models.Goal) error {
 
 	return txn.Commit()
 }
+
+func (r *Repository) DeleteGoal(ctx context.Context, id string) error {
+	return r.q.DeleteGoal(ctx, id)
+}
