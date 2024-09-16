@@ -51,6 +51,17 @@ LEFT JOIN items AS i ON gi.item_id = i.id
 LEFT JOIN currencies AS c ON i.currency_id = c.id
 WHERE gl.id = ?;
 
+-- name: UpdateGoal :exec
+UPDATE goals
+SET 
+title = ?,
+egp_subtotal = ?
+WHERE id = ?;
+
+-- name: DeleteGoalItems :exec
+DELETE FROM goals_items
+WHERE goal_id = ?;
+
 -- name: DeleteGoal :exec
 DELETE FROM goals
 WHERE id = ?;

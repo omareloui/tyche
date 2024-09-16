@@ -65,6 +65,16 @@ func (q *Queries) DeleteGoal(ctx context.Context, id string) error {
 	return err
 }
 
+const deleteGoalItems = `-- name: DeleteGoalItems :exec
+DELETE FROM goals_items
+WHERE goal_id = ?
+`
+
+func (q *Queries) DeleteGoalItems(ctx context.Context, goalID string) error {
+	_, err := q.db.ExecContext(ctx, deleteGoalItems, goalID)
+	return err
+}
+
 const getGoal = `-- name: GetGoal :many
 SELECT
     gl.id,
@@ -200,4 +210,23 @@ func (q *Queries) GetGoals(ctx context.Context) ([]GetGoalsRow, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateGoal = `-- name: UpdateGoal :exec
+UPDATE goals
+SET 
+title = ?,
+egp_subtotal = ?
+WHERE id = ?
+`
+
+type UpdateGoalParams struct {
+	Title       string
+	EgpSubtotal float64
+	ID          string
+}
+
+func (q *Queries) UpdateGoal(ctx context.Context, arg UpdateGoalParams) error {
+	_, err := q.db.ExecContext(ctx, updateGoal, arg.Title, arg.EgpSubtotal, arg.ID)
+	return err
 }

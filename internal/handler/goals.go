@@ -60,31 +60,6 @@ func (h Handler) Goal(w http.ResponseWriter, r *http.Request) (templ.Component, 
 	return views.Goal(gl), nil
 }
 
-func (h Handler) GetEditGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	id := r.PathValue("id")
-	if id == "" {
-		return nil, errs.ErrInvalidID
-	}
-
-	l := logger.FromCtx(r.Context())
-
-	gl, err := h.repo.GetGoal(r.Context(), id)
-	if err != nil {
-		l.Error("fetching goal", zap.Error(err))
-		return nil, err
-	}
-	l.Info("fetched goal")
-
-	its, err := h.repo.GetItems(r.Context())
-	if err != nil {
-		l.Error("fetching items", zap.Error(err))
-		return nil, err
-	}
-	l.Debug("fetched items")
-
-	return views.EditGoal(id, h.mapGlToFD(gl, &errs.ValidationError{}), its), nil
-}
-
 func (h Handler) CreateGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	l := logger.FromCtx(r.Context())
 
@@ -131,6 +106,83 @@ func (h Handler) CreateGoal(w http.ResponseWriter, r *http.Request) (templ.Compo
 	l.Debug("rendered goal")
 
 	return views.CreateGoalForm(h.mapGlToFD(dfltGoal(), &errs.ValidationError{}), its), nil
+}
+
+func (h Handler) GetEditGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+
+	gl, err := h.repo.GetGoal(r.Context(), id)
+	if err != nil {
+		l.Error("fetching goal", zap.Error(err))
+		return nil, err
+	}
+	l.Info("fetched goal")
+
+	its, err := h.repo.GetItems(r.Context())
+	if err != nil {
+		l.Error("fetching items", zap.Error(err))
+		return nil, err
+	}
+	l.Debug("fetched items")
+
+	return views.EditGoal(id, h.mapGlToFD(gl, &errs.ValidationError{}), its), nil
+}
+
+func (h Handler) EditGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+
+	gl, err := h.mapFDToGoal(r)
+	if err != nil {
+		l.Error("parsing form to goal", zap.Error(err))
+		return nil, err
+	}
+	l.Debug("parsed form to goal", zap.Any("goal", gl))
+
+	its, err := h.repo.GetItems(r.Context())
+	if err != nil {
+		l.Error("fetching items", zap.Error(err))
+		return nil, err
+	}
+	l.Debug("fetched items")
+
+	h.populateItemsToGoal(its, gl)
+	gl.ID = id
+	gl.EgpSubtotal = gl.CalculateEgpSubtotal()
+
+	if err = h.sani.SanitizeStruct(gl); err != nil {
+		l.Error("sanitizing goal", zap.Error(err))
+		return nil, err
+	}
+
+	if valerr := h.valid.Validate(gl); valerr != nil {
+		l.Error("validating goal", zap.Any("errors", valerr.Errors))
+		fd := h.mapGlToFD(gl, valerr)
+		return views.CreateGoalForm(fd, its), nil
+	}
+
+	if err = h.repo.UpdateGoal(r.Context(), gl); err != nil {
+		l.Error("udpating goal", zap.Error(err))
+		return nil, err
+	}
+	l.Info("updated goal", zap.Any("goal", gl))
+
+	if err = renderToBody(w, r, views.GoalOOB(gl)); err != nil {
+		l.Error("rendering OOB to body", zap.Error(err))
+		return nil, err
+	}
+	l.Debug("rendered goal")
+
+	return views.Goal(gl), nil
 }
 
 func (h Handler) DeleteGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
