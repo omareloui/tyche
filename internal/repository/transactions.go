@@ -15,6 +15,7 @@ func (r *Repository) CreateTransaction(ctx context.Context, t *models.Transactio
 		Amount:      t.Amount,
 		KindID:      t.Kind.ID,
 		CurrencyID:  t.Currency.ID,
+		Description: sql.NullString{String: t.Description, Valid: t.Description != ""},
 		IsRecurrent: t.IsRecurrent,
 		ScheduledTo: t.ScheduledTo,
 		FulfilledOn: sql.NullTime{Time: t.FulfilledOn, Valid: !t.FulfilledOn.IsZero()},

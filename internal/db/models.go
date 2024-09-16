@@ -46,6 +46,7 @@ type Transaction struct {
 	Amount      float64
 	CurrencyID  string
 	KindID      string
+	Description sql.NullString
 	IsRecurrent bool
 	FulfilledOn sql.NullTime
 	ScheduledTo time.Time

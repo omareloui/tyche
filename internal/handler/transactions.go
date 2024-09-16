@@ -380,6 +380,7 @@ func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationE
 			Amount:     views.FDInput{Value: formatIntIfNonZero(int(t.Amount)), Error: err.Errors.MsgFor("Amount")},
 			CurrencyID: views.FDInput{Value: t.Currency.ID, Error: err.Errors.MsgFor("Currency.ID")},
 		},
+		Description: views.FDInput{Value: t.Description, Error: err.Errors.MsgFor("Description")},
 		KindID:      views.FDInput{Value: t.Kind.ID, Error: err.Errors.MsgFor("Kind.ID")},
 		IsRecurrent: views.FDInput{Value: formatBooleanIfNonZero(t.IsRecurrent), Error: err.Errors.MsgFor("IsRecurrent")},
 		ScheduledTo: views.FDInput{Value: formatDateOnlyIfNonZero(t.ScheduledTo), Error: err.Errors.MsgFor("ScheduledTo")},
@@ -401,6 +402,7 @@ func (h Handler) mapFDToTransaction(r *http.Request) (*models.Transaction, error
 		Amount:      amount,
 		Currency:    models.Currency{ID: r.FormValue("currency_id")},
 		Kind:        models.TransactionKind{ID: r.FormValue("kind_id")},
+		Description: r.FormValue("description"),
 		IsRecurrent: parseBoolean(r.FormValue("is_recurrent")),
 		ScheduledTo: ScheduledTo,
 	}, nil
