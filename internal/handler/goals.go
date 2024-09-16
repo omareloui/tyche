@@ -176,12 +176,6 @@ func (h Handler) EditGoal(w http.ResponseWriter, r *http.Request) (templ.Compone
 	}
 	l.Info("updated goal", zap.Any("goal", gl))
 
-	if err = renderToBody(w, r, views.GoalOOB(gl)); err != nil {
-		l.Error("rendering OOB to body", zap.Error(err))
-		return nil, err
-	}
-	l.Debug("rendered goal")
-
 	return views.Goal(gl), nil
 }
 
