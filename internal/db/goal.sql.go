@@ -65,7 +65,7 @@ func (q *Queries) DeleteGoal(ctx context.Context, id string) error {
 	return err
 }
 
-const getGoal = `-- name: GetGoal :one
+const getGoal = `-- name: GetGoal :many
 SELECT
     gl.id,
     gl.title,
@@ -82,7 +82,7 @@ FROM goals AS gl
 LEFT JOIN goals_items AS gi ON gl.id = gi.goal_id
 LEFT JOIN items AS i ON gi.item_id = i.id
 LEFT JOIN currencies AS c ON i.currency_id = c.id
-WHERE gl.id = ? LIMIT 1
+WHERE gl.id = ?
 `
 
 type GetGoalRow struct {
@@ -99,23 +99,39 @@ type GetGoalRow struct {
 	ItemCurrencyFxRate sql.NullFloat64
 }
 
-func (q *Queries) GetGoal(ctx context.Context, id string) (GetGoalRow, error) {
-	row := q.db.QueryRowContext(ctx, getGoal, id)
-	var i GetGoalRow
-	err := row.Scan(
-		&i.ID,
-		&i.Title,
-		&i.EgpSubtotal,
-		&i.CreatedAt,
-		&i.ItemID,
-		&i.ItemName,
-		&i.ItemPrice,
-		&i.ItemCurrencyID,
-		&i.ItemPurchasedOn,
-		&i.ItemCurrency,
-		&i.ItemCurrencyFxRate,
-	)
-	return i, err
+func (q *Queries) GetGoal(ctx context.Context, id string) ([]GetGoalRow, error) {
+	rows, err := q.db.QueryContext(ctx, getGoal, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetGoalRow
+	for rows.Next() {
+		var i GetGoalRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.EgpSubtotal,
+			&i.CreatedAt,
+			&i.ItemID,
+			&i.ItemName,
+			&i.ItemPrice,
+			&i.ItemCurrencyID,
+			&i.ItemPurchasedOn,
+			&i.ItemCurrency,
+			&i.ItemCurrencyFxRate,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getGoals = `-- name: GetGoals :many

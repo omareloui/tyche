@@ -42,6 +42,49 @@ func (h Handler) Goals(w http.ResponseWriter, r *http.Request) (templ.Component,
 	return views.Goals(b, its, h.mapGlToFD(dfltGoal(), &errs.ValidationError{}), gls), nil
 }
 
+func (h Handler) Goal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+
+	gl, err := h.repo.GetGoal(r.Context(), id)
+	if err != nil {
+		l.Error("fetching goal", zap.Error(err))
+		return nil, err
+	}
+	l.Info("fetched goal")
+
+	return views.Goal(gl), nil
+}
+
+func (h Handler) GetEditGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+
+	gl, err := h.repo.GetGoal(r.Context(), id)
+	if err != nil {
+		l.Error("fetching goal", zap.Error(err))
+		return nil, err
+	}
+	l.Info("fetched goal")
+
+	its, err := h.repo.GetItems(r.Context())
+	if err != nil {
+		l.Error("fetching items", zap.Error(err))
+		return nil, err
+	}
+	l.Debug("fetched items")
+
+	return views.EditGoal(id, h.mapGlToFD(gl, &errs.ValidationError{}), its), nil
+}
+
 func (h Handler) CreateGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	l := logger.FromCtx(r.Context())
 

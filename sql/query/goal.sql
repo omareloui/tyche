@@ -32,7 +32,7 @@ LEFT JOIN goals_items AS gi ON gl.id = gi.goal_id
 LEFT JOIN items AS i ON gi.item_id = i.id
 LEFT JOIN currencies AS c ON i.currency_id = c.id;
 
--- name: GetGoal :one
+-- name: GetGoal :many
 SELECT
     gl.id,
     gl.title,
@@ -49,7 +49,7 @@ FROM goals AS gl
 LEFT JOIN goals_items AS gi ON gl.id = gi.goal_id
 LEFT JOIN items AS i ON gi.item_id = i.id
 LEFT JOIN currencies AS c ON i.currency_id = c.id
-WHERE gl.id = ? LIMIT 1;
+WHERE gl.id = ?;
 
 -- name: DeleteGoal :exec
 DELETE FROM goals

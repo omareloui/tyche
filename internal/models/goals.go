@@ -28,16 +28,28 @@ func (gl *Goal) CalculateEgpSubtotal() float64 {
 	return sum
 }
 
-// TEST: does the LIMIT work here?
-func DBGoalRowToGoal(dbGl *db.GetGoalRow) *Goal {
-	// TODO: popuate the items
+func DBGoalRowToGoal(dbGl []db.GetGoalRow) *Goal {
 	items := []Item{}
 
+	for _, gl := range dbGl {
+		items = append(items, Item{
+			ID:          gl.ItemID.String,
+			Name:        gl.ItemName.String,
+			Price:       gl.ItemPrice.Float64,
+			PurchasedOn: gl.ItemPurchasedOn.Time,
+			Currency: Currency{
+				ID:        gl.ItemCurrencyID.String,
+				Enum:      CurrencyEnum(gl.ItemCurrency.Int64),
+				EgpFxRate: gl.ItemCurrencyFxRate.Float64,
+			},
+		})
+	}
+
 	return &Goal{
-		ID:          dbGl.ID,
-		Title:       dbGl.Title,
-		EgpSubtotal: dbGl.EgpSubtotal,
-		CreatedAt:   dbGl.CreatedAt.(time.Time),
+		ID:          dbGl[0].ID,
+		Title:       dbGl[0].Title,
+		EgpSubtotal: dbGl[0].EgpSubtotal,
+		CreatedAt:   dbGl[0].CreatedAt.(time.Time),
 		Items:       items,
 	}
 }

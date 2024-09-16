@@ -16,11 +16,11 @@ func (r *Repository) GetGoals(ctx context.Context) ([]models.Goal, error) {
 }
 
 func (r *Repository) GetGoal(ctx context.Context, id string) (*models.Goal, error) {
-	dbGoal, err := r.q.GetGoal(ctx, id)
+	dbGls, err := r.q.GetGoal(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	return models.DBGoalRowToGoal(&dbGoal), nil
+	return models.DBGoalRowToGoal(dbGls), nil
 }
 
 func (r *Repository) CreateGoal(ctx context.Context, gl *models.Goal) error {
