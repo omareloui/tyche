@@ -73,6 +73,11 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 	}
 	dfltCurr := slicesutils.Find(currencies, func(cur models.Currency) bool { return cur.Enum == models.DfltCurrency })
 
+	c := slicesutils.Find(currencies, func(cur models.Currency) bool { return cur.ID == tx.Currency.ID })
+	tx.Currency = *c
+	k := slicesutils.Find(kinds, func(k models.TransactionKind) bool { return k.ID == tx.Kind.ID })
+	tx.Kind = *k
+
 	var ftx *models.FrequentTransaction
 
 	if r.FormValue("is_frequent") != "" {
@@ -125,11 +130,6 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		return nil, err
 	}
 	l.Info("created transaction")
-
-	c := slicesutils.Find(currencies, func(cur models.Currency) bool { return cur.ID == tx.Currency.ID })
-	tx.Currency = *c
-	k := slicesutils.Find(kinds, func(k models.TransactionKind) bool { return k.ID == tx.Kind.ID })
-	tx.Kind = *k
 
 	if err = renderToBody(w, r, views.TransactionOOB(tx)); err != nil {
 		l.Error("rendering transaction OOB")
