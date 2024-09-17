@@ -23,12 +23,31 @@ CREATE TABLE transactions (
     currency_id VARCHAR(16) NOT NULL,
     kind_id VARCHAR(16) NOT NULL,
     description VARCHAR(225),
-    is_recurrent BOOLEAN NOT NULL DEFAULT FALSE,
     fulfilled_on DATE,
     scheduled_to DATE NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW,
     FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE,
     FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id)
+);
+CREATE TABLE frequent_transactions (
+    id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
+    frequency_by INT NOT NULL,
+    frequency INT NOT NULL,
+    amount FLOAT DEFAULT 0 NOT NULL,
+    currency_id VARCHAR(16) NOT NULL,
+    kind_id VARCHAR(16) NOT NULL,
+    description VARCHAR(225),
+    created_at TIMESTAMP NOT NULL DEFAULT NOW,
+    last_transaction_created_at TIMESTAMP NOT NULL DEFAULT NOW,
+    FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE,
+    FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id)
+);
+-- TODO: to be able to delete not finished transactions
+CREATE TABLE frequent_transactions_transactions (
+    transaction_id VARCHAR(16) NOT NULL,
+    frequency_id VARCHAR(16) NOT NULL,
+    FOREIGN KEY (transaction_id) REFERENCES transactions (id) ON DELETE CASCADE,
+    FOREIGN KEY (frequency_id) REFERENCES frequent_transactions (id) ON DELETE CASCADE
 );
 CREATE TABLE goals (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,

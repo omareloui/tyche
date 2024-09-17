@@ -16,7 +16,6 @@ func (r *Repository) CreateTransaction(ctx context.Context, t *models.Transactio
 		KindID:      t.Kind.ID,
 		CurrencyID:  t.Currency.ID,
 		Description: sql.NullString{String: t.Description, Valid: t.Description != ""},
-		IsRecurrent: t.IsRecurrent,
 		ScheduledTo: t.ScheduledTo,
 		FulfilledOn: sql.NullTime{Time: t.FulfilledOn, Valid: !t.FulfilledOn.IsZero()},
 		CreatedAt:   t.CreatedAt,
@@ -58,7 +57,6 @@ func (r *Repository) UpdateTransaction(ctx context.Context, tx *models.Transacti
 		Amount:      tx.Amount,
 		CurrencyID:  tx.Currency.ID,
 		KindID:      tx.Kind.ID,
-		IsRecurrent: tx.IsRecurrent,
 		ScheduledTo: tx.ScheduledTo,
 	})
 }

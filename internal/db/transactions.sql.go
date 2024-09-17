@@ -17,13 +17,12 @@ INSERT INTO transactions (
     amount,
     currency_id,
     kind_id,
-    is_recurrent,
     description,
     scheduled_to,
     fulfilled_on,
     created_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateTransactionParams struct {
@@ -31,7 +30,6 @@ type CreateTransactionParams struct {
 	Amount      float64
 	CurrencyID  string
 	KindID      string
-	IsRecurrent bool
 	Description sql.NullString
 	ScheduledTo time.Time
 	FulfilledOn sql.NullTime
@@ -44,7 +42,6 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 		arg.Amount,
 		arg.CurrencyID,
 		arg.KindID,
-		arg.IsRecurrent,
 		arg.Description,
 		arg.ScheduledTo,
 		arg.FulfilledOn,
@@ -87,7 +84,6 @@ SELECT
     t.currency_id,
     t.kind_id,
     t.description,
-    t.is_recurrent,
     t.fulfilled_on,
     t.scheduled_to,
     t.created_at,
@@ -107,7 +103,6 @@ type GetTransactionRow struct {
 	CurrencyID      string
 	KindID          string
 	Description     sql.NullString
-	IsRecurrent     bool
 	FulfilledOn     sql.NullTime
 	ScheduledTo     time.Time
 	CreatedAt       interface{}
@@ -126,7 +121,6 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 		&i.CurrencyID,
 		&i.KindID,
 		&i.Description,
-		&i.IsRecurrent,
 		&i.FulfilledOn,
 		&i.ScheduledTo,
 		&i.CreatedAt,
@@ -145,7 +139,6 @@ SELECT
     t.currency_id,
     t.kind_id,
     t.description,
-    t.is_recurrent,
     t.fulfilled_on,
     t.scheduled_to,
     t.created_at,
@@ -165,7 +158,6 @@ type GetTransactionsRow struct {
 	CurrencyID      string
 	KindID          string
 	Description     sql.NullString
-	IsRecurrent     bool
 	FulfilledOn     sql.NullTime
 	ScheduledTo     time.Time
 	CreatedAt       interface{}
@@ -190,7 +182,6 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.CurrencyID,
 			&i.KindID,
 			&i.Description,
-			&i.IsRecurrent,
 			&i.FulfilledOn,
 			&i.ScheduledTo,
 			&i.CreatedAt,
@@ -219,7 +210,6 @@ amount = ?,
 currency_id = ?,
 kind_id = ?,
 description = ?,
-is_recurrent = ?,
 scheduled_to = ?
 WHERE id = ?
 `
@@ -229,7 +219,6 @@ type UpdateTransactionParams struct {
 	CurrencyID  string
 	KindID      string
 	Description sql.NullString
-	IsRecurrent bool
 	ScheduledTo time.Time
 	ID          string
 }
@@ -240,7 +229,6 @@ func (q *Queries) UpdateTransaction(ctx context.Context, arg UpdateTransactionPa
 		arg.CurrencyID,
 		arg.KindID,
 		arg.Description,
-		arg.IsRecurrent,
 		arg.ScheduledTo,
 		arg.ID,
 	)

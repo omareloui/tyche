@@ -152,13 +152,19 @@ templ selectInput(label, name, placeholder, idSuffix string, options map[string]
 	</div>
 }
 
-templ checkbox(label, name, idSuffix string, data FDInput) {
+templ checkbox(label, name, idSuffix string, data FDInput, attrs ...templ.Attributes) {
 	<div>
-		if data.Value == "on" {
-			<input id={ join(name, idSuffix) } type="checkbox" name={ name } checked/>
-		} else {
-			<input id={ join(name, idSuffix) } type="checkbox" name={ name }/>
-		}
+		<input
+			id={ join(name, idSuffix) }
+			type="checkbox"
+			name={ name }
+			if attrs != nil {
+				{ attrs[0]... }
+			}
+			if  data.Value != "" {
+				checked
+			}
+		/>
 		<label for={ join(name, idSuffix) } class="cursor-pointer">{ label }</label>
 	</div>
 }

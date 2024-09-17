@@ -21,6 +21,23 @@ type Currency struct {
 	EgpFxRate float64
 }
 
+type FrequentTransaction struct {
+	ID                       string
+	FrequencyBy              int64
+	Frequency                int64
+	Amount                   float64
+	CurrencyID               string
+	KindID                   string
+	Description              sql.NullString
+	CreatedAt                interface{}
+	LastTransactionCreatedAt interface{}
+}
+
+type FrequentTransactionsTransaction struct {
+	TransactionID string
+	FrequencyID   string
+}
+
 type Goal struct {
 	ID          string
 	Title       string
@@ -47,7 +64,6 @@ type Transaction struct {
 	CurrencyID  string
 	KindID      string
 	Description sql.NullString
-	IsRecurrent bool
 	FulfilledOn sql.NullTime
 	ScheduledTo time.Time
 	CreatedAt   interface{}

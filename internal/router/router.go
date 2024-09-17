@@ -25,6 +25,8 @@ func New(h *handler.Handler) Router {
 	mux.Handle("PUT /transactions/{id}", handle(h.EditTransaction))
 	mux.Handle("PUT /transactions/{id}/fulfill", handle(h.FulfillTransaction))
 	mux.Handle("DELETE /transactions/{id}", handle(h.DeleteTransaction))
+	mux.Handle("POST /frequency-form/", handle(h.FrequencyForm))
+	mux.Handle("POST /frequency-form/{id}", handle(h.FrequencyForm))
 
 	mux.Handle("GET /goals", handle(h.Goals))
 	mux.Handle("POST /goals", handle(h.CreateGoal))

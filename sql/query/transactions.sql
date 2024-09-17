@@ -4,13 +4,12 @@ INSERT INTO transactions (
     amount,
     currency_id,
     kind_id,
-    is_recurrent,
     description,
     scheduled_to,
     fulfilled_on,
     created_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetTransactions :many
 SELECT
@@ -19,7 +18,6 @@ SELECT
     t.currency_id,
     t.kind_id,
     t.description,
-    t.is_recurrent,
     t.fulfilled_on,
     t.scheduled_to,
     t.created_at,
@@ -39,7 +37,6 @@ SELECT
     t.currency_id,
     t.kind_id,
     t.description,
-    t.is_recurrent,
     t.fulfilled_on,
     t.scheduled_to,
     t.created_at,
@@ -59,7 +56,6 @@ amount = ?,
 currency_id = ?,
 kind_id = ?,
 description = ?,
-is_recurrent = ?,
 scheduled_to = ?
 WHERE id = ?;
 

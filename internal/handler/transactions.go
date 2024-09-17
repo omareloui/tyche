@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"slices"
 	"time"
@@ -171,6 +172,21 @@ func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (tem
 	return views.EditTransaction(tx, fd,
 		h.repo.CurrenciesToMap(currencies),
 		h.repo.TransactionKindsToMap(kinds)), nil
+}
+
+func (h Handler) FrequencyForm(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	l := logger.FromCtx(r.Context())
+
+	id := r.PathValue("id")
+	fd := h.parseFrequencyFD(r, &errs.ValidationError{})
+
+	if fd.FrequentBy.Value == "" {
+		fd.FrequentBy.Value = fmt.Sprintf("%d", models.Month)
+	}
+
+	l.Info("responding with", zap.Any("formdata", fd))
+
+	return views.FrequencyFormBody(id, fd), nil
 }
 
 func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -374,6 +390,14 @@ func (h Handler) getCurrenciesAndKinds(ctx context.Context) ([]models.Currency, 
 	return curs, knds, nil
 }
 
+func (h Handler) parseFrequencyFD(r *http.Request, err *errs.ValidationError) *views.FrequencyFD {
+	return &views.FrequencyFD{
+		IsFrequent: views.FDInput{Value: r.FormValue("is_frequent"), Error: err.Errors.MsgFor("IsFrequent")},
+		FrequentBy: views.FDInput{Value: r.FormValue("frequent_by"), Error: err.Errors.MsgFor("FrequentBy")},
+		Frequency:  views.FDInput{Value: r.FormValue("frequency"), Error: err.Errors.MsgFor("Frequency")},
+	}
+}
+
 func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationError) *views.TransactionFD {
 	return &views.TransactionFD{
 		AmountFD: views.AmountFD{
@@ -382,8 +406,8 @@ func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationE
 		},
 		Description: views.FDInput{Value: t.Description, Error: err.Errors.MsgFor("Description")},
 		KindID:      views.FDInput{Value: t.Kind.ID, Error: err.Errors.MsgFor("Kind.ID")},
-		IsRecurrent: views.FDInput{Value: formatBooleanIfNonZero(t.IsRecurrent), Error: err.Errors.MsgFor("IsRecurrent")},
 		ScheduledTo: views.FDInput{Value: formatDateOnlyIfNonZero(t.ScheduledTo), Error: err.Errors.MsgFor("ScheduledTo")},
+		FrequencyFD: views.FrequencyFD{},
 	}
 }
 
@@ -403,7 +427,6 @@ func (h Handler) mapFDToTransaction(r *http.Request) (*models.Transaction, error
 		Currency:    models.Currency{ID: r.FormValue("currency_id")},
 		Kind:        models.TransactionKind{ID: r.FormValue("kind_id")},
 		Description: r.FormValue("description"),
-		IsRecurrent: parseBoolean(r.FormValue("is_recurrent")),
 		ScheduledTo: ScheduledTo,
 	}, nil
 }
@@ -416,7 +439,6 @@ func defaultTransaction(currencies []models.Currency, kinds []models.Transaction
 		Amount:      0,
 		Currency:    models.Currency{ID: currencies[dfltCurrIdx].ID},
 		Kind:        models.TransactionKind{ID: kinds[dfltKindIdx].ID},
-		IsRecurrent: false,
 		ScheduledTo: time.Now(),
 	}
 }
