@@ -18,6 +18,7 @@ type FrequencyFD struct {
 	IsFrequent FDInput
 	FrequentBy FDInput
 	Frequency  FDInput
+	StopsOn    FDInput
 }
 
 type AmountFD struct {
@@ -59,8 +60,9 @@ templ FrequencyFormBody(id string, fd *FrequencyFD) {
 			})
 		if fd.IsFrequent.Value != "" {
 			<div class="grid grid-cols-3 gap-4">
-				@input("Frequency", "number", "frequent", "Frequent every", "", fd.Frequency, "col-span-2")
-				@selectInput("Frequent By", "frequent_by", "Select a How Recurrent", "", map[string]string{"0": "DAY", "1": "MONTH", "2": "YEAR"}, fd.FrequentBy)
+				@input("Frequency", "number", "frequent", "Frequent every...", id, fd.Frequency)
+				@selectInput("Frequent By", "frequent_by", "How frequent", id, models.FrequencyByOptions(), fd.FrequentBy)
+				@dateInput("Stops on", "stops_on", id, fd.StopsOn)
 			</div>
 		}
 	</div>
@@ -70,8 +72,8 @@ templ transactionFormBody(id string, fd *TransactionFD, currencies map[string]st
 	@AmountInputs(&fd.AmountFD, currencies, currencySymbol)
 	@selectInput("Kind", "kind_id", "Select a Kind", id, kinds, fd.KindID)
 	@input("Description", "text", "description", "Enter a description", id, fd.Description)
-	@FrequencyFormBody(id, &fd.FrequencyFD)
 	@dateInput("Date", "scheduled_to", id, fd.ScheduledTo)
+	@FrequencyFormBody(id, &fd.FrequencyFD)
 }
 
 templ TransactionOOB(tx *models.Transaction) {

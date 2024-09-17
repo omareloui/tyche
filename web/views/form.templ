@@ -96,6 +96,22 @@ templ input(label, kind, name, placeholder, idSuffix string, data FDInput, class
 	</div>
 }
 
+templ numberInput(label, name, placeholder, idSuffix string, data FDInput, classes ...string) {
+	<div class={ strings.Join(classes, " ") }>
+		<label class="input-label" for={ join(name, idSuffix) }>{ label }</label>
+		<input
+			id={ join(name, idSuffix) }
+			type="number"
+			typemod
+			name={ name }
+			placeholder={ placeholder }
+			class="input-field"
+			value={ data.Value }
+		/>
+		@errorMessage(data.Error)
+	</div>
+}
+
 templ moneyInput(label, name, currencySymbol, idSuffix string, data FDInput, classes ...string) {
 	<div class={ strings.Join(classes, " ") }>
 		<label class="input-label" for={ join(name, idSuffix) }>{ label }</label>

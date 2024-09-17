@@ -37,6 +37,7 @@ CREATE TABLE frequent_transactions (
     currency_id VARCHAR(16) NOT NULL,
     kind_id VARCHAR(16) NOT NULL,
     description VARCHAR(225),
+    stops_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT NOW,
     last_transaction_created_at TIMESTAMP NOT NULL DEFAULT NOW,
     FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE,

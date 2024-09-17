@@ -19,6 +19,14 @@ func (fb FrequencyBy) String() string {
 	return [...]string{"Day", "Month", "Year"}[fb]
 }
 
+func FrequencyByOptions() map[string]string {
+	m := make(map[string]string, 3)
+	m[fmt.Sprintf("%d", Day)] = Day.String()
+	m[fmt.Sprintf("%d", Month)] = Month.String()
+	m[fmt.Sprintf("%d", Year)] = Year.String()
+	return m
+}
+
 type Transaction struct {
 	ID          string  `validate:"required"`
 	Amount      float64 `validate:"required,min=1"`
@@ -38,6 +46,7 @@ type FrequentTransaction struct {
 	Currency                 Currency        `validate:"required"`
 	Kind                     TransactionKind `validate:"required"`
 	Description              string
+	StopsOn                  time.Time
 	CreatedAt                time.Time `validate:"required"`
 	LastTransactionCreatedAt time.Time `validate:"required"`
 }
