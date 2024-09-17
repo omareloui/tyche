@@ -3,6 +3,7 @@ package logger
 import (
 	"context"
 	"os"
+	"runtime/debug"
 	"sync"
 
 	"github.com/omareloui/financial-planner/internal/config"
@@ -41,27 +42,24 @@ func Get() *zap.Logger {
 		consoleEncoder := zapcore.NewConsoleEncoder(developmentCfg)
 		fileEncoder := zapcore.NewJSONEncoder(productionCfg)
 
-		core := zapcore.NewCore(consoleEncoder, stdout, level)
-		if config.GetAppEnv() != "development" {
-			core = zapcore.NewTee(
-				zapcore.NewCore(consoleEncoder, stdout, level),
-				zapcore.NewCore(fileEncoder, file, level),
-			)
+		core := zapcore.NewTee(
+			zapcore.NewCore(consoleEncoder, stdout, level),
+			zapcore.NewCore(fileEncoder, file, level),
+		)
+		var gitRevision string
+
+		buildInfo, ok := debug.ReadBuildInfo()
+		if ok {
+			for _, v := range buildInfo.Settings {
+				if v.Key == "vcs.revision" {
+					gitRevision = v.Value
+					break
+				}
+			}
 		}
-		// var gitRevision string
 
-		// buildInfo, ok := debug.ReadBuildInfo()
-		// if ok {
-		// 	for _, v := range buildInfo.Settings {
-		// 		if v.Key == "vcs.revision" {
-		// 			gitRevision = v.Value
-		// 			break
-		// 		}
-		// 	}
-		// }
-
-		// logger = zap.New(core).
-		// 	With(zap.String("git_revision", gitRevision), zap.String("go_version", buildInfo.GoVersion))
+		logger = zap.New(core).
+			With(zap.String("git_revision", gitRevision), zap.String("go_version", buildInfo.GoVersion))
 		logger = zap.New(core)
 	})
 
