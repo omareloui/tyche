@@ -168,6 +168,7 @@ func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (tem
 	}
 
 	fd := h.mapTransactionToFD(tx, new(errs.ValidationError))
+	fd.FrequencyFD = nil
 
 	return views.EditTransaction(tx, fd,
 		h.repo.CurrenciesToMap(currencies),
@@ -408,7 +409,7 @@ func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationE
 		Description: views.FDInput{Value: t.Description, Error: err.Errors.MsgFor("Description")},
 		KindID:      views.FDInput{Value: t.Kind.ID, Error: err.Errors.MsgFor("Kind.ID")},
 		ScheduledTo: views.FDInput{Value: formatDateOnlyIfNonZero(t.ScheduledTo), Error: err.Errors.MsgFor("ScheduledTo")},
-		FrequencyFD: views.FrequencyFD{},
+		FrequencyFD: &views.FrequencyFD{},
 	}
 }
 

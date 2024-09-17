@@ -29,6 +29,7 @@ type FrequentTransaction struct {
 	CurrencyID               string
 	KindID                   string
 	Description              sql.NullString
+	StopsAt                  sql.NullTime
 	CreatedAt                interface{}
 	LastTransactionCreatedAt interface{}
 }

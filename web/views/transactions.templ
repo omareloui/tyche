@@ -8,7 +8,7 @@ import (
 
 type TransactionFD struct {
 	AmountFD
-	FrequencyFD
+	FrequencyFD *FrequencyFD
 	KindID      FDInput
 	ScheduledTo FDInput
 	Description FDInput
@@ -73,7 +73,9 @@ templ transactionFormBody(id string, fd *TransactionFD, currencies map[string]st
 	@selectInput("Kind", "kind_id", "Select a Kind", id, kinds, fd.KindID)
 	@input("Description", "text", "description", "Enter a description", id, fd.Description)
 	@dateInput("Date", "scheduled_to", id, fd.ScheduledTo)
-	@FrequencyFormBody(id, &fd.FrequencyFD)
+	if fd.FrequencyFD != nil {
+		@FrequencyFormBody(id, fd.FrequencyFD)
+	}
 }
 
 templ TransactionOOB(tx *models.Transaction) {
