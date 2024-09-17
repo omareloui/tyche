@@ -214,7 +214,7 @@ SELECT
 FROM transactions AS t
 LEFT JOIN currencies AS c ON t.currency_id = c.id
 LEFT JOIN transaction_kinds AS k ON t.kind_id = k.id
-ORDER BY t.scheduled_to DESC
+ORDER BY t.scheduled_to DESC, t.created_at DESC
 `
 
 type GetTransactionsRow struct {
