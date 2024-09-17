@@ -10,13 +10,13 @@ import (
 type FrequencyBy uint8
 
 const (
-	Day FrequencyBy = iota
+	Day FrequencyBy = iota + 1
 	Month
 	Year
 )
 
 func (fb FrequencyBy) String() string {
-	return [...]string{"Day", "Month", "Year"}[fb]
+	return [...]string{"Day", "Month", "Year"}[fb-1]
 }
 
 func FrequencyByOptions() map[string]string {
