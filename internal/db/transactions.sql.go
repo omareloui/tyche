@@ -11,6 +11,71 @@ import (
 	"time"
 )
 
+const createFrequentTransaction = `-- name: CreateFrequentTransaction :exec
+
+INSERT INTO frequent_transactions (
+    id,
+    frequency_by,
+    frequency,
+    amount,
+    currency_id,
+    kind_id,
+    description,
+    stops_at,
+    created_at,
+    last_transaction_created_at
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type CreateFrequentTransactionParams struct {
+	ID                       string
+	FrequencyBy              int64
+	Frequency                int64
+	Amount                   float64
+	CurrencyID               string
+	KindID                   string
+	Description              sql.NullString
+	StopsAt                  sql.NullTime
+	CreatedAt                interface{}
+	LastTransactionCreatedAt interface{}
+}
+
+// --------------
+func (q *Queries) CreateFrequentTransaction(ctx context.Context, arg CreateFrequentTransactionParams) error {
+	_, err := q.db.ExecContext(ctx, createFrequentTransaction,
+		arg.ID,
+		arg.FrequencyBy,
+		arg.Frequency,
+		arg.Amount,
+		arg.CurrencyID,
+		arg.KindID,
+		arg.Description,
+		arg.StopsAt,
+		arg.CreatedAt,
+		arg.LastTransactionCreatedAt,
+	)
+	return err
+}
+
+const createFrequentTransactionTransaction = `-- name: CreateFrequentTransactionTransaction :exec
+INSERT INTO frequent_transactions_transactions (
+    transaction_id,
+    frequency_id
+)
+VALUES (?, ?)
+`
+
+type CreateFrequentTransactionTransactionParams struct {
+	TransactionID string
+	FrequencyID   string
+}
+
+func (q *Queries) CreateFrequentTransactionTransaction(ctx context.Context, arg CreateFrequentTransactionTransactionParams) error {
+	_, err := q.db.ExecContext(ctx, createFrequentTransactionTransaction, arg.TransactionID, arg.FrequencyID)
+	return err
+}
+
 const createTransaction = `-- name: CreateTransaction :exec
 INSERT INTO transactions (
     id,

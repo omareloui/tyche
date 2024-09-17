@@ -33,7 +33,7 @@ type Transaction struct {
 	Currency    Currency
 	Kind        TransactionKind
 	Description string
-	FulfilledOn time.Time `validate:"omitempty"`
+	FulfilledOn time.Time
 	ScheduledTo time.Time `validate:"required"`
 	CreatedAt   time.Time
 }
@@ -46,9 +46,11 @@ type FrequentTransaction struct {
 	Currency                 Currency        `validate:"required"`
 	Kind                     TransactionKind `validate:"required"`
 	Description              string
-	StopsOn                  time.Time
+	StopsOn                  time.Time `validate:"omitempty,gtfield=CreatedAt"`
 	CreatedAt                time.Time `validate:"required"`
 	LastTransactionCreatedAt time.Time `validate:"required"`
+
+	Transactions []Transaction
 }
 
 func (t *Transaction) ViewAmount() string {

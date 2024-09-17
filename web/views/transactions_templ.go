@@ -200,7 +200,7 @@ func FrequencyFormBody(id string, fd *FrequencyFD) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = input("Frequency", "number", "frequent", "Frequent every...", id, fd.Frequency).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = input("Frequency", "number", "frequency", "Frequent every...", id, fd.Frequency).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

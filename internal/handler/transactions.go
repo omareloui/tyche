@@ -52,7 +52,6 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 }
 
 func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	// TODO: use a transaction here
 	l := logger.FromCtx(r.Context())
 
 	tx, err := h.mapFDToTransaction(r)
@@ -67,18 +66,49 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		tx.FulfilledOn = tx.CreatedAt
 	}
 
-	if err := h.sani.SanitizeStruct(tx); err != nil {
-		return nil, errs.ErrSanitizer
-	}
-
-	l.Debug("create transaction", zap.Any("transaction", tx))
-
 	currencies, kinds, err := h.getCurrenciesAndKinds(r.Context())
 	if err != nil {
 		l.Error("fetching currencies and kinds")
 		return nil, err
 	}
 	dfltCurr := slicesutils.Find(currencies, func(cur models.Currency) bool { return cur.Enum == models.DfltCurrency })
+
+	var ftx *models.FrequentTransaction
+
+	if r.FormValue("is_frequent") != "" {
+		ftx, err = h.mapFDToTransactionFrequency(r, tx)
+		if err != nil {
+			l.Error("parsing frequent transaction", zap.Error(err), zap.Any("frequent_transaction", ftx))
+			return nil, err
+		}
+		l.Debug("parsed frequent transaction", zap.Any("frequent_transaction", ftx))
+
+		ftx.ID = idgen.New()
+		ftx.CreatedAt = time.Now()
+		ftx.LastTransactionCreatedAt = time.Now()
+
+		if err := h.sani.SanitizeStruct(ftx); err != nil {
+			return nil, errs.ErrSanitizer
+		}
+
+		if valerr := h.valid.Validate(ftx); valerr != nil {
+			l.Error("frequent transaction validation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
+			fd := h.mapTransactionToFD(tx, valerr)
+
+			fd.FrequencyFD = h.parseFrequencyFD(r, valerr)
+
+			return views.CreateTransactionForm(fd,
+				h.repo.CurrenciesToMap(currencies),
+				h.repo.TransactionKindsToMap(kinds),
+				dfltCurr.Enum.Symbol()), nil
+		}
+	}
+
+	if err := h.sani.SanitizeStruct(tx); err != nil {
+		return nil, errs.ErrSanitizer
+	}
+
+	l.Debug("transaction", zap.Any("transaction", tx))
 
 	if valerr := h.valid.Validate(tx); valerr != nil {
 		l.Error("create transaction validation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
@@ -90,7 +120,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 			dfltCurr.Enum.Symbol()), nil
 	}
 
-	if err := h.repo.CreateTransaction(r.Context(), tx); err != nil {
+	if err := h.repo.CreateTransaction(r.Context(), tx, ftx); err != nil {
 		l.Error("creating transaction", zap.Error(err))
 		return nil, err
 	}
@@ -108,9 +138,6 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 	l.Debug("rendered transaction OOB")
 
 	if !tx.FulfilledOn.IsZero() {
-		if err := h.applyTransactionToBalance(r, tx); err != nil {
-			return nil, err
-		}
 		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
 			return nil, err
 		}
@@ -191,7 +218,6 @@ func (h Handler) FrequencyForm(w http.ResponseWriter, r *http.Request) (templ.Co
 }
 
 func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	// TODO: use a transaction here
 	id := r.PathValue("id")
 	if id == "" {
 		return nil, errs.ErrInvalidID
@@ -235,7 +261,7 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 	tx.FulfilledOn = oldTx.FulfilledOn
 	tx.CreatedAt = oldTx.CreatedAt
 
-	if err := h.repo.UpdateTransaction(r.Context(), tx); err != nil {
+	if err := h.repo.UpdateTransaction(r.Context(), oldTx, tx); err != nil {
 		l.Error("updating transaction", zap.Error(err))
 		return nil, err
 	}
@@ -256,12 +282,6 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 	tx.Currency = *txCurrency
 
 	if !oldTx.FulfilledOn.IsZero() {
-		if err := h.undoTransactionOnBalance(r, oldTx); err != nil {
-			return nil, err
-		}
-		if err := h.applyTransactionToBalance(r, tx); err != nil {
-			return nil, err
-		}
 		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
 			return nil, err
 		}
@@ -291,7 +311,7 @@ func (h Handler) FulfillTransaction(w http.ResponseWriter, r *http.Request) (tem
 	}
 	l.Debug("fetched transaction", zap.Any("tx", tx))
 
-	if err := h.applyTransactionToBalance(r, tx); err != nil {
+	if err := h.repo.ApplyTransactionToBalance(r.Context(), tx); err != nil {
 		return nil, err
 	}
 	if err := h.getAndRenderBalancesOOB(w, r); err != nil {
@@ -323,7 +343,7 @@ func (h Handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) (temp
 	l.Info("deleted transaction")
 
 	if !tx.FulfilledOn.IsZero() {
-		if err := h.undoTransactionOnBalance(r, tx); err != nil {
+		if err := h.repo.UndoTransactionToBalance(r.Context(), tx); err != nil {
 			return nil, err
 		}
 		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
@@ -332,34 +352,6 @@ func (h Handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) (temp
 	}
 
 	return nil, nil
-}
-
-func (h Handler) applyTransactionToBalance(r *http.Request, tx *models.Transaction) error {
-	l := logger.FromCtx(r.Context())
-	upBalance := h.repo.RemoveFromBalance
-	if tx.Kind.IncreaseBalance {
-		upBalance = h.repo.AddToBalance
-	}
-	if err := upBalance(r.Context(), tx.Currency.ID, tx.Amount); err != nil {
-		l.Error("applying transaction to balance", zap.Error(err))
-		return err
-	}
-	l.Info("applied transaction to balance")
-	return nil
-}
-
-func (h Handler) undoTransactionOnBalance(r *http.Request, tx *models.Transaction) error {
-	l := logger.FromCtx(r.Context())
-	upBalance := h.repo.AddToBalance
-	if tx.Kind.IncreaseBalance {
-		upBalance = h.repo.RemoveFromBalance
-	}
-	if err := upBalance(r.Context(), tx.Currency.ID, tx.Amount); err != nil {
-		l.Error("undoing transaction on balance", zap.Error(err))
-		return err
-	}
-	l.Info("undone transaction on balance")
-	return nil
 }
 
 func (h Handler) getAndRenderBalancesOOB(w http.ResponseWriter, r *http.Request) error {
@@ -419,7 +411,7 @@ func (h Handler) mapFDToTransaction(r *http.Request) (*models.Transaction, error
 		return nil, err
 	}
 
-	ScheduledTo, err := parseDateOnlyIfExists(r.FormValue("scheduled_to"))
+	scheduledTo, err := parseDateOnlyIfExists(r.FormValue("scheduled_to"))
 	if err != nil {
 		return nil, err
 	}
@@ -429,7 +421,34 @@ func (h Handler) mapFDToTransaction(r *http.Request) (*models.Transaction, error
 		Currency:    models.Currency{ID: r.FormValue("currency_id")},
 		Kind:        models.TransactionKind{ID: r.FormValue("kind_id")},
 		Description: r.FormValue("description"),
-		ScheduledTo: ScheduledTo,
+		ScheduledTo: scheduledTo,
+	}, nil
+}
+
+func (h Handler) mapFDToTransactionFrequency(r *http.Request, parsedTx *models.Transaction) (*models.FrequentTransaction, error) {
+	frequency, err := parseIntIfExists(r.FormValue("frequency"))
+	if err != nil {
+		return nil, err
+	}
+
+	frequencyBy, err := parseIntIfExists(r.FormValue("frequent_by"))
+	if err != nil {
+		return nil, err
+	}
+
+	stopsOn, err := parseDateOnlyIfExists(r.FormValue("stops_on"))
+	if err != nil {
+		return nil, err
+	}
+
+	return &models.FrequentTransaction{
+		Amount:      parsedTx.Amount,
+		Currency:    models.Currency{ID: parsedTx.Currency.ID},
+		Kind:        models.TransactionKind{ID: parsedTx.Kind.ID},
+		Description: parsedTx.Description,
+		FrequencyBy: models.FrequencyBy(frequencyBy),
+		Frequency:   uint(frequency),
+		StopsOn:     stopsOn,
 	}, nil
 }
 

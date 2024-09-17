@@ -60,7 +60,7 @@ templ FrequencyFormBody(id string, fd *FrequencyFD) {
 			})
 		if fd.IsFrequent.Value != "" {
 			<div class="grid grid-cols-3 gap-4">
-				@input("Frequency", "number", "frequent", "Frequent every...", id, fd.Frequency)
+				@input("Frequency", "number", "frequency", "Frequent every...", id, fd.Frequency)
 				@selectInput("Frequent By", "frequent_by", "How frequent", id, models.FrequencyByOptions(), fd.FrequentBy)
 				@dateInput("Stops on", "stops_on", id, fd.StopsOn)
 			</div>
