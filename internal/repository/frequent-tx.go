@@ -87,6 +87,11 @@ func dbFrequentTxRowsToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 			})
 			ftxIdx = len(ftxs) - 1
 		}
+
+		if !dbFtx.TransactionID.Valid {
+			continue
+		}
+
 		ftxs[ftxIdx].Transactions = append(ftxs[ftxIdx].Transactions, models.Transaction{
 			ID:          dbFtx.TransactionID.String,
 			Amount:      dbFtx.TransactionAmount.Float64,

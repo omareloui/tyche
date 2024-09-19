@@ -20,6 +20,7 @@ func (h Handler) FrequencyForm(w http.ResponseWriter, r *http.Request) (templ.Co
 
 	if fd.FrequentBy.Value == "" {
 		fd.FrequentBy.Value = fmt.Sprintf("%d", models.Month)
+		fd.Frequency.Value = "1"
 	}
 
 	l.Info("responding with", zap.Any("formdata", fd))
@@ -60,4 +61,40 @@ func (h Handler) EditFrequentTx(w http.ResponseWriter, r *http.Request) (templ.C
 
 func (h Handler) DeleteFrequentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	return nil, nil
+}
+
+func (h Handler) parseFrequencyFD(r *http.Request, err *errs.ValidationError) *views.FrequencyFD {
+	return &views.FrequencyFD{
+		IsFrequent: views.FDInput{Value: r.FormValue("is_frequent"), Error: err.Errors.MsgFor("IsFrequent")},
+		FrequentBy: views.FDInput{Value: r.FormValue("frequent_by"), Error: err.Errors.MsgFor("FrequentBy")},
+		Frequency:  views.FDInput{Value: r.FormValue("frequency"), Error: err.Errors.MsgFor("Frequency")},
+		StopsOn:    views.FDInput{Value: r.FormValue("stops_on"), Error: err.Errors.MsgFor("StopsOn")},
+	}
+}
+
+func (h Handler) mapFDToTransactionFrequency(r *http.Request, parsedTx *models.Transaction) (*models.FrequentTx, error) {
+	frequency, err := parseIntIfExists(r.FormValue("frequency"))
+	if err != nil {
+		return nil, err
+	}
+
+	frequencyBy, err := parseIntIfExists(r.FormValue("frequent_by"))
+	if err != nil {
+		return nil, err
+	}
+
+	stopsOn, err := parseDateOnlyIfExists(r.FormValue("stops_on"))
+	if err != nil {
+		return nil, err
+	}
+
+	return &models.FrequentTx{
+		Amount:      parsedTx.Amount,
+		Currency:    models.Currency{ID: parsedTx.Currency.ID},
+		Kind:        models.TransactionKind{ID: parsedTx.Kind.ID},
+		Description: parsedTx.Description,
+		FrequencyBy: models.FrequencyBy(frequencyBy),
+		Frequency:   uint(frequency),
+		StopsOn:     stopsOn,
+	}, nil
 }
