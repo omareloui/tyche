@@ -71,8 +71,29 @@ func (r *Repository) GetFrequentTx(ctx context.Context, id string) (*models.Freq
 	return &ftx[0], nil
 }
 
+func (r *Repository) UpdateFrequentTx(ctx context.Context, ftx *models.FrequentTx) error {
+	l := logger.FromCtx(ctx)
+	// TODO: update scheduled transactions of this ftx
+	if err := r.q.UpdateFrequentTx(ctx, db.UpdateFrequentTxParams{
+		ID:          ftx.ID,
+		Amount:      ftx.Amount,
+		CurrencyID:  ftx.Currency.ID,
+		KindID:      ftx.Kind.ID,
+		FrequencyBy: int64(ftx.FrequencyBy),
+		Frequency:   int64(ftx.Frequency),
+		Description: sql.NullString{String: ftx.Description, Valid: ftx.Description != ""},
+		StopsOn:     sql.NullTime{Time: ftx.StopsOn, Valid: !ftx.StopsOn.IsZero()},
+	}); err != nil {
+		l.Error("updating frequent tx", zap.Any("frequent tx", ftx), zap.Error(err))
+		return err
+	}
+	l.Debug("updated frequent tx", zap.Any("frequent tx", ftx))
+	return nil
+}
+
 func (r *Repository) DeleteFrequentTx(ctx context.Context, id string) error {
 	l := logger.FromCtx(ctx)
+	// TODO: remove scheduled transactions of this ftx
 	if err := r.q.DeleteFrequentTx(ctx, id); err != nil {
 		l.Error("deleting frequent transaction", zap.Error(err))
 		return err

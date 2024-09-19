@@ -325,3 +325,41 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 	}
 	return items, nil
 }
+
+const updateFrequentTx = `-- name: UpdateFrequentTx :exec
+UPDATE frequent_txs
+SET
+frequency_by = ?,
+frequency = ?,
+amount = ?,
+currency_id = ?,
+kind_id = ?,
+description = ?,
+stops_on = ?
+WHERE id = ?
+`
+
+type UpdateFrequentTxParams struct {
+	FrequencyBy int64
+	Frequency   int64
+	Amount      float64
+	CurrencyID  string
+	KindID      string
+	Description sql.NullString
+	StopsOn     sql.NullTime
+	ID          string
+}
+
+func (q *Queries) UpdateFrequentTx(ctx context.Context, arg UpdateFrequentTxParams) error {
+	_, err := q.db.ExecContext(ctx, updateFrequentTx,
+		arg.FrequencyBy,
+		arg.Frequency,
+		arg.Amount,
+		arg.CurrencyID,
+		arg.KindID,
+		arg.Description,
+		arg.StopsOn,
+		arg.ID,
+	)
+	return err
+}

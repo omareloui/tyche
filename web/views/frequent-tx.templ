@@ -74,7 +74,6 @@ templ EditFrequentTx(
 	kinds map[string]string) {
 	@form("put", fmt.Sprintf("/frequent-tx/%s", ftx.ID), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { ftx.ID }</p>
-		// TODO: add rest of transaction body
 		@ftxFormBody(ftx.ID, fd, currencies, kinds, ftx.Currency.Enum.Symbol())
 		@editFormButtons(fmt.Sprintf("/frequent-tx/%s", ftx.ID))
 	}

@@ -89,8 +89,33 @@ func (h Handler) GetEditFrequentTx(w http.ResponseWriter, r *http.Request) (temp
 }
 
 func (h Handler) EditFrequentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	// TODO:
-	return nil, nil
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+	ftx, err := h.mapFDToFrequentTx(r)
+	if err != nil {
+		l.Error("parsing formdata", zap.Error(err))
+		return nil, err
+	}
+	ftx.ID = id
+
+	if err := h.repo.UpdateFrequentTx(r.Context(), ftx); err != nil {
+		l.Error("updating frequent tx", zap.Error(err))
+		return nil, err
+	}
+	l.Info("updated frequent tx", zap.Any("frequent tx", ftx))
+
+	ftx, err = h.repo.GetFrequentTx(r.Context(), id)
+	if err != nil {
+		l.Error("fetching frequent tx", zap.Error(err))
+		return nil, err
+	}
+	l.Debug("fetched frequent tx", zap.Any("frequent tx", ftx))
+
+	return views.FrequentTx(ftx), nil
 }
 
 func (h Handler) DeleteFrequentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -115,13 +140,37 @@ func generateScheduledTransactionsUntilNextYear(*models.FrequentTx) []models.Tra
 	return nil
 }
 
-func (h Handler) parseFrequencyFD(r *http.Request, err *errs.ValidationError) *views.FrequencyFD {
-	return &views.FrequencyFD{
-		IsFrequent: views.FDInput{Value: r.FormValue("is_frequent"), Error: err.Errors.MsgFor("IsFrequent")},
-		FrequentBy: views.FDInput{Value: r.FormValue("frequent_by"), Error: err.Errors.MsgFor("FrequentBy")},
-		Frequency:  views.FDInput{Value: r.FormValue("frequency"), Error: err.Errors.MsgFor("Frequency")},
-		StopsOn:    views.FDInput{Value: r.FormValue("stops_on"), Error: err.Errors.MsgFor("StopsOn")},
+func (h Handler) mapFDToFrequentTx(r *http.Request) (*models.FrequentTx, error) {
+	amount, err := parseFloatIfExists(r.FormValue("amount"))
+	if err != nil {
+		return nil, err
 	}
+
+	stopsOn, err := parseDateOnlyIfExists(r.FormValue("stops_on"))
+	if err != nil {
+		return nil, err
+	}
+
+	freqBy, err := parseIntIfExists(r.FormValue("frequent_by"))
+	if err != nil {
+		return nil, err
+	}
+
+	freq, err := parseUintIfExists(r.FormValue("frequency"))
+	if err != nil {
+		return nil, err
+	}
+
+	return &models.FrequentTx{
+		Frequency:    uint(freq),
+		FrequencyBy:  models.FrequencyBy(freqBy),
+		StopsOn:      stopsOn,
+		Transactions: []models.Transaction{},
+		Description:  r.FormValue("description"),
+		Amount:       amount,
+		Currency:     models.Currency{ID: r.FormValue("currency_id")},
+		Kind:         models.TransactionKind{ID: r.FormValue("kind_id")},
+	}, nil
 }
 
 func (h Handler) mapFrequentTxToFD(ftx *models.FrequentTx, valerr *errs.ValidationError) *views.FrequentTxFD {
@@ -138,5 +187,14 @@ func (h Handler) mapFrequentTxToFD(ftx *models.FrequentTx, valerr *errs.Validati
 		},
 		KindID:      views.FDInput{Value: ftx.Kind.ID, Error: valerr.Errors.MsgFor("KindID")},
 		Description: views.FDInput{Value: ftx.Description, Error: valerr.Errors.MsgFor("Description")},
+	}
+}
+
+func (h Handler) parseFrequencyFD(r *http.Request, err *errs.ValidationError) *views.FrequencyFD {
+	return &views.FrequencyFD{
+		IsFrequent: views.FDInput{Value: r.FormValue("is_frequent"), Error: err.Errors.MsgFor("IsFrequent")},
+		FrequentBy: views.FDInput{Value: r.FormValue("frequent_by"), Error: err.Errors.MsgFor("FrequentBy")},
+		Frequency:  views.FDInput{Value: r.FormValue("frequency"), Error: err.Errors.MsgFor("Frequency")},
+		StopsOn:    views.FDInput{Value: r.FormValue("stops_on"), Error: err.Errors.MsgFor("StopsOn")},
 	}
 }

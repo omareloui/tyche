@@ -33,6 +33,18 @@ func parseIntIfExists(str string) (int, error) {
 	return 0, nil
 }
 
+func parseUintIfExists(str string) (uint64, error) {
+	str = nonDigitRegexp.ReplaceAllLiteralString(str, "")
+	if str != "" {
+		num, err := strconv.ParseUint(str, 10, 64)
+		if err != nil {
+			return 0, errs.ErrInvalidNumber
+		}
+		return num, nil
+	}
+	return 0, nil
+}
+
 func parseBoolean(str string) bool {
 	return str == "on"
 }

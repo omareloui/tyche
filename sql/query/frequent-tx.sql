@@ -92,6 +92,17 @@ LEFT JOIN currencies AS tc ON t.currency_id = c.id
 LEFT JOIN transaction_kinds AS tk ON t.kind_id = k.id
 WHERE ft.id = ?;
 
+-- name: UpdateFrequentTx :exec
+UPDATE frequent_txs
+SET
+frequency_by = ?,
+frequency = ?,
+amount = ?,
+currency_id = ?,
+kind_id = ?,
+description = ?,
+stops_on = ?
+WHERE id = ?;
 
 -- name: DeleteFrequentTx :exec
 DELETE FROM frequent_txs
