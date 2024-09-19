@@ -29,7 +29,7 @@ CREATE TABLE transactions (
     FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE,
     FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id)
 );
-CREATE TABLE frequent_transactions (
+CREATE TABLE frequent_txs (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
     frequency_by INT NOT NULL,
     frequency INT NOT NULL,
@@ -37,18 +37,17 @@ CREATE TABLE frequent_transactions (
     currency_id VARCHAR(16) NOT NULL,
     kind_id VARCHAR(16) NOT NULL,
     description VARCHAR(225),
-    stops_at TIMESTAMP,
+    stops_on TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT NOW,
     last_transaction_created_at TIMESTAMP NOT NULL DEFAULT NOW,
     FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE,
     FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id)
 );
--- TODO: to be able to delete not finished transactions
-CREATE TABLE frequent_transactions_transactions (
+CREATE TABLE frequent_txs_transactions (
     transaction_id VARCHAR(16) NOT NULL,
     frequency_id VARCHAR(16) NOT NULL,
     FOREIGN KEY (transaction_id) REFERENCES transactions (id) ON DELETE CASCADE,
-    FOREIGN KEY (frequency_id) REFERENCES frequent_transactions (id) ON DELETE CASCADE
+    FOREIGN KEY (frequency_id) REFERENCES frequent_txs (id) ON DELETE CASCADE
 );
 CREATE TABLE goals (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
@@ -70,16 +69,6 @@ CREATE TABLE items (
     purchased_on DATE,
     FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE
 );
--- CREATE TABLE goal_plan_entries (
---     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
---     amount FLOAT DEFAULT 0 NOT NULL,
---     currency_id VARCHAR(16) NOT NULL,
---     kind_id VARCHAR(16) NOT NULL,
---     goal_id VARCHAR(16) NOT NULL,
---     FOREIGN KEY (currency_id) REFERENCES currencies (id),
---     FOREIGN KEY (goal_id) REFERENCES goals (id) ON DELETE CASCADE,
---     FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id)
--- );
 
 CREATE UNIQUE INDEX idx_goals_items
 ON goals_items (goal_id, item_id);
@@ -95,5 +84,4 @@ DROP TABLE goals;
 DROP TABLE goals_items;
 DROP TABLE items;
 DROP INDEX idx_goals_items;
--- DROP TABLE goal_plan_entries;
 -- +goose StatementEnd

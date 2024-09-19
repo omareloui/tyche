@@ -1,0 +1,105 @@
+package views
+
+import (
+	"fmt"
+	"time"
+	"strconv"
+	"github.com/omareloui/financial-planner/internal/models"
+)
+
+type FrequencyFD struct {
+	IsFrequent FDInput
+	FrequentBy FDInput
+	Frequency  FDInput
+	StopsOn    FDInput
+}
+
+type FrequentTransactionFD struct {
+	AmountFD
+	FrequencyFD
+	KindID      FDInput
+	Description FDInput
+}
+
+templ FrequentTxs(balances []models.Balance, ftxs []models.FrequentTx) {
+	@baseLayout("Frequent Transactions", balances) {
+		@container() {
+			@mainHeader("Frequent Transactions")
+			@ftxsList(ftxs)
+		}
+	}
+}
+
+templ FrequencyFormBody(id string, fd *FrequencyFD) {
+	<div data-frequency-form class="grid gap-2">
+		@checkbox("Is Frequent", "is_frequent", id, fd.IsFrequent,
+			templ.Attributes{
+				"hx-post":    fmt.Sprintf("/frequency-form/%s", id),
+				"hx-trigger": "change",
+				"hx-target":  "closest [data-frequency-form]",
+				"hx-swap":    "outerHTML",
+				"hx-sync":    "closest form:abort",
+			})
+		if fd.IsFrequent.Value != "" {
+			@frequencyFormBody(id, fd)
+		}
+	</div>
+}
+
+templ frequencyFormBody(id string, fd *FrequencyFD) {
+	<div class="grid grid-cols-3 gap-4">
+		@input("Frequency", "number", "frequency", "Frequent every...", id, fd.Frequency)
+		@selectInput("Frequent By", "frequent_by", "How frequent", id, models.FrequencyByOptions(), fd.FrequentBy)
+		@dateInput("Stops on", "stops_on", id, fd.StopsOn)
+	</div>
+}
+
+templ ftxFormBody(id string, fd *FrequentTransactionFD, currencies map[string]string, kinds map[string]string, currencySymbol string) {
+	@AmountInputs(&fd.AmountFD, currencies, currencySymbol)
+	@selectInput("Kind", "kind_id", "Select a Kind", id, kinds, fd.KindID)
+	@input("Description", "text", "description", "Enter a description", id, fd.Description)
+	@frequencyFormBody(id, &fd.FrequencyFD)
+}
+
+templ FrequentTransactionOOB(ftx *models.FrequentTx) {
+	<div id="tx-list" hx-swap-oob="afterbegin">
+		@FrequentTx(ftx)
+	</div>
+}
+
+templ EditFrequentTx(ftx *models.FrequentTx, fd *FrequentTransactionFD, currencies map[string]string, kinds map[string]string) {
+	@form("put", fmt.Sprintf("/frequentTx/%s", ftx.ID), templ.Attributes{"hx-target": "this"}) {
+		<p>ID: { ftx.ID }</p>
+		@ftxFormBody(ftx.ID, fd, currencies, kinds, ftx.Currency.Enum.Symbol())
+		@editFormButtons(fmt.Sprintf("/frequentTx/%s", ftx.ID))
+	}
+}
+
+templ ftxsList(frequentTx []models.FrequentTx) {
+	@list("tx-list") {
+		for _, t := range frequentTx {
+			@FrequentTx(&t)
+		}
+	}
+}
+
+templ FrequentTx(ftx *models.FrequentTx) {
+	<div hx-target="this" class="entry-container">
+		<p>ID: { ftx.ID }</p>
+		<p>Amount: { ftx.ViewAmount() }</p>
+		<p>Kind: { ftx.Kind.Kind }</p>
+		if ftx.Description != "" {
+			<p>Description: { ftx.Description }</p>
+		}
+		<p>Frequency: { strconv.FormatUint(uint64(ftx.Frequency), 10) }</p>
+		<p>Frequency By: { ftx.FrequencyBy.String() }</p>
+		if !ftx.StopsOn.IsZero() {
+			<p>Stops On: { ftx.StopsOn.Format(time.DateOnly) }</p>
+		}
+		<p>Created At: { ftx.CreatedAt.Format(time.RFC1123Z) }</p>
+		<div class="flex gap-4">
+			@editButton(fmt.Sprintf("/frequentTx/%s/edit", ftx.ID))
+			@deleteButton(fmt.Sprintf("/frequentTx/%s", ftx.ID))
+		</div>
+	</div>
+}

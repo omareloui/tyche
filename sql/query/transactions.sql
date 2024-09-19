@@ -69,27 +69,3 @@ WHERE id = ?;
 DELETE FROM transactions
 WHERE id = ?;
 
-----------------
-
--- name: CreateFrequentTransaction :exec
-INSERT INTO frequent_transactions (
-    id,
-    frequency_by,
-    frequency,
-    amount,
-    currency_id,
-    kind_id,
-    description,
-    stops_at,
-    created_at,
-    last_transaction_created_at
-)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-
-
--- name: CreateFrequentTransactionTransaction :exec
-INSERT INTO frequent_transactions_transactions (
-    transaction_id,
-    frequency_id
-)
-VALUES (?, ?);

@@ -21,7 +21,7 @@ type Currency struct {
 	EgpFxRate float64
 }
 
-type FrequentTransaction struct {
+type FrequentTx struct {
 	ID                       string
 	FrequencyBy              int64
 	Frequency                int64
@@ -29,12 +29,12 @@ type FrequentTransaction struct {
 	CurrencyID               string
 	KindID                   string
 	Description              sql.NullString
-	StopsAt                  sql.NullTime
+	StopsOn                  sql.NullTime
 	CreatedAt                interface{}
 	LastTransactionCreatedAt interface{}
 }
 
-type FrequentTransactionsTransaction struct {
+type FrequentTxsTransaction struct {
 	TransactionID string
 	FrequencyID   string
 }

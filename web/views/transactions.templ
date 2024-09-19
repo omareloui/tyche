@@ -14,13 +14,6 @@ type TransactionFD struct {
 	Description FDInput
 }
 
-type FrequencyFD struct {
-	IsFrequent FDInput
-	FrequentBy FDInput
-	Frequency  FDInput
-	StopsOn    FDInput
-}
-
 type AmountFD struct {
 	Amount     FDInput
 	CurrencyID FDInput
@@ -46,26 +39,6 @@ templ CreateTransactionForm(fd *TransactionFD, currencies map[string]string, kin
 	@creationForm("Create Transaction", "/transactions", "Create Transaction") {
 		@transactionFormBody("", fd, currencies, kinds, currencySymbol)
 	}
-}
-
-templ FrequencyFormBody(id string, fd *FrequencyFD) {
-	<div data-frequency-form class="grid gap-2">
-		@checkbox("Is Frequent", "is_frequent", id, fd.IsFrequent,
-			templ.Attributes{
-				"hx-post":    fmt.Sprintf("/frequency-form/%s", id),
-				"hx-trigger": "change",
-				"hx-target":  "closest [data-frequency-form]",
-				"hx-swap":    "outerHTML",
-				"hx-sync":    "closest form:abort",
-			})
-		if fd.IsFrequent.Value != "" {
-			<div class="grid grid-cols-3 gap-4">
-				@input("Frequency", "number", "frequency", "Frequent every...", id, fd.Frequency)
-				@selectInput("Frequent By", "frequent_by", "How frequent", id, models.FrequencyByOptions(), fd.FrequentBy)
-				@dateInput("Stops on", "stops_on", id, fd.StopsOn)
-			</div>
-		}
-	</div>
 }
 
 templ transactionFormBody(id string, fd *TransactionFD, currencies map[string]string, kinds map[string]string, currencySymbol string) {
@@ -115,7 +88,6 @@ templ Transaction(tx *models.Transaction) {
 		if tx.Description != "" {
 			<p>Description: { tx.Description }</p>
 		}
-		<p>Amount: { tx.ViewAmount() }</p>
 		<p>Scheduled To: { tx.ScheduledTo.Format(time.DateOnly) }</p>
 		if !tx.FulfilledOn.IsZero() {
 			<p>Fulfilled On: { tx.FulfilledOn.Format(time.RFC1123Z) }</p>

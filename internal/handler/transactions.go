@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"slices"
 	"time"
@@ -18,13 +17,16 @@ import (
 )
 
 func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	l := logger.FromCtx(r.Context())
+
 	currencies, kinds, err := h.getCurrenciesAndKinds(r.Context())
 	if err != nil {
+		l.Error("fetching currencies and kinds", zap.Error(err))
 		return nil, err
 	}
-	fd := h.mapTransactionToFD(defaultTransaction(currencies, kinds), new(errs.ValidationError))
+	l.Debug("fetched currencies and kinds", zap.Any("currencies", currencies), zap.Any("kinds", kinds))
 
-	l := logger.FromCtx(r.Context())
+	fd := h.mapTransactionToFD(defaultTransaction(currencies, kinds), new(errs.ValidationError))
 
 	transactions, err := h.repo.GetTransactions(r.Context())
 	if err != nil {
@@ -78,15 +80,15 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 	k := slicesutils.Find(kinds, func(k models.TransactionKind) bool { return k.ID == tx.Kind.ID })
 	tx.Kind = *k
 
-	var ftx *models.FrequentTransaction
+	var ftx *models.FrequentTx
 
 	if r.FormValue("is_frequent") != "" {
 		ftx, err = h.mapFDToTransactionFrequency(r, tx)
 		if err != nil {
-			l.Error("parsing frequent transaction", zap.Error(err), zap.Any("frequent_transaction", ftx))
+			l.Error("parsing frequent transaction", zap.Error(err), zap.Any("frequent tx", ftx))
 			return nil, err
 		}
-		l.Debug("parsed frequent transaction", zap.Any("frequent_transaction", ftx))
+		l.Debug("parsed frequent transaction", zap.Any("frequent tx", ftx))
 
 		ftx.ID = idgen.New()
 		ftx.CreatedAt = time.Now()
@@ -200,21 +202,6 @@ func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (tem
 	return views.EditTransaction(tx, fd,
 		h.repo.CurrenciesToMap(currencies),
 		h.repo.TransactionKindsToMap(kinds)), nil
-}
-
-func (h Handler) FrequencyForm(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	l := logger.FromCtx(r.Context())
-
-	id := r.PathValue("id")
-	fd := h.parseFrequencyFD(r, &errs.ValidationError{})
-
-	if fd.FrequentBy.Value == "" {
-		fd.FrequentBy.Value = fmt.Sprintf("%d", models.Month)
-	}
-
-	l.Info("responding with", zap.Any("formdata", fd))
-
-	return views.FrequencyFormBody(id, fd), nil
 }
 
 func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -425,7 +412,7 @@ func (h Handler) mapFDToTransaction(r *http.Request) (*models.Transaction, error
 	}, nil
 }
 
-func (h Handler) mapFDToTransactionFrequency(r *http.Request, parsedTx *models.Transaction) (*models.FrequentTransaction, error) {
+func (h Handler) mapFDToTransactionFrequency(r *http.Request, parsedTx *models.Transaction) (*models.FrequentTx, error) {
 	frequency, err := parseIntIfExists(r.FormValue("frequency"))
 	if err != nil {
 		return nil, err
@@ -441,7 +428,7 @@ func (h Handler) mapFDToTransactionFrequency(r *http.Request, parsedTx *models.T
 		return nil, err
 	}
 
-	return &models.FrequentTransaction{
+	return &models.FrequentTx{
 		Amount:      parsedTx.Amount,
 		Currency:    models.Currency{ID: parsedTx.Currency.ID},
 		Kind:        models.TransactionKind{ID: parsedTx.Kind.ID},

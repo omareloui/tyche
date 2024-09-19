@@ -24,13 +24,13 @@ func (r *Repository) GetGoal(ctx context.Context, id string) (*models.Goal, erro
 }
 
 func (r *Repository) CreateGoal(ctx context.Context, gl *models.Goal) error {
-	txn, err := r.db.Begin()
+	Txn, err := r.db.Begin()
 	if err != nil {
 		return err
 	}
-	defer txn.Rollback()
+	defer Txn.Rollback()
 
-	qtx := r.q.WithTx(txn)
+	qtx := r.q.WithTx(Txn)
 
 	if err = qtx.CreateGoal(ctx, db.CreateGoalParams{
 		ID:          gl.ID,
@@ -50,17 +50,17 @@ func (r *Repository) CreateGoal(ctx context.Context, gl *models.Goal) error {
 		}
 	}
 
-	return txn.Commit()
+	return Txn.Commit()
 }
 
 func (r *Repository) UpdateGoal(ctx context.Context, gl *models.Goal) error {
-	txn, err := r.db.Begin()
+	Txn, err := r.db.Begin()
 	if err != nil {
 		return err
 	}
-	defer txn.Rollback()
+	defer Txn.Rollback()
 
-	qtx := r.q.WithTx(txn)
+	qtx := r.q.WithTx(Txn)
 
 	if err = qtx.UpdateGoal(ctx, db.UpdateGoalParams{
 		ID:          gl.ID,
@@ -83,7 +83,7 @@ func (r *Repository) UpdateGoal(ctx context.Context, gl *models.Goal) error {
 		}
 	}
 
-	return txn.Commit()
+	return Txn.Commit()
 }
 
 func (r *Repository) DeleteGoal(ctx context.Context, id string) error {
