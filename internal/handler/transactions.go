@@ -359,14 +359,19 @@ func (h Handler) getAndRenderBalancesOOB(w http.ResponseWriter, r *http.Request)
 }
 
 func (h Handler) getCurrenciesAndKinds(ctx context.Context) ([]models.Currency, []models.TransactionKind, error) {
+	l := logger.FromCtx(ctx)
+
 	curs, err := h.repo.GetCurrencies(ctx)
 	if err != nil {
+		l.Error("error fetching currencies", zap.Error(err))
 		return nil, nil, err
 	}
 	knds, err := h.repo.GetTransactionKinds(ctx)
 	if err != nil {
+		l.Error("error fetching transaction kinds", zap.Error(err))
 		return nil, nil, err
 	}
+	l.Debug("fetched currencies and transaction kinds")
 	return curs, knds, nil
 }
 
@@ -413,4 +418,31 @@ func defaultTransaction(currencies []models.Currency, kinds []models.Transaction
 		Kind:        models.TransactionKind{ID: kinds[dfltKindIdx].ID},
 		ScheduledTo: time.Now(),
 	}
+}
+
+func (h Handler) mapFDToTransactionFrequency(r *http.Request, parsedTx *models.Transaction) (*models.FrequentTx, error) {
+	frequency, err := parseIntIfExists(r.FormValue("frequency"))
+	if err != nil {
+		return nil, err
+	}
+
+	frequencyBy, err := parseIntIfExists(r.FormValue("frequent_by"))
+	if err != nil {
+		return nil, err
+	}
+
+	stopsOn, err := parseDateOnlyIfExists(r.FormValue("stops_on"))
+	if err != nil {
+		return nil, err
+	}
+
+	return &models.FrequentTx{
+		Amount:      parsedTx.Amount,
+		Currency:    models.Currency{ID: parsedTx.Currency.ID},
+		Kind:        models.TransactionKind{ID: parsedTx.Kind.ID},
+		Description: parsedTx.Description,
+		FrequencyBy: models.FrequencyBy(frequencyBy),
+		Frequency:   uint(frequency),
+		StopsOn:     stopsOn,
+	}, nil
 }

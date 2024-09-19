@@ -46,7 +46,7 @@ func (r *Repository) createFrequentTxTransactionWithTxn(qtx *db.Queries, ctx con
 	return nil
 }
 
-func (r *Repository) FrequentTxs(ctx context.Context) ([]models.FrequentTx, error) {
+func (r *Repository) GetFrequentTxs(ctx context.Context) ([]models.FrequentTx, error) {
 	l := logger.FromCtx(ctx)
 	dbFtx, err := r.q.GetFrequentTxs(ctx)
 	if err != nil {
@@ -55,10 +55,33 @@ func (r *Repository) FrequentTxs(ctx context.Context) ([]models.FrequentTx, erro
 	}
 	l.Debug("queried frequent transactions")
 
-	return dbFrequentTxRowsToFrequentTxs(dbFtx), nil
+	return dbFrequentTxsRowToFrequentTxs(dbFtx), nil
 }
 
-func dbFrequentTxRowsToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.FrequentTx {
+func (r *Repository) GetFrequentTx(ctx context.Context, id string) (*models.FrequentTx, error) {
+	l := logger.FromCtx(ctx)
+	dbFtx, err := r.q.GetFrequentTx(ctx, id)
+	if err != nil {
+		l.Error("querying frequent transactions", zap.Error(err))
+		return nil, err
+	}
+	l.Debug("queried frequent transactions")
+
+	ftx := dbFrequentTxsRowToFrequentTxs(dbFrequentTxRowToDBFrequentTxsRow(dbFtx))
+	return &ftx[0], nil
+}
+
+func (r *Repository) DeleteFrequentTx(ctx context.Context, id string) error {
+	l := logger.FromCtx(ctx)
+	if err := r.q.DeleteFrequentTx(ctx, id); err != nil {
+		l.Error("deleting frequent transaction", zap.Error(err))
+		return err
+	}
+	l.Debug("deleted frequent transaction")
+	return nil
+}
+
+func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.FrequentTx {
 	ftxs := []models.FrequentTx{}
 
 	for _, dbFtx := range dbFtxs {
@@ -112,5 +135,13 @@ func dbFrequentTxRowsToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 		})
 	}
 
+	return ftxs
+}
+
+func dbFrequentTxRowToDBFrequentTxsRow(ftx []db.GetFrequentTxRow) []db.GetFrequentTxsRow {
+	ftxs := make([]db.GetFrequentTxsRow, len(ftx))
+	for i, f := range ftx {
+		ftxs[i] = db.GetFrequentTxsRow(f)
+	}
 	return ftxs
 }

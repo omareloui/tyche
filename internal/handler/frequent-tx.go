@@ -38,7 +38,7 @@ func (h Handler) FrequentTxs(w http.ResponseWriter, r *http.Request) (templ.Comp
 	}
 	l.Debug("fetched balances")
 
-	ftxs, err := h.repo.FrequentTxs(r.Context())
+	ftxs, err := h.repo.GetFrequentTxs(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -48,19 +48,71 @@ func (h Handler) FrequentTxs(w http.ResponseWriter, r *http.Request) (templ.Comp
 }
 
 func (h Handler) FrequentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	return nil, nil
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+
+	ftx, err := h.repo.GetFrequentTx(r.Context(), id)
+	if err != nil {
+		l.Error("fetching frequent tx", zap.Error(err))
+		return nil, err
+	}
+	l.Info("fetched frequent tx", zap.Any("frequent tx", ftx))
+
+	return views.FrequentTx(ftx), nil
 }
 
 func (h Handler) GetEditFrequentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	return nil, nil
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+
+	currencies, kinds, err := h.getCurrenciesAndKinds(r.Context())
+	if err != nil {
+		return nil, err
+	}
+
+	ftx, err := h.repo.GetFrequentTx(r.Context(), id)
+	if err != nil {
+		l.Error("fetching frequent tx", zap.Error(err))
+		return nil, err
+	}
+	l.Info("fetched frequent tx", zap.Any("frequent tx", ftx))
+
+	return views.EditFrequentTx(ftx, h.mapFrequentTxToFD(ftx, &errs.ValidationError{}), h.repo.CurrenciesToMap(currencies), h.repo.TransactionKindsToMap(kinds)), nil
 }
 
 func (h Handler) EditFrequentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	// TODO:
 	return nil, nil
 }
 
 func (h Handler) DeleteFrequentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+
+	if err := h.repo.DeleteFrequentTx(r.Context(), id); err != nil {
+		l.Error("deleting frequent transaction", zap.Error(err))
+		return nil, err
+	}
+	l.Info("deleted frequent transaction")
+
 	return nil, nil
+}
+
+func generateScheduledTransactionsUntilNextYear(*models.FrequentTx) []models.Transaction {
+	// TODO:
+	return nil
 }
 
 func (h Handler) parseFrequencyFD(r *http.Request, err *errs.ValidationError) *views.FrequencyFD {
@@ -72,29 +124,19 @@ func (h Handler) parseFrequencyFD(r *http.Request, err *errs.ValidationError) *v
 	}
 }
 
-func (h Handler) mapFDToTransactionFrequency(r *http.Request, parsedTx *models.Transaction) (*models.FrequentTx, error) {
-	frequency, err := parseIntIfExists(r.FormValue("frequency"))
-	if err != nil {
-		return nil, err
+func (h Handler) mapFrequentTxToFD(ftx *models.FrequentTx, valerr *errs.ValidationError) *views.FrequentTxFD {
+	return &views.FrequentTxFD{
+		AmountFD: views.AmountFD{
+			Amount:     views.FDInput{Value: formatIntIfNonZero(int(ftx.Amount)), Error: valerr.Errors.MsgFor("Amount")},
+			CurrencyID: views.FDInput{Value: ftx.Currency.ID, Error: valerr.Errors.MsgFor("Currency.ID")},
+		},
+		FrequencyFD: views.FrequencyFD{
+			IsFrequent: views.FDInput{Value: "on"},
+			FrequentBy: views.FDInput{Value: formatIntIfNonZero(int(ftx.FrequencyBy)), Error: valerr.Errors.MsgFor("FrequentBy")},
+			Frequency:  views.FDInput{Value: formatIntIfNonZero(int(ftx.Frequency)), Error: valerr.Errors.MsgFor("Frequency")},
+			StopsOn:    views.FDInput{Value: formatDateOnlyIfNonZero(ftx.StopsOn), Error: valerr.Errors.MsgFor("StopsOn")},
+		},
+		KindID:      views.FDInput{Value: ftx.Kind.ID, Error: valerr.Errors.MsgFor("KindID")},
+		Description: views.FDInput{Value: ftx.Description, Error: valerr.Errors.MsgFor("Description")},
 	}
-
-	frequencyBy, err := parseIntIfExists(r.FormValue("frequent_by"))
-	if err != nil {
-		return nil, err
-	}
-
-	stopsOn, err := parseDateOnlyIfExists(r.FormValue("stops_on"))
-	if err != nil {
-		return nil, err
-	}
-
-	return &models.FrequentTx{
-		Amount:      parsedTx.Amount,
-		Currency:    models.Currency{ID: parsedTx.Currency.ID},
-		Kind:        models.TransactionKind{ID: parsedTx.Kind.ID},
-		Description: parsedTx.Description,
-		FrequencyBy: models.FrequencyBy(frequencyBy),
-		Frequency:   uint(frequency),
-		StopsOn:     stopsOn,
-	}, nil
 }
