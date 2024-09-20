@@ -148,7 +148,26 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 }
 
 func (h *Handler) GetEditAccount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	return nil, nil
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+	l := logger.FromCtx(r.Context())
+
+	a, err := h.repo.GetAccount(r.Context(), id)
+	if err != nil {
+		l.Error("fetching account", zap.Error(err))
+		return nil, err
+	}
+	l.Info("fetched account")
+
+	curs, ak, err := h.getCurrenciesAndAccKinds(r.Context())
+	if err != nil {
+		return nil, err
+	}
+
+	fd := h.mapAccToFD(a, &errs.ValidationError{})
+	return views.EditAccount(id, fd, h.repo.AccountKindsToMap(ak), h.repo.CurrenciesToMap(curs), &a.Currency), nil
 }
 
 func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
