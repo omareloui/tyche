@@ -14,6 +14,12 @@ type RouteHandler func(w http.ResponseWriter, r *http.Request) (templ.Component,
 
 func (fn RouteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	l := logger.FromCtx(r.Context())
+	defer func() {
+		if p := recover(); p != nil {
+			l.Fatal("panicked", zap.Any("message", p))
+			panic(p)
+		}
+	}()
 
 	comp, err := fn(w, r)
 	if err != nil {

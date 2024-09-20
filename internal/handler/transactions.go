@@ -81,6 +81,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 	tx.Kind = *k
 
 	var ftx *models.FrequentTx
+	var scheduledTxs []models.Transaction
 
 	if r.FormValue("is_frequent") != "" {
 		ftx, err = h.mapFDToTransactionFrequency(r, tx)
@@ -109,6 +110,8 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 				h.repo.TransactionKindsToMap(kinds),
 				dfltCurr.Enum.Symbol()), nil
 		}
+
+		scheduledTxs = generateNextScheduledTransactions(ftx, 5)
 	}
 
 	if err := h.sani.SanitizeStruct(tx); err != nil {
@@ -127,7 +130,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 			dfltCurr.Enum.Symbol()), nil
 	}
 
-	if err := h.repo.CreateTransaction(r.Context(), tx, ftx); err != nil {
+	if err := h.repo.CreateTransaction(r.Context(), tx, ftx, scheduledTxs); err != nil {
 		l.Error("creating transaction", zap.Error(err))
 		return nil, err
 	}
@@ -138,6 +141,14 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		return nil, err
 	}
 	l.Debug("rendered transaction OOB")
+
+	for _, scheduledTx := range scheduledTxs {
+		if err = renderToBody(w, r, views.TransactionOOB(&scheduledTx)); err != nil {
+			l.Error("rendering scheduled transaction OOB", zap.Error(err), zap.Any("tx", &scheduledTx))
+			return nil, err
+		}
+		l.Debug("rendered scheduled transaction OOB")
+	}
 
 	if !tx.FulfilledOn.IsZero() {
 		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
@@ -438,8 +449,8 @@ func (h Handler) mapFDToTransactionFrequency(r *http.Request, parsedTx *models.T
 
 	return &models.FrequentTx{
 		Amount:      parsedTx.Amount,
-		Currency:    models.Currency{ID: parsedTx.Currency.ID},
-		Kind:        models.TransactionKind{ID: parsedTx.Kind.ID},
+		Currency:    parsedTx.Currency,
+		Kind:        parsedTx.Kind,
 		Description: parsedTx.Description,
 		FrequencyBy: models.FrequencyBy(frequencyBy),
 		Frequency:   uint(frequency),

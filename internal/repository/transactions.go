@@ -11,16 +11,46 @@ import (
 	"go.uber.org/zap"
 )
 
-func (r *Repository) CreateTransaction(ctx context.Context, tx *models.Transaction, ftx *models.FrequentTx) error {
+func (r *Repository) CreateTransaction(ctx context.Context, tx *models.Transaction, ftx *models.FrequentTx, scheduledTxs []models.Transaction) error {
+	return r.transact(func(qtx *db.Queries) error {
+		l := logger.FromCtx(ctx)
+
+		if err := r.createTransactionWithTxn(ctx, qtx, tx); err != nil {
+			return err
+		}
+
+		if !tx.FulfilledOn.IsZero() {
+			if err := r.ApplyTransactionToBalanceWithTxn(qtx, ctx, tx); err != nil {
+				l.Error("applying transaction", zap.Error(err), zap.Any("transaction", tx))
+				return err
+			}
+			l.Debug("applied transaction", zap.Any("transaction", tx))
+		}
+
+		if ftx != nil {
+			if err := r.createFrequentTxWithTxn(qtx, ctx, ftx); err != nil {
+				return err
+			}
+			if err := r.createFrequentTxTransactionWithTxn(ctx, qtx, ftx.ID, tx.ID); err != nil {
+				return err
+			}
+		}
+
+		for _, stx := range scheduledTxs {
+			if err := r.createTransactionWithTxn(ctx, qtx, &stx); err != nil {
+				return err
+			}
+			if err := r.createFrequentTxTransactionWithTxn(ctx, qtx, ftx.ID, stx.ID); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+}
+
+func (r *Repository) createTransactionWithTxn(ctx context.Context, qtx *db.Queries, tx *models.Transaction) error {
 	l := logger.FromCtx(ctx)
-	Txn, err := r.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer Txn.Commit()
-
-	qtx := r.q.WithTx(Txn)
-
 	if err := qtx.CreateTransaction(ctx, db.CreateTransactionParams{
 		ID:          tx.ID,
 		Amount:      tx.Amount,
@@ -35,24 +65,6 @@ func (r *Repository) CreateTransaction(ctx context.Context, tx *models.Transacti
 		return err
 	}
 	l.Debug("created transaction", zap.Any("transaction", tx))
-
-	if !tx.FulfilledOn.IsZero() {
-		if err := r.ApplyTransactionToBalanceWithTxn(qtx, ctx, tx); err != nil {
-			l.Error("applying transaction", zap.Error(err), zap.Any("transaction", tx))
-			return err
-		}
-		l.Debug("applied transaction", zap.Any("transaction", tx))
-	}
-
-	if ftx != nil {
-		if err := r.createFrequentTxWithTxn(qtx, ctx, ftx); err != nil {
-			return err
-		}
-		if err := r.createFrequentTxTransactionWithTxn(qtx, ctx, ftx.ID, tx.ID); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
@@ -94,37 +106,32 @@ func (r *Repository) DeleteTransaction(ctx context.Context, id string) error {
 }
 
 func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transaction, tx *models.Transaction) error {
-	l := logger.FromCtx(ctx)
-	Txn, err := r.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer Txn.Commit()
+	return r.transact(func(qtx *db.Queries) error {
+		l := logger.FromCtx(ctx)
 
-	qtx := r.q.WithTx(Txn)
-
-	if err := qtx.UpdateTransaction(ctx, db.UpdateTransactionParams{
-		ID:          tx.ID,
-		Amount:      tx.Amount,
-		CurrencyID:  tx.Currency.ID,
-		KindID:      tx.Kind.ID,
-		ScheduledTo: tx.ScheduledTo,
-	}); err != nil {
-		l.Error("updating transaction", zap.Error(err), zap.Any("new_transaction", tx), zap.Any("old_transaction", oldTx))
-		return err
-	}
-	l.Debug("updated transaction", zap.Any("new_transaction", tx), zap.Any("old_transaction", oldTx))
-
-	if !oldTx.FulfilledOn.IsZero() {
-		if err := r.UndoTransactionToBalanceWithTxn(qtx, ctx, oldTx); err != nil {
+		if err := qtx.UpdateTransaction(ctx, db.UpdateTransactionParams{
+			ID:          tx.ID,
+			Amount:      tx.Amount,
+			CurrencyID:  tx.Currency.ID,
+			KindID:      tx.Kind.ID,
+			ScheduledTo: tx.ScheduledTo,
+		}); err != nil {
+			l.Error("updating transaction", zap.Error(err), zap.Any("new_transaction", tx), zap.Any("old_transaction", oldTx))
 			return err
 		}
-		if err := r.ApplyTransactionToBalanceWithTxn(qtx, ctx, tx); err != nil {
-			return err
-		}
-	}
+		l.Debug("updated transaction", zap.Any("new_transaction", tx), zap.Any("old_transaction", oldTx))
 
-	return nil
+		if !oldTx.FulfilledOn.IsZero() {
+			if err := r.UndoTransactionToBalanceWithTxn(qtx, ctx, oldTx); err != nil {
+				return err
+			}
+			if err := r.ApplyTransactionToBalanceWithTxn(qtx, ctx, tx); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 }
 
 func (r *Repository) FulfillTransaction(ctx context.Context, id string, fulfilledOn time.Time) error {

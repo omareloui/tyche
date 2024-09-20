@@ -3,9 +3,11 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/financial-planner/internal/errs"
+	"github.com/omareloui/financial-planner/internal/idgen"
 	"github.com/omareloui/financial-planner/internal/logger"
 	"github.com/omareloui/financial-planner/internal/models"
 	"github.com/omareloui/financial-planner/web/views"
@@ -135,9 +137,44 @@ func (h Handler) DeleteFrequentTx(w http.ResponseWriter, r *http.Request) (templ
 	return nil, nil
 }
 
-func generateNext12ScheduledTransactions(*models.FrequentTx) []models.Transaction {
-	// TODO:
-	return nil
+func generateNextScheduledTransactions(ftx *models.FrequentTx, count int) []models.Transaction {
+	txs := []models.Transaction{}
+	now := time.Now()
+
+	for range count {
+		var nextOn time.Time
+
+		switch ftx.FrequencyBy {
+		case models.Day:
+			nextOn = ftx.LastTransactionCreatedAt.AddDate(0, 0, int(ftx.Frequency))
+		case models.Month:
+			nextOn = ftx.LastTransactionCreatedAt.AddDate(0, int(ftx.Frequency), 0)
+			if d := nextOn.Day(); d != ftx.LastTransactionCreatedAt.Day() {
+				nextOn = nextOn.AddDate(0, 0, -d)
+			}
+		case models.Year:
+			nextOn = ftx.LastTransactionCreatedAt.AddDate(int(ftx.Frequency), 0, 0)
+			if d := nextOn.Day(); d != ftx.LastTransactionCreatedAt.Day() {
+				nextOn = nextOn.AddDate(0, 0, -d)
+			}
+		}
+
+		if !ftx.StopsOn.IsZero() && nextOn.After(ftx.StopsOn) {
+			break
+		}
+
+		txs = append(txs, models.Transaction{
+			ID:          idgen.New(),
+			Amount:      ftx.Amount,
+			Currency:    ftx.Currency,
+			Kind:        ftx.Kind,
+			Description: ftx.Description,
+			ScheduledTo: nextOn,
+			CreatedAt:   now,
+		})
+		ftx.LastTransactionCreatedAt = nextOn
+	}
+	return txs
 }
 
 func (h Handler) mapFDToFrequentTx(r *http.Request) (*models.FrequentTx, error) {

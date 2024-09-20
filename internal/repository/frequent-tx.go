@@ -34,7 +34,7 @@ func (r *Repository) createFrequentTxWithTxn(qtx *db.Queries, ctx context.Contex
 	return nil
 }
 
-func (r *Repository) createFrequentTxTransactionWithTxn(qtx *db.Queries, ctx context.Context, ftxId, txId string) error {
+func (r *Repository) createFrequentTxTransactionWithTxn(ctx context.Context, qtx *db.Queries, ftxId, txId string) error {
 	l := logger.FromCtx(ctx)
 	if err := qtx.CreateFrequentTxTransaction(ctx, db.CreateFrequentTxTransactionParams{
 		TransactionID: txId,

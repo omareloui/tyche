@@ -26,66 +26,54 @@ func (r *Repository) GetGoal(ctx context.Context, id string) (*models.Goal, erro
 }
 
 func (r *Repository) CreateGoal(ctx context.Context, gl *models.Goal) error {
-	Txn, err := r.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer Txn.Rollback()
-
-	qtx := r.q.WithTx(Txn)
-
-	if err = qtx.CreateGoal(ctx, db.CreateGoalParams{
-		ID:          gl.ID,
-		Title:       gl.Title,
-		EgpSubtotal: gl.EgpSubtotal,
-		CreatedAt:   gl.CreatedAt,
-	}); err != nil {
-		return err
-	}
-
-	for _, it := range gl.Items {
-		if err = qtx.CreateGoalItem(ctx, db.CreateGoalItemParams{
-			GoalID: gl.ID,
-			ItemID: it.ID,
+	return r.transact(func(qtx *db.Queries) error {
+		if err := qtx.CreateGoal(ctx, db.CreateGoalParams{
+			ID:          gl.ID,
+			Title:       gl.Title,
+			EgpSubtotal: gl.EgpSubtotal,
+			CreatedAt:   gl.CreatedAt,
 		}); err != nil {
 			return err
 		}
-	}
 
-	return Txn.Commit()
+		for _, it := range gl.Items {
+			if err := qtx.CreateGoalItem(ctx, db.CreateGoalItemParams{
+				GoalID: gl.ID,
+				ItemID: it.ID,
+			}); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 }
 
 func (r *Repository) UpdateGoal(ctx context.Context, gl *models.Goal) error {
-	Txn, err := r.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer Txn.Rollback()
-
-	qtx := r.q.WithTx(Txn)
-
-	if err = qtx.UpdateGoal(ctx, db.UpdateGoalParams{
-		ID:          gl.ID,
-		Title:       gl.Title,
-		EgpSubtotal: gl.EgpSubtotal,
-	}); err != nil {
-		return err
-	}
-
-	if err = qtx.DeleteGoalItems(ctx, gl.ID); err != nil {
-		return err
-	}
-
-	for _, it := range gl.Items {
-		if err = qtx.CreateGoalItem(ctx, db.CreateGoalItemParams{
-			GoalID: gl.ID,
-			ItemID: it.ID,
+	return r.transact(func(qtx *db.Queries) error {
+		if err := qtx.UpdateGoal(ctx, db.UpdateGoalParams{
+			ID:          gl.ID,
+			Title:       gl.Title,
+			EgpSubtotal: gl.EgpSubtotal,
 		}); err != nil {
 			return err
 		}
-	}
 
-	return Txn.Commit()
+		if err := qtx.DeleteGoalItems(ctx, gl.ID); err != nil {
+			return err
+		}
+
+		for _, it := range gl.Items {
+			if err := qtx.CreateGoalItem(ctx, db.CreateGoalItemParams{
+				GoalID: gl.ID,
+				ItemID: it.ID,
+			}); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 }
 
 func (r *Repository) DeleteGoal(ctx context.Context, id string) error {
