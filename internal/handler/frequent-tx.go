@@ -14,6 +14,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const generateNextScheduledTransactionsCount = 5
+
 func (h Handler) FrequencyForm(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	l := logger.FromCtx(r.Context())
 
@@ -104,7 +106,10 @@ func (h Handler) EditFrequentTx(w http.ResponseWriter, r *http.Request) (templ.C
 	}
 	ftx.ID = id
 
-	if err := h.repo.UpdateFrequentTx(r.Context(), ftx); err != nil {
+	ftx.LastTransactionCreatedAt = time.Now()
+	scheduled := generateNextScheduledTransactions(ftx, generateNextScheduledTransactionsCount)
+
+	if err := h.repo.UpdateFrequentTx(r.Context(), ftx, scheduled); err != nil {
 		l.Error("updating frequent tx", zap.Error(err))
 		return nil, err
 	}

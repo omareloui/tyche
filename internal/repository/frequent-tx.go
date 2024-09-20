@@ -72,24 +72,42 @@ func (r *Repository) GetFrequentTx(ctx context.Context, id string) (*models.Freq
 	return &ftx[0], nil
 }
 
-func (r *Repository) UpdateFrequentTx(ctx context.Context, ftx *models.FrequentTx) error {
-	l := logger.FromCtx(ctx)
-	// TODO: update scheduled transactions of this ftx
-	if err := r.q.UpdateFrequentTx(ctx, db.UpdateFrequentTxParams{
-		ID:          ftx.ID,
-		Amount:      ftx.Amount,
-		CurrencyID:  ftx.Currency.ID,
-		KindID:      ftx.Kind.ID,
-		FrequencyBy: int64(ftx.FrequencyBy),
-		Frequency:   int64(ftx.Frequency),
-		Description: sql.NullString{String: ftx.Description, Valid: ftx.Description != ""},
-		StopsOn:     sql.NullTime{Time: ftx.StopsOn, Valid: !ftx.StopsOn.IsZero()},
-	}); err != nil {
-		l.Error("updating frequent tx", zap.Any("frequent tx", ftx), zap.Error(err))
-		return err
-	}
-	l.Debug("updated frequent tx", zap.Any("frequent tx", ftx))
-	return nil
+func (r *Repository) UpdateFrequentTx(ctx context.Context, ftx *models.FrequentTx, scheduledTxs []models.Transaction) error {
+	return r.transact(func(qtx *db.Queries) error {
+		l := logger.FromCtx(ctx)
+
+		if err := qtx.DeleteScheduledTransactionsOfFrequentTx(ctx, ftx.ID); err != nil {
+			l.Error("deleting scheduled transaction of transaction", zap.Error(err))
+			return err
+		}
+		l.Debug("deleted scheduled transaction of transaction")
+
+		if err := qtx.UpdateFrequentTx(ctx, db.UpdateFrequentTxParams{
+			ID:          ftx.ID,
+			Amount:      ftx.Amount,
+			CurrencyID:  ftx.Currency.ID,
+			KindID:      ftx.Kind.ID,
+			FrequencyBy: int64(ftx.FrequencyBy),
+			Frequency:   int64(ftx.Frequency),
+			Description: sql.NullString{String: ftx.Description, Valid: ftx.Description != ""},
+			StopsOn:     sql.NullTime{Time: ftx.StopsOn, Valid: !ftx.StopsOn.IsZero()},
+		}); err != nil {
+			l.Error("updating frequent tx", zap.Any("frequent tx", ftx), zap.Error(err))
+			return err
+		}
+		l.Debug("updated frequent tx", zap.Any("frequent tx", ftx))
+
+		for _, stx := range scheduledTxs {
+			if err := r.createTransactionWithTxn(ctx, qtx, &stx); err != nil {
+				return err
+			}
+			if err := r.createFrequentTxTransactionWithTxn(ctx, qtx, ftx.ID, stx.ID); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 }
 
 func (r *Repository) DeleteFrequentTx(ctx context.Context, id string) error {

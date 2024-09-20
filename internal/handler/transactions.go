@@ -111,7 +111,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 				dfltCurr.Enum.Symbol()), nil
 		}
 
-		scheduledTxs = generateNextScheduledTransactions(ftx, 5)
+		scheduledTxs = generateNextScheduledTransactions(ftx, generateNextScheduledTransactionsCount)
 	}
 
 	if err := h.sani.SanitizeStruct(tx); err != nil {
