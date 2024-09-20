@@ -62,6 +62,8 @@ CREATE TABLE goals_items (
     FOREIGN KEY (goal_id) REFERENCES goals (id) ON DELETE CASCADE,
     FOREIGN KEY (item_id) REFERENCES items (id) ON DELETE CASCADE
 );
+CREATE UNIQUE INDEX idx_goals_items
+ON goals_items (goal_id, item_id);
 CREATE TABLE items (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -70,9 +72,24 @@ CREATE TABLE items (
     purchased_on DATE,
     FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE
 );
-
-CREATE UNIQUE INDEX idx_goals_items
-ON goals_items (goal_id, item_id);
+CREATE TABLE account_kinds  ( 
+  id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
+  enum INT UNIQUE NOT NULL
+);
+CREATE TABLE accounts (
+    id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
+    name VARCHAR UNIQUE NOT NULL,
+    kind_id VARCHAR UNIQUE NOT NULL,
+    amount FLOAT NOT NULL,
+    currency_id VARCHAR NOT NULL,
+    card_number VARCHAR UNIQUE,
+    iban VARCHAR UNIQUE,
+    note VARCHAR,
+    is_archived BOOL,
+    exclude_from_balance BOOL,
+    FOREIGN KEY (currency_id) REFERENCES currencies (id)
+    FOREIGN KEY (kind_id) REFERENCES account_kinds (id)
+);
 -- +goose StatementEnd
 
 -- +goose Down
@@ -83,6 +100,8 @@ DROP TABLE transaction_kinds;
 DROP TABLE transactions;
 DROP TABLE goals;
 DROP TABLE goals_items;
-DROP TABLE items;
 DROP INDEX idx_goals_items;
+DROP TABLE items;
+DROP TABLE accounts;
+DROP TABLE account_kinds;
 -- +goose StatementEnd

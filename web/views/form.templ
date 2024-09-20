@@ -3,6 +3,7 @@ package views
 import (
 	"strings"
 	"fmt"
+	"github.com/omareloui/financial-planner/internal/models"
 )
 
 type FDInput struct {
@@ -127,6 +128,37 @@ templ moneyInput(label, name, currencySymbol, idSuffix string, data FDInput, cla
 	</div>
 }
 
+templ creditCardInput(label, name, idSuffix string, data FDInput, classes ...string) {
+	<div class={ strings.Join(classes, " ") }>
+		<label class="input-label" for={ join(name, idSuffix) }>{ label }</label>
+		<input
+			id={ join(name, idSuffix) }
+			name={ name }
+			class="input-field"
+			value={ data.Value }
+			placeholder="0000 0000 0000 0000"
+			x-mask:dynamic="$input.startsWith('34') || $input.startsWith('37')
+        ? '9999 999999 99999' : '9999 9999 9999 9999'"
+		/>
+		@errorMessage(data.Error)
+	</div>
+}
+
+templ ibanInput(label, name, idSuffix string, cur models.Currency, data FDInput, classes ...string) {
+	<div class={ strings.Join(classes, " ") }>
+		<label class="input-label" for={ join(name, idSuffix) }>{ label }</label>
+		<input
+			id={ join(name, idSuffix) }
+			name={ name }
+			class="input-field"
+			value={ data.Value }
+			placeholder={ fmt.Sprintf("%s00 0000 0000 0000 0000 0000 0000 0", cur.Enum.IBANPrefix()) }
+			x-mask={ fmt.Sprintf("%s00 0000 0000 0000 0000 0000 0000 0", cur.Enum.IBANPrefix()) }
+		/>
+		@errorMessage(data.Error)
+	</div>
+}
+
 templ dateInput(label, name, idSuffix string, data FDInput, classes ...string) {
 	<div class={ strings.Join(classes, "") }>
 		<label class="input-label" for={ join(name, idSuffix) }>{ label }</label>
@@ -243,7 +275,6 @@ templ postButton(text, putUrl string) {
 		hx-swap="outerHTML"
 	>{ text }</button>
 }
-
 
 templ errorMessage(message string) {
 	if message != "" {

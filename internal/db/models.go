@@ -9,6 +9,25 @@ import (
 	"time"
 )
 
+type Account struct {
+	ID                 string
+	Name               string
+	KindID             string
+	Amount             float64
+	CurrencyID         string
+	CardNumber         sql.NullString
+	Iban               sql.NullString
+	Note               sql.NullString
+	IsArchived         sql.NullBool
+	ExcludeFromBalance sql.NullBool
+	Foreign            interface{}
+}
+
+type AccountKind struct {
+	ID   string
+	Enum int64
+}
+
 type Balance struct {
 	ID         string
 	Amount     float64

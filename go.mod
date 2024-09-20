@@ -17,6 +17,7 @@ require (
 )
 
 require (
+	github.com/almerlucke/go-iban v0.0.0-20220324081643-09bcab81b879 // indirect
 	github.com/etgryphon/stringUp v0.0.0-20121020160746-31534ccd8cac // indirect
 	github.com/gabriel-vasile/mimetype v1.4.3 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect

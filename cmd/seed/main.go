@@ -50,7 +50,7 @@ func main() {
 		}
 	}
 
-	kinds, err := q.GetTransactionKinds(context.Background())
+	txKinds, err := q.GetTransactionKinds(context.Background())
 	if err != nil {
 		log.Fatalln("error while getting the kinds", err)
 	}
@@ -60,7 +60,7 @@ func main() {
 		{ID: idgen.New(), Kind: "INCOME", IncreaseBalance: sql.NullBool{Bool: true, Valid: true}},
 	}
 
-	if len(kinds) != len(kindsSeed) {
+	if len(txKinds) != len(kindsSeed) {
 		for _, kind := range kindsSeed {
 			if err := q.CreateTransactionKind(context.Background(), db.CreateTransactionKindParams(kind)); err != nil {
 				log.Fatalln("error while seeding the transaction kinds", err)
@@ -87,6 +87,19 @@ func main() {
 			}); err != nil {
 				log.Fatalln("error while seeding the balance", err)
 			}
+		}
+	}
+
+	accKinds := []db.CreateAccountKindParams{
+		{ID: idgen.New(), Enum: int64(models.CreditCard)},
+		{ID: idgen.New(), Enum: int64(models.BankAccount)},
+		{ID: idgen.New(), Enum: int64(models.Debt)},
+		{ID: idgen.New(), Enum: int64(models.Cash)},
+	}
+
+	for _, k := range accKinds {
+		if err := q.CreateAccountKind(context.Background(), k); err != nil {
+			log.Fatalln("error while seeding the account kinds", err)
 		}
 	}
 }

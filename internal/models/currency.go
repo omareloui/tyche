@@ -17,6 +17,10 @@ func (cs CurrencyEnum) Symbol() string {
 	return [...]string{"EG£", "US$"}[cs-1]
 }
 
+func (cs CurrencyEnum) IBANPrefix() string {
+	return [...]string{"EG", "US"}[cs-1]
+}
+
 type Currency struct {
 	ID        string `validate:"required"`
 	Enum      CurrencyEnum

@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/almerlucke/go-iban/iban"
 	"github.com/go-playground/validator/v10"
 	"github.com/go-playground/validator/v10/non-standard/validators"
 	"github.com/omareloui/financial-planner/internal/errs"
@@ -38,6 +39,7 @@ func New() *Validator {
 	val := validator.New(validator.WithRequiredStructEnabled())
 	_ = val.RegisterValidation("not_blank", validators.NotBlank)
 	_ = val.RegisterValidation("alphanum_with_underscore", IsAlphaNumWithUnderScore)
+	_ = val.RegisterValidation("iban", IsIBAN)
 	return &Validator{validator: val}
 }
 
@@ -45,4 +47,10 @@ func IsAlphaNumWithUnderScore(fl validator.FieldLevel) bool {
 	re := regexp.MustCompile(`^[A-Za-z0-9_]+$`)
 	field := fl.Field()
 	return re.Match([]byte(field.String()))
+}
+
+func IsIBAN(fl validator.FieldLevel) bool {
+	field := fl.Field().String()
+	_, err := iban.NewIBAN(field)
+	return err != nil
 }
