@@ -10,12 +10,14 @@ SELECT
     a.note,
     a.exclude_from_balance,
     a.is_archived,
+    a.created_at,
     c.enum AS currency_enum,
     c.egp_fx_rate,
     k.enum AS kind_enum
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
-LEFT JOIN currencies AS c ON a.currency_id = c.id;
+LEFT JOIN currencies AS c ON a.currency_id = c.id
+ORDER BY a.created_at DESC;
 
 -- name: GetAccount :one
 SELECT
@@ -29,6 +31,7 @@ SELECT
     a.note,
     a.exclude_from_balance,
     a.is_archived,
+    a.created_at,
     c.enum AS currency_enum,
     c.egp_fx_rate,
     k.enum AS kind_enum
@@ -48,9 +51,10 @@ INSERT INTO accounts (
     iban,
     note,
     exclude_from_balance,
-    is_archived
+    is_archived,
+    created_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: UpdateAccount :exec
 UPDATE accounts

@@ -9,6 +9,8 @@ const (
 	Cash
 )
 
+const DfltAccountKind = CreditCard
+
 func (a AccountKindEnum) String() string {
 	return [...]string{
 		"Credit Card", "Bank Account",
@@ -17,6 +19,6 @@ func (a AccountKindEnum) String() string {
 }
 
 type AccountKind struct {
-	ID   string          `validate:"required"`
-	Enum AccountKindEnum `validate:"required"`
+	ID   string `validate:"required"`
+	Enum AccountKindEnum
 }

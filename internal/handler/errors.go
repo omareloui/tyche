@@ -8,9 +8,9 @@ import (
 )
 
 func (h Handler) NotFound(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	return nil, resperr.NewRespError(http.StatusNotFound)
+	return nil, resperr.New(http.StatusNotFound, "")
 }
 
 func (h Handler) InternalServerError(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	return nil, resperr.NewRespError(http.StatusInternalServerError)
+	return nil, resperr.New(http.StatusInternalServerError, "")
 }

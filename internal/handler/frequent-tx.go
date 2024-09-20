@@ -77,7 +77,7 @@ func (h Handler) GetEditFrequentTx(w http.ResponseWriter, r *http.Request) (temp
 
 	l := logger.FromCtx(r.Context())
 
-	currencies, kinds, err := h.getCurrenciesAndKinds(r.Context())
+	currencies, kinds, err := h.getCurrenciesAndTxKinds(r.Context())
 	if err != nil {
 		return nil, err
 	}

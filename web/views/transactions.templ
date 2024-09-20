@@ -14,11 +14,6 @@ type TransactionFD struct {
 	Description FDInput
 }
 
-type AmountFD struct {
-	Amount     FDInput
-	CurrencyID FDInput
-}
-
 templ Transactions(
 	balances []models.Balance,
 	fd *TransactionFD,

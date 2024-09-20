@@ -59,6 +59,8 @@ func (v ValidationField) String() string {
 		return fmt.Sprintf(`This field must be one of %s`, v.Param)
 	case "gtcsfield", "gtfield":
 		return fmt.Sprintf(`This field has to be greater than %s`, v.Param)
+	case "duplicate":
+		return "This field is in use, try another one"
 	default:
 		msg := fmt.Sprintf(`Failed on "%s" tag`, v.Tag)
 		if v.Param != "" {

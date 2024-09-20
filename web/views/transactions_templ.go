@@ -22,11 +22,6 @@ type TransactionFD struct {
 	Description FDInput
 }
 
-type AmountFD struct {
-	Amount     FDInput
-	CurrencyID FDInput
-}
-
 func Transactions(
 	balances []models.Balance,
 	fd *TransactionFD,
@@ -270,7 +265,7 @@ func EditTransaction(tx *models.Transaction, fd *TransactionFD, currencies map[s
 			var templ_7745c5c3_Var10 string
 			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(tx.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 62, Col: 16}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 57, Col: 16}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 			if templ_7745c5c3_Err != nil {
@@ -388,7 +383,7 @@ func Transaction(tx *models.Transaction) templ.Component {
 		var templ_7745c5c3_Var14 string
 		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(tx.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 85, Col: 16}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 80, Col: 16}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 		if templ_7745c5c3_Err != nil {
@@ -401,7 +396,7 @@ func Transaction(tx *models.Transaction) templ.Component {
 		var templ_7745c5c3_Var15 string
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(tx.ViewAmount())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 86, Col: 30}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 81, Col: 30}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 		if templ_7745c5c3_Err != nil {
@@ -414,7 +409,7 @@ func Transaction(tx *models.Transaction) templ.Component {
 		var templ_7745c5c3_Var16 string
 		templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(tx.Kind.Kind)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 87, Col: 25}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 82, Col: 25}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 		if templ_7745c5c3_Err != nil {
@@ -432,7 +427,7 @@ func Transaction(tx *models.Transaction) templ.Component {
 			var templ_7745c5c3_Var17 string
 			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(tx.Description)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 89, Col: 35}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 84, Col: 35}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 			if templ_7745c5c3_Err != nil {
@@ -450,7 +445,7 @@ func Transaction(tx *models.Transaction) templ.Component {
 		var templ_7745c5c3_Var18 string
 		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(tx.ScheduledTo.Format(time.DateOnly))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 91, Col: 57}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 86, Col: 57}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 		if templ_7745c5c3_Err != nil {
@@ -468,7 +463,7 @@ func Transaction(tx *models.Transaction) templ.Component {
 			var templ_7745c5c3_Var19 string
 			templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(tx.FulfilledOn.Format(time.RFC1123Z))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 93, Col: 58}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 88, Col: 58}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 			if templ_7745c5c3_Err != nil {
@@ -486,7 +481,7 @@ func Transaction(tx *models.Transaction) templ.Component {
 		var templ_7745c5c3_Var20 string
 		templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(tx.CreatedAt.Format(time.RFC1123Z))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 95, Col: 53}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 90, Col: 53}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 		if templ_7745c5c3_Err != nil {

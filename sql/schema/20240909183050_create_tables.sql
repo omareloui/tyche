@@ -79,7 +79,7 @@ CREATE TABLE account_kinds  (
 CREATE TABLE accounts (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
     name VARCHAR UNIQUE NOT NULL,
-    kind_id VARCHAR UNIQUE NOT NULL,
+    kind_id VARCHAR NOT NULL,
     amount FLOAT NOT NULL,
     currency_id VARCHAR NOT NULL,
     card_number VARCHAR UNIQUE,
@@ -87,6 +87,7 @@ CREATE TABLE accounts (
     note VARCHAR,
     is_archived BOOL,
     exclude_from_balance BOOL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW,
     FOREIGN KEY (currency_id) REFERENCES currencies (id)
     FOREIGN KEY (kind_id) REFERENCES account_kinds (id)
 );

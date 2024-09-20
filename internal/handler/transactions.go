@@ -19,7 +19,7 @@ import (
 func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	l := logger.FromCtx(r.Context())
 
-	currencies, kinds, err := h.getCurrenciesAndKinds(r.Context())
+	currencies, kinds, err := h.getCurrenciesAndTxKinds(r.Context())
 	if err != nil {
 		l.Error("fetching currencies and kinds", zap.Error(err))
 		return nil, err
@@ -68,7 +68,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		tx.FulfilledOn = tx.CreatedAt
 	}
 
-	currencies, kinds, err := h.getCurrenciesAndKinds(r.Context())
+	currencies, kinds, err := h.getCurrenciesAndTxKinds(r.Context())
 	if err != nil {
 		l.Error("fetching currencies and kinds")
 		return nil, err
@@ -201,7 +201,7 @@ func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (tem
 
 	l.Debug("get edit transaction", zap.Any("transaction", tx))
 
-	currencies, kinds, err := h.getCurrenciesAndKinds(r.Context())
+	currencies, kinds, err := h.getCurrenciesAndTxKinds(r.Context())
 	if err != nil {
 		l.Error("fetching currencies and kinds")
 		return nil, err
@@ -240,7 +240,7 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 		fd := h.mapTransactionToFD(tx, valerr)
 		fd.Amount.Value = r.FormValue("amount")
 
-		currencies, kinds, err := h.getCurrenciesAndKinds(r.Context())
+		currencies, kinds, err := h.getCurrenciesAndTxKinds(r.Context())
 		if err != nil {
 			l.Error("fetching currencies and kinds")
 			return nil, err
@@ -369,7 +369,7 @@ func (h Handler) getAndRenderBalancesOOB(w http.ResponseWriter, r *http.Request)
 	return nil
 }
 
-func (h Handler) getCurrenciesAndKinds(ctx context.Context) ([]models.Currency, []models.TransactionKind, error) {
+func (h Handler) getCurrenciesAndTxKinds(ctx context.Context) ([]models.Currency, []models.TransactionKind, error) {
 	l := logger.FromCtx(ctx)
 
 	curs, err := h.repo.GetCurrencies(ctx)

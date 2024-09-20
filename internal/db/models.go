@@ -20,6 +20,7 @@ type Account struct {
 	Note               sql.NullString
 	IsArchived         sql.NullBool
 	ExcludeFromBalance sql.NullBool
+	CreatedAt          interface{}
 	Foreign            interface{}
 }
 

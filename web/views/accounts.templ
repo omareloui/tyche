@@ -1,0 +1,107 @@
+package views
+
+import (
+	"fmt"
+
+	"github.com/omareloui/financial-planner/internal/models"
+)
+
+type AccountFD struct {
+	IBANFD
+	Name               FDInput
+	KindID             FDInput
+	CardNumber         FDInput
+	Note               FDInput
+	IsArchive          FDInput
+	ExcludeFromBalance FDInput
+}
+
+templ Accounts(
+	balances []models.Balance,
+	fd *AccountFD, aks map[string]string,
+	curs map[string]string, cur *models.Currency,
+	accounts []models.Account) {
+	@baseLayout("Accounts", balances) {
+		@container() {
+			@mainHeader("Accounts")
+			@CreateAccountForm(fd, aks, curs, cur)
+			@accountsList(accounts)
+		}
+	}
+}
+
+templ CreateAccountForm(fd *AccountFD, aks map[string]string, curs map[string]string, cur *models.Currency) {
+	@creationForm("Create Account", "/accounts", "Create Account") {
+		@accountFormBody("", fd, aks, curs, cur)
+	}
+}
+
+templ EditAccount(id string, fd *AccountFD, aks map[string]string, curs map[string]string, cur *models.Currency) {
+	@form("put", fmt.Sprintf("/accounts/%s", id), templ.Attributes{"hx-target": "this"}) {
+		<p>ID: { id }</p>
+		@accountFormBody(id, fd, aks, curs, cur)
+		@editFormButtons(fmt.Sprintf("/accounts/%s", id))
+	}
+}
+
+templ accountFormBody(id string, fd *AccountFD, aks map[string]string, curs map[string]string, cur *models.Currency) {
+	@input("Name", "text", "name", "Enter account name", id, fd.Name)
+	@selectInput("Kind", "kind_id", "Select a Kind", id, aks, fd.KindID)
+	@IbanInputs(&fd.IBANFD, id, curs, cur)
+	@creditCardInput("Card Number", "card_number", id, fd.CardNumber)
+	@input("Note", "text", "note", "Enter note", id, fd.Note)
+	@checkbox("Is Archive", "is_archive", id, fd.IsArchive)
+	@checkbox("Exclude From Balance", "exclude_from_balance", id, fd.ExcludeFromBalance)
+}
+
+templ accountsList(accounts []models.Account) {
+	@list("accounts-list") {
+		for _, a := range accounts {
+			@Account(&a)
+		}
+	}
+}
+
+templ Account(a *models.Account) {
+	<div hx-target="this" class="entry-container">
+		<p>ID: { a.ID }</p>
+		<p>Name: { a.Name }</p>
+		<p>Amount: { a.ViewAmount() } </p>
+		<p>Kind: { a.Kind.Enum.String() } </p>
+		if a.IBAN != "" {
+			<p>IBAN: { a.MaskIBAN() } </p>
+		}
+		if a.CardNumber != "" {
+			<p>Card Number: { a.MaskCardNumber() } </p>
+		}
+		if a.Note != "" {
+			<p>Note: { a.Note } </p>
+		}
+		<p>
+			Is Archive:
+			if a.IsArchive {
+				true
+			} else {
+				false
+			}
+		</p>
+		<p>
+			Exclude From Balance:
+			if a.ExcludeFromBalance {
+				true
+			} else {
+				false
+			}
+		</p>
+		<div class="flex gap-4">
+			@editButton(fmt.Sprintf("/accounts/%s/edit", a.ID))
+			@deleteButton(fmt.Sprintf("/accounts/%s", a.ID))
+		</div>
+	</div>
+}
+
+templ AccountOOB(a *models.Account) {
+	<div id="accounts-list" hx-swap-oob="afterbegin">
+		@Account(a)
+	</div>
+}

@@ -18,6 +18,13 @@ func New(h *handler.Handler) Router {
 
 	mux.Handle("GET /{$}", handle(h.HomePage))
 
+	mux.Handle("GET /accounts", handle(h.Accounts))
+	mux.Handle("POST /accounts", handle(h.CreateAccount))
+	mux.Handle("GET /accounts/{id}", handle(h.Account))
+	mux.Handle("GET /accounts/{id}/edit", handle(h.GetEditAccount))
+	mux.Handle("PUT /accounts/{id}", handle(h.EditAccount))
+	mux.Handle("DELETE /accounts/{id}", handle(h.DeleteAccount))
+
 	mux.Handle("GET /transactions", handle(h.Transactions))
 	mux.Handle("POST /transactions", handle(h.CreateTransaction))
 	mux.Handle("GET /transactions/{id}", handle(h.Transaction))
@@ -51,6 +58,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("DELETE /items/{id}", handle(h.DeleteItem))
 
 	mux.Handle("POST /amount-inputs", handle(h.AmountInputs))
+	mux.Handle("POST /iban-inputs", handle(h.IbanInputs))
 
 	static(mux, []string{"styles", "js"}, "./web/public")
 	mux.Handle("/", handle(h.NotFound))

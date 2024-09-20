@@ -11,6 +11,17 @@ type FDInput struct {
 	Error string `json:"error"`
 }
 
+type AmountFD struct {
+	Amount     FDInput
+	CurrencyID FDInput
+}
+
+type IBANFD struct {
+	Amount     FDInput
+	CurrencyID FDInput
+	IBAN       FDInput
+}
+
 templ form(action, path string, attrs ...templ.Attributes) {
 	<form
 		{ templ.Attributes{fmt.Sprintf("hx-%s", action): string(templ.SafeURL(path))}... }
@@ -82,6 +93,21 @@ templ AmountInputs(fd *AmountFD, currencies map[string]string, currencySymbol st
 	</div>
 }
 
+templ IbanInputs(fd *IBANFD, id string, currencies map[string]string, cur *models.Currency) {
+	<div data-iban class="grid grid-cols-3 gap-4">
+		@moneyInput("Amount", "amount", cur.Enum.Symbol(), id, fd.Amount, "col-span-2")
+		@selectInput("Currency", "currency_id", "Select a Currency", id, currencies, fd.CurrencyID,
+			templ.Attributes{
+				"hx-post":    "/iban-inputs",
+				"hx-trigger": "change",
+				"hx-target":  "closest [data-iban]",
+				"hx-swap":    "outerHTML",
+				"hx-sync":    "closest form:abort",
+			})
+		@ibanInput("IBAN", "iban", id, cur, fd.IBAN, "col-span-3")
+	</div>
+}
+
 templ input(label, kind, name, placeholder, idSuffix string, data FDInput, classes ...string) {
 	<div class={ strings.Join(classes, " ") }>
 		<label class="input-label" for={ join(name, idSuffix) }>{ label }</label>
@@ -144,7 +170,7 @@ templ creditCardInput(label, name, idSuffix string, data FDInput, classes ...str
 	</div>
 }
 
-templ ibanInput(label, name, idSuffix string, cur models.Currency, data FDInput, classes ...string) {
+templ ibanInput(label, name, idSuffix string, cur *models.Currency, data FDInput, classes ...string) {
 	<div class={ strings.Join(classes, " ") }>
 		<label class="input-label" for={ join(name, idSuffix) }>{ label }</label>
 		<input
@@ -153,7 +179,7 @@ templ ibanInput(label, name, idSuffix string, cur models.Currency, data FDInput,
 			class="input-field"
 			value={ data.Value }
 			placeholder={ fmt.Sprintf("%s00 0000 0000 0000 0000 0000 0000 0", cur.Enum.IBANPrefix()) }
-			x-mask={ fmt.Sprintf("%s00 0000 0000 0000 0000 0000 0000 0", cur.Enum.IBANPrefix()) }
+			x-mask={ fmt.Sprintf("%s99 9999 9999 9999 9999 9999 9999 9", cur.Enum.IBANPrefix()) }
 		/>
 		@errorMessage(data.Error)
 	</div>

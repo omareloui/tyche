@@ -35,9 +35,10 @@ INSERT INTO accounts (
     iban,
     note,
     exclude_from_balance,
-    is_archived
+    is_archived,
+    created_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateAccountParams struct {
@@ -51,6 +52,7 @@ type CreateAccountParams struct {
 	Note               sql.NullString
 	ExcludeFromBalance sql.NullBool
 	IsArchived         sql.NullBool
+	CreatedAt          interface{}
 }
 
 func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) error {
@@ -65,6 +67,7 @@ func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) er
 		arg.Note,
 		arg.ExcludeFromBalance,
 		arg.IsArchived,
+		arg.CreatedAt,
 	)
 	return err
 }
@@ -81,6 +84,7 @@ SELECT
     a.note,
     a.exclude_from_balance,
     a.is_archived,
+    a.created_at,
     c.enum AS currency_enum,
     c.egp_fx_rate,
     k.enum AS kind_enum
@@ -101,6 +105,7 @@ type GetAccountRow struct {
 	Note               sql.NullString
 	ExcludeFromBalance sql.NullBool
 	IsArchived         sql.NullBool
+	CreatedAt          interface{}
 	CurrencyEnum       sql.NullInt64
 	EgpFxRate          sql.NullFloat64
 	KindEnum           sql.NullInt64
@@ -120,6 +125,7 @@ func (q *Queries) GetAccount(ctx context.Context, id string) (GetAccountRow, err
 		&i.Note,
 		&i.ExcludeFromBalance,
 		&i.IsArchived,
+		&i.CreatedAt,
 		&i.CurrencyEnum,
 		&i.EgpFxRate,
 		&i.KindEnum,
@@ -139,12 +145,14 @@ SELECT
     a.note,
     a.exclude_from_balance,
     a.is_archived,
+    a.created_at,
     c.enum AS currency_enum,
     c.egp_fx_rate,
     k.enum AS kind_enum
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
+ORDER BY a.created_at DESC
 `
 
 type GetAccountsRow struct {
@@ -158,6 +166,7 @@ type GetAccountsRow struct {
 	Note               sql.NullString
 	ExcludeFromBalance sql.NullBool
 	IsArchived         sql.NullBool
+	CreatedAt          interface{}
 	CurrencyEnum       sql.NullInt64
 	EgpFxRate          sql.NullFloat64
 	KindEnum           sql.NullInt64
@@ -183,6 +192,7 @@ func (q *Queries) GetAccounts(ctx context.Context) ([]GetAccountsRow, error) {
 			&i.Note,
 			&i.ExcludeFromBalance,
 			&i.IsArchived,
+			&i.CreatedAt,
 			&i.CurrencyEnum,
 			&i.EgpFxRate,
 			&i.KindEnum,

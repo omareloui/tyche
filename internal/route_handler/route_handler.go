@@ -41,7 +41,7 @@ func (fn RouteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func errorResponse(l *zap.Logger, w http.ResponseWriter, err error) {
 	var httperr *resperr.RespError
 	if !errors.As(err, &httperr) {
-		err = resperr.NewRespError(http.StatusInternalServerError)
+		err = resperr.New(http.StatusInternalServerError, "")
 	}
 
 	l.Error("server error",

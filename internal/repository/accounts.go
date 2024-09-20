@@ -1,0 +1,114 @@
+package repository
+
+import (
+	"context"
+	"database/sql"
+	"strings"
+	"time"
+
+	"github.com/omareloui/financial-planner/internal/db"
+	"github.com/omareloui/financial-planner/internal/logger"
+	"github.com/omareloui/financial-planner/internal/models"
+	"go.uber.org/zap"
+)
+
+func (r *Repository) CreateAccount(ctx context.Context, a *models.Account) error {
+	l := logger.FromCtx(ctx)
+	if err := r.q.CreateAccount(ctx, db.CreateAccountParams{
+		ID:                 a.ID,
+		Name:               a.Name,
+		KindID:             a.Kind.ID,
+		Amount:             a.Amount,
+		CurrencyID:         a.Currency.ID,
+		CardNumber:         sql.NullString{String: a.CardNumber, Valid: a.CardNumber != ""},
+		Iban:               sql.NullString{String: a.IBAN, Valid: a.IBAN != ""},
+		Note:               sql.NullString{String: a.Note, Valid: a.Note != ""},
+		IsArchived:         sql.NullBool{Bool: a.IsArchive, Valid: true},
+		ExcludeFromBalance: sql.NullBool{Bool: a.ExcludeFromBalance, Valid: true},
+		CreatedAt:          a.CreatedAt,
+	}); err != nil {
+		l.Error("creating account", zap.Error(err))
+		if strings.Contains(err.Error(), "UNIQUE constraint failed: accounts.name") {
+			return newDuplicationError("Name")
+		}
+
+		return err
+	}
+	l.Debug("created account")
+	return nil
+}
+
+func (r *Repository) GetAccounts(ctx context.Context) ([]models.Account, error) {
+	l := logger.FromCtx(ctx)
+	accs, err := r.q.GetAccounts(ctx)
+	if err != nil {
+		l.Error("querying accounts", zap.Error(err))
+		return nil, err
+	}
+	l.Debug("queried accounts")
+	return dbAccountsRowToAccounts(accs), nil
+}
+
+func (r *Repository) GetAccount(ctx context.Context, id string) (*models.Account, error) {
+	l := logger.FromCtx(ctx)
+	acc, err := r.q.GetAccount(ctx, id)
+	if err != nil {
+		l.Error("querying account", zap.Error(err))
+		return nil, err
+	}
+	l.Debug("queried account")
+	return dbAccountRowToAccount(&acc), nil
+}
+
+func (r *Repository) UpdateAccount(ctx context.Context, a *models.Account) error {
+	l := logger.FromCtx(ctx)
+	if err := r.q.UpdateAccount(ctx, db.UpdateAccountParams{
+		ID:                 a.ID,
+		Name:               a.Name,
+		KindID:             a.Kind.ID,
+		Amount:             a.Amount,
+		CurrencyID:         a.Currency.ID,
+		CardNumber:         sql.NullString{String: a.CardNumber, Valid: a.CardNumber != ""},
+		Iban:               sql.NullString{String: a.IBAN, Valid: a.IBAN != ""},
+		Note:               sql.NullString{String: a.Note, Valid: a.Note != ""},
+		IsArchived:         sql.NullBool{Bool: a.IsArchive, Valid: true},
+		ExcludeFromBalance: sql.NullBool{Bool: a.ExcludeFromBalance, Valid: true},
+	}); err != nil {
+		l.Error("updating account", zap.Error(err))
+		return err
+	}
+	l.Debug("updated account")
+	return nil
+}
+
+func dbAccountRowToAccount[T db.GetAccountRow | db.GetAccountsRow](dbAcc *T) *models.Account {
+	_dbAcc := db.GetAccountsRow(*dbAcc)
+	return &models.Account{
+		ID:     _dbAcc.ID,
+		Name:   _dbAcc.Name,
+		Amount: _dbAcc.Amount,
+		Currency: models.Currency{
+			ID:        _dbAcc.CurrencyID,
+			Enum:      models.CurrencyEnum(_dbAcc.CurrencyEnum.Int64),
+			EgpFxRate: _dbAcc.EgpFxRate.Float64,
+		},
+		Kind: models.AccountKind{
+			ID:   _dbAcc.KindID,
+			Enum: models.AccountKindEnum(_dbAcc.KindEnum.Int64),
+		},
+		IBAN:               _dbAcc.Iban.String,
+		CardNumber:         _dbAcc.CardNumber.String,
+		Note:               _dbAcc.Note.String,
+		IsArchive:          _dbAcc.IsArchived.Bool,
+		ExcludeFromBalance: _dbAcc.ExcludeFromBalance.Bool,
+		CreatedAt:          _dbAcc.CreatedAt.(time.Time),
+	}
+}
+
+func dbAccountsRowToAccounts(dbAccs []db.GetAccountsRow) []models.Account {
+	acc := make([]models.Account, len(dbAccs))
+	for i, dbAcc := range dbAccs {
+		acc[i] = *dbAccountRowToAccount(&dbAcc)
+	}
+	return acc
+}

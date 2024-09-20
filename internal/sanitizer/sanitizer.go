@@ -1,6 +1,7 @@
 package sanitizer
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/leebenson/conform"
@@ -9,6 +10,10 @@ import (
 type Sanitizer struct{}
 
 func New() *Sanitizer {
+	conform.AddSanitizer("nospaces", func(in string) string {
+		re := regexp.MustCompile(`\s`)
+		return re.ReplaceAllString(in, "")
+	})
 	return new(Sanitizer)
 }
 
