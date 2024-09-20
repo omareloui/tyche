@@ -443,6 +443,7 @@ func (h Handler) mapFDToTransactionFrequency(r *http.Request, parsedTx *models.T
 		Description: parsedTx.Description,
 		FrequencyBy: models.FrequencyBy(frequencyBy),
 		Frequency:   uint(frequency),
+		StartsOn:    parsedTx.ScheduledTo,
 		StopsOn:     stopsOn,
 	}, nil
 }

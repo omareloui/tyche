@@ -1,44 +1,24 @@
 package models
 
-import (
-	"github.com/omareloui/financial-planner/internal/db"
-)
-
 type CurrencyEnum uint8
 
 const (
-	CurrencyEgp CurrencyEnum = iota
+	CurrencyEgp CurrencyEnum = iota + 1
 	CurrencyUsd
 )
 
 const DfltCurrency = CurrencyEgp
 
 func (cs CurrencyEnum) String() string {
-	return [...]string{"EGP", "USD"}[cs]
+	return [...]string{"EGP", "USD"}[cs-1]
 }
 
 func (cs CurrencyEnum) Symbol() string {
-	return [...]string{"EG£", "US$"}[cs]
+	return [...]string{"EG£", "US$"}[cs-1]
 }
 
 type Currency struct {
 	ID        string `validate:"required"`
 	Enum      CurrencyEnum
 	EgpFxRate float64
-}
-
-func DBCurrencyToCurrency(dbCurr *db.Currency) *Currency {
-	return &Currency{
-		ID:        dbCurr.ID,
-		Enum:      CurrencyEnum(dbCurr.Enum),
-		EgpFxRate: dbCurr.EgpFxRate,
-	}
-}
-
-func DBCurrenciesToCurrencies(dbCurrency []db.Currency) []Currency {
-	currencies := make([]Currency, len(dbCurrency))
-	for i, cur := range dbCurrency {
-		currencies[i] = *DBCurrencyToCurrency(&cur)
-	}
-	return currencies
 }

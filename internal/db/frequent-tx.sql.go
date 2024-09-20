@@ -8,6 +8,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"time"
 )
 
 const createFrequentTx = `-- name: CreateFrequentTx :exec
@@ -20,10 +21,11 @@ INSERT INTO frequent_txs (
     kind_id,
     description,
     stops_on,
+    starts_on,
     created_at,
     last_transaction_created_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateFrequentTxParams struct {
@@ -35,6 +37,7 @@ type CreateFrequentTxParams struct {
 	KindID                   string
 	Description              sql.NullString
 	StopsOn                  sql.NullTime
+	StartsOn                 time.Time
 	CreatedAt                interface{}
 	LastTransactionCreatedAt interface{}
 }
@@ -49,6 +52,7 @@ func (q *Queries) CreateFrequentTx(ctx context.Context, arg CreateFrequentTxPara
 		arg.KindID,
 		arg.Description,
 		arg.StopsOn,
+		arg.StartsOn,
 		arg.CreatedAt,
 		arg.LastTransactionCreatedAt,
 	)
@@ -109,6 +113,7 @@ SELECT
     ft.created_at,
     ft.frequency_by,
     ft.frequency,
+    ft.starts_on,
     ft.stops_on,
     c.enum,
     c.egp_fx_rate,
@@ -145,6 +150,7 @@ type GetFrequentTxRow struct {
 	CreatedAt                  interface{}
 	FrequencyBy                int64
 	Frequency                  int64
+	StartsOn                   time.Time
 	StopsOn                    sql.NullTime
 	Enum                       sql.NullInt64
 	EgpFxRate                  sql.NullFloat64
@@ -182,6 +188,7 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) ([]GetFrequentTx
 			&i.CreatedAt,
 			&i.FrequencyBy,
 			&i.Frequency,
+			&i.StartsOn,
 			&i.StopsOn,
 			&i.Enum,
 			&i.EgpFxRate,
@@ -223,6 +230,7 @@ SELECT
     ft.created_at,
     ft.frequency_by,
     ft.frequency,
+    ft.starts_on,
     ft.stops_on,
     c.enum,
     c.egp_fx_rate,
@@ -258,6 +266,7 @@ type GetFrequentTxsRow struct {
 	CreatedAt                  interface{}
 	FrequencyBy                int64
 	Frequency                  int64
+	StartsOn                   time.Time
 	StopsOn                    sql.NullTime
 	Enum                       sql.NullInt64
 	EgpFxRate                  sql.NullFloat64
@@ -295,6 +304,7 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 			&i.CreatedAt,
 			&i.FrequencyBy,
 			&i.Frequency,
+			&i.StartsOn,
 			&i.StopsOn,
 			&i.Enum,
 			&i.EgpFxRate,

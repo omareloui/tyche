@@ -8,10 +8,11 @@ INSERT INTO frequent_txs (
     kind_id,
     description,
     stops_on,
+    starts_on,
     created_at,
     last_transaction_created_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: CreateFrequentTxTransaction :exec
 INSERT INTO frequent_txs_transactions (
@@ -30,6 +31,7 @@ SELECT
     ft.created_at,
     ft.frequency_by,
     ft.frequency,
+    ft.starts_on,
     ft.stops_on,
     c.enum,
     c.egp_fx_rate,
@@ -66,6 +68,7 @@ SELECT
     ft.created_at,
     ft.frequency_by,
     ft.frequency,
+    ft.starts_on,
     ft.stops_on,
     c.enum,
     c.egp_fx_rate,

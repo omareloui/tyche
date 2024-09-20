@@ -37,6 +37,7 @@ CREATE TABLE frequent_txs (
     currency_id VARCHAR(16) NOT NULL,
     kind_id VARCHAR(16) NOT NULL,
     description VARCHAR(225),
+    starts_on TIMESTAMP NOT NULL,
     stops_on TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT NOW,
     last_transaction_created_at TIMESTAMP NOT NULL DEFAULT NOW,

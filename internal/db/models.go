@@ -29,6 +29,7 @@ type FrequentTx struct {
 	CurrencyID               string
 	KindID                   string
 	Description              sql.NullString
+	StartsOn                 time.Time
 	StopsOn                  sql.NullTime
 	CreatedAt                interface{}
 	LastTransactionCreatedAt interface{}

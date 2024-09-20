@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 
+	"github.com/omareloui/financial-planner/internal/db"
 	"github.com/omareloui/financial-planner/internal/models"
 )
 
@@ -11,7 +12,7 @@ func (r *Repository) GetCurrencies(ctx context.Context) ([]models.Currency, erro
 	if err != nil {
 		return nil, err
 	}
-	return models.DBCurrenciesToCurrencies(dbCurrencies), nil
+	return dbCurrenciesToCurrencies(dbCurrencies), nil
 }
 
 func (r *Repository) GetCurrency(ctx context.Context, id string) (*models.Currency, error) {
@@ -19,7 +20,7 @@ func (r *Repository) GetCurrency(ctx context.Context, id string) (*models.Curren
 	if err != nil {
 		return nil, err
 	}
-	return models.DBCurrencyToCurrency(&dbCurrency), nil
+	return dbCurrencyToCurrency(&dbCurrency), nil
 }
 
 func (r *Repository) GetCurrenciesMap(ctx context.Context) (map[string]string, error) {
@@ -40,4 +41,20 @@ func (r *Repository) CurrenciesToMap(currencies []models.Currency) map[string]st
 		m[c.ID] = c.Enum.String()
 	}
 	return m
+}
+
+func dbCurrencyToCurrency(dbCurr *db.Currency) *models.Currency {
+	return &models.Currency{
+		ID:        dbCurr.ID,
+		Enum:      models.CurrencyEnum(dbCurr.Enum),
+		EgpFxRate: dbCurr.EgpFxRate,
+	}
+}
+
+func dbCurrenciesToCurrencies(dbCurrency []db.Currency) []models.Currency {
+	currencies := make([]models.Currency, len(dbCurrency))
+	for i, cur := range dbCurrency {
+		currencies[i] = *dbCurrencyToCurrency(&cur)
+	}
+	return currencies
 }

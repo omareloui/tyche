@@ -135,7 +135,7 @@ func (h Handler) DeleteFrequentTx(w http.ResponseWriter, r *http.Request) (templ
 	return nil, nil
 }
 
-func generateScheduledTransactionsUntilNextYear(*models.FrequentTx) []models.Transaction {
+func generateNext12ScheduledTransactions(*models.FrequentTx) []models.Transaction {
 	// TODO:
 	return nil
 }

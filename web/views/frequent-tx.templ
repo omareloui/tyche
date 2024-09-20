@@ -97,6 +97,7 @@ templ FrequentTx(ftx *models.FrequentTx) {
 		}
 		<p>Frequency: { strconv.FormatUint(uint64(ftx.Frequency), 10) }</p>
 		<p>Frequency By: { ftx.FrequencyBy.String() }</p>
+		<p>Starts On: { ftx.StartsOn.Format(time.DateOnly) }</p>
 		if !ftx.StopsOn.IsZero() {
 			<p>Stops On: { ftx.StopsOn.Format(time.DateOnly) }</p>
 		}

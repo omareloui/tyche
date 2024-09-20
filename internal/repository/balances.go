@@ -16,7 +16,7 @@ func (r *Repository) GetBalances(ctx context.Context) ([]models.Balance, error) 
 		l.Error("getting balance", zap.Error(err))
 		return nil, err
 	}
-	return models.DBBalancesToBalances(dbBalances), nil
+	return dbBalancesToBalances(dbBalances), nil
 }
 
 func (r *Repository) AddToBalance(ctx context.Context, currencyID string, amount float64) error {
@@ -113,4 +113,24 @@ func (r *Repository) UndoTransactionToBalanceWithTxn(qtx *db.Queries, ctx contex
 	}
 	l.Debug("undone transaction to balance", zap.Any("transaction", tx))
 	return nil
+}
+
+func dbBalanceToBalance(dbBalance *db.GetBalancesRow) *models.Balance {
+	return &models.Balance{
+		ID:     dbBalance.ID,
+		Amount: dbBalance.Amount,
+		Currency: models.Currency{
+			ID:        dbBalance.CurrencyID,
+			Enum:      models.CurrencyEnum(dbBalance.Enum.Int64),
+			EgpFxRate: dbBalance.EgpFxRate.Float64,
+		},
+	}
+}
+
+func dbBalancesToBalances(dbBalance []db.GetBalancesRow) []models.Balance {
+	balances := make([]models.Balance, len(dbBalance))
+	for i, cur := range dbBalance {
+		balances[i] = *dbBalanceToBalance(&cur)
+	}
+	return balances
 }

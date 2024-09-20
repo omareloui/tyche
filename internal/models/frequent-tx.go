@@ -33,7 +33,8 @@ type FrequentTx struct {
 	Currency                 Currency        `validate:"required"`
 	Kind                     TransactionKind `validate:"required"`
 	Description              string
-	StopsOn                  time.Time `validate:"omitempty,gtfield=CreatedAt"`
+	StartsOn                 time.Time `validate:"required"`
+	StopsOn                  time.Time `validate:"omitempty,gtfield=StartsOn"`
 	CreatedAt                time.Time `validate:"required"`
 	LastTransactionCreatedAt time.Time `validate:"required"`
 
