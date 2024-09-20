@@ -83,14 +83,15 @@ func (r *Repository) UpdateFrequentTx(ctx context.Context, ftx *models.FrequentT
 		l.Debug("deleted scheduled transaction of transaction")
 
 		if err := qtx.UpdateFrequentTx(ctx, db.UpdateFrequentTxParams{
-			ID:          ftx.ID,
-			Amount:      ftx.Amount,
-			CurrencyID:  ftx.Currency.ID,
-			KindID:      ftx.Kind.ID,
-			FrequencyBy: int64(ftx.FrequencyBy),
-			Frequency:   int64(ftx.Frequency),
-			Description: sql.NullString{String: ftx.Description, Valid: ftx.Description != ""},
-			StopsOn:     sql.NullTime{Time: ftx.StopsOn, Valid: !ftx.StopsOn.IsZero()},
+			ID:                       ftx.ID,
+			Amount:                   ftx.Amount,
+			CurrencyID:               ftx.Currency.ID,
+			KindID:                   ftx.Kind.ID,
+			FrequencyBy:              int64(ftx.FrequencyBy),
+			Frequency:                int64(ftx.Frequency),
+			Description:              sql.NullString{String: ftx.Description, Valid: ftx.Description != ""},
+			StopsOn:                  sql.NullTime{Time: ftx.StopsOn, Valid: !ftx.StopsOn.IsZero()},
+			LastTransactionCreatedAt: ftx.LastTransactionCreatedAt,
 		}); err != nil {
 			l.Error("updating frequent tx", zap.Any("frequent tx", ftx), zap.Error(err))
 			return err
@@ -130,6 +131,24 @@ func (r *Repository) DeleteFrequentTx(ctx context.Context, id string) error {
 	})
 }
 
+func (r *Repository) GenerateScheduledTransactions(ctx context.Context, ftx *models.FrequentTx, scheduledTxs []models.Transaction) error {
+	return r.transact(func(qtx *db.Queries) error {
+		qtx.UpdateFrequentTxLastTransactionCreatedAt(ctx, db.UpdateFrequentTxLastTransactionCreatedAtParams{
+			ID:                       ftx.ID,
+			LastTransactionCreatedAt: ftx.LastTransactionCreatedAt,
+		})
+		for _, stx := range scheduledTxs {
+			if err := r.createTransactionWithTxn(ctx, qtx, &stx); err != nil {
+				return err
+			}
+			if err := r.createFrequentTxTransactionWithTxn(ctx, qtx, ftx.ID, stx.ID); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.FrequentTx {
 	ftxs := []models.FrequentTx{}
 
@@ -155,7 +174,7 @@ func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 				FrequencyBy:              models.FrequencyBy(dbFtx.FrequencyBy),
 				StartsOn:                 dbFtx.StartsOn,
 				StopsOn:                  dbFtx.StopsOn.Time,
-				LastTransactionCreatedAt: dbFtx.TransactionFulfilledOn.Time,
+				LastTransactionCreatedAt: dbFtx.LastTransactionCreatedAt.(time.Time),
 				Transactions:             []models.Transaction{},
 			})
 			ftxIdx = len(ftxs) - 1

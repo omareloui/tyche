@@ -33,6 +33,7 @@ SELECT
     ft.frequency,
     ft.starts_on,
     ft.stops_on,
+    ft.last_transaction_created_at,
     c.enum,
     c.egp_fx_rate,
     k.kind,
@@ -70,6 +71,7 @@ SELECT
     ft.frequency,
     ft.starts_on,
     ft.stops_on,
+    ft.last_transaction_created_at,
     c.enum,
     c.egp_fx_rate,
     k.kind,
@@ -104,8 +106,17 @@ amount = ?,
 currency_id = ?,
 kind_id = ?,
 description = ?,
-stops_on = ?
+stops_on = ?,
+last_transaction_created_at = ?
 WHERE id = ?;
+
+
+-- name: UpdateFrequentTxLastTransactionCreatedAt :exec
+UPDATE frequent_txs
+SET
+last_transaction_created_at = ?
+WHERE id = ?;
+
 
 -- name: DeleteFrequentTx :exec
 DELETE FROM frequent_txs

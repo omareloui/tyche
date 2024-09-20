@@ -115,6 +115,7 @@ SELECT
     ft.frequency,
     ft.starts_on,
     ft.stops_on,
+    ft.last_transaction_created_at,
     c.enum,
     c.egp_fx_rate,
     k.kind,
@@ -152,6 +153,7 @@ type GetFrequentTxRow struct {
 	Frequency                  int64
 	StartsOn                   time.Time
 	StopsOn                    sql.NullTime
+	LastTransactionCreatedAt   interface{}
 	Enum                       sql.NullInt64
 	EgpFxRate                  sql.NullFloat64
 	Kind                       sql.NullString
@@ -190,6 +192,7 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) ([]GetFrequentTx
 			&i.Frequency,
 			&i.StartsOn,
 			&i.StopsOn,
+			&i.LastTransactionCreatedAt,
 			&i.Enum,
 			&i.EgpFxRate,
 			&i.Kind,
@@ -232,6 +235,7 @@ SELECT
     ft.frequency,
     ft.starts_on,
     ft.stops_on,
+    ft.last_transaction_created_at,
     c.enum,
     c.egp_fx_rate,
     k.kind,
@@ -268,6 +272,7 @@ type GetFrequentTxsRow struct {
 	Frequency                  int64
 	StartsOn                   time.Time
 	StopsOn                    sql.NullTime
+	LastTransactionCreatedAt   interface{}
 	Enum                       sql.NullInt64
 	EgpFxRate                  sql.NullFloat64
 	Kind                       sql.NullString
@@ -306,6 +311,7 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 			&i.Frequency,
 			&i.StartsOn,
 			&i.StopsOn,
+			&i.LastTransactionCreatedAt,
 			&i.Enum,
 			&i.EgpFxRate,
 			&i.Kind,
@@ -345,19 +351,21 @@ amount = ?,
 currency_id = ?,
 kind_id = ?,
 description = ?,
-stops_on = ?
+stops_on = ?,
+last_transaction_created_at = ?
 WHERE id = ?
 `
 
 type UpdateFrequentTxParams struct {
-	FrequencyBy int64
-	Frequency   int64
-	Amount      float64
-	CurrencyID  string
-	KindID      string
-	Description sql.NullString
-	StopsOn     sql.NullTime
-	ID          string
+	FrequencyBy              int64
+	Frequency                int64
+	Amount                   float64
+	CurrencyID               string
+	KindID                   string
+	Description              sql.NullString
+	StopsOn                  sql.NullTime
+	LastTransactionCreatedAt interface{}
+	ID                       string
 }
 
 func (q *Queries) UpdateFrequentTx(ctx context.Context, arg UpdateFrequentTxParams) error {
@@ -369,7 +377,25 @@ func (q *Queries) UpdateFrequentTx(ctx context.Context, arg UpdateFrequentTxPara
 		arg.KindID,
 		arg.Description,
 		arg.StopsOn,
+		arg.LastTransactionCreatedAt,
 		arg.ID,
 	)
+	return err
+}
+
+const updateFrequentTxLastTransactionCreatedAt = `-- name: UpdateFrequentTxLastTransactionCreatedAt :exec
+UPDATE frequent_txs
+SET
+last_transaction_created_at = ?
+WHERE id = ?
+`
+
+type UpdateFrequentTxLastTransactionCreatedAtParams struct {
+	LastTransactionCreatedAt interface{}
+	ID                       string
+}
+
+func (q *Queries) UpdateFrequentTxLastTransactionCreatedAt(ctx context.Context, arg UpdateFrequentTxLastTransactionCreatedAtParams) error {
+	_, err := q.db.ExecContext(ctx, updateFrequentTxLastTransactionCreatedAt, arg.LastTransactionCreatedAt, arg.ID)
 	return err
 }

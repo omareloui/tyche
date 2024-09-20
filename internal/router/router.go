@@ -33,6 +33,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("GET /frequent-tx/{id}", handle(h.FrequentTx))
 	mux.Handle("GET /frequent-tx/{id}/edit", handle(h.GetEditFrequentTx))
 	mux.Handle("PUT /frequent-tx/{id}", handle(h.EditFrequentTx))
+	mux.Handle("POST /frequent-tx/{id}/generate-txs", handle(h.GenerateTransactions))
 	mux.Handle("DELETE /frequent-tx/{id}", handle(h.DeleteFrequentTx))
 
 	mux.Handle("GET /goals", handle(h.Goals))

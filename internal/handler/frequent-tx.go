@@ -125,6 +125,30 @@ func (h Handler) EditFrequentTx(w http.ResponseWriter, r *http.Request) (templ.C
 	return views.FrequentTx(ftx), nil
 }
 
+func (h Handler) GenerateTransactions(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+
+	ftx, err := h.repo.GetFrequentTx(r.Context(), id)
+	if err != nil {
+		l.Error("fetching frequent tx", zap.Error(err))
+		return nil, err
+	}
+	l.Debug("fetched frequent tx", zap.Any("frequent tx", ftx))
+
+	scheduled := generateNextScheduledTransactions(ftx, generateNextScheduledTransactionsCount)
+
+	if err := h.repo.GenerateScheduledTransactions(r.Context(), ftx, scheduled); err != nil {
+		return nil, err
+	}
+
+	return views.FrequentTx(ftx), nil
+}
+
 func (h Handler) DeleteFrequentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	id := r.PathValue("id")
 	if id == "" {
@@ -163,6 +187,8 @@ func generateNextScheduledTransactions(ftx *models.FrequentTx, count int) []mode
 				nextOn = nextOn.AddDate(0, 0, -d)
 			}
 		}
+
+		nextOn = nextOn.Truncate(24 * time.Hour)
 
 		if !ftx.StopsOn.IsZero() && nextOn.After(ftx.StopsOn) {
 			break
