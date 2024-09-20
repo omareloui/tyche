@@ -93,14 +93,23 @@ func (r *Repository) UpdateFrequentTx(ctx context.Context, ftx *models.FrequentT
 }
 
 func (r *Repository) DeleteFrequentTx(ctx context.Context, id string) error {
-	l := logger.FromCtx(ctx)
-	// TODO: remove scheduled transactions of this ftx
-	if err := r.q.DeleteFrequentTx(ctx, id); err != nil {
-		l.Error("deleting frequent transaction", zap.Error(err))
-		return err
-	}
-	l.Debug("deleted frequent transaction")
-	return nil
+	return r.transact(func(qtx *db.Queries) error {
+		l := logger.FromCtx(ctx)
+
+		if err := qtx.DeleteScheduledTransactionsOfFrequentTx(ctx, id); err != nil {
+			l.Error("deleting scheduled transaction of transaction", zap.Error(err))
+			return err
+		}
+		l.Debug("deleted scheduled transaction of transaction")
+
+		if err := qtx.DeleteFrequentTx(ctx, id); err != nil {
+			l.Error("deleting frequent transaction", zap.Error(err))
+			return err
+		}
+		l.Debug("deleted frequent transaction")
+
+		return nil
+	})
 }
 
 func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.FrequentTx {
