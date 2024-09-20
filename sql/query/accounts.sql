@@ -61,7 +61,6 @@ UPDATE accounts
 SET
 name = ?,
 kind_id = ?,
-amount = ?,
 currency_id = ?,
 card_number = ?,
 iban = ?,

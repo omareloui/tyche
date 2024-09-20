@@ -239,7 +239,6 @@ UPDATE accounts
 SET
 name = ?,
 kind_id = ?,
-amount = ?,
 currency_id = ?,
 card_number = ?,
 iban = ?,
@@ -252,7 +251,6 @@ WHERE id = ?
 type UpdateAccountParams struct {
 	Name               string
 	KindID             string
-	Amount             float64
 	CurrencyID         string
 	CardNumber         sql.NullString
 	Iban               sql.NullString
@@ -266,7 +264,6 @@ func (q *Queries) UpdateAccount(ctx context.Context, arg UpdateAccountParams) er
 	_, err := q.db.ExecContext(ctx, updateAccount,
 		arg.Name,
 		arg.KindID,
-		arg.Amount,
 		arg.CurrencyID,
 		arg.CardNumber,
 		arg.Iban,

@@ -32,6 +32,13 @@ func (r *Repository) CreateAccount(ctx context.Context, a *models.Account) error
 			return newDuplicationError("Name")
 		}
 
+		if strings.Contains(err.Error(), "UNIQUE constraint failed: accounts.card_number") {
+			return newDuplicationError("CardNumber")
+		}
+
+		if strings.Contains(err.Error(), "UNIQUE constraint failed: accounts.iban") {
+			return newDuplicationError("IBAN")
+		}
 		return err
 	}
 	l.Debug("created account")
@@ -66,7 +73,6 @@ func (r *Repository) UpdateAccount(ctx context.Context, a *models.Account) error
 		ID:                 a.ID,
 		Name:               a.Name,
 		KindID:             a.Kind.ID,
-		Amount:             a.Amount,
 		CurrencyID:         a.Currency.ID,
 		CardNumber:         sql.NullString{String: a.CardNumber, Valid: a.CardNumber != ""},
 		Iban:               sql.NullString{String: a.IBAN, Valid: a.IBAN != ""},

@@ -83,12 +83,6 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 	}
 	l.Debug("sanitized account")
 
-	if err := h.sani.SanitizeStruct(a); err != nil {
-		l.Error("sanitizing account", zap.Error(err))
-		return nil, err
-	}
-	l.Debug("sanitized account")
-
 	if valerr := h.valid.Validate(a); valerr != nil {
 		l.Error("validating account", zap.Any("account", a), zap.Any("errors", valerr.Errors))
 		curs, ak, err := h.getCurrenciesAndAccKinds(r.Context())
@@ -171,7 +165,73 @@ func (h *Handler) GetEditAccount(w http.ResponseWriter, r *http.Request) (templ.
 }
 
 func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	return nil, nil
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+
+	a, err := h.mapFDToAcc(r)
+	if err != nil {
+		l.Error("parsing formdata", zap.Error(err))
+		return nil, err
+	}
+	l.Debug("parsed form data")
+
+	a.ID = id
+
+	if err := h.sani.SanitizeStruct(a); err != nil {
+		l.Error("sanitizing account", zap.Error(err))
+		return nil, err
+	}
+	l.Debug("sanitized account")
+
+	if valerr := h.valid.Validate(a); valerr != nil {
+		l.Error("validating account", zap.Any("account", a), zap.Any("errors", valerr.Errors))
+		curs, ak, err := h.getCurrenciesAndAccKinds(r.Context())
+		if err != nil {
+			return nil, err
+		}
+
+		a.Currency = *slicesutils.Find(curs, func(cur models.Currency) bool { return a.Currency.ID == cur.ID })
+		a.Kind = *slicesutils.Find(ak, func(ak models.AccountKind) bool { return a.Kind.ID == ak.ID })
+
+		fd := h.mapAccToFD(a, valerr)
+		return views.EditAccount(id, fd, h.repo.AccountKindsToMap(ak), h.repo.CurrenciesToMap(curs), &a.Currency), nil
+	}
+	l.Debug("validated account")
+
+	err = h.repo.UpdateAccount(r.Context(), a)
+
+	var valerr *errs.ValidationError
+	if err != nil && errors.As(err, &valerr) {
+		l.Error("duplication error", zap.Error(valerr), zap.Any("errors", valerr.Errors))
+		curs, ak, err := h.getCurrenciesAndAccKinds(r.Context())
+		if err != nil {
+			return nil, err
+		}
+
+		a.Currency = *slicesutils.Find(curs, func(cur models.Currency) bool { return a.Currency.ID == cur.ID })
+		a.Kind = *slicesutils.Find(ak, func(ak models.AccountKind) bool { return a.Kind.ID == ak.ID })
+
+		fd := h.mapAccToFD(a, valerr)
+		return views.EditAccount(id, fd, h.repo.AccountKindsToMap(ak), h.repo.CurrenciesToMap(curs), &a.Currency), nil
+	} else if err != nil {
+		l.Error("updating account", zap.Error(err), zap.Any("account", a))
+		return nil, err
+	}
+	l.Info("updated account", zap.Any("account", a))
+
+	curs, ak, err := h.getCurrenciesAndAccKinds(r.Context())
+	if err != nil {
+		return nil, err
+	}
+
+	a.Currency = *slicesutils.Find(curs, func(cur models.Currency) bool { return cur.ID == a.Currency.ID })
+	a.Kind = *slicesutils.Find(ak, func(k models.AccountKind) bool { return k.ID == a.Kind.ID })
+
+	return views.Account(a), nil
 }
 
 func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
