@@ -70,6 +70,10 @@ is_archived = ?,
 exclude_from_balance = ?
 WHERE id = ?;
 
+-- name: DeleteAccount :exec
+DELETE FROM accounts
+WHERE id = ?;
+
 -- name: AddToAccount :exec
 UPDATE accounts SET amount = amount + ? WHERE id = ?;
 

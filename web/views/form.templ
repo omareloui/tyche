@@ -95,7 +95,7 @@ templ AmountInputs(fd *AmountFD, currencies map[string]string, currencySymbol st
 
 templ IbanInputs(fd *IBANFD, id string, currencies map[string]string, cur *models.Currency) {
 	<div data-iban class="grid grid-cols-3 gap-4">
-		@moneyInput("Amount", "amount", cur.Enum.Symbol(), id, fd.Amount, "col-span-2")
+		@moneyDisabledInput("Amount", "amount", cur.Enum.Symbol(), id, fd.Amount, "col-span-2")
 		@selectInput("Currency", "currency_id", "Select a Currency", id, currencies, fd.CurrencyID,
 			templ.Attributes{
 				"hx-post":    "/iban-inputs",
@@ -149,6 +149,22 @@ templ moneyInput(label, name, currencySymbol, idSuffix string, data FDInput, cla
 			value={ data.Value }
 			placeholder={ fmt.Sprintf("%s 1,000.00", currencySymbol) }
 			x-mask:dynamic={ fmt.Sprintf("'%s ' + $money($input, '.', ',')", currencySymbol) }
+		/>
+		@errorMessage(data.Error)
+	</div>
+}
+
+templ moneyDisabledInput(label, name, currencySymbol, idSuffix string, data FDInput, classes ...string) {
+	<div class={ strings.Join(classes, " ") }>
+		<label class="input-label" for={ join(name, idSuffix) }>{ label }</label>
+		<input
+			id={ join(name, idSuffix) }
+			name={ name }
+			class="input-field"
+			value={ data.Value }
+			placeholder={ fmt.Sprintf("%s 1,000.00", currencySymbol) }
+			x-mask:dynamic={ fmt.Sprintf("'%s ' + $money($input, '.', ',')", currencySymbol) }
+			disabled
 		/>
 		@errorMessage(data.Error)
 	</div>

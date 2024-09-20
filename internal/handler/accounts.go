@@ -74,6 +74,7 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 	l.Debug("parsed form data")
 
 	a.ID = idgen.New()
+	a.Amount = 0
 	a.CreatedAt = time.Now()
 
 	if err := h.sani.SanitizeStruct(a); err != nil {
@@ -155,6 +156,16 @@ func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Com
 }
 
 func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+	l := logger.FromCtx(r.Context())
+	if err := h.repo.DeleteAccount(r.Context(), id); err != nil {
+		l.Error("deleting account", zap.Error(err))
+		return nil, err
+	}
+	l.Info("deleted account", zap.String("id", id))
 	return nil, nil
 }
 

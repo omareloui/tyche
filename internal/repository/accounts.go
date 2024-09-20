@@ -81,6 +81,16 @@ func (r *Repository) UpdateAccount(ctx context.Context, a *models.Account) error
 	return nil
 }
 
+func (r *Repository) DeleteAccount(ctx context.Context, id string) error {
+	l := logger.FromCtx(ctx)
+	if err := r.q.DeleteAccount(ctx, id); err != nil {
+		l.Error("deleting account", zap.Error(err))
+		return err
+	}
+	l.Debug("deleted account")
+	return nil
+}
+
 func dbAccountRowToAccount[T db.GetAccountRow | db.GetAccountsRow](dbAcc *T) *models.Account {
 	_dbAcc := db.GetAccountsRow(*dbAcc)
 	return &models.Account{
