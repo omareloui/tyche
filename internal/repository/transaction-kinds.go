@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 
+	"github.com/omareloui/financial-planner/internal/db"
 	"github.com/omareloui/financial-planner/internal/models"
 )
 
@@ -11,7 +12,7 @@ func (r *Repository) GetTransactionKinds(ctx context.Context) ([]models.Transact
 	if err != nil {
 		return nil, err
 	}
-	return models.DBTransactionKindsToTransactionKinds(dbKinds), nil
+	return dbTransactionKindsToTransactionKinds(dbKinds), nil
 }
 
 func (r *Repository) GetTransactionKind(ctx context.Context, id string) (*models.TransactionKind, error) {
@@ -19,7 +20,7 @@ func (r *Repository) GetTransactionKind(ctx context.Context, id string) (*models
 	if err != nil {
 		return nil, err
 	}
-	return models.DBTransactionKindToTransactionKind(&k), nil
+	return dbTransactionKindToTransactionKind(&k), nil
 }
 
 func (r *Repository) GetTransactionKindsMap(ctx context.Context) (map[string]string, error) {
@@ -40,4 +41,20 @@ func (r *Repository) TransactionKindsToMap(kinds []models.TransactionKind) map[s
 		m[k.ID] = k.Kind
 	}
 	return m
+}
+
+func dbTransactionKindToTransactionKind(dbKind *db.TransactionKind) *models.TransactionKind {
+	return &models.TransactionKind{
+		ID:              dbKind.ID,
+		Kind:            dbKind.Kind,
+		IncreaseBalance: dbKind.IncreaseBalance.Bool,
+	}
+}
+
+func dbTransactionKindsToTransactionKinds(dbKinds []db.TransactionKind) []models.TransactionKind {
+	kinds := make([]models.TransactionKind, len(dbKinds))
+	for i, kind := range dbKinds {
+		kinds[i] = *dbTransactionKindToTransactionKind(&kind)
+	}
+	return kinds
 }

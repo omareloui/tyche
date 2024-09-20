@@ -1,10 +1,7 @@
 package models
 
 import (
-	"slices"
 	"time"
-
-	"github.com/omareloui/financial-planner/internal/db"
 )
 
 type Goal struct {
@@ -26,62 +23,4 @@ func (gl *Goal) CalculateEgpSubtotal() float64 {
 		sum += it.EgpPrice()
 	}
 	return sum
-}
-
-func DBGoalRowToGoal(dbGl []db.GetGoalRow) *Goal {
-	items := []Item{}
-
-	for _, gl := range dbGl {
-		items = append(items, Item{
-			ID:          gl.ItemID.String,
-			Name:        gl.ItemName.String,
-			Price:       gl.ItemPrice.Float64,
-			PurchasedOn: gl.ItemPurchasedOn.Time,
-			Currency: Currency{
-				ID:        gl.ItemCurrencyID.String,
-				Enum:      CurrencyEnum(gl.ItemCurrency.Int64),
-				EgpFxRate: gl.ItemCurrencyFxRate.Float64,
-			},
-		})
-	}
-
-	return &Goal{
-		ID:          dbGl[0].ID,
-		Title:       dbGl[0].Title,
-		EgpSubtotal: dbGl[0].EgpSubtotal,
-		CreatedAt:   dbGl[0].CreatedAt.(time.Time),
-		Items:       items,
-	}
-}
-
-func DBGoalRowsToGoals(dbGls []db.GetGoalsRow) []Goal {
-	gls := []Goal{}
-
-	for _, dbGl := range dbGls {
-		glIdx := slices.IndexFunc(gls, func(gl Goal) bool { return gl.ID == dbGl.ID })
-		if glIdx == -1 {
-			gls = append(gls, Goal{
-				ID:          dbGl.ID,
-				Title:       dbGl.Title,
-				EgpSubtotal: dbGl.EgpSubtotal,
-				CreatedAt:   dbGl.CreatedAt.(time.Time),
-				Items:       []Item{},
-			})
-			glIdx = len(gls) - 1
-		}
-
-		gls[glIdx].Items = append(gls[glIdx].Items, Item{
-			ID:          dbGl.ItemID.String,
-			Name:        dbGl.ItemName.String,
-			Price:       dbGl.ItemPrice.Float64,
-			PurchasedOn: dbGl.ItemPurchasedOn.Time,
-			Currency: Currency{
-				ID:        dbGl.ItemCurrencyID.String,
-				Enum:      CurrencyEnum(dbGl.ItemCurrency.Int64),
-				EgpFxRate: dbGl.ItemCurrencyFxRate.Float64,
-			},
-		})
-	}
-
-	return gls
 }

@@ -12,7 +12,7 @@ func (r *Repository) GetItems(ctx context.Context) ([]models.Item, error) {
 	if err != nil {
 		return nil, err
 	}
-	return models.DBItemsRowToItems(dbIts), nil
+	return dbItemsRowToItems(dbIts), nil
 }
 
 func (r *Repository) GetItem(ctx context.Context, id string) (*models.Item, error) {
@@ -20,7 +20,7 @@ func (r *Repository) GetItem(ctx context.Context, id string) (*models.Item, erro
 	if err != nil {
 		return nil, err
 	}
-	return models.DBItemRowToItem(&dbIt), nil
+	return dbItemRowToItem(&dbIt), nil
 }
 
 func (r *Repository) UpdateItem(ctx context.Context, it *models.Item) error {
@@ -43,4 +43,36 @@ func (r *Repository) CreateItem(ctx context.Context, it *models.Item) error {
 
 func (r *Repository) DeleteItem(ctx context.Context, id string) error {
 	return r.q.DeleteItem(ctx, id)
+}
+
+func dbItemRowToItem(dbIt *db.GetItemRow) *models.Item {
+	return &models.Item{
+		ID:          dbIt.ID,
+		Name:        dbIt.Name,
+		Price:       dbIt.Price,
+		PurchasedOn: dbIt.PurchasedOn.Time,
+		Currency: models.Currency{
+			ID:        dbIt.CurrencyID,
+			Enum:      models.CurrencyEnum(dbIt.Enum.Int64),
+			EgpFxRate: dbIt.EgpFxRate.Float64,
+		},
+	}
+}
+
+func dbItemsRowToItems(dbIts []db.GetItemsRow) []models.Item {
+	items := make([]models.Item, len(dbIts))
+	for i, it := range dbIts {
+		items[i] = models.Item{
+			ID:          it.ID,
+			Name:        it.Name,
+			Price:       it.Price,
+			PurchasedOn: it.PurchasedOn.Time,
+			Currency: models.Currency{
+				ID:        it.CurrencyID,
+				Enum:      models.CurrencyEnum(it.Enum.Int64),
+				EgpFxRate: it.EgpFxRate.Float64,
+			},
+		}
+	}
+	return items
 }

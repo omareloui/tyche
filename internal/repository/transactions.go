@@ -67,7 +67,7 @@ func (r *Repository) GetTransactions(ctx context.Context) ([]models.Transaction,
 
 	tx := make([]models.Transaction, len(dbTransactions))
 	for i, t := range dbTransactions {
-		tx[i] = *models.DBTransactionRowToTransaction(&t)
+		tx[i] = *dbTransactionRowToTransaction(&t)
 	}
 	return tx, nil
 }
@@ -80,7 +80,7 @@ func (r *Repository) GetTransaction(ctx context.Context, id string) (*models.Tra
 		return nil, err
 	}
 	l.Info("queried transaction")
-	return models.DBTransactionRowToTransaction(&dbTx), nil
+	return dbTransactionRowToTransaction(&dbTx), nil
 }
 
 func (r *Repository) DeleteTransaction(ctx context.Context, id string) error {
@@ -138,4 +138,26 @@ func (r *Repository) FulfillTransaction(ctx context.Context, id string, fulfille
 	}
 	l.Debug("fulfilled transaction", zap.String("id", id), zap.Time("fulfilled_on", fulfilledOn))
 	return nil
+}
+
+func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRow](dbTx *T) *models.Transaction {
+	_dbTx := db.GetTransactionsRow(*dbTx)
+	return &models.Transaction{
+		ID:          _dbTx.ID,
+		Amount:      _dbTx.Amount,
+		Description: _dbTx.Description.String,
+		FulfilledOn: _dbTx.FulfilledOn.Time,
+		ScheduledTo: _dbTx.ScheduledTo,
+		CreatedAt:   _dbTx.CreatedAt.(time.Time),
+		Currency: models.Currency{
+			ID:        _dbTx.CurrencyID,
+			Enum:      models.CurrencyEnum(_dbTx.Enum.Int64),
+			EgpFxRate: _dbTx.EgpFxRate.Float64,
+		},
+		Kind: models.TransactionKind{
+			ID:              _dbTx.KindID,
+			Kind:            _dbTx.Kind.String,
+			IncreaseBalance: _dbTx.IncreaseBalance.Bool,
+		},
+	}
 }

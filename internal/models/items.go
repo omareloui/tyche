@@ -2,8 +2,6 @@ package models
 
 import (
 	"time"
-
-	"github.com/omareloui/financial-planner/internal/db"
 )
 
 type Item struct {
@@ -24,36 +22,4 @@ func (it *Item) ViewPrice() string {
 
 func (it *Item) ViewEgpPrice() string {
 	return formatAmount(it.EgpPrice(), CurrencyEgp)
-}
-
-func DBItemRowToItem(dbIt *db.GetItemRow) *Item {
-	return &Item{
-		ID:          dbIt.ID,
-		Name:        dbIt.Name,
-		Price:       dbIt.Price,
-		PurchasedOn: dbIt.PurchasedOn.Time,
-		Currency: Currency{
-			ID:        dbIt.CurrencyID,
-			Enum:      CurrencyEnum(dbIt.Enum.Int64),
-			EgpFxRate: dbIt.EgpFxRate.Float64,
-		},
-	}
-}
-
-func DBItemsRowToItems(dbIts []db.GetItemsRow) []Item {
-	items := make([]Item, len(dbIts))
-	for i, it := range dbIts {
-		items[i] = Item{
-			ID:          it.ID,
-			Name:        it.Name,
-			Price:       it.Price,
-			PurchasedOn: it.PurchasedOn.Time,
-			Currency: Currency{
-				ID:        it.CurrencyID,
-				Enum:      CurrencyEnum(it.Enum.Int64),
-				EgpFxRate: it.EgpFxRate.Float64,
-			},
-		}
-	}
-	return items
 }
