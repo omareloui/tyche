@@ -19,6 +19,42 @@ LEFT JOIN account_kinds AS k ON a.kind_id = k.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 ORDER BY a.created_at DESC;
 
+-- name: GetActiveAccounts :many
+SELECT
+    a.id,
+    a.name,
+    a.kind_id,
+    a.amount,
+    a.currency_id,
+    a.card_number,
+    a.iban,
+    a.note,
+    a.exclude_from_balance,
+    a.is_archived,
+    a.created_at,
+    c.enum AS currency_enum,
+    c.egp_fx_rate,
+    k.enum AS kind_enum
+FROM accounts AS a
+LEFT JOIN account_kinds AS k ON a.kind_id = k.id
+LEFT JOIN currencies AS c ON a.currency_id = c.id
+WHERE a.is_archived IS FALSE
+ORDER BY a.created_at DESC;
+
+-- name: GetBalances :many
+SELECT
+    a.currency_id,
+    c.enum AS currency_enum,
+    c.egp_fx_rate,
+    SUM(a.amount) AS balance
+FROM accounts AS a
+LEFT JOIN currencies AS c ON a.currency_id = c.id
+WHERE a.is_archived IS FALSE
+    AND a.exclude_from_balance IS FALSE
+GROUP BY currency_id
+ORDER BY balance DESC;
+
+
 -- name: GetAccount :one
 SELECT
     a.id,

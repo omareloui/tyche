@@ -16,6 +16,7 @@ func (r *Repository) createFrequentTxWithTxn(qtx *db.Queries, ctx context.Contex
 	l := logger.FromCtx(ctx)
 	if err := qtx.CreateFrequentTx(ctx, db.CreateFrequentTxParams{
 		ID:                       ftx.ID,
+		AccountID:                ftx.Account.ID,
 		FrequencyBy:              int64(ftx.FrequencyBy),
 		Frequency:                int64(ftx.Frequency),
 		Amount:                   ftx.Amount,
@@ -84,6 +85,7 @@ func (r *Repository) UpdateFrequentTx(ctx context.Context, ftx *models.FrequentT
 
 		if err := qtx.UpdateFrequentTx(ctx, db.UpdateFrequentTxParams{
 			ID:                       ftx.ID,
+			AccountID:                ftx.Account.ID,
 			Amount:                   ftx.Amount,
 			CurrencyID:               ftx.Currency.ID,
 			KindID:                   ftx.Kind.ID,
@@ -156,13 +158,18 @@ func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 		ftxIdx := slices.IndexFunc(ftxs, func(ftx models.FrequentTx) bool { return ftx.ID == dbFtx.ID })
 		if ftxIdx == -1 {
 			ftxs = append(ftxs, models.FrequentTx{
-				ID:          dbFtx.ID,
+				ID: dbFtx.ID,
+				Account: models.Account{
+					ID:       dbFtx.AccountID,
+					Name:     dbFtx.AccountName.String,
+					Currency: models.Currency{ID: dbFtx.AccountCurrencyID.String},
+				},
 				Amount:      dbFtx.Amount,
 				Description: dbFtx.Description.String,
 				CreatedAt:   dbFtx.CreatedAt.(time.Time),
 				Currency: models.Currency{
 					ID:        dbFtx.CurrencyID,
-					Enum:      models.CurrencyEnum(dbFtx.Enum.Int64),
+					Enum:      models.CurrencyEnum(dbFtx.CurrencyEnum.Int64),
 					EgpFxRate: dbFtx.EgpFxRate.Float64,
 				},
 				Kind: models.TransactionKind{
@@ -185,7 +192,10 @@ func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 		}
 
 		ftxs[ftxIdx].Transactions = append(ftxs[ftxIdx].Transactions, models.Transaction{
-			ID:          dbFtx.TransactionID.String,
+			ID: dbFtx.TransactionID.String,
+			Account: models.Account{
+				ID: dbFtx.TransactionAccountID.String,
+			},
 			Amount:      dbFtx.TransactionAmount.Float64,
 			Description: dbFtx.TransactionDescription.String,
 			FulfilledOn: dbFtx.TransactionFulfilledOn.Time,

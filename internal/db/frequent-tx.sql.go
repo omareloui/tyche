@@ -16,6 +16,7 @@ INSERT INTO frequent_txs (
     id,
     frequency_by,
     frequency,
+    account_id,
     amount,
     currency_id,
     kind_id,
@@ -25,13 +26,14 @@ INSERT INTO frequent_txs (
     created_at,
     last_transaction_created_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateFrequentTxParams struct {
 	ID                       string
 	FrequencyBy              int64
 	Frequency                int64
+	AccountID                string
 	Amount                   float64
 	CurrencyID               string
 	KindID                   string
@@ -47,6 +49,7 @@ func (q *Queries) CreateFrequentTx(ctx context.Context, arg CreateFrequentTxPara
 		arg.ID,
 		arg.FrequencyBy,
 		arg.Frequency,
+		arg.AccountID,
 		arg.Amount,
 		arg.CurrencyID,
 		arg.KindID,
@@ -106,6 +109,7 @@ func (q *Queries) DeleteScheduledTransactionsOfFrequentTx(ctx context.Context, f
 const getFrequentTx = `-- name: GetFrequentTx :many
 SELECT
     ft.id,
+    ft.account_id,
     ft.amount,
     ft.currency_id,
     ft.kind_id,
@@ -116,11 +120,14 @@ SELECT
     ft.starts_on,
     ft.stops_on,
     ft.last_transaction_created_at,
-    c.enum,
+    a.name AS account_name,
+    a.currency_id AS account_currency_id,
+    c.enum AS currency_enum,
     c.egp_fx_rate,
     k.kind,
     k.increase_balance,
     t.id AS transaction_id,
+    t.account_id AS transaction_account_id,
     t.amount AS transaction_amount,
     t.currency_id AS transaction_currency_id,
     t.kind_id AS transaction_kind_id,
@@ -134,6 +141,7 @@ SELECT
     tk.increase_balance AS transaction_increase_balance
 FROM frequent_txs AS ft
 LEFT JOIN frequent_txs_transactions AS ftt ON ftt.frequency_id = ft.id
+LEFT JOIN accounts AS a ON ft.account_id = a.id
 LEFT JOIN transactions AS t ON t.id = ftt.transaction_id
 LEFT JOIN currencies AS c ON ft.currency_id = c.id
 LEFT JOIN transaction_kinds AS k ON ft.kind_id = k.id
@@ -144,6 +152,7 @@ WHERE ft.id = ?
 
 type GetFrequentTxRow struct {
 	ID                         string
+	AccountID                  string
 	Amount                     float64
 	CurrencyID                 string
 	KindID                     string
@@ -154,11 +163,14 @@ type GetFrequentTxRow struct {
 	StartsOn                   time.Time
 	StopsOn                    sql.NullTime
 	LastTransactionCreatedAt   interface{}
-	Enum                       sql.NullInt64
+	AccountName                sql.NullString
+	AccountCurrencyID          sql.NullString
+	CurrencyEnum               sql.NullInt64
 	EgpFxRate                  sql.NullFloat64
 	Kind                       sql.NullString
 	IncreaseBalance            sql.NullBool
 	TransactionID              sql.NullString
+	TransactionAccountID       sql.NullString
 	TransactionAmount          sql.NullFloat64
 	TransactionCurrencyID      sql.NullString
 	TransactionKindID          sql.NullString
@@ -183,6 +195,7 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) ([]GetFrequentTx
 		var i GetFrequentTxRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.AccountID,
 			&i.Amount,
 			&i.CurrencyID,
 			&i.KindID,
@@ -193,11 +206,14 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) ([]GetFrequentTx
 			&i.StartsOn,
 			&i.StopsOn,
 			&i.LastTransactionCreatedAt,
-			&i.Enum,
+			&i.AccountName,
+			&i.AccountCurrencyID,
+			&i.CurrencyEnum,
 			&i.EgpFxRate,
 			&i.Kind,
 			&i.IncreaseBalance,
 			&i.TransactionID,
+			&i.TransactionAccountID,
 			&i.TransactionAmount,
 			&i.TransactionCurrencyID,
 			&i.TransactionKindID,
@@ -226,6 +242,7 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) ([]GetFrequentTx
 const getFrequentTxs = `-- name: GetFrequentTxs :many
 SELECT
     ft.id,
+    ft.account_id,
     ft.amount,
     ft.currency_id,
     ft.kind_id,
@@ -236,11 +253,14 @@ SELECT
     ft.starts_on,
     ft.stops_on,
     ft.last_transaction_created_at,
-    c.enum,
+    a.name AS account_name,
+    a.currency_id AS account_currency_id,
+    c.enum AS currency_enum,
     c.egp_fx_rate,
     k.kind,
     k.increase_balance,
     t.id AS transaction_id,
+    t.account_id AS transaction_account_id,
     t.amount AS transaction_amount,
     t.currency_id AS transaction_currency_id,
     t.kind_id AS transaction_kind_id,
@@ -254,6 +274,7 @@ SELECT
     tk.increase_balance AS transaction_increase_balance
 FROM frequent_txs AS ft
 LEFT JOIN frequent_txs_transactions AS ftt ON ftt.frequency_id = ft.id
+LEFT JOIN accounts AS a ON ft.account_id = a.id
 LEFT JOIN transactions AS t ON t.id = ftt.transaction_id
 LEFT JOIN currencies AS c ON ft.currency_id = c.id
 LEFT JOIN transaction_kinds AS k ON ft.kind_id = k.id
@@ -263,6 +284,7 @@ LEFT JOIN transaction_kinds AS tk ON t.kind_id = k.id
 
 type GetFrequentTxsRow struct {
 	ID                         string
+	AccountID                  string
 	Amount                     float64
 	CurrencyID                 string
 	KindID                     string
@@ -273,11 +295,14 @@ type GetFrequentTxsRow struct {
 	StartsOn                   time.Time
 	StopsOn                    sql.NullTime
 	LastTransactionCreatedAt   interface{}
-	Enum                       sql.NullInt64
+	AccountName                sql.NullString
+	AccountCurrencyID          sql.NullString
+	CurrencyEnum               sql.NullInt64
 	EgpFxRate                  sql.NullFloat64
 	Kind                       sql.NullString
 	IncreaseBalance            sql.NullBool
 	TransactionID              sql.NullString
+	TransactionAccountID       sql.NullString
 	TransactionAmount          sql.NullFloat64
 	TransactionCurrencyID      sql.NullString
 	TransactionKindID          sql.NullString
@@ -302,6 +327,7 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 		var i GetFrequentTxsRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.AccountID,
 			&i.Amount,
 			&i.CurrencyID,
 			&i.KindID,
@@ -312,11 +338,14 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 			&i.StartsOn,
 			&i.StopsOn,
 			&i.LastTransactionCreatedAt,
-			&i.Enum,
+			&i.AccountName,
+			&i.AccountCurrencyID,
+			&i.CurrencyEnum,
 			&i.EgpFxRate,
 			&i.Kind,
 			&i.IncreaseBalance,
 			&i.TransactionID,
+			&i.TransactionAccountID,
 			&i.TransactionAmount,
 			&i.TransactionCurrencyID,
 			&i.TransactionKindID,
@@ -347,6 +376,7 @@ UPDATE frequent_txs
 SET
 frequency_by = ?,
 frequency = ?,
+account_id = ?,
 amount = ?,
 currency_id = ?,
 kind_id = ?,
@@ -359,6 +389,7 @@ WHERE id = ?
 type UpdateFrequentTxParams struct {
 	FrequencyBy              int64
 	Frequency                int64
+	AccountID                string
 	Amount                   float64
 	CurrencyID               string
 	KindID                   string
@@ -372,6 +403,7 @@ func (q *Queries) UpdateFrequentTx(ctx context.Context, arg UpdateFrequentTxPara
 	_, err := q.db.ExecContext(ctx, updateFrequentTx,
 		arg.FrequencyBy,
 		arg.Frequency,
+		arg.AccountID,
 		arg.Amount,
 		arg.CurrencyID,
 		arg.KindID,

@@ -97,6 +97,72 @@ func (r *Repository) DeleteAccount(ctx context.Context, id string) error {
 	return nil
 }
 
+func (r *Repository) applyTxToAccountWithTxn(qtx *db.Queries, ctx context.Context, tx *models.Transaction) error {
+	l := logger.FromCtx(ctx)
+	upBalance := r.removeFromAccountWithTxn
+	if tx.Kind.IncreaseBalance {
+		upBalance = r.addToAccountWithTxn
+	}
+	if err := upBalance(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {
+		l.Error("applying transaction to account", zap.Error(err), zap.Any("transaction", tx))
+		return err
+	}
+	l.Debug("applied transaction to account", zap.Any("transaction", tx))
+	return nil
+}
+
+func (r *Repository) undoTxToAccountWithTxn(qtx *db.Queries, ctx context.Context, tx *models.Transaction) error {
+	l := logger.FromCtx(ctx)
+	upBalance := r.addToAccountWithTxn
+	if tx.Kind.IncreaseBalance {
+		upBalance = r.removeFromAccountWithTxn
+	}
+	if err := upBalance(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {
+		l.Error("undoing transaction to account", zap.Error(err), zap.Any("transaction", tx))
+		return err
+	}
+	l.Debug("undone transaction to account", zap.Any("transaction", tx))
+	return nil
+}
+
+func (r *Repository) addToAccountWithTxn(qtx *db.Queries, ctx context.Context, id string, amount float64) error {
+	err := qtx.AddToAccount(ctx, db.AddToAccountParams{ID: id, Amount: amount})
+	if err != nil {
+		l := logger.FromCtx(ctx)
+		l.Error("adding to account", zap.Error(err), zap.String("id", id), zap.Float64("amount", amount))
+		return err
+	}
+	return nil
+}
+
+func (r *Repository) removeFromAccountWithTxn(qtx *db.Queries, ctx context.Context, id string, amount float64) error {
+	err := qtx.RemoveFromAccount(ctx, db.RemoveFromAccountParams{ID: id, Amount: amount})
+	if err != nil {
+		l := logger.FromCtx(ctx)
+		l.Error("removing from account", zap.Error(err), zap.String("id", id), zap.Float64("amount", amount))
+		return err
+	}
+	return nil
+}
+
+func (r *Repository) GetBalances(ctx context.Context) ([]models.Balance, error) {
+	dbBalances, err := r.q.GetBalances(ctx)
+	if err != nil {
+		l := logger.FromCtx(ctx)
+		l.Error("querying balances", zap.Error(err))
+		return nil, err
+	}
+	return dbBalancesToBalances(dbBalances), nil
+}
+
+func (r *Repository) AccountsToMap(accs []models.Account) map[string]string {
+	m := make(map[string]string, len(accs))
+	for _, a := range accs {
+		m[a.ID] = a.Name
+	}
+	return m
+}
+
 func dbAccountRowToAccount[T db.GetAccountRow | db.GetAccountsRow](dbAcc *T) *models.Account {
 	_dbAcc := db.GetAccountsRow(*dbAcc)
 	return &models.Account{
@@ -127,4 +193,19 @@ func dbAccountsRowToAccounts(dbAccs []db.GetAccountsRow) []models.Account {
 		acc[i] = *dbAccountRowToAccount(&dbAcc)
 	}
 	return acc
+}
+
+func dbBalancesToBalances(dbBs []db.GetBalancesRow) []models.Balance {
+	b := make([]models.Balance, len(dbBs))
+	for i, dbB := range dbBs {
+		b[i] = models.Balance{
+			Amount: dbB.Balance.Float64,
+			Currency: models.Currency{
+				ID:        dbB.CurrencyID,
+				Enum:      models.CurrencyEnum(dbB.CurrencyEnum.Int64),
+				EgpFxRate: dbB.EgpFxRate.Float64,
+			},
+		}
+	}
+	return b
 }

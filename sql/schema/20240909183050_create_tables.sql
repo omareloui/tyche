@@ -10,15 +10,9 @@ CREATE TABLE transaction_kinds (
     kind VARCHAR(255) UNIQUE NOT NULL,
     increase_balance BOOLEAN DEFAULT FALSE
 );
-CREATE TABLE balances (
-    id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
-    amount FLOAT DEFAULT 0 NOT NULL,
-    currency_id VARCHAR(16) UNIQUE NOT NULL,
-    FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE
-);
-
 CREATE TABLE transactions (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
+    account_id VARCHAR(16) NOT NULL,
     amount FLOAT DEFAULT 0 NOT NULL,
     currency_id VARCHAR(16) NOT NULL,
     kind_id VARCHAR(16) NOT NULL,
@@ -26,6 +20,7 @@ CREATE TABLE transactions (
     fulfilled_on DATE,
     scheduled_to DATE NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW,
+    FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE,
     FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE,
     FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id)
 );
@@ -33,6 +28,7 @@ CREATE TABLE frequent_txs (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
     frequency_by INT NOT NULL,
     frequency INT NOT NULL,
+    account_id VARCHAR(16) NOT NULL,
     amount FLOAT DEFAULT 0 NOT NULL,
     currency_id VARCHAR(16) NOT NULL,
     kind_id VARCHAR(16) NOT NULL,
@@ -41,6 +37,7 @@ CREATE TABLE frequent_txs (
     stops_on TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT NOW,
     last_transaction_created_at TIMESTAMP NOT NULL DEFAULT NOW,
+    FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE,
     FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE,
     FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id)
 );
@@ -95,7 +92,6 @@ CREATE TABLE accounts (
 
 -- +goose Down
 -- +goose StatementBegin
-DROP TABLE balances;
 DROP TABLE currencies;
 DROP TABLE transaction_kinds;
 DROP TABLE transactions;

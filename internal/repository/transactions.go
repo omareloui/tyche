@@ -20,7 +20,7 @@ func (r *Repository) CreateTransaction(ctx context.Context, tx *models.Transacti
 		}
 
 		if !tx.FulfilledOn.IsZero() {
-			if err := r.ApplyTransactionToBalanceWithTxn(qtx, ctx, tx); err != nil {
+			if err := r.applyTxToAccountWithTxn(qtx, ctx, tx); err != nil {
 				l.Error("applying transaction", zap.Error(err), zap.Any("transaction", tx))
 				return err
 			}
@@ -53,6 +53,7 @@ func (r *Repository) createTransactionWithTxn(ctx context.Context, qtx *db.Queri
 	l := logger.FromCtx(ctx)
 	if err := qtx.CreateTransaction(ctx, db.CreateTransactionParams{
 		ID:          tx.ID,
+		AccountID:   tx.Account.ID,
 		Amount:      tx.Amount,
 		KindID:      tx.Kind.ID,
 		CurrencyID:  tx.Currency.ID,
@@ -95,14 +96,24 @@ func (r *Repository) GetTransaction(ctx context.Context, id string) (*models.Tra
 	return dbTransactionRowToTransaction(&dbTx), nil
 }
 
-func (r *Repository) DeleteTransaction(ctx context.Context, id string) error {
-	l := logger.FromCtx(ctx)
-	if err := r.q.DeleteTransaction(ctx, id); err != nil {
-		l.Error("deleting transaction", zap.Error(err), zap.String("id", id))
-		return err
-	}
-	l.Debug("deleted transaction", zap.String("id", id))
-	return nil
+func (r *Repository) DeleteTransaction(ctx context.Context, tx *models.Transaction) error {
+	return r.transact(func(qtx *db.Queries) error {
+		l := logger.FromCtx(ctx)
+		if err := qtx.DeleteTransaction(ctx, tx.ID); err != nil {
+			l.Error("deleting transaction", zap.Error(err), zap.String("id", tx.ID))
+			return err
+		}
+		l.Debug("deleted transaction", zap.String("id", tx.ID))
+
+		if !tx.FulfilledOn.IsZero() {
+			if err := r.undoTxToAccountWithTxn(qtx, ctx, tx); err != nil {
+				l.Error("undoing transaction after deletion", zap.Error(err))
+				return err
+			}
+			l.Debug("undone transaction after deletion")
+		}
+		return nil
+	})
 }
 
 func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transaction, tx *models.Transaction) error {
@@ -111,6 +122,7 @@ func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transa
 
 		if err := qtx.UpdateTransaction(ctx, db.UpdateTransactionParams{
 			ID:          tx.ID,
+			AccountID:   tx.Account.ID,
 			Amount:      tx.Amount,
 			CurrencyID:  tx.Currency.ID,
 			KindID:      tx.Kind.ID,
@@ -122,10 +134,10 @@ func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transa
 		l.Debug("updated transaction", zap.Any("new_transaction", tx), zap.Any("old_transaction", oldTx))
 
 		if !oldTx.FulfilledOn.IsZero() {
-			if err := r.UndoTransactionToBalanceWithTxn(qtx, ctx, oldTx); err != nil {
+			if err := r.undoTxToAccountWithTxn(qtx, ctx, oldTx); err != nil {
 				return err
 			}
-			if err := r.ApplyTransactionToBalanceWithTxn(qtx, ctx, tx); err != nil {
+			if err := r.applyTxToAccountWithTxn(qtx, ctx, tx); err != nil {
 				return err
 			}
 		}
@@ -134,23 +146,37 @@ func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transa
 	})
 }
 
-func (r *Repository) FulfillTransaction(ctx context.Context, id string, fulfilledOn time.Time) error {
-	l := logger.FromCtx(ctx)
-	if err := r.q.FulfillTransaction(ctx, db.FulfillTransactionParams{
-		ID:          id,
-		FulfilledOn: sql.NullTime{Time: fulfilledOn, Valid: !fulfilledOn.IsZero()},
-	}); err != nil {
-		l.Error("fulfilling transaction", zap.Error(err), zap.String("id", id), zap.Time("fulfilled_on", fulfilledOn))
-		return err
-	}
-	l.Debug("fulfilled transaction", zap.String("id", id), zap.Time("fulfilled_on", fulfilledOn))
-	return nil
+func (r *Repository) FulfillTransaction(ctx context.Context, tx *models.Transaction) error {
+	return r.transact(func(qtx *db.Queries) error {
+		l := logger.FromCtx(ctx)
+		if err := qtx.FulfillTransaction(ctx, db.FulfillTransactionParams{
+			ID:          tx.ID,
+			FulfilledOn: sql.NullTime{Time: tx.FulfilledOn, Valid: !tx.FulfilledOn.IsZero()},
+		}); err != nil {
+			l.Error("fulfilling transaction", zap.Error(err), zap.String("id", tx.ID), zap.Time("fulfilled_on", tx.FulfilledOn))
+			return err
+		}
+		l.Debug("fulfilled transaction", zap.String("id", tx.ID), zap.Time("fulfilled_on", tx.FulfilledOn))
+		if err := r.applyTxToAccountWithTxn(qtx, ctx, tx); err != nil {
+			l.Error("applying transaction to account", zap.Error(err))
+			return err
+		}
+		l.Debug("applied transaction to account")
+		return nil
+	})
 }
 
 func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRow](dbTx *T) *models.Transaction {
 	_dbTx := db.GetTransactionsRow(*dbTx)
 	return &models.Transaction{
-		ID:          _dbTx.ID,
+		ID: _dbTx.ID,
+		Account: models.Account{
+			ID:   _dbTx.AccountID,
+			Name: _dbTx.AccountName.String,
+			Currency: models.Currency{
+				ID: _dbTx.AccountCurrencyID.String,
+			},
+		},
 		Amount:      _dbTx.Amount,
 		Description: _dbTx.Description.String,
 		FulfilledOn: _dbTx.FulfilledOn.Time,

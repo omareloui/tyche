@@ -26,7 +26,8 @@ func FrequencyByOptions() map[string]string {
 }
 
 type FrequentTx struct {
-	ID                       string          `validate:"required"`
+	ID                       string `validate:"required"`
+	Account                  Account
 	FrequencyBy              FrequencyBy     `validate:"required"`
 	Frequency                uint            `validate:"required,min=1"`
 	Amount                   float64         `validate:"required,min=1"`

@@ -68,28 +68,6 @@ func main() {
 		}
 	}
 
-	balances, err := q.GetBalances(context.Background())
-	if err != nil {
-		log.Fatalln("error while getting the balances", err)
-	}
-
-	if len(balances) != len(currenciesSeed) {
-		currencies, err := q.GetCurrencies(context.Background())
-		if err != nil {
-			log.Fatalln("error while getting the currencies", err)
-		}
-
-		for _, cur := range currencies {
-			if err := q.CreateBalance(context.Background(), db.CreateBalanceParams{
-				ID:         idgen.New(),
-				CurrencyID: cur.ID,
-				Amount:     0,
-			}); err != nil {
-				log.Fatalln("error while seeding the balance", err)
-			}
-		}
-	}
-
 	accKinds := []db.CreateAccountKindParams{
 		{ID: idgen.New(), Enum: int64(models.CreditCard)},
 		{ID: idgen.New(), Enum: int64(models.BankAccount)},

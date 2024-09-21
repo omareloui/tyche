@@ -8,6 +8,7 @@ import (
 
 type TransactionFD struct {
 	AmountFD
+	AccountID   FDInput
 	FrequencyFD *FrequencyFD
 	KindID      FDInput
 	ScheduledTo FDInput
@@ -18,25 +19,25 @@ templ Transactions(
 	balances []models.Balance,
 	fd *TransactionFD,
 	transactions []models.Transaction,
-	currencies map[string]string,
-	kinds map[string]string,
+	accounts, currencies, kinds map[string]string,
 	defaultCurrencySymbol string) {
 	@baseLayout("Transactions", balances) {
 		@container() {
 			@mainHeader("Transactions")
-			@CreateTransactionForm(fd, currencies, kinds, defaultCurrencySymbol)
+			@CreateTransactionForm(fd, accounts, currencies, kinds, defaultCurrencySymbol)
 			@transactionsList(transactions)
 		}
 	}
 }
 
-templ CreateTransactionForm(fd *TransactionFD, currencies map[string]string, kinds map[string]string, currencySymbol string) {
+templ CreateTransactionForm(fd *TransactionFD, accounts, currencies, kinds map[string]string, currencySymbol string) {
 	@creationForm("Create Transaction", "/transactions", "Create Transaction") {
-		@transactionFormBody("", fd, currencies, kinds, currencySymbol)
+		@transactionFormBody("", fd, accounts, currencies, kinds, currencySymbol)
 	}
 }
 
-templ transactionFormBody(id string, fd *TransactionFD, currencies map[string]string, kinds map[string]string, currencySymbol string) {
+templ transactionFormBody(id string, fd *TransactionFD, accounts, currencies, kinds map[string]string, currencySymbol string) {
+	@selectInput("Account", "account_id", "Select the Account", id, accounts, fd.AccountID)
 	@AmountInputs(&fd.AmountFD, currencies, currencySymbol)
 	@selectInput("Kind", "kind_id", "Select a Kind", id, kinds, fd.KindID)
 	@input("Description", "text", "description", "Enter a description", id, fd.Description)
@@ -52,10 +53,10 @@ templ TransactionOOB(tx *models.Transaction) {
 	</div>
 }
 
-templ EditTransaction(tx *models.Transaction, fd *TransactionFD, currencies map[string]string, kinds map[string]string) {
+templ EditTransaction(tx *models.Transaction, fd *TransactionFD, accounts, currencies, kinds map[string]string) {
 	@form("put", fmt.Sprintf("/transactions/%s", tx.ID), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { tx.ID }</p>
-		@transactionFormBody(tx.ID, fd, currencies, kinds, tx.Currency.Enum.Symbol())
+		@transactionFormBody(tx.ID, fd, accounts, currencies, kinds, tx.Currency.Enum.Symbol())
 		@editFormButtons(fmt.Sprintf("/transactions/%s", tx.ID))
 	}
 }
@@ -78,6 +79,7 @@ templ Transaction(tx *models.Transaction) {
 		}
 	>
 		<p>ID: { tx.ID }</p>
+		<p>Account: { tx.Account.Name }</p>
 		<p>Amount: { tx.ViewAmount() }</p>
 		<p>Kind: { tx.Kind.Kind }</p>
 		if tx.Description != "" {

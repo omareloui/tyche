@@ -77,7 +77,7 @@ func (h Handler) GetEditFrequentTx(w http.ResponseWriter, r *http.Request) (temp
 
 	l := logger.FromCtx(r.Context())
 
-	currencies, kinds, err := h.getCurrenciesAndTxKinds(r.Context())
+	accs, curs, knds, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +89,11 @@ func (h Handler) GetEditFrequentTx(w http.ResponseWriter, r *http.Request) (temp
 	}
 	l.Info("fetched frequent tx", zap.Any("frequent tx", ftx))
 
-	return views.EditFrequentTx(ftx, h.mapFrequentTxToFD(ftx, &errs.ValidationError{}), h.repo.CurrenciesToMap(currencies), h.repo.TransactionKindsToMap(kinds)), nil
+	return views.EditFrequentTx(ftx,
+		h.mapFrequentTxToFD(ftx, &errs.ValidationError{}),
+		h.repo.AccountsToMap(accs),
+		h.repo.CurrenciesToMap(curs),
+		h.repo.TransactionKindsToMap(knds)), nil
 }
 
 func (h Handler) EditFrequentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -196,6 +200,7 @@ func generateNextScheduledTransactions(ftx *models.FrequentTx, count int) []mode
 
 		txs = append(txs, models.Transaction{
 			ID:          idgen.New(),
+			Account:     ftx.Account,
 			Amount:      ftx.Amount,
 			Currency:    ftx.Currency,
 			Kind:        ftx.Kind,

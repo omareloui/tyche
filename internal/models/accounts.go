@@ -9,13 +9,13 @@ var ErrDuplicateAccountName = errors.New("duplicate account name")
 
 type Account struct {
 	ID                 string `validate:"required"`
-	Name               string `validate:"required" conform:"trim,title"`
+	Name               string `conform:"trim,title"`
 	Amount             float64
-	Currency           Currency
-	Kind               AccountKind
-	IBAN               string `validate:"omitempty,iban" conform:"trim,nospaces"`
-	CardNumber         string `validate:"omitempty" conform:"trim,nospaces"`
-	Note               string `conform:"trim"`
+	Currency           Currency    `validate:"omitempty"`
+	Kind               AccountKind `validate:"omitempty"`
+	IBAN               string      `validate:"omitempty,iban" conform:"trim,nospaces"`
+	CardNumber         string      `validate:"omitempty" conform:"trim,num"`
+	Note               string      `conform:"trim"`
 	IsArchive          bool
 	ExcludeFromBalance bool
 	CreatedAt          time.Time
@@ -39,4 +39,21 @@ func (a *Account) MaskCardNumber() string {
 		rs[i] = '*'
 	}
 	return string(rs)
+}
+
+type Balance struct {
+	Amount   float64 `validate:"require"`
+	Currency Currency
+}
+
+func (b *Balance) ViewAmount() string {
+	return formatAmount(b.Amount, b.Currency.Enum)
+}
+
+func (b *Balance) ViewEgpAmount() string {
+	return formatAmount(b.Currency.EgpFxRate*b.Amount, CurrencyEgp)
+}
+
+func (b *Balance) EgpAmount() float64 {
+	return b.Currency.EgpFxRate * b.Amount
 }

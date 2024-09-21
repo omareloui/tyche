@@ -14,6 +14,7 @@ import (
 const createTransaction = `-- name: CreateTransaction :exec
 INSERT INTO transactions (
     id,
+    account_id,
     amount,
     currency_id,
     kind_id,
@@ -22,11 +23,12 @@ INSERT INTO transactions (
     fulfilled_on,
     created_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateTransactionParams struct {
 	ID          string
+	AccountID   string
 	Amount      float64
 	CurrencyID  string
 	KindID      string
@@ -39,6 +41,7 @@ type CreateTransactionParams struct {
 func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionParams) error {
 	_, err := q.db.ExecContext(ctx, createTransaction,
 		arg.ID,
+		arg.AccountID,
 		arg.Amount,
 		arg.CurrencyID,
 		arg.KindID,
@@ -80,6 +83,7 @@ func (q *Queries) FulfillTransaction(ctx context.Context, arg FulfillTransaction
 const getTransaction = `-- name: GetTransaction :one
 SELECT
     t.id,
+    t.account_id,
     t.amount,
     t.currency_id,
     t.kind_id,
@@ -87,29 +91,35 @@ SELECT
     t.fulfilled_on,
     t.scheduled_to,
     t.created_at,
+    a.name AS account_name,
+    a.currency_id AS account_currency_id,
     c.enum,
     c.egp_fx_rate,
     k.kind,
     k.increase_balance
 FROM transactions AS t
+LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN currencies AS c ON t.currency_id = c.id
 LEFT JOIN transaction_kinds AS k ON t.kind_id = k.id
 WHERE t.id = ? LIMIT 1
 `
 
 type GetTransactionRow struct {
-	ID              string
-	Amount          float64
-	CurrencyID      string
-	KindID          string
-	Description     sql.NullString
-	FulfilledOn     sql.NullTime
-	ScheduledTo     time.Time
-	CreatedAt       interface{}
-	Enum            sql.NullInt64
-	EgpFxRate       sql.NullFloat64
-	Kind            sql.NullString
-	IncreaseBalance sql.NullBool
+	ID                string
+	AccountID         string
+	Amount            float64
+	CurrencyID        string
+	KindID            string
+	Description       sql.NullString
+	FulfilledOn       sql.NullTime
+	ScheduledTo       time.Time
+	CreatedAt         interface{}
+	AccountName       sql.NullString
+	AccountCurrencyID sql.NullString
+	Enum              sql.NullInt64
+	EgpFxRate         sql.NullFloat64
+	Kind              sql.NullString
+	IncreaseBalance   sql.NullBool
 }
 
 func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransactionRow, error) {
@@ -117,6 +127,7 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 	var i GetTransactionRow
 	err := row.Scan(
 		&i.ID,
+		&i.AccountID,
 		&i.Amount,
 		&i.CurrencyID,
 		&i.KindID,
@@ -124,6 +135,8 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 		&i.FulfilledOn,
 		&i.ScheduledTo,
 		&i.CreatedAt,
+		&i.AccountName,
+		&i.AccountCurrencyID,
 		&i.Enum,
 		&i.EgpFxRate,
 		&i.Kind,
@@ -135,6 +148,7 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 const getTransactions = `-- name: GetTransactions :many
 SELECT
     t.id,
+    t.account_id,
     t.amount,
     t.currency_id,
     t.kind_id,
@@ -142,29 +156,35 @@ SELECT
     t.fulfilled_on,
     t.scheduled_to,
     t.created_at,
+    a.name AS account_name,
+    a.currency_id AS account_currency_id,
     c.enum,
     c.egp_fx_rate,
     k.kind,
     k.increase_balance
 FROM transactions AS t
+LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN currencies AS c ON t.currency_id = c.id
 LEFT JOIN transaction_kinds AS k ON t.kind_id = k.id
 ORDER BY t.scheduled_to DESC, t.created_at DESC
 `
 
 type GetTransactionsRow struct {
-	ID              string
-	Amount          float64
-	CurrencyID      string
-	KindID          string
-	Description     sql.NullString
-	FulfilledOn     sql.NullTime
-	ScheduledTo     time.Time
-	CreatedAt       interface{}
-	Enum            sql.NullInt64
-	EgpFxRate       sql.NullFloat64
-	Kind            sql.NullString
-	IncreaseBalance sql.NullBool
+	ID                string
+	AccountID         string
+	Amount            float64
+	CurrencyID        string
+	KindID            string
+	Description       sql.NullString
+	FulfilledOn       sql.NullTime
+	ScheduledTo       time.Time
+	CreatedAt         interface{}
+	AccountName       sql.NullString
+	AccountCurrencyID sql.NullString
+	Enum              sql.NullInt64
+	EgpFxRate         sql.NullFloat64
+	Kind              sql.NullString
+	IncreaseBalance   sql.NullBool
 }
 
 func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, error) {
@@ -178,6 +198,7 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 		var i GetTransactionsRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.AccountID,
 			&i.Amount,
 			&i.CurrencyID,
 			&i.KindID,
@@ -185,6 +206,8 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.FulfilledOn,
 			&i.ScheduledTo,
 			&i.CreatedAt,
+			&i.AccountName,
+			&i.AccountCurrencyID,
 			&i.Enum,
 			&i.EgpFxRate,
 			&i.Kind,
@@ -206,6 +229,7 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 const updateTransaction = `-- name: UpdateTransaction :exec
 UPDATE transactions
 SET
+account_id = ?,
 amount = ?,
 currency_id = ?,
 kind_id = ?,
@@ -215,6 +239,7 @@ WHERE id = ?
 `
 
 type UpdateTransactionParams struct {
+	AccountID   string
 	Amount      float64
 	CurrencyID  string
 	KindID      string
@@ -225,6 +250,7 @@ type UpdateTransactionParams struct {
 
 func (q *Queries) UpdateTransaction(ctx context.Context, arg UpdateTransactionParams) error {
 	_, err := q.db.ExecContext(ctx, updateTransaction,
+		arg.AccountID,
 		arg.Amount,
 		arg.CurrencyID,
 		arg.KindID,

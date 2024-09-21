@@ -220,6 +220,133 @@ func (q *Queries) GetAccounts(ctx context.Context) ([]GetAccountsRow, error) {
 	return items, nil
 }
 
+const getActiveAccounts = `-- name: GetActiveAccounts :many
+SELECT
+    a.id,
+    a.name,
+    a.kind_id,
+    a.amount,
+    a.currency_id,
+    a.card_number,
+    a.iban,
+    a.note,
+    a.exclude_from_balance,
+    a.is_archived,
+    a.created_at,
+    c.enum AS currency_enum,
+    c.egp_fx_rate,
+    k.enum AS kind_enum
+FROM accounts AS a
+LEFT JOIN account_kinds AS k ON a.kind_id = k.id
+LEFT JOIN currencies AS c ON a.currency_id = c.id
+WHERE a.is_archived IS FALSE
+ORDER BY a.created_at DESC
+`
+
+type GetActiveAccountsRow struct {
+	ID                 string
+	Name               string
+	KindID             string
+	Amount             float64
+	CurrencyID         string
+	CardNumber         sql.NullString
+	Iban               sql.NullString
+	Note               sql.NullString
+	ExcludeFromBalance sql.NullBool
+	IsArchived         sql.NullBool
+	CreatedAt          interface{}
+	CurrencyEnum       sql.NullInt64
+	EgpFxRate          sql.NullFloat64
+	KindEnum           sql.NullInt64
+}
+
+func (q *Queries) GetActiveAccounts(ctx context.Context) ([]GetActiveAccountsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getActiveAccounts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetActiveAccountsRow
+	for rows.Next() {
+		var i GetActiveAccountsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.KindID,
+			&i.Amount,
+			&i.CurrencyID,
+			&i.CardNumber,
+			&i.Iban,
+			&i.Note,
+			&i.ExcludeFromBalance,
+			&i.IsArchived,
+			&i.CreatedAt,
+			&i.CurrencyEnum,
+			&i.EgpFxRate,
+			&i.KindEnum,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getBalances = `-- name: GetBalances :many
+SELECT
+    a.currency_id,
+    c.enum AS currency_enum,
+    c.egp_fx_rate,
+    SUM(a.amount) AS balance
+FROM accounts AS a
+LEFT JOIN currencies AS c ON a.currency_id = c.id
+WHERE a.is_archived IS FALSE
+    AND a.exclude_from_balance IS FALSE
+GROUP BY currency_id
+ORDER BY balance DESC
+`
+
+type GetBalancesRow struct {
+	CurrencyID   string
+	CurrencyEnum sql.NullInt64
+	EgpFxRate    sql.NullFloat64
+	Balance      sql.NullFloat64
+}
+
+func (q *Queries) GetBalances(ctx context.Context) ([]GetBalancesRow, error) {
+	rows, err := q.db.QueryContext(ctx, getBalances)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetBalancesRow
+	for rows.Next() {
+		var i GetBalancesRow
+		if err := rows.Scan(
+			&i.CurrencyID,
+			&i.CurrencyEnum,
+			&i.EgpFxRate,
+			&i.Balance,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const removeFromAccount = `-- name: RemoveFromAccount :exec
 UPDATE accounts SET amount = amount - ? WHERE id = ?
 `

@@ -29,12 +29,6 @@ type AccountKind struct {
 	Enum int64
 }
 
-type Balance struct {
-	ID         string
-	Amount     float64
-	CurrencyID string
-}
-
 type Currency struct {
 	ID        string
 	Enum      int64
@@ -45,6 +39,7 @@ type FrequentTx struct {
 	ID                       string
 	FrequencyBy              int64
 	Frequency                int64
+	AccountID                string
 	Amount                   float64
 	CurrencyID               string
 	KindID                   string
@@ -82,6 +77,7 @@ type Item struct {
 
 type Transaction struct {
 	ID          string
+	AccountID   string
 	Amount      float64
 	CurrencyID  string
 	KindID      string

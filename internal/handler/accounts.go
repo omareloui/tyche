@@ -133,6 +133,10 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 	}
 	l.Debug("rendered account oob")
 
+	if err := h.getAndRenderBalancesOOB(w, r); err != nil {
+		return nil, err
+	}
+
 	defaultCurrency := slicesutils.Find(curs, func(cur models.Currency) bool { return cur.Enum == models.DfltCurrency })
 
 	fd := h.mapAccToFD(defaultAccount(curs, ak), &errs.ValidationError{})
@@ -223,6 +227,10 @@ func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Com
 	}
 	l.Info("updated account", zap.Any("account", a))
 
+	if err := h.getAndRenderBalancesOOB(w, r); err != nil {
+		return nil, err
+	}
+
 	curs, ak, err := h.getCurrenciesAndAccKinds(r.Context())
 	if err != nil {
 		return nil, err
@@ -245,6 +253,11 @@ func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) (templ.C
 		return nil, err
 	}
 	l.Info("deleted account", zap.String("id", id))
+
+	if err := h.getAndRenderBalancesOOB(w, r); err != nil {
+		return nil, err
+	}
+
 	return nil, nil
 }
 

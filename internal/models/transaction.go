@@ -5,7 +5,8 @@ import (
 )
 
 type Transaction struct {
-	ID          string  `validate:"required"`
+	ID          string `validate:"required"`
+	Account     Account
 	Amount      float64 `validate:"required,min=1"`
 	Currency    Currency
 	Kind        TransactionKind

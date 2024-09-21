@@ -17,6 +17,7 @@ type FrequencyFD struct {
 type FrequentTxFD struct {
 	AmountFD
 	FrequencyFD
+	AccountID   FDInput
 	KindID      FDInput
 	Description FDInput
 }
@@ -54,7 +55,8 @@ templ frequencyFormBody(id string, fd *FrequencyFD) {
 	</div>
 }
 
-templ ftxFormBody(id string, fd *FrequentTxFD, currencies map[string]string, kinds map[string]string, currencySymbol string) {
+templ ftxFormBody(id string, fd *FrequentTxFD, accounts, currencies, kinds map[string]string, currencySymbol string) {
+	@selectInput("Account", "account_id", "Select the Account", id, accounts, fd.AccountID)
 	@AmountInputs(&fd.AmountFD, currencies, currencySymbol)
 	@selectInput("Kind", "kind_id", "Select a Kind", id, kinds, fd.KindID)
 	@input("Description", "text", "description", "Enter a description", id, fd.Description)
@@ -70,11 +72,10 @@ templ FrequentTransactionOOB(ftx *models.FrequentTx) {
 templ EditFrequentTx(
 	ftx *models.FrequentTx,
 	fd *FrequentTxFD,
-	currencies map[string]string,
-	kinds map[string]string) {
+	accounts, currencies, kinds map[string]string) {
 	@form("put", fmt.Sprintf("/frequent-tx/%s", ftx.ID), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { ftx.ID }</p>
-		@ftxFormBody(ftx.ID, fd, currencies, kinds, ftx.Currency.Enum.Symbol())
+		@ftxFormBody(ftx.ID, fd, accounts, currencies, kinds, ftx.Currency.Enum.Symbol())
 		@editFormButtons(fmt.Sprintf("/frequent-tx/%s", ftx.ID))
 	}
 }
@@ -90,6 +91,7 @@ templ ftxsList(frequentTx []models.FrequentTx) {
 templ FrequentTx(ftx *models.FrequentTx) {
 	<div hx-target="this" class="entry-container">
 		<p>ID: { ftx.ID }</p>
+		<p>Account: { ftx.Account.Name }</p>
 		<p>Amount: { ftx.ViewAmount() }</p>
 		<p>Kind: { ftx.Kind.Kind }</p>
 		if ftx.Description != "" {

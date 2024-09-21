@@ -19,14 +19,12 @@ import (
 func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	l := logger.FromCtx(r.Context())
 
-	currencies, kinds, err := h.getCurrenciesAndTxKinds(r.Context())
+	accs, curs, knds, err := h.getTxDeps(r.Context())
 	if err != nil {
-		l.Error("fetching currencies and kinds", zap.Error(err))
 		return nil, err
 	}
-	l.Debug("fetched currencies and kinds", zap.Any("currencies", currencies), zap.Any("kinds", kinds))
 
-	fd := h.mapTransactionToFD(defaultTransaction(currencies, kinds), new(errs.ValidationError))
+	fd := h.mapTransactionToFD(defaultTransaction(accs, curs, knds), new(errs.ValidationError))
 
 	transactions, err := h.repo.GetTransactions(r.Context())
 	if err != nil {
@@ -43,14 +41,13 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 		return nil, err
 	}
 
-	defaultCurrency := slicesutils.Find(currencies, func(cur models.Currency) bool { return cur.Enum == models.DfltCurrency })
+	defaultCurrency := slicesutils.Find(curs, func(cur models.Currency) bool { return cur.Enum == models.DfltCurrency })
 
-	comp := views.Transactions(balances, fd, transactions,
-		h.repo.CurrenciesToMap(currencies),
-		h.repo.TransactionKindsToMap(kinds),
-		defaultCurrency.Enum.Symbol())
-
-	return comp, nil
+	return views.Transactions(balances, fd, transactions,
+		h.repo.AccountsToMap(accs),
+		h.repo.CurrenciesToMap(curs),
+		h.repo.TransactionKindsToMap(knds),
+		defaultCurrency.Enum.Symbol()), nil
 }
 
 func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -68,17 +65,19 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		tx.FulfilledOn = tx.CreatedAt
 	}
 
-	currencies, kinds, err := h.getCurrenciesAndTxKinds(r.Context())
+	accs, curs, knds, err := h.getTxDeps(r.Context())
 	if err != nil {
-		l.Error("fetching currencies and kinds")
 		return nil, err
 	}
-	dfltCurr := slicesutils.Find(currencies, func(cur models.Currency) bool { return cur.Enum == models.DfltCurrency })
 
-	c := slicesutils.Find(currencies, func(cur models.Currency) bool { return cur.ID == tx.Currency.ID })
+	dfltCurr := slicesutils.Find(curs, func(cur models.Currency) bool { return cur.Enum == models.DfltCurrency })
+
+	c := slicesutils.Find(curs, func(cur models.Currency) bool { return cur.ID == tx.Currency.ID })
 	tx.Currency = *c
-	k := slicesutils.Find(kinds, func(k models.TransactionKind) bool { return k.ID == tx.Kind.ID })
+	k := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == tx.Kind.ID })
 	tx.Kind = *k
+	a := slicesutils.Find(accs, func(ac models.Account) bool { return ac.ID == tx.Account.ID })
+	tx.Account = *a
 
 	var ftx *models.FrequentTx
 	var scheduledTxs []models.Transaction
@@ -106,8 +105,9 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 			fd.FrequencyFD = h.parseFrequencyFD(r, valerr)
 
 			return views.CreateTransactionForm(fd,
-				h.repo.CurrenciesToMap(currencies),
-				h.repo.TransactionKindsToMap(kinds),
+				h.repo.AccountsToMap(accs),
+				h.repo.CurrenciesToMap(curs),
+				h.repo.TransactionKindsToMap(knds),
 				dfltCurr.Enum.Symbol()), nil
 		}
 
@@ -125,8 +125,9 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		fd := h.mapTransactionToFD(tx, valerr)
 
 		return views.CreateTransactionForm(fd,
-			h.repo.CurrenciesToMap(currencies),
-			h.repo.TransactionKindsToMap(kinds),
+			h.repo.AccountsToMap(accs),
+			h.repo.CurrenciesToMap(curs),
+			h.repo.TransactionKindsToMap(knds),
 			dfltCurr.Enum.Symbol()), nil
 	}
 
@@ -156,11 +157,12 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		}
 	}
 
-	fd := h.mapTransactionToFD(defaultTransaction(currencies, kinds), new(errs.ValidationError))
+	fd := h.mapTransactionToFD(defaultTransaction(accs, curs, knds), new(errs.ValidationError))
 
 	return views.CreateTransactionForm(fd,
-		h.repo.CurrenciesToMap(currencies),
-		h.repo.TransactionKindsToMap(kinds),
+		h.repo.AccountsToMap(accs),
+		h.repo.CurrenciesToMap(curs),
+		h.repo.TransactionKindsToMap(knds),
 		dfltCurr.Enum.Symbol()), nil
 }
 
@@ -201,7 +203,7 @@ func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (tem
 
 	l.Debug("get edit transaction", zap.Any("transaction", tx))
 
-	currencies, kinds, err := h.getCurrenciesAndTxKinds(r.Context())
+	accs, curs, knds, err := h.getTxDeps(r.Context())
 	if err != nil {
 		l.Error("fetching currencies and kinds")
 		return nil, err
@@ -211,8 +213,9 @@ func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (tem
 	fd.FrequencyFD = nil
 
 	return views.EditTransaction(tx, fd,
-		h.repo.CurrenciesToMap(currencies),
-		h.repo.TransactionKindsToMap(kinds)), nil
+		h.repo.AccountsToMap(accs),
+		h.repo.CurrenciesToMap(curs),
+		h.repo.TransactionKindsToMap(knds)), nil
 }
 
 func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -240,15 +243,15 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 		fd := h.mapTransactionToFD(tx, valerr)
 		fd.Amount.Value = r.FormValue("amount")
 
-		currencies, kinds, err := h.getCurrenciesAndTxKinds(r.Context())
+		accs, curs, knds, err := h.getTxDeps(r.Context())
 		if err != nil {
-			l.Error("fetching currencies and kinds")
 			return nil, err
 		}
 
 		return views.EditTransaction(tx, fd,
-			h.repo.CurrenciesToMap(currencies),
-			h.repo.TransactionKindsToMap(kinds)), nil
+			h.repo.AccountsToMap(accs),
+			h.repo.CurrenciesToMap(curs),
+			h.repo.TransactionKindsToMap(knds)), nil
 	}
 
 	oldTx, err := h.repo.GetTransaction(r.Context(), tx.ID)
@@ -296,12 +299,6 @@ func (h Handler) FulfillTransaction(w http.ResponseWriter, r *http.Request) (tem
 
 	l := logger.FromCtx(r.Context())
 
-	if err := h.repo.FulfillTransaction(r.Context(), id, time.Now()); err != nil {
-		l.Error("fulfilling transaction", zap.Error(err))
-		return nil, err
-	}
-	l.Info("fulfilled transaction")
-
 	tx, err := h.repo.GetTransaction(r.Context(), id)
 	if err != nil {
 		l.Error("fetching transaction", zap.Error(err))
@@ -309,9 +306,13 @@ func (h Handler) FulfillTransaction(w http.ResponseWriter, r *http.Request) (tem
 	}
 	l.Debug("fetched transaction", zap.Any("tx", tx))
 
-	if err := h.repo.ApplyTransactionToBalance(r.Context(), tx); err != nil {
+	tx.FulfilledOn = time.Now()
+
+	if err := h.repo.FulfillTransaction(r.Context(), tx); err != nil {
 		return nil, err
 	}
+	l.Info("fulfilled transaction")
+
 	if err := h.getAndRenderBalancesOOB(w, r); err != nil {
 		return nil, err
 	}
@@ -334,16 +335,13 @@ func (h Handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) (temp
 	}
 	l.Debug("fetched transaction", zap.Any("transaction", tx))
 
-	if err := h.repo.DeleteTransaction(r.Context(), id); err != nil {
+	if err := h.repo.DeleteTransaction(r.Context(), tx); err != nil {
 		l.Error("deleting transaction", zap.Error(err))
 		return nil, err
 	}
 	l.Info("deleted transaction")
 
 	if !tx.FulfilledOn.IsZero() {
-		if err := h.repo.UndoTransactionToBalance(r.Context(), tx); err != nil {
-			return nil, err
-		}
 		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
 			return nil, err
 		}
@@ -369,21 +367,25 @@ func (h Handler) getAndRenderBalancesOOB(w http.ResponseWriter, r *http.Request)
 	return nil
 }
 
-func (h Handler) getCurrenciesAndTxKinds(ctx context.Context) ([]models.Currency, []models.TransactionKind, error) {
+func (h Handler) getTxDeps(ctx context.Context) ([]models.Account, []models.Currency, []models.TransactionKind, error) {
 	l := logger.FromCtx(ctx)
-
+	accs, err := h.repo.GetAccounts(ctx)
+	if err != nil {
+		l.Error("error fetching accounts", zap.Error(err))
+		return nil, nil, nil, err
+	}
 	curs, err := h.repo.GetCurrencies(ctx)
 	if err != nil {
 		l.Error("error fetching currencies", zap.Error(err))
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	knds, err := h.repo.GetTransactionKinds(ctx)
 	if err != nil {
 		l.Error("error fetching transaction kinds", zap.Error(err))
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	l.Debug("fetched currencies and transaction kinds")
-	return curs, knds, nil
+	l.Debug("fetched transactions dependencies")
+	return accs, curs, knds, nil
 }
 
 func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationError) *views.TransactionFD {
@@ -392,6 +394,7 @@ func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationE
 			Amount:     views.FDInput{Value: formatIntIfNonZero(int(t.Amount)), Error: err.Errors.MsgFor("Amount")},
 			CurrencyID: views.FDInput{Value: t.Currency.ID, Error: err.Errors.MsgFor("Currency.ID")},
 		},
+		AccountID:   views.FDInput{Value: t.Account.ID, Error: err.Errors.MsgFor("Account.ID")},
 		Description: views.FDInput{Value: t.Description, Error: err.Errors.MsgFor("Description")},
 		KindID:      views.FDInput{Value: t.Kind.ID, Error: err.Errors.MsgFor("Kind.ID")},
 		ScheduledTo: views.FDInput{Value: formatDateOnlyIfNonZero(t.ScheduledTo), Error: err.Errors.MsgFor("ScheduledTo")},
@@ -411,6 +414,7 @@ func (h Handler) mapFDToTransaction(r *http.Request) (*models.Transaction, error
 	}
 
 	return &models.Transaction{
+		Account:     models.Account{ID: r.FormValue("account_id")},
 		Amount:      amount,
 		Currency:    models.Currency{ID: r.FormValue("currency_id")},
 		Kind:        models.TransactionKind{ID: r.FormValue("kind_id")},
@@ -419,11 +423,18 @@ func (h Handler) mapFDToTransaction(r *http.Request) (*models.Transaction, error
 	}, nil
 }
 
-func defaultTransaction(currencies []models.Currency, kinds []models.TransactionKind) *models.Transaction {
+func defaultTransaction(accs []models.Account, currencies []models.Currency, kinds []models.TransactionKind) *models.Transaction {
+	dfltAccsIdx := 0
 	dfltCurrIdx := slices.IndexFunc(currencies, func(cur models.Currency) bool { return cur.Enum == models.DfltCurrency })
 	dfltKindIdx := slices.IndexFunc(kinds, func(knd models.TransactionKind) bool { return knd.Kind == models.DfltKind })
 
+	dfltAccId := ""
+	if len(accs) > 0 {
+		dfltAccId = accs[dfltAccsIdx].ID
+	}
+
 	return &models.Transaction{
+		Account:     models.Account{ID: dfltAccId},
 		Amount:      0,
 		Currency:    models.Currency{ID: currencies[dfltCurrIdx].ID},
 		Kind:        models.TransactionKind{ID: kinds[dfltKindIdx].ID},
@@ -448,6 +459,7 @@ func (h Handler) mapFDToTransactionFrequency(r *http.Request, parsedTx *models.T
 	}
 
 	return &models.FrequentTx{
+		Account:     parsedTx.Account,
 		Amount:      parsedTx.Amount,
 		Currency:    parsedTx.Currency,
 		Kind:        parsedTx.Kind,

@@ -3,6 +3,7 @@ INSERT INTO frequent_txs (
     id,
     frequency_by,
     frequency,
+    account_id,
     amount,
     currency_id,
     kind_id,
@@ -12,7 +13,7 @@ INSERT INTO frequent_txs (
     created_at,
     last_transaction_created_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: CreateFrequentTxTransaction :exec
 INSERT INTO frequent_txs_transactions (
@@ -24,6 +25,7 @@ VALUES (?, ?);
 -- name: GetFrequentTxs :many
 SELECT
     ft.id,
+    ft.account_id,
     ft.amount,
     ft.currency_id,
     ft.kind_id,
@@ -34,11 +36,14 @@ SELECT
     ft.starts_on,
     ft.stops_on,
     ft.last_transaction_created_at,
-    c.enum,
+    a.name AS account_name,
+    a.currency_id AS account_currency_id,
+    c.enum AS currency_enum,
     c.egp_fx_rate,
     k.kind,
     k.increase_balance,
     t.id AS transaction_id,
+    t.account_id AS transaction_account_id,
     t.amount AS transaction_amount,
     t.currency_id AS transaction_currency_id,
     t.kind_id AS transaction_kind_id,
@@ -52,6 +57,7 @@ SELECT
     tk.increase_balance AS transaction_increase_balance
 FROM frequent_txs AS ft
 LEFT JOIN frequent_txs_transactions AS ftt ON ftt.frequency_id = ft.id
+LEFT JOIN accounts AS a ON ft.account_id = a.id
 LEFT JOIN transactions AS t ON t.id = ftt.transaction_id
 LEFT JOIN currencies AS c ON ft.currency_id = c.id
 LEFT JOIN transaction_kinds AS k ON ft.kind_id = k.id
@@ -62,6 +68,7 @@ LEFT JOIN transaction_kinds AS tk ON t.kind_id = k.id;
 -- name: GetFrequentTx :many
 SELECT
     ft.id,
+    ft.account_id,
     ft.amount,
     ft.currency_id,
     ft.kind_id,
@@ -72,11 +79,14 @@ SELECT
     ft.starts_on,
     ft.stops_on,
     ft.last_transaction_created_at,
-    c.enum,
+    a.name AS account_name,
+    a.currency_id AS account_currency_id,
+    c.enum AS currency_enum,
     c.egp_fx_rate,
     k.kind,
     k.increase_balance,
     t.id AS transaction_id,
+    t.account_id AS transaction_account_id,
     t.amount AS transaction_amount,
     t.currency_id AS transaction_currency_id,
     t.kind_id AS transaction_kind_id,
@@ -90,6 +100,7 @@ SELECT
     tk.increase_balance AS transaction_increase_balance
 FROM frequent_txs AS ft
 LEFT JOIN frequent_txs_transactions AS ftt ON ftt.frequency_id = ft.id
+LEFT JOIN accounts AS a ON ft.account_id = a.id
 LEFT JOIN transactions AS t ON t.id = ftt.transaction_id
 LEFT JOIN currencies AS c ON ft.currency_id = c.id
 LEFT JOIN transaction_kinds AS k ON ft.kind_id = k.id
@@ -102,6 +113,7 @@ UPDATE frequent_txs
 SET
 frequency_by = ?,
 frequency = ?,
+account_id = ?,
 amount = ?,
 currency_id = ?,
 kind_id = ?,
