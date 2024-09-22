@@ -36,9 +36,10 @@ INSERT INTO accounts (
     note,
     exclude_from_balance,
     is_archived,
+    is_default,
     created_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateAccountParams struct {
@@ -50,8 +51,9 @@ type CreateAccountParams struct {
 	CardNumber         sql.NullString
 	Iban               sql.NullString
 	Note               sql.NullString
-	ExcludeFromBalance sql.NullBool
-	IsArchived         sql.NullBool
+	ExcludeFromBalance bool
+	IsArchived         bool
+	IsDefault          bool
 	CreatedAt          interface{}
 }
 
@@ -67,6 +69,7 @@ func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) er
 		arg.Note,
 		arg.ExcludeFromBalance,
 		arg.IsArchived,
+		arg.IsDefault,
 		arg.CreatedAt,
 	)
 	return err
@@ -94,6 +97,7 @@ SELECT
     a.note,
     a.exclude_from_balance,
     a.is_archived,
+    a.is_default,
     a.created_at,
     c.enum AS currency_enum,
     c.egp_fx_rate,
@@ -113,8 +117,9 @@ type GetAccountRow struct {
 	CardNumber         sql.NullString
 	Iban               sql.NullString
 	Note               sql.NullString
-	ExcludeFromBalance sql.NullBool
-	IsArchived         sql.NullBool
+	ExcludeFromBalance bool
+	IsArchived         bool
+	IsDefault          bool
 	CreatedAt          interface{}
 	CurrencyEnum       sql.NullInt64
 	EgpFxRate          sql.NullFloat64
@@ -135,6 +140,7 @@ func (q *Queries) GetAccount(ctx context.Context, id string) (GetAccountRow, err
 		&i.Note,
 		&i.ExcludeFromBalance,
 		&i.IsArchived,
+		&i.IsDefault,
 		&i.CreatedAt,
 		&i.CurrencyEnum,
 		&i.EgpFxRate,
@@ -155,6 +161,7 @@ SELECT
     a.note,
     a.exclude_from_balance,
     a.is_archived,
+    a.is_default,
     a.created_at,
     c.enum AS currency_enum,
     c.egp_fx_rate,
@@ -174,8 +181,9 @@ type GetAccountsRow struct {
 	CardNumber         sql.NullString
 	Iban               sql.NullString
 	Note               sql.NullString
-	ExcludeFromBalance sql.NullBool
-	IsArchived         sql.NullBool
+	ExcludeFromBalance bool
+	IsArchived         bool
+	IsDefault          bool
 	CreatedAt          interface{}
 	CurrencyEnum       sql.NullInt64
 	EgpFxRate          sql.NullFloat64
@@ -202,6 +210,7 @@ func (q *Queries) GetAccounts(ctx context.Context) ([]GetAccountsRow, error) {
 			&i.Note,
 			&i.ExcludeFromBalance,
 			&i.IsArchived,
+			&i.IsDefault,
 			&i.CreatedAt,
 			&i.CurrencyEnum,
 			&i.EgpFxRate,
@@ -232,6 +241,7 @@ SELECT
     a.note,
     a.exclude_from_balance,
     a.is_archived,
+    a.is_default,
     a.created_at,
     c.enum AS currency_enum,
     c.egp_fx_rate,
@@ -252,8 +262,9 @@ type GetActiveAccountsRow struct {
 	CardNumber         sql.NullString
 	Iban               sql.NullString
 	Note               sql.NullString
-	ExcludeFromBalance sql.NullBool
-	IsArchived         sql.NullBool
+	ExcludeFromBalance bool
+	IsArchived         bool
+	IsDefault          bool
 	CreatedAt          interface{}
 	CurrencyEnum       sql.NullInt64
 	EgpFxRate          sql.NullFloat64
@@ -280,6 +291,7 @@ func (q *Queries) GetActiveAccounts(ctx context.Context) ([]GetActiveAccountsRow
 			&i.Note,
 			&i.ExcludeFromBalance,
 			&i.IsArchived,
+			&i.IsDefault,
 			&i.CreatedAt,
 			&i.CurrencyEnum,
 			&i.EgpFxRate,
@@ -371,7 +383,8 @@ card_number = ?,
 iban = ?,
 note = ?,
 is_archived = ?,
-exclude_from_balance = ?
+exclude_from_balance = ?,
+is_default = ?
 WHERE id = ?
 `
 
@@ -382,8 +395,9 @@ type UpdateAccountParams struct {
 	CardNumber         sql.NullString
 	Iban               sql.NullString
 	Note               sql.NullString
-	IsArchived         sql.NullBool
-	ExcludeFromBalance sql.NullBool
+	IsArchived         bool
+	ExcludeFromBalance bool
+	IsDefault          bool
 	ID                 string
 }
 
@@ -397,6 +411,7 @@ func (q *Queries) UpdateAccount(ctx context.Context, arg UpdateAccountParams) er
 		arg.Note,
 		arg.IsArchived,
 		arg.ExcludeFromBalance,
+		arg.IsDefault,
 		arg.ID,
 	)
 	return err

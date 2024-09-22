@@ -56,7 +56,6 @@ func (r *Repository) createTransactionWithTxn(ctx context.Context, qtx *db.Queri
 		AccountID:   tx.Account.ID,
 		Amount:      tx.Amount,
 		KindID:      tx.Kind.ID,
-		CurrencyID:  tx.Currency.ID,
 		Description: sql.NullString{String: tx.Description, Valid: tx.Description != ""},
 		ScheduledTo: tx.ScheduledTo,
 		FulfilledOn: sql.NullTime{Time: tx.FulfilledOn, Valid: !tx.FulfilledOn.IsZero()},
@@ -124,7 +123,6 @@ func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transa
 			ID:          tx.ID,
 			AccountID:   tx.Account.ID,
 			Amount:      tx.Amount,
-			CurrencyID:  tx.Currency.ID,
 			KindID:      tx.Kind.ID,
 			ScheduledTo: tx.ScheduledTo,
 		}); err != nil {
@@ -174,7 +172,9 @@ func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRo
 			ID:   _dbTx.AccountID,
 			Name: _dbTx.AccountName.String,
 			Currency: models.Currency{
-				ID: _dbTx.AccountCurrencyID.String,
+				ID:        _dbTx.CurrencyID.String,
+				Enum:      models.CurrencyEnum(_dbTx.CurrencyEnum.Int64),
+				EgpFxRate: _dbTx.EgpFxRate.Float64,
 			},
 		},
 		Amount:      _dbTx.Amount,
@@ -182,11 +182,6 @@ func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRo
 		FulfilledOn: _dbTx.FulfilledOn.Time,
 		ScheduledTo: _dbTx.ScheduledTo,
 		CreatedAt:   _dbTx.CreatedAt.(time.Time),
-		Currency: models.Currency{
-			ID:        _dbTx.CurrencyID,
-			Enum:      models.CurrencyEnum(_dbTx.Enum.Int64),
-			EgpFxRate: _dbTx.EgpFxRate.Float64,
-		},
 		Kind: models.TransactionKind{
 			ID:              _dbTx.KindID,
 			Kind:            _dbTx.Kind.String,

@@ -10,18 +10,36 @@ CREATE TABLE transaction_kinds (
     kind VARCHAR(255) UNIQUE NOT NULL,
     increase_balance BOOLEAN DEFAULT FALSE
 );
+CREATE TABLE account_kinds (
+    id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
+    enum INT UNIQUE NOT NULL
+);
+CREATE TABLE accounts (
+    id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
+    name VARCHAR UNIQUE NOT NULL,
+    kind_id VARCHAR NOT NULL,
+    amount FLOAT NOT NULL,
+    currency_id VARCHAR NOT NULL,
+    card_number VARCHAR UNIQUE,
+    iban VARCHAR UNIQUE,
+    note VARCHAR,
+    is_default BOOL NOT NULL DEFAULT FALSE,
+    is_archived BOOL NOT NULL DEFAULT FALSE,
+    exclude_from_balance BOOL NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW,
+    FOREIGN KEY (currency_id) REFERENCES currencies (id)
+    FOREIGN KEY (kind_id) REFERENCES account_kinds (id)
+);
 CREATE TABLE transactions (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
     account_id VARCHAR(16) NOT NULL,
     amount FLOAT DEFAULT 0 NOT NULL,
-    currency_id VARCHAR(16) NOT NULL,
     kind_id VARCHAR(16) NOT NULL,
     description VARCHAR(225),
     fulfilled_on DATE,
     scheduled_to DATE NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW,
     FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE,
-    FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE,
     FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id)
 );
 CREATE TABLE frequent_txs (
@@ -30,15 +48,13 @@ CREATE TABLE frequent_txs (
     frequency INT NOT NULL,
     account_id VARCHAR(16) NOT NULL,
     amount FLOAT DEFAULT 0 NOT NULL,
-    currency_id VARCHAR(16) NOT NULL,
     kind_id VARCHAR(16) NOT NULL,
     description VARCHAR(225),
     starts_on TIMESTAMP NOT NULL,
     stops_on TIMESTAMP,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW,
     last_transaction_created_at TIMESTAMP NOT NULL DEFAULT NOW,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW,
     FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE,
-    FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE,
     FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id)
 );
 CREATE TABLE frequent_txs_transactions (
@@ -67,26 +83,8 @@ CREATE TABLE items (
     price FLOAT DEFAULT 0 NOT NULL,
     currency_id VARCHAR(16) NOT NULL,
     purchased_on DATE,
-    FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE
-);
-CREATE TABLE account_kinds  ( 
-  id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
-  enum INT UNIQUE NOT NULL
-);
-CREATE TABLE accounts (
-    id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
-    name VARCHAR UNIQUE NOT NULL,
-    kind_id VARCHAR NOT NULL,
-    amount FLOAT NOT NULL,
-    currency_id VARCHAR NOT NULL,
-    card_number VARCHAR UNIQUE,
-    iban VARCHAR UNIQUE,
-    note VARCHAR,
-    is_archived BOOL,
-    exclude_from_balance BOOL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW,
-    FOREIGN KEY (currency_id) REFERENCES currencies (id)
-    FOREIGN KEY (kind_id) REFERENCES account_kinds (id)
+    FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE
 );
 -- +goose StatementEnd
 

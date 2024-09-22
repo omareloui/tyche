@@ -58,6 +58,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("DELETE /items/{id}", handle(h.DeleteItem))
 
 	mux.Handle("POST /amount-inputs", handle(h.AmountInputs))
+	mux.Handle("POST /account-inputs", handle(h.AccountInputs))
 	mux.Handle("POST /iban-inputs", handle(h.IbanInputs))
 
 	static(mux, []string{"styles", "js"}, "./web/public")

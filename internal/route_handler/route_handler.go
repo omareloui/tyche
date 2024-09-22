@@ -41,15 +41,16 @@ func (fn RouteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func errorResponse(l *zap.Logger, w http.ResponseWriter, err error) {
 	var httperr *resperr.RespError
 	if !errors.As(err, &httperr) {
-		err = resperr.New(http.StatusInternalServerError, "")
+		httperr = resperr.New(http.StatusInternalServerError, err.Error())
 	}
 
 	l.Error("server error",
-		zap.Error(err),
-		zap.Int("status_code", err.(*resperr.RespError).Code),
+		zap.Error(httperr),
+		zap.String("message", httperr.Message),
+		zap.Int("status_code", httperr.Code),
 	)
 
-	http.Error(w, err.Error(), err.(*resperr.RespError).Code)
+	http.Error(w, httperr.Error(), httperr.Code)
 }
 
 func prepareResponse(w http.ResponseWriter, code int) {

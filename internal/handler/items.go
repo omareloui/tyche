@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/financial-planner/internal/errs"
@@ -40,7 +41,7 @@ func (h Handler) Items(w http.ResponseWriter, r *http.Request) (templ.Component,
 	}
 	l.Debug("fetched items")
 
-	return views.Items(b, fd, its, h.repo.CurrenciesToMap(cur), dfltCur.Enum.Symbol()), nil
+	return views.Items(b, fd, its, cur), nil
 }
 
 func (h Handler) Item(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -71,6 +72,7 @@ func (h Handler) CreateItem(w http.ResponseWriter, r *http.Request) (templ.Compo
 		return nil, err
 	}
 	it.ID = idgen.New()
+	it.CreatedAt = time.Now()
 
 	if err := h.sani.SanitizeStruct(it); err != nil {
 		l.Error("sanitizing the form", zap.Error(err))
@@ -90,9 +92,7 @@ func (h Handler) CreateItem(w http.ResponseWriter, r *http.Request) (templ.Compo
 		}
 		l.Debug("fetched currencies")
 
-		return views.CreateItemForm(fd,
-			h.repo.CurrenciesToMap(cur),
-			models.DfltCurrency.Symbol()), nil
+		return views.CreateItemForm(fd, cur), nil
 	}
 
 	if err := h.repo.CreateItem(r.Context(), it); err != nil {
@@ -118,9 +118,7 @@ func (h Handler) CreateItem(w http.ResponseWriter, r *http.Request) (templ.Compo
 	}
 	l.Debug("rendered item oob")
 
-	return views.CreateItemForm(fd,
-		h.repo.CurrenciesToMap(cur),
-		dfltCur.Enum.Symbol()), nil
+	return views.CreateItemForm(fd, cur), nil
 }
 
 func (h Handler) GetEditItem(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -147,9 +145,7 @@ func (h Handler) GetEditItem(w http.ResponseWriter, r *http.Request) (templ.Comp
 	}
 	l.Debug("fetched currencies")
 
-	curS := slicesutils.Find(cur, func(c models.Currency) bool { return c.ID == it.Currency.ID }).Enum.Symbol()
-
-	return views.EditItem(id, fd, h.repo.CurrenciesToMap(cur), curS), nil
+	return views.EditItem(fd, id, cur), nil
 }
 
 func (h Handler) EditItem(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

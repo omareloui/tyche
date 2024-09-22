@@ -20,7 +20,6 @@ func (r *Repository) createFrequentTxWithTxn(qtx *db.Queries, ctx context.Contex
 		FrequencyBy:              int64(ftx.FrequencyBy),
 		Frequency:                int64(ftx.Frequency),
 		Amount:                   ftx.Amount,
-		CurrencyID:               ftx.Currency.ID,
 		KindID:                   ftx.Kind.ID,
 		Description:              sql.NullString{String: ftx.Description, Valid: ftx.Description != ""},
 		StartsOn:                 ftx.StartsOn,
@@ -87,7 +86,6 @@ func (r *Repository) UpdateFrequentTx(ctx context.Context, ftx *models.FrequentT
 			ID:                       ftx.ID,
 			AccountID:                ftx.Account.ID,
 			Amount:                   ftx.Amount,
-			CurrencyID:               ftx.Currency.ID,
 			KindID:                   ftx.Kind.ID,
 			FrequencyBy:              int64(ftx.FrequencyBy),
 			Frequency:                int64(ftx.Frequency),
@@ -160,18 +158,17 @@ func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 			ftxs = append(ftxs, models.FrequentTx{
 				ID: dbFtx.ID,
 				Account: models.Account{
-					ID:       dbFtx.AccountID,
-					Name:     dbFtx.AccountName.String,
-					Currency: models.Currency{ID: dbFtx.AccountCurrencyID.String},
+					ID:   dbFtx.AccountID,
+					Name: dbFtx.AccountName.String,
+					Currency: models.Currency{
+						ID:        dbFtx.CurrencyID.String,
+						Enum:      models.CurrencyEnum(dbFtx.CurrencyEnum.Int64),
+						EgpFxRate: dbFtx.EgpFxRate.Float64,
+					},
 				},
 				Amount:      dbFtx.Amount,
 				Description: dbFtx.Description.String,
 				CreatedAt:   dbFtx.CreatedAt.(time.Time),
-				Currency: models.Currency{
-					ID:        dbFtx.CurrencyID,
-					Enum:      models.CurrencyEnum(dbFtx.CurrencyEnum.Int64),
-					EgpFxRate: dbFtx.EgpFxRate.Float64,
-				},
 				Kind: models.TransactionKind{
 					ID:              dbFtx.KindID,
 					Kind:            dbFtx.Kind.String,
@@ -194,18 +191,19 @@ func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 		ftxs[ftxIdx].Transactions = append(ftxs[ftxIdx].Transactions, models.Transaction{
 			ID: dbFtx.TransactionID.String,
 			Account: models.Account{
-				ID: dbFtx.TransactionAccountID.String,
+				ID:   dbFtx.TransactionAccountID.String,
+				Name: dbFtx.AccountName.String,
+				Currency: models.Currency{
+					ID:        dbFtx.CurrencyID.String,
+					Enum:      models.CurrencyEnum(dbFtx.CurrencyEnum.Int64),
+					EgpFxRate: dbFtx.EgpFxRate.Float64,
+				},
 			},
 			Amount:      dbFtx.TransactionAmount.Float64,
 			Description: dbFtx.TransactionDescription.String,
 			FulfilledOn: dbFtx.TransactionFulfilledOn.Time,
 			ScheduledTo: dbFtx.TransactionScheduledTo.Time,
 			CreatedAt:   dbFtx.TransactionCreatedAt.(time.Time),
-			Currency: models.Currency{
-				ID:        dbFtx.TransactionCurrencyID.String,
-				Enum:      models.CurrencyEnum(dbFtx.TransactionEnum.Int64),
-				EgpFxRate: dbFtx.TransactionEgpFxRate.Float64,
-			},
 			Kind: models.TransactionKind{
 				ID:              dbFtx.TransactionKindID.String,
 				Kind:            dbFtx.TransactionKind.String,

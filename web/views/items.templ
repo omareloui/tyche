@@ -15,34 +15,33 @@ templ Items(
 	balances []models.Balance,
 	fd *ItemFD,
 	items []models.Item,
-	currencies map[string]string,
-	defaultCurrencySymbol string) {
+	curs []models.Currency) {
 	@baseLayout("Items", balances) {
 		@container() {
 			@mainHeader("Items")
-			@CreateItemForm(fd, currencies, defaultCurrencySymbol)
+			@CreateItemForm(fd, curs)
 			@itemsList(items)
 		}
 	}
 }
 
-templ CreateItemForm(fd *ItemFD, currencies map[string]string, currencySymbol string) {
+templ CreateItemForm(fd *ItemFD, curs []models.Currency) {
 	@creationForm("Create Item", "/items", "Create Item") {
-		@itemFormBody(fd, currencies, currencySymbol)
+		@itemFormBody(fd, "", curs)
 	}
 }
 
-templ EditItem(id string, fd *ItemFD, currencies map[string]string, currencySymbol string) {
+templ EditItem(fd *ItemFD, id string, curs []models.Currency) {
 	@form("put", fmt.Sprintf("/items/%s", id), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { id }</p>
-		@itemFormBody(fd, currencies, currencySymbol)
+		@itemFormBody(fd, id, curs)
 		@editFormButtons(fmt.Sprintf("/items/%s", id))
 	}
 }
 
-templ itemFormBody(fd *ItemFD, currencies map[string]string, currencySymbol string) {
+templ itemFormBody(fd *ItemFD, id string, curs []models.Currency) {
 	@input("Name", "text", "name", "Enter item name", "", fd.Name)
-	@AmountInputs(&fd.AmountFD, currencies, currencySymbol)
+	@AmountInputs(&fd.AmountFD, id, curs)
 }
 
 templ itemsList(items []models.Item) {

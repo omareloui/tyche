@@ -5,6 +5,7 @@ SELECT
     i.price,
     i.purchased_on,
     i.currency_id,
+    i.created_at,
     c.enum,
     c.egp_fx_rate
 FROM items AS i
@@ -18,6 +19,7 @@ SELECT
     i.price,
     i.purchased_on,
     i.currency_id,
+    i.created_at,
     c.enum,
     c.egp_fx_rate
 FROM items AS i
@@ -29,9 +31,10 @@ INSERT INTO items (
     id,
     name,
     price,
-    currency_id
+    currency_id,
+    created_at
 )
-VALUES (?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?);
 
 -- name: UpdateItem :exec
 UPDATE items

@@ -18,7 +18,6 @@ INSERT INTO frequent_txs (
     frequency,
     account_id,
     amount,
-    currency_id,
     kind_id,
     description,
     stops_on,
@@ -26,7 +25,7 @@ INSERT INTO frequent_txs (
     created_at,
     last_transaction_created_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateFrequentTxParams struct {
@@ -35,7 +34,6 @@ type CreateFrequentTxParams struct {
 	Frequency                int64
 	AccountID                string
 	Amount                   float64
-	CurrencyID               string
 	KindID                   string
 	Description              sql.NullString
 	StopsOn                  sql.NullTime
@@ -51,7 +49,6 @@ func (q *Queries) CreateFrequentTx(ctx context.Context, arg CreateFrequentTxPara
 		arg.Frequency,
 		arg.AccountID,
 		arg.Amount,
-		arg.CurrencyID,
 		arg.KindID,
 		arg.Description,
 		arg.StopsOn,
@@ -111,7 +108,6 @@ SELECT
     ft.id,
     ft.account_id,
     ft.amount,
-    ft.currency_id,
     ft.kind_id,
     ft.description,
     ft.created_at,
@@ -121,7 +117,7 @@ SELECT
     ft.stops_on,
     ft.last_transaction_created_at,
     a.name AS account_name,
-    a.currency_id AS account_currency_id,
+    a.currency_id,
     c.enum AS currency_enum,
     c.egp_fx_rate,
     k.kind,
@@ -129,12 +125,12 @@ SELECT
     t.id AS transaction_id,
     t.account_id AS transaction_account_id,
     t.amount AS transaction_amount,
-    t.currency_id AS transaction_currency_id,
     t.kind_id AS transaction_kind_id,
     t.description AS transaction_description,
     t.fulfilled_on AS transaction_fulfilled_on,
     t.scheduled_to AS transaction_scheduled_to,
     t.created_at AS transaction_created_at,
+    ta.currency_id AS transaction_currency_id,
     tc.enum AS transaction_enum,
     tc.egp_fx_rate AS transaction_egp_fx_rate,
     tk.kind AS transaction_kind,
@@ -142,10 +138,11 @@ SELECT
 FROM frequent_txs AS ft
 LEFT JOIN frequent_txs_transactions AS ftt ON ftt.frequency_id = ft.id
 LEFT JOIN accounts AS a ON ft.account_id = a.id
-LEFT JOIN transactions AS t ON t.id = ftt.transaction_id
-LEFT JOIN currencies AS c ON ft.currency_id = c.id
+LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN transaction_kinds AS k ON ft.kind_id = k.id
-LEFT JOIN currencies AS tc ON t.currency_id = c.id
+LEFT JOIN transactions AS t ON t.id = ftt.transaction_id
+LEFT JOIN accounts AS ta ON t.account_id = ta.id
+LEFT JOIN currencies AS tc ON ta.currency_id = c.id
 LEFT JOIN transaction_kinds AS tk ON t.kind_id = k.id
 WHERE ft.id = ?
 `
@@ -154,7 +151,6 @@ type GetFrequentTxRow struct {
 	ID                         string
 	AccountID                  string
 	Amount                     float64
-	CurrencyID                 string
 	KindID                     string
 	Description                sql.NullString
 	CreatedAt                  interface{}
@@ -164,7 +160,7 @@ type GetFrequentTxRow struct {
 	StopsOn                    sql.NullTime
 	LastTransactionCreatedAt   interface{}
 	AccountName                sql.NullString
-	AccountCurrencyID          sql.NullString
+	CurrencyID                 sql.NullString
 	CurrencyEnum               sql.NullInt64
 	EgpFxRate                  sql.NullFloat64
 	Kind                       sql.NullString
@@ -172,12 +168,12 @@ type GetFrequentTxRow struct {
 	TransactionID              sql.NullString
 	TransactionAccountID       sql.NullString
 	TransactionAmount          sql.NullFloat64
-	TransactionCurrencyID      sql.NullString
 	TransactionKindID          sql.NullString
 	TransactionDescription     sql.NullString
 	TransactionFulfilledOn     sql.NullTime
 	TransactionScheduledTo     sql.NullTime
 	TransactionCreatedAt       interface{}
+	TransactionCurrencyID      sql.NullString
 	TransactionEnum            sql.NullInt64
 	TransactionEgpFxRate       sql.NullFloat64
 	TransactionKind            sql.NullString
@@ -197,7 +193,6 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) ([]GetFrequentTx
 			&i.ID,
 			&i.AccountID,
 			&i.Amount,
-			&i.CurrencyID,
 			&i.KindID,
 			&i.Description,
 			&i.CreatedAt,
@@ -207,7 +202,7 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) ([]GetFrequentTx
 			&i.StopsOn,
 			&i.LastTransactionCreatedAt,
 			&i.AccountName,
-			&i.AccountCurrencyID,
+			&i.CurrencyID,
 			&i.CurrencyEnum,
 			&i.EgpFxRate,
 			&i.Kind,
@@ -215,12 +210,12 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) ([]GetFrequentTx
 			&i.TransactionID,
 			&i.TransactionAccountID,
 			&i.TransactionAmount,
-			&i.TransactionCurrencyID,
 			&i.TransactionKindID,
 			&i.TransactionDescription,
 			&i.TransactionFulfilledOn,
 			&i.TransactionScheduledTo,
 			&i.TransactionCreatedAt,
+			&i.TransactionCurrencyID,
 			&i.TransactionEnum,
 			&i.TransactionEgpFxRate,
 			&i.TransactionKind,
@@ -244,7 +239,6 @@ SELECT
     ft.id,
     ft.account_id,
     ft.amount,
-    ft.currency_id,
     ft.kind_id,
     ft.description,
     ft.created_at,
@@ -254,7 +248,7 @@ SELECT
     ft.stops_on,
     ft.last_transaction_created_at,
     a.name AS account_name,
-    a.currency_id AS account_currency_id,
+    a.currency_id,
     c.enum AS currency_enum,
     c.egp_fx_rate,
     k.kind,
@@ -262,12 +256,12 @@ SELECT
     t.id AS transaction_id,
     t.account_id AS transaction_account_id,
     t.amount AS transaction_amount,
-    t.currency_id AS transaction_currency_id,
     t.kind_id AS transaction_kind_id,
     t.description AS transaction_description,
     t.fulfilled_on AS transaction_fulfilled_on,
     t.scheduled_to AS transaction_scheduled_to,
     t.created_at AS transaction_created_at,
+    ta.currency_id AS transaction_currency_id,
     tc.enum AS transaction_enum,
     tc.egp_fx_rate AS transaction_egp_fx_rate,
     tk.kind AS transaction_kind,
@@ -275,10 +269,11 @@ SELECT
 FROM frequent_txs AS ft
 LEFT JOIN frequent_txs_transactions AS ftt ON ftt.frequency_id = ft.id
 LEFT JOIN accounts AS a ON ft.account_id = a.id
-LEFT JOIN transactions AS t ON t.id = ftt.transaction_id
-LEFT JOIN currencies AS c ON ft.currency_id = c.id
+LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN transaction_kinds AS k ON ft.kind_id = k.id
-LEFT JOIN currencies AS tc ON t.currency_id = c.id
+LEFT JOIN transactions AS t ON t.id = ftt.transaction_id
+LEFT JOIN accounts AS ta ON t.account_id = ta.id
+LEFT JOIN currencies AS tc ON ta.currency_id = c.id
 LEFT JOIN transaction_kinds AS tk ON t.kind_id = k.id
 `
 
@@ -286,7 +281,6 @@ type GetFrequentTxsRow struct {
 	ID                         string
 	AccountID                  string
 	Amount                     float64
-	CurrencyID                 string
 	KindID                     string
 	Description                sql.NullString
 	CreatedAt                  interface{}
@@ -296,7 +290,7 @@ type GetFrequentTxsRow struct {
 	StopsOn                    sql.NullTime
 	LastTransactionCreatedAt   interface{}
 	AccountName                sql.NullString
-	AccountCurrencyID          sql.NullString
+	CurrencyID                 sql.NullString
 	CurrencyEnum               sql.NullInt64
 	EgpFxRate                  sql.NullFloat64
 	Kind                       sql.NullString
@@ -304,12 +298,12 @@ type GetFrequentTxsRow struct {
 	TransactionID              sql.NullString
 	TransactionAccountID       sql.NullString
 	TransactionAmount          sql.NullFloat64
-	TransactionCurrencyID      sql.NullString
 	TransactionKindID          sql.NullString
 	TransactionDescription     sql.NullString
 	TransactionFulfilledOn     sql.NullTime
 	TransactionScheduledTo     sql.NullTime
 	TransactionCreatedAt       interface{}
+	TransactionCurrencyID      sql.NullString
 	TransactionEnum            sql.NullInt64
 	TransactionEgpFxRate       sql.NullFloat64
 	TransactionKind            sql.NullString
@@ -329,7 +323,6 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 			&i.ID,
 			&i.AccountID,
 			&i.Amount,
-			&i.CurrencyID,
 			&i.KindID,
 			&i.Description,
 			&i.CreatedAt,
@@ -339,7 +332,7 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 			&i.StopsOn,
 			&i.LastTransactionCreatedAt,
 			&i.AccountName,
-			&i.AccountCurrencyID,
+			&i.CurrencyID,
 			&i.CurrencyEnum,
 			&i.EgpFxRate,
 			&i.Kind,
@@ -347,12 +340,12 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 			&i.TransactionID,
 			&i.TransactionAccountID,
 			&i.TransactionAmount,
-			&i.TransactionCurrencyID,
 			&i.TransactionKindID,
 			&i.TransactionDescription,
 			&i.TransactionFulfilledOn,
 			&i.TransactionScheduledTo,
 			&i.TransactionCreatedAt,
+			&i.TransactionCurrencyID,
 			&i.TransactionEnum,
 			&i.TransactionEgpFxRate,
 			&i.TransactionKind,
@@ -378,7 +371,6 @@ frequency_by = ?,
 frequency = ?,
 account_id = ?,
 amount = ?,
-currency_id = ?,
 kind_id = ?,
 description = ?,
 stops_on = ?,
@@ -391,7 +383,6 @@ type UpdateFrequentTxParams struct {
 	Frequency                int64
 	AccountID                string
 	Amount                   float64
-	CurrencyID               string
 	KindID                   string
 	Description              sql.NullString
 	StopsOn                  sql.NullTime
@@ -405,7 +396,6 @@ func (q *Queries) UpdateFrequentTx(ctx context.Context, arg UpdateFrequentTxPara
 		arg.Frequency,
 		arg.AccountID,
 		arg.Amount,
-		arg.CurrencyID,
 		arg.KindID,
 		arg.Description,
 		arg.StopsOn,

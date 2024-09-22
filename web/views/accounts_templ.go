@@ -26,9 +26,8 @@ type AccountFD struct {
 
 func Accounts(
 	balances []models.Balance,
-	fd *AccountFD, aks map[string]string,
-	curs map[string]string, cur *models.Currency,
-	accounts []models.Account) templ.Component {
+	fd *AccountFD, aknds []models.AccountKind,
+	curs []models.Currency, accounts []models.Account) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
@@ -78,7 +77,7 @@ func Accounts(
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = CreateAccountForm(fd, aks, curs, cur).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = CreateAccountForm(fd, aknds, curs).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -106,7 +105,7 @@ func Accounts(
 	})
 }
 
-func CreateAccountForm(fd *AccountFD, aks map[string]string, curs map[string]string, cur *models.Currency) templ.Component {
+func CreateAccountForm(fd *AccountFD, aknds []models.AccountKind, curs []models.Currency) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
@@ -136,7 +135,7 @@ func CreateAccountForm(fd *AccountFD, aks map[string]string, curs map[string]str
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = accountFormBody("", fd, aks, curs, cur).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = accountFormBody("", fd, aknds, curs).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -150,7 +149,7 @@ func CreateAccountForm(fd *AccountFD, aks map[string]string, curs map[string]str
 	})
 }
 
-func EditAccount(id string, fd *AccountFD, aks map[string]string, curs map[string]string, cur *models.Currency) templ.Component {
+func EditAccount(id string, fd *AccountFD, aknds []models.AccountKind, curs []models.Currency) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
@@ -187,7 +186,7 @@ func EditAccount(id string, fd *AccountFD, aks map[string]string, curs map[strin
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(id)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/accounts.templ`, Line: 41, Col: 13}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/accounts.templ`, Line: 40, Col: 13}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 			if templ_7745c5c3_Err != nil {
@@ -197,7 +196,7 @@ func EditAccount(id string, fd *AccountFD, aks map[string]string, curs map[strin
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = accountFormBody(id, fd, aks, curs, cur).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = accountFormBody(id, fd, aknds, curs).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -219,7 +218,7 @@ func EditAccount(id string, fd *AccountFD, aks map[string]string, curs map[strin
 	})
 }
 
-func accountFormBody(id string, fd *AccountFD, aks map[string]string, curs map[string]string, cur *models.Currency) templ.Component {
+func accountFormBody(id string, fd *AccountFD, aknds []models.AccountKind, curs []models.Currency) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
@@ -241,11 +240,11 @@ func accountFormBody(id string, fd *AccountFD, aks map[string]string, curs map[s
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = selectInput("Kind", "kind_id", "Select a Kind", id, aks, fd.KindID).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = selectAccKind("kind_id", id, aknds, fd.KindID).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = IbanInputs(&fd.IBANFD, id, curs, cur).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = IbanInputs(&fd.IBANFD, id, curs).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -340,7 +339,7 @@ func Account(a *models.Account) templ.Component {
 		var templ_7745c5c3_Var13 string
 		templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(a.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/accounts.templ`, Line: 67, Col: 15}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/accounts.templ`, Line: 66, Col: 15}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 		if templ_7745c5c3_Err != nil {
@@ -353,7 +352,7 @@ func Account(a *models.Account) templ.Component {
 		var templ_7745c5c3_Var14 string
 		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(a.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/accounts.templ`, Line: 68, Col: 19}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/accounts.templ`, Line: 67, Col: 19}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 		if templ_7745c5c3_Err != nil {
@@ -366,7 +365,7 @@ func Account(a *models.Account) templ.Component {
 		var templ_7745c5c3_Var15 string
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(a.ViewAmount())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/accounts.templ`, Line: 69, Col: 29}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/accounts.templ`, Line: 68, Col: 29}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 		if templ_7745c5c3_Err != nil {
@@ -379,7 +378,7 @@ func Account(a *models.Account) templ.Component {
 		var templ_7745c5c3_Var16 string
 		templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(a.Kind.Enum.String())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/accounts.templ`, Line: 70, Col: 33}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/accounts.templ`, Line: 69, Col: 33}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 		if templ_7745c5c3_Err != nil {
@@ -397,7 +396,7 @@ func Account(a *models.Account) templ.Component {
 			var templ_7745c5c3_Var17 string
 			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(a.MaskIBAN())
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/accounts.templ`, Line: 72, Col: 26}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/accounts.templ`, Line: 71, Col: 26}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 			if templ_7745c5c3_Err != nil {
@@ -416,7 +415,7 @@ func Account(a *models.Account) templ.Component {
 			var templ_7745c5c3_Var18 string
 			templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(a.MaskCardNumber())
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/accounts.templ`, Line: 75, Col: 39}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/accounts.templ`, Line: 74, Col: 39}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 			if templ_7745c5c3_Err != nil {
@@ -435,7 +434,7 @@ func Account(a *models.Account) templ.Component {
 			var templ_7745c5c3_Var19 string
 			templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(a.Note)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/accounts.templ`, Line: 78, Col: 20}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/accounts.templ`, Line: 77, Col: 20}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 			if templ_7745c5c3_Err != nil {

@@ -15,9 +15,10 @@ INSERT INTO items (
     id,
     name,
     price,
-    currency_id
+    currency_id,
+    created_at
 )
-VALUES (?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?)
 `
 
 type CreateItemParams struct {
@@ -25,6 +26,7 @@ type CreateItemParams struct {
 	Name       string
 	Price      float64
 	CurrencyID string
+	CreatedAt  interface{}
 }
 
 func (q *Queries) CreateItem(ctx context.Context, arg CreateItemParams) error {
@@ -33,6 +35,7 @@ func (q *Queries) CreateItem(ctx context.Context, arg CreateItemParams) error {
 		arg.Name,
 		arg.Price,
 		arg.CurrencyID,
+		arg.CreatedAt,
 	)
 	return err
 }
@@ -54,6 +57,7 @@ SELECT
     i.price,
     i.purchased_on,
     i.currency_id,
+    i.created_at,
     c.enum,
     c.egp_fx_rate
 FROM items AS i
@@ -67,6 +71,7 @@ type GetItemRow struct {
 	Price       float64
 	PurchasedOn sql.NullTime
 	CurrencyID  string
+	CreatedAt   interface{}
 	Enum        sql.NullInt64
 	EgpFxRate   sql.NullFloat64
 }
@@ -80,6 +85,7 @@ func (q *Queries) GetItem(ctx context.Context, id string) (GetItemRow, error) {
 		&i.Price,
 		&i.PurchasedOn,
 		&i.CurrencyID,
+		&i.CreatedAt,
 		&i.Enum,
 		&i.EgpFxRate,
 	)
@@ -93,6 +99,7 @@ SELECT
     i.price,
     i.purchased_on,
     i.currency_id,
+    i.created_at,
     c.enum,
     c.egp_fx_rate
 FROM items AS i
@@ -106,6 +113,7 @@ type GetItemsRow struct {
 	Price       float64
 	PurchasedOn sql.NullTime
 	CurrencyID  string
+	CreatedAt   interface{}
 	Enum        sql.NullInt64
 	EgpFxRate   sql.NullFloat64
 }
@@ -125,6 +133,7 @@ func (q *Queries) GetItems(ctx context.Context) ([]GetItemsRow, error) {
 			&i.Price,
 			&i.PurchasedOn,
 			&i.CurrencyID,
+			&i.CreatedAt,
 			&i.Enum,
 			&i.EgpFxRate,
 		); err != nil {

@@ -31,7 +31,6 @@ type FrequentTx struct {
 	FrequencyBy              FrequencyBy     `validate:"required"`
 	Frequency                uint            `validate:"required,min=1"`
 	Amount                   float64         `validate:"required,min=1"`
-	Currency                 Currency        `validate:"required"`
 	Kind                     TransactionKind `validate:"required"`
 	Description              string
 	StartsOn                 time.Time `validate:"required"`
@@ -47,5 +46,5 @@ func (ft *FrequentTx) ViewFrequency() string {
 }
 
 func (ft *FrequentTx) ViewAmount() string {
-	return formatAmount(ft.Amount, ft.Currency.Enum)
+	return formatAmount(ft.Amount, ft.Account.Currency.Enum)
 }

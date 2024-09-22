@@ -11,14 +11,24 @@ type Account struct {
 	ID                 string `validate:"required"`
 	Name               string `conform:"trim,title"`
 	Amount             float64
-	Currency           Currency    `validate:"omitempty"`
-	Kind               AccountKind `validate:"omitempty"`
-	IBAN               string      `validate:"omitempty,iban" conform:"trim,nospaces"`
-	CardNumber         string      `validate:"omitempty" conform:"trim,num"`
-	Note               string      `conform:"trim"`
+	Currency           Currency
+	Kind               AccountKind
+	IBAN               string `validate:"omitempty,iban" conform:"trim,nospaces"`
+	CardNumber         string `validate:"omitempty" conform:"trim,num"`
+	Note               string `conform:"trim"`
 	IsArchive          bool
 	ExcludeFromBalance bool
+	IsDefault          bool
 	CreatedAt          time.Time
+}
+
+// This is used to validate the
+// account on create and update only
+type AccountCreation struct {
+	ID         string `validate:"required"`
+	Name       string `validate:"required"`
+	IBAN       string `validate:"omitempty,iban"`
+	CardNumber string `validate:"omitempty"`
 }
 
 func (a *Account) ViewAmount() string {

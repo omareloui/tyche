@@ -23,8 +23,7 @@ func Items(
 	balances []models.Balance,
 	fd *ItemFD,
 	items []models.Item,
-	currencies map[string]string,
-	defaultCurrencySymbol string) templ.Component {
+	curs []models.Currency) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
@@ -74,7 +73,7 @@ func Items(
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = CreateItemForm(fd, currencies, defaultCurrencySymbol).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = CreateItemForm(fd, curs).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -102,7 +101,7 @@ func Items(
 	})
 }
 
-func CreateItemForm(fd *ItemFD, currencies map[string]string, currencySymbol string) templ.Component {
+func CreateItemForm(fd *ItemFD, curs []models.Currency) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
@@ -132,7 +131,7 @@ func CreateItemForm(fd *ItemFD, currencies map[string]string, currencySymbol str
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = itemFormBody(fd, currencies, currencySymbol).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = itemFormBody(fd, "", curs).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -146,7 +145,7 @@ func CreateItemForm(fd *ItemFD, currencies map[string]string, currencySymbol str
 	})
 }
 
-func EditItem(id string, fd *ItemFD, currencies map[string]string, currencySymbol string) templ.Component {
+func EditItem(fd *ItemFD, id string, curs []models.Currency) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
@@ -183,7 +182,7 @@ func EditItem(id string, fd *ItemFD, currencies map[string]string, currencySymbo
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(id)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/items.templ`, Line: 37, Col: 13}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/items.templ`, Line: 36, Col: 13}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 			if templ_7745c5c3_Err != nil {
@@ -193,7 +192,7 @@ func EditItem(id string, fd *ItemFD, currencies map[string]string, currencySymbo
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = itemFormBody(fd, currencies, currencySymbol).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = itemFormBody(fd, id, curs).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -215,7 +214,7 @@ func EditItem(id string, fd *ItemFD, currencies map[string]string, currencySymbo
 	})
 }
 
-func itemFormBody(fd *ItemFD, currencies map[string]string, currencySymbol string) templ.Component {
+func itemFormBody(fd *ItemFD, id string, curs []models.Currency) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
@@ -237,7 +236,7 @@ func itemFormBody(fd *ItemFD, currencies map[string]string, currencySymbol strin
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = AmountInputs(&fd.AmountFD, currencies, currencySymbol).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = AmountInputs(&fd.AmountFD, id, curs).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -316,7 +315,7 @@ func Item(it *models.Item) templ.Component {
 		var templ_7745c5c3_Var13 string
 		templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(it.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/items.templ`, Line: 58, Col: 16}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/items.templ`, Line: 57, Col: 16}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 		if templ_7745c5c3_Err != nil {
@@ -329,7 +328,7 @@ func Item(it *models.Item) templ.Component {
 		var templ_7745c5c3_Var14 string
 		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(it.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/items.templ`, Line: 59, Col: 20}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/items.templ`, Line: 58, Col: 20}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 		if templ_7745c5c3_Err != nil {
@@ -384,7 +383,7 @@ func itemPrice(it *models.Item) templ.Component {
 		var templ_7745c5c3_Var16 string
 		templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(it.ViewPrice())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/items.templ`, Line: 72, Col: 17}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/items.templ`, Line: 71, Col: 17}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 		if templ_7745c5c3_Err != nil {
@@ -402,7 +401,7 @@ func itemPrice(it *models.Item) templ.Component {
 			var templ_7745c5c3_Var17 string
 			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(it.ViewEgpPrice())
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/items.templ`, Line: 74, Col: 47}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/items.templ`, Line: 73, Col: 47}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 			if templ_7745c5c3_Err != nil {

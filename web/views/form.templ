@@ -4,11 +4,17 @@ import (
 	"strings"
 	"fmt"
 	"github.com/omareloui/financial-planner/internal/models"
+	"github.com/omareloui/financial-planner/internal/slicesutils"
 )
 
 type FDInput struct {
 	Value string `json:"value"`
 	Error string `json:"error"`
+}
+
+type AccountIFD struct {
+	Amount    FDInput
+	AccountID FDInput
 }
 
 type AmountFD struct {
@@ -79,10 +85,10 @@ templ creationForm(title, postTo, submitStr string, close ...bool) {
 	</div>
 }
 
-templ AmountInputs(fd *AmountFD, currencies map[string]string, currencySymbol string) {
+templ AmountInputs(fd *AmountFD, id string, curs []models.Currency) {
 	<div data-amount class="grid grid-cols-3 gap-4">
-		@moneyInput("Amount", "amount", currencySymbol, "", fd.Amount, "col-span-2")
-		@selectInput("Currency", "currency_id", "Select a Currency", "", currencies, fd.CurrencyID,
+		@moneyInput("Amount", "amount", getCurSymbolByCurrency(curs, fd.CurrencyID.Value), id, fd.Amount, "col-span-2")
+		@selectInput("Currency", "currency_id", "Select a Currency", id, currenciesToMap(curs), fd.CurrencyID,
 			templ.Attributes{
 				"hx-post":    "/amount-inputs",
 				"hx-trigger": "change",
@@ -93,10 +99,24 @@ templ AmountInputs(fd *AmountFD, currencies map[string]string, currencySymbol st
 	</div>
 }
 
-templ IbanInputs(fd *IBANFD, id string, currencies map[string]string, cur *models.Currency) {
+templ AccountInputs(fd *AccountIFD, id string, accs []models.Account) {
+	<div data-account class="grid grid-cols-3 gap-4">
+		@moneyInput("Amount", "amount", getCurSymbolByAccount(accs, fd.AccountID.Value), id, fd.Amount, "col-span-2")
+		@selectAccount("account_id", id, accs, fd.AccountID,
+			templ.Attributes{
+				"hx-post":    "/account-inputs",
+				"hx-trigger": "change",
+				"hx-target":  "closest [data-account]",
+				"hx-swap":    "outerHTML",
+				"hx-sync":    "closest form:abort",
+			})
+	</div>
+}
+
+templ IbanInputs(fd *IBANFD, id string, curs []models.Currency) {
 	<div data-iban class="grid grid-cols-3 gap-4">
-		@moneyDisabledInput("Amount", "amount", cur.Enum.Symbol(), id, fd.Amount, "col-span-2")
-		@selectInput("Currency", "currency_id", "Select a Currency", id, currencies, fd.CurrencyID,
+		@moneyDisabledInput("Amount", "amount", getCurSymbolByCurrency(curs, fd.CurrencyID.Value), id, fd.Amount, "col-span-2")
+		@selectCurrency("currency_id", id, curs, fd.CurrencyID,
 			templ.Attributes{
 				"hx-post":    "/iban-inputs",
 				"hx-trigger": "change",
@@ -104,15 +124,15 @@ templ IbanInputs(fd *IBANFD, id string, currencies map[string]string, cur *model
 				"hx-swap":    "outerHTML",
 				"hx-sync":    "closest form:abort",
 			})
-		@ibanInput("IBAN", "iban", id, cur, fd.IBAN, "col-span-3")
+		@ibanInput("IBAN", "iban", id, getCurIbanPrefixByCurrency(curs, fd.CurrencyID.Value), fd.IBAN, "col-span-3")
 	</div>
 }
 
-templ input(label, kind, name, placeholder, idSuffix string, data FDInput, classes ...string) {
+templ input(label, kind, name, placeholder, id string, data FDInput, classes ...string) {
 	<div class={ strings.Join(classes, " ") }>
-		<label class="input-label" for={ join(name, idSuffix) }>{ label }</label>
+		<label class="input-label" for={ join(name, id) }>{ label }</label>
 		<input
-			id={ join(name, idSuffix) }
+			id={ join(name, id) }
 			type={ kind }
 			name={ name }
 			placeholder={ placeholder }
@@ -123,11 +143,11 @@ templ input(label, kind, name, placeholder, idSuffix string, data FDInput, class
 	</div>
 }
 
-templ numberInput(label, name, placeholder, idSuffix string, data FDInput, classes ...string) {
+templ numberInput(label, name, placeholder, id string, data FDInput, classes ...string) {
 	<div class={ strings.Join(classes, " ") }>
-		<label class="input-label" for={ join(name, idSuffix) }>{ label }</label>
+		<label class="input-label" for={ join(name, id) }>{ label }</label>
 		<input
-			id={ join(name, idSuffix) }
+			id={ join(name, id) }
 			type="number"
 			typemode="decimal"
 			name={ name }
@@ -139,11 +159,11 @@ templ numberInput(label, name, placeholder, idSuffix string, data FDInput, class
 	</div>
 }
 
-templ moneyInput(label, name, currencySymbol, idSuffix string, data FDInput, classes ...string) {
+templ moneyInput(label, name, currencySymbol, id string, data FDInput, classes ...string) {
 	<div class={ strings.Join(classes, " ") }>
-		<label class="input-label" for={ join(name, idSuffix) }>{ label }</label>
+		<label class="input-label" for={ join(name, id) }>{ label }</label>
 		<input
-			id={ join(name, idSuffix) }
+			id={ join(name, id) }
 			name={ name }
 			class="input-field"
 			value={ data.Value }
@@ -154,11 +174,11 @@ templ moneyInput(label, name, currencySymbol, idSuffix string, data FDInput, cla
 	</div>
 }
 
-templ moneyDisabledInput(label, name, currencySymbol, idSuffix string, data FDInput, classes ...string) {
+templ moneyDisabledInput(label, name, currencySymbol, id string, data FDInput, classes ...string) {
 	<div class={ strings.Join(classes, " ") }>
-		<label class="input-label" for={ join(name, idSuffix) }>{ label }</label>
+		<label class="input-label" for={ join(name, id) }>{ label }</label>
 		<input
-			id={ join(name, idSuffix) }
+			id={ join(name, id) }
 			name={ name }
 			class="input-field"
 			value={ data.Value }
@@ -170,11 +190,11 @@ templ moneyDisabledInput(label, name, currencySymbol, idSuffix string, data FDIn
 	</div>
 }
 
-templ creditCardInput(label, name, idSuffix string, data FDInput, classes ...string) {
+templ creditCardInput(label, name, id string, data FDInput, classes ...string) {
 	<div class={ strings.Join(classes, " ") }>
-		<label class="input-label" for={ join(name, idSuffix) }>{ label }</label>
+		<label class="input-label" for={ join(name, id) }>{ label }</label>
 		<input
-			id={ join(name, idSuffix) }
+			id={ join(name, id) }
 			name={ name }
 			class="input-field"
 			value={ data.Value }
@@ -186,27 +206,27 @@ templ creditCardInput(label, name, idSuffix string, data FDInput, classes ...str
 	</div>
 }
 
-templ ibanInput(label, name, idSuffix string, cur *models.Currency, data FDInput, classes ...string) {
+templ ibanInput(label, name, id string, ibanPrefix string, data FDInput, classes ...string) {
 	<div class={ strings.Join(classes, " ") }>
-		<label class="input-label" for={ join(name, idSuffix) }>{ label }</label>
+		<label class="input-label" for={ join(name, id) }>{ label }</label>
 		<input
-			id={ join(name, idSuffix) }
+			id={ join(name, id) }
 			name={ name }
 			class="input-field"
 			value={ data.Value }
-			placeholder={ fmt.Sprintf("%s00 0000 0000 0000 0000 0000 0000 0", cur.Enum.IBANPrefix()) }
-			x-mask={ fmt.Sprintf("%s99 9999 9999 9999 9999 9999 9999 9", cur.Enum.IBANPrefix()) }
+			placeholder={ fmt.Sprintf("%s00 0000 0000 0000 0000 0000 0000 0", ibanPrefix) }
+			x-mask={ fmt.Sprintf("%s99 9999 9999 9999 9999 9999 9999 9", ibanPrefix) }
 		/>
 		@errorMessage(data.Error)
 	</div>
 }
 
-templ dateInput(label, name, idSuffix string, data FDInput, classes ...string) {
+templ dateInput(label, name, id string, data FDInput, classes ...string) {
 	<div class={ strings.Join(classes, "") }>
-		<label class="input-label" for={ join(name, idSuffix) }>{ label }</label>
+		<label class="input-label" for={ join(name, id) }>{ label }</label>
 		<input
 			data-datepicker
-			id={ join(name, idSuffix) }
+			id={ join(name, id) }
 			class="input-field"
 			x-mask="9999-99-99"
 			placeholder="yyyy-mm-dd"
@@ -218,11 +238,11 @@ templ dateInput(label, name, idSuffix string, data FDInput, classes ...string) {
 	</div>
 }
 
-templ selectInput(label, name, placeholder, idSuffix string, options map[string]string, data FDInput, inputAttrs ...templ.Attributes) {
+templ selectInput(label, name, placeholder, id string, options map[string]string, data FDInput, inputAttrs ...templ.Attributes) {
 	<div>
-		<label for={ join(name, idSuffix) } class="input-label">{ label }</label>
+		<label for={ join(name, id) } class="input-label">{ label }</label>
 		<select
-			id={ join(name, idSuffix) }
+			id={ join(name, id) }
 			name={ name }
 			class="input-field"
 			if inputAttrs != nil {
@@ -231,21 +251,38 @@ templ selectInput(label, name, placeholder, idSuffix string, options map[string]
 		>
 			<option value="" disabled selected>{ placeholder }</option>
 			for k, v := range options {
-				if k == data.Value {
-					<option value={ k } selected>{ v }</option>
-				} else {
-					<option value={ k }>{ v }</option>
-				}
+				<option
+					value={ k }
+					if k == data.Value {
+						selected
+					}
+				>{ v }</option>
 			}
 		</select>
 		@errorMessage(data.Error)
 	</div>
 }
 
-templ checkbox(label, name, idSuffix string, data FDInput, attrs ...templ.Attributes) {
+templ selectAccKind(name, id string, aknds []models.AccountKind, data FDInput, inputAttrs ...templ.Attributes) {
+	@selectInput("Account Kind", name, "Select Account Kind", id, accKindsToMap(aknds), data, inputAttrs...)
+}
+
+templ selectAccount(name, id string, accs []models.Account, data FDInput, inputAttrs ...templ.Attributes) {
+	@selectInput("Account", name, "Select Account", id, accountsToMap(accs), data, inputAttrs...)
+}
+
+templ selectCurrency(name, id string, curs []models.Currency, data FDInput, inputAttrs ...templ.Attributes) {
+	@selectInput("Currency", name, "Select Currency", id, currenciesToMap(curs), data, inputAttrs...)
+}
+
+templ selectTxKind(name, id string, knds []models.TransactionKind, data FDInput, inputAttrs ...templ.Attributes) {
+	@selectInput("Transaction Kind", name, "Select Kind", id, txKindsToMap(knds), data, inputAttrs...)
+}
+
+templ checkbox(label, name, id string, data FDInput, attrs ...templ.Attributes) {
 	<div>
 		<input
-			id={ join(name, idSuffix) }
+			id={ join(name, id) }
 			type="checkbox"
 			name={ name }
 			if attrs != nil {
@@ -255,7 +292,7 @@ templ checkbox(label, name, idSuffix string, data FDInput, attrs ...templ.Attrib
 				checked
 			}
 		/>
-		<label for={ join(name, idSuffix) } class="cursor-pointer">{ label }</label>
+		<label for={ join(name, id) } class="cursor-pointer">{ label }</label>
 	</div>
 }
 
@@ -332,4 +369,66 @@ func join(prefix, suffix string) string {
 		return prefix
 	}
 	return strings.Join([]string{prefix, suffix}, "-")
+}
+
+func currenciesToMap(curs []models.Currency) map[string]string {
+	m := make(map[string]string, len(curs))
+	for _, c := range curs {
+		m[c.ID] = c.Enum.String()
+	}
+	return m
+}
+
+func accountsToMap(accs []models.Account) map[string]string {
+	m := make(map[string]string, len(accs))
+	for _, a := range accs {
+		m[a.ID] = a.Name
+	}
+	return m
+}
+
+func accKindsToMap(accs []models.AccountKind) map[string]string {
+	m := make(map[string]string, len(accs))
+	for _, a := range accs {
+		m[a.ID] = a.Enum.String()
+	}
+	return m
+}
+
+func txKindsToMap(kinds []models.TransactionKind) map[string]string {
+	m := make(map[string]string, len(kinds))
+	for _, k := range kinds {
+		m[k.ID] = k.Kind
+	}
+	return m
+}
+
+func getCurSymbolByAccount(accs []models.Account, accId string) string {
+	acc := slicesutils.Find(accs, func(a models.Account) bool {
+		return a.ID == accId
+	})
+	if acc == nil {
+		return models.DfltCurrency.Symbol()
+	}
+	return acc.Currency.Enum.Symbol()
+}
+
+func getCurSymbolByCurrency(curs []models.Currency, curId string) string {
+	cur := slicesutils.Find(curs, func(c models.Currency) bool {
+		return c.ID == curId
+	})
+	if cur == nil {
+		return models.DfltCurrency.Symbol()
+	}
+	return cur.Enum.Symbol()
+}
+
+func getCurIbanPrefixByCurrency(curs []models.Currency, curId string) string {
+	cur := slicesutils.Find(curs, func(c models.Currency) bool {
+		return c.ID == curId
+	})
+	if cur == nil {
+		return models.DfltCurrency.IBANPrefix()
+	}
+	return cur.Enum.IBANPrefix()
 }

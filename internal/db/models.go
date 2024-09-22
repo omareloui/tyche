@@ -18,8 +18,9 @@ type Account struct {
 	CardNumber         sql.NullString
 	Iban               sql.NullString
 	Note               sql.NullString
-	IsArchived         sql.NullBool
-	ExcludeFromBalance sql.NullBool
+	IsDefault          bool
+	IsArchived         bool
+	ExcludeFromBalance bool
 	CreatedAt          interface{}
 	Foreign            interface{}
 }
@@ -41,13 +42,12 @@ type FrequentTx struct {
 	Frequency                int64
 	AccountID                string
 	Amount                   float64
-	CurrencyID               string
 	KindID                   string
 	Description              sql.NullString
 	StartsOn                 time.Time
 	StopsOn                  sql.NullTime
-	CreatedAt                interface{}
 	LastTransactionCreatedAt interface{}
+	CreatedAt                interface{}
 }
 
 type FrequentTxsTransaction struct {
@@ -73,13 +73,13 @@ type Item struct {
 	Price       float64
 	CurrencyID  string
 	PurchasedOn sql.NullTime
+	CreatedAt   interface{}
 }
 
 type Transaction struct {
 	ID          string
 	AccountID   string
 	Amount      float64
-	CurrencyID  string
 	KindID      string
 	Description sql.NullString
 	FulfilledOn sql.NullTime

@@ -35,14 +35,6 @@ func (r *Repository) GetTransactionKindsMap(ctx context.Context) (map[string]str
 	return m, nil
 }
 
-func (r *Repository) TransactionKindsToMap(kinds []models.TransactionKind) map[string]string {
-	m := make(map[string]string, len(kinds))
-	for _, k := range kinds {
-		m[k.ID] = k.Kind
-	}
-	return m
-}
-
 func dbTransactionKindToTransactionKind(dbKind *db.TransactionKind) *models.TransactionKind {
 	return &models.TransactionKind{
 		ID:              dbKind.ID,

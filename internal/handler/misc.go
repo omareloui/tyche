@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/a-h/templ"
+	"github.com/omareloui/financial-planner/internal/errs"
 	"github.com/omareloui/financial-planner/internal/logger"
 	"github.com/omareloui/financial-planner/internal/models"
 	"github.com/omareloui/financial-planner/internal/slicesutils"
@@ -19,21 +20,53 @@ func (h Handler) AmountInputs(w http.ResponseWriter, r *http.Request) (templ.Com
 		return nil, err
 	}
 
-	tx, err := h.mapFDToTransaction(r)
-	if err != nil {
-		return nil, err
+	curId := r.FormValue("currency_id")
+	if curId == "" {
+		return nil, errs.ErrInvalidID
 	}
 
 	currency := slicesutils.Find(curs, func(cur models.Currency) bool {
-		return cur.ID == tx.Currency.ID
+		return cur.ID == curId
 	})
+
+	if currency == nil {
+		return nil, errs.ErrInvalidID
+	}
 
 	fd := &views.AmountFD{
 		Amount:     views.FDInput{Value: r.FormValue("amount")},
 		CurrencyID: views.FDInput{Value: currency.ID},
 	}
 
-	return views.AmountInputs(fd, h.repo.CurrenciesToMap(curs), currency.Enum.Symbol()), nil
+	return views.AmountInputs(fd, "", curs), nil
+}
+
+func (h Handler) AccountInputs(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	l := logger.FromCtx(r.Context())
+
+	accs, err := h.repo.GetAccounts(r.Context())
+	if err != nil {
+		l.Error("fetching currencies")
+		return nil, err
+	}
+
+	accId := r.FormValue("account_id")
+	if accId == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	acc := slicesutils.Find(accs, func(a models.Account) bool { return a.ID == accId })
+
+	if acc == nil {
+		return nil, errs.ErrInvalidID
+	}
+
+	fd := &views.AccountIFD{
+		Amount:    views.FDInput{Value: r.FormValue("amount")},
+		AccountID: views.FDInput{Value: acc.ID},
+	}
+
+	return views.AccountInputs(fd, "", accs), nil
 }
 
 func (h Handler) IbanInputs(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -45,14 +78,18 @@ func (h Handler) IbanInputs(w http.ResponseWriter, r *http.Request) (templ.Compo
 		return nil, err
 	}
 
-	tx, err := h.mapFDToTransaction(r)
-	if err != nil {
-		return nil, err
+	curId := r.FormValue("currency_id")
+	if curId == "" {
+		return nil, errs.ErrInvalidID
 	}
 
 	currency := slicesutils.Find(curs, func(cur models.Currency) bool {
-		return cur.ID == tx.Currency.ID
+		return cur.ID == curId
 	})
+
+	if currency == nil {
+		return nil, errs.ErrInvalidID
+	}
 
 	amount := r.FormValue("amount")
 	if amount == "" {
@@ -65,5 +102,5 @@ func (h Handler) IbanInputs(w http.ResponseWriter, r *http.Request) (templ.Compo
 		CurrencyID: views.FDInput{Value: currency.ID},
 	}
 
-	return views.IbanInputs(fd, "", h.repo.CurrenciesToMap(curs), currency), nil
+	return views.IbanInputs(fd, "", curs), nil
 }

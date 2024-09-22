@@ -10,6 +10,7 @@ type Item struct {
 	Price       float64 `validate:"required"`
 	PurchasedOn time.Time
 	Currency    Currency
+	CreatedAt   time.Time
 }
 
 func (it *Item) EgpPrice() float64 {

@@ -7,8 +7,7 @@ import (
 )
 
 type TransactionFD struct {
-	AmountFD
-	AccountID   FDInput
+	AccountIFD
 	FrequencyFD *FrequencyFD
 	KindID      FDInput
 	ScheduledTo FDInput
@@ -17,29 +16,27 @@ type TransactionFD struct {
 
 templ Transactions(
 	balances []models.Balance,
-	fd *TransactionFD,
 	transactions []models.Transaction,
-	accounts, currencies, kinds map[string]string,
-	defaultCurrencySymbol string) {
+	fd *TransactionFD, accounts []models.Account,
+	kinds []models.TransactionKind) {
 	@baseLayout("Transactions", balances) {
 		@container() {
 			@mainHeader("Transactions")
-			@CreateTransactionForm(fd, accounts, currencies, kinds, defaultCurrencySymbol)
+			@CreateTransactionForm(fd, accounts, kinds)
 			@transactionsList(transactions)
 		}
 	}
 }
 
-templ CreateTransactionForm(fd *TransactionFD, accounts, currencies, kinds map[string]string, currencySymbol string) {
+templ CreateTransactionForm(fd *TransactionFD, accounts []models.Account, kinds []models.TransactionKind) {
 	@creationForm("Create Transaction", "/transactions", "Create Transaction") {
-		@transactionFormBody("", fd, accounts, currencies, kinds, currencySymbol)
+		@transactionFormBody(fd, "", accounts, kinds)
 	}
 }
 
-templ transactionFormBody(id string, fd *TransactionFD, accounts, currencies, kinds map[string]string, currencySymbol string) {
-	@selectInput("Account", "account_id", "Select the Account", id, accounts, fd.AccountID)
-	@AmountInputs(&fd.AmountFD, currencies, currencySymbol)
-	@selectInput("Kind", "kind_id", "Select a Kind", id, kinds, fd.KindID)
+templ transactionFormBody(fd *TransactionFD, id string, accounts []models.Account, kinds []models.TransactionKind) {
+	@AccountInputs(&fd.AccountIFD, id, accounts)
+	@selectTxKind("kind_id", id, kinds, fd.KindID)
 	@input("Description", "text", "description", "Enter a description", id, fd.Description)
 	@dateInput("Date", "scheduled_to", id, fd.ScheduledTo)
 	if fd.FrequencyFD != nil {
@@ -53,10 +50,10 @@ templ TransactionOOB(tx *models.Transaction) {
 	</div>
 }
 
-templ EditTransaction(tx *models.Transaction, fd *TransactionFD, accounts, currencies, kinds map[string]string) {
+templ EditTransaction(tx *models.Transaction, fd *TransactionFD, accounts []models.Account, kinds []models.TransactionKind) {
 	@form("put", fmt.Sprintf("/transactions/%s", tx.ID), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { tx.ID }</p>
-		@transactionFormBody(tx.ID, fd, accounts, currencies, kinds, tx.Currency.Enum.Symbol())
+		@transactionFormBody(fd, tx.ID, accounts, kinds)
 		@editFormButtons(fmt.Sprintf("/transactions/%s", tx.ID))
 	}
 }

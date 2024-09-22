@@ -38,12 +38,8 @@ func (h *Handler) Accounts(w http.ResponseWriter, r *http.Request) (templ.Compon
 	}
 	l.Info("fetched accounts", zap.Int("accounts_length", len(accs)))
 
-	defaultCurrency := slicesutils.Find(curs, func(cur models.Currency) bool { return cur.Enum == models.DfltCurrency })
-
 	fd := h.mapAccToFD(defaultAccount(curs, ak), &errs.ValidationError{})
-	return views.Accounts(
-		balances, fd, h.repo.AccountKindsToMap(ak), h.repo.CurrenciesToMap(curs),
-		defaultCurrency, accs), nil
+	return views.Accounts(balances, fd, ak, curs, accs), nil
 }
 
 func (h *Handler) Account(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -83,19 +79,19 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 	}
 	l.Debug("sanitized account")
 
-	if valerr := h.valid.Validate(a); valerr != nil {
+	if valerr := h.valid.Validate(models.AccountCreation{
+		ID: a.ID, Name: a.Name,
+		IBAN: a.IBAN, CardNumber: a.CardNumber,
+	}); valerr != nil {
 		l.Error("validating account", zap.Any("account", a), zap.Any("errors", valerr.Errors))
 		curs, ak, err := h.getCurrenciesAndAccKinds(r.Context())
 		if err != nil {
 			return nil, err
 		}
 
-		defaultCurrency := slicesutils.Find(curs, func(cur models.Currency) bool { return cur.Enum == models.DfltCurrency })
-
 		fd := h.mapAccToFD(a, valerr)
 		return views.CreateAccountForm(
-			fd, h.repo.AccountKindsToMap(ak), h.repo.CurrenciesToMap(curs),
-			defaultCurrency), nil
+			fd, ak, curs), nil
 	}
 	l.Debug("validated account")
 
@@ -108,11 +104,9 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 		if err != nil {
 			return nil, err
 		}
-		defaultCurrency := slicesutils.Find(curs, func(cur models.Currency) bool { return cur.Enum == models.DfltCurrency })
 		fd := h.mapAccToFD(a, valerr)
 		return views.CreateAccountForm(
-			fd, h.repo.AccountKindsToMap(ak), h.repo.CurrenciesToMap(curs),
-			defaultCurrency), nil
+			fd, ak, curs), nil
 	} else if err != nil {
 		l.Error("creating account", zap.Error(err), zap.Any("account", a))
 		return nil, err
@@ -137,12 +131,9 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 		return nil, err
 	}
 
-	defaultCurrency := slicesutils.Find(curs, func(cur models.Currency) bool { return cur.Enum == models.DfltCurrency })
-
 	fd := h.mapAccToFD(defaultAccount(curs, ak), &errs.ValidationError{})
 	return views.CreateAccountForm(
-		fd, h.repo.AccountKindsToMap(ak), h.repo.CurrenciesToMap(curs),
-		defaultCurrency), nil
+		fd, ak, curs), nil
 }
 
 func (h *Handler) GetEditAccount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -165,7 +156,7 @@ func (h *Handler) GetEditAccount(w http.ResponseWriter, r *http.Request) (templ.
 	}
 
 	fd := h.mapAccToFD(a, &errs.ValidationError{})
-	return views.EditAccount(id, fd, h.repo.AccountKindsToMap(ak), h.repo.CurrenciesToMap(curs), &a.Currency), nil
+	return views.EditAccount(id, fd, ak, curs), nil
 }
 
 func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -191,7 +182,10 @@ func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Com
 	}
 	l.Debug("sanitized account")
 
-	if valerr := h.valid.Validate(a); valerr != nil {
+	if valerr := h.valid.Validate(models.AccountCreation{
+		ID: a.ID, Name: a.Name,
+		IBAN: a.IBAN, CardNumber: a.CardNumber,
+	}); valerr != nil {
 		l.Error("validating account", zap.Any("account", a), zap.Any("errors", valerr.Errors))
 		curs, ak, err := h.getCurrenciesAndAccKinds(r.Context())
 		if err != nil {
@@ -202,7 +196,7 @@ func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Com
 		a.Kind = *slicesutils.Find(ak, func(ak models.AccountKind) bool { return a.Kind.ID == ak.ID })
 
 		fd := h.mapAccToFD(a, valerr)
-		return views.EditAccount(id, fd, h.repo.AccountKindsToMap(ak), h.repo.CurrenciesToMap(curs), &a.Currency), nil
+		return views.EditAccount(id, fd, ak, curs), nil
 	}
 	l.Debug("validated account")
 
@@ -220,7 +214,7 @@ func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Com
 		a.Kind = *slicesutils.Find(ak, func(ak models.AccountKind) bool { return a.Kind.ID == ak.ID })
 
 		fd := h.mapAccToFD(a, valerr)
-		return views.EditAccount(id, fd, h.repo.AccountKindsToMap(ak), h.repo.CurrenciesToMap(curs), &a.Currency), nil
+		return views.EditAccount(id, fd, ak, curs), nil
 	} else if err != nil {
 		l.Error("updating account", zap.Error(err), zap.Any("account", a))
 		return nil, err

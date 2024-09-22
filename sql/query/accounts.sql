@@ -10,6 +10,7 @@ SELECT
     a.note,
     a.exclude_from_balance,
     a.is_archived,
+    a.is_default,
     a.created_at,
     c.enum AS currency_enum,
     c.egp_fx_rate,
@@ -31,6 +32,7 @@ SELECT
     a.note,
     a.exclude_from_balance,
     a.is_archived,
+    a.is_default,
     a.created_at,
     c.enum AS currency_enum,
     c.egp_fx_rate,
@@ -67,6 +69,7 @@ SELECT
     a.note,
     a.exclude_from_balance,
     a.is_archived,
+    a.is_default,
     a.created_at,
     c.enum AS currency_enum,
     c.egp_fx_rate,
@@ -88,9 +91,10 @@ INSERT INTO accounts (
     note,
     exclude_from_balance,
     is_archived,
+    is_default,
     created_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: UpdateAccount :exec
 UPDATE accounts
@@ -102,7 +106,8 @@ card_number = ?,
 iban = ?,
 note = ?,
 is_archived = ?,
-exclude_from_balance = ?
+exclude_from_balance = ?,
+is_default = ?
 WHERE id = ?;
 
 -- name: DeleteAccount :exec

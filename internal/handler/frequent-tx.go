@@ -77,7 +77,7 @@ func (h Handler) GetEditFrequentTx(w http.ResponseWriter, r *http.Request) (temp
 
 	l := logger.FromCtx(r.Context())
 
-	accs, curs, knds, err := h.getTxDeps(r.Context())
+	accs, knds, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -91,9 +91,7 @@ func (h Handler) GetEditFrequentTx(w http.ResponseWriter, r *http.Request) (temp
 
 	return views.EditFrequentTx(ftx,
 		h.mapFrequentTxToFD(ftx, &errs.ValidationError{}),
-		h.repo.AccountsToMap(accs),
-		h.repo.CurrenciesToMap(curs),
-		h.repo.TransactionKindsToMap(knds)), nil
+		accs, knds), nil
 }
 
 func (h Handler) EditFrequentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -202,7 +200,6 @@ func generateNextScheduledTransactions(ftx *models.FrequentTx, count int) []mode
 			ID:          idgen.New(),
 			Account:     ftx.Account,
 			Amount:      ftx.Amount,
-			Currency:    ftx.Currency,
 			Kind:        ftx.Kind,
 			Description: ftx.Description,
 			ScheduledTo: nextOn,
@@ -241,17 +238,12 @@ func (h Handler) mapFDToFrequentTx(r *http.Request) (*models.FrequentTx, error) 
 		Transactions: []models.Transaction{},
 		Description:  r.FormValue("description"),
 		Amount:       amount,
-		Currency:     models.Currency{ID: r.FormValue("currency_id")},
 		Kind:         models.TransactionKind{ID: r.FormValue("kind_id")},
 	}, nil
 }
 
 func (h Handler) mapFrequentTxToFD(ftx *models.FrequentTx, valerr *errs.ValidationError) *views.FrequentTxFD {
 	return &views.FrequentTxFD{
-		AmountFD: views.AmountFD{
-			Amount:     views.FDInput{Value: formatIntIfNonZero(int(ftx.Amount)), Error: valerr.Errors.MsgFor("Amount")},
-			CurrencyID: views.FDInput{Value: ftx.Currency.ID, Error: valerr.Errors.MsgFor("Currency.ID")},
-		},
 		FrequencyFD: views.FrequencyFD{
 			IsFrequent: views.FDInput{Value: "on"},
 			FrequentBy: views.FDInput{Value: formatIntIfNonZero(int(ftx.FrequencyBy)), Error: valerr.Errors.MsgFor("FrequentBy")},

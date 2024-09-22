@@ -8,7 +8,6 @@ type Transaction struct {
 	ID          string `validate:"required"`
 	Account     Account
 	Amount      float64 `validate:"required,min=1"`
-	Currency    Currency
 	Kind        TransactionKind
 	Description string
 	FulfilledOn time.Time
@@ -17,5 +16,5 @@ type Transaction struct {
 }
 
 func (t *Transaction) ViewAmount() string {
-	return formatAmount(t.Amount, t.Currency.Enum)
+	return formatAmount(t.Amount, t.Account.Currency.Enum)
 }

@@ -23,8 +23,8 @@ func (r *Repository) CreateAccount(ctx context.Context, a *models.Account) error
 		CardNumber:         sql.NullString{String: a.CardNumber, Valid: a.CardNumber != ""},
 		Iban:               sql.NullString{String: a.IBAN, Valid: a.IBAN != ""},
 		Note:               sql.NullString{String: a.Note, Valid: a.Note != ""},
-		IsArchived:         sql.NullBool{Bool: a.IsArchive, Valid: true},
-		ExcludeFromBalance: sql.NullBool{Bool: a.ExcludeFromBalance, Valid: true},
+		IsArchived:         a.IsArchive,
+		ExcludeFromBalance: a.ExcludeFromBalance,
 		CreatedAt:          a.CreatedAt,
 	}); err != nil {
 		l.Error("creating account", zap.Error(err))
@@ -77,8 +77,8 @@ func (r *Repository) UpdateAccount(ctx context.Context, a *models.Account) error
 		CardNumber:         sql.NullString{String: a.CardNumber, Valid: a.CardNumber != ""},
 		Iban:               sql.NullString{String: a.IBAN, Valid: a.IBAN != ""},
 		Note:               sql.NullString{String: a.Note, Valid: a.Note != ""},
-		IsArchived:         sql.NullBool{Bool: a.IsArchive, Valid: true},
-		ExcludeFromBalance: sql.NullBool{Bool: a.ExcludeFromBalance, Valid: true},
+		IsArchived:         a.IsArchive,
+		ExcludeFromBalance: a.ExcludeFromBalance,
 	}); err != nil {
 		l.Error("updating account", zap.Error(err))
 		return err
@@ -155,14 +155,6 @@ func (r *Repository) GetBalances(ctx context.Context) ([]models.Balance, error) 
 	return dbBalancesToBalances(dbBalances), nil
 }
 
-func (r *Repository) AccountsToMap(accs []models.Account) map[string]string {
-	m := make(map[string]string, len(accs))
-	for _, a := range accs {
-		m[a.ID] = a.Name
-	}
-	return m
-}
-
 func dbAccountRowToAccount[T db.GetAccountRow | db.GetAccountsRow](dbAcc *T) *models.Account {
 	_dbAcc := db.GetAccountsRow(*dbAcc)
 	return &models.Account{
@@ -181,8 +173,8 @@ func dbAccountRowToAccount[T db.GetAccountRow | db.GetAccountsRow](dbAcc *T) *mo
 		IBAN:               _dbAcc.Iban.String,
 		CardNumber:         _dbAcc.CardNumber.String,
 		Note:               _dbAcc.Note.String,
-		IsArchive:          _dbAcc.IsArchived.Bool,
-		ExcludeFromBalance: _dbAcc.ExcludeFromBalance.Bool,
+		IsArchive:          _dbAcc.IsArchived,
+		ExcludeFromBalance: _dbAcc.ExcludeFromBalance,
 		CreatedAt:          _dbAcc.CreatedAt.(time.Time),
 	}
 }

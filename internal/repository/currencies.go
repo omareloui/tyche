@@ -23,26 +23,6 @@ func (r *Repository) GetCurrency(ctx context.Context, id string) (*models.Curren
 	return dbCurrencyToCurrency(&dbCurrency), nil
 }
 
-func (r *Repository) GetCurrenciesMap(ctx context.Context) (map[string]string, error) {
-	currencies, err := r.GetCurrencies(ctx)
-	if err != nil {
-		return nil, err
-	}
-	m := make(map[string]string, len(currencies))
-	for _, c := range currencies {
-		m[c.ID] = c.Enum.String()
-	}
-	return m, nil
-}
-
-func (r *Repository) CurrenciesToMap(currencies []models.Currency) map[string]string {
-	m := make(map[string]string, len(currencies))
-	for _, c := range currencies {
-		m[c.ID] = c.Enum.String()
-	}
-	return m
-}
-
 func dbCurrencyToCurrency(dbCurr *db.Currency) *models.Currency {
 	return &models.Currency{
 		ID:        dbCurr.ID,

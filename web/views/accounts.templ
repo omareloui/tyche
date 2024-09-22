@@ -18,36 +18,35 @@ type AccountFD struct {
 
 templ Accounts(
 	balances []models.Balance,
-	fd *AccountFD, aks map[string]string,
-	curs map[string]string, cur *models.Currency,
-	accounts []models.Account) {
+	fd *AccountFD, aknds []models.AccountKind,
+	curs []models.Currency, accounts []models.Account) {
 	@baseLayout("Accounts", balances) {
 		@container() {
 			@mainHeader("Accounts")
-			@CreateAccountForm(fd, aks, curs, cur)
+			@CreateAccountForm(fd, aknds, curs)
 			@accountsList(accounts)
 		}
 	}
 }
 
-templ CreateAccountForm(fd *AccountFD, aks map[string]string, curs map[string]string, cur *models.Currency) {
+templ CreateAccountForm(fd *AccountFD, aknds []models.AccountKind, curs []models.Currency) {
 	@creationForm("Create Account", "/accounts", "Create Account") {
-		@accountFormBody("", fd, aks, curs, cur)
+		@accountFormBody("", fd, aknds, curs)
 	}
 }
 
-templ EditAccount(id string, fd *AccountFD, aks map[string]string, curs map[string]string, cur *models.Currency) {
+templ EditAccount(id string, fd *AccountFD, aknds []models.AccountKind, curs []models.Currency) {
 	@form("put", fmt.Sprintf("/accounts/%s", id), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { id }</p>
-		@accountFormBody(id, fd, aks, curs, cur)
+		@accountFormBody(id, fd, aknds, curs)
 		@editFormButtons(fmt.Sprintf("/accounts/%s", id))
 	}
 }
 
-templ accountFormBody(id string, fd *AccountFD, aks map[string]string, curs map[string]string, cur *models.Currency) {
+templ accountFormBody(id string, fd *AccountFD, aknds []models.AccountKind, curs []models.Currency) {
 	@input("Name", "text", "name", "Enter account name", id, fd.Name)
-	@selectInput("Kind", "kind_id", "Select a Kind", id, aks, fd.KindID)
-	@IbanInputs(&fd.IBANFD, id, curs, cur)
+	@selectAccKind("kind_id", id, aknds, fd.KindID)
+	@IbanInputs(&fd.IBANFD, id, curs)
 	@creditCardInput("Card Number", "card_number", id, fd.CardNumber)
 	@input("Note", "text", "note", "Enter note", id, fd.Note)
 	@checkbox("Is Archive", "is_archive", id, fd.IsArchive)
