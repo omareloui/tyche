@@ -167,7 +167,7 @@ func (h Handler) EditGoal(w http.ResponseWriter, r *http.Request) (templ.Compone
 	if valerr := h.valid.Validate(gl); valerr != nil {
 		l.Error("validating goal", zap.Any("errors", valerr.Errors))
 		fd := h.mapGlToFD(gl, valerr)
-		return views.CreateGoalForm(fd, its), nil
+		return views.EditGoal(id, fd, its), nil
 	}
 
 	if err = h.repo.UpdateGoal(r.Context(), gl); err != nil {

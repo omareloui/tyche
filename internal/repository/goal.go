@@ -84,17 +84,19 @@ func dbGoalRowToGoal(dbGl []db.GetGoalRow) *models.Goal {
 	items := []models.Item{}
 
 	for _, gl := range dbGl {
-		items = append(items, models.Item{
-			ID:          gl.ItemID.String,
-			Name:        gl.ItemName.String,
-			Price:       gl.ItemPrice.Float64,
-			PurchasedOn: gl.ItemPurchasedOn.Time,
-			Currency: models.Currency{
-				ID:        gl.ItemCurrencyID.String,
-				Enum:      models.CurrencyEnum(gl.ItemCurrency.Int64),
-				EgpFxRate: gl.ItemCurrencyFxRate.Float64,
-			},
-		})
+		if gl.ItemID.Valid {
+			items = append(items, models.Item{
+				ID:          gl.ItemID.String,
+				Name:        gl.ItemName.String,
+				Price:       gl.ItemPrice.Float64,
+				PurchasedOn: gl.ItemPurchasedOn.Time,
+				Currency: models.Currency{
+					ID:        gl.ItemCurrencyID.String,
+					Enum:      models.CurrencyEnum(gl.ItemCurrency.Int64),
+					EgpFxRate: gl.ItemCurrencyFxRate.Float64,
+				},
+			})
+		}
 	}
 
 	return &models.Goal{
