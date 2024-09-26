@@ -373,6 +373,30 @@ func (q *Queries) RemoveFromAccount(ctx context.Context, arg RemoveFromAccountPa
 	return err
 }
 
+const setDefaultAccount = `-- name: SetDefaultAccount :exec
+UPDATE accounts
+SET
+is_default = TRUE
+WHERE id = ?
+`
+
+func (q *Queries) SetDefaultAccount(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, setDefaultAccount, id)
+	return err
+}
+
+const unsetDefaultAccountExpect = `-- name: UnsetDefaultAccountExpect :exec
+UPDATE accounts
+SET
+is_default = FALSE
+WHERE id != ?
+`
+
+func (q *Queries) UnsetDefaultAccountExpect(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, unsetDefaultAccountExpect, id)
+	return err
+}
+
 const updateAccount = `-- name: UpdateAccount :exec
 UPDATE accounts
 SET
@@ -383,8 +407,7 @@ card_number = ?,
 iban = ?,
 note = ?,
 is_archived = ?,
-exclude_from_balance = ?,
-is_default = ?
+exclude_from_balance = ?
 WHERE id = ?
 `
 
@@ -397,7 +420,6 @@ type UpdateAccountParams struct {
 	Note               sql.NullString
 	IsArchived         bool
 	ExcludeFromBalance bool
-	IsDefault          bool
 	ID                 string
 }
 
@@ -411,7 +433,6 @@ func (q *Queries) UpdateAccount(ctx context.Context, arg UpdateAccountParams) er
 		arg.Note,
 		arg.IsArchived,
 		arg.ExcludeFromBalance,
-		arg.IsDefault,
 		arg.ID,
 	)
 	return err

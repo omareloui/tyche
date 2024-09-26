@@ -99,6 +99,23 @@ func (r *Repository) UpdateAccount(ctx context.Context, a *models.Account) error
 	return nil
 }
 
+func (r *Repository) SetDefaultAccountExpect(ctx context.Context, id string) error {
+	return r.transact(func(qtx *db.Queries) error {
+		l := logger.FromCtx(ctx)
+		err := qtx.UnsetDefaultAccountExpect(ctx, id)
+		if err != nil {
+			l.Error("unsetting default accounts", zap.Error(err))
+			return err
+		}
+		err = qtx.SetDefaultAccount(ctx, id)
+		if err != nil {
+			l.Error("setting default accounts", zap.Error(err))
+			return err
+		}
+		return nil
+	})
+}
+
 func (r *Repository) DeleteAccount(ctx context.Context, id string) error {
 	l := logger.FromCtx(ctx)
 	if err := r.q.DeleteAccount(ctx, id); err != nil {
@@ -170,9 +187,10 @@ func (r *Repository) GetBalances(ctx context.Context) ([]models.Balance, error) 
 func dbAccountRowToAccount[T db.GetAccountRow | db.GetAccountsRow](dbAcc *T) *models.Account {
 	_dbAcc := db.GetAccountsRow(*dbAcc)
 	return &models.Account{
-		ID:     _dbAcc.ID,
-		Name:   _dbAcc.Name,
-		Amount: _dbAcc.Amount,
+		ID:        _dbAcc.ID,
+		Name:      _dbAcc.Name,
+		Amount:    _dbAcc.Amount,
+		IsDefault: _dbAcc.IsDefault,
 		Currency: models.Currency{
 			ID:        _dbAcc.CurrencyID,
 			Enum:      models.CurrencyEnum(_dbAcc.CurrencyEnum.Int64),

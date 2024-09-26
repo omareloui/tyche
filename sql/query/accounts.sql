@@ -106,9 +106,21 @@ card_number = ?,
 iban = ?,
 note = ?,
 is_archived = ?,
-exclude_from_balance = ?,
-is_default = ?
+exclude_from_balance = ?
 WHERE id = ?;
+
+-- name: UnsetDefaultAccountExpect :exec
+UPDATE accounts
+SET
+is_default = FALSE
+WHERE id != ?;
+
+-- name: SetDefaultAccount :exec
+UPDATE accounts
+SET
+is_default = TRUE
+WHERE id = ?;
+
 
 -- name: DeleteAccount :exec
 DELETE FROM accounts

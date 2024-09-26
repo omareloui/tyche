@@ -253,6 +253,20 @@ func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) (templ.C
 	return nil, nil
 }
 
+func (h *Handler) SetDefaultAccount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+	l := logger.FromCtx(r.Context())
+	if err := h.repo.SetDefaultAccountExpect(r.Context(), id); err != nil {
+		l.Error("Setting as default", zap.Error(err))
+		return nil, err
+	}
+	l.Info("Set as default", zap.String("id", id))
+	return nil, nil
+}
+
 func (h Handler) getCurrenciesAndAccKinds(ctx context.Context) ([]models.Currency, []models.AccountKind, error) {
 	l := logger.FromCtx(ctx)
 

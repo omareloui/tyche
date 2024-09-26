@@ -423,12 +423,17 @@ func (h Handler) mapFDToTransaction(r *http.Request) (*models.Transaction, error
 }
 
 func defaultTransaction(accs []models.Account, kinds []models.TransactionKind) *models.Transaction {
-	dfltAccsIdx := 0
 	dfltKindIdx := slices.IndexFunc(kinds, func(knd models.TransactionKind) bool { return knd.Kind == models.DfltKind })
 
-	dfltAccId := ""
+	var dfltAccId string
+
 	if len(accs) > 0 {
-		dfltAccId = accs[dfltAccsIdx].ID
+		dfltAcc := slicesutils.Find(accs, func(a models.Account) bool { return a.IsDefault })
+		if dfltAcc != nil {
+			dfltAccId = dfltAcc.ID
+		} else {
+			dfltAccId = accs[0].ID
+		}
 	}
 
 	return &models.Transaction{
