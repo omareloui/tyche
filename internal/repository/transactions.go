@@ -13,18 +13,8 @@ import (
 
 func (r *Repository) CreateTransaction(ctx context.Context, tx *models.Transaction, ftx *models.FrequentTx, scheduledTxs []models.Transaction) error {
 	return r.transact(func(qtx *db.Queries) error {
-		l := logger.FromCtx(ctx)
-
-		if err := r.createTransactionWithTxn(ctx, qtx, tx); err != nil {
+		if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, tx); err != nil {
 			return err
-		}
-
-		if !tx.FulfilledOn.IsZero() {
-			if err := r.applyTxToAccountWithTxn(qtx, ctx, tx); err != nil {
-				l.Error("applying transaction", zap.Error(err), zap.Any("transaction", tx))
-				return err
-			}
-			l.Debug("applied transaction", zap.Any("transaction", tx))
 		}
 
 		if ftx != nil {
@@ -65,6 +55,23 @@ func (r *Repository) createTransactionWithTxn(ctx context.Context, qtx *db.Queri
 		return err
 	}
 	l.Debug("created transaction", zap.Any("transaction", tx))
+	return nil
+}
+
+func (r *Repository) createTransactionAndApplyToAccountIfNeededWithTxn(ctx context.Context, qtx *db.Queries, tx *models.Transaction) error {
+	l := logger.FromCtx(ctx)
+	if err := r.createTransactionWithTxn(ctx, qtx, tx); err != nil {
+		return err
+	}
+
+	if !tx.FulfilledOn.IsZero() {
+		if err := r.applyTxToAccountWithTxn(qtx, ctx, tx); err != nil {
+			l.Error("applying transaction", zap.Error(err), zap.Any("transaction", tx))
+			return err
+		}
+		l.Debug("applied transaction", zap.Any("transaction", tx))
+	}
+
 	return nil
 }
 

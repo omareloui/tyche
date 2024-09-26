@@ -10,7 +10,8 @@ type Goal struct {
 	EgpSubtotal float64 `validate:"required,gt=0"`
 	CreatedAt   time.Time
 
-	Items []Item `validate:"required,min=1"`
+	Items        []Item `validate:"required,min=1"`
+	Transactions []Transaction
 }
 
 func (gl *Goal) ViewAmount() string {
@@ -23,4 +24,22 @@ func (gl *Goal) CalculateEgpSubtotal() float64 {
 		sum += it.EgpPrice()
 	}
 	return sum
+}
+
+func (gl *Goal) Remaining() float64 {
+	sum := float64(0)
+	for _, tx := range gl.Transactions {
+		if !tx.FulfilledOn.IsZero() {
+			sum += tx.Amount * tx.Account.Currency.EgpFxRate
+		}
+	}
+	rem := gl.EgpSubtotal - sum
+	if rem < 0 {
+		return 0
+	}
+	return rem
+}
+
+func (gl *Goal) ViewRemaining() string {
+	return formatAmount(gl.Remaining(), CurrencyEgp)
 }

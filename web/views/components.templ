@@ -1,5 +1,7 @@
 package views
 
+import "fmt"
+
 templ container() {
 	<div class="md:max-w-screen-md px-5 mx-auto max-w-full">
 		{ children... }
@@ -24,4 +26,15 @@ templ list(id string) {
 	<div id={ id } class="grid gap-4 no-entries">
 		{ children... }
 	</div>
+}
+
+templ button(color string, attrs ...templ.Attributes) {
+	<button
+		class={ fmt.Sprintf("px-5 py-2.5 my-2 text-white bg-%s-500 hover:bg-%s-600 focus:outline-none focus:ring-4 focus:ring-%s-300 font-medium rounded-lg text-sm sm:w-auto text-center", color, color, color) }
+		if attrs != nil {
+			{ attrs[0]... }
+		}
+	>
+		{ children... }
+	</button>
 }

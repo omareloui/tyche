@@ -1,6 +1,6 @@
 package models
 
-const DfltKind = "EXPENSES"
+const ExpensesTxKind = "EXPENSES"
 
 type TransactionKind struct {
 	ID              string `validate:"required"`

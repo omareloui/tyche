@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/omareloui/financial-planner/internal/db"
+	"github.com/omareloui/financial-planner/internal/logger"
 	"github.com/omareloui/financial-planner/internal/models"
+	"go.uber.org/zap"
 )
 
 func (r *Repository) GetGoals(ctx context.Context) ([]models.Goal, error) {
@@ -76,6 +78,22 @@ func (r *Repository) UpdateGoal(ctx context.Context, gl *models.Goal) error {
 	})
 }
 
+func (r *Repository) CreateGoalProgress(ctx context.Context, glId string, tx *models.Transaction) error {
+	return r.transact(func(qtx *db.Queries) error {
+		if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, tx); err != nil {
+			return err
+		}
+
+		l := logger.FromCtx(ctx)
+		if err := qtx.CreateGoalProgress(ctx, db.CreateGoalProgressParams{GoalID: glId, TransactionID: tx.ID}); err != nil {
+			l.Error("creating goal progress", zap.Error(err))
+			return err
+		}
+		l.Debug("created goal progress")
+		return nil
+	})
+}
+
 func (r *Repository) DeleteGoal(ctx context.Context, id string) error {
 	return r.q.DeleteGoal(ctx, id)
 }
@@ -115,27 +133,50 @@ func dbGoalRowsToGoals(dbGls []db.GetGoalsRow) []models.Goal {
 		glIdx := slices.IndexFunc(gls, func(gl models.Goal) bool { return gl.ID == dbGl.ID })
 		if glIdx == -1 {
 			gls = append(gls, models.Goal{
-				ID:          dbGl.ID,
-				Title:       dbGl.Title,
-				EgpSubtotal: dbGl.EgpSubtotal,
-				CreatedAt:   dbGl.CreatedAt.(time.Time),
-				Items:       []models.Item{},
+				ID:           dbGl.ID,
+				Title:        dbGl.Title,
+				EgpSubtotal:  dbGl.EgpSubtotal,
+				CreatedAt:    dbGl.CreatedAt.(time.Time),
+				Items:        []models.Item{},
+				Transactions: []models.Transaction{},
 			})
 			glIdx = len(gls) - 1
 		}
 
 		if dbGl.ItemID.Valid {
-			gls[glIdx].Items = append(gls[glIdx].Items, models.Item{
-				ID:          dbGl.ItemID.String,
-				Name:        dbGl.ItemName.String,
-				Price:       dbGl.ItemPrice.Float64,
-				PurchasedOn: dbGl.ItemPurchasedOn.Time,
-				Currency: models.Currency{
-					ID:        dbGl.ItemCurrencyID.String,
-					Enum:      models.CurrencyEnum(dbGl.ItemCurrency.Int64),
-					EgpFxRate: dbGl.ItemCurrencyFxRate.Float64,
-				},
-			})
+			if idx := slices.IndexFunc(gls[glIdx].Items, func(it models.Item) bool { return it.ID == dbGl.ItemID.String }); idx == -1 {
+				gls[glIdx].Items = append(gls[glIdx].Items, models.Item{
+					ID:          dbGl.ItemID.String,
+					Name:        dbGl.ItemName.String,
+					Price:       dbGl.ItemPrice.Float64,
+					PurchasedOn: dbGl.ItemPurchasedOn.Time,
+					Currency: models.Currency{
+						ID:        dbGl.ItemCurrencyID.String,
+						Enum:      models.CurrencyEnum(dbGl.ItemCurrency.Int64),
+						EgpFxRate: dbGl.ItemCurrencyFxRate.Float64,
+					},
+				})
+			}
+		}
+
+		if dbGl.TransactionID.Valid {
+			if idx := slices.IndexFunc(gls[glIdx].Transactions, func(tx models.Transaction) bool { return tx.ID == dbGl.TransactionID.String }); idx == -1 {
+				gls[glIdx].Transactions = append(gls[glIdx].Transactions, models.Transaction{
+					ID:     dbGl.TransactionID.String,
+					Amount: dbGl.TransactionAmount.Float64,
+					Account: models.Account{
+						ID:   dbGl.TransactionAccountID.String,
+						Name: dbGl.TransactionAccountName.String,
+						Currency: models.Currency{
+							ID:        dbGl.TransactionAccountCurrencyID.String,
+							EgpFxRate: dbGl.TransactionAccountCurrencyFxRate.Float64,
+							Enum:      models.CurrencyEnum(dbGl.TransactionAccountCurrencyEnum.Int64),
+						},
+					},
+					ScheduledTo: dbGl.TransactionScheduledTo.Time,
+					FulfilledOn: dbGl.TransactionFulfilledOn.Time,
+				})
+			}
 		}
 	}
 

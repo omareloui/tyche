@@ -64,27 +64,13 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		return nil, err
 	}
 
-	k := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == tx.Kind.ID })
-	if k == nil {
-		valerr := &errs.ValidationError{Errors: errs.ValidationErrors{}}
-		valerr.Errors["Kind.ID"] = errs.ValidationField{Tag: "required"}
-		l.Error("tx kind doesn't exist")
-		fd := h.mapTransactionToFD(tx, valerr)
-		fd.FrequencyFD = h.parseFrequencyFD(r, valerr)
+	fd, err := h.prepareTx(r, tx, accs, knds)
+	if fd != nil {
 		return views.CreateTransactionForm(fd, accs, knds), nil
 	}
-	tx.Kind = *k
-
-	a := slicesutils.Find(accs, func(ac models.Account) bool { return ac.ID == tx.Account.ID })
-	if a == nil {
-		valerr := &errs.ValidationError{Errors: errs.ValidationErrors{}}
-		valerr.Errors["Account.ID"] = errs.ValidationField{Tag: "required"}
-		l.Error("account doesn't exist")
-		fd := h.mapTransactionToFD(tx, valerr)
-		fd.FrequencyFD = h.parseFrequencyFD(r, valerr)
-		return views.CreateTransactionForm(fd, accs, knds), nil
+	if err != nil {
+		return nil, err
 	}
-	tx.Account = *a
 
 	var ftx *models.FrequentTx
 	var scheduledTxs []models.Transaction
@@ -117,19 +103,6 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		scheduledTxs = generateNextScheduledTransactions(ftx, generateNextScheduledTransactionsCount)
 	}
 
-	if err := h.sani.SanitizeStruct(tx); err != nil {
-		return nil, errs.ErrSanitizer
-	}
-
-	l.Debug("transaction", zap.Any("transaction", tx))
-
-	if valerr := h.valid.Validate(tx); valerr != nil {
-		l.Error("create transaction validation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-		fd := h.mapTransactionToFD(tx, valerr)
-
-		return views.CreateTransactionForm(fd, accs, knds), nil
-	}
-
 	if err := h.repo.CreateTransaction(r.Context(), tx, ftx, scheduledTxs); err != nil {
 		l.Error("creating transaction", zap.Error(err))
 		return nil, err
@@ -156,9 +129,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		}
 	}
 
-	fd := h.mapTransactionToFD(defaultTransaction(accs, knds), new(errs.ValidationError))
-
-	return views.CreateTransactionForm(fd, accs, knds), nil
+	return views.CreateTransactionForm(h.mapTransactionToFD(defaultTransaction(accs, knds), new(errs.ValidationError)), accs, knds), nil
 }
 
 func (h Handler) Transaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -232,39 +203,15 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 	if err != nil {
 		return nil, err
 	}
-
-	k := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == tx.Kind.ID })
-	if k == nil {
-		valerr := &errs.ValidationError{Errors: errs.ValidationErrors{}}
-		valerr.Errors["Kind.ID"] = errs.ValidationField{Tag: "required"}
-		l.Error("tx kind doesn't exist")
-		fd := h.mapTransactionToFD(tx, valerr)
-		fd.FrequencyFD = h.parseFrequencyFD(r, valerr)
-		return views.CreateTransactionForm(fd, accs, knds), nil
-	}
-	tx.Kind = *k
-
-	a := slicesutils.Find(accs, func(ac models.Account) bool { return ac.ID == tx.Account.ID })
-	if a == nil {
-		valerr := &errs.ValidationError{Errors: errs.ValidationErrors{}}
-		valerr.Errors["Account.ID"] = errs.ValidationField{Tag: "required"}
-		l.Error("account doesn't exist")
-		fd := h.mapTransactionToFD(tx, valerr)
-		fd.FrequencyFD = h.parseFrequencyFD(r, valerr)
-		return views.CreateTransactionForm(fd, accs, knds), nil
-	}
-	tx.Account = *a
-
-	l.Debug("update transaction", zap.Any("new transaction", tx))
-
-	if valerr := h.valid.Validate(tx); valerr != nil {
-		l.Error("update transaction validation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-		fd := h.mapTransactionToFD(tx, valerr)
-		fd.Amount.Value = r.FormValue("amount")
-
-		fd.FrequencyFD = nil
+	fd, err := h.prepareTx(r, tx, accs, knds)
+	if fd != nil {
 		return views.EditTransaction(tx, fd, accs, knds), nil
 	}
+	if err != nil {
+		return nil, err
+	}
+
+	l.Debug("update transaction", zap.Any("new_transaction", tx))
 
 	oldTx, err := h.repo.GetTransaction(r.Context(), tx.ID)
 	if err != nil {
@@ -423,7 +370,7 @@ func (h Handler) mapFDToTransaction(r *http.Request) (*models.Transaction, error
 }
 
 func defaultTransaction(accs []models.Account, kinds []models.TransactionKind) *models.Transaction {
-	dfltKindIdx := slices.IndexFunc(kinds, func(knd models.TransactionKind) bool { return knd.Kind == models.DfltKind })
+	dfltKindIdx := slices.IndexFunc(kinds, func(knd models.TransactionKind) bool { return knd.Kind == models.ExpensesTxKind })
 
 	var dfltAccId string
 
@@ -470,4 +417,54 @@ func (h Handler) mapFDToTransactionFrequency(r *http.Request, parsedTx *models.T
 		StartsOn:    parsedTx.ScheduledTo,
 		StopsOn:     stopsOn,
 	}, nil
+}
+
+func (h Handler) prepareTx(r *http.Request, tx *models.Transaction, accs []models.Account, knds []models.TransactionKind) (*views.TransactionFD, error) {
+	l := logger.FromCtx(r.Context())
+
+	k := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == tx.Kind.ID })
+	if k == nil {
+		valerr := &errs.ValidationError{Errors: errs.ValidationErrors{}}
+		valerr.Errors["Kind.ID"] = errs.ValidationField{Tag: "required"}
+		l.Error("tx kind doesn't exist")
+		fd := h.mapTransactionToFD(tx, valerr)
+		fd.FrequencyFD = h.parseFrequencyFD(r, valerr)
+		return fd, nil
+	}
+	tx.Kind = *k
+
+	a := slicesutils.Find(accs, func(ac models.Account) bool { return ac.ID == tx.Account.ID })
+	if a == nil {
+		valerr := &errs.ValidationError{Errors: errs.ValidationErrors{}}
+		valerr.Errors["Account.ID"] = errs.ValidationField{Tag: "required"}
+		l.Error("account doesn't exist")
+		fd := h.mapTransactionToFD(tx, valerr)
+		fd.FrequencyFD = h.parseFrequencyFD(r, valerr)
+		return fd, nil
+	}
+	tx.Account = *a
+
+	if err := h.sani.SanitizeStruct(tx); err != nil {
+		return nil, errs.ErrSanitizer
+	}
+
+	if valerr := h.valid.Validate(tx); valerr != nil {
+		l.Error("validating transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
+		fd := h.mapTransactionToFD(tx, valerr)
+		return fd, nil
+	}
+
+	return nil, nil
+}
+
+func (h Handler) prepareCreatingTx(r *http.Request, tx *models.Transaction, accs []models.Account, knds []models.TransactionKind) (*views.TransactionFD, error) {
+	tx.ID = idgen.New()
+	tx.CreatedAt = time.Now()
+
+	sod := time.Now().Truncate(24 * time.Hour)
+	if tx.ScheduledTo.Equal(sod) || tx.ScheduledTo.Before(sod) {
+		tx.FulfilledOn = tx.CreatedAt
+	}
+
+	return h.prepareTx(r, tx, accs, knds)
 }

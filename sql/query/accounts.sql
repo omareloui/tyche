@@ -48,7 +48,7 @@ SELECT
     a.currency_id,
     c.enum AS currency_enum,
     c.egp_fx_rate,
-    SUM(a.amount) AS balance
+    TOTAL(a.amount) AS balance
 FROM accounts AS a
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 WHERE a.is_archived IS FALSE

@@ -315,7 +315,7 @@ SELECT
     a.currency_id,
     c.enum AS currency_enum,
     c.egp_fx_rate,
-    SUM(a.amount) AS balance
+    TOTAL(a.amount) AS balance
 FROM accounts AS a
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 WHERE a.is_archived IS FALSE
@@ -328,7 +328,7 @@ type GetBalancesRow struct {
 	CurrencyID   string
 	CurrencyEnum sql.NullInt64
 	EgpFxRate    sql.NullFloat64
-	Balance      sql.NullFloat64
+	Balance      float64
 }
 
 func (q *Queries) GetBalances(ctx context.Context) ([]GetBalancesRow, error) {

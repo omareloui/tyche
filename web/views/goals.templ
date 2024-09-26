@@ -2,6 +2,7 @@ package views
 
 import (
 	"fmt"
+	"time"
 	"slices"
 
 	"github.com/omareloui/financial-planner/internal/models"
@@ -73,10 +74,11 @@ templ goalsList(goals []models.Goal) {
 }
 
 templ Goal(gl *models.Goal) {
-	<div hx-target="this" class="entry-container">
+	<div hx-target="this" hx-swap="outerHTML" class="entry-container">
 		<p>ID: { gl.ID }</p>
 		<p>Name: { gl.Title }</p>
 		<p>EGP Subtotal: { gl.ViewAmount() } </p>
+		<p>Remaining: { gl.ViewRemaining() } </p>
 		<div>
 			if len(gl.Items) > 0 {
 				<h4 class="font-bold text-xl">Items</h4>
@@ -90,11 +92,53 @@ templ Goal(gl *models.Goal) {
 				</p>
 			}
 		</div>
+		if len(gl.Transactions) > 0 {
+			<h4 class="font-bold text-xl">Progress</h4>
+		}
+		for _, tx := range gl.Transactions {
+			<div class="p-4 my-2 bg-gray-100 rounded" hx-target="this">
+				<p>Account: { tx.Account.Name }</p>
+				<p>Amount: { tx.ViewAmount() }</p>
+				<p>Scheduled To: { tx.ScheduledTo.Format(time.DateOnly) }</p>
+				if !tx.FulfilledOn.IsZero() {
+					<p>Fulfilled On: { tx.FulfilledOn.Format(time.RFC1123Z) }</p>
+				}
+				<div class="flex gap-4">
+					if tx.FulfilledOn.IsZero() {
+						<button
+							class="px-5 py-2.5 my-2 text-white bg-green-500 hover:bg-green-600 focus:outline-none focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm sm:w-auto text-center"
+							hx-put={ string(templ.SafeURL(fmt.Sprintf("/transactions/%s/fulfill", tx.ID))) }
+							hx-swap="delete"
+							hx-target="this"
+						>Fulfill</button>
+					}
+					<button
+						class="px-5 py-2.5 my-2 text-white bg-red-500 hover:bg-red-600 focus:outline-none focus:ring-4 focus:ring-red-300 font-medium rounded-lg text-sm sm:w-auto text-center"
+						hx-delete={ string(templ.SafeURL(fmt.Sprintf("/transactions/%s", tx.ID))) }
+						hx-swap="delete"
+						hx-confirm="Are you sure you want to delete this transaction?"
+					>Delete</button>
+				</div>
+			</div>
+		}
 		<div class="flex gap-4">
+			<button
+				class="px-5 py-2.5 my-2 text-white bg-green-500 hover:bg-green-600 focus:outline-none focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm sm:w-auto text-center"
+				hx-get={ fmt.Sprintf("/goals/%s/progress-form", gl.ID) }
+			>Add Progress</button>
 			@editButton(fmt.Sprintf("/goals/%s/edit", gl.ID))
 			@deleteButton(fmt.Sprintf("/goals/%s", gl.ID))
 		</div>
 	</div>
+}
+
+templ GoalProgressForm(gl *models.Goal, fd *TransactionFD, accounts []models.Account, kinds []models.TransactionKind) {
+	@form("post", fmt.Sprintf("/goals/%s/progress", gl.ID), templ.Attributes{"hx-target": "this"}) {
+		<h2 class="text-xl font-bold">{ gl.Title } <i class="text-gray-400 font-regular">({ gl.ViewAmount() })</i></h2>
+		@AccountInputs(&fd.AccountIFD, gl.ID, accounts)
+		@dateInput("Date", "scheduled_to", gl.ID, fd.ScheduledTo)
+		@editFormButtons(fmt.Sprintf("/goals/%s", gl.ID))
+	}
 }
 
 templ GoalOOB(gl *models.Goal) {

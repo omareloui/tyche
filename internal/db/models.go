@@ -67,6 +67,11 @@ type GoalsItem struct {
 	ItemID string
 }
 
+type GoalsProgress struct {
+	GoalID        string
+	TransactionID string
+}
+
 type Item struct {
 	ID          string
 	Name        string

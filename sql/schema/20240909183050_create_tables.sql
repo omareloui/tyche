@@ -75,6 +75,12 @@ CREATE TABLE goals_items (
     FOREIGN KEY (goal_id) REFERENCES goals (id) ON DELETE CASCADE,
     FOREIGN KEY (item_id) REFERENCES items (id) ON DELETE CASCADE
 );
+CREATE TABLE goals_progresses (
+    goal_id VARCHAR(16) NOT NULL,
+    transaction_id VARCHAR(16) NOT NULL,
+    FOREIGN KEY (goal_id) REFERENCES goals (id) ON DELETE CASCADE,
+    FOREIGN KEY (transaction_id) REFERENCES transactions (id) ON DELETE CASCADE
+);
 CREATE TABLE items (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -93,6 +99,7 @@ DROP TABLE transaction_kinds;
 DROP TABLE transactions;
 DROP TABLE goals;
 DROP TABLE goals_items;
+DROP TABLE goals_progresses;
 DROP TABLE items;
 DROP TABLE accounts;
 DROP TABLE account_kinds;

@@ -133,6 +133,74 @@ func (h Handler) GetEditGoal(w http.ResponseWriter, r *http.Request) (templ.Comp
 	return views.EditGoal(id, h.mapGlToFD(gl, &errs.ValidationError{}), its), nil
 }
 
+func (h Handler) GetGoalProgressForm(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	gl, err := h.repo.GetGoal(r.Context(), id)
+	if err != nil {
+		return nil, err
+	}
+
+	accs, knds, err := h.getTxDeps(r.Context())
+	if err != nil {
+		return nil, err
+	}
+
+	fd := h.mapTransactionToFD(defaultTransaction(accs, knds), &errs.ValidationError{})
+	return views.GoalProgressForm(gl, fd, accs, knds), nil
+}
+
+func (h Handler) CreateGoalProgress(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+	gl, err := h.repo.GetGoal(r.Context(), id)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := h.mapFDToTransaction(r)
+	if err != nil {
+		return nil, err
+	}
+
+	accs, knds, err := h.getTxDeps(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.Kind == models.ExpensesTxKind })
+	if knd != nil {
+		tx.Kind = *knd
+	}
+	fd, err := h.prepareCreatingTx(r, tx, accs, knds)
+	if fd != nil {
+		return views.GoalProgressForm(gl, fd, accs, knds), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if err := h.repo.CreateGoalProgress(r.Context(), id, tx); err != nil {
+		l.Error("creating transaction", zap.Error(err))
+		return nil, err
+	}
+	l.Info("created transaction")
+
+	if !tx.FulfilledOn.IsZero() {
+		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
+			return nil, err
+		}
+	}
+
+	return views.Goal(gl), nil
+}
+
 func (h Handler) EditGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	id := r.PathValue("id")
 	if id == "" {

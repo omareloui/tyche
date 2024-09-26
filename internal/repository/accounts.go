@@ -221,7 +221,7 @@ func dbBalancesToBalances(dbBs []db.GetBalancesRow) []models.Balance {
 	b := make([]models.Balance, len(dbBs))
 	for i, dbB := range dbBs {
 		b[i] = models.Balance{
-			Amount: dbB.Balance.Float64,
+			Amount: dbB.Balance,
 			Currency: models.Currency{
 				ID:        dbB.CurrencyID,
 				Enum:      models.CurrencyEnum(dbB.CurrencyEnum.Int64),
