@@ -48,7 +48,7 @@ func (v ValidationField) String() string {
 	case "eqfield":
 		return fmt.Sprintf(`This field must match the "%s" field`, v.Tag)
 	case "not_blank":
-		return "This field can't empty"
+		return "This field can't be empty"
 	case "alphanum":
 		return "This field expects alphanumeric value"
 	case "alphanum_with_underscore":
@@ -61,6 +61,8 @@ func (v ValidationField) String() string {
 		return fmt.Sprintf(`This field has to be greater than %s`, v.Param)
 	case "duplicate":
 		return "This field is in use, try another one"
+	case "credit_card":
+		return "This field has to be a valid card number"
 	default:
 		msg := fmt.Sprintf(`Failed on "%s" tag`, v.Tag)
 		if v.Param != "" {
