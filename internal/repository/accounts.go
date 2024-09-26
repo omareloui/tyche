@@ -81,6 +81,18 @@ func (r *Repository) UpdateAccount(ctx context.Context, a *models.Account) error
 		ExcludeFromBalance: a.ExcludeFromBalance,
 	}); err != nil {
 		l.Error("updating account", zap.Error(err))
+
+		if strings.Contains(err.Error(), "UNIQUE constraint failed: accounts.name") {
+			return newDuplicationError("Name")
+		}
+
+		if strings.Contains(err.Error(), "UNIQUE constraint failed: accounts.card_number") {
+			return newDuplicationError("CardNumber")
+		}
+
+		if strings.Contains(err.Error(), "UNIQUE constraint failed: accounts.iban") {
+			return newDuplicationError("IBAN")
+		}
 		return err
 	}
 	l.Debug("updated account")
