@@ -87,7 +87,7 @@ func (h Handler) GetEditFrequentTx(w http.ResponseWriter, r *http.Request) (temp
 		l.Error("fetching frequent tx", zap.Error(err))
 		return nil, err
 	}
-	l.Info("fetched frequent tx", zap.Any("frequent tx", ftx))
+	l.Info("fetched frequent tx")
 
 	return views.EditFrequentTx(ftx,
 		h.mapFrequentTxToFD(ftx, &errs.ValidationError{}),
@@ -244,6 +244,10 @@ func (h Handler) mapFDToFrequentTx(r *http.Request) (*models.FrequentTx, error) 
 
 func (h Handler) mapFrequentTxToFD(ftx *models.FrequentTx, valerr *errs.ValidationError) *views.FrequentTxFD {
 	return &views.FrequentTxFD{
+		AccountIFD: views.AccountIFD{
+			AccountID: views.FDInput{Value: ftx.Account.ID, Error: valerr.Errors.MsgFor("Account.ID")},
+			Amount:    views.FDInput{Value: formatFloatIfNonZero(ftx.Amount), Error: valerr.Errors.MsgFor("Amount")},
+		},
 		FrequencyFD: views.FrequencyFD{
 			IsFrequent: views.FDInput{Value: "on"},
 			FrequentBy: views.FDInput{Value: formatIntIfNonZero(int(ftx.FrequencyBy)), Error: valerr.Errors.MsgFor("FrequentBy")},
