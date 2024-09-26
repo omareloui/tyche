@@ -31,7 +31,6 @@ type AmountFD struct {
 }
 
 type IBANFD struct {
-	Amount     FDInput
 	CurrencyID FDInput
 	IBAN       FDInput
 }
@@ -109,7 +108,7 @@ func creationForm(title, postTo, submitStr string, close ...bool) templ.Componen
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("{open: %v, toggle() {this.open = !this.open}}", close == nil || !close[0]))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 46, Col: 98}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 45, Col: 98}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 		if templ_7745c5c3_Err != nil {
@@ -122,7 +121,7 @@ func creationForm(title, postTo, submitStr string, close ...bool) templ.Componen
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 54, Col: 40}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 53, Col: 40}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
@@ -171,7 +170,7 @@ func creationForm(title, postTo, submitStr string, close ...bool) templ.Componen
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(submitStr)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 82, Col: 15}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 81, Col: 15}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {
@@ -307,11 +306,7 @@ func IbanInputs(fd *IBANFD, id string, curs []models.Currency) templ.Component {
 			templ_7745c5c3_Var9 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("<div data-iban class=\"grid grid-cols-3 gap-4\">")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = moneyDisabledInput("Amount", "amount", getCurSymbolByCurrency(curs, fd.CurrencyID.Value), id, fd.Amount, "col-span-2").Render(ctx, templ_7745c5c3_Buffer)
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("<div data-iban class=\"grid gap-4\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -326,7 +321,7 @@ func IbanInputs(fd *IBANFD, id string, curs []models.Currency) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = ibanInput("IBAN", "iban", id, getCurIbanPrefixByCurrency(curs, fd.CurrencyID.Value), fd.IBAN, "col-span-3").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = ibanInput("IBAN", "iban", id, getCurIbanPrefixByCurrency(curs, fd.CurrencyID.Value), fd.IBAN).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -381,7 +376,7 @@ func input(label, kind, name, placeholder, id string, data FDInput, classes ...s
 		var templ_7745c5c3_Var13 string
 		templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(join(name, id))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 133, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 131, Col: 49}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 		if templ_7745c5c3_Err != nil {
@@ -394,7 +389,7 @@ func input(label, kind, name, placeholder, id string, data FDInput, classes ...s
 		var templ_7745c5c3_Var14 string
 		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 133, Col: 59}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 131, Col: 59}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 		if templ_7745c5c3_Err != nil {
@@ -407,7 +402,7 @@ func input(label, kind, name, placeholder, id string, data FDInput, classes ...s
 		var templ_7745c5c3_Var15 string
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(join(name, id))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 135, Col: 22}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 133, Col: 22}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 		if templ_7745c5c3_Err != nil {
@@ -420,7 +415,7 @@ func input(label, kind, name, placeholder, id string, data FDInput, classes ...s
 		var templ_7745c5c3_Var16 string
 		templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(kind)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 136, Col: 14}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 134, Col: 14}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 		if templ_7745c5c3_Err != nil {
@@ -433,7 +428,7 @@ func input(label, kind, name, placeholder, id string, data FDInput, classes ...s
 		var templ_7745c5c3_Var17 string
 		templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 137, Col: 14}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 135, Col: 14}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 		if templ_7745c5c3_Err != nil {
@@ -446,7 +441,7 @@ func input(label, kind, name, placeholder, id string, data FDInput, classes ...s
 		var templ_7745c5c3_Var18 string
 		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(placeholder)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 138, Col: 28}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 136, Col: 28}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 		if templ_7745c5c3_Err != nil {
@@ -459,7 +454,7 @@ func input(label, kind, name, placeholder, id string, data FDInput, classes ...s
 		var templ_7745c5c3_Var19 string
 		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(data.Value)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 140, Col: 21}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 138, Col: 21}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 		if templ_7745c5c3_Err != nil {
@@ -524,7 +519,7 @@ func numberInput(label, name, placeholder, id string, data FDInput, classes ...s
 		var templ_7745c5c3_Var23 string
 		templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(join(name, id))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 148, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 146, Col: 49}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 		if templ_7745c5c3_Err != nil {
@@ -537,7 +532,7 @@ func numberInput(label, name, placeholder, id string, data FDInput, classes ...s
 		var templ_7745c5c3_Var24 string
 		templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 148, Col: 59}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 146, Col: 59}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 		if templ_7745c5c3_Err != nil {
@@ -550,7 +545,7 @@ func numberInput(label, name, placeholder, id string, data FDInput, classes ...s
 		var templ_7745c5c3_Var25 string
 		templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(join(name, id))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 150, Col: 22}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 148, Col: 22}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
 		if templ_7745c5c3_Err != nil {
@@ -563,7 +558,7 @@ func numberInput(label, name, placeholder, id string, data FDInput, classes ...s
 		var templ_7745c5c3_Var26 string
 		templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 153, Col: 14}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 151, Col: 14}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
 		if templ_7745c5c3_Err != nil {
@@ -576,7 +571,7 @@ func numberInput(label, name, placeholder, id string, data FDInput, classes ...s
 		var templ_7745c5c3_Var27 string
 		templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinStringErrs(placeholder)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 154, Col: 28}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 152, Col: 28}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
 		if templ_7745c5c3_Err != nil {
@@ -589,7 +584,7 @@ func numberInput(label, name, placeholder, id string, data FDInput, classes ...s
 		var templ_7745c5c3_Var28 string
 		templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(data.Value)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 156, Col: 21}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 154, Col: 21}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
 		if templ_7745c5c3_Err != nil {
@@ -654,7 +649,7 @@ func moneyInput(label, name, currencySymbol, id string, data FDInput, classes ..
 		var templ_7745c5c3_Var32 string
 		templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(join(name, id))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 164, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 162, Col: 49}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var32))
 		if templ_7745c5c3_Err != nil {
@@ -667,7 +662,7 @@ func moneyInput(label, name, currencySymbol, id string, data FDInput, classes ..
 		var templ_7745c5c3_Var33 string
 		templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 164, Col: 59}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 162, Col: 59}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
 		if templ_7745c5c3_Err != nil {
@@ -680,7 +675,7 @@ func moneyInput(label, name, currencySymbol, id string, data FDInput, classes ..
 		var templ_7745c5c3_Var34 string
 		templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(join(name, id))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 166, Col: 22}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 164, Col: 22}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
 		if templ_7745c5c3_Err != nil {
@@ -693,7 +688,7 @@ func moneyInput(label, name, currencySymbol, id string, data FDInput, classes ..
 		var templ_7745c5c3_Var35 string
 		templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinStringErrs(name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 167, Col: 14}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 165, Col: 14}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
 		if templ_7745c5c3_Err != nil {
@@ -706,7 +701,7 @@ func moneyInput(label, name, currencySymbol, id string, data FDInput, classes ..
 		var templ_7745c5c3_Var36 string
 		templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinStringErrs(data.Value)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 169, Col: 21}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 167, Col: 21}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
 		if templ_7745c5c3_Err != nil {
@@ -719,7 +714,7 @@ func moneyInput(label, name, currencySymbol, id string, data FDInput, classes ..
 		var templ_7745c5c3_Var37 string
 		templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%s 1,000.00", currencySymbol))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 170, Col: 59}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 168, Col: 59}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
 		if templ_7745c5c3_Err != nil {
@@ -732,7 +727,7 @@ func moneyInput(label, name, currencySymbol, id string, data FDInput, classes ..
 		var templ_7745c5c3_Var38 string
 		templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("'%s ' + $money($input, '.', ',')", currencySymbol))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 171, Col: 83}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 169, Col: 83}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
 		if templ_7745c5c3_Err != nil {
@@ -797,7 +792,7 @@ func moneyDisabledInput(label, name, currencySymbol, id string, data FDInput, cl
 		var templ_7745c5c3_Var42 string
 		templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.JoinStringErrs(join(name, id))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 179, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 177, Col: 49}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var42))
 		if templ_7745c5c3_Err != nil {
@@ -810,7 +805,7 @@ func moneyDisabledInput(label, name, currencySymbol, id string, data FDInput, cl
 		var templ_7745c5c3_Var43 string
 		templ_7745c5c3_Var43, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 179, Col: 59}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 177, Col: 59}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var43))
 		if templ_7745c5c3_Err != nil {
@@ -823,7 +818,7 @@ func moneyDisabledInput(label, name, currencySymbol, id string, data FDInput, cl
 		var templ_7745c5c3_Var44 string
 		templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinStringErrs(join(name, id))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 181, Col: 22}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 179, Col: 22}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var44))
 		if templ_7745c5c3_Err != nil {
@@ -836,7 +831,7 @@ func moneyDisabledInput(label, name, currencySymbol, id string, data FDInput, cl
 		var templ_7745c5c3_Var45 string
 		templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.JoinStringErrs(name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 182, Col: 14}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 180, Col: 14}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var45))
 		if templ_7745c5c3_Err != nil {
@@ -849,7 +844,7 @@ func moneyDisabledInput(label, name, currencySymbol, id string, data FDInput, cl
 		var templ_7745c5c3_Var46 string
 		templ_7745c5c3_Var46, templ_7745c5c3_Err = templ.JoinStringErrs(data.Value)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 184, Col: 21}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 182, Col: 21}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var46))
 		if templ_7745c5c3_Err != nil {
@@ -862,7 +857,7 @@ func moneyDisabledInput(label, name, currencySymbol, id string, data FDInput, cl
 		var templ_7745c5c3_Var47 string
 		templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%s 1,000.00", currencySymbol))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 185, Col: 59}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 183, Col: 59}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var47))
 		if templ_7745c5c3_Err != nil {
@@ -875,7 +870,7 @@ func moneyDisabledInput(label, name, currencySymbol, id string, data FDInput, cl
 		var templ_7745c5c3_Var48 string
 		templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("'%s ' + $money($input, '.', ',')", currencySymbol))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 186, Col: 83}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 184, Col: 83}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var48))
 		if templ_7745c5c3_Err != nil {
@@ -940,7 +935,7 @@ func creditCardInput(label, name, id string, data FDInput, classes ...string) te
 		var templ_7745c5c3_Var52 string
 		templ_7745c5c3_Var52, templ_7745c5c3_Err = templ.JoinStringErrs(join(name, id))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 195, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 193, Col: 49}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var52))
 		if templ_7745c5c3_Err != nil {
@@ -953,7 +948,7 @@ func creditCardInput(label, name, id string, data FDInput, classes ...string) te
 		var templ_7745c5c3_Var53 string
 		templ_7745c5c3_Var53, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 195, Col: 59}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 193, Col: 59}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var53))
 		if templ_7745c5c3_Err != nil {
@@ -966,7 +961,7 @@ func creditCardInput(label, name, id string, data FDInput, classes ...string) te
 		var templ_7745c5c3_Var54 string
 		templ_7745c5c3_Var54, templ_7745c5c3_Err = templ.JoinStringErrs(join(name, id))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 197, Col: 22}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 195, Col: 22}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var54))
 		if templ_7745c5c3_Err != nil {
@@ -979,7 +974,7 @@ func creditCardInput(label, name, id string, data FDInput, classes ...string) te
 		var templ_7745c5c3_Var55 string
 		templ_7745c5c3_Var55, templ_7745c5c3_Err = templ.JoinStringErrs(name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 198, Col: 14}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 196, Col: 14}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var55))
 		if templ_7745c5c3_Err != nil {
@@ -992,7 +987,7 @@ func creditCardInput(label, name, id string, data FDInput, classes ...string) te
 		var templ_7745c5c3_Var56 string
 		templ_7745c5c3_Var56, templ_7745c5c3_Err = templ.JoinStringErrs(data.Value)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 200, Col: 21}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 198, Col: 21}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var56))
 		if templ_7745c5c3_Err != nil {
@@ -1057,7 +1052,7 @@ func ibanInput(label, name, id string, ibanPrefix string, data FDInput, classes 
 		var templ_7745c5c3_Var60 string
 		templ_7745c5c3_Var60, templ_7745c5c3_Err = templ.JoinStringErrs(join(name, id))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 211, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 209, Col: 49}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var60))
 		if templ_7745c5c3_Err != nil {
@@ -1070,7 +1065,7 @@ func ibanInput(label, name, id string, ibanPrefix string, data FDInput, classes 
 		var templ_7745c5c3_Var61 string
 		templ_7745c5c3_Var61, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 211, Col: 59}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 209, Col: 59}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var61))
 		if templ_7745c5c3_Err != nil {
@@ -1083,7 +1078,7 @@ func ibanInput(label, name, id string, ibanPrefix string, data FDInput, classes 
 		var templ_7745c5c3_Var62 string
 		templ_7745c5c3_Var62, templ_7745c5c3_Err = templ.JoinStringErrs(join(name, id))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 213, Col: 22}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 211, Col: 22}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var62))
 		if templ_7745c5c3_Err != nil {
@@ -1096,7 +1091,7 @@ func ibanInput(label, name, id string, ibanPrefix string, data FDInput, classes 
 		var templ_7745c5c3_Var63 string
 		templ_7745c5c3_Var63, templ_7745c5c3_Err = templ.JoinStringErrs(name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 214, Col: 14}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 212, Col: 14}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var63))
 		if templ_7745c5c3_Err != nil {
@@ -1109,7 +1104,7 @@ func ibanInput(label, name, id string, ibanPrefix string, data FDInput, classes 
 		var templ_7745c5c3_Var64 string
 		templ_7745c5c3_Var64, templ_7745c5c3_Err = templ.JoinStringErrs(data.Value)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 216, Col: 21}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 214, Col: 21}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var64))
 		if templ_7745c5c3_Err != nil {
@@ -1122,7 +1117,7 @@ func ibanInput(label, name, id string, ibanPrefix string, data FDInput, classes 
 		var templ_7745c5c3_Var65 string
 		templ_7745c5c3_Var65, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%s00 0000 0000 0000 0000 0000 0000 0", ibanPrefix))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 217, Col: 80}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 215, Col: 80}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var65))
 		if templ_7745c5c3_Err != nil {
@@ -1135,7 +1130,7 @@ func ibanInput(label, name, id string, ibanPrefix string, data FDInput, classes 
 		var templ_7745c5c3_Var66 string
 		templ_7745c5c3_Var66, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%s99 9999 9999 9999 9999 9999 9999 9", ibanPrefix))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 218, Col: 75}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 216, Col: 75}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var66))
 		if templ_7745c5c3_Err != nil {
@@ -1200,7 +1195,7 @@ func dateInput(label, name, id string, data FDInput, classes ...string) templ.Co
 		var templ_7745c5c3_Var70 string
 		templ_7745c5c3_Var70, templ_7745c5c3_Err = templ.JoinStringErrs(join(name, id))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 226, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 224, Col: 49}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var70))
 		if templ_7745c5c3_Err != nil {
@@ -1213,7 +1208,7 @@ func dateInput(label, name, id string, data FDInput, classes ...string) templ.Co
 		var templ_7745c5c3_Var71 string
 		templ_7745c5c3_Var71, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 226, Col: 59}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 224, Col: 59}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var71))
 		if templ_7745c5c3_Err != nil {
@@ -1226,7 +1221,7 @@ func dateInput(label, name, id string, data FDInput, classes ...string) templ.Co
 		var templ_7745c5c3_Var72 string
 		templ_7745c5c3_Var72, templ_7745c5c3_Err = templ.JoinStringErrs(join(name, id))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 229, Col: 22}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 227, Col: 22}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var72))
 		if templ_7745c5c3_Err != nil {
@@ -1239,7 +1234,7 @@ func dateInput(label, name, id string, data FDInput, classes ...string) templ.Co
 		var templ_7745c5c3_Var73 string
 		templ_7745c5c3_Var73, templ_7745c5c3_Err = templ.JoinStringErrs(name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 233, Col: 14}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 231, Col: 14}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var73))
 		if templ_7745c5c3_Err != nil {
@@ -1252,7 +1247,7 @@ func dateInput(label, name, id string, data FDInput, classes ...string) templ.Co
 		var templ_7745c5c3_Var74 string
 		templ_7745c5c3_Var74, templ_7745c5c3_Err = templ.JoinStringErrs(data.Value)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 234, Col: 21}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 232, Col: 21}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var74))
 		if templ_7745c5c3_Err != nil {
@@ -1299,7 +1294,7 @@ func selectInput(label, name, placeholder, id string, options map[string]string,
 		var templ_7745c5c3_Var76 string
 		templ_7745c5c3_Var76, templ_7745c5c3_Err = templ.JoinStringErrs(join(name, id))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 243, Col: 29}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 241, Col: 29}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var76))
 		if templ_7745c5c3_Err != nil {
@@ -1312,7 +1307,7 @@ func selectInput(label, name, placeholder, id string, options map[string]string,
 		var templ_7745c5c3_Var77 string
 		templ_7745c5c3_Var77, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 243, Col: 59}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 241, Col: 59}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var77))
 		if templ_7745c5c3_Err != nil {
@@ -1325,7 +1320,7 @@ func selectInput(label, name, placeholder, id string, options map[string]string,
 		var templ_7745c5c3_Var78 string
 		templ_7745c5c3_Var78, templ_7745c5c3_Err = templ.JoinStringErrs(join(name, id))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 245, Col: 22}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 243, Col: 22}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var78))
 		if templ_7745c5c3_Err != nil {
@@ -1338,7 +1333,7 @@ func selectInput(label, name, placeholder, id string, options map[string]string,
 		var templ_7745c5c3_Var79 string
 		templ_7745c5c3_Var79, templ_7745c5c3_Err = templ.JoinStringErrs(name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 246, Col: 14}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 244, Col: 14}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var79))
 		if templ_7745c5c3_Err != nil {
@@ -1361,7 +1356,7 @@ func selectInput(label, name, placeholder, id string, options map[string]string,
 		var templ_7745c5c3_Var80 string
 		templ_7745c5c3_Var80, templ_7745c5c3_Err = templ.JoinStringErrs(placeholder)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 252, Col: 51}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 250, Col: 51}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var80))
 		if templ_7745c5c3_Err != nil {
@@ -1379,7 +1374,7 @@ func selectInput(label, name, placeholder, id string, options map[string]string,
 			var templ_7745c5c3_Var81 string
 			templ_7745c5c3_Var81, templ_7745c5c3_Err = templ.JoinStringErrs(k)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 255, Col: 14}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 253, Col: 14}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var81))
 			if templ_7745c5c3_Err != nil {
@@ -1402,7 +1397,7 @@ func selectInput(label, name, placeholder, id string, options map[string]string,
 			var templ_7745c5c3_Var82 string
 			templ_7745c5c3_Var82, templ_7745c5c3_Err = templ.JoinStringErrs(v)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 259, Col: 8}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 257, Col: 8}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var82))
 			if templ_7745c5c3_Err != nil {
@@ -1558,7 +1553,7 @@ func checkbox(label, name, id string, data FDInput, attrs ...templ.Attributes) t
 		var templ_7745c5c3_Var88 string
 		templ_7745c5c3_Var88, templ_7745c5c3_Err = templ.JoinStringErrs(join(name, id))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 285, Col: 22}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 283, Col: 22}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var88))
 		if templ_7745c5c3_Err != nil {
@@ -1571,7 +1566,7 @@ func checkbox(label, name, id string, data FDInput, attrs ...templ.Attributes) t
 		var templ_7745c5c3_Var89 string
 		templ_7745c5c3_Var89, templ_7745c5c3_Err = templ.JoinStringErrs(name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 287, Col: 14}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 285, Col: 14}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var89))
 		if templ_7745c5c3_Err != nil {
@@ -1600,7 +1595,7 @@ func checkbox(label, name, id string, data FDInput, attrs ...templ.Attributes) t
 		var templ_7745c5c3_Var90 string
 		templ_7745c5c3_Var90, templ_7745c5c3_Err = templ.JoinStringErrs(join(name, id))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 295, Col: 29}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 293, Col: 29}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var90))
 		if templ_7745c5c3_Err != nil {
@@ -1613,7 +1608,7 @@ func checkbox(label, name, id string, data FDInput, attrs ...templ.Attributes) t
 		var templ_7745c5c3_Var91 string
 		templ_7745c5c3_Var91, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 295, Col: 62}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 293, Col: 62}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var91))
 		if templ_7745c5c3_Err != nil {
@@ -1652,7 +1647,7 @@ func sumbitButton(submitStr string) templ.Component {
 		var templ_7745c5c3_Var93 string
 		templ_7745c5c3_Var93, templ_7745c5c3_Err = templ.JoinStringErrs(submitStr)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 304, Col: 13}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 302, Col: 13}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var93))
 		if templ_7745c5c3_Err != nil {
@@ -1691,7 +1686,7 @@ func editFormButtons(entryGetUrl string) templ.Component {
 		var templ_7745c5c3_Var95 string
 		templ_7745c5c3_Var95, templ_7745c5c3_Err = templ.JoinStringErrs(string(templ.SafeURL(entryGetUrl)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 319, Col: 46}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 317, Col: 46}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var95))
 		if templ_7745c5c3_Err != nil {
@@ -1730,7 +1725,7 @@ func editButton(getEditUrl string) templ.Component {
 		var templ_7745c5c3_Var97 string
 		templ_7745c5c3_Var97, templ_7745c5c3_Err = templ.JoinStringErrs(string(templ.SafeURL(getEditUrl)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 328, Col: 44}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 326, Col: 44}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var97))
 		if templ_7745c5c3_Err != nil {
@@ -1769,7 +1764,7 @@ func deleteButton(deleteUrl string) templ.Component {
 		var templ_7745c5c3_Var99 string
 		templ_7745c5c3_Var99, templ_7745c5c3_Err = templ.JoinStringErrs(string(templ.SafeURL(deleteUrl)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 336, Col: 46}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 334, Col: 46}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var99))
 		if templ_7745c5c3_Err != nil {
@@ -1808,7 +1803,7 @@ func saveButton(text, putUrl string) templ.Component {
 		var templ_7745c5c3_Var101 string
 		templ_7745c5c3_Var101, templ_7745c5c3_Err = templ.JoinStringErrs(string(templ.SafeURL(putUrl)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 345, Col: 40}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 343, Col: 40}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var101))
 		if templ_7745c5c3_Err != nil {
@@ -1821,7 +1816,7 @@ func saveButton(text, putUrl string) templ.Component {
 		var templ_7745c5c3_Var102 string
 		templ_7745c5c3_Var102, templ_7745c5c3_Err = templ.JoinStringErrs(text)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 347, Col: 8}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 345, Col: 8}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var102))
 		if templ_7745c5c3_Err != nil {
@@ -1860,7 +1855,7 @@ func postButton(text, putUrl string) templ.Component {
 		var templ_7745c5c3_Var104 string
 		templ_7745c5c3_Var104, templ_7745c5c3_Err = templ.JoinStringErrs(string(templ.SafeURL(putUrl)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 353, Col: 41}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 351, Col: 41}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var104))
 		if templ_7745c5c3_Err != nil {
@@ -1873,7 +1868,7 @@ func postButton(text, putUrl string) templ.Component {
 		var templ_7745c5c3_Var105 string
 		templ_7745c5c3_Var105, templ_7745c5c3_Err = templ.JoinStringErrs(text)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 355, Col: 8}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 353, Col: 8}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var105))
 		if templ_7745c5c3_Err != nil {
@@ -1921,7 +1916,7 @@ func errorMessage(message string) templ.Component {
 			var templ_7745c5c3_Var107 string
 			templ_7745c5c3_Var107, templ_7745c5c3_Err = templ.JoinStringErrs(message)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 362, Col: 18}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/form.templ`, Line: 360, Col: 18}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var107))
 			if templ_7745c5c3_Err != nil {

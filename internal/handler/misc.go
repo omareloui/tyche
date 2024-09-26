@@ -91,14 +91,8 @@ func (h Handler) IbanInputs(w http.ResponseWriter, r *http.Request) (templ.Compo
 		return nil, errs.ErrInvalidID
 	}
 
-	amount := r.FormValue("amount")
-	if amount == "" {
-		amount = "0"
-	}
-
 	fd := &views.IBANFD{
 		IBAN:       views.FDInput{Value: r.FormValue("iban")},
-		Amount:     views.FDInput{Value: amount},
 		CurrencyID: views.FDInput{Value: currency.ID},
 	}
 

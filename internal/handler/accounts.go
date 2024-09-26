@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/a-h/templ"
@@ -70,7 +69,6 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 	l.Debug("parsed form data")
 
 	a.ID = idgen.New()
-	a.Amount = 0
 	a.CreatedAt = time.Now()
 
 	if err := h.sani.SanitizeStruct(a); err != nil {
@@ -273,16 +271,10 @@ func (h Handler) getCurrenciesAndAccKinds(ctx context.Context) ([]models.Currenc
 }
 
 func (h *Handler) mapFDToAcc(r *http.Request) (*models.Account, error) {
-	amount, err := parseFloatIfExists(r.FormValue("amount"))
-	if err != nil {
-		return nil, err
-	}
-
 	return &models.Account{
 		Name:               r.FormValue("name"),
 		Kind:               models.AccountKind{ID: r.FormValue("kind_id")},
 		IBAN:               r.FormValue("iban"),
-		Amount:             amount,
 		CardNumber:         r.FormValue("card_number"),
 		Note:               r.FormValue("note"),
 		Currency:           models.Currency{ID: r.FormValue("currency_id")},
@@ -294,7 +286,6 @@ func (h *Handler) mapFDToAcc(r *http.Request) (*models.Account, error) {
 func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError) *views.AccountFD {
 	return &views.AccountFD{
 		IBANFD: views.IBANFD{
-			Amount:     views.FDInput{Value: strconv.FormatFloat(acc.Amount, 'f', -1, 64), Error: errs.Errors.MsgFor("Amount")},
 			CurrencyID: views.FDInput{Value: acc.Currency.ID, Error: errs.Errors.MsgFor("Currency.ID")},
 			IBAN:       views.FDInput{Value: acc.IBAN, Error: errs.Errors.MsgFor("IBAN")},
 		},

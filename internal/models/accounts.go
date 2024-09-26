@@ -28,7 +28,7 @@ type AccountCreation struct {
 	ID         string `validate:"required"`
 	Name       string `validate:"required"`
 	IBAN       string `validate:"omitempty,iban"`
-	CardNumber string `validate:"omitempty"`
+	CardNumber string `validate:"omitempty,credit_card"`
 }
 
 func (a *Account) ViewAmount() string {
