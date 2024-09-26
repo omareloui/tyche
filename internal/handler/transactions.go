@@ -228,6 +228,33 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 		return nil, errs.ErrSanitizer
 	}
 
+	accs, knds, err := h.getTxDeps(r.Context())
+	if err != nil {
+		return nil, err
+	}
+
+	k := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == tx.Kind.ID })
+	if k == nil {
+		valerr := &errs.ValidationError{Errors: errs.ValidationErrors{}}
+		valerr.Errors["Kind.ID"] = errs.ValidationField{Tag: "required"}
+		l.Error("tx kind doesn't exist")
+		fd := h.mapTransactionToFD(tx, valerr)
+		fd.FrequencyFD = h.parseFrequencyFD(r, valerr)
+		return views.CreateTransactionForm(fd, accs, knds), nil
+	}
+	tx.Kind = *k
+
+	a := slicesutils.Find(accs, func(ac models.Account) bool { return ac.ID == tx.Account.ID })
+	if a == nil {
+		valerr := &errs.ValidationError{Errors: errs.ValidationErrors{}}
+		valerr.Errors["Account.ID"] = errs.ValidationField{Tag: "required"}
+		l.Error("account doesn't exist")
+		fd := h.mapTransactionToFD(tx, valerr)
+		fd.FrequencyFD = h.parseFrequencyFD(r, valerr)
+		return views.CreateTransactionForm(fd, accs, knds), nil
+	}
+	tx.Account = *a
+
 	l.Debug("update transaction", zap.Any("new transaction", tx))
 
 	if valerr := h.valid.Validate(tx); valerr != nil {
@@ -235,11 +262,7 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 		fd := h.mapTransactionToFD(tx, valerr)
 		fd.Amount.Value = r.FormValue("amount")
 
-		accs, knds, err := h.getTxDeps(r.Context())
-		if err != nil {
-			return nil, err
-		}
-
+		fd.FrequencyFD = nil
 		return views.EditTransaction(tx, fd, accs, knds), nil
 	}
 
