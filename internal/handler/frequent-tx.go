@@ -115,14 +115,14 @@ func (h Handler) EditFrequentTx(w http.ResponseWriter, r *http.Request) (templ.C
 		l.Error("updating frequent tx", zap.Error(err))
 		return nil, err
 	}
-	l.Info("updated frequent tx", zap.Any("frequent tx", ftx))
+	l.Info("updated frequent tx", zap.Any("frequent_tx", ftx))
 
 	ftx, err = h.repo.GetFrequentTx(r.Context(), id)
 	if err != nil {
 		l.Error("fetching frequent tx", zap.Error(err))
 		return nil, err
 	}
-	l.Debug("fetched frequent tx", zap.Any("frequent tx", ftx))
+	l.Debug("fetched frequent tx", zap.Any("frequent_tx", ftx))
 
 	return views.FrequentTx(ftx), nil
 }
@@ -232,12 +232,15 @@ func (h Handler) mapFDToFrequentTx(r *http.Request) (*models.FrequentTx, error) 
 	}
 
 	return &models.FrequentTx{
+		Account: models.Account{
+			ID: r.FormValue("account_id"),
+		},
+		Amount:       amount,
 		Frequency:    uint(freq),
 		FrequencyBy:  models.FrequencyBy(freqBy),
 		StopsOn:      stopsOn,
 		Transactions: []models.Transaction{},
 		Description:  r.FormValue("description"),
-		Amount:       amount,
 		Kind:         models.TransactionKind{ID: r.FormValue("kind_id")},
 	}, nil
 }
