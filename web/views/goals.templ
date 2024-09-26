@@ -2,10 +2,9 @@ package views
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/omareloui/financial-planner/internal/models"
-	"strconv"
-	"slices"
 )
 
 type GoalFD struct {
@@ -43,7 +42,9 @@ templ EditGoal(id string, fd *GoalFD, its []models.Item) {
 
 templ goalFormBody(id string, fd *GoalFD, its []models.Item) {
 	@input("Title", "text", "title", "Enter goal title", id, fd.Title)
-	<h3 class="font-bold text-xl mt-2">Items ({ strconv.Itoa(len(its)) })</h3>
+	if len(its) > 0 {
+		<h3 class="font-bold text-xl mt-2">Items</h3>
+	}
 	for _, it := range its {
 		<label class="cursor-pointer">
 			<input
@@ -77,7 +78,9 @@ templ Goal(gl *models.Goal) {
 		<p>Name: { gl.Title }</p>
 		<p>EGP Subtotal: { gl.ViewAmount() } </p>
 		<div>
-			<h4 class="font-bold text-xl">Items</h4>
+			if len(gl.Items) > 0 {
+				<h4 class="font-bold text-xl">Items</h4>
+			}
 			for _, it := range gl.Items {
 				<p>
 					<strong>{ it.Name }</strong>

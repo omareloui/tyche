@@ -122,17 +122,19 @@ func dbGoalRowsToGoals(dbGls []db.GetGoalsRow) []models.Goal {
 			glIdx = len(gls) - 1
 		}
 
-		gls[glIdx].Items = append(gls[glIdx].Items, models.Item{
-			ID:          dbGl.ItemID.String,
-			Name:        dbGl.ItemName.String,
-			Price:       dbGl.ItemPrice.Float64,
-			PurchasedOn: dbGl.ItemPurchasedOn.Time,
-			Currency: models.Currency{
-				ID:        dbGl.ItemCurrencyID.String,
-				Enum:      models.CurrencyEnum(dbGl.ItemCurrency.Int64),
-				EgpFxRate: dbGl.ItemCurrencyFxRate.Float64,
-			},
-		})
+		if dbGl.ItemID.Valid {
+			gls[glIdx].Items = append(gls[glIdx].Items, models.Item{
+				ID:          dbGl.ItemID.String,
+				Name:        dbGl.ItemName.String,
+				Price:       dbGl.ItemPrice.Float64,
+				PurchasedOn: dbGl.ItemPurchasedOn.Time,
+				Currency: models.Currency{
+					ID:        dbGl.ItemCurrencyID.String,
+					Enum:      models.CurrencyEnum(dbGl.ItemCurrency.Int64),
+					EgpFxRate: dbGl.ItemCurrencyFxRate.Float64,
+				},
+			})
+		}
 	}
 
 	return gls

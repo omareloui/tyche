@@ -75,8 +75,6 @@ CREATE TABLE goals_items (
     FOREIGN KEY (goal_id) REFERENCES goals (id) ON DELETE CASCADE,
     FOREIGN KEY (item_id) REFERENCES items (id) ON DELETE CASCADE
 );
-CREATE UNIQUE INDEX idx_goals_items
-ON goals_items (goal_id, item_id);
 CREATE TABLE items (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -95,7 +93,6 @@ DROP TABLE transaction_kinds;
 DROP TABLE transactions;
 DROP TABLE goals;
 DROP TABLE goals_items;
-DROP INDEX idx_goals_items;
 DROP TABLE items;
 DROP TABLE accounts;
 DROP TABLE account_kinds;
