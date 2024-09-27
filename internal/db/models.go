@@ -30,6 +30,13 @@ type AccountKind struct {
 	Enum int64
 }
 
+type Category struct {
+	ID          string
+	Name        string
+	BudgetInEgp float64
+	CreatedAt   interface{}
+}
+
 type Currency struct {
 	ID        string
 	Enum      int64
@@ -43,6 +50,7 @@ type FrequentTx struct {
 	AccountID                string
 	Amount                   float64
 	KindID                   string
+	CategoryID               sql.NullString
 	Description              sql.NullString
 	StartsOn                 time.Time
 	StopsOn                  sql.NullTime
@@ -86,6 +94,7 @@ type Transaction struct {
 	AccountID   string
 	Amount      float64
 	KindID      string
+	CategoryID  sql.NullString
 	Description sql.NullString
 	FulfilledOn sql.NullTime
 	ScheduledTo time.Time

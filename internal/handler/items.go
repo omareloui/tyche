@@ -79,8 +79,6 @@ func (h Handler) CreateItem(w http.ResponseWriter, r *http.Request) (templ.Compo
 		return nil, errs.ErrSanitizer
 	}
 
-	l.Debug("create transaction", zap.Any("item", it))
-
 	if valerr := h.valid.Validate(it); valerr != nil {
 		l.Error("create item validation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
 		fd := h.mapItemToFD(it, valerr)

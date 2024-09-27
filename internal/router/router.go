@@ -26,6 +26,13 @@ func New(h *handler.Handler) Router {
 	mux.Handle("PUT /accounts/{id}/default", handle(h.SetDefaultAccount))
 	mux.Handle("DELETE /accounts/{id}", handle(h.DeleteAccount))
 
+	mux.Handle("GET /categories", handle(h.Categories))
+	mux.Handle("POST /categories", handle(h.CreateCategory))
+	mux.Handle("GET /categories/{id}", handle(h.Category))
+	mux.Handle("GET /categories/{id}/edit", handle(h.GetEditCategory))
+	mux.Handle("PUT /categories/{id}", handle(h.EditCategory))
+	mux.Handle("DELETE /categories/{id}", handle(h.DeleteCategory))
+
 	mux.Handle("GET /transactions", handle(h.Transactions))
 	mux.Handle("POST /transactions", handle(h.CreateTransaction))
 	mux.Handle("GET /transactions/{id}", handle(h.Transaction))

@@ -1,0 +1,72 @@
+package views
+
+import (
+	"fmt"
+
+	"github.com/omareloui/financial-planner/internal/models"
+)
+
+type CategoryFD struct {
+	Name        FDInput
+	BudgetInEgp FDInput
+}
+
+templ Categories(
+	balances []models.Balance,
+	fd *CategoryFD,
+	categories []models.Category) {
+	@baseLayout("Categories", balances) {
+		@container() {
+			@mainHeader("Categories")
+			@CreateCategoryForm(fd)
+			@categoriesList(categories)
+		}
+	}
+}
+
+templ CreateCategoryForm(fd *CategoryFD) {
+	@creationForm("Create Category", "/categories", "Create Category") {
+		@categoryFormBody(fd, "")
+	}
+}
+
+templ EditCategory(fd *CategoryFD, id string) {
+	@form("put", fmt.Sprintf("/categories/%s", id), templ.Attributes{"hx-target": "this"}) {
+		<p>ID: { id }</p>
+		@categoryFormBody(fd, id)
+		@editFormButtons(fmt.Sprintf("/categories/%s", id))
+	}
+}
+
+templ categoryFormBody(fd *CategoryFD, id string) {
+	@input("Name", "text", "name", "Enter category name", id, fd.Name)
+	@numberInput("Budget in EGP", "budget_in_egp", "Enter budget amount in EGP", id, fd.BudgetInEgp)
+}
+
+templ categoriesList(categories []models.Category) {
+	@list("categories-list") {
+		for _, cat := range categories {
+			@Category(&cat)
+		}
+	}
+}
+
+templ Category(cat *models.Category) {
+	<div hx-target="this" class="entry-container">
+		<p>ID: { cat.ID }</p>
+		<p>Name: { cat.Name }</p>
+		<p>
+			Budget: { cat.ViewBudgetInEgp() }
+		</p>
+		<div class="flex gap-4">
+			@editButton(fmt.Sprintf("/categories/%s/edit", cat.ID))
+			@deleteButton(fmt.Sprintf("/categories/%s", cat.ID))
+		</div>
+	</div>
+}
+
+templ CategoryOOB(cat *models.Category) {
+	<div id="categories-list" hx-swap-oob="afterbegin">
+		@Category(cat)
+	</div>
+}

@@ -35,6 +35,7 @@ CREATE TABLE transactions (
     account_id VARCHAR(16) NOT NULL,
     amount FLOAT DEFAULT 0 NOT NULL,
     kind_id VARCHAR(16) NOT NULL,
+    category_id VARCHAR(16),
     description VARCHAR(225),
     fulfilled_on DATE,
     scheduled_to DATE NOT NULL,
@@ -49,6 +50,7 @@ CREATE TABLE frequent_txs (
     account_id VARCHAR(16) NOT NULL,
     amount FLOAT DEFAULT 0 NOT NULL,
     kind_id VARCHAR(16) NOT NULL,
+    category_id VARCHAR(16),
     description VARCHAR(225),
     starts_on TIMESTAMP NOT NULL,
     stops_on TIMESTAMP,
@@ -90,6 +92,12 @@ CREATE TABLE items (
     created_at TIMESTAMP NOT NULL DEFAULT NOW,
     FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE
 );
+CREATE TABLE categories (
+    id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
+    name VARCHAR UNIQUE NOT NULL,
+    budget_in_egp FLOAT DEFAULT 0 NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW
+);
 -- +goose StatementEnd
 
 -- +goose Down
@@ -103,4 +111,5 @@ DROP TABLE goals_progresses;
 DROP TABLE items;
 DROP TABLE accounts;
 DROP TABLE account_kinds;
+DROP TABLE categories;
 -- +goose StatementEnd
