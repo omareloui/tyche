@@ -1,3 +1,8 @@
+-- name: TotalBudget :one
+SELECT TOTAL(budget_in_egp)
+FROM categories
+GROUP BY id;
+
 -- name: GetCategories :many
 SELECT
     id,

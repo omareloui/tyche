@@ -12,10 +12,13 @@ import (
 )
 
 func (r *Repository) GetGoals(ctx context.Context) ([]models.Goal, error) {
+	l := logger.FromCtx(ctx)
 	dbGoals, err := r.q.GetGoals(ctx)
 	if err != nil {
+		l.Error("fetching goals", zap.Error(err))
 		return nil, err
 	}
+	l.Debug("fetched goals")
 	return dbGoalRowsToGoals(dbGoals), nil
 }
 

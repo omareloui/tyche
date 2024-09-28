@@ -5,14 +5,19 @@ import (
 	"time"
 
 	"github.com/omareloui/financial-planner/internal/db"
+	"github.com/omareloui/financial-planner/internal/logger"
 	"github.com/omareloui/financial-planner/internal/models"
+	"go.uber.org/zap"
 )
 
 func (r *Repository) GetItems(ctx context.Context) ([]models.Item, error) {
+	l := logger.FromCtx(ctx)
 	dbIts, err := r.q.GetItems(ctx)
 	if err != nil {
+		l.Error("fetching goals items", zap.Error(err))
 		return nil, err
 	}
+	l.Debug("fetched goals items")
 	return dbItemsRowToItems(dbIts), nil
 }
 

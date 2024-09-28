@@ -24,6 +24,14 @@ func (r *Repository) GetCategory(ctx context.Context, id string) (*models.Catego
 	return dbCategoryRowToCategory(&dbCat), nil
 }
 
+func (r *Repository) GetTotalBudget(ctx context.Context) (float64, error) {
+	budget, err := r.q.TotalBudget(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return budget, nil
+}
+
 func (r *Repository) UpdateCategory(ctx context.Context, cat *models.Category) error {
 	return r.q.UpdateCategory(ctx, db.UpdateCategoryParams{
 		ID:          cat.ID,

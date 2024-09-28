@@ -106,6 +106,19 @@ func (q *Queries) GetCategory(ctx context.Context, id string) (Category, error) 
 	return i, err
 }
 
+const totalBudget = `-- name: TotalBudget :one
+SELECT TOTAL(budget_in_egp)
+FROM categories
+GROUP BY id
+`
+
+func (q *Queries) TotalBudget(ctx context.Context) (float64, error) {
+	row := q.db.QueryRowContext(ctx, totalBudget)
+	var total float64
+	err := row.Scan(&total)
+	return total, err
+}
+
 const updateCategory = `-- name: UpdateCategory :exec
 UPDATE categories
 SET
