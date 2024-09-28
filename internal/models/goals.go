@@ -2,6 +2,8 @@ package models
 
 import (
 	"time"
+
+	"github.com/omareloui/financial-planner/internal/numsutils"
 )
 
 type Goal struct {
@@ -42,4 +44,8 @@ func (gl *Goal) Remaining() float64 {
 
 func (gl *Goal) ViewRemaining() string {
 	return formatAmount(gl.Remaining(), CurrencyEgp)
+}
+
+func (gl *Goal) Plan(numberOfMonths int) float64 {
+	return numsutils.Round(gl.Remaining() / float64(numberOfMonths))
 }
