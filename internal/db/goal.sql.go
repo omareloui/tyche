@@ -8,32 +8,26 @@ package db
 import (
 	"context"
 	"database/sql"
+	"time"
 )
 
 const createGoal = `-- name: CreateGoal :exec
 INSERT INTO goals (
     id,
     title,
-    egp_subtotal,
-    created_at
+    egp_subtotal
 )
-VALUES (?, ?, ?, ?)
+VALUES (?, ?, ?)
 `
 
 type CreateGoalParams struct {
 	ID          string
 	Title       string
 	EgpSubtotal float64
-	CreatedAt   interface{}
 }
 
 func (q *Queries) CreateGoal(ctx context.Context, arg CreateGoalParams) error {
-	_, err := q.db.ExecContext(ctx, createGoal,
-		arg.ID,
-		arg.Title,
-		arg.EgpSubtotal,
-		arg.CreatedAt,
-	)
+	_, err := q.db.ExecContext(ctx, createGoal, arg.ID, arg.Title, arg.EgpSubtotal)
 	return err
 }
 
@@ -113,7 +107,7 @@ type GetGoalRow struct {
 	Title              string
 	EgpSubtotal        float64
 	FulfilledAt        sql.NullTime
-	CreatedAt          interface{}
+	CreatedAt          time.Time
 	ItemID             sql.NullString
 	ItemName           sql.NullString
 	ItemPrice          sql.NullFloat64
@@ -197,7 +191,7 @@ type GetGoalsRow struct {
 	Title                            string
 	EgpSubtotal                      float64
 	FulfilledAt                      sql.NullTime
-	CreatedAt                        interface{}
+	CreatedAt                        time.Time
 	ItemID                           sql.NullString
 	ItemName                         sql.NullString
 	ItemPrice                        sql.NullFloat64

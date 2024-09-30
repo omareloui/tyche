@@ -25,10 +25,9 @@ WHERE id = ?;
 INSERT INTO categories (
     id,
     name,
-    budget_in_egp,
-    created_at
+    budget_in_egp
 )
-VALUES (?, ?, ?, ?);
+VALUES (?, ?, ?);
 
 -- name: UpdateCategory :exec
 UPDATE categories

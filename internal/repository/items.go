@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"time"
 
 	"github.com/omareloui/financial-planner/internal/db"
 	"github.com/omareloui/financial-planner/internal/logger"
@@ -44,7 +43,6 @@ func (r *Repository) CreateItem(ctx context.Context, it *models.Item) error {
 		Name:       it.Name,
 		CurrencyID: it.Currency.ID,
 		Price:      it.Price,
-		CreatedAt:  it.CreatedAt,
 	})
 }
 
@@ -63,7 +61,7 @@ func dbItemRowToItem(dbIt *db.GetItemRow) *models.Item {
 			Enum:      models.CurrencyEnum(dbIt.Enum.Int64),
 			EgpFxRate: dbIt.EgpFxRate.Float64,
 		},
-		CreatedAt: dbIt.CreatedAt.(time.Time),
+		CreatedAt: dbIt.CreatedAt,
 	}
 }
 
@@ -80,7 +78,7 @@ func dbItemsRowToItems(dbIts []db.GetItemsRow) []models.Item {
 				Enum:      models.CurrencyEnum(it.Enum.Int64),
 				EgpFxRate: it.EgpFxRate.Float64,
 			},
-			CreatedAt: it.CreatedAt.(time.Time),
+			CreatedAt: it.CreatedAt,
 		}
 	}
 	return items

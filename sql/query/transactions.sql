@@ -6,10 +6,9 @@ INSERT INTO transactions (
     kind_id,
     description,
     scheduled_to,
-    fulfilled_on,
-    created_at
+    fulfilled_on
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetTransactions :many
 SELECT
@@ -78,7 +77,7 @@ WHERE id = ?;
 -- name: FulfillTransaction :exec
 UPDATE transactions
 SET
-fulfilled_on = ?
+fulfilled_on = DATETIME('now')
 WHERE id = ?;
 
 -- name: DeleteTransaction :exec

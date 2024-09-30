@@ -8,6 +8,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"time"
 )
 
 const addToAccount = `-- name: AddToAccount :exec
@@ -36,10 +37,9 @@ INSERT INTO accounts (
     note,
     exclude_from_balance,
     is_archived,
-    is_default,
-    created_at
+    is_default
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateAccountParams struct {
@@ -54,7 +54,6 @@ type CreateAccountParams struct {
 	ExcludeFromBalance bool
 	IsArchived         bool
 	IsDefault          bool
-	CreatedAt          interface{}
 }
 
 func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) error {
@@ -70,7 +69,6 @@ func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) er
 		arg.ExcludeFromBalance,
 		arg.IsArchived,
 		arg.IsDefault,
-		arg.CreatedAt,
 	)
 	return err
 }
@@ -132,7 +130,7 @@ type GetAccountRow struct {
 	ExcludeFromBalance bool
 	IsArchived         bool
 	IsDefault          bool
-	CreatedAt          interface{}
+	CreatedAt          time.Time
 	CurrencyEnum       sql.NullInt64
 	EgpFxRate          sql.NullFloat64
 	KindEnum           sql.NullInt64
@@ -210,7 +208,7 @@ type GetAccountsRow struct {
 	ExcludeFromBalance bool
 	IsArchived         bool
 	IsDefault          bool
-	CreatedAt          interface{}
+	CreatedAt          time.Time
 	CurrencyEnum       sql.NullInt64
 	EgpFxRate          sql.NullFloat64
 	KindEnum           sql.NullInt64
@@ -305,7 +303,7 @@ type GetActiveAccountsRow struct {
 	ExcludeFromBalance bool
 	IsArchived         bool
 	IsDefault          bool
-	CreatedAt          interface{}
+	CreatedAt          time.Time
 	CurrencyEnum       sql.NullInt64
 	EgpFxRate          sql.NullFloat64
 	KindEnum           sql.NullInt64

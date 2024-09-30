@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"slices"
-	"time"
 
 	"github.com/omareloui/financial-planner/internal/db"
 	"github.com/omareloui/financial-planner/internal/logger"
@@ -36,7 +35,6 @@ func (r *Repository) CreateGoal(ctx context.Context, gl *models.Goal) error {
 			ID:          gl.ID,
 			Title:       gl.Title,
 			EgpSubtotal: gl.EgpSubtotal,
-			CreatedAt:   gl.CreatedAt,
 		}); err != nil {
 			return err
 		}
@@ -145,7 +143,7 @@ func dbGoalRowToGoal(dbGl []db.GetGoalRow) *models.Goal {
 		Title:       dbGl[0].Title,
 		EgpSubtotal: dbGl[0].EgpSubtotal,
 		FulfilledAt: dbGl[0].FulfilledAt.Time,
-		CreatedAt:   dbGl[0].CreatedAt.(time.Time),
+		CreatedAt:   dbGl[0].CreatedAt,
 		Items:       items,
 	}
 }
@@ -161,7 +159,7 @@ func dbGoalRowsToGoals(dbGls []db.GetGoalsRow) []models.Goal {
 				Title:        dbGl.Title,
 				EgpSubtotal:  dbGl.EgpSubtotal,
 				FulfilledAt:  dbGl.FulfilledAt.Time,
-				CreatedAt:    dbGl.CreatedAt.(time.Time),
+				CreatedAt:    dbGl.CreatedAt,
 				Items:        []models.Item{},
 				Transactions: []models.Transaction{},
 			})

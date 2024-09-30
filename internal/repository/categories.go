@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"time"
 
 	"github.com/omareloui/financial-planner/internal/db"
 	"github.com/omareloui/financial-planner/internal/models"
@@ -45,7 +44,6 @@ func (r *Repository) CreateCategory(ctx context.Context, cat *models.Category) e
 		ID:          cat.ID,
 		Name:        cat.Name,
 		BudgetInEgp: cat.BudgetInEgp,
-		CreatedAt:   cat.CreatedAt,
 	})
 }
 
@@ -58,7 +56,7 @@ func dbCategoryRowToCategory(dbCat *db.Category) *models.Category {
 		ID:          dbCat.ID,
 		Name:        dbCat.Name,
 		BudgetInEgp: dbCat.BudgetInEgp,
-		CreatedAt:   dbCat.CreatedAt.(time.Time),
+		CreatedAt:   dbCat.CreatedAt,
 	}
 }
 

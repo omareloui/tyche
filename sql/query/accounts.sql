@@ -113,10 +113,9 @@ INSERT INTO accounts (
     note,
     exclude_from_balance,
     is_archived,
-    is_default,
-    created_at
+    is_default
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: UpdateAccount :exec
 UPDATE accounts

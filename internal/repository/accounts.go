@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"strings"
-	"time"
 
 	"github.com/omareloui/financial-planner/internal/db"
 	"github.com/omareloui/financial-planner/internal/logger"
@@ -25,7 +24,6 @@ func (r *Repository) CreateAccount(ctx context.Context, a *models.Account) error
 		Note:               sql.NullString{String: a.Note, Valid: a.Note != ""},
 		IsArchived:         a.IsArchive,
 		ExcludeFromBalance: a.ExcludeFromBalance,
-		CreatedAt:          a.CreatedAt,
 	}); err != nil {
 		l.Error("creating account", zap.Error(err))
 		if strings.Contains(err.Error(), "UNIQUE constraint failed: accounts.name") {
@@ -206,7 +204,7 @@ func dbAccountRowToAccount[T db.GetAccountRow | db.GetAccountsRow](dbAcc *T) *mo
 		Note:               _dbAcc.Note.String,
 		IsArchive:          _dbAcc.IsArchived,
 		ExcludeFromBalance: _dbAcc.ExcludeFromBalance,
-		CreatedAt:          _dbAcc.CreatedAt.(time.Time),
+		CreatedAt:          _dbAcc.CreatedAt,
 	}
 }
 

@@ -26,7 +26,7 @@ CREATE TABLE accounts (
     is_default BOOL NOT NULL DEFAULT FALSE,
     is_archived BOOL NOT NULL DEFAULT FALSE,
     exclude_from_balance BOOL NOT NULL DEFAULT FALSE,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (currency_id) REFERENCES currencies (id)
     FOREIGN KEY (kind_id) REFERENCES account_kinds (id)
 );
@@ -39,7 +39,7 @@ CREATE TABLE transactions (
     description VARCHAR(225),
     fulfilled_on DATE,
     scheduled_to DATE NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE,
     FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id)
 );
@@ -54,8 +54,8 @@ CREATE TABLE frequent_txs (
     description VARCHAR(225),
     starts_on TIMESTAMP NOT NULL,
     stops_on TIMESTAMP,
-    last_transaction_created_at TIMESTAMP NOT NULL DEFAULT NOW,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW,
+    last_transaction_created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE,
     FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id)
 );
@@ -70,7 +70,7 @@ CREATE TABLE goals (
     title VARCHAR(255) NOT NULL,
     egp_subtotal FLOAT NOT NULL,
     fulfilled_at TIMESTAMP,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE goals_items (
     goal_id VARCHAR(16) NOT NULL,
@@ -90,14 +90,14 @@ CREATE TABLE items (
     price FLOAT DEFAULT 0 NOT NULL,
     currency_id VARCHAR(16) NOT NULL,
     purchased_on DATE,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE
 );
 CREATE TABLE categories (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
     name VARCHAR UNIQUE NOT NULL,
     budget_in_egp FLOAT DEFAULT 0 NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 -- +goose StatementEnd
 

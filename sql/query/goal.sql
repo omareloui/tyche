@@ -2,10 +2,9 @@
 INSERT INTO goals (
     id,
     title,
-    egp_subtotal,
-    created_at
+    egp_subtotal
 )
-VALUES (?, ?, ?, ?);
+VALUES (?, ?, ?);
 
 -- name: CreateGoalItem :exec
 INSERT INTO goals_items (

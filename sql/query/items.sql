@@ -31,10 +31,9 @@ INSERT INTO items (
     id,
     name,
     price,
-    currency_id,
-    created_at
+    currency_id
 )
-VALUES (?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?);
 
 -- name: UpdateItem :exec
 UPDATE items

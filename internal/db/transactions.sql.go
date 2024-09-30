@@ -19,10 +19,9 @@ INSERT INTO transactions (
     kind_id,
     description,
     scheduled_to,
-    fulfilled_on,
-    created_at
+    fulfilled_on
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateTransactionParams struct {
@@ -33,7 +32,6 @@ type CreateTransactionParams struct {
 	Description sql.NullString
 	ScheduledTo time.Time
 	FulfilledOn sql.NullTime
-	CreatedAt   interface{}
 }
 
 func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionParams) error {
@@ -45,7 +43,6 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 		arg.Description,
 		arg.ScheduledTo,
 		arg.FulfilledOn,
-		arg.CreatedAt,
 	)
 	return err
 }
@@ -63,17 +60,12 @@ func (q *Queries) DeleteTransaction(ctx context.Context, id string) error {
 const fulfillTransaction = `-- name: FulfillTransaction :exec
 UPDATE transactions
 SET
-fulfilled_on = ?
+fulfilled_on = DATETIME('now')
 WHERE id = ?
 `
 
-type FulfillTransactionParams struct {
-	FulfilledOn sql.NullTime
-	ID          string
-}
-
-func (q *Queries) FulfillTransaction(ctx context.Context, arg FulfillTransactionParams) error {
-	_, err := q.db.ExecContext(ctx, fulfillTransaction, arg.FulfilledOn, arg.ID)
+func (q *Queries) FulfillTransaction(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, fulfillTransaction, id)
 	return err
 }
 
@@ -113,7 +105,7 @@ type GetTransactionRow struct {
 	Description     sql.NullString
 	FulfilledOn     sql.NullTime
 	ScheduledTo     time.Time
-	CreatedAt       interface{}
+	CreatedAt       time.Time
 	AccountName     sql.NullString
 	CurrencyID      sql.NullString
 	CurrencyEnum    sql.NullInt64
@@ -186,7 +178,7 @@ type GetTransactionsRow struct {
 	Description     sql.NullString
 	FulfilledOn     sql.NullTime
 	ScheduledTo     time.Time
-	CreatedAt       interface{}
+	CreatedAt       time.Time
 	AccountName     sql.NullString
 	CurrencyID      sql.NullString
 	CurrencyEnum    sql.NullInt64

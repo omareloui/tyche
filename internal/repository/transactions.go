@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"time"
 
 	"github.com/omareloui/financial-planner/internal/db"
 	"github.com/omareloui/financial-planner/internal/logger"
@@ -49,7 +48,6 @@ func (r *Repository) createTransactionWithTxn(ctx context.Context, qtx *db.Queri
 		Description: sql.NullString{String: tx.Description, Valid: tx.Description != ""},
 		ScheduledTo: tx.ScheduledTo,
 		FulfilledOn: sql.NullTime{Time: tx.FulfilledOn, Valid: !tx.FulfilledOn.IsZero()},
-		CreatedAt:   tx.CreatedAt,
 	}); err != nil {
 		l.Error("create transaction", zap.Error(err), zap.Any("transaction", tx))
 		return err
@@ -154,10 +152,7 @@ func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transa
 func (r *Repository) FulfillTransaction(ctx context.Context, tx *models.Transaction) error {
 	return r.transact(func(qtx *db.Queries) error {
 		l := logger.FromCtx(ctx)
-		if err := qtx.FulfillTransaction(ctx, db.FulfillTransactionParams{
-			ID:          tx.ID,
-			FulfilledOn: sql.NullTime{Time: tx.FulfilledOn, Valid: !tx.FulfilledOn.IsZero()},
-		}); err != nil {
+		if err := qtx.FulfillTransaction(ctx, tx.ID); err != nil {
 			l.Error("fulfilling transaction", zap.Error(err), zap.String("id", tx.ID), zap.Time("fulfilled_on", tx.FulfilledOn))
 			return err
 		}
@@ -191,7 +186,7 @@ func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRo
 		GoalPercentage: _dbTx.GoalPercentage.(float64),
 		FulfilledOn:    _dbTx.FulfilledOn.Time,
 		ScheduledTo:    _dbTx.ScheduledTo,
-		CreatedAt:      _dbTx.CreatedAt.(time.Time),
+		CreatedAt:      _dbTx.CreatedAt,
 		Kind: models.TransactionKind{
 			ID:              _dbTx.KindID,
 			Kind:            _dbTx.Kind.String,

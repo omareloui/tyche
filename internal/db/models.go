@@ -21,7 +21,7 @@ type Account struct {
 	IsDefault          bool
 	IsArchived         bool
 	ExcludeFromBalance bool
-	CreatedAt          interface{}
+	CreatedAt          time.Time
 	Foreign            interface{}
 }
 
@@ -34,7 +34,7 @@ type Category struct {
 	ID          string
 	Name        string
 	BudgetInEgp float64
-	CreatedAt   interface{}
+	CreatedAt   time.Time
 }
 
 type Currency struct {
@@ -54,8 +54,8 @@ type FrequentTx struct {
 	Description              sql.NullString
 	StartsOn                 time.Time
 	StopsOn                  sql.NullTime
-	LastTransactionCreatedAt interface{}
-	CreatedAt                interface{}
+	LastTransactionCreatedAt time.Time
+	CreatedAt                time.Time
 }
 
 type FrequentTxsTransaction struct {
@@ -68,7 +68,7 @@ type Goal struct {
 	Title       string
 	EgpSubtotal float64
 	FulfilledAt sql.NullTime
-	CreatedAt   interface{}
+	CreatedAt   time.Time
 }
 
 type GoalsItem struct {
@@ -87,7 +87,7 @@ type Item struct {
 	Price       float64
 	CurrencyID  string
 	PurchasedOn sql.NullTime
-	CreatedAt   interface{}
+	CreatedAt   time.Time
 }
 
 type Transaction struct {
@@ -99,7 +99,7 @@ type Transaction struct {
 	Description sql.NullString
 	FulfilledOn sql.NullTime
 	ScheduledTo time.Time
-	CreatedAt   interface{}
+	CreatedAt   time.Time
 }
 
 type TransactionKind struct {

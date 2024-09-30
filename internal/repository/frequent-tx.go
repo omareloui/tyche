@@ -3,7 +3,6 @@ package repository
 import (
 	"database/sql"
 	"slices"
-	"time"
 
 	"github.com/omareloui/financial-planner/internal/db"
 	"github.com/omareloui/financial-planner/internal/logger"
@@ -24,8 +23,7 @@ func (r *Repository) createFrequentTxWithTxn(qtx *db.Queries, ctx context.Contex
 		Description:              sql.NullString{String: ftx.Description, Valid: ftx.Description != ""},
 		StartsOn:                 ftx.StartsOn,
 		StopsOn:                  sql.NullTime{Time: ftx.StopsOn, Valid: !ftx.StopsOn.IsZero()},
-		CreatedAt:                ftx.CreatedAt,
-		LastTransactionCreatedAt: sql.NullTime{Time: ftx.LastTransactionCreatedAt, Valid: !ftx.LastTransactionCreatedAt.IsZero()},
+		LastTransactionCreatedAt: ftx.LastTransactionCreatedAt,
 	}); err != nil {
 		l.Error("creating frequent transaction", zap.Error(err), zap.Any("frequent tx", ftx))
 		return err
@@ -168,7 +166,7 @@ func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 				},
 				Amount:      dbFtx.Amount,
 				Description: dbFtx.Description.String,
-				CreatedAt:   dbFtx.CreatedAt.(time.Time),
+				CreatedAt:   dbFtx.CreatedAt,
 				Kind: models.TransactionKind{
 					ID:              dbFtx.KindID,
 					Kind:            dbFtx.Kind.String,
@@ -178,7 +176,7 @@ func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 				FrequencyBy:              models.FrequencyBy(dbFtx.FrequencyBy),
 				StartsOn:                 dbFtx.StartsOn,
 				StopsOn:                  dbFtx.StopsOn.Time,
-				LastTransactionCreatedAt: dbFtx.LastTransactionCreatedAt.(time.Time),
+				LastTransactionCreatedAt: dbFtx.LastTransactionCreatedAt,
 				Transactions:             []models.Transaction{},
 			})
 			ftxIdx = len(ftxs) - 1
@@ -203,7 +201,7 @@ func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 			Description: dbFtx.TransactionDescription.String,
 			FulfilledOn: dbFtx.TransactionFulfilledOn.Time,
 			ScheduledTo: dbFtx.TransactionScheduledTo.Time,
-			CreatedAt:   dbFtx.TransactionCreatedAt.(time.Time),
+			CreatedAt:   dbFtx.TransactionCreatedAt.Time,
 			Kind: models.TransactionKind{
 				ID:              dbFtx.TransactionKindID.String,
 				Kind:            dbFtx.TransactionKind.String,

@@ -8,6 +8,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"time"
 )
 
 const createItem = `-- name: CreateItem :exec
@@ -15,10 +16,9 @@ INSERT INTO items (
     id,
     name,
     price,
-    currency_id,
-    created_at
+    currency_id
 )
-VALUES (?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?)
 `
 
 type CreateItemParams struct {
@@ -26,7 +26,6 @@ type CreateItemParams struct {
 	Name       string
 	Price      float64
 	CurrencyID string
-	CreatedAt  interface{}
 }
 
 func (q *Queries) CreateItem(ctx context.Context, arg CreateItemParams) error {
@@ -35,7 +34,6 @@ func (q *Queries) CreateItem(ctx context.Context, arg CreateItemParams) error {
 		arg.Name,
 		arg.Price,
 		arg.CurrencyID,
-		arg.CreatedAt,
 	)
 	return err
 }
@@ -71,7 +69,7 @@ type GetItemRow struct {
 	Price       float64
 	PurchasedOn sql.NullTime
 	CurrencyID  string
-	CreatedAt   interface{}
+	CreatedAt   time.Time
 	Enum        sql.NullInt64
 	EgpFxRate   sql.NullFloat64
 }
@@ -113,7 +111,7 @@ type GetItemsRow struct {
 	Price       float64
 	PurchasedOn sql.NullTime
 	CurrencyID  string
-	CreatedAt   interface{}
+	CreatedAt   time.Time
 	Enum        sql.NullInt64
 	EgpFxRate   sql.NullFloat64
 }

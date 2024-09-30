@@ -13,26 +13,19 @@ const createCategory = `-- name: CreateCategory :exec
 INSERT INTO categories (
     id,
     name,
-    budget_in_egp,
-    created_at
+    budget_in_egp
 )
-VALUES (?, ?, ?, ?)
+VALUES (?, ?, ?)
 `
 
 type CreateCategoryParams struct {
 	ID          string
 	Name        string
 	BudgetInEgp float64
-	CreatedAt   interface{}
 }
 
 func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) error {
-	_, err := q.db.ExecContext(ctx, createCategory,
-		arg.ID,
-		arg.Name,
-		arg.BudgetInEgp,
-		arg.CreatedAt,
-	)
+	_, err := q.db.ExecContext(ctx, createCategory, arg.ID, arg.Name, arg.BudgetInEgp)
 	return err
 }
 

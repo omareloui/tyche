@@ -22,10 +22,9 @@ INSERT INTO frequent_txs (
     description,
     stops_on,
     starts_on,
-    created_at,
     last_transaction_created_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateFrequentTxParams struct {
@@ -38,8 +37,7 @@ type CreateFrequentTxParams struct {
 	Description              sql.NullString
 	StopsOn                  sql.NullTime
 	StartsOn                 time.Time
-	CreatedAt                interface{}
-	LastTransactionCreatedAt interface{}
+	LastTransactionCreatedAt time.Time
 }
 
 func (q *Queries) CreateFrequentTx(ctx context.Context, arg CreateFrequentTxParams) error {
@@ -53,7 +51,6 @@ func (q *Queries) CreateFrequentTx(ctx context.Context, arg CreateFrequentTxPara
 		arg.Description,
 		arg.StopsOn,
 		arg.StartsOn,
-		arg.CreatedAt,
 		arg.LastTransactionCreatedAt,
 	)
 	return err
@@ -153,12 +150,12 @@ type GetFrequentTxRow struct {
 	Amount                     float64
 	KindID                     string
 	Description                sql.NullString
-	CreatedAt                  interface{}
+	CreatedAt                  time.Time
 	FrequencyBy                int64
 	Frequency                  int64
 	StartsOn                   time.Time
 	StopsOn                    sql.NullTime
-	LastTransactionCreatedAt   interface{}
+	LastTransactionCreatedAt   time.Time
 	AccountName                sql.NullString
 	CurrencyID                 sql.NullString
 	CurrencyEnum               sql.NullInt64
@@ -172,7 +169,7 @@ type GetFrequentTxRow struct {
 	TransactionDescription     sql.NullString
 	TransactionFulfilledOn     sql.NullTime
 	TransactionScheduledTo     sql.NullTime
-	TransactionCreatedAt       interface{}
+	TransactionCreatedAt       sql.NullTime
 	TransactionCurrencyID      sql.NullString
 	TransactionEnum            sql.NullInt64
 	TransactionEgpFxRate       sql.NullFloat64
@@ -283,12 +280,12 @@ type GetFrequentTxsRow struct {
 	Amount                     float64
 	KindID                     string
 	Description                sql.NullString
-	CreatedAt                  interface{}
+	CreatedAt                  time.Time
 	FrequencyBy                int64
 	Frequency                  int64
 	StartsOn                   time.Time
 	StopsOn                    sql.NullTime
-	LastTransactionCreatedAt   interface{}
+	LastTransactionCreatedAt   time.Time
 	AccountName                sql.NullString
 	CurrencyID                 sql.NullString
 	CurrencyEnum               sql.NullInt64
@@ -302,7 +299,7 @@ type GetFrequentTxsRow struct {
 	TransactionDescription     sql.NullString
 	TransactionFulfilledOn     sql.NullTime
 	TransactionScheduledTo     sql.NullTime
-	TransactionCreatedAt       interface{}
+	TransactionCreatedAt       sql.NullTime
 	TransactionCurrencyID      sql.NullString
 	TransactionEnum            sql.NullInt64
 	TransactionEgpFxRate       sql.NullFloat64
@@ -386,7 +383,7 @@ type UpdateFrequentTxParams struct {
 	KindID                   string
 	Description              sql.NullString
 	StopsOn                  sql.NullTime
-	LastTransactionCreatedAt interface{}
+	LastTransactionCreatedAt time.Time
 	ID                       string
 }
 
@@ -413,7 +410,7 @@ WHERE id = ?
 `
 
 type UpdateFrequentTxLastTransactionCreatedAtParams struct {
-	LastTransactionCreatedAt interface{}
+	LastTransactionCreatedAt time.Time
 	ID                       string
 }
 
