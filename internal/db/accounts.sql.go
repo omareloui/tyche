@@ -101,11 +101,16 @@ SELECT
     a.created_at,
     c.enum AS currency_enum,
     c.egp_fx_rate,
-    k.enum AS kind_enum
+    k.enum AS kind_enum,
+    IFNULL(a.amount + SUM(tgp.amount), 0.0) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
-LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN currencies AS c ON c.id = a.currency_id
+LEFT JOIN transactions AS t ON a.id = t.account_id
+LEFT JOIN goals_progresses AS gp ON gp.transaction_id = t.id
+LEFT JOIN transactions AS tgp ON gp.transaction_id = tgp.id
 WHERE a.id = ?
+GROUP BY a.id
 `
 
 type GetAccountRow struct {
@@ -124,6 +129,7 @@ type GetAccountRow struct {
 	CurrencyEnum       sql.NullInt64
 	EgpFxRate          sql.NullFloat64
 	KindEnum           sql.NullInt64
+	ActualAmount       interface{}
 }
 
 func (q *Queries) GetAccount(ctx context.Context, id string) (GetAccountRow, error) {
@@ -145,6 +151,7 @@ func (q *Queries) GetAccount(ctx context.Context, id string) (GetAccountRow, err
 		&i.CurrencyEnum,
 		&i.EgpFxRate,
 		&i.KindEnum,
+		&i.ActualAmount,
 	)
 	return i, err
 }
@@ -165,10 +172,15 @@ SELECT
     a.created_at,
     c.enum AS currency_enum,
     c.egp_fx_rate,
-    k.enum AS kind_enum
+    k.enum AS kind_enum,
+    IFNULL(a.amount + SUM(tgp.amount), 0.0) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
-LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN currencies AS c ON c.id = a.currency_id
+LEFT JOIN transactions AS t ON a.id = t.account_id
+LEFT JOIN goals_progresses AS gp ON gp.transaction_id = t.id
+LEFT JOIN transactions AS tgp ON gp.transaction_id = tgp.id
+GROUP BY a.id
 ORDER BY a.created_at DESC
 `
 
@@ -188,6 +200,7 @@ type GetAccountsRow struct {
 	CurrencyEnum       sql.NullInt64
 	EgpFxRate          sql.NullFloat64
 	KindEnum           sql.NullInt64
+	ActualAmount       interface{}
 }
 
 func (q *Queries) GetAccounts(ctx context.Context) ([]GetAccountsRow, error) {
@@ -215,6 +228,7 @@ func (q *Queries) GetAccounts(ctx context.Context) ([]GetAccountsRow, error) {
 			&i.CurrencyEnum,
 			&i.EgpFxRate,
 			&i.KindEnum,
+			&i.ActualAmount,
 		); err != nil {
 			return nil, err
 		}
@@ -245,11 +259,16 @@ SELECT
     a.created_at,
     c.enum AS currency_enum,
     c.egp_fx_rate,
-    k.enum AS kind_enum
+    k.enum AS kind_enum,
+    IFNULL(a.amount + SUM(tgp.amount), 0.0) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
-LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN currencies AS c ON c.id = a.currency_id
+LEFT JOIN transactions AS t ON a.id = t.account_id
+LEFT JOIN goals_progresses AS gp ON gp.transaction_id = t.id
+LEFT JOIN transactions AS tgp ON gp.transaction_id = tgp.id
 WHERE a.is_archived IS FALSE
+GROUP BY a.id
 ORDER BY a.created_at DESC
 `
 
@@ -269,6 +288,7 @@ type GetActiveAccountsRow struct {
 	CurrencyEnum       sql.NullInt64
 	EgpFxRate          sql.NullFloat64
 	KindEnum           sql.NullInt64
+	ActualAmount       interface{}
 }
 
 func (q *Queries) GetActiveAccounts(ctx context.Context) ([]GetActiveAccountsRow, error) {
@@ -296,6 +316,7 @@ func (q *Queries) GetActiveAccounts(ctx context.Context) ([]GetActiveAccountsRow
 			&i.CurrencyEnum,
 			&i.EgpFxRate,
 			&i.KindEnum,
+			&i.ActualAmount,
 		); err != nil {
 			return nil, err
 		}

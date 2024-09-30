@@ -173,6 +173,7 @@ func (r *Repository) FulfillTransaction(ctx context.Context, tx *models.Transact
 
 func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRow](dbTx *T) *models.Transaction {
 	_dbTx := db.GetTransactionsRow(*dbTx)
+
 	return &models.Transaction{
 		ID: _dbTx.ID,
 		Account: models.Account{
@@ -184,11 +185,13 @@ func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRo
 				EgpFxRate: _dbTx.EgpFxRate.Float64,
 			},
 		},
-		Amount:      _dbTx.Amount,
-		Description: _dbTx.Description.String,
-		FulfilledOn: _dbTx.FulfilledOn.Time,
-		ScheduledTo: _dbTx.ScheduledTo,
-		CreatedAt:   _dbTx.CreatedAt.(time.Time),
+		Amount:         _dbTx.Amount,
+		Description:    _dbTx.Description.String,
+		GoalTitle:      _dbTx.GoalTitle.String,
+		GoalPercentage: _dbTx.GoalPercentage.(float64),
+		FulfilledOn:    _dbTx.FulfilledOn.Time,
+		ScheduledTo:    _dbTx.ScheduledTo,
+		CreatedAt:      _dbTx.CreatedAt.(time.Time),
 		Kind: models.TransactionKind{
 			ID:              _dbTx.KindID,
 			Kind:            _dbTx.Kind.String,

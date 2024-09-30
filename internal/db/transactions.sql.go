@@ -92,11 +92,16 @@ SELECT
     c.enum AS currency_enum,
     c.egp_fx_rate,
     k.kind,
-    k.increase_balance
+    k.increase_balance,
+    g.title AS goal_title,
+    g.egp_subtotal AS goal_egp_subtotal,
+    IFNULL(t.amount * c.egp_fx_rate / g.egp_subtotal, 0.0) AS goal_percentage
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN transaction_kinds AS k ON t.kind_id = k.id
+LEFT JOIN goals_progresses AS gp ON t.id = gp.transaction_id
+LEFT JOIN goals AS g ON gp.goal_id = g.id
 WHERE t.id = ? LIMIT 1
 `
 
@@ -115,6 +120,9 @@ type GetTransactionRow struct {
 	EgpFxRate       sql.NullFloat64
 	Kind            sql.NullString
 	IncreaseBalance sql.NullBool
+	GoalTitle       sql.NullString
+	GoalEgpSubtotal sql.NullFloat64
+	GoalPercentage  interface{}
 }
 
 func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransactionRow, error) {
@@ -135,6 +143,9 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 		&i.EgpFxRate,
 		&i.Kind,
 		&i.IncreaseBalance,
+		&i.GoalTitle,
+		&i.GoalEgpSubtotal,
+		&i.GoalPercentage,
 	)
 	return i, err
 }
@@ -154,11 +165,16 @@ SELECT
     c.enum AS currency_enum,
     c.egp_fx_rate,
     k.kind,
-    k.increase_balance
+    k.increase_balance,
+    g.title AS goal_title,
+    g.egp_subtotal AS goal_egp_subtotal,
+    IFNULL(t.amount * c.egp_fx_rate / g.egp_subtotal, 0.0) AS goal_percentage
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN transaction_kinds AS k ON t.kind_id = k.id
+LEFT JOIN goals_progresses AS gp ON t.id = gp.transaction_id
+LEFT JOIN goals AS g ON gp.goal_id = g.id
 ORDER BY t.scheduled_to DESC, t.created_at DESC
 `
 
@@ -177,6 +193,9 @@ type GetTransactionsRow struct {
 	EgpFxRate       sql.NullFloat64
 	Kind            sql.NullString
 	IncreaseBalance sql.NullBool
+	GoalTitle       sql.NullString
+	GoalEgpSubtotal sql.NullFloat64
+	GoalPercentage  interface{}
 }
 
 func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, error) {
@@ -203,6 +222,9 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.EgpFxRate,
 			&i.Kind,
 			&i.IncreaseBalance,
+			&i.GoalTitle,
+			&i.GoalEgpSubtotal,
+			&i.GoalPercentage,
 		); err != nil {
 			return nil, err
 		}

@@ -3,6 +3,7 @@ package views
 import (
 	"fmt"
 	"time"
+	"strconv"
 	"github.com/omareloui/financial-planner/internal/models"
 )
 
@@ -81,6 +82,10 @@ templ Transaction(tx *models.Transaction) {
 		<p>Kind: { tx.Kind.Kind }</p>
 		if tx.Description != "" {
 			<p>Description: { tx.Description }</p>
+		}
+		if tx.GoalTitle != "" {
+			<p>Goal: { tx.GoalTitle }</p>
+			<p>Goal Percentage: { strconv.FormatFloat(tx.GoalPercentage * 100, 'f', 2, 64) }%</p>
 		}
 		<p>Scheduled To: { tx.ScheduledTo.Format(time.DateOnly) }</p>
 		if !tx.FulfilledOn.IsZero() {

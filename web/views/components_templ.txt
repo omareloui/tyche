@@ -1,0 +1,17 @@
+<div class=\"md:max-w-screen-md px-5 mx-auto max-w-full\">
+</div>
+<h1 class=\"text-3xl font-bold mb-3 text-center\">
+</h1>
+<a href=\"
+\" class=\"text font-bold text-blue-500 rounded-sm focus:ring focus:ring-blue-300 focus:outline-none\">
+</a>
+<a href=\"
+\" class=\"text-sm font-bold text-blue-500 rounded-sm focus:ring focus:ring-blue-300 focus:outline-none\">
+</a>
+<div id=\"
+\" class=\"grid gap-4 no-entries\">
+</div>
+<button class=\"
+\"
+>
+</button>

@@ -69,6 +69,7 @@ templ Account(a *models.Account) {
 		}
 		<p>Name: { a.Name }</p>
 		<p>Amount: { a.ViewAmount() } </p>
+		<p>Actual Amount: { a.ViewActualAmount() } </p>
 		<p>Kind: { a.Kind.Enum.String() } </p>
 		if a.IBAN != "" {
 			<p>IBAN: { a.MaskIBAN() } </p>

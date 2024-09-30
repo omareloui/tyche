@@ -14,10 +14,15 @@ SELECT
     a.created_at,
     c.enum AS currency_enum,
     c.egp_fx_rate,
-    k.enum AS kind_enum
+    k.enum AS kind_enum,
+    IFNULL(a.amount + SUM(tgp.amount), 0.0) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
-LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN currencies AS c ON c.id = a.currency_id
+LEFT JOIN transactions AS t ON a.id = t.account_id
+LEFT JOIN goals_progresses AS gp ON gp.transaction_id = t.id
+LEFT JOIN transactions AS tgp ON gp.transaction_id = tgp.id
+GROUP BY a.id
 ORDER BY a.created_at DESC;
 
 -- name: GetActiveAccounts :many
@@ -36,11 +41,16 @@ SELECT
     a.created_at,
     c.enum AS currency_enum,
     c.egp_fx_rate,
-    k.enum AS kind_enum
+    k.enum AS kind_enum,
+    IFNULL(a.amount + SUM(tgp.amount), 0.0) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
-LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN currencies AS c ON c.id = a.currency_id
+LEFT JOIN transactions AS t ON a.id = t.account_id
+LEFT JOIN goals_progresses AS gp ON gp.transaction_id = t.id
+LEFT JOIN transactions AS tgp ON gp.transaction_id = tgp.id
 WHERE a.is_archived IS FALSE
+GROUP BY a.id
 ORDER BY a.created_at DESC;
 
 -- name: GetBalances :many
@@ -73,11 +83,16 @@ SELECT
     a.created_at,
     c.enum AS currency_enum,
     c.egp_fx_rate,
-    k.enum AS kind_enum
+    k.enum AS kind_enum,
+    IFNULL(a.amount + SUM(tgp.amount), 0.0) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
-LEFT JOIN currencies AS c ON a.currency_id = c.id
-WHERE a.id = ?;
+LEFT JOIN currencies AS c ON c.id = a.currency_id
+LEFT JOIN transactions AS t ON a.id = t.account_id
+LEFT JOIN goals_progresses AS gp ON gp.transaction_id = t.id
+LEFT JOIN transactions AS tgp ON gp.transaction_id = tgp.id
+WHERE a.id = ?
+GROUP BY a.id;
 
 -- name: CreateAccount :exec
 INSERT INTO accounts (

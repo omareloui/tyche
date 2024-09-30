@@ -187,10 +187,11 @@ func (r *Repository) GetBalances(ctx context.Context) ([]models.Balance, error) 
 func dbAccountRowToAccount[T db.GetAccountRow | db.GetAccountsRow](dbAcc *T) *models.Account {
 	_dbAcc := db.GetAccountsRow(*dbAcc)
 	return &models.Account{
-		ID:        _dbAcc.ID,
-		Name:      _dbAcc.Name,
-		Amount:    _dbAcc.Amount,
-		IsDefault: _dbAcc.IsDefault,
+		ID:           _dbAcc.ID,
+		Name:         _dbAcc.Name,
+		Amount:       _dbAcc.Amount,
+		ActualAmount: _dbAcc.ActualAmount.(float64),
+		IsDefault:    _dbAcc.IsDefault,
 		Currency: models.Currency{
 			ID:        _dbAcc.CurrencyID,
 			Enum:      models.CurrencyEnum(_dbAcc.CurrencyEnum.Int64),

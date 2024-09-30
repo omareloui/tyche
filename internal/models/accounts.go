@@ -11,6 +11,7 @@ type Account struct {
 	ID                 string `validate:"required"`
 	Name               string `conform:"trim,title"`
 	Amount             float64
+	ActualAmount       float64
 	Currency           Currency
 	Kind               AccountKind
 	IBAN               string `validate:"omitempty,iban" conform:"trim,nospaces"`
@@ -33,6 +34,10 @@ type AccountCreation struct {
 
 func (a *Account) ViewAmount() string {
 	return formatAmount(a.Amount, a.Currency.Enum)
+}
+
+func (a *Account) ViewActualAmount() string {
+	return formatAmount(a.ActualAmount, a.Currency.Enum)
 }
 
 func (a *Account) MaskIBAN() string {
