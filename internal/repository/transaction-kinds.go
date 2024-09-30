@@ -4,14 +4,19 @@ import (
 	"context"
 
 	"github.com/omareloui/financial-planner/internal/db"
+	"github.com/omareloui/financial-planner/internal/logger"
 	"github.com/omareloui/financial-planner/internal/models"
+	"go.uber.org/zap"
 )
 
 func (r *Repository) GetTransactionKinds(ctx context.Context) ([]models.TransactionKind, error) {
+	l := logger.FromCtx(ctx)
 	dbKinds, err := r.q.GetTransactionKinds(ctx)
 	if err != nil {
+		l.Error("fetching tx kinds", zap.Error(err))
 		return nil, err
 	}
+	l.Debug("fetched transaction kinds")
 	return dbTransactionKindsToTransactionKinds(dbKinds), nil
 }
 

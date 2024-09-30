@@ -7,25 +7,34 @@ package db
 
 import (
 	"context"
+	"database/sql"
+	"time"
 )
 
 const createCategory = `-- name: CreateCategory :exec
 INSERT INTO categories (
     id,
     name,
+    kind_id,
     budget_in_egp
 )
-VALUES (?, ?, ?)
+VALUES (?, ?, ?, ?)
 `
 
 type CreateCategoryParams struct {
 	ID          string
 	Name        string
+	KindID      string
 	BudgetInEgp float64
 }
 
 func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) error {
-	_, err := q.db.ExecContext(ctx, createCategory, arg.ID, arg.Name, arg.BudgetInEgp)
+	_, err := q.db.ExecContext(ctx, createCategory,
+		arg.ID,
+		arg.Name,
+		arg.KindID,
+		arg.BudgetInEgp,
+	)
 	return err
 }
 
@@ -41,28 +50,45 @@ func (q *Queries) DeleteCategory(ctx context.Context, id string) error {
 
 const getCategories = `-- name: GetCategories :many
 SELECT
-    id,
-    name,
-    budget_in_egp,
-    created_at
-FROM categories
-ORDER BY created_at DESC
+    c.id,
+    c.name,
+    c.kind_id,
+    c.budget_in_egp,
+    c.created_at,
+    k.kind,
+    k.increase_balance
+FROM categories AS c
+LEFT JOIN transaction_kinds AS k ON c.kind_id = k.id
+ORDER BY c.created_at DESC
 `
 
-func (q *Queries) GetCategories(ctx context.Context) ([]Category, error) {
+type GetCategoriesRow struct {
+	ID              string
+	Name            string
+	KindID          string
+	BudgetInEgp     float64
+	CreatedAt       time.Time
+	Kind            sql.NullString
+	IncreaseBalance sql.NullBool
+}
+
+func (q *Queries) GetCategories(ctx context.Context) ([]GetCategoriesRow, error) {
 	rows, err := q.db.QueryContext(ctx, getCategories)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Category
+	var items []GetCategoriesRow
 	for rows.Next() {
-		var i Category
+		var i GetCategoriesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
+			&i.KindID,
 			&i.BudgetInEgp,
 			&i.CreatedAt,
+			&i.Kind,
+			&i.IncreaseBalance,
 		); err != nil {
 			return nil, err
 		}
@@ -79,22 +105,39 @@ func (q *Queries) GetCategories(ctx context.Context) ([]Category, error) {
 
 const getCategory = `-- name: GetCategory :one
 SELECT
-    id,
-    name,
-    budget_in_egp,
-    created_at
-FROM categories
-WHERE id = ?
+    c.id,
+    c.name,
+    c.kind_id,
+    c.budget_in_egp,
+    c.created_at,
+    k.kind,
+    k.increase_balance
+FROM categories AS c
+LEFT JOIN transaction_kinds AS k ON c.kind_id = k.id
+WHERE c.id = ?
 `
 
-func (q *Queries) GetCategory(ctx context.Context, id string) (Category, error) {
+type GetCategoryRow struct {
+	ID              string
+	Name            string
+	KindID          string
+	BudgetInEgp     float64
+	CreatedAt       time.Time
+	Kind            sql.NullString
+	IncreaseBalance sql.NullBool
+}
+
+func (q *Queries) GetCategory(ctx context.Context, id string) (GetCategoryRow, error) {
 	row := q.db.QueryRowContext(ctx, getCategory, id)
-	var i Category
+	var i GetCategoryRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
+		&i.KindID,
 		&i.BudgetInEgp,
 		&i.CreatedAt,
+		&i.Kind,
+		&i.IncreaseBalance,
 	)
 	return i, err
 }
@@ -116,17 +159,24 @@ const updateCategory = `-- name: UpdateCategory :exec
 UPDATE categories
 SET
 name = ?,
+kind_id = ?,
 budget_in_egp = ?
 WHERE id = ?
 `
 
 type UpdateCategoryParams struct {
 	Name        string
+	KindID      string
 	BudgetInEgp float64
 	ID          string
 }
 
 func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) error {
-	_, err := q.db.ExecContext(ctx, updateCategory, arg.Name, arg.BudgetInEgp, arg.ID)
+	_, err := q.db.ExecContext(ctx, updateCategory,
+		arg.Name,
+		arg.KindID,
+		arg.BudgetInEgp,
+		arg.ID,
+	)
 	return err
 }

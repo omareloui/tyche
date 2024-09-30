@@ -1,12 +1,12 @@
 -- +goose Up
 -- +goose StatementBegin
 CREATE TABLE currencies (
-    id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
+    id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
     enum INT UNIQUE NOT NULL,
     egp_fx_rate FLOAT DEFAULT 1 NOT NULL
 );
 CREATE TABLE transaction_kinds (
-    id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
+    id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
     kind VARCHAR(255) UNIQUE NOT NULL,
     increase_balance BOOLEAN DEFAULT FALSE
 );
@@ -15,7 +15,7 @@ CREATE TABLE account_kinds (
     enum INT UNIQUE NOT NULL
 );
 CREATE TABLE accounts (
-    id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
+    id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
     name VARCHAR UNIQUE NOT NULL,
     kind_id VARCHAR NOT NULL,
     amount FLOAT NOT NULL,
@@ -31,11 +31,11 @@ CREATE TABLE accounts (
     FOREIGN KEY (kind_id) REFERENCES account_kinds (id)
 );
 CREATE TABLE transactions (
-    id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
-    account_id VARCHAR(16) NOT NULL,
+    id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
+    account_id VARCHAR NOT NULL,
     amount FLOAT DEFAULT 0 NOT NULL,
-    kind_id VARCHAR(16) NOT NULL,
-    category_id VARCHAR(16),
+    kind_id VARCHAR NOT NULL,
+    category_id VARCHAR,
     description VARCHAR(225),
     fulfilled_on DATE,
     scheduled_to DATE NOT NULL,
@@ -44,13 +44,13 @@ CREATE TABLE transactions (
     FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id)
 );
 CREATE TABLE frequent_txs (
-    id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
+    id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
     frequency_by INT NOT NULL,
     frequency INT NOT NULL,
-    account_id VARCHAR(16) NOT NULL,
+    account_id VARCHAR NOT NULL,
     amount FLOAT DEFAULT 0 NOT NULL,
-    kind_id VARCHAR(16) NOT NULL,
-    category_id VARCHAR(16),
+    kind_id VARCHAR NOT NULL,
+    category_id VARCHAR,
     description VARCHAR(225),
     starts_on TIMESTAMP NOT NULL,
     stops_on TIMESTAMP,
@@ -60,44 +60,46 @@ CREATE TABLE frequent_txs (
     FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id)
 );
 CREATE TABLE frequent_txs_transactions (
-    transaction_id VARCHAR(16) NOT NULL,
-    frequency_id VARCHAR(16) NOT NULL,
+    transaction_id VARCHAR NOT NULL,
+    frequency_id VARCHAR NOT NULL,
     FOREIGN KEY (transaction_id) REFERENCES transactions (id) ON DELETE CASCADE,
     FOREIGN KEY (frequency_id) REFERENCES frequent_txs (id) ON DELETE CASCADE
 );
 CREATE TABLE goals (
-    id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
+    id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
     egp_subtotal FLOAT NOT NULL,
     fulfilled_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE goals_items (
-    goal_id VARCHAR(16) NOT NULL,
-    item_id VARCHAR(16) NOT NULL,
+    goal_id VARCHAR NOT NULL,
+    item_id VARCHAR NOT NULL,
     FOREIGN KEY (goal_id) REFERENCES goals (id) ON DELETE CASCADE,
     FOREIGN KEY (item_id) REFERENCES items (id) ON DELETE CASCADE
 );
 CREATE TABLE goals_progresses (
-    goal_id VARCHAR(16) NOT NULL,
-    transaction_id VARCHAR(16) NOT NULL,
+    goal_id VARCHAR NOT NULL,
+    transaction_id VARCHAR NOT NULL,
     FOREIGN KEY (goal_id) REFERENCES goals (id) ON DELETE CASCADE,
     FOREIGN KEY (transaction_id) REFERENCES transactions (id) ON DELETE CASCADE
 );
 CREATE TABLE items (
-    id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
+    id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     price FLOAT DEFAULT 0 NOT NULL,
-    currency_id VARCHAR(16) NOT NULL,
+    currency_id VARCHAR NOT NULL,
     purchased_on DATE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE
 );
 CREATE TABLE categories (
-    id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
+    id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
     name VARCHAR UNIQUE NOT NULL,
     budget_in_egp FLOAT DEFAULT 0 NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    kind_id VARCHAR NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id) ON DELETE CASCADE
 );
 -- +goose StatementEnd
 

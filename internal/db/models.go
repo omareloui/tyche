@@ -34,6 +34,7 @@ type Category struct {
 	ID          string
 	Name        string
 	BudgetInEgp float64
+	KindID      string
 	CreatedAt   time.Time
 }
 

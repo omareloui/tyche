@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/a-h/templ"
@@ -22,14 +23,19 @@ func (h Handler) Categories(w http.ResponseWriter, r *http.Request) (templ.Compo
 		return nil, err
 	}
 
-	its, err := h.repo.GetCategories(r.Context())
+	cats, err := h.repo.GetCategories(r.Context())
 	if err != nil {
 		l.Error("fetching categories", zap.Error(err))
 		return nil, err
 	}
 	l.Debug("fetched categories")
 
-	return views.Categories(b, h.mapCategoryToFD(dfltCategory(), &errs.ValidationError{}), its), nil
+	knds, err := h.repo.GetTransactionKinds(r.Context())
+	if err != nil {
+		return nil, err
+	}
+
+	return views.Categories(b, h.mapCategoryToFD(dfltCategory(knds), &errs.ValidationError{}), knds, cats), nil
 }
 
 func (h Handler) Category(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -66,9 +72,14 @@ func (h Handler) CreateCategory(w http.ResponseWriter, r *http.Request) (templ.C
 		return nil, errs.ErrSanitizer
 	}
 
+	knds, err := h.repo.GetTransactionKinds(r.Context())
+	if err != nil {
+		return nil, err
+	}
+
 	if valerr := h.valid.Validate(cat); valerr != nil {
 		l.Error("create category validation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-		return views.CreateCategoryForm(h.mapCategoryToFD(cat, valerr)), nil
+		return views.CreateCategoryForm(h.mapCategoryToFD(cat, valerr), knds), nil
 	}
 
 	if err := h.repo.CreateCategory(r.Context(), cat); err != nil {
@@ -83,7 +94,7 @@ func (h Handler) CreateCategory(w http.ResponseWriter, r *http.Request) (templ.C
 	}
 	l.Debug("rendered category oob")
 
-	return views.CreateCategoryForm(h.mapCategoryToFD(dfltCategory(), &errs.ValidationError{})), nil
+	return views.CreateCategoryForm(h.mapCategoryToFD(dfltCategory(knds), &errs.ValidationError{}), knds), nil
 }
 
 func (h Handler) GetEditCategory(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -101,9 +112,12 @@ func (h Handler) GetEditCategory(w http.ResponseWriter, r *http.Request) (templ.
 	}
 	l.Info("fetched category", zap.Any("category", cat))
 
-	fd := h.mapCategoryToFD(cat, &errs.ValidationError{})
+	knds, err := h.repo.GetTransactionKinds(r.Context())
+	if err != nil {
+		return nil, err
+	}
 
-	return views.EditCategory(fd, id), nil
+	return views.EditCategory(h.mapCategoryToFD(cat, &errs.ValidationError{}), id, knds), nil
 }
 
 func (h Handler) EditCategory(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -151,6 +165,7 @@ func (h Handler) DeleteCategory(w http.ResponseWriter, r *http.Request) (templ.C
 func (h Handler) mapCategoryToFD(cat *models.Category, err *errs.ValidationError) *views.CategoryFD {
 	return &views.CategoryFD{
 		Name:        views.FDInput{Value: cat.Name, Error: err.Errors.MsgFor("Name")},
+		KindID:      views.FDInput{Value: cat.Kind.ID, Error: err.Errors.MsgFor("Kind.ID")},
 		BudgetInEgp: views.FDInput{Value: formatFloatIfNonZero(cat.BudgetInEgp), Error: err.Errors.MsgFor("BudgetInEgp")},
 	}
 }
@@ -162,10 +177,21 @@ func (h Handler) mapFDToCategory(r *http.Request) (*models.Category, error) {
 	}
 	return &models.Category{
 		Name:        r.FormValue("name"),
+		Kind:        models.TransactionKind{ID: r.FormValue("kind_id")},
 		BudgetInEgp: budget,
 	}, nil
 }
 
-func dfltCategory() *models.Category {
-	return &models.Category{}
+func dfltCategory(knds []models.TransactionKind) *models.Category {
+	dfltKindIdx := slices.IndexFunc(knds, func(knd models.TransactionKind) bool { return knd.Kind == models.ExpensesTxKind })
+
+	if dfltKindIdx == -1 {
+		return &models.Category{
+			Kind: models.TransactionKind{},
+		}
+	}
+
+	return &models.Category{
+		Kind: models.TransactionKind{ID: knds[dfltKindIdx].ID},
+	}
 }

@@ -8,38 +8,41 @@ import (
 
 type CategoryFD struct {
 	Name        FDInput
+	KindID      FDInput
 	BudgetInEgp FDInput
 }
 
 templ Categories(
 	balances []models.Balance,
 	fd *CategoryFD,
+	knds []models.TransactionKind,
 	categories []models.Category) {
 	@baseLayout("Categories", balances) {
 		@container() {
 			@mainHeader("Categories")
-			@CreateCategoryForm(fd)
+			@CreateCategoryForm(fd, knds)
 			@categoriesList(categories)
 		}
 	}
 }
 
-templ CreateCategoryForm(fd *CategoryFD) {
+templ CreateCategoryForm(fd *CategoryFD, knds []models.TransactionKind) {
 	@creationForm("Create Category", "/categories", "Create Category") {
-		@categoryFormBody(fd, "")
+		@categoryFormBody(fd, "", knds)
 	}
 }
 
-templ EditCategory(fd *CategoryFD, id string) {
+templ EditCategory(fd *CategoryFD, id string, knds []models.TransactionKind) {
 	@form("put", fmt.Sprintf("/categories/%s", id), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { id }</p>
-		@categoryFormBody(fd, id)
+		@categoryFormBody(fd, id, knds)
 		@editFormButtons(fmt.Sprintf("/categories/%s", id))
 	}
 }
 
-templ categoryFormBody(fd *CategoryFD, id string) {
+templ categoryFormBody(fd *CategoryFD, id string, knds []models.TransactionKind) {
 	@input("Name", "text", "name", "Enter category name", id, fd.Name)
+	@selectTxKind("kind_id", id, knds, fd.KindID)
 	@numberInput("Budget in EGP", "budget_in_egp", "Enter budget amount in EGP", id, fd.BudgetInEgp)
 }
 
@@ -55,6 +58,10 @@ templ Category(cat *models.Category) {
 	<div hx-target="this" class="entry-container">
 		<p>ID: { cat.ID }</p>
 		<p>Name: { cat.Name }</p>
+		<p>Kind ID: { cat.Kind.ID }</p>
+		if cat.Kind.Kind != "" {
+			<p>Kind: { cat.Kind.Kind }</p>
+		}
 		<p>
 			Budget: { cat.ViewBudgetInEgp() }
 		</p>

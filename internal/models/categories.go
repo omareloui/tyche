@@ -8,6 +8,7 @@ type Category struct {
 	ID          string `validate:"required"`
 	Name        string `validate:"required" conform:"trim,title"`
 	BudgetInEgp float64
+	Kind        TransactionKind
 	CreatedAt   time.Time
 }
 

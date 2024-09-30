@@ -35,6 +35,7 @@ func (r *Repository) UpdateCategory(ctx context.Context, cat *models.Category) e
 	return r.q.UpdateCategory(ctx, db.UpdateCategoryParams{
 		ID:          cat.ID,
 		Name:        cat.Name,
+		KindID:      cat.Kind.ID,
 		BudgetInEgp: cat.BudgetInEgp,
 	})
 }
@@ -43,6 +44,7 @@ func (r *Repository) CreateCategory(ctx context.Context, cat *models.Category) e
 	return r.q.CreateCategory(ctx, db.CreateCategoryParams{
 		ID:          cat.ID,
 		Name:        cat.Name,
+		KindID:      cat.Kind.ID,
 		BudgetInEgp: cat.BudgetInEgp,
 	})
 }
@@ -51,16 +53,22 @@ func (r *Repository) DeleteCategory(ctx context.Context, id string) error {
 	return r.q.DeleteCategory(ctx, id)
 }
 
-func dbCategoryRowToCategory(dbCat *db.Category) *models.Category {
+func dbCategoryRowToCategory[T db.GetCategoryRow | db.GetCategoriesRow](dbCat *T) *models.Category {
+	_dbCat := db.GetCategoryRow(*dbCat)
 	return &models.Category{
-		ID:          dbCat.ID,
-		Name:        dbCat.Name,
-		BudgetInEgp: dbCat.BudgetInEgp,
-		CreatedAt:   dbCat.CreatedAt,
+		ID:   _dbCat.ID,
+		Name: _dbCat.Name,
+		Kind: models.TransactionKind{
+			ID:              _dbCat.KindID,
+			Kind:            _dbCat.Kind.String,
+			IncreaseBalance: _dbCat.IncreaseBalance.Bool,
+		},
+		BudgetInEgp: _dbCat.BudgetInEgp,
+		CreatedAt:   _dbCat.CreatedAt,
 	}
 }
 
-func dbCategoriesRowToCategories(dbCats []db.Category) []models.Category {
+func dbCategoriesRowToCategories(dbCats []db.GetCategoriesRow) []models.Category {
 	categories := make([]models.Category, len(dbCats))
 	for i, cat := range dbCats {
 		categories[i] = *dbCategoryRowToCategory(&cat)
