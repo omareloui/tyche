@@ -1,4 +1,14 @@
 -- name: GetAccounts :many
+WITH gls_amts AS (
+    SELECT
+        SUM(t.amount) AS amount,
+        t.account_id
+    FROM goals AS gl
+    LEFT JOIN goals_progresses AS gp ON gl.id = gp.goal_id
+    LEFT JOIN transactions AS t ON gp.transaction_id = t.id
+    WHERE gl.fulfilled_at IS NULL
+    GROUP BY t.amount
+)
 SELECT
     a.id,
     a.name,
@@ -15,17 +25,24 @@ SELECT
     c.enum AS currency_enum,
     c.egp_fx_rate,
     k.enum AS kind_enum,
-    IFNULL(a.amount + SUM(tgp.amount), 0.0) AS actual_amount
+    IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
 LEFT JOIN currencies AS c ON c.id = a.currency_id
-LEFT JOIN transactions AS t ON a.id = t.account_id
-LEFT JOIN goals_progresses AS gp ON gp.transaction_id = t.id
-LEFT JOIN transactions AS tgp ON gp.transaction_id = tgp.id
-GROUP BY a.id
+LEFT JOIN gls_amts AS gla ON gla.account_id = a.id
 ORDER BY a.created_at DESC;
 
 -- name: GetActiveAccounts :many
+WITH gls_amts AS (
+    SELECT
+        SUM(t.amount) AS amount,
+        t.account_id
+    FROM goals AS gl
+    LEFT JOIN goals_progresses AS gp ON gl.id = gp.goal_id
+    LEFT JOIN transactions AS t ON gp.transaction_id = t.id
+    WHERE gl.fulfilled_at IS NULL
+    GROUP BY t.amount
+)
 SELECT
     a.id,
     a.name,
@@ -42,32 +59,25 @@ SELECT
     c.enum AS currency_enum,
     c.egp_fx_rate,
     k.enum AS kind_enum,
-    IFNULL(a.amount + SUM(tgp.amount), 0.0) AS actual_amount
+    IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
 LEFT JOIN currencies AS c ON c.id = a.currency_id
-LEFT JOIN transactions AS t ON a.id = t.account_id
-LEFT JOIN goals_progresses AS gp ON gp.transaction_id = t.id
-LEFT JOIN transactions AS tgp ON gp.transaction_id = tgp.id
+LEFT JOIN gls_amts AS gla ON gla.account_id = a.id
 WHERE a.is_archived IS FALSE
-GROUP BY a.id
 ORDER BY a.created_at DESC;
 
--- name: GetBalances :many
-SELECT
-    a.currency_id,
-    c.enum AS currency_enum,
-    c.egp_fx_rate,
-    TOTAL(a.amount) AS balance
-FROM accounts AS a
-LEFT JOIN currencies AS c ON a.currency_id = c.id
-WHERE a.is_archived IS FALSE
-    AND a.exclude_from_balance IS FALSE
-GROUP BY currency_id
-ORDER BY balance DESC;
-
-
 -- name: GetAccount :one
+WITH gls_amts AS (
+    SELECT
+        SUM(t.amount) AS amount,
+        t.account_id
+    FROM goals AS gl
+    LEFT JOIN goals_progresses AS gp ON gl.id = gp.goal_id
+    LEFT JOIN transactions AS t ON gp.transaction_id = t.id
+    WHERE gl.fulfilled_at IS NULL
+    GROUP BY t.amount
+)
 SELECT
     a.id,
     a.name,
@@ -84,15 +94,12 @@ SELECT
     c.enum AS currency_enum,
     c.egp_fx_rate,
     k.enum AS kind_enum,
-    IFNULL(a.amount + SUM(tgp.amount), 0.0) AS actual_amount
+    IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
 LEFT JOIN currencies AS c ON c.id = a.currency_id
-LEFT JOIN transactions AS t ON a.id = t.account_id
-LEFT JOIN goals_progresses AS gp ON gp.transaction_id = t.id
-LEFT JOIN transactions AS tgp ON gp.transaction_id = tgp.id
-WHERE a.id = ?
-GROUP BY a.id;
+LEFT JOIN gls_amts AS gla ON gla.account_id = a.id
+WHERE a.id = ?;
 
 -- name: CreateAccount :exec
 INSERT INTO accounts (
@@ -146,3 +153,16 @@ UPDATE accounts SET amount = amount + ? WHERE id = ?;
 
 -- name: RemoveFromAccount :exec
 UPDATE accounts SET amount = amount - ? WHERE id = ?;
+
+-- name: GetBalances :many
+SELECT
+    a.currency_id,
+    c.enum AS currency_enum,
+    c.egp_fx_rate,
+    TOTAL(a.amount) AS balance
+FROM accounts AS a
+LEFT JOIN currencies AS c ON a.currency_id = c.id
+WHERE a.is_archived IS FALSE
+    AND a.exclude_from_balance IS FALSE
+GROUP BY currency_id
+ORDER BY balance DESC;

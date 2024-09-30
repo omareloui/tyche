@@ -19,6 +19,7 @@ SELECT
     gl.id,
     gl.title,
     gl.egp_subtotal,
+    gl.fulfilled_at,
     gl.created_at,
     i.id AS item_id,
     i.name AS item_name,
@@ -50,6 +51,7 @@ SELECT
     gl.id,
     gl.title,
     gl.egp_subtotal,
+    gl.fulfilled_at,
     gl.created_at,
     i.id AS item_id,
     i.name AS item_name,
@@ -69,6 +71,18 @@ UPDATE goals
 SET 
 title = ?,
 egp_subtotal = ?
+WHERE id = ?;
+
+-- name: FulfillGoal :exec
+UPDATE goals
+SET 
+fulfilled_at = DATETIME('now')
+WHERE id = ?;
+
+-- name: UnfulfillGoal :exec
+UPDATE goals
+SET 
+fulfilled_at = NULL
 WHERE id = ?;
 
 -- name: DeleteGoalItems :exec

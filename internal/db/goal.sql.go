@@ -75,11 +75,24 @@ func (q *Queries) DeleteGoalItems(ctx context.Context, goalID string) error {
 	return err
 }
 
+const fulfillGoal = `-- name: FulfillGoal :exec
+UPDATE goals
+SET 
+fulfilled_at = DATETIME('now')
+WHERE id = ?
+`
+
+func (q *Queries) FulfillGoal(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, fulfillGoal, id)
+	return err
+}
+
 const getGoal = `-- name: GetGoal :many
 SELECT
     gl.id,
     gl.title,
     gl.egp_subtotal,
+    gl.fulfilled_at,
     gl.created_at,
     i.id AS item_id,
     i.name AS item_name,
@@ -99,6 +112,7 @@ type GetGoalRow struct {
 	ID                 string
 	Title              string
 	EgpSubtotal        float64
+	FulfilledAt        sql.NullTime
 	CreatedAt          interface{}
 	ItemID             sql.NullString
 	ItemName           sql.NullString
@@ -122,6 +136,7 @@ func (q *Queries) GetGoal(ctx context.Context, id string) ([]GetGoalRow, error) 
 			&i.ID,
 			&i.Title,
 			&i.EgpSubtotal,
+			&i.FulfilledAt,
 			&i.CreatedAt,
 			&i.ItemID,
 			&i.ItemName,
@@ -149,6 +164,7 @@ SELECT
     gl.id,
     gl.title,
     gl.egp_subtotal,
+    gl.fulfilled_at,
     gl.created_at,
     i.id AS item_id,
     i.name AS item_name,
@@ -180,6 +196,7 @@ type GetGoalsRow struct {
 	ID                               string
 	Title                            string
 	EgpSubtotal                      float64
+	FulfilledAt                      sql.NullTime
 	CreatedAt                        interface{}
 	ItemID                           sql.NullString
 	ItemName                         sql.NullString
@@ -212,6 +229,7 @@ func (q *Queries) GetGoals(ctx context.Context) ([]GetGoalsRow, error) {
 			&i.ID,
 			&i.Title,
 			&i.EgpSubtotal,
+			&i.FulfilledAt,
 			&i.CreatedAt,
 			&i.ItemID,
 			&i.ItemName,
@@ -241,6 +259,18 @@ func (q *Queries) GetGoals(ctx context.Context) ([]GetGoalsRow, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const unfulfillGoal = `-- name: UnfulfillGoal :exec
+UPDATE goals
+SET 
+fulfilled_at = NULL
+WHERE id = ?
+`
+
+func (q *Queries) UnfulfillGoal(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, unfulfillGoal, id)
+	return err
 }
 
 const updateGoal = `-- name: UpdateGoal :exec

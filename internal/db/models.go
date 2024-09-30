@@ -67,6 +67,7 @@ type Goal struct {
 	ID          string
 	Title       string
 	EgpSubtotal float64
+	FulfilledAt sql.NullTime
 	CreatedAt   interface{}
 }
 

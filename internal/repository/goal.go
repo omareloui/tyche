@@ -81,6 +81,26 @@ func (r *Repository) UpdateGoal(ctx context.Context, gl *models.Goal) error {
 	})
 }
 
+func (r *Repository) FulfillGoal(ctx context.Context, id string) error {
+	l := logger.FromCtx(ctx)
+	if err := r.q.FulfillGoal(ctx, id); err != nil {
+		l.Error("fulfilling goal", zap.Error(err))
+		return err
+	}
+	l.Debug("fulfilled goal", zap.String("id", id))
+	return nil
+}
+
+func (r *Repository) UnfulfillGoal(ctx context.Context, id string) error {
+	l := logger.FromCtx(ctx)
+	if err := r.q.UnfulfillGoal(ctx, id); err != nil {
+		l.Error("fulfilling goal", zap.Error(err))
+		return err
+	}
+	l.Debug("fulfilled goal", zap.String("id", id))
+	return nil
+}
+
 func (r *Repository) CreateGoalProgress(ctx context.Context, glId string, tx *models.Transaction) error {
 	return r.transact(func(qtx *db.Queries) error {
 		if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, tx); err != nil {
@@ -124,6 +144,7 @@ func dbGoalRowToGoal(dbGl []db.GetGoalRow) *models.Goal {
 		ID:          dbGl[0].ID,
 		Title:       dbGl[0].Title,
 		EgpSubtotal: dbGl[0].EgpSubtotal,
+		FulfilledAt: dbGl[0].FulfilledAt.Time,
 		CreatedAt:   dbGl[0].CreatedAt.(time.Time),
 		Items:       items,
 	}
@@ -139,6 +160,7 @@ func dbGoalRowsToGoals(dbGls []db.GetGoalsRow) []models.Goal {
 				ID:           dbGl.ID,
 				Title:        dbGl.Title,
 				EgpSubtotal:  dbGl.EgpSubtotal,
+				FulfilledAt:  dbGl.FulfilledAt.Time,
 				CreatedAt:    dbGl.CreatedAt.(time.Time),
 				Items:        []models.Item{},
 				Transactions: []models.Transaction{},

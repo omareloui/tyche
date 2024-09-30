@@ -121,11 +121,31 @@ templ Goal(gl *models.Goal) {
 				</div>
 			</div>
 		}
+		if !gl.FulfilledAt.IsZero() {
+			<p>
+				Fulfilled At: { gl.FulfilledAt.Format(time.RFC1123Z) }
+			</p>
+		}
 		<div class="flex gap-4">
 			<button
 				class="px-5 py-2.5 my-2 text-white bg-green-500 hover:bg-green-600 focus:outline-none focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm sm:w-auto text-center"
 				hx-get={ fmt.Sprintf("/goals/%s/progress-form", gl.ID) }
 			>Add Progress</button>
+			if gl.FulfilledAt.IsZero() {
+				<button
+					class="px-5 py-2.5 my-2 text-white bg-green-500 hover:bg-green-600 focus:outline-none focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm sm:w-auto text-center"
+					hx-put={ fmt.Sprintf("/goals/%s/fulfill", gl.ID) }
+					hx-swap="delete"
+					hx-target="this"
+				>Fulfill</button>
+			} else {
+				<button
+					class="px-5 py-2.5 my-2 text-white bg-green-500 hover:bg-green-600 focus:outline-none focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm sm:w-auto text-center"
+					hx-put={ fmt.Sprintf("/goals/%s/unfulfill", gl.ID) }
+					hx-swap="delete"
+					hx-target="this"
+				>Unfulfill</button>
+			}
 			@editButton(fmt.Sprintf("/goals/%s/edit", gl.ID))
 			@deleteButton(fmt.Sprintf("/goals/%s", gl.ID))
 		</div>

@@ -69,6 +69,7 @@ CREATE TABLE goals (
     id VARCHAR(16) UNIQUE NOT NULL PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
     egp_subtotal FLOAT NOT NULL,
+    fulfilled_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT NOW
 );
 CREATE TABLE goals_items (

@@ -239,12 +239,34 @@ func (h Handler) EditGoal(w http.ResponseWriter, r *http.Request) (templ.Compone
 	}
 
 	if err = h.repo.UpdateGoal(r.Context(), gl); err != nil {
-		l.Error("udpating goal", zap.Error(err))
+		l.Error("updating goal", zap.Error(err))
 		return nil, err
 	}
 	l.Info("updated goal", zap.Any("goal", gl))
 
 	return views.Goal(gl), nil
+}
+
+func (h Handler) FulfillGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+	if err := h.repo.FulfillGoal(r.Context(), id); err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
+func (h Handler) UnfulfillGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+	if err := h.repo.UnfulfillGoal(r.Context(), id); err != nil {
+		return nil, err
+	}
+	return nil, nil
 }
 
 func (h Handler) DeleteGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

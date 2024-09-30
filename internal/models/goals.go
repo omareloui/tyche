@@ -7,11 +7,11 @@ import (
 )
 
 type Goal struct {
-	ID          string  `validate:"required"`
-	Title       string  `validate:"required" conform:"trim,title"`
-	EgpSubtotal float64 `validate:"required,gt=0"`
-	CreatedAt   time.Time
-
+	ID           string  `validate:"required"`
+	Title        string  `validate:"required" conform:"trim,title"`
+	EgpSubtotal  float64 `validate:"required,gt=0"`
+	FulfilledAt  time.Time
+	CreatedAt    time.Time
 	Items        []Item `validate:"required,min=1"`
 	Transactions []Transaction
 }
