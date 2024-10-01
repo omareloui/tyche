@@ -7,7 +7,7 @@ CREATE TABLE currencies (
 );
 CREATE TABLE transaction_kinds (
     id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
-    kind VARCHAR(255) UNIQUE NOT NULL,
+    kind VARCHAR UNIQUE NOT NULL,
     increase_balance BOOLEAN DEFAULT FALSE
 );
 CREATE TABLE account_kinds (
@@ -36,7 +36,7 @@ CREATE TABLE transactions (
     amount FLOAT DEFAULT 0 NOT NULL,
     kind_id VARCHAR NOT NULL,
     category_id VARCHAR,
-    description VARCHAR(225),
+    description VARCHAR,
     fulfilled_on DATE,
     scheduled_to DATE NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -51,7 +51,7 @@ CREATE TABLE frequent_txs (
     amount FLOAT DEFAULT 0 NOT NULL,
     kind_id VARCHAR NOT NULL,
     category_id VARCHAR,
-    description VARCHAR(225),
+    description VARCHAR,
     starts_on TIMESTAMP NOT NULL,
     stops_on TIMESTAMP,
     last_transaction_created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -67,7 +67,7 @@ CREATE TABLE frequent_txs_transactions (
 );
 CREATE TABLE goals (
     id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
-    title VARCHAR(255) NOT NULL,
+    title VARCHAR NOT NULL,
     egp_subtotal FLOAT NOT NULL,
     fulfilled_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -86,7 +86,7 @@ CREATE TABLE goals_progresses (
 );
 CREATE TABLE items (
     id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
+    name VARCHAR NOT NULL,
     price FLOAT DEFAULT 0 NOT NULL,
     currency_id VARCHAR NOT NULL,
     purchased_on DATE,
