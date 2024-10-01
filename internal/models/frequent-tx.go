@@ -36,7 +36,7 @@ type FrequentTx struct {
 	Description              string
 	StartsOn                 time.Time `validate:"required"`
 	StopsOn                  time.Time `validate:"omitempty,gtfield=StartsOn"`
-	CreatedAt                time.Time `validate:"required"`
+	CreatedAt                time.Time
 	LastTransactionCreatedAt time.Time `validate:"required"`
 
 	Transactions []Transaction

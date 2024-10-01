@@ -19,12 +19,13 @@ INSERT INTO frequent_txs (
     account_id,
     amount,
     kind_id,
+    category_id,
     description,
     stops_on,
     starts_on,
     last_transaction_created_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateFrequentTxParams struct {
@@ -34,6 +35,7 @@ type CreateFrequentTxParams struct {
 	AccountID                string
 	Amount                   float64
 	KindID                   string
+	CategoryID               sql.NullString
 	Description              sql.NullString
 	StopsOn                  sql.NullTime
 	StartsOn                 time.Time
@@ -48,6 +50,7 @@ func (q *Queries) CreateFrequentTx(ctx context.Context, arg CreateFrequentTxPara
 		arg.AccountID,
 		arg.Amount,
 		arg.KindID,
+		arg.CategoryID,
 		arg.Description,
 		arg.StopsOn,
 		arg.StartsOn,
@@ -106,6 +109,7 @@ SELECT
     ft.account_id,
     ft.amount,
     ft.kind_id,
+    ft.category_id,
     ft.description,
     ft.created_at,
     ft.frequency_by,
@@ -119,6 +123,8 @@ SELECT
     c.egp_fx_rate,
     k.kind,
     k.increase_balance,
+    cat.name AS category_name,
+    cat.budget_in_egp AS category_budget_in_egp,
     t.id AS transaction_id,
     t.account_id AS transaction_account_id,
     t.amount AS transaction_amount,
@@ -131,50 +137,59 @@ SELECT
     tc.enum AS transaction_enum,
     tc.egp_fx_rate AS transaction_egp_fx_rate,
     tk.kind AS transaction_kind,
-    tk.increase_balance AS transaction_increase_balance
+    tk.increase_balance AS transaction_increase_balance,
+    tcat.name AS transaction_category_name,
+    tcat.budget_in_egp AS transaction_category_budget_in_egp
 FROM frequent_txs AS ft
 LEFT JOIN frequent_txs_transactions AS ftt ON ftt.frequency_id = ft.id
 LEFT JOIN accounts AS a ON ft.account_id = a.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN transaction_kinds AS k ON ft.kind_id = k.id
+LEFT JOIN categories AS cat ON ft.category_id = cat.id
 LEFT JOIN transactions AS t ON t.id = ftt.transaction_id
 LEFT JOIN accounts AS ta ON t.account_id = ta.id
 LEFT JOIN currencies AS tc ON ta.currency_id = c.id
 LEFT JOIN transaction_kinds AS tk ON t.kind_id = k.id
+LEFT JOIN categories AS tcat ON t.category_id = tcat.id
 WHERE ft.id = ?
 `
 
 type GetFrequentTxRow struct {
-	ID                         string
-	AccountID                  string
-	Amount                     float64
-	KindID                     string
-	Description                sql.NullString
-	CreatedAt                  time.Time
-	FrequencyBy                int64
-	Frequency                  int64
-	StartsOn                   time.Time
-	StopsOn                    sql.NullTime
-	LastTransactionCreatedAt   time.Time
-	AccountName                sql.NullString
-	CurrencyID                 sql.NullString
-	CurrencyEnum               sql.NullInt64
-	EgpFxRate                  sql.NullFloat64
-	Kind                       sql.NullString
-	IncreaseBalance            sql.NullBool
-	TransactionID              sql.NullString
-	TransactionAccountID       sql.NullString
-	TransactionAmount          sql.NullFloat64
-	TransactionKindID          sql.NullString
-	TransactionDescription     sql.NullString
-	TransactionFulfilledOn     sql.NullTime
-	TransactionScheduledTo     sql.NullTime
-	TransactionCreatedAt       sql.NullTime
-	TransactionCurrencyID      sql.NullString
-	TransactionEnum            sql.NullInt64
-	TransactionEgpFxRate       sql.NullFloat64
-	TransactionKind            sql.NullString
-	TransactionIncreaseBalance sql.NullBool
+	ID                             string
+	AccountID                      string
+	Amount                         float64
+	KindID                         string
+	CategoryID                     sql.NullString
+	Description                    sql.NullString
+	CreatedAt                      time.Time
+	FrequencyBy                    int64
+	Frequency                      int64
+	StartsOn                       time.Time
+	StopsOn                        sql.NullTime
+	LastTransactionCreatedAt       time.Time
+	AccountName                    sql.NullString
+	CurrencyID                     sql.NullString
+	CurrencyEnum                   sql.NullInt64
+	EgpFxRate                      sql.NullFloat64
+	Kind                           sql.NullString
+	IncreaseBalance                sql.NullBool
+	CategoryName                   sql.NullString
+	CategoryBudgetInEgp            sql.NullFloat64
+	TransactionID                  sql.NullString
+	TransactionAccountID           sql.NullString
+	TransactionAmount              sql.NullFloat64
+	TransactionKindID              sql.NullString
+	TransactionDescription         sql.NullString
+	TransactionFulfilledOn         sql.NullTime
+	TransactionScheduledTo         sql.NullTime
+	TransactionCreatedAt           sql.NullTime
+	TransactionCurrencyID          sql.NullString
+	TransactionEnum                sql.NullInt64
+	TransactionEgpFxRate           sql.NullFloat64
+	TransactionKind                sql.NullString
+	TransactionIncreaseBalance     sql.NullBool
+	TransactionCategoryName        sql.NullString
+	TransactionCategoryBudgetInEgp sql.NullFloat64
 }
 
 func (q *Queries) GetFrequentTx(ctx context.Context, id string) ([]GetFrequentTxRow, error) {
@@ -191,6 +206,7 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) ([]GetFrequentTx
 			&i.AccountID,
 			&i.Amount,
 			&i.KindID,
+			&i.CategoryID,
 			&i.Description,
 			&i.CreatedAt,
 			&i.FrequencyBy,
@@ -204,6 +220,8 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) ([]GetFrequentTx
 			&i.EgpFxRate,
 			&i.Kind,
 			&i.IncreaseBalance,
+			&i.CategoryName,
+			&i.CategoryBudgetInEgp,
 			&i.TransactionID,
 			&i.TransactionAccountID,
 			&i.TransactionAmount,
@@ -217,6 +235,8 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) ([]GetFrequentTx
 			&i.TransactionEgpFxRate,
 			&i.TransactionKind,
 			&i.TransactionIncreaseBalance,
+			&i.TransactionCategoryName,
+			&i.TransactionCategoryBudgetInEgp,
 		); err != nil {
 			return nil, err
 		}
@@ -237,6 +257,7 @@ SELECT
     ft.account_id,
     ft.amount,
     ft.kind_id,
+    ft.category_id,
     ft.description,
     ft.created_at,
     ft.frequency_by,
@@ -250,6 +271,8 @@ SELECT
     c.egp_fx_rate,
     k.kind,
     k.increase_balance,
+    cat.name AS category_name,
+    cat.budget_in_egp AS category_budget_in_egp,
     t.id AS transaction_id,
     t.account_id AS transaction_account_id,
     t.amount AS transaction_amount,
@@ -262,49 +285,58 @@ SELECT
     tc.enum AS transaction_enum,
     tc.egp_fx_rate AS transaction_egp_fx_rate,
     tk.kind AS transaction_kind,
-    tk.increase_balance AS transaction_increase_balance
+    tk.increase_balance AS transaction_increase_balance,
+    tcat.name AS transaction_category_name,
+    tcat.budget_in_egp AS transaction_category_budget_in_egp
 FROM frequent_txs AS ft
 LEFT JOIN frequent_txs_transactions AS ftt ON ftt.frequency_id = ft.id
 LEFT JOIN accounts AS a ON ft.account_id = a.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN transaction_kinds AS k ON ft.kind_id = k.id
+LEFT JOIN categories AS cat ON ft.category_id = cat.id
 LEFT JOIN transactions AS t ON t.id = ftt.transaction_id
 LEFT JOIN accounts AS ta ON t.account_id = ta.id
 LEFT JOIN currencies AS tc ON ta.currency_id = c.id
 LEFT JOIN transaction_kinds AS tk ON t.kind_id = k.id
+LEFT JOIN categories AS tcat ON t.category_id = tcat.id
 `
 
 type GetFrequentTxsRow struct {
-	ID                         string
-	AccountID                  string
-	Amount                     float64
-	KindID                     string
-	Description                sql.NullString
-	CreatedAt                  time.Time
-	FrequencyBy                int64
-	Frequency                  int64
-	StartsOn                   time.Time
-	StopsOn                    sql.NullTime
-	LastTransactionCreatedAt   time.Time
-	AccountName                sql.NullString
-	CurrencyID                 sql.NullString
-	CurrencyEnum               sql.NullInt64
-	EgpFxRate                  sql.NullFloat64
-	Kind                       sql.NullString
-	IncreaseBalance            sql.NullBool
-	TransactionID              sql.NullString
-	TransactionAccountID       sql.NullString
-	TransactionAmount          sql.NullFloat64
-	TransactionKindID          sql.NullString
-	TransactionDescription     sql.NullString
-	TransactionFulfilledOn     sql.NullTime
-	TransactionScheduledTo     sql.NullTime
-	TransactionCreatedAt       sql.NullTime
-	TransactionCurrencyID      sql.NullString
-	TransactionEnum            sql.NullInt64
-	TransactionEgpFxRate       sql.NullFloat64
-	TransactionKind            sql.NullString
-	TransactionIncreaseBalance sql.NullBool
+	ID                             string
+	AccountID                      string
+	Amount                         float64
+	KindID                         string
+	CategoryID                     sql.NullString
+	Description                    sql.NullString
+	CreatedAt                      time.Time
+	FrequencyBy                    int64
+	Frequency                      int64
+	StartsOn                       time.Time
+	StopsOn                        sql.NullTime
+	LastTransactionCreatedAt       time.Time
+	AccountName                    sql.NullString
+	CurrencyID                     sql.NullString
+	CurrencyEnum                   sql.NullInt64
+	EgpFxRate                      sql.NullFloat64
+	Kind                           sql.NullString
+	IncreaseBalance                sql.NullBool
+	CategoryName                   sql.NullString
+	CategoryBudgetInEgp            sql.NullFloat64
+	TransactionID                  sql.NullString
+	TransactionAccountID           sql.NullString
+	TransactionAmount              sql.NullFloat64
+	TransactionKindID              sql.NullString
+	TransactionDescription         sql.NullString
+	TransactionFulfilledOn         sql.NullTime
+	TransactionScheduledTo         sql.NullTime
+	TransactionCreatedAt           sql.NullTime
+	TransactionCurrencyID          sql.NullString
+	TransactionEnum                sql.NullInt64
+	TransactionEgpFxRate           sql.NullFloat64
+	TransactionKind                sql.NullString
+	TransactionIncreaseBalance     sql.NullBool
+	TransactionCategoryName        sql.NullString
+	TransactionCategoryBudgetInEgp sql.NullFloat64
 }
 
 func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, error) {
@@ -321,6 +353,7 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 			&i.AccountID,
 			&i.Amount,
 			&i.KindID,
+			&i.CategoryID,
 			&i.Description,
 			&i.CreatedAt,
 			&i.FrequencyBy,
@@ -334,6 +367,8 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 			&i.EgpFxRate,
 			&i.Kind,
 			&i.IncreaseBalance,
+			&i.CategoryName,
+			&i.CategoryBudgetInEgp,
 			&i.TransactionID,
 			&i.TransactionAccountID,
 			&i.TransactionAmount,
@@ -347,6 +382,8 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 			&i.TransactionEgpFxRate,
 			&i.TransactionKind,
 			&i.TransactionIncreaseBalance,
+			&i.TransactionCategoryName,
+			&i.TransactionCategoryBudgetInEgp,
 		); err != nil {
 			return nil, err
 		}
@@ -369,6 +406,7 @@ frequency = ?,
 account_id = ?,
 amount = ?,
 kind_id = ?,
+category_id = ?,
 description = ?,
 stops_on = ?,
 last_transaction_created_at = ?
@@ -381,6 +419,7 @@ type UpdateFrequentTxParams struct {
 	AccountID                string
 	Amount                   float64
 	KindID                   string
+	CategoryID               sql.NullString
 	Description              sql.NullString
 	StopsOn                  sql.NullTime
 	LastTransactionCreatedAt time.Time
@@ -394,6 +433,7 @@ func (q *Queries) UpdateFrequentTx(ctx context.Context, arg UpdateFrequentTxPara
 		arg.AccountID,
 		arg.Amount,
 		arg.KindID,
+		arg.CategoryID,
 		arg.Description,
 		arg.StopsOn,
 		arg.LastTransactionCreatedAt,

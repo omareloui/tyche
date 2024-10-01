@@ -16,8 +16,8 @@ INSERT INTO transactions (
     id,
     account_id,
     amount,
-    category_id,
     kind_id,
+    category_id,
     description,
     scheduled_to,
     fulfilled_on
@@ -29,8 +29,8 @@ type CreateTransactionParams struct {
 	ID          string
 	AccountID   string
 	Amount      float64
-	CategoryID  sql.NullString
 	KindID      string
+	CategoryID  sql.NullString
 	Description sql.NullString
 	ScheduledTo time.Time
 	FulfilledOn sql.NullTime
@@ -41,8 +41,8 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 		arg.ID,
 		arg.AccountID,
 		arg.Amount,
-		arg.CategoryID,
 		arg.KindID,
+		arg.CategoryID,
 		arg.Description,
 		arg.ScheduledTo,
 		arg.FulfilledOn,
@@ -78,6 +78,7 @@ SELECT
     t.account_id,
     t.amount,
     t.kind_id,
+    t.category_id,
     t.description,
     t.fulfilled_on,
     t.scheduled_to,
@@ -88,6 +89,8 @@ SELECT
     c.egp_fx_rate,
     k.kind,
     k.increase_balance,
+    cat.name AS category_name,
+    cat.budget_in_egp AS category_budget_in_egp,
     g.title AS goal_title,
     g.egp_subtotal AS goal_egp_subtotal,
     IFNULL(t.amount * c.egp_fx_rate / g.egp_subtotal, 0.0) AS goal_percentage
@@ -95,29 +98,33 @@ FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN transaction_kinds AS k ON t.kind_id = k.id
+LEFT JOIN categories AS cat ON t.category_id = cat.id
 LEFT JOIN goals_progresses AS gp ON t.id = gp.transaction_id
 LEFT JOIN goals AS g ON gp.goal_id = g.id
 WHERE t.id = ? LIMIT 1
 `
 
 type GetTransactionRow struct {
-	ID              string
-	AccountID       string
-	Amount          float64
-	KindID          string
-	Description     sql.NullString
-	FulfilledOn     sql.NullTime
-	ScheduledTo     time.Time
-	CreatedAt       time.Time
-	AccountName     sql.NullString
-	CurrencyID      sql.NullString
-	CurrencyEnum    sql.NullInt64
-	EgpFxRate       sql.NullFloat64
-	Kind            sql.NullString
-	IncreaseBalance sql.NullBool
-	GoalTitle       sql.NullString
-	GoalEgpSubtotal sql.NullFloat64
-	GoalPercentage  interface{}
+	ID                  string
+	AccountID           string
+	Amount              float64
+	KindID              string
+	CategoryID          sql.NullString
+	Description         sql.NullString
+	FulfilledOn         sql.NullTime
+	ScheduledTo         time.Time
+	CreatedAt           time.Time
+	AccountName         sql.NullString
+	CurrencyID          sql.NullString
+	CurrencyEnum        sql.NullInt64
+	EgpFxRate           sql.NullFloat64
+	Kind                sql.NullString
+	IncreaseBalance     sql.NullBool
+	CategoryName        sql.NullString
+	CategoryBudgetInEgp sql.NullFloat64
+	GoalTitle           sql.NullString
+	GoalEgpSubtotal     sql.NullFloat64
+	GoalPercentage      interface{}
 }
 
 func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransactionRow, error) {
@@ -128,6 +135,7 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 		&i.AccountID,
 		&i.Amount,
 		&i.KindID,
+		&i.CategoryID,
 		&i.Description,
 		&i.FulfilledOn,
 		&i.ScheduledTo,
@@ -138,6 +146,8 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 		&i.EgpFxRate,
 		&i.Kind,
 		&i.IncreaseBalance,
+		&i.CategoryName,
+		&i.CategoryBudgetInEgp,
 		&i.GoalTitle,
 		&i.GoalEgpSubtotal,
 		&i.GoalPercentage,
@@ -151,6 +161,7 @@ SELECT
     t.account_id,
     t.amount,
     t.kind_id,
+    t.category_id,
     t.description,
     t.fulfilled_on,
     t.scheduled_to,
@@ -161,6 +172,8 @@ SELECT
     c.egp_fx_rate,
     k.kind,
     k.increase_balance,
+    cat.name AS category_name,
+    cat.budget_in_egp AS category_budget_in_egp,
     g.title AS goal_title,
     g.egp_subtotal AS goal_egp_subtotal,
     IFNULL(t.amount * c.egp_fx_rate / g.egp_subtotal, 0.0) AS goal_percentage
@@ -169,28 +182,32 @@ LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN transaction_kinds AS k ON t.kind_id = k.id
 LEFT JOIN goals_progresses AS gp ON t.id = gp.transaction_id
+LEFT JOIN categories AS cat ON t.category_id = cat.id
 LEFT JOIN goals AS g ON gp.goal_id = g.id
 ORDER BY t.scheduled_to DESC, t.created_at DESC
 `
 
 type GetTransactionsRow struct {
-	ID              string
-	AccountID       string
-	Amount          float64
-	KindID          string
-	Description     sql.NullString
-	FulfilledOn     sql.NullTime
-	ScheduledTo     time.Time
-	CreatedAt       time.Time
-	AccountName     sql.NullString
-	CurrencyID      sql.NullString
-	CurrencyEnum    sql.NullInt64
-	EgpFxRate       sql.NullFloat64
-	Kind            sql.NullString
-	IncreaseBalance sql.NullBool
-	GoalTitle       sql.NullString
-	GoalEgpSubtotal sql.NullFloat64
-	GoalPercentage  interface{}
+	ID                  string
+	AccountID           string
+	Amount              float64
+	KindID              string
+	CategoryID          sql.NullString
+	Description         sql.NullString
+	FulfilledOn         sql.NullTime
+	ScheduledTo         time.Time
+	CreatedAt           time.Time
+	AccountName         sql.NullString
+	CurrencyID          sql.NullString
+	CurrencyEnum        sql.NullInt64
+	EgpFxRate           sql.NullFloat64
+	Kind                sql.NullString
+	IncreaseBalance     sql.NullBool
+	CategoryName        sql.NullString
+	CategoryBudgetInEgp sql.NullFloat64
+	GoalTitle           sql.NullString
+	GoalEgpSubtotal     sql.NullFloat64
+	GoalPercentage      interface{}
 }
 
 func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, error) {
@@ -207,6 +224,7 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.AccountID,
 			&i.Amount,
 			&i.KindID,
+			&i.CategoryID,
 			&i.Description,
 			&i.FulfilledOn,
 			&i.ScheduledTo,
@@ -217,6 +235,8 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.EgpFxRate,
 			&i.Kind,
 			&i.IncreaseBalance,
+			&i.CategoryName,
+			&i.CategoryBudgetInEgp,
 			&i.GoalTitle,
 			&i.GoalEgpSubtotal,
 			&i.GoalPercentage,

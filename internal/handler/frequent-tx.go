@@ -77,7 +77,7 @@ func (h Handler) GetEditFrequentTx(w http.ResponseWriter, r *http.Request) (temp
 
 	l := logger.FromCtx(r.Context())
 
-	accs, knds, _, err := h.getTxDeps(r.Context())
+	accs, knds, cats, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +91,7 @@ func (h Handler) GetEditFrequentTx(w http.ResponseWriter, r *http.Request) (temp
 
 	return views.EditFrequentTx(ftx,
 		h.mapFrequentTxToFD(ftx, &errs.ValidationError{}),
-		accs, knds), nil
+		accs, knds, getCategoriesOfKinds(cats, ftx.Kind.ID)), nil
 }
 
 func (h Handler) EditFrequentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -201,6 +201,7 @@ func generateNextScheduledTransactions(ftx *models.FrequentTx, count int) []mode
 			Account:     ftx.Account,
 			Amount:      ftx.Amount,
 			Kind:        ftx.Kind,
+			Category:    ftx.Category,
 			Description: ftx.Description,
 			ScheduledTo: nextOn,
 			CreatedAt:   now,
@@ -242,6 +243,7 @@ func (h Handler) mapFDToFrequentTx(r *http.Request) (*models.FrequentTx, error) 
 		Transactions: []models.Transaction{},
 		Description:  r.FormValue("description"),
 		Kind:         models.TransactionKind{ID: r.FormValue("kind_id")},
+		Category:     models.Category{ID: r.FormValue("category_id")},
 	}, nil
 }
 
@@ -257,7 +259,10 @@ func (h Handler) mapFrequentTxToFD(ftx *models.FrequentTx, valerr *errs.Validati
 			Frequency:  views.FDInput{Value: formatIntIfNonZero(int(ftx.Frequency)), Error: valerr.Errors.MsgFor("Frequency")},
 			StopsOn:    views.FDInput{Value: formatDateOnlyIfNonZero(ftx.StopsOn), Error: valerr.Errors.MsgFor("StopsOn")},
 		},
-		KindID:      views.FDInput{Value: ftx.Kind.ID, Error: valerr.Errors.MsgFor("KindID")},
+		CategoryAndKindsFD: views.CategoryAndKindsFD{
+			KindID:     views.FDInput{Value: ftx.Kind.ID, Error: valerr.Errors.MsgFor("Kind.ID")},
+			CategoryID: views.FDInput{Value: ftx.Category.ID, Error: valerr.Errors.MsgFor("Category.ID")},
+		},
 		Description: views.FDInput{Value: ftx.Description, Error: valerr.Errors.MsgFor("Description")},
 	}
 }

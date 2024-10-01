@@ -86,7 +86,6 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		l.Debug("parsed frequent transaction", zap.Any("frequent tx", ftx))
 
 		ftx.ID = idgen.New()
-		ftx.CreatedAt = time.Now()
 		ftx.LastTransactionCreatedAt = time.Now()
 
 		if err := h.sani.SanitizeStruct(ftx); err != nil {

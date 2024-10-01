@@ -95,6 +95,10 @@ templ Transaction(tx *models.Transaction) {
 		<p>Account: { tx.Account.Name }</p>
 		<p>Amount: { tx.ViewAmount() }</p>
 		<p>Kind: { tx.Kind.Kind }</p>
+		if tx.Category.ID != "" {
+			<p>Category ID: { tx.Category.ID }</p>
+			<p>Category Name: { tx.Category.Name }</p>
+		}
 		if tx.Description != "" {
 			<p>Description: { tx.Description }</p>
 		}

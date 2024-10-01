@@ -17,7 +17,7 @@ type FrequencyFD struct {
 type FrequentTxFD struct {
 	AccountIFD
 	FrequencyFD
-	KindID      FDInput
+	CategoryAndKindsFD
 	Description FDInput
 }
 
@@ -54,9 +54,9 @@ templ frequencyFormBody(id string, fd *FrequencyFD) {
 	</div>
 }
 
-templ ftxFormBody(id string, fd *FrequentTxFD, accs []models.Account, kinds []models.TransactionKind) {
+templ ftxFormBody(id string, fd *FrequentTxFD, accs []models.Account, knds []models.TransactionKind, cats []models.Category) {
 	@AccountInputs(&fd.AccountIFD, id, accs)
-	@selectTxKind("kind_id", id, kinds, fd.KindID)
+	@KindCategoryInputs(&fd.CategoryAndKindsFD, id, knds, cats)
 	@input("Description", "text", "description", "Enter a description", id, fd.Description)
 	@frequencyFormBody(id, &fd.FrequencyFD)
 }
@@ -70,10 +70,12 @@ templ FrequentTransactionOOB(ftx *models.FrequentTx) {
 templ EditFrequentTx(
 	ftx *models.FrequentTx,
 	fd *FrequentTxFD,
-	accs []models.Account, kinds []models.TransactionKind) {
+	accs []models.Account,
+	knds []models.TransactionKind,
+	cats []models.Category) {
 	@form("put", fmt.Sprintf("/frequent-tx/%s", ftx.ID), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { ftx.ID }</p>
-		@ftxFormBody(ftx.ID, fd, accs, kinds)
+		@ftxFormBody(ftx.ID, fd, accs, knds, cats)
 		@editFormButtons(fmt.Sprintf("/frequent-tx/%s", ftx.ID))
 	}
 }
@@ -94,6 +96,10 @@ templ FrequentTx(ftx *models.FrequentTx) {
 		<p>Kind: { ftx.Kind.Kind }</p>
 		if ftx.Description != "" {
 			<p>Description: { ftx.Description }</p>
+		}
+		if ftx.Category.ID != "" {
+			<p>Category ID: { ftx.Category.ID }</p>
+			<p>Category Name: { ftx.Category.Name }</p>
 		}
 		<p>Frequency: { strconv.FormatUint(uint64(ftx.Frequency), 10) }</p>
 		<p>Frequency By: { ftx.FrequencyBy.String() }</p>

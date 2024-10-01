@@ -6,12 +6,13 @@ INSERT INTO frequent_txs (
     account_id,
     amount,
     kind_id,
+    category_id,
     description,
     stops_on,
     starts_on,
     last_transaction_created_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: CreateFrequentTxTransaction :exec
 INSERT INTO frequent_txs_transactions (
@@ -26,6 +27,7 @@ SELECT
     ft.account_id,
     ft.amount,
     ft.kind_id,
+    ft.category_id,
     ft.description,
     ft.created_at,
     ft.frequency_by,
@@ -39,6 +41,8 @@ SELECT
     c.egp_fx_rate,
     k.kind,
     k.increase_balance,
+    cat.name AS category_name,
+    cat.budget_in_egp AS category_budget_in_egp,
     t.id AS transaction_id,
     t.account_id AS transaction_account_id,
     t.amount AS transaction_amount,
@@ -51,16 +55,20 @@ SELECT
     tc.enum AS transaction_enum,
     tc.egp_fx_rate AS transaction_egp_fx_rate,
     tk.kind AS transaction_kind,
-    tk.increase_balance AS transaction_increase_balance
+    tk.increase_balance AS transaction_increase_balance,
+    tcat.name AS transaction_category_name,
+    tcat.budget_in_egp AS transaction_category_budget_in_egp
 FROM frequent_txs AS ft
 LEFT JOIN frequent_txs_transactions AS ftt ON ftt.frequency_id = ft.id
 LEFT JOIN accounts AS a ON ft.account_id = a.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN transaction_kinds AS k ON ft.kind_id = k.id
+LEFT JOIN categories AS cat ON ft.category_id = cat.id
 LEFT JOIN transactions AS t ON t.id = ftt.transaction_id
 LEFT JOIN accounts AS ta ON t.account_id = ta.id
 LEFT JOIN currencies AS tc ON ta.currency_id = c.id
-LEFT JOIN transaction_kinds AS tk ON t.kind_id = k.id;
+LEFT JOIN transaction_kinds AS tk ON t.kind_id = k.id
+LEFT JOIN categories AS tcat ON t.category_id = tcat.id;
 
 
 -- name: GetFrequentTx :many
@@ -69,6 +77,7 @@ SELECT
     ft.account_id,
     ft.amount,
     ft.kind_id,
+    ft.category_id,
     ft.description,
     ft.created_at,
     ft.frequency_by,
@@ -82,6 +91,8 @@ SELECT
     c.egp_fx_rate,
     k.kind,
     k.increase_balance,
+    cat.name AS category_name,
+    cat.budget_in_egp AS category_budget_in_egp,
     t.id AS transaction_id,
     t.account_id AS transaction_account_id,
     t.amount AS transaction_amount,
@@ -94,16 +105,20 @@ SELECT
     tc.enum AS transaction_enum,
     tc.egp_fx_rate AS transaction_egp_fx_rate,
     tk.kind AS transaction_kind,
-    tk.increase_balance AS transaction_increase_balance
+    tk.increase_balance AS transaction_increase_balance,
+    tcat.name AS transaction_category_name,
+    tcat.budget_in_egp AS transaction_category_budget_in_egp
 FROM frequent_txs AS ft
 LEFT JOIN frequent_txs_transactions AS ftt ON ftt.frequency_id = ft.id
 LEFT JOIN accounts AS a ON ft.account_id = a.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN transaction_kinds AS k ON ft.kind_id = k.id
+LEFT JOIN categories AS cat ON ft.category_id = cat.id
 LEFT JOIN transactions AS t ON t.id = ftt.transaction_id
 LEFT JOIN accounts AS ta ON t.account_id = ta.id
 LEFT JOIN currencies AS tc ON ta.currency_id = c.id
 LEFT JOIN transaction_kinds AS tk ON t.kind_id = k.id
+LEFT JOIN categories AS tcat ON t.category_id = tcat.id
 WHERE ft.id = ?;
 
 -- name: UpdateFrequentTx :exec
@@ -114,6 +129,7 @@ frequency = ?,
 account_id = ?,
 amount = ?,
 kind_id = ?,
+category_id = ?,
 description = ?,
 stops_on = ?,
 last_transaction_created_at = ?

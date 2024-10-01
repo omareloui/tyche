@@ -194,5 +194,10 @@ func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRo
 			Kind:            _dbTx.Kind.String,
 			IncreaseBalance: _dbTx.IncreaseBalance.Bool,
 		},
+		Category: models.Category{
+			ID:          _dbTx.CategoryID.String,
+			Name:        _dbTx.CategoryName.String,
+			BudgetInEgp: _dbTx.CategoryBudgetInEgp.Float64,
+		},
 	}
 }

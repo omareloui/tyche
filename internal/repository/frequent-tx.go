@@ -20,6 +20,7 @@ func (r *Repository) createFrequentTxWithTxn(qtx *db.Queries, ctx context.Contex
 		Frequency:                int64(ftx.Frequency),
 		Amount:                   ftx.Amount,
 		KindID:                   ftx.Kind.ID,
+		CategoryID:               sql.NullString{String: ftx.Category.ID, Valid: ftx.Category.ID != ""},
 		Description:              sql.NullString{String: ftx.Description, Valid: ftx.Description != ""},
 		StartsOn:                 ftx.StartsOn,
 		StopsOn:                  sql.NullTime{Time: ftx.StopsOn, Valid: !ftx.StopsOn.IsZero()},
@@ -85,6 +86,7 @@ func (r *Repository) UpdateFrequentTx(ctx context.Context, ftx *models.FrequentT
 			AccountID:                ftx.Account.ID,
 			Amount:                   ftx.Amount,
 			KindID:                   ftx.Kind.ID,
+			CategoryID:               sql.NullString{String: ftx.Category.ID, Valid: ftx.Category.ID != ""},
 			FrequencyBy:              int64(ftx.FrequencyBy),
 			Frequency:                int64(ftx.Frequency),
 			Description:              sql.NullString{String: ftx.Description, Valid: ftx.Description != ""},
@@ -172,6 +174,11 @@ func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 					Kind:            dbFtx.Kind.String,
 					IncreaseBalance: dbFtx.IncreaseBalance.Bool,
 				},
+				Category: models.Category{
+					ID:          dbFtx.CategoryID.String,
+					Name:        dbFtx.CategoryName.String,
+					BudgetInEgp: dbFtx.CategoryBudgetInEgp.Float64,
+				},
 				Frequency:                uint(dbFtx.Frequency),
 				FrequencyBy:              models.FrequencyBy(dbFtx.FrequencyBy),
 				StartsOn:                 dbFtx.StartsOn,
@@ -206,6 +213,11 @@ func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 				ID:              dbFtx.TransactionKindID.String,
 				Kind:            dbFtx.TransactionKind.String,
 				IncreaseBalance: dbFtx.TransactionIncreaseBalance.Bool,
+			},
+			Category: models.Category{
+				ID:          dbFtx.TransactionCurrencyID.String,
+				Name:        dbFtx.TransactionCategoryName.String,
+				BudgetInEgp: dbFtx.TransactionCategoryBudgetInEgp.Float64,
 			},
 		})
 	}
