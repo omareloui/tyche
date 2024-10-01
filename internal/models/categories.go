@@ -5,7 +5,7 @@ import (
 )
 
 type Category struct {
-	ID          string `validate:"required"`
+	ID          string
 	Name        string `validate:"required" conform:"trim,title"`
 	BudgetInEgp float64
 	Kind        TransactionKind

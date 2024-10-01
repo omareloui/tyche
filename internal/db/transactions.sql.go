@@ -16,18 +16,20 @@ INSERT INTO transactions (
     id,
     account_id,
     amount,
+    category_id,
     kind_id,
     description,
     scheduled_to,
     fulfilled_on
 )
-VALUES (?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateTransactionParams struct {
 	ID          string
 	AccountID   string
 	Amount      float64
+	CategoryID  sql.NullString
 	KindID      string
 	Description sql.NullString
 	ScheduledTo time.Time
@@ -39,6 +41,7 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 		arg.ID,
 		arg.AccountID,
 		arg.Amount,
+		arg.CategoryID,
 		arg.KindID,
 		arg.Description,
 		arg.ScheduledTo,
@@ -237,6 +240,7 @@ SET
 account_id = ?,
 amount = ?,
 kind_id = ?,
+category_id = ?,
 description = ?,
 scheduled_to = ?
 WHERE id = ?
@@ -246,6 +250,7 @@ type UpdateTransactionParams struct {
 	AccountID   string
 	Amount      float64
 	KindID      string
+	CategoryID  sql.NullString
 	Description sql.NullString
 	ScheduledTo time.Time
 	ID          string
@@ -256,6 +261,7 @@ func (q *Queries) UpdateTransaction(ctx context.Context, arg UpdateTransactionPa
 		arg.AccountID,
 		arg.Amount,
 		arg.KindID,
+		arg.CategoryID,
 		arg.Description,
 		arg.ScheduledTo,
 		arg.ID,

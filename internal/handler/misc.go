@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/a-h/templ"
@@ -97,4 +98,40 @@ func (h Handler) IbanInputs(w http.ResponseWriter, r *http.Request) (templ.Compo
 	}
 
 	return views.IbanInputs(fd, "", curs), nil
+}
+
+func (h Handler) CategoriesInputs(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	kndId := r.FormValue("kind_id")
+	if kndId == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	catId := r.FormValue("category_id")
+
+	knds, err := h.repo.GetTransactionKinds(r.Context())
+	if err != nil {
+		return nil, err
+	}
+
+	cats, err := h.repo.GetCategories(r.Context())
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Printf("kndId: %s, catdId: %s\n", kndId, catId)
+
+	kndsCats := []models.Category{}
+
+	for _, cat := range cats {
+		if cat.Kind.ID == kndId {
+			kndsCats = append(kndsCats, cat)
+		}
+	}
+
+	fd := &views.CategoryAndKindsFD{
+		KindID:     views.FDInput{Value: kndId},
+		CategoryID: views.FDInput{Value: catId},
+	}
+
+	return views.KindCategoryInputs(fd, "", knds, kndsCats), nil
 }

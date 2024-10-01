@@ -144,7 +144,7 @@ func (h Handler) GetGoalProgressForm(w http.ResponseWriter, r *http.Request) (te
 		return nil, err
 	}
 
-	accs, knds, err := h.getTxDeps(r.Context())
+	accs, knds, _, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +170,7 @@ func (h Handler) CreateGoalProgress(w http.ResponseWriter, r *http.Request) (tem
 		return nil, err
 	}
 
-	accs, knds, err := h.getTxDeps(r.Context())
+	accs, knds, cats, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +178,7 @@ func (h Handler) CreateGoalProgress(w http.ResponseWriter, r *http.Request) (tem
 	if knd != nil {
 		tx.Kind = *knd
 	}
-	fd, err := h.prepareCreatingTx(r, tx, accs, knds)
+	fd, err := h.prepareCreatingTx(r, tx, accs, knds, cats)
 	if fd != nil {
 		return views.GoalProgressForm(gl, fd, accs, knds), nil
 	}

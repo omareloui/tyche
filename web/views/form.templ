@@ -27,6 +27,11 @@ type IBANFD struct {
 	IBAN       FDInput
 }
 
+type CategoryAndKindsFD struct {
+	CategoryID FDInput
+	KindID     FDInput
+}
+
 templ form(action, path string, attrs ...templ.Attributes) {
 	<form
 		{ templ.Attributes{fmt.Sprintf("hx-%s", action): string(templ.SafeURL(path))}... }
@@ -123,6 +128,21 @@ templ IbanInputs(fd *IBANFD, id string, curs []models.Currency) {
 				"hx-sync":    "closest form:abort",
 			})
 		@ibanInput("IBAN", "iban", id, getCurIbanPrefixByCurrency(curs, fd.CurrencyID.Value), fd.IBAN)
+	</div>
+}
+
+templ KindCategoryInputs(fd *CategoryAndKindsFD, id string, knds []models.TransactionKind, cats []models.Category) {
+	<div
+		class="contents"
+		hx-target="this"
+		hx-swap="outerHTML"
+		hx-sync="closest form:abort"
+	>
+		@selectTxKind("kind_id", id, knds, fd.KindID, templ.Attributes{
+			"hx-post":    "/categories-inputs",
+			"hx-trigger": "change",
+		})
+		@selectTxCat("category_id", id, cats, fd.CategoryID)
 	</div>
 }
 
@@ -277,6 +297,31 @@ templ selectTxKind(name, id string, knds []models.TransactionKind, data FDInput,
 	@selectInput("Transaction Kind", name, "Select Kind", id, txKindsToMap(knds), data, inputAttrs...)
 }
 
+templ selectTxCat(name, id string, cats []models.Category, data FDInput, inputAttrs ...templ.Attributes) {
+	<div>
+		<label for={ join(name, id) } class="input-label">Category</label>
+		<select
+			id={ join(name, id) }
+			name={ name }
+			class="input-field"
+			if inputAttrs != nil {
+				{ inputAttrs[0]... }
+			}
+		>
+			<option value="" selected>Select Category</option>
+			for k, v := range catsToMap(cats) {
+				<option
+					value={ k }
+					if k == data.Value {
+						selected
+					}
+				>{ v }</option>
+			}
+		</select>
+		@errorMessage(data.Error)
+	</div>
+}
+
 templ checkbox(label, name, id string, data FDInput, attrs ...templ.Attributes) {
 	<div>
 		<input
@@ -397,6 +442,14 @@ func txKindsToMap(kinds []models.TransactionKind) map[string]string {
 	m := make(map[string]string, len(kinds))
 	for _, k := range kinds {
 		m[k.ID] = k.Kind
+	}
+	return m
+}
+
+func catsToMap(cats []models.Category) map[string]string {
+	m := make(map[string]string, len(cats))
+	for _, c := range cats {
+		m[c.ID] = c.Name
 	}
 	return m
 }

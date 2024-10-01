@@ -72,6 +72,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("POST /amount-inputs", handle(h.AmountInputs))
 	mux.Handle("POST /account-inputs", handle(h.AccountInputs))
 	mux.Handle("POST /iban-inputs", handle(h.IbanInputs))
+	mux.Handle("POST /categories-inputs", handle(h.CategoriesInputs))
 
 	static(mux, []string{"styles", "js"}, "./web/public")
 	mux.Handle("/", handle(h.NotFound))

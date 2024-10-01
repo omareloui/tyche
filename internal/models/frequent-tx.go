@@ -32,6 +32,7 @@ type FrequentTx struct {
 	Frequency                uint            `validate:"required,min=1"`
 	Amount                   float64         `validate:"required,min=1"`
 	Kind                     TransactionKind `validate:"required"`
+	Category                 Category
 	Description              string
 	StartsOn                 time.Time `validate:"required"`
 	StopsOn                  time.Time `validate:"omitempty,gtfield=StartsOn"`

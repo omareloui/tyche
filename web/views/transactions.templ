@@ -9,8 +9,8 @@ import (
 
 type TransactionFD struct {
 	AccountIFD
+	CategoryAndKindsFD
 	FrequencyFD *FrequencyFD
-	KindID      FDInput
 	ScheduledTo FDInput
 	Description FDInput
 }
@@ -19,25 +19,35 @@ templ Transactions(
 	balances []models.Balance,
 	transactions []models.Transaction,
 	fd *TransactionFD, accounts []models.Account,
-	kinds []models.TransactionKind) {
+	knds []models.TransactionKind,
+	cats []models.Category) {
 	@baseLayout("Transactions", balances) {
 		@container() {
 			@mainHeader("Transactions")
-			@CreateTransactionForm(fd, accounts, kinds)
+			@CreateTransactionForm(fd, accounts, knds, cats)
 			@transactionsList(transactions)
 		}
 	}
 }
 
-templ CreateTransactionForm(fd *TransactionFD, accounts []models.Account, kinds []models.TransactionKind) {
+templ CreateTransactionForm(
+	fd *TransactionFD,
+	accounts []models.Account,
+	knds []models.TransactionKind,
+	cats []models.Category) {
 	@creationForm("Create Transaction", "/transactions", "Create Transaction") {
-		@transactionFormBody(fd, "", accounts, kinds)
+		@transactionFormBody(fd, "", accounts, knds, cats)
 	}
 }
 
-templ transactionFormBody(fd *TransactionFD, id string, accounts []models.Account, kinds []models.TransactionKind) {
+templ transactionFormBody(
+	fd *TransactionFD,
+	id string,
+	accounts []models.Account,
+	knds []models.TransactionKind,
+	cats []models.Category) {
 	@AccountInputs(&fd.AccountIFD, id, accounts)
-	@selectTxKind("kind_id", id, kinds, fd.KindID)
+	@KindCategoryInputs(&fd.CategoryAndKindsFD, id, knds, cats)
 	@input("Description", "text", "description", "Enter a description", id, fd.Description)
 	@dateInput("Date", "scheduled_to", id, fd.ScheduledTo)
 	if fd.FrequencyFD != nil {
@@ -51,10 +61,15 @@ templ TransactionOOB(tx *models.Transaction) {
 	</div>
 }
 
-templ EditTransaction(tx *models.Transaction, fd *TransactionFD, accounts []models.Account, kinds []models.TransactionKind) {
+templ EditTransaction(
+	tx *models.Transaction,
+	fd *TransactionFD,
+	accounts []models.Account,
+	knds []models.TransactionKind,
+	cats []models.Category) {
 	@form("put", fmt.Sprintf("/transactions/%s", tx.ID), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { tx.ID }</p>
-		@transactionFormBody(fd, tx.ID, accounts, kinds)
+		@transactionFormBody(fd, tx.ID, accounts, knds, cats)
 		@editFormButtons(fmt.Sprintf("/transactions/%s", tx.ID))
 	}
 }

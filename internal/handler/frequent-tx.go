@@ -77,7 +77,7 @@ func (h Handler) GetEditFrequentTx(w http.ResponseWriter, r *http.Request) (temp
 
 	l := logger.FromCtx(r.Context())
 
-	accs, knds, err := h.getTxDeps(r.Context())
+	accs, knds, _, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}

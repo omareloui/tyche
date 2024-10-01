@@ -45,6 +45,7 @@ func (r *Repository) createTransactionWithTxn(ctx context.Context, qtx *db.Queri
 		AccountID:   tx.Account.ID,
 		Amount:      tx.Amount,
 		KindID:      tx.Kind.ID,
+		CategoryID:  sql.NullString{String: tx.Category.ID, Valid: tx.Category.ID != ""},
 		Description: sql.NullString{String: tx.Description, Valid: tx.Description != ""},
 		ScheduledTo: tx.ScheduledTo,
 		FulfilledOn: sql.NullTime{Time: tx.FulfilledOn, Valid: !tx.FulfilledOn.IsZero()},
@@ -129,6 +130,7 @@ func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transa
 			AccountID:   tx.Account.ID,
 			Amount:      tx.Amount,
 			KindID:      tx.Kind.ID,
+			CategoryID:  sql.NullString{String: tx.Category.ID, Valid: tx.Category.ID != ""},
 			ScheduledTo: tx.ScheduledTo,
 		}); err != nil {
 			l.Error("updating transaction", zap.Error(err), zap.Any("new_transaction", tx), zap.Any("old_transaction", oldTx))

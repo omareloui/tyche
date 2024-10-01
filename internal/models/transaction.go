@@ -9,6 +9,7 @@ type Transaction struct {
 	Account        Account
 	Amount         float64 `validate:"required,min=1"`
 	Kind           TransactionKind
+	Category       Category
 	Description    string
 	GoalTitle      string
 	GoalPercentage float64

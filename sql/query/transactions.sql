@@ -3,12 +3,13 @@ INSERT INTO transactions (
     id,
     account_id,
     amount,
+    category_id,
     kind_id,
     description,
     scheduled_to,
     fulfilled_on
 )
-VALUES (?, ?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetTransactions :many
 SELECT
@@ -70,6 +71,7 @@ SET
 account_id = ?,
 amount = ?,
 kind_id = ?,
+category_id = ?,
 description = ?,
 scheduled_to = ?
 WHERE id = ?;
