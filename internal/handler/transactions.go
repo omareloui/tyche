@@ -41,6 +41,8 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 		return nil, err
 	}
 
+	cats = getCategoriesOfKinds(cats, fd.KindID.Value)
+
 	return views.Transactions(balances, transactions, fd, accs, knds, cats), nil
 }
 
@@ -482,4 +484,14 @@ func (h Handler) prepareCreatingTx(r *http.Request, tx *models.Transaction, accs
 	}
 
 	return h.prepareTx(r, tx, accs, knds, cats)
+}
+
+func getCategoriesOfKinds(cats []models.Category, kndId string) []models.Category {
+	kndsCats := []models.Category{}
+	for _, cat := range cats {
+		if cat.Kind.ID == kndId {
+			kndsCats = append(kndsCats, cat)
+		}
+	}
+	return kndsCats
 }

@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/a-h/templ"
@@ -118,15 +117,7 @@ func (h Handler) CategoriesInputs(w http.ResponseWriter, r *http.Request) (templ
 		return nil, err
 	}
 
-	fmt.Printf("kndId: %s, catdId: %s\n", kndId, catId)
-
-	kndsCats := []models.Category{}
-
-	for _, cat := range cats {
-		if cat.Kind.ID == kndId {
-			kndsCats = append(kndsCats, cat)
-		}
-	}
+	kndsCats := getCategoriesOfKinds(cats, kndId)
 
 	fd := &views.CategoryAndKindsFD{
 		KindID:     views.FDInput{Value: kndId},
