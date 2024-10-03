@@ -27,9 +27,11 @@ type IBANFD struct {
 	IBAN       FDInput
 }
 
-type CategoryAndKindsFD struct {
-	CategoryID FDInput
-	KindID     FDInput
+type TransactionAmountsAndKindFD struct {
+	AccountIFD         AccountIFD
+	KindID             FDInput
+	CategoryID         *FDInput
+	TransferAccountIFD *AccountIFD
 }
 
 templ form(action, path string, attrs ...templ.Attributes) {
@@ -104,9 +106,13 @@ templ AmountInputs(fd *AmountFD, id string, curs []models.Currency) {
 }
 
 templ AccountInputs(fd *AccountIFD, id string, accs []models.Account) {
+	@accountInputs(fd, id, "", accs)
+}
+
+templ accountInputs(fd *AccountIFD, id, nameSuffix string, accs []models.Account) {
 	<div data-account class="grid grid-cols-3 gap-4">
-		@moneyInput("Amount", "amount", getCurSymbolByAccount(accs, fd.AccountID.Value), id, fd.Amount, "col-span-2")
-		@selectAccount("account_id", id, accs, fd.AccountID,
+		@moneyInput("Amount", join("amount", nameSuffix, "_"), getCurSymbolByAccount(accs, fd.AccountID.Value), id, fd.Amount, "col-span-2")
+		@selectAccount(join("account_id", nameSuffix, "_"), id, accs, fd.AccountID,
 			templ.Attributes{
 				"hx-post":    "/account-inputs",
 				"hx-trigger": "change",
@@ -131,18 +137,41 @@ templ IbanInputs(fd *IBANFD, id string, curs []models.Currency) {
 	</div>
 }
 
-templ KindCategoryInputs(fd *CategoryAndKindsFD, id string, knds []models.TransactionKind, cats []models.Category) {
+templ TransactionAmountsAndKindFormBody(fd *TransactionAmountsAndKindFD, id string, knds []models.TransactionKind, cats []models.Category, accs []models.Account) {
 	<div
 		class="contents"
 		hx-target="this"
 		hx-swap="outerHTML"
 		hx-sync="closest form:abort"
+		hx-sync="closest form:abort"
 	>
+		<div class="grid grid-cols-3 gap-4">
+			@moneyInput("Amount", "amount", getCurSymbolByAccount(accs, fd.AccountIFD.AccountID.Value), id, fd.AccountIFD.Amount, "col-span-2")
+			@selectAccount("account_id", id, accs, fd.AccountIFD.AccountID,
+				templ.Attributes{
+					"hx-post":    fmt.Sprintf("/transaction-accounts-and-kinds-inputs/%s", id),
+					"hx-trigger": "change",
+				})
+		</div>
 		@selectTxKind("kind_id", id, knds, fd.KindID, templ.Attributes{
-			"hx-post":    "/categories-inputs",
+			"hx-post":    fmt.Sprintf("/transaction-accounts-and-kinds-inputs/%s", id),
 			"hx-trigger": "change",
 		})
-		@selectTxCat("category_id", id, cats, fd.CategoryID)
+		if fd.CategoryID != nil {
+			@selectTxCat("category_id", id, cats, *fd.CategoryID)
+		}
+		if fd.TransferAccountIFD != nil {
+			<div class="grid grid-cols-3 gap-4">
+				@moneyInput("To Amount", "to_amount", getCurSymbolByAccount(accs, fd.TransferAccountIFD.AccountID.Value), id, fd.TransferAccountIFD.Amount, "col-span-2")
+				@selectAccount("to_account_id", id,
+					slicesutils.Filter(accs, func(a models.Account) bool { return a.ID != fd.AccountIFD.AccountID.Value }),
+					fd.TransferAccountIFD.AccountID,
+					templ.Attributes{
+						"hx-post":    fmt.Sprintf("/transaction-accounts-and-kinds-inputs/%s", id),
+						"hx-trigger": "change",
+					})
+			</div>
+		}
 	</div>
 }
 
@@ -407,11 +436,15 @@ templ errorMessage(message string) {
 	}
 }
 
-func join(prefix, suffix string) string {
+func join(prefix, suffix string, del ...string) string {
+	_del := "-"
+	if len(del) > 0 {
+		_del = del[0]
+	}
 	if suffix == "" {
 		return prefix
 	}
-	return strings.Join([]string{prefix, suffix}, "-")
+	return strings.Join([]string{prefix, suffix}, _del)
 }
 
 func currenciesToMap(curs []models.Currency) map[string]string {

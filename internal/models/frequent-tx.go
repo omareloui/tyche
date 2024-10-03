@@ -26,14 +26,18 @@ func FrequencyByOptions() map[string]string {
 }
 
 type FrequentTx struct {
-	ID                       string `validate:"required"`
-	Account                  Account
-	FrequencyBy              FrequencyBy     `validate:"required"`
-	Frequency                uint            `validate:"required,min=1"`
-	Amount                   float64         `validate:"required,min=1"`
-	Kind                     TransactionKind `validate:"required"`
-	Category                 Category
-	Description              string
+	ID          string      `validate:"required"`
+	FrequencyBy FrequencyBy `validate:"required"`
+	Frequency   uint        `validate:"required,min=1"`
+
+	Account     Account
+	Amount      float64         `validate:"required,min=1"`
+	Kind        TransactionKind `validate:"required"`
+	Category    *Category       `validate:"omitempty"`
+	ToAccount   *Account        `validate:"omitempty"`
+	ToAmount    float64
+	Description string
+
 	StartsOn                 time.Time `validate:"required"`
 	StopsOn                  time.Time `validate:"omitempty,gtfield=StartsOn"`
 	CreatedAt                time.Time

@@ -243,25 +243,40 @@ func (h Handler) mapFDToFrequentTx(r *http.Request) (*models.FrequentTx, error) 
 		Transactions: []models.Transaction{},
 		Description:  r.FormValue("description"),
 		Kind:         models.TransactionKind{ID: r.FormValue("kind_id")},
-		Category:     models.Category{ID: r.FormValue("category_id")},
+		Category:     &models.Category{ID: r.FormValue("category_id")},
 	}, nil
 }
 
 func (h Handler) mapFrequentTxToFD(ftx *models.FrequentTx, valerr *errs.ValidationError) *views.FrequentTxFD {
+	var catId string
+	var toAccId string
+
+	if ftx.Category != nil {
+		catId = ftx.Category.ID
+	}
+
+	if ftx.ToAccount != nil {
+		toAccId = ftx.ToAccount.ID
+	}
+
 	return &views.FrequentTxFD{
-		AccountIFD: views.AccountIFD{
-			AccountID: views.FDInput{Value: ftx.Account.ID, Error: valerr.Errors.MsgFor("Account.ID")},
-			Amount:    views.FDInput{Value: formatFloatIfNonZero(ftx.Amount), Error: valerr.Errors.MsgFor("Amount")},
-		},
 		FrequencyFD: views.FrequencyFD{
 			IsFrequent: views.FDInput{Value: "on"},
 			FrequentBy: views.FDInput{Value: formatIntIfNonZero(int(ftx.FrequencyBy)), Error: valerr.Errors.MsgFor("FrequentBy")},
 			Frequency:  views.FDInput{Value: formatIntIfNonZero(int(ftx.Frequency)), Error: valerr.Errors.MsgFor("Frequency")},
 			StopsOn:    views.FDInput{Value: formatDateOnlyIfNonZero(ftx.StopsOn), Error: valerr.Errors.MsgFor("StopsOn")},
 		},
-		CategoryAndKindsFD: views.CategoryAndKindsFD{
-			KindID:     views.FDInput{Value: ftx.Kind.ID, Error: valerr.Errors.MsgFor("Kind.ID")},
-			CategoryID: views.FDInput{Value: ftx.Category.ID, Error: valerr.Errors.MsgFor("Category.ID")},
+		TransactionAmountsAndKindFD: views.TransactionAmountsAndKindFD{
+			AccountIFD: views.AccountIFD{
+				AccountID: views.FDInput{Value: ftx.Account.ID, Error: valerr.Errors.MsgFor("Account.ID")},
+				Amount:    views.FDInput{Value: formatFloatIfNonZero(ftx.Amount), Error: valerr.Errors.MsgFor("Amount")},
+			},
+			KindID: views.FDInput{Value: ftx.Kind.ID, Error: valerr.Errors.MsgFor("Kind.ID")},
+			TransferAccountIFD: &views.AccountIFD{
+				AccountID: views.FDInput{Value: toAccId, Error: valerr.Errors.MsgFor("ToAccount.ID")},
+				Amount:    views.FDInput{Value: formatFloatIfNonZero(ftx.ToAmount), Error: valerr.Errors.MsgFor("ToAmount")},
+			},
+			CategoryID: &views.FDInput{Value: catId, Error: valerr.Errors.MsgFor("Category.ID")},
 		},
 		Description: views.FDInput{Value: ftx.Description, Error: valerr.Errors.MsgFor("Description")},
 	}

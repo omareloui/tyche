@@ -8,8 +8,7 @@ import (
 )
 
 type TransactionFD struct {
-	AccountIFD
-	CategoryAndKindsFD
+	TransactionAmountsAndKindFD
 	FrequencyFD *FrequencyFD
 	ScheduledTo FDInput
 	Description FDInput
@@ -36,18 +35,17 @@ templ CreateTransactionForm(
 	knds []models.TransactionKind,
 	cats []models.Category) {
 	@creationForm("Create Transaction", "/transactions", "Create Transaction") {
-		@transactionFormBody(fd, "", accounts, knds, cats)
+		@transactionFormBody(fd, "0", accounts, knds, cats)
 	}
 }
 
 templ transactionFormBody(
 	fd *TransactionFD,
 	id string,
-	accounts []models.Account,
+	accs []models.Account,
 	knds []models.TransactionKind,
 	cats []models.Category) {
-	@AccountInputs(&fd.AccountIFD, id, accounts)
-	@KindCategoryInputs(&fd.CategoryAndKindsFD, id, knds, cats)
+	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs)
 	@input("Description", "text", "description", "Enter a description", id, fd.Description)
 	@dateInput("Date", "scheduled_to", id, fd.ScheduledTo)
 	if fd.FrequencyFD != nil {
@@ -95,7 +93,7 @@ templ Transaction(tx *models.Transaction) {
 		<p>Account: { tx.Account.Name }</p>
 		<p>Amount: { tx.ViewAmount() }</p>
 		<p>Kind: { tx.Kind.Kind }</p>
-		if tx.Category.ID != "" {
+		if tx.Category != nil {
 			<p>Category ID: { tx.Category.ID }</p>
 			<p>Category Name: { tx.Category.Name }</p>
 		}

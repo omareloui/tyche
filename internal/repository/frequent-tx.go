@@ -13,6 +13,14 @@ import (
 
 func (r *Repository) createFrequentTxWithTxn(qtx *db.Queries, ctx context.Context, ftx *models.FrequentTx) error {
 	l := logger.FromCtx(ctx)
+
+	var catId sql.NullString
+	if ftx.Category != nil {
+		catId = sql.NullString{Valid: ftx.Category.ID != "", String: ftx.Category.ID}
+	} else {
+		catId = sql.NullString{Valid: false}
+	}
+
 	if err := qtx.CreateFrequentTx(ctx, db.CreateFrequentTxParams{
 		ID:                       ftx.ID,
 		AccountID:                ftx.Account.ID,
@@ -20,7 +28,7 @@ func (r *Repository) createFrequentTxWithTxn(qtx *db.Queries, ctx context.Contex
 		Frequency:                int64(ftx.Frequency),
 		Amount:                   ftx.Amount,
 		KindID:                   ftx.Kind.ID,
-		CategoryID:               sql.NullString{String: ftx.Category.ID, Valid: ftx.Category.ID != ""},
+		CategoryID:               catId,
 		Description:              sql.NullString{String: ftx.Description, Valid: ftx.Description != ""},
 		StartsOn:                 ftx.StartsOn,
 		StopsOn:                  sql.NullTime{Time: ftx.StopsOn, Valid: !ftx.StopsOn.IsZero()},
@@ -81,12 +89,19 @@ func (r *Repository) UpdateFrequentTx(ctx context.Context, ftx *models.FrequentT
 		}
 		l.Debug("deleted scheduled transaction of transaction")
 
+		var catId sql.NullString
+		if ftx.Category != nil {
+			catId = sql.NullString{Valid: ftx.Category.ID != "", String: ftx.Category.ID}
+		} else {
+			catId = sql.NullString{Valid: false}
+		}
+
 		if err := qtx.UpdateFrequentTx(ctx, db.UpdateFrequentTxParams{
 			ID:                       ftx.ID,
 			AccountID:                ftx.Account.ID,
 			Amount:                   ftx.Amount,
 			KindID:                   ftx.Kind.ID,
-			CategoryID:               sql.NullString{String: ftx.Category.ID, Valid: ftx.Category.ID != ""},
+			CategoryID:               catId,
 			FrequencyBy:              int64(ftx.FrequencyBy),
 			Frequency:                int64(ftx.Frequency),
 			Description:              sql.NullString{String: ftx.Description, Valid: ftx.Description != ""},
@@ -133,10 +148,12 @@ func (r *Repository) DeleteFrequentTx(ctx context.Context, id string) error {
 
 func (r *Repository) GenerateScheduledTransactions(ctx context.Context, ftx *models.FrequentTx, scheduledTxs []models.Transaction) error {
 	return r.transact(func(qtx *db.Queries) error {
-		qtx.UpdateFrequentTxLastTransactionCreatedAt(ctx, db.UpdateFrequentTxLastTransactionCreatedAtParams{
+		if err := qtx.UpdateFrequentTxLastTransactionCreatedAt(ctx, db.UpdateFrequentTxLastTransactionCreatedAtParams{
 			ID:                       ftx.ID,
 			LastTransactionCreatedAt: ftx.LastTransactionCreatedAt,
-		})
+		}); err != nil {
+			return err
+		}
 		for _, stx := range scheduledTxs {
 			if err := r.createTransactionWithTxn(ctx, qtx, &stx); err != nil {
 				return err
@@ -155,6 +172,16 @@ func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 	for _, dbFtx := range dbFtxs {
 		ftxIdx := slices.IndexFunc(ftxs, func(ftx models.FrequentTx) bool { return ftx.ID == dbFtx.ID })
 		if ftxIdx == -1 {
+			var cat *models.Category
+
+			if dbFtx.CategoryID.Valid {
+				cat = &models.Category{
+					ID:          dbFtx.CategoryID.String,
+					Name:        dbFtx.CategoryName.String,
+					BudgetInEgp: dbFtx.CategoryBudgetInEgp.Float64,
+				}
+			}
+
 			ftxs = append(ftxs, models.FrequentTx{
 				ID: dbFtx.ID,
 				Account: models.Account{
@@ -174,11 +201,7 @@ func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 					Kind:            dbFtx.Kind.String,
 					IncreaseBalance: dbFtx.IncreaseBalance.Bool,
 				},
-				Category: models.Category{
-					ID:          dbFtx.CategoryID.String,
-					Name:        dbFtx.CategoryName.String,
-					BudgetInEgp: dbFtx.CategoryBudgetInEgp.Float64,
-				},
+				Category:                 cat,
 				Frequency:                uint(dbFtx.Frequency),
 				FrequencyBy:              models.FrequencyBy(dbFtx.FrequencyBy),
 				StartsOn:                 dbFtx.StartsOn,
@@ -191,6 +214,16 @@ func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 
 		if !dbFtx.TransactionID.Valid {
 			continue
+		}
+
+		var tCat *models.Category
+
+		if !dbFtx.TransactionCurrencyID.Valid {
+			tCat = &models.Category{
+				ID:          dbFtx.TransactionCurrencyID.String,
+				Name:        dbFtx.TransactionCategoryName.String,
+				BudgetInEgp: dbFtx.TransactionCategoryBudgetInEgp.Float64,
+			}
 		}
 
 		ftxs[ftxIdx].Transactions = append(ftxs[ftxIdx].Transactions, models.Transaction{
@@ -214,11 +247,7 @@ func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 				Kind:            dbFtx.TransactionKind.String,
 				IncreaseBalance: dbFtx.TransactionIncreaseBalance.Bool,
 			},
-			Category: models.Category{
-				ID:          dbFtx.TransactionCurrencyID.String,
-				Name:        dbFtx.TransactionCategoryName.String,
-				BudgetInEgp: dbFtx.TransactionCategoryBudgetInEgp.Float64,
-			},
+			Category: tCat,
 		})
 	}
 

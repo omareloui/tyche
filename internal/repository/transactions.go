@@ -40,12 +40,21 @@ func (r *Repository) CreateTransaction(ctx context.Context, tx *models.Transacti
 
 func (r *Repository) createTransactionWithTxn(ctx context.Context, qtx *db.Queries, tx *models.Transaction) error {
 	l := logger.FromCtx(ctx)
+
+	var catId sql.NullString
+
+	if tx.Category != nil {
+		catId = sql.NullString{String: tx.Category.ID, Valid: tx.Category.ID != ""}
+	} else {
+		catId = sql.NullString{Valid: false}
+	}
+
 	if err := qtx.CreateTransaction(ctx, db.CreateTransactionParams{
 		ID:          tx.ID,
 		AccountID:   tx.Account.ID,
 		Amount:      tx.Amount,
 		KindID:      tx.Kind.ID,
-		CategoryID:  sql.NullString{String: tx.Category.ID, Valid: tx.Category.ID != ""},
+		CategoryID:  catId,
 		Description: sql.NullString{String: tx.Description, Valid: tx.Description != ""},
 		ScheduledTo: tx.ScheduledTo,
 		FulfilledOn: sql.NullTime{Time: tx.FulfilledOn, Valid: !tx.FulfilledOn.IsZero()},
@@ -125,12 +134,20 @@ func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transa
 	return r.transact(func(qtx *db.Queries) error {
 		l := logger.FromCtx(ctx)
 
+		var catId sql.NullString
+
+		if tx.Category != nil {
+			catId = sql.NullString{String: tx.Category.ID, Valid: tx.Category.ID != ""}
+		} else {
+			catId = sql.NullString{Valid: false}
+		}
+
 		if err := qtx.UpdateTransaction(ctx, db.UpdateTransactionParams{
 			ID:          tx.ID,
 			AccountID:   tx.Account.ID,
 			Amount:      tx.Amount,
 			KindID:      tx.Kind.ID,
-			CategoryID:  sql.NullString{String: tx.Category.ID, Valid: tx.Category.ID != ""},
+			CategoryID:  catId,
 			ScheduledTo: tx.ScheduledTo,
 		}); err != nil {
 			l.Error("updating transaction", zap.Error(err), zap.Any("new_transaction", tx), zap.Any("old_transaction", oldTx))
@@ -171,7 +188,17 @@ func (r *Repository) FulfillTransaction(ctx context.Context, tx *models.Transact
 func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRow](dbTx *T) *models.Transaction {
 	_dbTx := db.GetTransactionsRow(*dbTx)
 
-	return &models.Transaction{
+	var cat *models.Category
+
+	if _dbTx.CategoryID.Valid {
+		cat = &models.Category{
+			ID:          _dbTx.CategoryID.String,
+			Name:        _dbTx.CategoryName.String,
+			BudgetInEgp: _dbTx.CategoryBudgetInEgp.Float64,
+		}
+	}
+
+	tx := models.Transaction{
 		ID: _dbTx.ID,
 		Account: models.Account{
 			ID:   _dbTx.AccountID,
@@ -194,10 +221,8 @@ func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRo
 			Kind:            _dbTx.Kind.String,
 			IncreaseBalance: _dbTx.IncreaseBalance.Bool,
 		},
-		Category: models.Category{
-			ID:          _dbTx.CategoryID.String,
-			Name:        _dbTx.CategoryName.String,
-			BudgetInEgp: _dbTx.CategoryBudgetInEgp.Float64,
-		},
+		Category: cat,
 	}
+
+	return &tx
 }

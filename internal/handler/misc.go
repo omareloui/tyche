@@ -105,9 +105,17 @@ func (h Handler) CategoriesInputs(w http.ResponseWriter, r *http.Request) (templ
 		return nil, errs.ErrInvalidID
 	}
 
-	catId := r.FormValue("category_id")
-
 	knds, err := h.repo.GetTransactionKinds(r.Context())
+	if err != nil {
+		return nil, err
+	}
+
+	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == kndId })
+	if knd == nil {
+		return nil, errs.ErrInvalidID
+	}
+
+	accs, err := h.repo.GetAccounts(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -119,10 +127,26 @@ func (h Handler) CategoriesInputs(w http.ResponseWriter, r *http.Request) (templ
 
 	kndsCats := getCategoriesOfKinds(cats, kndId)
 
-	fd := &views.CategoryAndKindsFD{
-		KindID:     views.FDInput{Value: kndId},
-		CategoryID: views.FDInput{Value: catId},
+	accId := r.FormValue("account_id")
+
+	fd := &views.TransactionAmountsAndKindFD{
+		AccountIFD: views.AccountIFD{
+			Amount:    views.FDInput{Value: r.FormValue("amount")},
+			AccountID: views.FDInput{Value: accId},
+		},
+		KindID: views.FDInput{Value: kndId},
 	}
 
-	return views.KindCategoryInputs(fd, "", knds, kndsCats), nil
+	if knd.Kind == models.TransferTxKind {
+		toAccId := r.FormValue("to_account_id")
+
+		fd.TransferAccountIFD = &views.AccountIFD{
+			Amount:    views.FDInput{Value: r.FormValue("to_amount")},
+			AccountID: views.FDInput{Value: toAccId},
+		}
+	} else {
+		fd.CategoryID = &views.FDInput{Value: r.FormValue("category_id")}
+	}
+
+	return views.TransactionAmountsAndKindFormBody(fd, r.PathValue("id"), knds, kndsCats, accs), nil
 }

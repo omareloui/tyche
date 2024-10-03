@@ -15,9 +15,8 @@ type FrequencyFD struct {
 }
 
 type FrequentTxFD struct {
-	AccountIFD
 	FrequencyFD
-	CategoryAndKindsFD
+	TransactionAmountsAndKindFD
 	Description FDInput
 }
 
@@ -55,8 +54,7 @@ templ frequencyFormBody(id string, fd *FrequencyFD) {
 }
 
 templ ftxFormBody(id string, fd *FrequentTxFD, accs []models.Account, knds []models.TransactionKind, cats []models.Category) {
-	@AccountInputs(&fd.AccountIFD, id, accs)
-	@KindCategoryInputs(&fd.CategoryAndKindsFD, id, knds, cats)
+	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs)
 	@input("Description", "text", "description", "Enter a description", id, fd.Description)
 	@frequencyFormBody(id, &fd.FrequencyFD)
 }
@@ -97,7 +95,7 @@ templ FrequentTx(ftx *models.FrequentTx) {
 		if ftx.Description != "" {
 			<p>Description: { ftx.Description }</p>
 		}
-		if ftx.Category.ID != "" {
+		if ftx.Category != nil {
 			<p>Category ID: { ftx.Category.ID }</p>
 			<p>Category Name: { ftx.Category.Name }</p>
 		}

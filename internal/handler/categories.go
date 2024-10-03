@@ -10,6 +10,7 @@ import (
 	"github.com/omareloui/financial-planner/internal/idgen"
 	"github.com/omareloui/financial-planner/internal/logger"
 	"github.com/omareloui/financial-planner/internal/models"
+	"github.com/omareloui/financial-planner/internal/slicesutils"
 	"github.com/omareloui/financial-planner/web/views"
 	"go.uber.org/zap"
 )
@@ -34,6 +35,7 @@ func (h Handler) Categories(w http.ResponseWriter, r *http.Request) (templ.Compo
 	if err != nil {
 		return nil, err
 	}
+	knds = slicesutils.Filter(knds, func(k models.TransactionKind) bool { return k.Kind != models.TransferTxKind })
 
 	return views.Categories(b, h.mapCategoryToFD(dfltCategory(knds), &errs.ValidationError{}), knds, cats), nil
 }
@@ -76,6 +78,7 @@ func (h Handler) CreateCategory(w http.ResponseWriter, r *http.Request) (templ.C
 	if err != nil {
 		return nil, err
 	}
+	knds = slicesutils.Filter(knds, func(k models.TransactionKind) bool { return k.Kind != models.TransferTxKind })
 
 	if valerr := h.valid.Validate(cat); valerr != nil {
 		l.Error("create category validation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
@@ -116,6 +119,7 @@ func (h Handler) GetEditCategory(w http.ResponseWriter, r *http.Request) (templ.
 	if err != nil {
 		return nil, err
 	}
+	knds = slicesutils.Filter(knds, func(k models.TransactionKind) bool { return k.Kind != models.TransferTxKind })
 
 	return views.EditCategory(h.mapCategoryToFD(cat, &errs.ValidationError{}), id, knds), nil
 }
@@ -183,7 +187,7 @@ func (h Handler) mapFDToCategory(r *http.Request) (*models.Category, error) {
 }
 
 func dfltCategory(knds []models.TransactionKind) *models.Category {
-	dfltKindIdx := slices.IndexFunc(knds, func(knd models.TransactionKind) bool { return knd.Kind == models.ExpensesTxKind })
+	dfltKindIdx := slices.IndexFunc(knds, func(knd models.TransactionKind) bool { return knd.Kind == models.ExpenseTxKind })
 
 	if dfltKindIdx == -1 {
 		return &models.Category{

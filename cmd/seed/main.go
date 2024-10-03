@@ -56,8 +56,9 @@ func main() {
 	}
 
 	kindsSeed := []db.TransactionKind{
-		{ID: idgen.New(), Kind: "EXPENSES", IncreaseBalance: sql.NullBool{Bool: false, Valid: true}},
-		{ID: idgen.New(), Kind: "INCOME", IncreaseBalance: sql.NullBool{Bool: true, Valid: true}},
+		{ID: idgen.New(), Kind: models.ExpenseTxKind, IncreaseBalance: sql.NullBool{Bool: false, Valid: true}},
+		{ID: idgen.New(), Kind: models.IncomeTxKind, IncreaseBalance: sql.NullBool{Bool: true, Valid: true}},
+		{ID: idgen.New(), Kind: models.TransferTxKind, IncreaseBalance: sql.NullBool{Valid: false}},
 	}
 
 	if len(txKinds) != len(kindsSeed) {

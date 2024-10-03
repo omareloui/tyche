@@ -1,6 +1,8 @@
 package slicesutils
 
-import "slices"
+import (
+	"slices"
+)
 
 func Find[S ~[]E, E any](s S, fun func(E) bool) *E {
 	idx := slices.IndexFunc(s, fun)
@@ -8,4 +10,14 @@ func Find[S ~[]E, E any](s S, fun func(E) bool) *E {
 		return nil
 	}
 	return &(s[idx])
+}
+
+func Filter[S ~[]E, E any](s S, fun func(E) bool) []E {
+	a := []E{}
+	for _, e := range s {
+		if inc := fun(e); inc {
+			a = append(a, e)
+		}
+	}
+	return a
 }

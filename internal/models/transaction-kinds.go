@@ -1,6 +1,10 @@
 package models
 
-const ExpensesTxKind = "EXPENSES"
+const (
+	ExpenseTxKind  = "EXPENSE"
+	IncomeTxKind   = "INCOME"
+	TransferTxKind = "TRANSFER"
+)
 
 type TransactionKind struct {
 	ID              string `validate:"required"`

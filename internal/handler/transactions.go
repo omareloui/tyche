@@ -32,8 +32,7 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 		return nil, err
 	}
 
-	l.Debug("transaction from data", zap.Any("fd", fd))
-	l.Debug("transactions count", zap.Int("transactions_count", len(transactions)))
+	l.Debug("transaction from data", zap.Any("fd", fd), zap.Int("transactions_count", len(transactions)))
 
 	balances, err := h.repo.GetBalances(r.Context())
 	if err != nil {
@@ -54,11 +53,10 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		return nil, err
 	}
 	tx.ID = idgen.New()
-	tx.CreatedAt = time.Now()
 
 	sod := time.Now().Truncate(24 * time.Hour)
 	if tx.ScheduledTo.Equal(sod) || tx.ScheduledTo.Before(sod) {
-		tx.FulfilledOn = tx.CreatedAt
+		tx.FulfilledOn = time.Now()
 	}
 
 	accs, knds, cats, err := h.getTxDeps(r.Context())
@@ -344,19 +342,31 @@ func (h Handler) getTxDeps(ctx context.Context) ([]models.Account, []models.Tran
 }
 
 func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationError) *views.TransactionFD {
-	return &views.TransactionFD{
-		AccountIFD: views.AccountIFD{
-			Amount:    views.FDInput{Value: formatFloatIfNonZero(t.Amount), Error: err.Errors.MsgFor("Amount")},
-			AccountID: views.FDInput{Value: t.Account.ID, Error: err.Errors.MsgFor("Account.ID")},
+	fd := &views.TransactionFD{
+		TransactionAmountsAndKindFD: views.TransactionAmountsAndKindFD{
+			AccountIFD: views.AccountIFD{
+				Amount:    views.FDInput{Value: formatFloatIfNonZero(t.Amount), Error: err.Errors.MsgFor("Amount")},
+				AccountID: views.FDInput{Value: t.Account.ID, Error: err.Errors.MsgFor("Account.ID")},
+			},
+			KindID: views.FDInput{Value: t.Kind.ID, Error: err.Errors.MsgFor("Kind.ID")},
 		},
 		Description: views.FDInput{Value: t.Description, Error: err.Errors.MsgFor("Description")},
-		CategoryAndKindsFD: views.CategoryAndKindsFD{
-			KindID:     views.FDInput{Value: t.Kind.ID, Error: err.Errors.MsgFor("Kind.ID")},
-			CategoryID: views.FDInput{Value: t.Category.ID, Error: err.Errors.MsgFor("Category.ID")},
-		},
 		ScheduledTo: views.FDInput{Value: formatDateOnlyIfNonZero(t.ScheduledTo), Error: err.Errors.MsgFor("ScheduledTo")},
 		FrequencyFD: &views.FrequencyFD{},
 	}
+
+	if t.Category != nil {
+		fd.CategoryID = &views.FDInput{Value: t.Category.ID, Error: err.Errors.MsgFor("Category.ID")}
+	}
+
+	if t.ToAccount != nil {
+		fd.TransferAccountIFD = &views.AccountIFD{
+			Amount:    views.FDInput{Value: formatFloatIfNonZero(t.ToAmount), Error: err.Errors.MsgFor("ToAmount")},
+			AccountID: views.FDInput{Value: t.ToAccount.ID, Error: err.Errors.MsgFor("ToAccount.ID")},
+		}
+	}
+
+	return fd
 }
 
 func (h Handler) mapFDToTransaction(r *http.Request) (*models.Transaction, error) {
@@ -370,18 +380,25 @@ func (h Handler) mapFDToTransaction(r *http.Request) (*models.Transaction, error
 		return nil, err
 	}
 
+	kndId := r.FormValue("kind_id")
+
+	var cat *models.Category
+	if catId := r.FormValue("category_id"); catId != "" {
+		cat = &models.Category{ID: catId, Kind: models.TransactionKind{ID: kndId}}
+	}
+
 	return &models.Transaction{
 		Account:     models.Account{ID: r.FormValue("account_id")},
 		Amount:      amount,
-		Kind:        models.TransactionKind{ID: r.FormValue("kind_id")},
-		Category:    models.Category{ID: r.FormValue("category_id")},
+		Kind:        models.TransactionKind{ID: kndId},
+		Category:    cat,
 		Description: r.FormValue("description"),
 		ScheduledTo: scheduledTo,
 	}, nil
 }
 
 func defaultTransaction(accs []models.Account, knds []models.TransactionKind) *models.Transaction {
-	dfltKindIdx := slices.IndexFunc(knds, func(knd models.TransactionKind) bool { return knd.Kind == models.ExpensesTxKind })
+	dfltKindIdx := slices.IndexFunc(knds, func(knd models.TransactionKind) bool { return knd.Kind == models.ExpenseTxKind })
 
 	var dfltAccId string
 	if len(accs) > 0 {
@@ -393,12 +410,20 @@ func defaultTransaction(accs []models.Account, knds []models.TransactionKind) *m
 		}
 	}
 
-	return &models.Transaction{
+	knd := knds[dfltKindIdx]
+
+	tx := &models.Transaction{
 		Amount:      0,
 		Account:     models.Account{ID: dfltAccId},
-		Kind:        models.TransactionKind{ID: knds[dfltKindIdx].ID},
+		Kind:        knd,
 		ScheduledTo: time.Now(),
 	}
+
+	if knd.Kind == models.ExpenseTxKind {
+		tx.Category = &models.Category{}
+	}
+
+	return tx
 }
 
 func (h Handler) mapFDToTransactionFrequency(r *http.Request, parsedTx *models.Transaction) (*models.FrequentTx, error) {
@@ -455,8 +480,8 @@ func (h Handler) prepareTx(r *http.Request, tx *models.Transaction, accs []model
 	}
 	tx.Account = *a
 
-	if c := slicesutils.Find(cats, func(c models.Category) bool { return c.ID == tx.Category.ID }); c != nil {
-		tx.Category = *c
+	if c := slicesutils.Find(cats, func(c models.Category) bool { return tx.Category != nil && c.ID == tx.Category.ID }); c != nil {
+		tx.Category = c
 		tx.Category.Kind = tx.Kind
 	}
 
