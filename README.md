@@ -1,4 +1,4 @@
-# Financial
+# Tyche: Fortune Builder
 
 ## How to Run
 
@@ -14,6 +14,6 @@ make dev
 Or to start in production mode run:
 
 ```bash
-# FIXME:
-docker compose --profile prod up
+make build
+make start
 ```

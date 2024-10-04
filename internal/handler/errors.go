@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/a-h/templ"
-	"github.com/omareloui/financial-planner/internal/resperr"
+	"github.com/omareloui/tyche/internal/resperr"
 )
 
 func (h Handler) NotFound(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

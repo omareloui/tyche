@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/omareloui/financial-planner/internal/handler"
-	"github.com/omareloui/financial-planner/internal/middleware"
-	"github.com/omareloui/financial-planner/internal/route_handler"
+	"github.com/omareloui/tyche/internal/handler"
+	"github.com/omareloui/tyche/internal/middleware"
+	"github.com/omareloui/tyche/internal/route_handler"
 )
 
 type Router interface {

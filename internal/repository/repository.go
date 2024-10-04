@@ -3,7 +3,7 @@ package repository
 import (
 	"database/sql"
 
-	"github.com/omareloui/financial-planner/internal/db"
+	"github.com/omareloui/tyche/internal/db"
 )
 
 type Repository struct {

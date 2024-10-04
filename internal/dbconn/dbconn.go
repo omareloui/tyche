@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/omareloui/financial-planner/internal/db"
+	"github.com/omareloui/tyche/internal/db"
 )
 
 func New(datasource string) (*sql.DB, *db.Queries, error) {

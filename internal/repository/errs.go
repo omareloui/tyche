@@ -1,6 +1,6 @@
 package repository
 
-import "github.com/omareloui/financial-planner/internal/errs"
+import "github.com/omareloui/tyche/internal/errs"
 
 func newDuplicationError(f string) *errs.ValidationError {
 	valerr := &errs.ValidationError{}

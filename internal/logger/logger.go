@@ -6,7 +6,7 @@ import (
 	"runtime/debug"
 	"sync"
 
-	"github.com/omareloui/financial-planner/internal/config"
+	"github.com/omareloui/tyche/internal/config"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -23,7 +23,7 @@ func Get() *zap.Logger {
 		stdout := zapcore.AddSync(os.Stdout)
 
 		file := zapcore.AddSync(&lumberjack.Logger{
-			Filename:   "logs/financial-plans.log",
+			Filename:   "logs/tyche.log",
 			MaxSize:    5,
 			MaxBackups: 10,
 			MaxAge:     14,

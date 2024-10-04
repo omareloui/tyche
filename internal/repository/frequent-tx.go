@@ -4,9 +4,9 @@ import (
 	"database/sql"
 	"slices"
 
-	"github.com/omareloui/financial-planner/internal/db"
-	"github.com/omareloui/financial-planner/internal/logger"
-	"github.com/omareloui/financial-planner/internal/models"
+	"github.com/omareloui/tyche/internal/db"
+	"github.com/omareloui/tyche/internal/logger"
+	"github.com/omareloui/tyche/internal/models"
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
 )

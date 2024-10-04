@@ -5,9 +5,9 @@ import (
 	"database/sql"
 	"strings"
 
-	"github.com/omareloui/financial-planner/internal/db"
-	"github.com/omareloui/financial-planner/internal/logger"
-	"github.com/omareloui/financial-planner/internal/models"
+	"github.com/omareloui/tyche/internal/db"
+	"github.com/omareloui/tyche/internal/logger"
+	"github.com/omareloui/tyche/internal/models"
 	"go.uber.org/zap"
 )
 

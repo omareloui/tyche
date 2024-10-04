@@ -1,9 +1,9 @@
 package handler
 
 import (
-	"github.com/omareloui/financial-planner/internal/repository"
-	"github.com/omareloui/financial-planner/internal/sanitizer"
-	"github.com/omareloui/financial-planner/internal/valid"
+	"github.com/omareloui/tyche/internal/repository"
+	"github.com/omareloui/tyche/internal/sanitizer"
+	"github.com/omareloui/tyche/internal/valid"
 )
 
 type Handler struct {

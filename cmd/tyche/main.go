@@ -8,13 +8,13 @@ import (
 	"github.com/joho/godotenv"
 	_ "github.com/mattn/go-sqlite3"
 
-	"github.com/omareloui/financial-planner/internal/config"
-	"github.com/omareloui/financial-planner/internal/dbconn"
-	"github.com/omareloui/financial-planner/internal/handler"
-	"github.com/omareloui/financial-planner/internal/repository"
-	"github.com/omareloui/financial-planner/internal/router"
-	"github.com/omareloui/financial-planner/internal/sanitizer"
-	"github.com/omareloui/financial-planner/internal/valid"
+	"github.com/omareloui/tyche/internal/config"
+	"github.com/omareloui/tyche/internal/dbconn"
+	"github.com/omareloui/tyche/internal/handler"
+	"github.com/omareloui/tyche/internal/repository"
+	"github.com/omareloui/tyche/internal/router"
+	"github.com/omareloui/tyche/internal/sanitizer"
+	"github.com/omareloui/tyche/internal/valid"
 )
 
 func main() {

@@ -16,17 +16,17 @@ COPY ./web ./web
 RUN go build -v \
   -ldflags="-linkmode external -extldflags -static" \
   -tags netgo \
-  -o /usr/local/bin/financial-plans \
-  ./cmd/financial-plans
+  -o /usr/local/bin/tyche \
+  ./cmd/tyche
 
 ###
 FROM scratch
 WORKDIR /app
 
 COPY --from=build /etc/passwd /etc/passwd
-COPY --from=build /usr/local/bin/financial-plans ./bin
+COPY --from=build /usr/local/bin/tyche ./bin
 COPY --from=build /usr/local/web/assets ./web/assets
 
 USER nonroot
 
-CMD ["./bin/financial-plans"]
+CMD ["./bin/tyche"]

@@ -3,8 +3,8 @@ package repository
 import (
 	"context"
 
-	"github.com/omareloui/financial-planner/internal/db"
-	"github.com/omareloui/financial-planner/internal/models"
+	"github.com/omareloui/tyche/internal/db"
+	"github.com/omareloui/tyche/internal/models"
 )
 
 func (r *Repository) GetCategories(ctx context.Context) ([]models.Category, error) {

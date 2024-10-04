@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"github.com/omareloui/financial-planner/internal/db"
+	"github.com/omareloui/tyche/internal/db"
 )
 
 func (r *Repository) transact(txFunc func(*db.Queries) error) error {

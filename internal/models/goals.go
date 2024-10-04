@@ -3,7 +3,7 @@ package models
 import (
 	"time"
 
-	"github.com/omareloui/financial-planner/internal/numsutils"
+	"github.com/omareloui/tyche/internal/numsutils"
 )
 
 type Goal struct {

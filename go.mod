@@ -1,4 +1,4 @@
-module github.com/omareloui/financial-planner
+module github.com/omareloui/tyche
 
 go 1.22.5
 

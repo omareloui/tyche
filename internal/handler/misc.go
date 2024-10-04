@@ -4,11 +4,11 @@ import (
 	"net/http"
 
 	"github.com/a-h/templ"
-	"github.com/omareloui/financial-planner/internal/errs"
-	"github.com/omareloui/financial-planner/internal/logger"
-	"github.com/omareloui/financial-planner/internal/models"
-	"github.com/omareloui/financial-planner/internal/slicesutils"
-	"github.com/omareloui/financial-planner/web/views"
+	"github.com/omareloui/tyche/internal/errs"
+	"github.com/omareloui/tyche/internal/logger"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/slicesutils"
+	"github.com/omareloui/tyche/web/views"
 )
 
 func (h Handler) AmountInputs(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

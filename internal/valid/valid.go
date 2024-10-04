@@ -7,7 +7,7 @@ import (
 	"github.com/almerlucke/go-iban/iban"
 	"github.com/go-playground/validator/v10"
 	"github.com/go-playground/validator/v10/non-standard/validators"
-	"github.com/omareloui/financial-planner/internal/errs"
+	"github.com/omareloui/tyche/internal/errs"
 )
 
 type Validator struct {

@@ -6,9 +6,9 @@ run:
 	@air -c internal/config/.air.toml
 
 build: sqlgen migrate templ css
-	@go build -o ./tmp/main ./cmd/odinls
+	@go build -o ./tmp/main ./cmd/tyche
 
-start: build
+start:
 	@./tmp/main
 
 seed:
