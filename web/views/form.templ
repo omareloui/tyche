@@ -93,7 +93,8 @@ templ creationForm(title, postTo, submitStr string, close ...bool) {
 
 templ AmountInputs(fd *AmountFD, id string, curs []models.Currency) {
 	<div data-amount class="grid grid-cols-3 gap-4">
-		@moneyInput("Amount", "amount", getCurSymbolByCurrency(curs, fd.CurrencyID.Value), id, fd.Amount, "col-span-2")
+		@moneyInput("Amount", "amount", getCurSymbolByCurrency(curs, fd.CurrencyID.Value), id,
+			fd.Amount, "col-span-2")
 		@selectInput("Currency", "currency_id", "Select a Currency", id, currenciesToMap(curs), fd.CurrencyID,
 			templ.Attributes{
 				"hx-post":    "/amount-inputs",
@@ -111,7 +112,8 @@ templ AccountInputs(fd *AccountIFD, id string, accs []models.Account) {
 
 templ accountInputs(fd *AccountIFD, id, nameSuffix string, accs []models.Account) {
 	<div data-account class="grid grid-cols-3 gap-4">
-		@moneyInput("Amount", join("amount", nameSuffix, "_"), getCurSymbolByAccount(accs, fd.AccountID.Value), id, fd.Amount, "col-span-2")
+		@moneyInput("Amount", join("amount", nameSuffix, "_"), getCurSymbolByAccount(accs, fd.AccountID.Value), id,
+			fd.Amount, "col-span-2")
 		@selectAccount(join("account_id", nameSuffix, "_"), id, accs, fd.AccountID,
 			templ.Attributes{
 				"hx-post":    "/account-inputs",
@@ -143,17 +145,20 @@ templ TransactionAmountsAndKindFormBody(fd *TransactionAmountsAndKindFD, id stri
 		hx-target="this"
 		hx-swap="outerHTML"
 		hx-sync="closest form:abort"
-		hx-sync="closest form:abort"
 	>
 		<div class="grid grid-cols-3 gap-4">
-			@moneyInput("Amount", "amount", getCurSymbolByAccount(accs, fd.AccountIFD.AccountID.Value), id, fd.AccountIFD.Amount, "col-span-2")
+			@moneyInput("Amount", "amount", getCurSymbolByAccount(accs, fd.AccountIFD.AccountID.Value), id,
+				fd.AccountIFD.Amount, "col-span-2", templ.Attributes{
+					"hx-post":    fmt.Sprintf("/transaction-accounts-and-kinds-inputs/%s", id),
+					"hx-trigger": "keyup changed delay:200ms",
+				})
 			@selectAccount("account_id", id, accs, fd.AccountIFD.AccountID,
 				templ.Attributes{
 					"hx-post":    fmt.Sprintf("/transaction-accounts-and-kinds-inputs/%s", id),
 					"hx-trigger": "change",
 				})
 		</div>
-		@selectTxKind("kind_id", id, knds, fd.KindID, templ.Attributes{
+		@selectTxKind("kind_id", id, getTxKindsForAccounts(accs, knds), fd.KindID, templ.Attributes{
 			"hx-post":    fmt.Sprintf("/transaction-accounts-and-kinds-inputs/%s", id),
 			"hx-trigger": "change",
 		})
@@ -162,11 +167,12 @@ templ TransactionAmountsAndKindFormBody(fd *TransactionAmountsAndKindFD, id stri
 		}
 		if fd.TransferAccountIFD != nil {
 			<div class="grid grid-cols-3 gap-4">
-				@moneyInput("To Amount", "to_amount", getCurSymbolByAccount(accs, fd.TransferAccountIFD.AccountID.Value), id, fd.TransferAccountIFD.Amount, "col-span-2")
-				@selectAccount("to_account_id", id,
-					slicesutils.Filter(accs, func(a models.Account) bool { return a.ID != fd.AccountIFD.AccountID.Value }),
-					fd.TransferAccountIFD.AccountID,
-					templ.Attributes{
+				@moneyInput("To Amount", "to_amount",
+					getCurSymbolByAccount(accs, fd.TransferAccountIFD.AccountID.Value), id,
+					fd.TransferAccountIFD.Amount, "col-span-2")
+				@selectInput("To Account", "to_account_id", "Select Account", id,
+					accountsToMap(accs),
+					fd.TransferAccountIFD.AccountID, templ.Attributes{
 						"hx-post":    fmt.Sprintf("/transaction-accounts-and-kinds-inputs/%s", id),
 						"hx-trigger": "change",
 					})
@@ -201,13 +207,14 @@ templ numberInput(label, name, placeholder, id string, data FDInput, classes ...
 			placeholder={ placeholder }
 			class="input-field"
 			value={ data.Value }
+			autocomplete="off"
 		/>
 		@errorMessage(data.Error)
 	</div>
 }
 
-templ moneyInput(label, name, currencySymbol, id string, data FDInput, classes ...string) {
-	<div class={ strings.Join(classes, " ") }>
+templ moneyInput(label, name, currencySymbol, id string, data FDInput, class string, attrs ...templ.Attributes) {
+	<div class={ class }>
 		<label class="input-label" for={ join(name, id) }>{ label }</label>
 		<input
 			id={ join(name, id) }
@@ -215,23 +222,12 @@ templ moneyInput(label, name, currencySymbol, id string, data FDInput, classes .
 			class="input-field"
 			value={ data.Value }
 			placeholder={ fmt.Sprintf("%s 1,000.00", currencySymbol) }
+			inputmode="decimal"
 			x-mask:dynamic={ fmt.Sprintf("'%s ' + $money($input, '.', ',')", currencySymbol) }
-		/>
-		@errorMessage(data.Error)
-	</div>
-}
-
-templ moneyDisabledInput(label, name, currencySymbol, id string, data FDInput, classes ...string) {
-	<div class={ strings.Join(classes, " ") }>
-		<label class="input-label" for={ join(name, id) }>{ label }</label>
-		<input
-			id={ join(name, id) }
-			name={ name }
-			class="input-field"
-			value={ data.Value }
-			placeholder={ fmt.Sprintf("%s 1,000.00", currencySymbol) }
-			x-mask:dynamic={ fmt.Sprintf("'%s ' + $money($input, '.', ',')", currencySymbol) }
-			disabled
+			autocomplete="off"
+			if attrs != nil {
+				{ attrs[0]... }
+			}
 		/>
 		@errorMessage(data.Error)
 	</div>
@@ -515,4 +511,12 @@ func getCurIbanPrefixByCurrency(curs []models.Currency, curId string) string {
 		return models.DfltCurrency.IBANPrefix()
 	}
 	return cur.Enum.IBANPrefix()
+}
+
+func getTxKindsForAccounts(accs []models.Account, knds []models.TransactionKind) []models.TransactionKind {
+	nknds := knds
+	if len(accs) < 2 {
+		nknds = slicesutils.Filter(knds, func(k models.TransactionKind) bool { return k.Kind != models.TransferTxKind })
+	}
+	return nknds
 }

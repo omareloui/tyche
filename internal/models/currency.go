@@ -26,3 +26,10 @@ type Currency struct {
 	Enum      CurrencyEnum
 	EgpFxRate float64
 }
+
+func GetFxRate(from, to Currency) float64 {
+	if from.ID == to.ID {
+		return 1
+	}
+	return to.EgpFxRate / from.EgpFxRate
+}
