@@ -123,8 +123,6 @@ func (h Handler) CategoriesInputs(w http.ResponseWriter, r *http.Request) (templ
 		return nil, err
 	}
 
-	kndsCats := getCategoriesOfKinds(cats, kndId)
-
 	accId := r.FormValue("account_id")
 
 	fd := &views.TransactionAmountsAndKindFD{
@@ -173,7 +171,7 @@ func (h Handler) CategoriesInputs(w http.ResponseWriter, r *http.Request) (templ
 			toAmt = strconv.FormatFloat(amt/fxRate, 'f', 2, 64)
 		}
 
-		fd.TransferAccountIFD = &views.AccountIFD{
+		fd.ToAccountIFD = &views.AccountIFD{
 			Amount:    views.FDInput{Value: toAmt},
 			AccountID: views.FDInput{Value: toAccId},
 		}
@@ -182,5 +180,5 @@ func (h Handler) CategoriesInputs(w http.ResponseWriter, r *http.Request) (templ
 		fd.CategoryID = &views.FDInput{Value: r.FormValue("category_id")}
 	}
 
-	return views.TransactionAmountsAndKindFormBody(fd, r.PathValue("id"), knds, kndsCats, accs), nil
+	return views.TransactionAmountsAndKindFormBody(fd, r.PathValue("id"), knds, cats, accs), nil
 }

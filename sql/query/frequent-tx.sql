@@ -8,11 +8,13 @@ INSERT INTO frequent_txs (
     kind_id,
     category_id,
     description,
+    to_account_id,
+    to_amount,
     stops_on,
     starts_on,
     last_transaction_created_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: CreateFrequentTxTransaction :exec
 INSERT INTO frequent_txs_transactions (
@@ -29,6 +31,8 @@ SELECT
     ft.kind_id,
     ft.category_id,
     ft.description,
+    ft.to_account_id,
+    ft.to_amount,
     ft.created_at,
     ft.frequency_by,
     ft.frequency,
@@ -39,6 +43,10 @@ SELECT
     a.currency_id,
     c.enum AS currency_enum,
     c.egp_fx_rate,
+    ftta.name AS to_account_name,
+    ftta.currency_id AS to_currency_id,
+    fttc.enum AS to_currency_enum,
+    fttc.egp_fx_rate AS to_egp_fx_rate,
     k.kind,
     k.increase_balance,
     cat.name AS category_name,
@@ -48,12 +56,17 @@ SELECT
     t.amount AS transaction_amount,
     t.kind_id AS transaction_kind_id,
     t.description AS transaction_description,
+    t.to_account_id AS transaction_to_account_id,
+    t.to_amount AS transaction_to_amount,
     t.fulfilled_on AS transaction_fulfilled_on,
     t.scheduled_to AS transaction_scheduled_to,
     t.created_at AS transaction_created_at,
     ta.currency_id AS transaction_currency_id,
-    tc.enum AS transaction_enum,
+    tc.enum AS transaction_currency_enum,
     tc.egp_fx_rate AS transaction_egp_fx_rate,
+    tta.currency_id AS transaction_to_currency_id,
+    ttc.enum AS transaction_to_currency_enum,
+    ttc.egp_fx_rate AS transaction_to_egp_fx_rate,
     tk.kind AS transaction_kind,
     tk.increase_balance AS transaction_increase_balance,
     tcat.name AS transaction_category_name,
@@ -62,11 +75,15 @@ FROM frequent_txs AS ft
 LEFT JOIN frequent_txs_transactions AS ftt ON ftt.frequency_id = ft.id
 LEFT JOIN accounts AS a ON ft.account_id = a.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN accounts AS ftta ON ft.to_account_id = a.id
+LEFT JOIN currencies AS fttc ON ftta.currency_id = c.id
 LEFT JOIN transaction_kinds AS k ON ft.kind_id = k.id
 LEFT JOIN categories AS cat ON ft.category_id = cat.id
 LEFT JOIN transactions AS t ON t.id = ftt.transaction_id
 LEFT JOIN accounts AS ta ON t.account_id = ta.id
-LEFT JOIN currencies AS tc ON ta.currency_id = c.id
+LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
+LEFT JOIN accounts AS tta ON t.to_account_id = tta.id
+LEFT JOIN currencies AS ttc ON tta.currency_id = ttc.id
 LEFT JOIN transaction_kinds AS tk ON t.kind_id = k.id
 LEFT JOIN categories AS tcat ON t.category_id = tcat.id;
 
@@ -79,6 +96,8 @@ SELECT
     ft.kind_id,
     ft.category_id,
     ft.description,
+    ft.to_account_id,
+    ft.to_amount,
     ft.created_at,
     ft.frequency_by,
     ft.frequency,
@@ -89,6 +108,10 @@ SELECT
     a.currency_id,
     c.enum AS currency_enum,
     c.egp_fx_rate,
+    ftta.name AS to_account_name,
+    ftta.currency_id AS to_currency_id,
+    fttc.enum AS to_currency_enum,
+    fttc.egp_fx_rate AS to_egp_fx_rate,
     k.kind,
     k.increase_balance,
     cat.name AS category_name,
@@ -98,12 +121,17 @@ SELECT
     t.amount AS transaction_amount,
     t.kind_id AS transaction_kind_id,
     t.description AS transaction_description,
+    t.to_account_id AS transaction_to_account_id,
+    t.to_amount AS transaction_to_amount,
     t.fulfilled_on AS transaction_fulfilled_on,
     t.scheduled_to AS transaction_scheduled_to,
     t.created_at AS transaction_created_at,
     ta.currency_id AS transaction_currency_id,
-    tc.enum AS transaction_enum,
+    tc.enum AS transaction_currency_enum,
     tc.egp_fx_rate AS transaction_egp_fx_rate,
+    tta.currency_id AS transaction_to_currency_id,
+    ttc.enum AS transaction_to_currency_enum,
+    ttc.egp_fx_rate AS transaction_to_egp_fx_rate,
     tk.kind AS transaction_kind,
     tk.increase_balance AS transaction_increase_balance,
     tcat.name AS transaction_category_name,
@@ -112,11 +140,15 @@ FROM frequent_txs AS ft
 LEFT JOIN frequent_txs_transactions AS ftt ON ftt.frequency_id = ft.id
 LEFT JOIN accounts AS a ON ft.account_id = a.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN accounts AS ftta ON ft.to_account_id = a.id
+LEFT JOIN currencies AS fttc ON ftta.currency_id = c.id
 LEFT JOIN transaction_kinds AS k ON ft.kind_id = k.id
 LEFT JOIN categories AS cat ON ft.category_id = cat.id
 LEFT JOIN transactions AS t ON t.id = ftt.transaction_id
 LEFT JOIN accounts AS ta ON t.account_id = ta.id
-LEFT JOIN currencies AS tc ON ta.currency_id = c.id
+LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
+LEFT JOIN accounts AS tta ON t.to_account_id = tta.id
+LEFT JOIN currencies AS ttc ON tta.currency_id = ttc.id
 LEFT JOIN transaction_kinds AS tk ON t.kind_id = k.id
 LEFT JOIN categories AS tcat ON t.category_id = tcat.id
 WHERE ft.id = ?;
@@ -131,6 +163,8 @@ amount = ?,
 kind_id = ?,
 category_id = ?,
 description = ?,
+to_account_id = ?,
+to_amount = ?,
 stops_on = ?,
 last_transaction_created_at = ?
 WHERE id = ?;

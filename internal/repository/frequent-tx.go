@@ -15,10 +15,18 @@ func (r *Repository) createFrequentTxWithTxn(qtx *db.Queries, ctx context.Contex
 	l := logger.FromCtx(ctx)
 
 	var catId sql.NullString
+	var toAccId sql.NullString
+
 	if ftx.Category != nil {
 		catId = sql.NullString{Valid: ftx.Category.ID != "", String: ftx.Category.ID}
 	} else {
 		catId = sql.NullString{Valid: false}
+	}
+
+	if ftx.ToAccount != nil {
+		toAccId = sql.NullString{String: ftx.ToAccount.ID, Valid: ftx.ToAccount.ID != ""}
+	} else {
+		toAccId = sql.NullString{Valid: false}
 	}
 
 	if err := qtx.CreateFrequentTx(ctx, db.CreateFrequentTxParams{
@@ -30,6 +38,8 @@ func (r *Repository) createFrequentTxWithTxn(qtx *db.Queries, ctx context.Contex
 		KindID:                   ftx.Kind.ID,
 		CategoryID:               catId,
 		Description:              sql.NullString{String: ftx.Description, Valid: ftx.Description != ""},
+		ToAccountID:              toAccId,
+		ToAmount:                 sql.NullFloat64{Float64: ftx.ToAmount, Valid: ftx.ToAmount != 0},
 		StartsOn:                 ftx.StartsOn,
 		StopsOn:                  sql.NullTime{Time: ftx.StopsOn, Valid: !ftx.StopsOn.IsZero()},
 		LastTransactionCreatedAt: ftx.LastTransactionCreatedAt,
@@ -90,10 +100,18 @@ func (r *Repository) UpdateFrequentTx(ctx context.Context, ftx *models.FrequentT
 		l.Debug("deleted scheduled transaction of transaction")
 
 		var catId sql.NullString
+		var toAccId sql.NullString
+
 		if ftx.Category != nil {
 			catId = sql.NullString{Valid: ftx.Category.ID != "", String: ftx.Category.ID}
 		} else {
 			catId = sql.NullString{Valid: false}
+		}
+
+		if ftx.ToAccount != nil {
+			toAccId = sql.NullString{String: ftx.ToAccount.ID, Valid: ftx.ToAccount.ID != ""}
+		} else {
+			toAccId = sql.NullString{Valid: false}
 		}
 
 		if err := qtx.UpdateFrequentTx(ctx, db.UpdateFrequentTxParams{
@@ -105,6 +123,8 @@ func (r *Repository) UpdateFrequentTx(ctx context.Context, ftx *models.FrequentT
 			FrequencyBy:              int64(ftx.FrequencyBy),
 			Frequency:                int64(ftx.Frequency),
 			Description:              sql.NullString{String: ftx.Description, Valid: ftx.Description != ""},
+			ToAccountID:              toAccId,
+			ToAmount:                 sql.NullFloat64{Float64: ftx.ToAmount, Valid: ftx.ToAmount != 0},
 			StopsOn:                  sql.NullTime{Time: ftx.StopsOn, Valid: !ftx.StopsOn.IsZero()},
 			LastTransactionCreatedAt: ftx.LastTransactionCreatedAt,
 		}); err != nil {
@@ -173,12 +193,25 @@ func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 		ftxIdx := slices.IndexFunc(ftxs, func(ftx models.FrequentTx) bool { return ftx.ID == dbFtx.ID })
 		if ftxIdx == -1 {
 			var cat *models.Category
+			var toAcc *models.Account
 
 			if dbFtx.CategoryID.Valid {
 				cat = &models.Category{
 					ID:          dbFtx.CategoryID.String,
 					Name:        dbFtx.CategoryName.String,
 					BudgetInEgp: dbFtx.CategoryBudgetInEgp.Float64,
+				}
+			}
+
+			if dbFtx.ToAccountID.Valid {
+				toAcc = &models.Account{
+					ID:   dbFtx.ToAccountID.String,
+					Name: dbFtx.ToAccountName.String,
+					Currency: models.Currency{
+						ID:        dbFtx.ToCurrencyID.String,
+						Enum:      models.CurrencyEnum(dbFtx.ToCurrencyEnum.Int64),
+						EgpFxRate: dbFtx.ToEgpFxRate.Float64,
+					},
 				}
 			}
 
@@ -202,6 +235,8 @@ func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 					IncreaseBalance: dbFtx.IncreaseBalance.Bool,
 				},
 				Category:                 cat,
+				ToAccount:                toAcc,
+				ToAmount:                 dbFtx.ToAmount.Float64,
 				Frequency:                uint(dbFtx.Frequency),
 				FrequencyBy:              models.FrequencyBy(dbFtx.FrequencyBy),
 				StartsOn:                 dbFtx.StartsOn,
@@ -217,12 +252,19 @@ func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 		}
 
 		var tCat *models.Category
+		var tToAcc *models.Account
 
 		if !dbFtx.TransactionCurrencyID.Valid {
 			tCat = &models.Category{
 				ID:          dbFtx.TransactionCurrencyID.String,
 				Name:        dbFtx.TransactionCategoryName.String,
 				BudgetInEgp: dbFtx.TransactionCategoryBudgetInEgp.Float64,
+			}
+		}
+
+		if !dbFtx.TransactionToAccountID.Valid {
+			tToAcc = &models.Account{
+				ID: dbFtx.TransactionToAccountID.String,
 			}
 		}
 
@@ -239,6 +281,8 @@ func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 			},
 			Amount:      dbFtx.TransactionAmount.Float64,
 			Description: dbFtx.TransactionDescription.String,
+			ToAccount:   tToAcc,
+			ToAmount:    dbFtx.TransactionToAmount.Float64,
 			FulfilledOn: dbFtx.TransactionFulfilledOn.Time,
 			ScheduledTo: dbFtx.TransactionScheduledTo.Time,
 			CreatedAt:   dbFtx.TransactionCreatedAt.Time,

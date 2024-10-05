@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"slices"
 	"time"
@@ -26,13 +27,13 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 
 	fd := h.mapTransactionToFD(defaultTransaction(accs, knds), new(errs.ValidationError))
 
-	transactions, err := h.repo.GetTransactions(r.Context())
+	txs, err := h.repo.GetTransactions(r.Context())
 	if err != nil {
 		l.Error("fetch transaction from db", zap.Error(err))
 		return nil, err
 	}
 
-	l.Debug("transaction from data", zap.Any("fd", fd), zap.Int("transactions_count", len(transactions)))
+	l.Debug("transaction from data", zap.Int("transactions_count", len(txs)))
 
 	balances, err := h.repo.GetBalances(r.Context())
 	if err != nil {
@@ -40,9 +41,7 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 		return nil, err
 	}
 
-	cats = getCategoriesOfKinds(cats, fd.KindID.Value)
-
-	return views.Transactions(balances, transactions, fd, accs, knds, cats), nil
+	return views.Transactions(balances, txs, fd, accs, knds, cats), nil
 }
 
 func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -86,17 +85,16 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		ftx.ID = idgen.New()
 		ftx.LastTransactionCreatedAt = time.Now()
 
-		if err := h.sani.SanitizeStruct(ftx); err != nil {
-			return nil, errs.ErrSanitizer
-		}
-
-		if valerr := h.valid.Validate(ftx); valerr != nil {
-			l.Error("frequent transaction validation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-			fd := h.mapTransactionToFD(tx, valerr)
-
-			fd.FrequencyFD = h.parseFrequencyFD(r, valerr)
-
-			return views.CreateTransactionForm(fd, accs, knds, cats), nil
+		if err := ftx.SanitizeAndValidate(h.sani, h.valid); err != nil {
+			var valerr errs.ValidationError
+			if errors.As(err, &valerr) {
+				l.Error("validating frequent transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
+				fd := h.mapTransactionToFD(tx, &valerr)
+				fd.FrequencyFD = h.parseFrequencyFD(r, &valerr)
+				return views.CreateTransactionForm(fd, accs, knds, cats), nil
+			}
+			l.Error("sanitizing frequent transaction", zap.Error(err))
+			return nil, err
 		}
 
 		scheduledTxs = generateNextScheduledTransactions(ftx, generateNextScheduledTransactionsCount)
@@ -163,10 +161,6 @@ func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (tem
 		return nil, err
 	}
 
-	if err := h.sani.SanitizeStruct(tx); err != nil {
-		return nil, errs.ErrSanitizer
-	}
-
 	l.Debug("get edit transaction", zap.Any("transaction", tx))
 
 	accs, knds, cats, err := h.getTxDeps(r.Context())
@@ -177,6 +171,11 @@ func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (tem
 
 	fd := h.mapTransactionToFD(tx, new(errs.ValidationError))
 	fd.FrequencyFD = nil
+
+	// TODO: only add if the tx kind isn't transfer
+	if fd.CategoryID == nil {
+		fd.CategoryID = &views.FDInput{}
+	}
 
 	return views.EditTransaction(tx, fd, accs, knds, cats), nil
 }
@@ -194,10 +193,6 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 		return nil, err
 	}
 	tx.ID = id
-
-	if err := h.sani.SanitizeStruct(tx); err != nil {
-		return nil, errs.ErrSanitizer
-	}
 
 	accs, knds, cats, err := h.getTxDeps(r.Context())
 	if err != nil {
@@ -346,9 +341,9 @@ func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationE
 		TransactionAmountsAndKindFD: views.TransactionAmountsAndKindFD{
 			AccountIFD: views.AccountIFD{
 				Amount:    views.FDInput{Value: formatFloatIfNonZero(t.Amount), Error: err.Errors.MsgFor("Amount")},
-				AccountID: views.FDInput{Value: t.Account.ID, Error: err.Errors.MsgFor("Account.ID")},
+				AccountID: views.FDInput{Value: t.Account.ID, Error: err.Errors.MsgFor("AccountID")},
 			},
-			KindID: views.FDInput{Value: t.Kind.ID, Error: err.Errors.MsgFor("Kind.ID")},
+			KindID: views.FDInput{Value: t.Kind.ID, Error: err.Errors.MsgFor("KindID")},
 		},
 		Description: views.FDInput{Value: t.Description, Error: err.Errors.MsgFor("Description")},
 		ScheduledTo: views.FDInput{Value: formatDateOnlyIfNonZero(t.ScheduledTo), Error: err.Errors.MsgFor("ScheduledTo")},
@@ -356,13 +351,20 @@ func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationE
 	}
 
 	if t.Category != nil {
-		fd.CategoryID = &views.FDInput{Value: t.Category.ID, Error: err.Errors.MsgFor("Category.ID")}
+		fd.CategoryID = &views.FDInput{Value: t.Category.ID, Error: err.Errors.MsgFor("CategoryID")}
+	} else if t.Kind.Kind != models.TransferTxKind {
+		fd.CategoryID = &views.FDInput{}
 	}
 
 	if t.ToAccount != nil {
-		fd.TransferAccountIFD = &views.AccountIFD{
+		fd.ToAccountIFD = &views.AccountIFD{
 			Amount:    views.FDInput{Value: formatFloatIfNonZero(t.ToAmount), Error: err.Errors.MsgFor("ToAmount")},
-			AccountID: views.FDInput{Value: t.ToAccount.ID, Error: err.Errors.MsgFor("ToAccount.ID")},
+			AccountID: views.FDInput{Value: t.ToAccount.ID, Error: err.Errors.MsgFor("ToAccountID")},
+		}
+	} else if t.Kind.Kind == models.TransferTxKind {
+		fd.ToAccountIFD = &views.AccountIFD{
+			Amount:    views.FDInput{Error: err.Errors.MsgFor("ToAmount")},
+			AccountID: views.FDInput{Error: err.Errors.MsgFor("ToAccountID")},
 		}
 	}
 
@@ -371,6 +373,11 @@ func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationE
 
 func (h Handler) mapFDToTransaction(r *http.Request) (*models.Transaction, error) {
 	amount, err := parseFloatIfExists(r.FormValue("amount"))
+	if err != nil {
+		return nil, err
+	}
+
+	toAmount, err := parseFloatIfExists(r.FormValue("to_amount"))
 	if err != nil {
 		return nil, err
 	}
@@ -387,11 +394,19 @@ func (h Handler) mapFDToTransaction(r *http.Request) (*models.Transaction, error
 		cat = &models.Category{ID: catId, Kind: models.TransactionKind{ID: kndId}}
 	}
 
+	toAccId := r.FormValue("to_account_id")
+	var toAcc *models.Account
+	if toAccId != "" {
+		toAcc = &models.Account{ID: toAccId}
+	}
+
 	return &models.Transaction{
 		Account:     models.Account{ID: r.FormValue("account_id")},
 		Amount:      amount,
 		Kind:        models.TransactionKind{ID: kndId},
 		Category:    cat,
+		ToAccount:   toAcc,
+		ToAmount:    toAmount,
 		Description: r.FormValue("description"),
 		ScheduledTo: scheduledTo,
 	}, nil
@@ -448,6 +463,8 @@ func (h Handler) mapFDToTransactionFrequency(r *http.Request, parsedTx *models.T
 		Kind:        parsedTx.Kind,
 		Category:    parsedTx.Category,
 		Description: parsedTx.Description,
+		ToAccount:   parsedTx.ToAccount,
+		ToAmount:    parsedTx.ToAmount,
 		FrequencyBy: models.FrequencyBy(frequencyBy),
 		Frequency:   uint(frequency),
 		StartsOn:    parsedTx.ScheduledTo,
@@ -461,7 +478,7 @@ func (h Handler) prepareTx(r *http.Request, tx *models.Transaction, accs []model
 	k := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == tx.Kind.ID })
 	if k == nil {
 		valerr := &errs.ValidationError{Errors: errs.ValidationErrors{}}
-		valerr.Errors["Kind.ID"] = errs.ValidationField{Tag: "required"}
+		valerr.Errors["KindID"] = errs.ValidationField{Tag: "required"}
 		l.Error("tx kind doesn't exist")
 		fd := h.mapTransactionToFD(tx, valerr)
 		fd.FrequencyFD = h.parseFrequencyFD(r, valerr)
@@ -472,7 +489,7 @@ func (h Handler) prepareTx(r *http.Request, tx *models.Transaction, accs []model
 	a := slicesutils.Find(accs, func(ac models.Account) bool { return ac.ID == tx.Account.ID })
 	if a == nil {
 		valerr := &errs.ValidationError{Errors: errs.ValidationErrors{}}
-		valerr.Errors["Account.ID"] = errs.ValidationField{Tag: "required"}
+		valerr.Errors["AccountID"] = errs.ValidationField{Tag: "required"}
 		l.Error("account doesn't exist")
 		fd := h.mapTransactionToFD(tx, valerr)
 		fd.FrequencyFD = h.parseFrequencyFD(r, valerr)
@@ -485,16 +502,16 @@ func (h Handler) prepareTx(r *http.Request, tx *models.Transaction, accs []model
 		tx.Category.Kind = tx.Kind
 	}
 
-	if err := h.sani.SanitizeStruct(tx); err != nil {
-		return nil, errs.ErrSanitizer
+	if err := tx.SanitizeAndValidate(h.sani, h.valid); err != nil {
+		var valerr errs.ValidationError
+		if errors.As(err, &valerr) {
+			l.Error("validating transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
+			fd := h.mapTransactionToFD(tx, &valerr)
+			return fd, nil
+		}
+		l.Error("sanitizing transaction", zap.Error(err))
+		return nil, err
 	}
-
-	if valerr := h.valid.Validate(tx); valerr != nil {
-		l.Error("validating transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-		fd := h.mapTransactionToFD(tx, valerr)
-		return fd, nil
-	}
-
 	return nil, nil
 }
 
@@ -508,14 +525,4 @@ func (h Handler) prepareCreatingTx(r *http.Request, tx *models.Transaction, accs
 	}
 
 	return h.prepareTx(r, tx, accs, knds, cats)
-}
-
-func getCategoriesOfKinds(cats []models.Category, kndId string) []models.Category {
-	kndsCats := []models.Category{}
-	for _, cat := range cats {
-		if cat.Kind.ID == kndId {
-			kndsCats = append(kndsCats, cat)
-		}
-	}
-	return kndsCats
 }

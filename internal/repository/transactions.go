@@ -42,11 +42,18 @@ func (r *Repository) createTransactionWithTxn(ctx context.Context, qtx *db.Queri
 	l := logger.FromCtx(ctx)
 
 	var catId sql.NullString
+	var toAccId sql.NullString
 
 	if tx.Category != nil {
 		catId = sql.NullString{String: tx.Category.ID, Valid: tx.Category.ID != ""}
 	} else {
 		catId = sql.NullString{Valid: false}
+	}
+
+	if tx.ToAccount != nil {
+		toAccId = sql.NullString{String: tx.ToAccount.ID, Valid: tx.ToAccount.ID != ""}
+	} else {
+		toAccId = sql.NullString{Valid: false}
 	}
 
 	if err := qtx.CreateTransaction(ctx, db.CreateTransactionParams{
@@ -56,6 +63,8 @@ func (r *Repository) createTransactionWithTxn(ctx context.Context, qtx *db.Queri
 		KindID:      tx.Kind.ID,
 		CategoryID:  catId,
 		Description: sql.NullString{String: tx.Description, Valid: tx.Description != ""},
+		ToAccountID: toAccId,
+		ToAmount:    sql.NullFloat64{Float64: tx.ToAmount, Valid: tx.ToAmount != 0},
 		ScheduledTo: tx.ScheduledTo,
 		FulfilledOn: sql.NullTime{Time: tx.FulfilledOn, Valid: !tx.FulfilledOn.IsZero()},
 	}); err != nil {
@@ -189,12 +198,25 @@ func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRo
 	_dbTx := db.GetTransactionsRow(*dbTx)
 
 	var cat *models.Category
+	var toAcc *models.Account
 
 	if _dbTx.CategoryID.Valid {
 		cat = &models.Category{
 			ID:          _dbTx.CategoryID.String,
 			Name:        _dbTx.CategoryName.String,
 			BudgetInEgp: _dbTx.CategoryBudgetInEgp.Float64,
+		}
+	}
+
+	if _dbTx.ToAccountID.Valid {
+		toAcc = &models.Account{
+			ID:   _dbTx.ToAccountID.String,
+			Name: _dbTx.ToAccountName.String,
+			Currency: models.Currency{
+				ID:        _dbTx.ToCurrencyID.String,
+				Enum:      models.CurrencyEnum(_dbTx.ToCurrencyEnum.Int64),
+				EgpFxRate: _dbTx.ToEgpFxRate.Float64,
+			},
 		}
 	}
 
@@ -211,6 +233,8 @@ func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRo
 		},
 		Amount:         _dbTx.Amount,
 		Description:    _dbTx.Description.String,
+		ToAccount:      toAcc,
+		ToAmount:       _dbTx.ToAmount.Float64,
 		GoalTitle:      _dbTx.GoalTitle.String,
 		GoalPercentage: _dbTx.GoalPercentage.(float64),
 		FulfilledOn:    _dbTx.FulfilledOn.Time,

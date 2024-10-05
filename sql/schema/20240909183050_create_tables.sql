@@ -39,6 +39,8 @@ CREATE TABLE transactions (
     description VARCHAR,
     fulfilled_on DATE,
     scheduled_to DATE NOT NULL,
+    to_account_id VARCHAR,
+    to_amount FLOAT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE,
     FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id)
@@ -52,6 +54,8 @@ CREATE TABLE frequent_txs (
     kind_id VARCHAR NOT NULL,
     category_id VARCHAR,
     description VARCHAR,
+    to_account_id VARCHAR,
+    to_amount FLOAT,
     starts_on TIMESTAMP NOT NULL,
     stops_on TIMESTAMP,
     last_transaction_created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

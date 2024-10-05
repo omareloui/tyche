@@ -6,10 +6,12 @@ INSERT INTO transactions (
     kind_id,
     category_id,
     description,
+    to_account_id,
+    to_amount,
     scheduled_to,
     fulfilled_on
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetTransactions :many
 SELECT
@@ -19,6 +21,8 @@ SELECT
     t.kind_id,
     t.category_id,
     t.description,
+    t.to_account_id,
+    t.to_amount,
     t.fulfilled_on,
     t.scheduled_to,
     t.created_at,
@@ -26,6 +30,10 @@ SELECT
     a.currency_id,
     c.enum AS currency_enum,
     c.egp_fx_rate,
+    ta.name AS to_account_name,
+    ta.currency_id AS to_currency_id,
+    tc.enum AS to_currency_enum,
+    tc.egp_fx_rate AS to_egp_fx_rate,
     k.kind,
     k.increase_balance,
     cat.name AS category_name,
@@ -36,6 +44,8 @@ SELECT
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
+LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
 LEFT JOIN transaction_kinds AS k ON t.kind_id = k.id
 LEFT JOIN goals_progresses AS gp ON t.id = gp.transaction_id
 LEFT JOIN categories AS cat ON t.category_id = cat.id
@@ -50,6 +60,8 @@ SELECT
     t.kind_id,
     t.category_id,
     t.description,
+    t.to_account_id,
+    t.to_amount,
     t.fulfilled_on,
     t.scheduled_to,
     t.created_at,
@@ -57,6 +69,10 @@ SELECT
     a.currency_id,
     c.enum AS currency_enum,
     c.egp_fx_rate,
+    ta.name AS to_account_name,
+    ta.currency_id AS to_currency_id,
+    tc.enum AS to_currency_enum,
+    tc.egp_fx_rate AS to_egp_fx_rate,
     k.kind,
     k.increase_balance,
     cat.name AS category_name,
@@ -67,9 +83,11 @@ SELECT
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
+LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
 LEFT JOIN transaction_kinds AS k ON t.kind_id = k.id
-LEFT JOIN categories AS cat ON t.category_id = cat.id
 LEFT JOIN goals_progresses AS gp ON t.id = gp.transaction_id
+LEFT JOIN categories AS cat ON t.category_id = cat.id
 LEFT JOIN goals AS g ON gp.goal_id = g.id
 WHERE t.id = ? LIMIT 1;
 
@@ -81,6 +99,8 @@ amount = ?,
 kind_id = ?,
 category_id = ?,
 description = ?,
+to_account_id = ?,
+to_amount = ?,
 scheduled_to = ?
 WHERE id = ?;
 

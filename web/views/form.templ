@@ -28,10 +28,10 @@ type IBANFD struct {
 }
 
 type TransactionAmountsAndKindFD struct {
-	AccountIFD         AccountIFD
-	KindID             FDInput
-	CategoryID         *FDInput
-	TransferAccountIFD *AccountIFD
+	AccountIFD   AccountIFD
+	KindID       FDInput
+	CategoryID   *FDInput
+	ToAccountIFD *AccountIFD
 }
 
 templ form(action, path string, attrs ...templ.Attributes) {
@@ -163,16 +163,16 @@ templ TransactionAmountsAndKindFormBody(fd *TransactionAmountsAndKindFD, id stri
 			"hx-trigger": "change",
 		})
 		if fd.CategoryID != nil {
-			@selectTxCat("category_id", id, cats, *fd.CategoryID)
+			@selectTxCat("category_id", id, getCategoriesOfKinds(cats, fd.KindID.Value), *fd.CategoryID)
 		}
-		if fd.TransferAccountIFD != nil {
+		if fd.ToAccountIFD != nil {
 			<div class="grid grid-cols-3 gap-4">
 				@moneyInput("To Amount", "to_amount",
-					getCurSymbolByAccount(accs, fd.TransferAccountIFD.AccountID.Value), id,
-					fd.TransferAccountIFD.Amount, "col-span-2")
+					getCurSymbolByAccount(accs, fd.ToAccountIFD.AccountID.Value), id,
+					fd.ToAccountIFD.Amount, "col-span-2")
 				@selectInput("To Account", "to_account_id", "Select Account", id,
 					accountsToMap(accs),
-					fd.TransferAccountIFD.AccountID, templ.Attributes{
+					fd.ToAccountIFD.AccountID, templ.Attributes{
 						"hx-post":    fmt.Sprintf("/transaction-accounts-and-kinds-inputs/%s", id),
 						"hx-trigger": "change",
 					})
@@ -519,4 +519,14 @@ func getTxKindsForAccounts(accs []models.Account, knds []models.TransactionKind)
 		nknds = slicesutils.Filter(knds, func(k models.TransactionKind) bool { return k.Kind != models.TransferTxKind })
 	}
 	return nknds
+}
+
+func getCategoriesOfKinds(cats []models.Category, kndId string) []models.Category {
+	kndsCats := []models.Category{}
+	for _, cat := range cats {
+		if cat.Kind.ID == kndId {
+			kndsCats = append(kndsCats, cat)
+		}
+	}
+	return kndsCats
 }

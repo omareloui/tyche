@@ -33,10 +33,12 @@ func (v ValidationField) String() string {
 	}
 
 	switch v.Tag {
-	case "required":
+	case "required", "required_if":
 		return "This field is required"
 	case "email":
 		return "Invalid email"
+	case "ulid":
+		return "Invalid ID"
 	case "http_url":
 		return "This field must be a valid URL"
 	case "gte":

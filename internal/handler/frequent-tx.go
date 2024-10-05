@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -91,7 +92,7 @@ func (h Handler) GetEditFrequentTx(w http.ResponseWriter, r *http.Request) (temp
 
 	return views.EditFrequentTx(ftx,
 		h.mapFrequentTxToFD(ftx, &errs.ValidationError{}),
-		accs, knds, getCategoriesOfKinds(cats, ftx.Kind.ID)), nil
+		accs, knds, cats), nil
 }
 
 func (h Handler) EditFrequentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -107,8 +108,21 @@ func (h Handler) EditFrequentTx(w http.ResponseWriter, r *http.Request) (templ.C
 		return nil, err
 	}
 	ftx.ID = id
-
 	ftx.LastTransactionCreatedAt = time.Now()
+
+	if err := ftx.SanitizeAndValidate(h.sani, h.valid); err != nil {
+		var valerr errs.ValidationError
+		if errors.As(err, &valerr) {
+			accs, knds, cats, err := h.getTxDeps(r.Context())
+			if err != nil {
+				return nil, err
+			}
+			return views.EditFrequentTx(ftx, h.mapFrequentTxToFD(ftx, &valerr),
+				accs, knds, cats), nil
+		}
+		return nil, err
+	}
+
 	scheduled := generateNextScheduledTransactions(ftx, generateNextScheduledTransactionsCount)
 
 	if err := h.repo.UpdateFrequentTx(r.Context(), ftx, scheduled); err != nil {
@@ -268,15 +282,15 @@ func (h Handler) mapFrequentTxToFD(ftx *models.FrequentTx, valerr *errs.Validati
 		},
 		TransactionAmountsAndKindFD: views.TransactionAmountsAndKindFD{
 			AccountIFD: views.AccountIFD{
-				AccountID: views.FDInput{Value: ftx.Account.ID, Error: valerr.Errors.MsgFor("Account.ID")},
+				AccountID: views.FDInput{Value: ftx.Account.ID, Error: valerr.Errors.MsgFor("AccountID")},
 				Amount:    views.FDInput{Value: formatFloatIfNonZero(ftx.Amount), Error: valerr.Errors.MsgFor("Amount")},
 			},
-			KindID: views.FDInput{Value: ftx.Kind.ID, Error: valerr.Errors.MsgFor("Kind.ID")},
-			TransferAccountIFD: &views.AccountIFD{
-				AccountID: views.FDInput{Value: toAccId, Error: valerr.Errors.MsgFor("ToAccount.ID")},
+			KindID: views.FDInput{Value: ftx.Kind.ID, Error: valerr.Errors.MsgFor("KindID")},
+			ToAccountIFD: &views.AccountIFD{
+				AccountID: views.FDInput{Value: toAccId, Error: valerr.Errors.MsgFor("ToAccountID")},
 				Amount:    views.FDInput{Value: formatFloatIfNonZero(ftx.ToAmount), Error: valerr.Errors.MsgFor("ToAmount")},
 			},
-			CategoryID: &views.FDInput{Value: catId, Error: valerr.Errors.MsgFor("Category.ID")},
+			CategoryID: &views.FDInput{Value: catId, Error: valerr.Errors.MsgFor("CategoryID")},
 		},
 		Description: views.FDInput{Value: ftx.Description, Error: valerr.Errors.MsgFor("Description")},
 	}

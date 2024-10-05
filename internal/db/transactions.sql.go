@@ -19,10 +19,12 @@ INSERT INTO transactions (
     kind_id,
     category_id,
     description,
+    to_account_id,
+    to_amount,
     scheduled_to,
     fulfilled_on
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateTransactionParams struct {
@@ -32,6 +34,8 @@ type CreateTransactionParams struct {
 	KindID      string
 	CategoryID  sql.NullString
 	Description sql.NullString
+	ToAccountID sql.NullString
+	ToAmount    sql.NullFloat64
 	ScheduledTo time.Time
 	FulfilledOn sql.NullTime
 }
@@ -44,6 +48,8 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 		arg.KindID,
 		arg.CategoryID,
 		arg.Description,
+		arg.ToAccountID,
+		arg.ToAmount,
 		arg.ScheduledTo,
 		arg.FulfilledOn,
 	)
@@ -80,6 +86,8 @@ SELECT
     t.kind_id,
     t.category_id,
     t.description,
+    t.to_account_id,
+    t.to_amount,
     t.fulfilled_on,
     t.scheduled_to,
     t.created_at,
@@ -87,6 +95,10 @@ SELECT
     a.currency_id,
     c.enum AS currency_enum,
     c.egp_fx_rate,
+    ta.name AS to_account_name,
+    ta.currency_id AS to_currency_id,
+    tc.enum AS to_currency_enum,
+    tc.egp_fx_rate AS to_egp_fx_rate,
     k.kind,
     k.increase_balance,
     cat.name AS category_name,
@@ -97,9 +109,11 @@ SELECT
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
+LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
 LEFT JOIN transaction_kinds AS k ON t.kind_id = k.id
-LEFT JOIN categories AS cat ON t.category_id = cat.id
 LEFT JOIN goals_progresses AS gp ON t.id = gp.transaction_id
+LEFT JOIN categories AS cat ON t.category_id = cat.id
 LEFT JOIN goals AS g ON gp.goal_id = g.id
 WHERE t.id = ? LIMIT 1
 `
@@ -111,6 +125,8 @@ type GetTransactionRow struct {
 	KindID              string
 	CategoryID          sql.NullString
 	Description         sql.NullString
+	ToAccountID         sql.NullString
+	ToAmount            sql.NullFloat64
 	FulfilledOn         sql.NullTime
 	ScheduledTo         time.Time
 	CreatedAt           time.Time
@@ -118,6 +134,10 @@ type GetTransactionRow struct {
 	CurrencyID          sql.NullString
 	CurrencyEnum        sql.NullInt64
 	EgpFxRate           sql.NullFloat64
+	ToAccountName       sql.NullString
+	ToCurrencyID        sql.NullString
+	ToCurrencyEnum      sql.NullInt64
+	ToEgpFxRate         sql.NullFloat64
 	Kind                sql.NullString
 	IncreaseBalance     sql.NullBool
 	CategoryName        sql.NullString
@@ -137,6 +157,8 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 		&i.KindID,
 		&i.CategoryID,
 		&i.Description,
+		&i.ToAccountID,
+		&i.ToAmount,
 		&i.FulfilledOn,
 		&i.ScheduledTo,
 		&i.CreatedAt,
@@ -144,6 +166,10 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 		&i.CurrencyID,
 		&i.CurrencyEnum,
 		&i.EgpFxRate,
+		&i.ToAccountName,
+		&i.ToCurrencyID,
+		&i.ToCurrencyEnum,
+		&i.ToEgpFxRate,
 		&i.Kind,
 		&i.IncreaseBalance,
 		&i.CategoryName,
@@ -163,6 +189,8 @@ SELECT
     t.kind_id,
     t.category_id,
     t.description,
+    t.to_account_id,
+    t.to_amount,
     t.fulfilled_on,
     t.scheduled_to,
     t.created_at,
@@ -170,6 +198,10 @@ SELECT
     a.currency_id,
     c.enum AS currency_enum,
     c.egp_fx_rate,
+    ta.name AS to_account_name,
+    ta.currency_id AS to_currency_id,
+    tc.enum AS to_currency_enum,
+    tc.egp_fx_rate AS to_egp_fx_rate,
     k.kind,
     k.increase_balance,
     cat.name AS category_name,
@@ -180,6 +212,8 @@ SELECT
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
+LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
 LEFT JOIN transaction_kinds AS k ON t.kind_id = k.id
 LEFT JOIN goals_progresses AS gp ON t.id = gp.transaction_id
 LEFT JOIN categories AS cat ON t.category_id = cat.id
@@ -194,6 +228,8 @@ type GetTransactionsRow struct {
 	KindID              string
 	CategoryID          sql.NullString
 	Description         sql.NullString
+	ToAccountID         sql.NullString
+	ToAmount            sql.NullFloat64
 	FulfilledOn         sql.NullTime
 	ScheduledTo         time.Time
 	CreatedAt           time.Time
@@ -201,6 +237,10 @@ type GetTransactionsRow struct {
 	CurrencyID          sql.NullString
 	CurrencyEnum        sql.NullInt64
 	EgpFxRate           sql.NullFloat64
+	ToAccountName       sql.NullString
+	ToCurrencyID        sql.NullString
+	ToCurrencyEnum      sql.NullInt64
+	ToEgpFxRate         sql.NullFloat64
 	Kind                sql.NullString
 	IncreaseBalance     sql.NullBool
 	CategoryName        sql.NullString
@@ -226,6 +266,8 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.KindID,
 			&i.CategoryID,
 			&i.Description,
+			&i.ToAccountID,
+			&i.ToAmount,
 			&i.FulfilledOn,
 			&i.ScheduledTo,
 			&i.CreatedAt,
@@ -233,6 +275,10 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.CurrencyID,
 			&i.CurrencyEnum,
 			&i.EgpFxRate,
+			&i.ToAccountName,
+			&i.ToCurrencyID,
+			&i.ToCurrencyEnum,
+			&i.ToEgpFxRate,
 			&i.Kind,
 			&i.IncreaseBalance,
 			&i.CategoryName,
@@ -262,6 +308,8 @@ amount = ?,
 kind_id = ?,
 category_id = ?,
 description = ?,
+to_account_id = ?,
+to_amount = ?,
 scheduled_to = ?
 WHERE id = ?
 `
@@ -272,6 +320,8 @@ type UpdateTransactionParams struct {
 	KindID      string
 	CategoryID  sql.NullString
 	Description sql.NullString
+	ToAccountID sql.NullString
+	ToAmount    sql.NullFloat64
 	ScheduledTo time.Time
 	ID          string
 }
@@ -283,6 +333,8 @@ func (q *Queries) UpdateTransaction(ctx context.Context, arg UpdateTransactionPa
 		arg.KindID,
 		arg.CategoryID,
 		arg.Description,
+		arg.ToAccountID,
+		arg.ToAmount,
 		arg.ScheduledTo,
 		arg.ID,
 	)

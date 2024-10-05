@@ -36,10 +36,10 @@ type IBANFD struct {
 }
 
 type TransactionAmountsAndKindFD struct {
-	AccountIFD         AccountIFD
-	KindID             FDInput
-	CategoryID         *FDInput
-	TransferAccountIFD *AccountIFD
+	AccountIFD   AccountIFD
+	KindID       FDInput
+	CategoryID   *FDInput
+	ToAccountIFD *AccountIFD
 }
 
 func form(action, path string, attrs ...templ.Attributes) templ.Component {
@@ -418,25 +418,25 @@ func TransactionAmountsAndKindFormBody(fd *TransactionAmountsAndKindFD, id strin
 			return templ_7745c5c3_Err
 		}
 		if fd.CategoryID != nil {
-			templ_7745c5c3_Err = selectTxCat("category_id", id, cats, *fd.CategoryID).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = selectTxCat("category_id", id, getCategoriesOfKinds(cats, fd.KindID.Value), *fd.CategoryID).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		if fd.TransferAccountIFD != nil {
+		if fd.ToAccountIFD != nil {
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("<div class=\"grid grid-cols-3 gap-4\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			templ_7745c5c3_Err = moneyInput("To Amount", "to_amount",
-				getCurSymbolByAccount(accs, fd.TransferAccountIFD.AccountID.Value), id,
-				fd.TransferAccountIFD.Amount, "col-span-2").Render(ctx, templ_7745c5c3_Buffer)
+				getCurSymbolByAccount(accs, fd.ToAccountIFD.AccountID.Value), id,
+				fd.ToAccountIFD.Amount, "col-span-2").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			templ_7745c5c3_Err = selectInput("To Account", "to_account_id", "Select Account", id,
 				accountsToMap(accs),
-				fd.TransferAccountIFD.AccountID, templ.Attributes{
+				fd.ToAccountIFD.AccountID, templ.Attributes{
 					"hx-post":    fmt.Sprintf("/transaction-accounts-and-kinds-inputs/%s", id),
 					"hx-trigger": "change",
 				}).Render(ctx, templ_7745c5c3_Buffer)
@@ -2137,4 +2137,14 @@ func getTxKindsForAccounts(accs []models.Account, knds []models.TransactionKind)
 		nknds = slicesutils.Filter(knds, func(k models.TransactionKind) bool { return k.Kind != models.TransferTxKind })
 	}
 	return nknds
+}
+
+func getCategoriesOfKinds(cats []models.Category, kndId string) []models.Category {
+	kndsCats := []models.Category{}
+	for _, cat := range cats {
+		if cat.Kind.ID == kndId {
+			kndsCats = append(kndsCats, cat)
+		}
+	}
+	return kndsCats
 }

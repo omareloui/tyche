@@ -53,6 +53,8 @@ type FrequentTx struct {
 	KindID                   string
 	CategoryID               sql.NullString
 	Description              sql.NullString
+	ToAccountID              sql.NullString
+	ToAmount                 sql.NullFloat64
 	StartsOn                 time.Time
 	StopsOn                  sql.NullTime
 	LastTransactionCreatedAt time.Time
@@ -100,6 +102,8 @@ type Transaction struct {
 	Description sql.NullString
 	FulfilledOn sql.NullTime
 	ScheduledTo time.Time
+	ToAccountID sql.NullString
+	ToAmount    sql.NullFloat64
 	CreatedAt   time.Time
 }
 
