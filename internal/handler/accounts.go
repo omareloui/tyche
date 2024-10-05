@@ -77,19 +77,19 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 	}
 	l.Debug("sanitized account")
 
-	if valerr := h.valid.Validate(models.AccountCreation{
-		ID: a.ID, Name: a.Name,
-		IBAN: a.IBAN, CardNumber: a.CardNumber,
-	}); valerr != nil {
-		l.Error("validating account", zap.Any("account", a), zap.Any("errors", valerr.Errors))
-		curs, ak, err := h.getCurrenciesAndAccKinds(r.Context())
-		if err != nil {
-			return nil, err
+	if err := a.SanitizeAndValidate(h.sani, h.valid); err != nil {
+		var valerr errs.ValidationError
+		if errors.As(err, &valerr) {
+			l.Error("validating account", zap.Any("account", a), zap.Any("errors", valerr.Errors))
+			curs, ak, err := h.getCurrenciesAndAccKinds(r.Context())
+			if err != nil {
+				return nil, err
+			}
+			fd := h.mapAccToFD(a, &valerr)
+			return views.CreateAccountForm(fd, ak, curs), nil
 		}
-
-		fd := h.mapAccToFD(a, valerr)
-		return views.CreateAccountForm(
-			fd, ak, curs), nil
+		l.Error("sanitizing account", zap.Error(err))
+		return nil, err
 	}
 	l.Debug("validated account")
 
@@ -180,21 +180,21 @@ func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Com
 	}
 	l.Debug("sanitized account")
 
-	if valerr := h.valid.Validate(models.AccountCreation{
-		ID: a.ID, Name: a.Name,
-		IBAN: a.IBAN, CardNumber: a.CardNumber,
-	}); valerr != nil {
-		l.Error("validating account", zap.Any("account", a), zap.Any("errors", valerr.Errors))
-		curs, ak, err := h.getCurrenciesAndAccKinds(r.Context())
-		if err != nil {
-			return nil, err
+	if err := a.SanitizeAndValidate(h.sani, h.valid); err != nil {
+		var valerr errs.ValidationError
+		if errors.As(err, &valerr) {
+			l.Error("validating account", zap.Any("account", a), zap.Any("errors", valerr.Errors))
+			curs, ak, err := h.getCurrenciesAndAccKinds(r.Context())
+			if err != nil {
+				return nil, err
+			}
+			a.Currency = *slicesutils.Find(curs, func(cur models.Currency) bool { return a.Currency.ID == cur.ID })
+			a.Kind = *slicesutils.Find(ak, func(ak models.AccountKind) bool { return a.Kind.ID == ak.ID })
+			fd := h.mapAccToFD(a, &valerr)
+			return views.CreateAccountForm(fd, ak, curs), nil
 		}
-
-		a.Currency = *slicesutils.Find(curs, func(cur models.Currency) bool { return a.Currency.ID == cur.ID })
-		a.Kind = *slicesutils.Find(ak, func(ak models.AccountKind) bool { return a.Kind.ID == ak.ID })
-
-		fd := h.mapAccToFD(a, valerr)
-		return views.EditAccount(id, fd, ak, curs), nil
+		l.Error("sanitizing account", zap.Error(err))
+		return nil, err
 	}
 	l.Debug("validated account")
 

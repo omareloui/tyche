@@ -3,29 +3,31 @@ package models
 import (
 	"errors"
 	"time"
+
+	"github.com/omareloui/tyche/internal/errs"
+	"github.com/omareloui/tyche/internal/sanitizer"
+	"github.com/omareloui/tyche/internal/valid"
 )
 
 var ErrDuplicateAccountName = errors.New("duplicate account name")
 
 type Account struct {
-	ID                 string `validate:"required"`
-	Name               string `conform:"trim,title"`
+	ID                 string
+	Name               string
 	Amount             float64
 	ActualAmount       float64
 	Currency           Currency
 	Kind               AccountKind
-	IBAN               string `validate:"omitempty,iban" conform:"trim,nospaces"`
-	CardNumber         string `validate:"omitempty" conform:"trim,num"`
-	Note               string `conform:"trim"`
+	IBAN               string
+	CardNumber         string
+	Note               string
 	IsArchive          bool
 	ExcludeFromBalance bool
 	IsDefault          bool
 	CreatedAt          time.Time
 }
 
-// This is used to validate the
-// account on create and update only
-type AccountCreation struct {
+type createAccount struct {
 	ID         string `validate:"required"`
 	Name       string `validate:"required"`
 	IBAN       string `validate:"omitempty,iban"`
@@ -54,6 +56,26 @@ func (a *Account) MaskCardNumber() string {
 		rs[i] = '*'
 	}
 	return string(rs)
+}
+
+func (a *Account) toValidate() *createAccount {
+	return &createAccount{
+		ID:         a.ID,
+		Name:       a.Name,
+		IBAN:       a.IBAN,
+		CardNumber: a.CardNumber,
+	}
+}
+
+func (a *Account) SanitizeAndValidate(sani *sanitizer.Sanitizer, valid *valid.Validator) error {
+	ac := a.toValidate()
+	if err := sani.SanitizeStruct(ac); err != nil {
+		return errs.ErrSanitizer
+	}
+	if valerr := valid.Validate(ac); valerr != nil {
+		return *valerr
+	}
+	return nil
 }
 
 type Balance struct {
