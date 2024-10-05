@@ -18,6 +18,7 @@ INSERT INTO transactions (
     amount,
     kind_id,
     category_id,
+    counterparty_id,
     description,
     to_account_id,
     to_amount,
@@ -32,23 +33,25 @@ VALUES (
     ?5,
     ?6,
     ?7,
-    IIF(?8 > 0.0, ROUND(?8, 2), NULL),
-    ?9,
-    ?10
+    ?8,
+    IIF(?9 > 0.0, ROUND(?9, 2), NULL),
+    ?10,
+    ?11
 )
 `
 
 type CreateTransactionParams struct {
-	ID          string
-	AccountID   string
-	Amount      float64
-	KindID      string
-	CategoryID  sql.NullString
-	Description sql.NullString
-	ToAccountID sql.NullString
-	ToAmount    interface{}
-	ScheduledTo time.Time
-	FulfilledOn sql.NullTime
+	ID             string
+	AccountID      string
+	Amount         float64
+	KindID         string
+	CategoryID     sql.NullString
+	CounterpartyID sql.NullString
+	Description    sql.NullString
+	ToAccountID    sql.NullString
+	ToAmount       interface{}
+	ScheduledTo    time.Time
+	FulfilledOn    sql.NullTime
 }
 
 func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionParams) error {
@@ -58,6 +61,7 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 		arg.Amount,
 		arg.KindID,
 		arg.CategoryID,
+		arg.CounterpartyID,
 		arg.Description,
 		arg.ToAccountID,
 		arg.ToAmount,
@@ -96,6 +100,7 @@ SELECT
     t.amount,
     t.kind_id,
     t.category_id,
+    t.counterparty_id,
     t.description,
     t.to_account_id,
     t.to_amount,
@@ -106,6 +111,7 @@ SELECT
     a.currency_id,
     c.enum AS currency_enum,
     c.egp_fx_rate,
+    cp.name AS counterparty_name,
     ta.name AS to_account_name,
     ta.currency_id AS to_currency_id,
     tc.enum AS to_currency_enum,
@@ -119,6 +125,7 @@ SELECT
     IFNULL(t.amount * c.egp_fx_rate / g.egp_subtotal, 0.0) AS goal_percentage
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
+LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
 LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
@@ -135,6 +142,7 @@ type GetTransactionRow struct {
 	Amount              float64
 	KindID              string
 	CategoryID          sql.NullString
+	CounterpartyID      sql.NullString
 	Description         sql.NullString
 	ToAccountID         sql.NullString
 	ToAmount            sql.NullFloat64
@@ -145,6 +153,7 @@ type GetTransactionRow struct {
 	CurrencyID          sql.NullString
 	CurrencyEnum        sql.NullInt64
 	EgpFxRate           sql.NullFloat64
+	CounterpartyName    sql.NullString
 	ToAccountName       sql.NullString
 	ToCurrencyID        sql.NullString
 	ToCurrencyEnum      sql.NullInt64
@@ -167,6 +176,7 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 		&i.Amount,
 		&i.KindID,
 		&i.CategoryID,
+		&i.CounterpartyID,
 		&i.Description,
 		&i.ToAccountID,
 		&i.ToAmount,
@@ -177,6 +187,7 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 		&i.CurrencyID,
 		&i.CurrencyEnum,
 		&i.EgpFxRate,
+		&i.CounterpartyName,
 		&i.ToAccountName,
 		&i.ToCurrencyID,
 		&i.ToCurrencyEnum,
@@ -199,6 +210,7 @@ SELECT
     t.amount,
     t.kind_id,
     t.category_id,
+    t.counterparty_id,
     t.description,
     t.to_account_id,
     t.to_amount,
@@ -209,6 +221,7 @@ SELECT
     a.currency_id,
     c.enum AS currency_enum,
     c.egp_fx_rate,
+    cp.name AS counterparty_name,
     ta.name AS to_account_name,
     ta.currency_id AS to_currency_id,
     tc.enum AS to_currency_enum,
@@ -222,6 +235,7 @@ SELECT
     IFNULL(t.amount * c.egp_fx_rate / g.egp_subtotal, 0.0) AS goal_percentage
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
+LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
 LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
@@ -238,6 +252,7 @@ type GetTransactionsRow struct {
 	Amount              float64
 	KindID              string
 	CategoryID          sql.NullString
+	CounterpartyID      sql.NullString
 	Description         sql.NullString
 	ToAccountID         sql.NullString
 	ToAmount            sql.NullFloat64
@@ -248,6 +263,7 @@ type GetTransactionsRow struct {
 	CurrencyID          sql.NullString
 	CurrencyEnum        sql.NullInt64
 	EgpFxRate           sql.NullFloat64
+	CounterpartyName    sql.NullString
 	ToAccountName       sql.NullString
 	ToCurrencyID        sql.NullString
 	ToCurrencyEnum      sql.NullInt64
@@ -276,6 +292,7 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.Amount,
 			&i.KindID,
 			&i.CategoryID,
+			&i.CounterpartyID,
 			&i.Description,
 			&i.ToAccountID,
 			&i.ToAmount,
@@ -286,6 +303,7 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.CurrencyID,
 			&i.CurrencyEnum,
 			&i.EgpFxRate,
+			&i.CounterpartyName,
 			&i.ToAccountName,
 			&i.ToCurrencyID,
 			&i.ToCurrencyEnum,
@@ -318,23 +336,25 @@ SET
     amount = ROUND(?2, 2),
     kind_id = ?3,
     category_id = ?4,
-    description = ?5,
-    to_account_id = ?6,
-    to_amount = ROUND(?7, 2),
-    scheduled_to = ?8
-WHERE id = ?9
+    counterparty_id = ?5,
+    description = ?6,
+    to_account_id = ?7,
+    to_amount = ROUND(?8, 2),
+    scheduled_to = ?9
+WHERE id = ?10
 `
 
 type UpdateTransactionParams struct {
-	AccountID   string
-	Amount      float64
-	KindID      string
-	CategoryID  sql.NullString
-	Description sql.NullString
-	ToAccountID sql.NullString
-	ToAmount    sql.NullFloat64
-	ScheduledTo time.Time
-	ID          string
+	AccountID      string
+	Amount         float64
+	KindID         string
+	CategoryID     sql.NullString
+	CounterpartyID sql.NullString
+	Description    sql.NullString
+	ToAccountID    sql.NullString
+	ToAmount       sql.NullFloat64
+	ScheduledTo    time.Time
+	ID             string
 }
 
 func (q *Queries) UpdateTransaction(ctx context.Context, arg UpdateTransactionParams) error {
@@ -343,6 +363,7 @@ func (q *Queries) UpdateTransaction(ctx context.Context, arg UpdateTransactionPa
 		arg.Amount,
 		arg.KindID,
 		arg.CategoryID,
+		arg.CounterpartyID,
 		arg.Description,
 		arg.ToAccountID,
 		arg.ToAmount,

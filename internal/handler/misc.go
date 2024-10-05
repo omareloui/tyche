@@ -101,13 +101,8 @@ func (h Handler) IbanInputs(w http.ResponseWriter, r *http.Request) (templ.Compo
 	return views.IbanInputs(fd, "", curs), nil
 }
 
-func (h Handler) CategoriesInputs(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	accs, err := h.repo.GetAccounts(r.Context())
-	if err != nil {
-		return nil, err
-	}
-
-	knds, err := h.repo.GetTransactionKinds(r.Context())
+func (h Handler) TxInputs(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	accs, knds, cats, cps, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -116,11 +111,6 @@ func (h Handler) CategoriesInputs(w http.ResponseWriter, r *http.Request) (templ
 	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == kndId })
 	if knd == nil {
 		return nil, errs.ErrInvalidID
-	}
-
-	cats, err := h.repo.GetCategories(r.Context())
-	if err != nil {
-		return nil, err
 	}
 
 	accId := r.FormValue("account_id")
@@ -178,7 +168,8 @@ func (h Handler) CategoriesInputs(w http.ResponseWriter, r *http.Request) (templ
 
 	} else {
 		fd.CategoryID = &views.FDInput{Value: r.FormValue("category_id")}
+		fd.CounterpartyID = &views.FDInput{Value: r.FormValue("counterparty_id")}
 	}
 
-	return views.TransactionAmountsAndKindFormBody(fd, r.PathValue("id"), knds, cats, accs), nil
+	return views.TransactionAmountsAndKindFormBody(fd, r.PathValue("id"), knds, cats, accs, cps), nil
 }

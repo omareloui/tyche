@@ -79,7 +79,7 @@ func (h Handler) GetEditFrequentTx(w http.ResponseWriter, r *http.Request) (temp
 
 	l := logger.FromCtx(r.Context())
 
-	accs, knds, cats, err := h.getTxDeps(r.Context())
+	accs, knds, cats, cps, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func (h Handler) GetEditFrequentTx(w http.ResponseWriter, r *http.Request) (temp
 
 	return views.EditFrequentTx(ftx,
 		h.mapFrequentTxToFD(ftx, &errs.ValidationError{}),
-		accs, knds, cats), nil
+		accs, knds, cats, cps), nil
 }
 
 func (h Handler) EditFrequentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -111,7 +111,7 @@ func (h Handler) EditFrequentTx(w http.ResponseWriter, r *http.Request) (templ.C
 	ftx.ID = id
 	ftx.LastTransactionCreatedAt = time.Now()
 
-	accs, knds, cats, err := h.getTxDeps(r.Context())
+	accs, knds, cats, cps, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +128,7 @@ func (h Handler) EditFrequentTx(w http.ResponseWriter, r *http.Request) (templ.C
 		if errors.As(err, &valerr) {
 			l.Error("validating frequent transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
 			return views.EditFrequentTx(ftx, h.mapFrequentTxToFD(ftx, &valerr),
-				accs, knds, cats), nil
+				accs, knds, cats, cps), nil
 		}
 		l.Error("sanitizing frequent transaction", zap.Error(err))
 		return nil, err
@@ -222,16 +222,17 @@ func generateNextScheduledTransactions(ftx *models.FrequentTx, count int) []mode
 		}
 
 		txs = append(txs, models.Transaction{
-			ID:          idgen.New(),
-			Account:     ftx.Account,
-			Amount:      ftx.Amount,
-			Kind:        ftx.Kind,
-			Category:    ftx.Category,
-			ToAccount:   ftx.ToAccount,
-			ToAmount:    ftx.ToAmount,
-			Description: ftx.Description,
-			ScheduledTo: nextOn,
-			CreatedAt:   now,
+			ID:           idgen.New(),
+			Account:      ftx.Account,
+			Amount:       ftx.Amount,
+			Kind:         ftx.Kind,
+			Category:     ftx.Category,
+			Counterparty: ftx.Counterparty,
+			ToAccount:    ftx.ToAccount,
+			ToAmount:     ftx.ToAmount,
+			Description:  ftx.Description,
+			ScheduledTo:  nextOn,
+			CreatedAt:    now,
 		})
 		ftx.LastTransactionCreatedAt = nextOn
 	}
@@ -271,6 +272,11 @@ func (h Handler) mapFDToFrequentTx(r *http.Request) (*models.FrequentTx, error) 
 		cat = &models.Category{ID: catId, Kind: models.TransactionKind{ID: kndId}}
 	}
 
+	var cp *models.Counterparty
+	if cpId := r.FormValue("counterparty_id"); cpId != "" {
+		cp = &models.Counterparty{ID: cpId}
+	}
+
 	toAccId := r.FormValue("to_account_id")
 	var toAcc *models.Account
 	if toAccId != "" {
@@ -278,8 +284,8 @@ func (h Handler) mapFDToFrequentTx(r *http.Request) (*models.FrequentTx, error) 
 	}
 
 	return &models.FrequentTx{
-		Account: models.Account{ID: r.FormValue("account_id")},
-		Amount: amount,
+		Account:      models.Account{ID: r.FormValue("account_id")},
+		Amount:       amount,
 		Frequency:    uint(freq),
 		FrequencyBy:  models.FrequencyBy(freqBy),
 		StopsOn:      stopsOn,
@@ -287,6 +293,7 @@ func (h Handler) mapFDToFrequentTx(r *http.Request) (*models.FrequentTx, error) 
 		Description:  r.FormValue("description"),
 		Kind:         models.TransactionKind{ID: kndId},
 		Category:     cat,
+		Counterparty: cp,
 		ToAccount:    toAcc,
 		ToAmount:     toAmount,
 	}, nil
@@ -314,6 +321,12 @@ func (h Handler) mapFrequentTxToFD(ftx *models.FrequentTx, valerr *errs.Validati
 		fd.CategoryID = &views.FDInput{Value: ftx.Category.ID, Error: valerr.Errors.MsgFor("CategoryID")}
 	} else if ftx.Kind.Kind != models.TransferTxKind {
 		fd.CategoryID = &views.FDInput{}
+	}
+
+	if ftx.Counterparty != nil {
+		fd.CounterpartyID = &views.FDInput{Value: ftx.Counterparty.ID, Error: valerr.Errors.MsgFor("CounterpartyID")}
+	} else if ftx.Kind.Kind != models.TransferTxKind {
+		fd.CounterpartyID = &views.FDInput{}
 	}
 
 	if ftx.ToAccount != nil {

@@ -48,13 +48,13 @@ templ FrequencyFormBody(id string, fd *FrequencyFD) {
 templ frequencyFormBody(id string, fd *FrequencyFD) {
 	<div class="grid grid-cols-3 gap-4">
 		@input("Frequency", "number", "frequency", "Frequent every...", id, fd.Frequency)
-		@selectInput("Frequent By", "frequent_by", "How frequent", id, models.FrequencyByOptions(), fd.FrequentBy)
+		@selectInput("Frequent By", "frequent_by", "How frequent", id, models.FrequencyByOptions(), fd.FrequentBy, false)
 		@dateInput("Stops on", "stops_on", id, fd.StopsOn)
 	</div>
 }
 
-templ ftxFormBody(id string, fd *FrequentTxFD, accs []models.Account, knds []models.TransactionKind, cats []models.Category) {
-	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs)
+templ ftxFormBody(id string, fd *FrequentTxFD, accs []models.Account, knds []models.TransactionKind, cats []models.Category, cps []models.Counterparty) {
+	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs, cps)
 	@input("Description", "text", "description", "Enter a description", id, fd.Description)
 	@frequencyFormBody(id, &fd.FrequencyFD)
 }
@@ -70,10 +70,11 @@ templ EditFrequentTx(
 	fd *FrequentTxFD,
 	accs []models.Account,
 	knds []models.TransactionKind,
-	cats []models.Category) {
+	cats []models.Category,
+	cps []models.Counterparty) {
 	@form("put", fmt.Sprintf("/frequent-tx/%s", ftx.ID), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { ftx.ID }</p>
-		@ftxFormBody(ftx.ID, fd, accs, knds, cats)
+		@ftxFormBody(ftx.ID, fd, accs, knds, cats, cps)
 		@editFormButtons(fmt.Sprintf("/frequent-tx/%s", ftx.ID))
 	}
 }
@@ -102,6 +103,10 @@ templ FrequentTx(ftx *models.FrequentTx) {
 		if ftx.Category != nil {
 			<p>Category ID: { ftx.Category.ID }</p>
 			<p>Category Name: { ftx.Category.Name }</p>
+		}
+		if ftx.Counterparty != nil {
+			<p>Counterparty ID: { ftx.Counterparty.ID }</p>
+			<p>Counterparty Name: { ftx.Counterparty.Name }</p>
 		}
 		<p>Frequency: { strconv.FormatUint(uint64(ftx.Frequency), 10) }</p>
 		<p>Frequency By: { ftx.FrequencyBy.String() }</p>

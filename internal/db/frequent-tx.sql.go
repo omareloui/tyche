@@ -20,6 +20,7 @@ INSERT INTO frequent_txs (
     amount,
     kind_id,
     category_id,
+    counterparty_id,
     description,
     to_account_id,
     to_amount,
@@ -37,10 +38,11 @@ VALUES (
     ?7,
     ?8,
     ?9,
-    IIF(?10 > 0.0, ROUND(?10, 2), NULL),
-    ?11,
+    ?10,
+    IIF(?11 > 0.0, ROUND(?11, 2), NULL),
     ?12,
-    ?13
+    ?13,
+    ?14
 )
 `
 
@@ -52,6 +54,7 @@ type CreateFrequentTxParams struct {
 	Amount                   float64
 	KindID                   string
 	CategoryID               sql.NullString
+	CounterpartyID           sql.NullString
 	Description              sql.NullString
 	ToAccountID              sql.NullString
 	ToAmount                 interface{}
@@ -69,6 +72,7 @@ func (q *Queries) CreateFrequentTx(ctx context.Context, arg CreateFrequentTxPara
 		arg.Amount,
 		arg.KindID,
 		arg.CategoryID,
+		arg.CounterpartyID,
 		arg.Description,
 		arg.ToAccountID,
 		arg.ToAmount,
@@ -133,6 +137,7 @@ SELECT
     ft.amount,
     ft.kind_id,
     ft.category_id,
+    ft.counterparty_id,
     ft.description,
     ft.to_account_id,
     ft.to_amount,
@@ -146,6 +151,7 @@ SELECT
     a.currency_id,
     c.enum AS currency_enum,
     c.egp_fx_rate,
+    cp.name AS counterparty_name,
     ftta.name AS to_account_name,
     ftta.currency_id AS to_currency_id,
     fttc.enum AS to_currency_enum,
@@ -158,6 +164,7 @@ SELECT
     t.account_id AS transaction_account_id,
     t.amount AS transaction_amount,
     t.kind_id AS transaction_kind_id,
+    t.counterparty_id AS transaction_counterparty_id,
     t.description AS transaction_description,
     t.to_account_id AS transaction_to_account_id,
     t.to_amount AS transaction_to_amount,
@@ -167,6 +174,7 @@ SELECT
     ta.currency_id AS transaction_currency_id,
     tc.enum AS transaction_currency_enum,
     tc.egp_fx_rate AS transaction_egp_fx_rate,
+    tcp.name AS transaction_counterparty_name,
     tta.currency_id AS transaction_to_currency_id,
     ttc.enum AS transaction_to_currency_enum,
     ttc.egp_fx_rate AS transaction_to_egp_fx_rate,
@@ -176,6 +184,7 @@ SELECT
     tcat.budget_in_egp AS transaction_category_budget_in_egp
 FROM frequent_txs AS ft
 LEFT JOIN frequent_txs_transactions AS ftt ON ftt.frequency_id = ft.id
+LEFT JOIN counterparties AS cp ON ft.counterparty_id = cp.id
 LEFT JOIN accounts AS a ON ft.account_id = a.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN accounts AS ftta ON ft.to_account_id = a.id
@@ -189,6 +198,7 @@ LEFT JOIN accounts AS tta ON t.to_account_id = tta.id
 LEFT JOIN currencies AS ttc ON tta.currency_id = ttc.id
 LEFT JOIN transaction_kinds AS tk ON t.kind_id = k.id
 LEFT JOIN categories AS tcat ON t.category_id = tcat.id
+LEFT JOIN counterparties AS tcp ON t.counterparty_id = tcp.id
 WHERE ft.id = ?1
 `
 
@@ -198,6 +208,7 @@ type GetFrequentTxRow struct {
 	Amount                         float64
 	KindID                         string
 	CategoryID                     sql.NullString
+	CounterpartyID                 sql.NullString
 	Description                    sql.NullString
 	ToAccountID                    sql.NullString
 	ToAmount                       sql.NullFloat64
@@ -211,6 +222,7 @@ type GetFrequentTxRow struct {
 	CurrencyID                     sql.NullString
 	CurrencyEnum                   sql.NullInt64
 	EgpFxRate                      sql.NullFloat64
+	CounterpartyName               sql.NullString
 	ToAccountName                  sql.NullString
 	ToCurrencyID                   sql.NullString
 	ToCurrencyEnum                 sql.NullInt64
@@ -223,6 +235,7 @@ type GetFrequentTxRow struct {
 	TransactionAccountID           sql.NullString
 	TransactionAmount              sql.NullFloat64
 	TransactionKindID              sql.NullString
+	TransactionCounterpartyID      sql.NullString
 	TransactionDescription         sql.NullString
 	TransactionToAccountID         sql.NullString
 	TransactionToAmount            sql.NullFloat64
@@ -232,6 +245,7 @@ type GetFrequentTxRow struct {
 	TransactionCurrencyID          sql.NullString
 	TransactionCurrencyEnum        sql.NullInt64
 	TransactionEgpFxRate           sql.NullFloat64
+	TransactionCounterpartyName    sql.NullString
 	TransactionToCurrencyID        sql.NullString
 	TransactionToCurrencyEnum      sql.NullInt64
 	TransactionToEgpFxRate         sql.NullFloat64
@@ -256,6 +270,7 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) ([]GetFrequentTx
 			&i.Amount,
 			&i.KindID,
 			&i.CategoryID,
+			&i.CounterpartyID,
 			&i.Description,
 			&i.ToAccountID,
 			&i.ToAmount,
@@ -269,6 +284,7 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) ([]GetFrequentTx
 			&i.CurrencyID,
 			&i.CurrencyEnum,
 			&i.EgpFxRate,
+			&i.CounterpartyName,
 			&i.ToAccountName,
 			&i.ToCurrencyID,
 			&i.ToCurrencyEnum,
@@ -281,6 +297,7 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) ([]GetFrequentTx
 			&i.TransactionAccountID,
 			&i.TransactionAmount,
 			&i.TransactionKindID,
+			&i.TransactionCounterpartyID,
 			&i.TransactionDescription,
 			&i.TransactionToAccountID,
 			&i.TransactionToAmount,
@@ -290,6 +307,7 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) ([]GetFrequentTx
 			&i.TransactionCurrencyID,
 			&i.TransactionCurrencyEnum,
 			&i.TransactionEgpFxRate,
+			&i.TransactionCounterpartyName,
 			&i.TransactionToCurrencyID,
 			&i.TransactionToCurrencyEnum,
 			&i.TransactionToEgpFxRate,
@@ -318,6 +336,7 @@ SELECT
     ft.amount,
     ft.kind_id,
     ft.category_id,
+    ft.counterparty_id,
     ft.description,
     ft.to_account_id,
     ft.to_amount,
@@ -331,6 +350,7 @@ SELECT
     a.currency_id,
     c.enum AS currency_enum,
     c.egp_fx_rate,
+    cp.name AS counterparty_name,
     ftta.name AS to_account_name,
     ftta.currency_id AS to_currency_id,
     fttc.enum AS to_currency_enum,
@@ -343,6 +363,7 @@ SELECT
     t.account_id AS transaction_account_id,
     t.amount AS transaction_amount,
     t.kind_id AS transaction_kind_id,
+    t.counterparty_id AS transaction_counterparty_id,
     t.description AS transaction_description,
     t.to_account_id AS transaction_to_account_id,
     t.to_amount AS transaction_to_amount,
@@ -352,6 +373,7 @@ SELECT
     ta.currency_id AS transaction_currency_id,
     tc.enum AS transaction_currency_enum,
     tc.egp_fx_rate AS transaction_egp_fx_rate,
+    tcp.name AS transaction_counterparty_name,
     tta.currency_id AS transaction_to_currency_id,
     ttc.enum AS transaction_to_currency_enum,
     ttc.egp_fx_rate AS transaction_to_egp_fx_rate,
@@ -361,6 +383,7 @@ SELECT
     tcat.budget_in_egp AS transaction_category_budget_in_egp
 FROM frequent_txs AS ft
 LEFT JOIN frequent_txs_transactions AS ftt ON ftt.frequency_id = ft.id
+LEFT JOIN counterparties AS cp ON ft.counterparty_id = cp.id
 LEFT JOIN accounts AS a ON ft.account_id = a.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN accounts AS ftta ON ft.to_account_id = a.id
@@ -374,6 +397,7 @@ LEFT JOIN accounts AS tta ON t.to_account_id = tta.id
 LEFT JOIN currencies AS ttc ON tta.currency_id = ttc.id
 LEFT JOIN transaction_kinds AS tk ON t.kind_id = k.id
 LEFT JOIN categories AS tcat ON t.category_id = tcat.id
+LEFT JOIN counterparties AS tcp ON t.counterparty_id = tcp.id
 `
 
 type GetFrequentTxsRow struct {
@@ -382,6 +406,7 @@ type GetFrequentTxsRow struct {
 	Amount                         float64
 	KindID                         string
 	CategoryID                     sql.NullString
+	CounterpartyID                 sql.NullString
 	Description                    sql.NullString
 	ToAccountID                    sql.NullString
 	ToAmount                       sql.NullFloat64
@@ -395,6 +420,7 @@ type GetFrequentTxsRow struct {
 	CurrencyID                     sql.NullString
 	CurrencyEnum                   sql.NullInt64
 	EgpFxRate                      sql.NullFloat64
+	CounterpartyName               sql.NullString
 	ToAccountName                  sql.NullString
 	ToCurrencyID                   sql.NullString
 	ToCurrencyEnum                 sql.NullInt64
@@ -407,6 +433,7 @@ type GetFrequentTxsRow struct {
 	TransactionAccountID           sql.NullString
 	TransactionAmount              sql.NullFloat64
 	TransactionKindID              sql.NullString
+	TransactionCounterpartyID      sql.NullString
 	TransactionDescription         sql.NullString
 	TransactionToAccountID         sql.NullString
 	TransactionToAmount            sql.NullFloat64
@@ -416,6 +443,7 @@ type GetFrequentTxsRow struct {
 	TransactionCurrencyID          sql.NullString
 	TransactionCurrencyEnum        sql.NullInt64
 	TransactionEgpFxRate           sql.NullFloat64
+	TransactionCounterpartyName    sql.NullString
 	TransactionToCurrencyID        sql.NullString
 	TransactionToCurrencyEnum      sql.NullInt64
 	TransactionToEgpFxRate         sql.NullFloat64
@@ -440,6 +468,7 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 			&i.Amount,
 			&i.KindID,
 			&i.CategoryID,
+			&i.CounterpartyID,
 			&i.Description,
 			&i.ToAccountID,
 			&i.ToAmount,
@@ -453,6 +482,7 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 			&i.CurrencyID,
 			&i.CurrencyEnum,
 			&i.EgpFxRate,
+			&i.CounterpartyName,
 			&i.ToAccountName,
 			&i.ToCurrencyID,
 			&i.ToCurrencyEnum,
@@ -465,6 +495,7 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 			&i.TransactionAccountID,
 			&i.TransactionAmount,
 			&i.TransactionKindID,
+			&i.TransactionCounterpartyID,
 			&i.TransactionDescription,
 			&i.TransactionToAccountID,
 			&i.TransactionToAmount,
@@ -474,6 +505,7 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 			&i.TransactionCurrencyID,
 			&i.TransactionCurrencyEnum,
 			&i.TransactionEgpFxRate,
+			&i.TransactionCounterpartyName,
 			&i.TransactionToCurrencyID,
 			&i.TransactionToCurrencyEnum,
 			&i.TransactionToEgpFxRate,
@@ -504,12 +536,13 @@ SET
     amount = ROUND(?4, 2),
     kind_id = ?5,
     category_id = ?6,
-    description = ?7,
-    to_account_id = ?8,
-    to_amount = IIF(?9 > 0.0, ROUND(?9, 2), NULL),
-    stops_on = ?10,
-    last_transaction_created_at = ?11
-WHERE id = ?12
+    counterparty_id = ?7,
+    description = ?8,
+    to_account_id = ?9,
+    to_amount = IIF(?10 > 0.0, ROUND(?10, 2), NULL),
+    stops_on = ?11,
+    last_transaction_created_at = ?12
+WHERE id = ?13
 `
 
 type UpdateFrequentTxParams struct {
@@ -519,6 +552,7 @@ type UpdateFrequentTxParams struct {
 	Amount                   float64
 	KindID                   string
 	CategoryID               sql.NullString
+	CounterpartyID           sql.NullString
 	Description              sql.NullString
 	ToAccountID              sql.NullString
 	ToAmount                 interface{}
@@ -535,6 +569,7 @@ func (q *Queries) UpdateFrequentTx(ctx context.Context, arg UpdateFrequentTxPara
 		arg.Amount,
 		arg.KindID,
 		arg.CategoryID,
+		arg.CounterpartyID,
 		arg.Description,
 		arg.ToAccountID,
 		arg.ToAmount,

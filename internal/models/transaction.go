@@ -15,6 +15,7 @@ type Transaction struct {
 	Kind           TransactionKind
 	Category       *Category
 	ToAccount      *Account
+	Counterparty   *Counterparty
 	ToAmount       float64
 	Description    string
 	GoalTitle      string
@@ -25,16 +26,17 @@ type Transaction struct {
 }
 
 type createTransaction struct {
-	ID          string    `validate:"required,ulid"`
-	AccountID   string    `validate:"required,ulid"`
-	Amount      float64   `validate:"required"`
-	KindID      string    `validate:"required,ulid"`
-	KindString  string    `validate:"required,oneof=EXPENSE INCOME TRANSFER"`
-	CategoryID  string    `validate:"excluded_if=KindString TRANSFER,omitempty,ulid"`
-	ToAccountID string    `validate:"required_if=KindString TRANSFER,omitempty,ulid"`
-	ToAmount    float64   `validate:"required_if=KindString TRANSFER"`
-	Description string    `conform:"trim"`
-	ScheduledTo time.Time `validate:"required"`
+	ID             string    `validate:"required,ulid"`
+	AccountID      string    `validate:"required,ulid"`
+	Amount         float64   `validate:"required"`
+	KindID         string    `validate:"required,ulid"`
+	KindString     string    `validate:"required,oneof=EXPENSE INCOME TRANSFER"`
+	CategoryID     string    `validate:"excluded_if=KindString TRANSFER,omitempty,ulid"`
+	CounterpartyID string    `validate:"excluded_if=KindString TRANSFER,omitempty,ulid"`
+	ToAccountID    string    `validate:"required_if=KindString TRANSFER,omitempty,ulid"`
+	ToAmount       float64   `validate:"required_if=KindString TRANSFER"`
+	Description    string    `conform:"trim"`
+	ScheduledTo    time.Time `validate:"required"`
 }
 
 func (t *Transaction) ViewAmount() string {
@@ -49,26 +51,30 @@ func (t *Transaction) ViewToAmount() string {
 }
 
 func (t *Transaction) toValidate() *createTransaction {
-	var catId, toAccId string
+	var catId, toAccId, cpId string
 
 	if cat := t.Category; cat != nil {
 		catId = cat.ID
+	}
+	if cp := t.Counterparty; cp != nil {
+		cpId = cp.ID
 	}
 	if toAcc := t.ToAccount; toAcc != nil {
 		toAccId = toAcc.ID
 	}
 
 	return &createTransaction{
-		ID:          t.ID,
-		AccountID:   t.Account.ID,
-		Amount:      t.Amount,
-		KindID:      t.Kind.ID,
-		KindString:  t.Kind.Kind,
-		CategoryID:  catId,
-		ToAccountID: toAccId,
-		ToAmount:    t.ToAmount,
-		Description: t.Description,
-		ScheduledTo: t.ScheduledTo,
+		ID:             t.ID,
+		AccountID:      t.Account.ID,
+		Amount:         t.Amount,
+		KindID:         t.Kind.ID,
+		KindString:     t.Kind.Kind,
+		CategoryID:     catId,
+		CounterpartyID: cpId,
+		ToAccountID:    toAccId,
+		ToAmount:       t.ToAmount,
+		Description:    t.Description,
+		ScheduledTo:    t.ScheduledTo,
 	}
 }
 

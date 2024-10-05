@@ -22,7 +22,6 @@ type Account struct {
 	IsArchived         bool
 	ExcludeFromBalance bool
 	CreatedAt          time.Time
-	Foreign            interface{}
 }
 
 type AccountKind struct {
@@ -38,7 +37,7 @@ type Category struct {
 	CreatedAt   time.Time
 }
 
-type CounterParty struct {
+type Counterparty struct {
 	ID        string
 	Name      string
 	CreatedAt time.Time
@@ -58,6 +57,7 @@ type FrequentTx struct {
 	Amount                   float64
 	KindID                   string
 	CategoryID               sql.NullString
+	CounterpartyID           sql.NullString
 	Description              sql.NullString
 	ToAccountID              sql.NullString
 	ToAmount                 sql.NullFloat64
@@ -100,17 +100,18 @@ type Item struct {
 }
 
 type Transaction struct {
-	ID          string
-	AccountID   string
-	Amount      float64
-	KindID      string
-	CategoryID  sql.NullString
-	Description sql.NullString
-	FulfilledOn sql.NullTime
-	ScheduledTo time.Time
-	ToAccountID sql.NullString
-	ToAmount    sql.NullFloat64
-	CreatedAt   time.Time
+	ID             string
+	AccountID      string
+	Amount         float64
+	KindID         string
+	CategoryID     sql.NullString
+	CounterpartyID sql.NullString
+	Description    sql.NullString
+	ToAccountID    sql.NullString
+	ToAmount       sql.NullFloat64
+	FulfilledOn    sql.NullTime
+	ScheduledTo    time.Time
+	CreatedAt      time.Time
 }
 
 type TransactionKind struct {

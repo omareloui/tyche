@@ -8,13 +8,13 @@ import (
 	"github.com/omareloui/tyche/internal/valid"
 )
 
-type CounterParty struct {
+type Counterparty struct {
 	ID        string `validate:"required"`
 	Name      string `validate:"required,not_blank" conform:"trim,title"`
 	CreatedAt time.Time
 }
 
-func (cp *CounterParty) SanitizeAndValidate(sani *sanitizer.Sanitizer, valid *valid.Validator) error {
+func (cp *Counterparty) SanitizeAndValidate(sani *sanitizer.Sanitizer, valid *valid.Validator) error {
 	if err := sani.SanitizeStruct(cp); err != nil {
 		return errs.ErrSanitizer
 	}

@@ -20,7 +20,7 @@ import (
 func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	l := logger.FromCtx(r.Context())
 
-	accs, knds, cats, err := h.getTxDeps(r.Context())
+	accs, knds, cats, cps, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +41,7 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 		return nil, err
 	}
 
-	return views.Transactions(balances, txs, fd, accs, knds, cats), nil
+	return views.Transactions(balances, txs, fd, accs, knds, cats, cps), nil
 }
 
 func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -58,14 +58,14 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		tx.FulfilledOn = time.Now()
 	}
 
-	accs, knds, cats, err := h.getTxDeps(r.Context())
+	accs, knds, cats, cps, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
 
-	fd, err := h.prepareTx(r, tx, accs, knds, cats)
+	fd, err := h.prepareTx(r, tx, accs, knds, cats, cps)
 	if fd != nil {
-		return views.CreateTransactionForm(fd, accs, knds, cats), nil
+		return views.CreateTransactionForm(fd, accs, knds, cats, cps), nil
 	}
 	if err != nil {
 		return nil, err
@@ -91,7 +91,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 				l.Error("validating frequent transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
 				fd := h.mapTransactionToFD(tx, &valerr)
 				fd.FrequencyFD = h.parseFrequencyFD(r, &valerr)
-				return views.CreateTransactionForm(fd, accs, knds, cats), nil
+				return views.CreateTransactionForm(fd, accs, knds, cats, cps), nil
 			}
 			l.Error("sanitizing frequent transaction", zap.Error(err))
 			return nil, err
@@ -127,7 +127,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 	}
 
 	fd = h.mapTransactionToFD(defaultTransaction(accs, knds), new(errs.ValidationError))
-	return views.CreateTransactionForm(fd, accs, knds, cats), nil
+	return views.CreateTransactionForm(fd, accs, knds, cats, cps), nil
 }
 
 func (h Handler) Transaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -163,7 +163,7 @@ func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (tem
 
 	l.Debug("get edit transaction", zap.Any("transaction", tx))
 
-	accs, knds, cats, err := h.getTxDeps(r.Context())
+	accs, knds, cats, cps, err := h.getTxDeps(r.Context())
 	if err != nil {
 		l.Error("fetching currencies and kinds")
 		return nil, err
@@ -172,7 +172,7 @@ func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (tem
 	fd := h.mapTransactionToFD(tx, new(errs.ValidationError))
 	fd.FrequencyFD = nil
 
-	return views.EditTransaction(tx, fd, accs, knds, cats), nil
+	return views.EditTransaction(tx, fd, accs, knds, cats, cps), nil
 }
 
 func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -189,13 +189,13 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 	}
 	tx.ID = id
 
-	accs, knds, cats, err := h.getTxDeps(r.Context())
+	accs, knds, cats, cps, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
-	fd, err := h.prepareTx(r, tx, accs, knds, cats)
+	fd, err := h.prepareTx(r, tx, accs, knds, cats, cps)
 	if fd != nil {
-		return views.EditTransaction(tx, fd, accs, knds, cats), nil
+		return views.EditTransaction(tx, fd, accs, knds, cats, cps), nil
 	}
 	if err != nil {
 		return nil, err
@@ -310,25 +310,30 @@ func (h Handler) getAndRenderBalancesOOB(w http.ResponseWriter, r *http.Request)
 	return nil
 }
 
-func (h Handler) getTxDeps(ctx context.Context) ([]models.Account, []models.TransactionKind, []models.Category, error) {
+func (h Handler) getTxDeps(ctx context.Context) ([]models.Account, []models.TransactionKind, []models.Category, []models.Counterparty, error) {
 	l := logger.FromCtx(ctx)
 	accs, err := h.repo.GetAccounts(ctx)
 	if err != nil {
 		l.Error("error fetching accounts", zap.Error(err))
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	knds, err := h.repo.GetTransactionKinds(ctx)
 	if err != nil {
 		l.Error("error fetching transaction kinds", zap.Error(err))
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	cats, err := h.repo.GetCategories(ctx)
 	if err != nil {
 		l.Error("error fetching categories", zap.Error(err))
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
+	}
+	cps, err := h.repo.GetCounterparties(ctx)
+	if err != nil {
+		l.Error("error fetching counterparties", zap.Error(err))
+		return nil, nil, nil, nil, err
 	}
 	l.Debug("fetched transactions dependencies")
-	return accs, knds, cats, nil
+	return accs, knds, cats, cps, nil
 }
 
 func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationError) *views.TransactionFD {
@@ -349,6 +354,12 @@ func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationE
 		fd.CategoryID = &views.FDInput{Value: t.Category.ID, Error: err.Errors.MsgFor("CategoryID")}
 	} else if t.Kind.Kind != models.TransferTxKind {
 		fd.CategoryID = &views.FDInput{}
+	}
+
+	if t.Counterparty != nil {
+		fd.CounterpartyID = &views.FDInput{Value: t.Counterparty.ID, Error: err.Errors.MsgFor("CounterpartyID")}
+	} else if t.Kind.Kind != models.TransferTxKind {
+		fd.CounterpartyID = &views.FDInput{}
 	}
 
 	if t.ToAccount != nil {
@@ -389,6 +400,11 @@ func (h Handler) mapFDToTransaction(r *http.Request) (*models.Transaction, error
 		cat = &models.Category{ID: catId, Kind: models.TransactionKind{ID: kndId}}
 	}
 
+	var cp *models.Counterparty
+	if cpId := r.FormValue("counterparty_id"); cpId != "" {
+		cp = &models.Counterparty{ID: cpId}
+	}
+
 	toAccId := r.FormValue("to_account_id")
 	var toAcc *models.Account
 	if toAccId != "" {
@@ -396,14 +412,15 @@ func (h Handler) mapFDToTransaction(r *http.Request) (*models.Transaction, error
 	}
 
 	return &models.Transaction{
-		Account:     models.Account{ID: r.FormValue("account_id")},
-		Amount:      amount,
-		Kind:        models.TransactionKind{ID: kndId},
-		Category:    cat,
-		ToAccount:   toAcc,
-		ToAmount:    toAmount,
-		Description: r.FormValue("description"),
-		ScheduledTo: scheduledTo,
+		Account:      models.Account{ID: r.FormValue("account_id")},
+		Amount:       amount,
+		Kind:         models.TransactionKind{ID: kndId},
+		Category:     cat,
+		Counterparty: cp,
+		ToAccount:    toAcc,
+		ToAmount:     toAmount,
+		Description:  r.FormValue("description"),
+		ScheduledTo:  scheduledTo,
 	}, nil
 }
 
@@ -453,21 +470,25 @@ func (h Handler) mapFDToTransactionFrequency(r *http.Request, parsedTx *models.T
 	}
 
 	return &models.FrequentTx{
-		Account:     parsedTx.Account,
-		Amount:      parsedTx.Amount,
-		Kind:        parsedTx.Kind,
-		Category:    parsedTx.Category,
-		Description: parsedTx.Description,
-		ToAccount:   parsedTx.ToAccount,
-		ToAmount:    parsedTx.ToAmount,
-		FrequencyBy: models.FrequencyBy(frequencyBy),
-		Frequency:   uint(frequency),
-		StartsOn:    parsedTx.ScheduledTo,
-		StopsOn:     stopsOn,
+		Account:      parsedTx.Account,
+		Amount:       parsedTx.Amount,
+		Kind:         parsedTx.Kind,
+		Category:     parsedTx.Category,
+		Counterparty: parsedTx.Counterparty,
+		Description:  parsedTx.Description,
+		ToAccount:    parsedTx.ToAccount,
+		ToAmount:     parsedTx.ToAmount,
+		FrequencyBy:  models.FrequencyBy(frequencyBy),
+		Frequency:    uint(frequency),
+		StartsOn:     parsedTx.ScheduledTo,
+		StopsOn:      stopsOn,
 	}, nil
 }
 
-func (h Handler) prepareTx(r *http.Request, tx *models.Transaction, accs []models.Account, knds []models.TransactionKind, cats []models.Category) (*views.TransactionFD, error) {
+func (h Handler) prepareTx(r *http.Request, tx *models.Transaction,
+	accs []models.Account, knds []models.TransactionKind,
+	cats []models.Category, cps []models.Counterparty,
+) (*views.TransactionFD, error) {
 	l := logger.FromCtx(r.Context())
 
 	k := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == tx.Kind.ID })
@@ -497,6 +518,10 @@ func (h Handler) prepareTx(r *http.Request, tx *models.Transaction, accs []model
 		tx.Category.Kind = tx.Kind
 	}
 
+	if cp := slicesutils.Find(cps, func(c models.Counterparty) bool { return tx.Counterparty != nil && c.ID == tx.Counterparty.ID }); cp != nil {
+		tx.Counterparty = cp
+	}
+
 	if err := tx.SanitizeAndValidate(h.sani, h.valid); err != nil {
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
@@ -510,7 +535,10 @@ func (h Handler) prepareTx(r *http.Request, tx *models.Transaction, accs []model
 	return nil, nil
 }
 
-func (h Handler) prepareCreatingTx(r *http.Request, tx *models.Transaction, accs []models.Account, knds []models.TransactionKind, cats []models.Category) (*views.TransactionFD, error) {
+func (h Handler) prepareCreatingTx(r *http.Request, tx *models.Transaction,
+	accs []models.Account, knds []models.TransactionKind,
+	cats []models.Category, cps []models.Counterparty,
+) (*views.TransactionFD, error) {
 	tx.ID = idgen.New()
 	tx.CreatedAt = time.Now()
 
@@ -519,5 +547,5 @@ func (h Handler) prepareCreatingTx(r *http.Request, tx *models.Transaction, accs
 		tx.FulfilledOn = tx.CreatedAt
 	}
 
-	return h.prepareTx(r, tx, accs, knds, cats)
+	return h.prepareTx(r, tx, accs, knds, cats, cps)
 }

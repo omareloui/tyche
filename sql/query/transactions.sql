@@ -5,6 +5,7 @@ INSERT INTO transactions (
     amount,
     kind_id,
     category_id,
+    counterparty_id,
     description,
     to_account_id,
     to_amount,
@@ -17,6 +18,7 @@ VALUES (
     ROUND(sqlc.arg(amount), 2),
     sqlc.arg(kind_id),
     sqlc.arg(category_id),
+    sqlc.arg(counterparty_id),
     sqlc.arg(description),
     sqlc.arg(to_account_id),
     IIF(sqlc.narg(to_amount) > 0.0, ROUND(sqlc.narg(to_amount), 2), NULL),
@@ -31,6 +33,7 @@ SELECT
     t.amount,
     t.kind_id,
     t.category_id,
+    t.counterparty_id,
     t.description,
     t.to_account_id,
     t.to_amount,
@@ -41,6 +44,7 @@ SELECT
     a.currency_id,
     c.enum AS currency_enum,
     c.egp_fx_rate,
+    cp.name AS counterparty_name,
     ta.name AS to_account_name,
     ta.currency_id AS to_currency_id,
     tc.enum AS to_currency_enum,
@@ -54,6 +58,7 @@ SELECT
     IFNULL(t.amount * c.egp_fx_rate / g.egp_subtotal, 0.0) AS goal_percentage
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
+LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
 LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
@@ -70,6 +75,7 @@ SELECT
     t.amount,
     t.kind_id,
     t.category_id,
+    t.counterparty_id,
     t.description,
     t.to_account_id,
     t.to_amount,
@@ -80,6 +86,7 @@ SELECT
     a.currency_id,
     c.enum AS currency_enum,
     c.egp_fx_rate,
+    cp.name AS counterparty_name,
     ta.name AS to_account_name,
     ta.currency_id AS to_currency_id,
     tc.enum AS to_currency_enum,
@@ -93,6 +100,7 @@ SELECT
     IFNULL(t.amount * c.egp_fx_rate / g.egp_subtotal, 0.0) AS goal_percentage
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
+LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
 LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
@@ -109,6 +117,7 @@ SET
     amount = ROUND(sqlc.arg(amount), 2),
     kind_id = sqlc.arg(kind_id),
     category_id = sqlc.arg(category_id),
+    counterparty_id = sqlc.arg(counterparty_id),
     description = sqlc.arg(description),
     to_account_id = sqlc.narg(to_account_id),
     to_amount = ROUND(sqlc.narg(to_amount), 2),

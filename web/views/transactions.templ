@@ -19,11 +19,12 @@ templ Transactions(
 	transactions []models.Transaction,
 	fd *TransactionFD, accounts []models.Account,
 	knds []models.TransactionKind,
-	cats []models.Category) {
+	cats []models.Category,
+	cps []models.Counterparty) {
 	@baseLayout("Transactions", balances) {
 		@container() {
 			@mainHeader("Transactions")
-			@CreateTransactionForm(fd, accounts, knds, cats)
+			@CreateTransactionForm(fd, accounts, knds, cats, cps)
 			@transactionsList(transactions)
 		}
 	}
@@ -33,9 +34,10 @@ templ CreateTransactionForm(
 	fd *TransactionFD,
 	accounts []models.Account,
 	knds []models.TransactionKind,
-	cats []models.Category) {
+	cats []models.Category,
+	cps []models.Counterparty) {
 	@creationForm("Create Transaction", "/transactions", "Create Transaction") {
-		@transactionFormBody(fd, "0", accounts, knds, cats)
+		@transactionFormBody(fd, "0", accounts, knds, cats, cps)
 	}
 }
 
@@ -44,8 +46,9 @@ templ transactionFormBody(
 	id string,
 	accs []models.Account,
 	knds []models.TransactionKind,
-	cats []models.Category) {
-	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs)
+	cats []models.Category,
+	cps []models.Counterparty) {
+	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs, cps)
 	@input("Description", "text", "description", "Enter a description", id, fd.Description)
 	@dateInput("Date", "scheduled_to", id, fd.ScheduledTo)
 	if fd.FrequencyFD != nil {
@@ -64,10 +67,11 @@ templ EditTransaction(
 	fd *TransactionFD,
 	accounts []models.Account,
 	knds []models.TransactionKind,
-	cats []models.Category) {
+	cats []models.Category,
+	cps []models.Counterparty) {
 	@form("put", fmt.Sprintf("/transactions/%s", tx.ID), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { tx.ID }</p>
-		@transactionFormBody(fd, tx.ID, accounts, knds, cats)
+		@transactionFormBody(fd, tx.ID, accounts, knds, cats, cps)
 		@editFormButtons(fmt.Sprintf("/transactions/%s", tx.ID))
 	}
 }
@@ -100,6 +104,10 @@ templ Transaction(tx *models.Transaction) {
 		if tx.Category != nil {
 			<p>Category ID: { tx.Category.ID }</p>
 			<p>Category Name: { tx.Category.Name }</p>
+		}
+		if tx.Counterparty != nil {
+			<p>Counterparty ID: { tx.Counterparty.ID }</p>
+			<p>Counterparty Name: { tx.Counterparty.Name }</p>
 		}
 		if tx.Description != "" {
 			<p>Description: { tx.Description }</p>

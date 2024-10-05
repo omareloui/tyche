@@ -30,22 +30,23 @@ func FrequencyByOptions() map[string]string {
 }
 
 type FrequentTx struct {
-	ID          string      `validate:"required"`
-	FrequencyBy FrequencyBy `validate:"required"`
-	Frequency   uint        `validate:"required,min=1"`
+	ID          string
+	FrequencyBy FrequencyBy
+	Frequency   uint
 
-	Account     Account
-	Amount      float64         `validate:"required,min=1"`
-	Kind        TransactionKind `validate:"required"`
-	Category    *Category       `validate:"omitempty"`
-	ToAccount   *Account        `validate:"omitempty"`
-	ToAmount    float64
-	Description string
+	Account      Account
+	Amount       float64
+	Kind         TransactionKind
+	Category     *Category
+	ToAccount    *Account
+	Counterparty *Counterparty
+	ToAmount     float64
+	Description  string
 
-	StartsOn                 time.Time `validate:"required"`
-	StopsOn                  time.Time `validate:"omitempty,gtfield=StartsOn"`
+	StartsOn                 time.Time
+	StopsOn                  time.Time
 	CreatedAt                time.Time
-	LastTransactionCreatedAt time.Time `validate:"required"`
+	LastTransactionCreatedAt time.Time
 
 	Transactions []Transaction
 }
@@ -55,14 +56,15 @@ type createFrequentTx struct {
 	FrequencyBy FrequencyBy `validate:"required,oneof=0 1 2"`
 	Frequency   uint        `validate:"required"`
 
-	AccountID   string  `validate:"required,ulid"`
-	Amount      float64 `validate:"required"`
-	KindID      string  `validate:"required,ulid"`
-	KindString  string  `validate:"required,oneof=EXPENSE INCOME TRANSFER"`
-	CategoryID  string  `validate:"excluded_if=KindString TRANSFER,omitempty,ulid"`
-	ToAccountID string  `validate:"required_if=KindString TRANSFER,omitempty,ulid"`
-	ToAmount    float64 `validate:"required_if=KindString TRANSFER"`
-	Description string  `conform:"trim"`
+	AccountID      string  `validate:"required,ulid"`
+	Amount         float64 `validate:"required"`
+	KindID         string  `validate:"required,ulid"`
+	KindString     string  `validate:"required,oneof=EXPENSE INCOME TRANSFER"`
+	CategoryID     string  `validate:"excluded_if=KindString TRANSFER,omitempty,ulid"`
+	CounterpartyID string  `validate:"excluded_if=KindString TRANSFER,omitempty,ulid"`
+	ToAccountID    string  `validate:"required_if=KindString TRANSFER,omitempty,ulid"`
+	ToAmount       float64 `validate:"required_if=KindString TRANSFER"`
+	Description    string  `conform:"trim"`
 
 	StartsOn                 time.Time
 	StopsOn                  time.Time `validate:"omitempty,gtfield=StartsOn"`
@@ -85,10 +87,13 @@ func (ft *FrequentTx) ViewToAmount() string {
 }
 
 func (ft *FrequentTx) toValidate() *createFrequentTx {
-	var catId, toAccId string
+	var catId, toAccId, cpId string
 
 	if cat := ft.Category; cat != nil {
 		catId = cat.ID
+	}
+	if cp := ft.Counterparty; cp != nil {
+		cpId = cp.ID
 	}
 	if toAcc := ft.ToAccount; toAcc != nil {
 		toAccId = toAcc.ID
@@ -101,6 +106,7 @@ func (ft *FrequentTx) toValidate() *createFrequentTx {
 		KindID:                   ft.Kind.ID,
 		KindString:               ft.Kind.Kind,
 		CategoryID:               catId,
+		CounterpartyID:           cpId,
 		ToAccountID:              toAccId,
 		ToAmount:                 ft.ToAmount,
 		Description:              ft.Description,

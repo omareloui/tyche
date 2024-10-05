@@ -27,7 +27,7 @@ CREATE TABLE accounts (
     is_archived BOOL NOT NULL DEFAULT FALSE,
     exclude_from_balance BOOL NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (currency_id) REFERENCES currencies (id)
+    FOREIGN KEY (currency_id) REFERENCES currencies (id),
     FOREIGN KEY (kind_id) REFERENCES account_kinds (id)
 );
 CREATE TABLE transactions (
@@ -36,13 +36,16 @@ CREATE TABLE transactions (
     amount FLOAT DEFAULT 0 NOT NULL,
     kind_id VARCHAR NOT NULL,
     category_id VARCHAR,
+    counterparty_id VARCHAR,
     description VARCHAR,
-    fulfilled_on DATE,
-    scheduled_to DATE NOT NULL,
     to_account_id VARCHAR,
     to_amount FLOAT,
+    fulfilled_on DATE,
+    scheduled_to DATE NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE,
+    FOREIGN KEY (to_account_id) REFERENCES accounts (id) ON DELETE CASCADE,
+    FOREIGN KEY (counterparty_id) REFERENCES counterparties (id) ON DELETE SET NULL,
     FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id)
 );
 CREATE TABLE frequent_txs (
@@ -53,6 +56,7 @@ CREATE TABLE frequent_txs (
     amount FLOAT DEFAULT 0 NOT NULL,
     kind_id VARCHAR NOT NULL,
     category_id VARCHAR,
+    counterparty_id VARCHAR,
     description VARCHAR,
     to_account_id VARCHAR,
     to_amount FLOAT,
@@ -61,6 +65,8 @@ CREATE TABLE frequent_txs (
     last_transaction_created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE,
+    FOREIGN KEY (to_account_id) REFERENCES accounts (id) ON DELETE CASCADE,
+    FOREIGN KEY (counterparty_id) REFERENCES counterparties (id) ON DELETE SET NULL,
     FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id)
 );
 CREATE TABLE frequent_txs_transactions (
@@ -105,7 +111,7 @@ CREATE TABLE categories (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id) ON DELETE CASCADE
 );
-CREATE TABLE counter_parties (
+CREATE TABLE counterparties (
     id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
     name VARCHAR UNIQUE NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -124,5 +130,5 @@ DROP TABLE items;
 DROP TABLE accounts;
 DROP TABLE account_kinds;
 DROP TABLE categories;
-DROP TABLE counter_parties;
+DROP TABLE counterparties;
 -- +goose StatementEnd

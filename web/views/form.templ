@@ -28,10 +28,11 @@ type IBANFD struct {
 }
 
 type TransactionAmountsAndKindFD struct {
-	AccountIFD   AccountIFD
-	KindID       FDInput
-	CategoryID   *FDInput
-	ToAccountIFD *AccountIFD
+	AccountIFD     AccountIFD
+	KindID         FDInput
+	CategoryID     *FDInput
+	CounterpartyID *FDInput
+	ToAccountIFD   *AccountIFD
 }
 
 templ form(action, path string, attrs ...templ.Attributes) {
@@ -96,7 +97,7 @@ templ AmountInputs(fd *AmountFD, id string, curs []models.Currency) {
 		@moneyInput("Amount", "amount", getCurSymbolByCurrency(curs, fd.CurrencyID.Value), id,
 			fd.Amount, "col-span-2")
 		@selectInput("Currency", "currency_id", "Select a Currency", id, currenciesToMap(curs), fd.CurrencyID,
-			templ.Attributes{
+			false, templ.Attributes{
 				"hx-post":    "/amount-inputs",
 				"hx-trigger": "change",
 				"hx-target":  "closest [data-amount]",
@@ -139,7 +140,12 @@ templ IbanInputs(fd *IBANFD, id string, curs []models.Currency) {
 	</div>
 }
 
-templ TransactionAmountsAndKindFormBody(fd *TransactionAmountsAndKindFD, id string, knds []models.TransactionKind, cats []models.Category, accs []models.Account) {
+templ TransactionAmountsAndKindFormBody(fd *TransactionAmountsAndKindFD,
+	id string,
+	knds []models.TransactionKind,
+	cats []models.Category,
+	accs []models.Account,
+	cps []models.Counterparty) {
 	<div
 		class="contents"
 		hx-target="this"
@@ -149,21 +155,24 @@ templ TransactionAmountsAndKindFormBody(fd *TransactionAmountsAndKindFD, id stri
 		<div class="grid grid-cols-3 gap-4">
 			@moneyInput("Amount", "amount", getCurSymbolByAccount(accs, fd.AccountIFD.AccountID.Value), id,
 				fd.AccountIFD.Amount, "col-span-2", templ.Attributes{
-					"hx-post":    fmt.Sprintf("/transaction-accounts-and-kinds-inputs/%s", id),
+					"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
 					"hx-trigger": "keyup changed delay:200ms",
 				})
 			@selectAccount("account_id", id, accs, fd.AccountIFD.AccountID,
 				templ.Attributes{
-					"hx-post":    fmt.Sprintf("/transaction-accounts-and-kinds-inputs/%s", id),
+					"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
 					"hx-trigger": "change",
 				})
 		</div>
 		@selectTxKind("kind_id", id, getTxKindsForAccounts(accs, knds), fd.KindID, templ.Attributes{
-			"hx-post":    fmt.Sprintf("/transaction-accounts-and-kinds-inputs/%s", id),
+			"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
 			"hx-trigger": "change",
 		})
 		if fd.CategoryID != nil {
 			@selectTxCat("category_id", id, getCategoriesOfKinds(cats, fd.KindID.Value), *fd.CategoryID)
+		}
+		if fd.CounterpartyID != nil {
+			@selectCounterparty("counterparty_id", id, cps, *fd.CounterpartyID)
 		}
 		if fd.ToAccountIFD != nil {
 			<div class="grid grid-cols-3 gap-4">
@@ -172,8 +181,8 @@ templ TransactionAmountsAndKindFormBody(fd *TransactionAmountsAndKindFD, id stri
 					fd.ToAccountIFD.Amount, "col-span-2")
 				@selectInput("To Account", "to_account_id", "Select Account", id,
 					accountsToMap(accs),
-					fd.ToAccountIFD.AccountID, templ.Attributes{
-						"hx-post":    fmt.Sprintf("/transaction-accounts-and-kinds-inputs/%s", id),
+					fd.ToAccountIFD.AccountID, false, templ.Attributes{
+						"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
 						"hx-trigger": "change",
 					})
 			</div>
@@ -281,7 +290,9 @@ templ dateInput(label, name, id string, data FDInput, classes ...string) {
 	</div>
 }
 
-templ selectInput(label, name, placeholder, id string, options map[string]string, data FDInput, inputAttrs ...templ.Attributes) {
+templ selectInput(label, name, placeholder, id string,
+	options map[string]string, data FDInput, nullable bool,
+	inputAttrs ...templ.Attributes) {
 	<div>
 		<label for={ join(name, id) } class="input-label">{ label }</label>
 		<select
@@ -292,7 +303,16 @@ templ selectInput(label, name, placeholder, id string, options map[string]string
 				{ inputAttrs[0]... }
 			}
 		>
-			<option value="" disabled selected>{ placeholder }</option>
+			<option
+				value=""
+				disabled
+				if !nullable || data.Value != "" {
+					selected
+				}
+			>{ placeholder }</option>
+			if nullable {
+				<option value="" selected>&lt;nil&gt;</option>
+			}
 			for k, v := range options {
 				<option
 					value={ k }
@@ -307,44 +327,27 @@ templ selectInput(label, name, placeholder, id string, options map[string]string
 }
 
 templ selectAccKind(name, id string, aknds []models.AccountKind, data FDInput, inputAttrs ...templ.Attributes) {
-	@selectInput("Account Kind", name, "Select Account Kind", id, accKindsToMap(aknds), data, inputAttrs...)
+	@selectInput("Account Kind", name, "Select Account Kind", id, accKindsToMap(aknds), data, false, inputAttrs...)
 }
 
 templ selectAccount(name, id string, accs []models.Account, data FDInput, inputAttrs ...templ.Attributes) {
-	@selectInput("Account", name, "Select Account", id, accountsToMap(accs), data, inputAttrs...)
+	@selectInput("Account", name, "Select Account", id, accountsToMap(accs), data, false, inputAttrs...)
 }
 
 templ selectCurrency(name, id string, curs []models.Currency, data FDInput, inputAttrs ...templ.Attributes) {
-	@selectInput("Currency", name, "Select Currency", id, currenciesToMap(curs), data, inputAttrs...)
+	@selectInput("Currency", name, "Select Currency", id, currenciesToMap(curs), data, false, inputAttrs...)
 }
 
 templ selectTxKind(name, id string, knds []models.TransactionKind, data FDInput, inputAttrs ...templ.Attributes) {
-	@selectInput("Transaction Kind", name, "Select Kind", id, txKindsToMap(knds), data, inputAttrs...)
+	@selectInput("Transaction Kind", name, "Select Kind", id, txKindsToMap(knds), data, false, inputAttrs...)
+}
+
+templ selectCounterparty(name, id string, cps []models.Counterparty, data FDInput, inputAttrs ...templ.Attributes) {
+	@selectInput("Counterparty", name, "Select Counterparty", id, counterpartiesToMap(cps), data, true, inputAttrs...)
 }
 
 templ selectTxCat(name, id string, cats []models.Category, data FDInput, inputAttrs ...templ.Attributes) {
-	<div>
-		<label for={ join(name, id) } class="input-label">Category</label>
-		<select
-			id={ join(name, id) }
-			name={ name }
-			class="input-field"
-			if inputAttrs != nil {
-				{ inputAttrs[0]... }
-			}
-		>
-			<option value="" selected>Select Category</option>
-			for k, v := range catsToMap(cats) {
-				<option
-					value={ k }
-					if k == data.Value {
-						selected
-					}
-				>{ v }</option>
-			}
-		</select>
-		@errorMessage(data.Error)
-	</div>
+	@selectInput("Category", name, "Select Category", id, catsToMap(cats), data, true, inputAttrs...)
 }
 
 templ checkbox(label, name, id string, data FDInput, attrs ...templ.Attributes) {
@@ -471,6 +474,14 @@ func txKindsToMap(kinds []models.TransactionKind) map[string]string {
 	m := make(map[string]string, len(kinds))
 	for _, k := range kinds {
 		m[k.ID] = k.Kind
+	}
+	return m
+}
+
+func counterpartiesToMap(cps []models.Counterparty) map[string]string {
+	m := make(map[string]string, len(cps))
+	for _, cp := range cps {
+		m[cp.ID] = cp.Name
 	}
 	return m
 }

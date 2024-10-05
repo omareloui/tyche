@@ -41,32 +41,35 @@ func (r *Repository) CreateTransaction(ctx context.Context, tx *models.Transacti
 func (r *Repository) createTransactionWithTxn(ctx context.Context, qtx *db.Queries, tx *models.Transaction) error {
 	l := logger.FromCtx(ctx)
 
-	var catId sql.NullString
-	var toAccId sql.NullString
+	catId := sql.NullString{}
+	cpId := sql.NullString{}
+	toAccId := sql.NullString{}
 
 	if tx.Category != nil {
-		catId = sql.NullString{String: tx.Category.ID, Valid: tx.Category.ID != ""}
-	} else {
-		catId = sql.NullString{Valid: false}
+		catId.Valid = tx.Category.ID != ""
+		catId.String = tx.Category.ID
 	}
-
+	if tx.Counterparty != nil {
+		cpId.Valid = tx.Counterparty.ID != ""
+		cpId.String = tx.Counterparty.ID
+	}
 	if tx.ToAccount != nil {
-		toAccId = sql.NullString{String: tx.ToAccount.ID, Valid: tx.ToAccount.ID != ""}
-	} else {
-		toAccId = sql.NullString{Valid: false}
+		toAccId.Valid = tx.ToAccount.ID != ""
+		toAccId.String = tx.ToAccount.ID
 	}
 
 	if err := qtx.CreateTransaction(ctx, db.CreateTransactionParams{
-		ID:          tx.ID,
-		AccountID:   tx.Account.ID,
-		Amount:      tx.Amount,
-		KindID:      tx.Kind.ID,
-		CategoryID:  catId,
-		Description: sql.NullString{String: tx.Description, Valid: tx.Description != ""},
-		ToAccountID: toAccId,
-		ToAmount:    sql.NullFloat64{Float64: tx.ToAmount, Valid: tx.ToAmount != 0},
-		ScheduledTo: tx.ScheduledTo,
-		FulfilledOn: sql.NullTime{Time: tx.FulfilledOn, Valid: !tx.FulfilledOn.IsZero()},
+		ID:             tx.ID,
+		AccountID:      tx.Account.ID,
+		Amount:         tx.Amount,
+		KindID:         tx.Kind.ID,
+		CategoryID:     catId,
+		CounterpartyID: cpId,
+		Description:    sql.NullString{String: tx.Description, Valid: tx.Description != ""},
+		ToAccountID:    toAccId,
+		ToAmount:       sql.NullFloat64{Float64: tx.ToAmount, Valid: tx.ToAmount != 0},
+		ScheduledTo:    tx.ScheduledTo,
+		FulfilledOn:    sql.NullTime{Time: tx.FulfilledOn, Valid: !tx.FulfilledOn.IsZero()},
 	}); err != nil {
 		l.Error("create transaction", zap.Error(err), zap.Any("transaction", tx))
 		return err
@@ -144,28 +147,35 @@ func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transa
 		l := logger.FromCtx(ctx)
 
 		catId := sql.NullString{}
+		cpId := sql.NullString{}
 		toAccId := sql.NullString{}
 
 		if tx.Category != nil {
-			catId.Valid = true
+			catId.Valid = tx.Category.ID != ""
 			catId.String = tx.Category.ID
 		}
 
+		if tx.Counterparty != nil {
+			cpId.Valid = tx.Counterparty.ID != ""
+			cpId.String = tx.Counterparty.ID
+		}
+
 		if tx.ToAccount != nil {
-			toAccId.Valid = true
+			toAccId.Valid = tx.ToAccount.ID != ""
 			toAccId.String = tx.ToAccount.ID
 		}
 
 		if err := qtx.UpdateTransaction(ctx, db.UpdateTransactionParams{
-			ID:          tx.ID,
-			AccountID:   tx.Account.ID,
-			Amount:      tx.Amount,
-			KindID:      tx.Kind.ID,
-			CategoryID:  catId,
-			ToAccountID: toAccId,
-			ToAmount:    sql.NullFloat64{Float64: tx.ToAmount, Valid: tx.ToAmount != 0},
-			Description: sql.NullString{String: tx.Description, Valid: tx.Description != ""},
-			ScheduledTo: tx.ScheduledTo,
+			ID:             tx.ID,
+			AccountID:      tx.Account.ID,
+			Amount:         tx.Amount,
+			KindID:         tx.Kind.ID,
+			CategoryID:     catId,
+			CounterpartyID: cpId,
+			ToAccountID:    toAccId,
+			ToAmount:       sql.NullFloat64{Float64: tx.ToAmount, Valid: tx.ToAmount != 0},
+			Description:    sql.NullString{String: tx.Description, Valid: tx.Description != ""},
+			ScheduledTo:    tx.ScheduledTo,
 		}); err != nil {
 			l.Error("updating transaction", zap.Error(err), zap.Any("new_transaction", tx), zap.Any("old_transaction", oldTx))
 			return err
@@ -206,6 +216,7 @@ func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRo
 	_dbTx := db.GetTransactionsRow(*dbTx)
 
 	var cat *models.Category
+	var cp *models.Counterparty
 	var toAcc *models.Account
 
 	if _dbTx.CategoryID.Valid {
@@ -213,6 +224,13 @@ func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRo
 			ID:          _dbTx.CategoryID.String,
 			Name:        _dbTx.CategoryName.String,
 			BudgetInEgp: _dbTx.CategoryBudgetInEgp.Float64,
+		}
+	}
+
+	if _dbTx.CounterpartyID.Valid {
+		cp = &models.Counterparty{
+			ID:   _dbTx.CounterpartyID.String,
+			Name: _dbTx.CounterpartyName.String,
 		}
 	}
 
@@ -253,7 +271,8 @@ func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRo
 			Kind:            _dbTx.Kind.String,
 			IncreaseBalance: _dbTx.IncreaseBalance.Bool,
 		},
-		Category: cat,
+		Category:     cat,
+		Counterparty: cp,
 	}
 
 	return &tx

@@ -15,14 +15,14 @@ import (
 	"github.com/omareloui/tyche/internal/models"
 )
 
-type CounterPartyFD struct {
+type CounterpartyFD struct {
 	Name FDInput
 }
 
-func CounterParties(
+func Counterparties(
 	balances []models.Balance,
-	fd *CounterPartyFD,
-	counterparties []models.CounterParty) templ.Component {
+	fd *CounterpartyFD,
+	counterparties []models.Counterparty) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
@@ -64,7 +64,7 @@ func CounterParties(
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = mainHeader("Counter Parties").Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = mainHeader("Counterparties").Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -72,7 +72,7 @@ func CounterParties(
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = CreateCounterPartyForm(fd).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = CreateCounterpartyForm(fd).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -92,7 +92,7 @@ func CounterParties(
 			}
 			return templ_7745c5c3_Err
 		})
-		templ_7745c5c3_Err = baseLayout("CounterParties", balances).Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = baseLayout("Counterparties", balances).Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -100,7 +100,7 @@ func CounterParties(
 	})
 }
 
-func CreateCounterPartyForm(fd *CounterPartyFD) templ.Component {
+func CreateCounterpartyForm(fd *CounterpartyFD) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
@@ -136,7 +136,7 @@ func CreateCounterPartyForm(fd *CounterPartyFD) templ.Component {
 			}
 			return templ_7745c5c3_Err
 		})
-		templ_7745c5c3_Err = creationForm("Create Counter Party", "/counter-parties", "Create CounterParty").Render(templ.WithChildren(ctx, templ_7745c5c3_Var5), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = creationForm("Create Counterparty", "/counterparties", "Create Counterparty").Render(templ.WithChildren(ctx, templ_7745c5c3_Var5), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -144,7 +144,7 @@ func CreateCounterPartyForm(fd *CounterPartyFD) templ.Component {
 	})
 }
 
-func EditCounterParty(id string, fd *CounterPartyFD) templ.Component {
+func EditCounterparty(id string, fd *CounterpartyFD) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
@@ -181,7 +181,7 @@ func EditCounterParty(id string, fd *CounterPartyFD) templ.Component {
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(id)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/counter-parties.templ`, Line: 35, Col: 13}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/counterparties.templ`, Line: 35, Col: 13}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 			if templ_7745c5c3_Err != nil {
@@ -199,13 +199,13 @@ func EditCounterParty(id string, fd *CounterPartyFD) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = editFormButtons(fmt.Sprintf("/counter-parties/%s", id)).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = editFormButtons(fmt.Sprintf("/counterparties/%s", id)).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return templ_7745c5c3_Err
 		})
-		templ_7745c5c3_Err = form("put", fmt.Sprintf("/counter-parties/%s", id), templ.Attributes{"hx-target": "this"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var7), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = form("put", fmt.Sprintf("/counterparties/%s", id), templ.Attributes{"hx-target": "this"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var7), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -213,7 +213,7 @@ func EditCounterParty(id string, fd *CounterPartyFD) templ.Component {
 	})
 }
 
-func counterpartyFormBody(id string, fd *CounterPartyFD) templ.Component {
+func counterpartyFormBody(id string, fd *CounterpartyFD) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
@@ -239,7 +239,7 @@ func counterpartyFormBody(id string, fd *CounterPartyFD) templ.Component {
 	})
 }
 
-func counterpartiesList(counterparties []models.CounterParty) templ.Component {
+func counterpartiesList(counterparties []models.Counterparty) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
@@ -270,7 +270,7 @@ func counterpartiesList(counterparties []models.CounterParty) templ.Component {
 			}
 			ctx = templ.InitializeContext(ctx)
 			for _, per := range counterparties {
-				templ_7745c5c3_Err = CounterParty(&per).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = Counterparty(&per).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -285,7 +285,7 @@ func counterpartiesList(counterparties []models.CounterParty) templ.Component {
 	})
 }
 
-func CounterParty(per *models.CounterParty) templ.Component {
+func Counterparty(per *models.Counterparty) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
@@ -310,7 +310,7 @@ func CounterParty(per *models.CounterParty) templ.Component {
 		var templ_7745c5c3_Var13 string
 		templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(per.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/counter-parties.templ`, Line: 55, Col: 17}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/counterparties.templ`, Line: 55, Col: 17}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 		if templ_7745c5c3_Err != nil {
@@ -323,7 +323,7 @@ func CounterParty(per *models.CounterParty) templ.Component {
 		var templ_7745c5c3_Var14 string
 		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(per.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/counter-parties.templ`, Line: 56, Col: 21}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/counterparties.templ`, Line: 56, Col: 21}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 		if templ_7745c5c3_Err != nil {
@@ -336,7 +336,7 @@ func CounterParty(per *models.CounterParty) templ.Component {
 		var templ_7745c5c3_Var15 string
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(per.CreatedAt.Format(time.RFC1123Z))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/counter-parties.templ`, Line: 57, Col: 53}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/counterparties.templ`, Line: 57, Col: 53}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 		if templ_7745c5c3_Err != nil {
@@ -346,11 +346,11 @@ func CounterParty(per *models.CounterParty) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = editButton(fmt.Sprintf("/counter-parties/%s/edit", per.ID)).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = editButton(fmt.Sprintf("/counterparties/%s/edit", per.ID)).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = deleteButton(fmt.Sprintf("/counter-parties/%s", per.ID)).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = deleteButton(fmt.Sprintf("/counterparties/%s", per.ID)).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -362,7 +362,7 @@ func CounterParty(per *models.CounterParty) templ.Component {
 	})
 }
 
-func CounterPartyOOB(per *models.CounterParty) templ.Component {
+func CounterpartyOOB(per *models.Counterparty) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
@@ -384,7 +384,7 @@ func CounterPartyOOB(per *models.CounterParty) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = CounterParty(per).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = Counterparty(per).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
