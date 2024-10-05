@@ -172,11 +172,6 @@ func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (tem
 	fd := h.mapTransactionToFD(tx, new(errs.ValidationError))
 	fd.FrequencyFD = nil
 
-	// TODO: only add if the tx kind isn't transfer
-	if fd.CategoryID == nil {
-		fd.CategoryID = &views.FDInput{}
-	}
-
 	return views.EditTransaction(tx, fd, accs, knds, cats), nil
 }
 

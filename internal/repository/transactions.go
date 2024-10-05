@@ -143,12 +143,17 @@ func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transa
 	return r.transact(func(qtx *db.Queries) error {
 		l := logger.FromCtx(ctx)
 
-		var catId sql.NullString
+		catId := sql.NullString{}
+		toAccId := sql.NullString{}
 
 		if tx.Category != nil {
-			catId = sql.NullString{String: tx.Category.ID, Valid: tx.Category.ID != ""}
-		} else {
-			catId = sql.NullString{Valid: false}
+			catId.Valid = true
+			catId.String = tx.Category.ID
+		}
+
+		if tx.ToAccount != nil {
+			toAccId.Valid = true
+			toAccId.String = tx.ToAccount.ID
 		}
 
 		if err := qtx.UpdateTransaction(ctx, db.UpdateTransactionParams{
@@ -157,6 +162,9 @@ func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transa
 			Amount:      tx.Amount,
 			KindID:      tx.Kind.ID,
 			CategoryID:  catId,
+			ToAccountID: toAccId,
+			ToAmount:    sql.NullFloat64{Float64: tx.ToAmount, Valid: tx.ToAmount != 0},
+			Description: sql.NullString{String: tx.Description, Valid: tx.Description != ""},
 			ScheduledTo: tx.ScheduledTo,
 		}); err != nil {
 			l.Error("updating transaction", zap.Error(err), zap.Any("new_transaction", tx), zap.Any("old_transaction", oldTx))
