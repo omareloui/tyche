@@ -24,7 +24,18 @@ INSERT INTO transactions (
     scheduled_to,
     fulfilled_on
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (
+    ?1,
+    ?2,
+    ROUND(?3, 2),
+    ?4,
+    ?5,
+    ?6,
+    ?7,
+    IIF(?8 > 0.0, ROUND(?8, 2), NULL),
+    ?9,
+    ?10
+)
 `
 
 type CreateTransactionParams struct {
@@ -35,7 +46,7 @@ type CreateTransactionParams struct {
 	CategoryID  sql.NullString
 	Description sql.NullString
 	ToAccountID sql.NullString
-	ToAmount    sql.NullFloat64
+	ToAmount    interface{}
 	ScheduledTo time.Time
 	FulfilledOn sql.NullTime
 }
@@ -58,7 +69,7 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 
 const deleteTransaction = `-- name: DeleteTransaction :exec
 DELETE FROM transactions
-WHERE id = ?
+WHERE id = ?1
 `
 
 func (q *Queries) DeleteTransaction(ctx context.Context, id string) error {
@@ -69,8 +80,8 @@ func (q *Queries) DeleteTransaction(ctx context.Context, id string) error {
 const fulfillTransaction = `-- name: FulfillTransaction :exec
 UPDATE transactions
 SET
-fulfilled_on = DATETIME('now')
-WHERE id = ?
+    fulfilled_on = DATETIME('now')
+WHERE id = ?1
 `
 
 func (q *Queries) FulfillTransaction(ctx context.Context, id string) error {
@@ -115,7 +126,7 @@ LEFT JOIN transaction_kinds AS k ON t.kind_id = k.id
 LEFT JOIN goals_progresses AS gp ON t.id = gp.transaction_id
 LEFT JOIN categories AS cat ON t.category_id = cat.id
 LEFT JOIN goals AS g ON gp.goal_id = g.id
-WHERE t.id = ? LIMIT 1
+WHERE t.id = ?1 LIMIT 1
 `
 
 type GetTransactionRow struct {
@@ -303,15 +314,15 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 const updateTransaction = `-- name: UpdateTransaction :exec
 UPDATE transactions
 SET
-account_id = ?,
-amount = ?,
-kind_id = ?,
-category_id = ?,
-description = ?,
-to_account_id = ?,
-to_amount = ?,
-scheduled_to = ?
-WHERE id = ?
+    account_id = ?1,
+    amount = ROUND(?2, 2),
+    kind_id = ?3,
+    category_id = ?4,
+    description = ?5,
+    to_account_id = ?6,
+    to_amount = ROUND(?7, 2),
+    scheduled_to = ?8
+WHERE id = ?9
 `
 
 type UpdateTransactionParams struct {
@@ -321,7 +332,7 @@ type UpdateTransactionParams struct {
 	CategoryID  sql.NullString
 	Description sql.NullString
 	ToAccountID sql.NullString
-	ToAmount    sql.NullFloat64
+	ToAmount    float64
 	ScheduledTo time.Time
 	ID          string
 }

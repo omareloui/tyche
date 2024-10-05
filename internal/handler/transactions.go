@@ -80,7 +80,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 			l.Error("parsing frequent transaction", zap.Error(err), zap.Any("frequent tx", ftx))
 			return nil, err
 		}
-		l.Debug("parsed frequent transaction", zap.Any("frequent tx", ftx))
+		l.Debug("parsed frequent transaction")
 
 		ftx.ID = idgen.New()
 		ftx.LastTransactionCreatedAt = time.Now()

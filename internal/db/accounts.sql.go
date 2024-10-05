@@ -12,7 +12,7 @@ import (
 )
 
 const addToAccount = `-- name: AddToAccount :exec
-UPDATE accounts SET amount = amount + ? WHERE id = ?
+UPDATE accounts SET amount = ROUND(amount + ?, 2) WHERE id = ?
 `
 
 type AddToAccountParams struct {
@@ -400,7 +400,7 @@ func (q *Queries) GetBalances(ctx context.Context) ([]GetBalancesRow, error) {
 }
 
 const removeFromAccount = `-- name: RemoveFromAccount :exec
-UPDATE accounts SET amount = amount - ? WHERE id = ?
+UPDATE accounts SET amount = ROUND(amount - ?, 2) WHERE id = ?
 `
 
 type RemoveFromAccountParams struct {

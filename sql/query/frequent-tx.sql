@@ -10,18 +10,35 @@ INSERT INTO frequent_txs (
     description,
     to_account_id,
     to_amount,
-    stops_on,
     starts_on,
+    stops_on,
     last_transaction_created_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (
+    sqlc.arg(id),
+    sqlc.arg(frequency_by),
+    sqlc.arg(frequency),
+    sqlc.arg(account_id),
+    ROUND(sqlc.arg(amount), 2),
+    sqlc.arg(kind_id),
+    sqlc.arg(category_id),
+    sqlc.arg(description),
+    sqlc.arg(to_account_id),
+    IIF(sqlc.narg(to_amount) > 0.0, ROUND(sqlc.narg(to_amount), 2), NULL),
+    sqlc.arg(starts_on),
+    sqlc.arg(stops_on),
+    sqlc.arg(last_transaction_created_at)
+);
 
 -- name: CreateFrequentTxTransaction :exec
 INSERT INTO frequent_txs_transactions (
     transaction_id,
     frequency_id
 )
-VALUES (?, ?);
+VALUES (
+    sqlc.arg(transaction_id),
+    sqlc.arg(frequency_id)
+);
 
 -- name: GetFrequentTxs :many
 SELECT
@@ -151,42 +168,42 @@ LEFT JOIN accounts AS tta ON t.to_account_id = tta.id
 LEFT JOIN currencies AS ttc ON tta.currency_id = ttc.id
 LEFT JOIN transaction_kinds AS tk ON t.kind_id = k.id
 LEFT JOIN categories AS tcat ON t.category_id = tcat.id
-WHERE ft.id = ?;
+WHERE ft.id = sqlc.arg(id);
 
 -- name: UpdateFrequentTx :exec
 UPDATE frequent_txs
 SET
-frequency_by = ?,
-frequency = ?,
-account_id = ?,
-amount = ?,
-kind_id = ?,
-category_id = ?,
-description = ?,
-to_account_id = ?,
-to_amount = ?,
-stops_on = ?,
-last_transaction_created_at = ?
-WHERE id = ?;
+    frequency_by = sqlc.arg(frequency_by),
+    frequency = sqlc.arg(frequency),
+    account_id = sqlc.arg(account_id),
+    amount = ROUND(sqlc.arg(amount), 2),
+    kind_id = sqlc.arg(kind_id),
+    category_id = sqlc.arg(category_id),
+    description = sqlc.arg(description),
+    to_account_id = sqlc.arg(to_account_id),
+    to_amount = IIF(sqlc.narg(to_amount) > 0.0, ROUND(sqlc.narg(to_amount), 2), NULL),
+    stops_on = sqlc.arg(stops_on),
+    last_transaction_created_at = sqlc.arg(last_transaction_created_at)
+WHERE id = sqlc.arg(id);
 
 
 -- name: UpdateFrequentTxLastTransactionCreatedAt :exec
 UPDATE frequent_txs
 SET
-last_transaction_created_at = ?
-WHERE id = ?;
+    last_transaction_created_at = sqlc.arg(last_transaction_created_at)
+WHERE id = sqlc.arg(id);
 
 
 -- name: DeleteFrequentTx :exec
 DELETE FROM frequent_txs
-WHERE id = ?;
+WHERE id = sqlc.arg(id);
 
 -- name: DeleteScheduledTransactionsOfFrequentTx :exec
 DELETE FROM transactions
-WHERE ROWID IN (
-    SELECT tx.ROWID FROM transactions AS tx
-    LEFT JOIN frequent_txs_transactions AS ftxt ON ftxt.transaction_id = tx.id 
+WHERE rowid IN (
+    SELECT tx.rowid FROM transactions AS tx
+    LEFT JOIN frequent_txs_transactions AS ftxt ON tx.id = ftxt.transaction_id
     WHERE
-        ftxt.frequency_id = ? AND
-        tx.fulfilled_on IS NULL
+        ftxt.frequency_id = sqlc.arg(frequency_id)
+    AND tx.fulfilled_on IS NULL
 );

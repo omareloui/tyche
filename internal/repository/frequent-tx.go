@@ -39,7 +39,7 @@ func (r *Repository) createFrequentTxWithTxn(qtx *db.Queries, ctx context.Contex
 		CategoryID:               catId,
 		Description:              sql.NullString{String: ftx.Description, Valid: ftx.Description != ""},
 		ToAccountID:              toAccId,
-		ToAmount:                 sql.NullFloat64{Float64: ftx.ToAmount, Valid: ftx.ToAmount != 0},
+		ToAmount:                 ftx.ToAmount,
 		StartsOn:                 ftx.StartsOn,
 		StopsOn:                  sql.NullTime{Time: ftx.StopsOn, Valid: !ftx.StopsOn.IsZero()},
 		LastTransactionCreatedAt: ftx.LastTransactionCreatedAt,
@@ -124,7 +124,7 @@ func (r *Repository) UpdateFrequentTx(ctx context.Context, ftx *models.FrequentT
 			Frequency:                int64(ftx.Frequency),
 			Description:              sql.NullString{String: ftx.Description, Valid: ftx.Description != ""},
 			ToAccountID:              toAccId,
-			ToAmount:                 sql.NullFloat64{Float64: ftx.ToAmount, Valid: ftx.ToAmount != 0},
+			ToAmount:                 ftx.ToAmount,
 			StopsOn:                  sql.NullTime{Time: ftx.StopsOn, Valid: !ftx.StopsOn.IsZero()},
 			LastTransactionCreatedAt: ftx.LastTransactionCreatedAt,
 		}); err != nil {

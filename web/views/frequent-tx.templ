@@ -91,6 +91,10 @@ templ FrequentTx(ftx *models.FrequentTx) {
 		<p>ID: { ftx.ID }</p>
 		<p>Account: { ftx.Account.Name }</p>
 		<p>Amount: { ftx.ViewAmount() }</p>
+		if ftx.ToAccount != nil {
+			<p>To Account: { ftx.ToAccount.Name }</p>
+			<p>To Amount: { ftx.ViewToAmount() }</p>
+		}
 		<p>Kind: { ftx.Kind.Kind }</p>
 		if ftx.Description != "" {
 			<p>Description: { ftx.Description }</p>

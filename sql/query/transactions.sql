@@ -11,7 +11,18 @@ INSERT INTO transactions (
     scheduled_to,
     fulfilled_on
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (
+    sqlc.arg(id),
+    sqlc.arg(account_id),
+    ROUND(sqlc.arg(amount), 2),
+    sqlc.arg(kind_id),
+    sqlc.arg(category_id),
+    sqlc.arg(description),
+    sqlc.arg(to_account_id),
+    IIF(sqlc.narg(to_amount) > 0.0, ROUND(sqlc.narg(to_amount), 2), NULL),
+    sqlc.arg(scheduled_to),
+    sqlc.arg(fulfilled_on)
+);
 
 -- name: GetTransactions :many
 SELECT
@@ -89,27 +100,27 @@ LEFT JOIN transaction_kinds AS k ON t.kind_id = k.id
 LEFT JOIN goals_progresses AS gp ON t.id = gp.transaction_id
 LEFT JOIN categories AS cat ON t.category_id = cat.id
 LEFT JOIN goals AS g ON gp.goal_id = g.id
-WHERE t.id = ? LIMIT 1;
+WHERE t.id = sqlc.arg(id) LIMIT 1;
 
 -- name: UpdateTransaction :exec
 UPDATE transactions
 SET
-account_id = ?,
-amount = ?,
-kind_id = ?,
-category_id = ?,
-description = ?,
-to_account_id = ?,
-to_amount = ?,
-scheduled_to = ?
-WHERE id = ?;
+    account_id = sqlc.arg(account_id),
+    amount = ROUND(sqlc.arg(amount), 2),
+    kind_id = sqlc.arg(kind_id),
+    category_id = sqlc.arg(category_id),
+    description = sqlc.arg(description),
+    to_account_id = sqlc.narg(to_account_id),
+    to_amount = ROUND(sqlc.narg(to_amount), 2),
+    scheduled_to = sqlc.arg(scheduled_to)
+WHERE id = sqlc.arg(id);
 
 -- name: FulfillTransaction :exec
 UPDATE transactions
 SET
-fulfilled_on = DATETIME('now')
-WHERE id = ?;
+    fulfilled_on = DATETIME('now')
+WHERE id = sqlc.arg(id);
 
 -- name: DeleteTransaction :exec
 DELETE FROM transactions
-WHERE id = ?;
+WHERE id = sqlc.arg(id);

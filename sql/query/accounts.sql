@@ -148,10 +148,10 @@ DELETE FROM accounts
 WHERE id = ?;
 
 -- name: AddToAccount :exec
-UPDATE accounts SET amount = amount + ? WHERE id = ?;
+UPDATE accounts SET amount = ROUND(amount + ?, 2) WHERE id = ?;
 
 -- name: RemoveFromAccount :exec
-UPDATE accounts SET amount = amount - ? WHERE id = ?;
+UPDATE accounts SET amount = ROUND(amount - ?, 2) WHERE id = ?;
 
 -- name: GetBalances :many
 SELECT

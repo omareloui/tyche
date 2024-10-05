@@ -126,29 +126,56 @@ func (r *Repository) DeleteAccount(ctx context.Context, id string) error {
 
 func (r *Repository) applyTxToAccountWithTxn(qtx *db.Queries, ctx context.Context, tx *models.Transaction) error {
 	l := logger.FromCtx(ctx)
-	upBalance := r.removeFromAccountWithTxn
-	if tx.Kind.IncreaseBalance {
-		upBalance = r.addToAccountWithTxn
+
+	if tx.Kind.Kind == models.TransferTxKind {
+		if err := r.removeFromAccountWithTxn(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {
+			l.Error("applying transfer: remove from account", zap.Error(err), zap.Any("transaction", tx))
+			return err
+		}
+		l.Debug("applied transfer: remove from account")
+		if err := r.addToAccountWithTxn(qtx, ctx, tx.ToAccount.ID, tx.ToAmount); err != nil {
+			l.Error("applying transfer: add to account", zap.Error(err), zap.Any("transaction", tx))
+			return err
+		}
+		l.Debug("applied transfer: add to account")
+	} else {
+		upBalance := r.removeFromAccountWithTxn
+		if tx.Kind.IncreaseBalance {
+			upBalance = r.addToAccountWithTxn
+		}
+		if err := upBalance(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {
+			l.Error("applying transaction to account", zap.Error(err), zap.Any("transaction", tx))
+			return err
+		}
+		l.Debug("applied transaction to account", zap.Any("transaction", tx))
 	}
-	if err := upBalance(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {
-		l.Error("applying transaction to account", zap.Error(err), zap.Any("transaction", tx))
-		return err
-	}
-	l.Debug("applied transaction to account", zap.Any("transaction", tx))
 	return nil
 }
 
 func (r *Repository) undoTxToAccountWithTxn(qtx *db.Queries, ctx context.Context, tx *models.Transaction) error {
 	l := logger.FromCtx(ctx)
-	upBalance := r.addToAccountWithTxn
-	if tx.Kind.IncreaseBalance {
-		upBalance = r.removeFromAccountWithTxn
+	if tx.Kind.Kind == models.TransferTxKind {
+		if err := r.addToAccountWithTxn(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {
+			l.Error("undoing transfer: remove from account", zap.Error(err), zap.Any("transaction", tx))
+			return err
+		}
+		l.Debug("undone transfer: remove from account")
+		if err := r.removeFromAccountWithTxn(qtx, ctx, tx.ToAccount.ID, tx.ToAmount); err != nil {
+			l.Error("undoing transfer: add to account", zap.Error(err), zap.Any("transaction", tx))
+			return err
+		}
+		l.Debug("undone transfer: add to account")
+	} else {
+		upBalance := r.addToAccountWithTxn
+		if tx.Kind.IncreaseBalance {
+			upBalance = r.removeFromAccountWithTxn
+		}
+		if err := upBalance(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {
+			l.Error("undoing transaction to account", zap.Error(err), zap.Any("transaction", tx))
+			return err
+		}
+		l.Debug("undone transaction to account", zap.Any("transaction", tx))
 	}
-	if err := upBalance(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {
-		l.Error("undoing transaction to account", zap.Error(err), zap.Any("transaction", tx))
-		return err
-	}
-	l.Debug("undone transaction to account", zap.Any("transaction", tx))
 	return nil
 }
 

@@ -216,6 +216,8 @@ func generateNextScheduledTransactions(ftx *models.FrequentTx, count int) []mode
 			Amount:      ftx.Amount,
 			Kind:        ftx.Kind,
 			Category:    ftx.Category,
+			ToAccount:   ftx.ToAccount,
+			ToAmount:    ftx.ToAmount,
 			Description: ftx.Description,
 			ScheduledTo: nextOn,
 			CreatedAt:   now,

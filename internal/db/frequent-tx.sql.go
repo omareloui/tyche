@@ -23,11 +23,25 @@ INSERT INTO frequent_txs (
     description,
     to_account_id,
     to_amount,
-    stops_on,
     starts_on,
+    stops_on,
     last_transaction_created_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (
+    ?1,
+    ?2,
+    ?3,
+    ?4,
+    ROUND(?5, 2),
+    ?6,
+    ?7,
+    ?8,
+    ?9,
+    IIF(?10 > 0.0, ROUND(?10, 2), NULL),
+    ?11,
+    ?12,
+    ?13
+)
 `
 
 type CreateFrequentTxParams struct {
@@ -40,9 +54,9 @@ type CreateFrequentTxParams struct {
 	CategoryID               sql.NullString
 	Description              sql.NullString
 	ToAccountID              sql.NullString
-	ToAmount                 sql.NullFloat64
-	StopsOn                  sql.NullTime
+	ToAmount                 interface{}
 	StartsOn                 time.Time
+	StopsOn                  sql.NullTime
 	LastTransactionCreatedAt time.Time
 }
 
@@ -58,8 +72,8 @@ func (q *Queries) CreateFrequentTx(ctx context.Context, arg CreateFrequentTxPara
 		arg.Description,
 		arg.ToAccountID,
 		arg.ToAmount,
-		arg.StopsOn,
 		arg.StartsOn,
+		arg.StopsOn,
 		arg.LastTransactionCreatedAt,
 	)
 	return err
@@ -70,7 +84,10 @@ INSERT INTO frequent_txs_transactions (
     transaction_id,
     frequency_id
 )
-VALUES (?, ?)
+VALUES (
+    ?1,
+    ?2
+)
 `
 
 type CreateFrequentTxTransactionParams struct {
@@ -85,7 +102,7 @@ func (q *Queries) CreateFrequentTxTransaction(ctx context.Context, arg CreateFre
 
 const deleteFrequentTx = `-- name: DeleteFrequentTx :exec
 DELETE FROM frequent_txs
-WHERE id = ?
+WHERE id = ?1
 `
 
 func (q *Queries) DeleteFrequentTx(ctx context.Context, id string) error {
@@ -95,12 +112,12 @@ func (q *Queries) DeleteFrequentTx(ctx context.Context, id string) error {
 
 const deleteScheduledTransactionsOfFrequentTx = `-- name: DeleteScheduledTransactionsOfFrequentTx :exec
 DELETE FROM transactions
-WHERE ROWID IN (
-    SELECT tx.ROWID FROM transactions AS tx
-    LEFT JOIN frequent_txs_transactions AS ftxt ON ftxt.transaction_id = tx.id 
+WHERE rowid IN (
+    SELECT tx.rowid FROM transactions AS tx
+    LEFT JOIN frequent_txs_transactions AS ftxt ON tx.id = ftxt.transaction_id
     WHERE
-        ftxt.frequency_id = ? AND
-        tx.fulfilled_on IS NULL
+        ftxt.frequency_id = ?1
+    AND tx.fulfilled_on IS NULL
 )
 `
 
@@ -172,7 +189,7 @@ LEFT JOIN accounts AS tta ON t.to_account_id = tta.id
 LEFT JOIN currencies AS ttc ON tta.currency_id = ttc.id
 LEFT JOIN transaction_kinds AS tk ON t.kind_id = k.id
 LEFT JOIN categories AS tcat ON t.category_id = tcat.id
-WHERE ft.id = ?
+WHERE ft.id = ?1
 `
 
 type GetFrequentTxRow struct {
@@ -481,18 +498,18 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 const updateFrequentTx = `-- name: UpdateFrequentTx :exec
 UPDATE frequent_txs
 SET
-frequency_by = ?,
-frequency = ?,
-account_id = ?,
-amount = ?,
-kind_id = ?,
-category_id = ?,
-description = ?,
-to_account_id = ?,
-to_amount = ?,
-stops_on = ?,
-last_transaction_created_at = ?
-WHERE id = ?
+    frequency_by = ?1,
+    frequency = ?2,
+    account_id = ?3,
+    amount = ROUND(?4, 2),
+    kind_id = ?5,
+    category_id = ?6,
+    description = ?7,
+    to_account_id = ?8,
+    to_amount = IIF(?9 > 0.0, ROUND(?9, 2), NULL),
+    stops_on = ?10,
+    last_transaction_created_at = ?11
+WHERE id = ?12
 `
 
 type UpdateFrequentTxParams struct {
@@ -504,7 +521,7 @@ type UpdateFrequentTxParams struct {
 	CategoryID               sql.NullString
 	Description              sql.NullString
 	ToAccountID              sql.NullString
-	ToAmount                 sql.NullFloat64
+	ToAmount                 interface{}
 	StopsOn                  sql.NullTime
 	LastTransactionCreatedAt time.Time
 	ID                       string
@@ -531,8 +548,8 @@ func (q *Queries) UpdateFrequentTx(ctx context.Context, arg UpdateFrequentTxPara
 const updateFrequentTxLastTransactionCreatedAt = `-- name: UpdateFrequentTxLastTransactionCreatedAt :exec
 UPDATE frequent_txs
 SET
-last_transaction_created_at = ?
-WHERE id = ?
+    last_transaction_created_at = ?1
+WHERE id = ?2
 `
 
 type UpdateFrequentTxLastTransactionCreatedAtParams struct {

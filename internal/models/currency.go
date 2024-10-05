@@ -3,22 +3,23 @@ package models
 type CurrencyEnum uint8
 
 const (
-	CurrencyEgp CurrencyEnum = iota + 1
+	CurrencyNull CurrencyEnum = iota
+	CurrencyEgp
 	CurrencyUsd
 )
 
 const DfltCurrency = CurrencyEgp
 
 func (cs CurrencyEnum) String() string {
-	return [...]string{"EGP", "USD"}[cs-1]
+	return [...]string{"???", "EGP", "USD"}[cs]
 }
 
 func (cs CurrencyEnum) Symbol() string {
-	return [...]string{"EG£", "US$"}[cs-1]
+	return [...]string{"???", "EG£", "US$"}[cs]
 }
 
 func (cs CurrencyEnum) IBANPrefix() string {
-	return [...]string{"EG", "US"}[cs-1]
+	return [...]string{"??", "EG", "US"}[cs]
 }
 
 type Currency struct {
