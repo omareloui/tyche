@@ -191,6 +191,7 @@ LEFT JOIN goals_progresses AS gp ON gp.goal_id = gl.id
 LEFT JOIN transactions AS t ON t.id = gp.transaction_id
 LEFT JOIN accounts AS a ON a.id = t.account_id
 LEFT JOIN currencies AS ac ON ac.id = a.currency_id
+ORDER BY gl.created_at DESC
 `
 
 type GetGoalsRow struct {

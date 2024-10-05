@@ -52,6 +52,7 @@ SELECT
     kind,
     increase_balance
 FROM transaction_kinds
+ORDER BY kind
 `
 
 func (q *Queries) GetTransactionKinds(ctx context.Context) ([]TransactionKind, error) {

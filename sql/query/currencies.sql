@@ -10,7 +10,8 @@ SELECT
     id,
     enum,
     egp_fx_rate
-FROM currencies;
+FROM currencies
+ORDER BY enum;
 
 -- name: CreateCurrency :exec
 INSERT INTO currencies (id, enum, egp_fx_rate)

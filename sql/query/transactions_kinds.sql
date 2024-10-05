@@ -3,7 +3,8 @@ SELECT
     id,
     kind,
     increase_balance
-FROM transaction_kinds;
+FROM transaction_kinds
+ORDER BY kind;
 
 -- name: GetTransactionKind :one
 SELECT

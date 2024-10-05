@@ -377,7 +377,7 @@ WHERE
     a.is_archived IS FALSE
     AND a.exclude_from_balance IS FALSE
 GROUP BY a.currency_id
-ORDER BY balance DESC
+ORDER BY c.enum
 `
 
 type GetBalancesRow struct {

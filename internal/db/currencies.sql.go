@@ -31,6 +31,7 @@ SELECT
     enum,
     egp_fx_rate
 FROM currencies
+ORDER BY enum
 `
 
 func (q *Queries) GetCurrencies(ctx context.Context) ([]Currency, error) {

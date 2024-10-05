@@ -10,7 +10,7 @@ SELECT
     c.egp_fx_rate
 FROM items AS i
 LEFT JOIN currencies AS c ON i.currency_id = c.id
-ORDER BY i.price;
+ORDER BY i.created_at DESC;
 
 -- name: GetItem :one
 SELECT

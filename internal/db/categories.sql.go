@@ -64,7 +64,7 @@ SELECT
     k.increase_balance
 FROM categories AS c
 LEFT JOIN transaction_kinds AS k ON c.kind_id = k.id
-ORDER BY c.created_at DESC
+ORDER BY c.created_at
 `
 
 type GetCategoriesRow struct {
