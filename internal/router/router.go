@@ -69,6 +69,13 @@ func New(h *handler.Handler) Router {
 	mux.Handle("PUT /items/{id}", handle(h.EditItem))
 	mux.Handle("DELETE /items/{id}", handle(h.DeleteItem))
 
+	mux.Handle("GET /counter-parties", handle(h.CounterParties))
+	mux.Handle("POST /counter-parties", handle(h.CreateCounterParty))
+	mux.Handle("GET /counter-parties/{id}", handle(h.CounterParty))
+	mux.Handle("GET /counter-parties/{id}/edit", handle(h.GetEditCounterParty))
+	mux.Handle("PUT /counter-parties/{id}", handle(h.EditCounterParty))
+	mux.Handle("DELETE /counter-parties/{id}", handle(h.DeleteCounterParty))
+
 	mux.Handle("POST /amount-inputs", handle(h.AmountInputs))
 	mux.Handle("POST /account-inputs", handle(h.AccountInputs))
 	mux.Handle("POST /iban-inputs", handle(h.IbanInputs))

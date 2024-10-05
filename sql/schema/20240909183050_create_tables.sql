@@ -105,6 +105,11 @@ CREATE TABLE categories (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id) ON DELETE CASCADE
 );
+CREATE TABLE counter_parties (
+    id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
+    name VARCHAR UNIQUE NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 -- +goose StatementEnd
 
 -- +goose Down
@@ -119,4 +124,5 @@ DROP TABLE items;
 DROP TABLE accounts;
 DROP TABLE account_kinds;
 DROP TABLE categories;
+DROP TABLE counter_parties;
 -- +goose StatementEnd

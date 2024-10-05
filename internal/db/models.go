@@ -38,6 +38,12 @@ type Category struct {
 	CreatedAt   time.Time
 }
 
+type CounterParty struct {
+	ID        string
+	Name      string
+	CreatedAt time.Time
+}
+
 type Currency struct {
 	ID        string
 	Enum      int64
