@@ -64,7 +64,7 @@ type createFrequentTx struct {
 	ToAmount    float64 `validate:"required_if=KindString TRANSFER"`
 	Description string  `conform:"trim"`
 
-	StartsOn                 time.Time `validate:"required"`
+	StartsOn                 time.Time
 	StopsOn                  time.Time `validate:"omitempty,gtfield=StartsOn"`
 	LastTransactionCreatedAt time.Time `validate:"required"`
 }

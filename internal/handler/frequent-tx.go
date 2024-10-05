@@ -11,6 +11,7 @@ import (
 	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views"
 	"go.uber.org/zap"
 )
@@ -110,16 +111,26 @@ func (h Handler) EditFrequentTx(w http.ResponseWriter, r *http.Request) (templ.C
 	ftx.ID = id
 	ftx.LastTransactionCreatedAt = time.Now()
 
+	accs, knds, cats, err := h.getTxDeps(r.Context())
+	if err != nil {
+		return nil, err
+	}
+
+	if knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == ftx.Kind.ID }); knd != nil {
+		ftx.Kind = *knd
+	} else {
+		l.Error("mapping kind id to frequent transaction")
+		return nil, errs.ErrInvalidID
+	}
+
 	if err := ftx.SanitizeAndValidate(h.sani, h.valid); err != nil {
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
-			accs, knds, cats, err := h.getTxDeps(r.Context())
-			if err != nil {
-				return nil, err
-			}
+			l.Error("validating frequent transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
 			return views.EditFrequentTx(ftx, h.mapFrequentTxToFD(ftx, &valerr),
 				accs, knds, cats), nil
 		}
+		l.Error("sanitizing frequent transaction", zap.Error(err))
 		return nil, err
 	}
 
@@ -233,6 +244,11 @@ func (h Handler) mapFDToFrequentTx(r *http.Request) (*models.FrequentTx, error) 
 		return nil, err
 	}
 
+	toAmount, err := parseFloatIfExists(r.FormValue("to_amount"))
+	if err != nil {
+		return nil, err
+	}
+
 	stopsOn, err := parseDateOnlyIfExists(r.FormValue("stops_on"))
 	if err != nil {
 		return nil, err
@@ -248,34 +264,36 @@ func (h Handler) mapFDToFrequentTx(r *http.Request) (*models.FrequentTx, error) 
 		return nil, err
 	}
 
+	kndId := r.FormValue("kind_id")
+
+	var cat *models.Category
+	if catId := r.FormValue("category_id"); catId != "" {
+		cat = &models.Category{ID: catId, Kind: models.TransactionKind{ID: kndId}}
+	}
+
+	toAccId := r.FormValue("to_account_id")
+	var toAcc *models.Account
+	if toAccId != "" {
+		toAcc = &models.Account{ID: toAccId}
+	}
+
 	return &models.FrequentTx{
-		Account: models.Account{
-			ID: r.FormValue("account_id"),
-		},
-		Amount:       amount,
+		Account: models.Account{ID: r.FormValue("account_id")},
+		Amount: amount,
 		Frequency:    uint(freq),
 		FrequencyBy:  models.FrequencyBy(freqBy),
 		StopsOn:      stopsOn,
 		Transactions: []models.Transaction{},
 		Description:  r.FormValue("description"),
-		Kind:         models.TransactionKind{ID: r.FormValue("kind_id")},
-		Category:     &models.Category{ID: r.FormValue("category_id")},
+		Kind:         models.TransactionKind{ID: kndId},
+		Category:     cat,
+		ToAccount:    toAcc,
+		ToAmount:     toAmount,
 	}, nil
 }
 
 func (h Handler) mapFrequentTxToFD(ftx *models.FrequentTx, valerr *errs.ValidationError) *views.FrequentTxFD {
-	var catId string
-	var toAccId string
-
-	if ftx.Category != nil {
-		catId = ftx.Category.ID
-	}
-
-	if ftx.ToAccount != nil {
-		toAccId = ftx.ToAccount.ID
-	}
-
-	return &views.FrequentTxFD{
+	fd := &views.FrequentTxFD{
 		FrequencyFD: views.FrequencyFD{
 			IsFrequent: views.FDInput{Value: "on"},
 			FrequentBy: views.FDInput{Value: formatIntIfNonZero(int(ftx.FrequencyBy)), Error: valerr.Errors.MsgFor("FrequentBy")},
@@ -288,14 +306,29 @@ func (h Handler) mapFrequentTxToFD(ftx *models.FrequentTx, valerr *errs.Validati
 				Amount:    views.FDInput{Value: formatFloatIfNonZero(ftx.Amount), Error: valerr.Errors.MsgFor("Amount")},
 			},
 			KindID: views.FDInput{Value: ftx.Kind.ID, Error: valerr.Errors.MsgFor("KindID")},
-			ToAccountIFD: &views.AccountIFD{
-				AccountID: views.FDInput{Value: toAccId, Error: valerr.Errors.MsgFor("ToAccountID")},
-				Amount:    views.FDInput{Value: formatFloatIfNonZero(ftx.ToAmount), Error: valerr.Errors.MsgFor("ToAmount")},
-			},
-			CategoryID: &views.FDInput{Value: catId, Error: valerr.Errors.MsgFor("CategoryID")},
 		},
 		Description: views.FDInput{Value: ftx.Description, Error: valerr.Errors.MsgFor("Description")},
 	}
+
+	if ftx.Category != nil {
+		fd.CategoryID = &views.FDInput{Value: ftx.Category.ID, Error: valerr.Errors.MsgFor("CategoryID")}
+	} else if ftx.Kind.Kind != models.TransferTxKind {
+		fd.CategoryID = &views.FDInput{}
+	}
+
+	if ftx.ToAccount != nil {
+		fd.ToAccountIFD = &views.AccountIFD{
+			Amount:    views.FDInput{Value: formatFloatIfNonZero(ftx.ToAmount), Error: valerr.Errors.MsgFor("ToAmount")},
+			AccountID: views.FDInput{Value: ftx.ToAccount.ID, Error: valerr.Errors.MsgFor("ToAccountID")},
+		}
+	} else if ftx.Kind.Kind == models.TransferTxKind {
+		fd.ToAccountIFD = &views.AccountIFD{
+			Amount:    views.FDInput{Error: valerr.Errors.MsgFor("ToAmount")},
+			AccountID: views.FDInput{Error: valerr.Errors.MsgFor("ToAccountID")},
+		}
+	}
+
+	return fd
 }
 
 func (h Handler) parseFrequencyFD(r *http.Request, err *errs.ValidationError) *views.FrequencyFD {
