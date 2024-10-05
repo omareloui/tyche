@@ -4,14 +4,21 @@ INSERT INTO goals (
     title,
     egp_subtotal
 )
-VALUES (?, ?, ?);
+VALUES (
+    sqlc.arg(id),
+    sqlc.arg(title),
+    sqlc.arg(egp_subtotal)
+);
 
 -- name: CreateGoalItem :exec
 INSERT INTO goals_items (
     goal_id,
     item_id
 )
-VALUES (?, ?);
+VALUES (
+    sqlc.arg(goal_id),
+    sqlc.arg(item_id)
+);
 
 -- name: GetGoals :many
 SELECT
@@ -63,31 +70,31 @@ FROM goals AS gl
 LEFT JOIN goals_items AS gi ON gl.id = gi.goal_id
 LEFT JOIN items AS i ON gi.item_id = i.id
 LEFT JOIN currencies AS c ON i.currency_id = c.id
-WHERE gl.id = ?;
+WHERE gl.id = sqlc.arg(id);
 
 -- name: UpdateGoal :exec
 UPDATE goals
-SET 
-title = ?,
-egp_subtotal = ?
-WHERE id = ?;
+SET
+    title = sqlc.arg(title),
+    egp_subtotal = sqlc.arg(egp_subtotal)
+WHERE id = sqlc.arg(id);
 
 -- name: FulfillGoal :exec
 UPDATE goals
-SET 
-fulfilled_at = DATETIME('now')
-WHERE id = ?;
+SET
+    fulfilled_at = DATETIME('now')
+WHERE id = sqlc.arg(id);
 
 -- name: UnfulfillGoal :exec
 UPDATE goals
-SET 
-fulfilled_at = NULL
-WHERE id = ?;
+SET
+    fulfilled_at = NULL
+WHERE id = sqlc.arg(id);
 
 -- name: DeleteGoalItems :exec
 DELETE FROM goals_items
-WHERE goal_id = ?;
+WHERE goal_id = sqlc.arg(goal_id);
 
 -- name: DeleteGoal :exec
 DELETE FROM goals
-WHERE id = ?;
+WHERE id = sqlc.arg(id);

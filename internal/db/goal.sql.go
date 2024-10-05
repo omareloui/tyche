@@ -17,7 +17,11 @@ INSERT INTO goals (
     title,
     egp_subtotal
 )
-VALUES (?, ?, ?)
+VALUES (
+    ?1,
+    ?2,
+    ?3
+)
 `
 
 type CreateGoalParams struct {
@@ -36,7 +40,10 @@ INSERT INTO goals_items (
     goal_id,
     item_id
 )
-VALUES (?, ?)
+VALUES (
+    ?1,
+    ?2
+)
 `
 
 type CreateGoalItemParams struct {
@@ -51,7 +58,7 @@ func (q *Queries) CreateGoalItem(ctx context.Context, arg CreateGoalItemParams) 
 
 const deleteGoal = `-- name: DeleteGoal :exec
 DELETE FROM goals
-WHERE id = ?
+WHERE id = ?1
 `
 
 func (q *Queries) DeleteGoal(ctx context.Context, id string) error {
@@ -61,7 +68,7 @@ func (q *Queries) DeleteGoal(ctx context.Context, id string) error {
 
 const deleteGoalItems = `-- name: DeleteGoalItems :exec
 DELETE FROM goals_items
-WHERE goal_id = ?
+WHERE goal_id = ?1
 `
 
 func (q *Queries) DeleteGoalItems(ctx context.Context, goalID string) error {
@@ -71,9 +78,9 @@ func (q *Queries) DeleteGoalItems(ctx context.Context, goalID string) error {
 
 const fulfillGoal = `-- name: FulfillGoal :exec
 UPDATE goals
-SET 
-fulfilled_at = DATETIME('now')
-WHERE id = ?
+SET
+    fulfilled_at = DATETIME('now')
+WHERE id = ?1
 `
 
 func (q *Queries) FulfillGoal(ctx context.Context, id string) error {
@@ -99,7 +106,7 @@ FROM goals AS gl
 LEFT JOIN goals_items AS gi ON gl.id = gi.goal_id
 LEFT JOIN items AS i ON gi.item_id = i.id
 LEFT JOIN currencies AS c ON i.currency_id = c.id
-WHERE gl.id = ?
+WHERE gl.id = ?1
 `
 
 type GetGoalRow struct {
@@ -257,9 +264,9 @@ func (q *Queries) GetGoals(ctx context.Context) ([]GetGoalsRow, error) {
 
 const unfulfillGoal = `-- name: UnfulfillGoal :exec
 UPDATE goals
-SET 
-fulfilled_at = NULL
-WHERE id = ?
+SET
+    fulfilled_at = NULL
+WHERE id = ?1
 `
 
 func (q *Queries) UnfulfillGoal(ctx context.Context, id string) error {
@@ -269,10 +276,10 @@ func (q *Queries) UnfulfillGoal(ctx context.Context, id string) error {
 
 const updateGoal = `-- name: UpdateGoal :exec
 UPDATE goals
-SET 
-title = ?,
-egp_subtotal = ?
-WHERE id = ?
+SET
+    title = ?1,
+    egp_subtotal = ?2
+WHERE id = ?3
 `
 
 type UpdateGoalParams struct {

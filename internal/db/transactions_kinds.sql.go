@@ -12,7 +12,11 @@ import (
 
 const createTransactionKind = `-- name: CreateTransactionKind :exec
 INSERT INTO transaction_kinds (id, kind, increase_balance)
-VALUES (?, ?, ?)
+VALUES (
+    ?1,
+    ?2,
+    ?3
+)
 `
 
 type CreateTransactionKindParams struct {
@@ -32,7 +36,7 @@ SELECT
     kind,
     increase_balance
 FROM transaction_kinds
-WHERE id = ? LIMIT 1
+WHERE id = ?1 LIMIT 1
 `
 
 func (q *Queries) GetTransactionKind(ctx context.Context, id string) (TransactionKind, error) {

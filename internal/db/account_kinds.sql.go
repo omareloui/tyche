@@ -11,7 +11,10 @@ import (
 
 const createAccountKind = `-- name: CreateAccountKind :exec
 INSERT INTO account_kinds (id, enum)
-VALUES (?, ?)
+VALUES (
+    ?1,
+    ?2
+)
 `
 
 type CreateAccountKindParams struct {
@@ -25,7 +28,11 @@ func (q *Queries) CreateAccountKind(ctx context.Context, arg CreateAccountKindPa
 }
 
 const getAccountKinds = `-- name: GetAccountKinds :many
-SELECT id, enum FROM account_kinds
+SELECT
+    id,
+    enum
+FROM account_kinds
+ORDER BY enum
 `
 
 func (q *Queries) GetAccountKinds(ctx context.Context) ([]AccountKind, error) {

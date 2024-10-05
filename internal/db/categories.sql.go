@@ -18,7 +18,12 @@ INSERT INTO categories (
     kind_id,
     budget_in_egp
 )
-VALUES (?, ?, ?, ?)
+VALUES (
+    ?1,
+    ?2,
+    ?3,
+    ?4
+)
 `
 
 type CreateCategoryParams struct {
@@ -40,7 +45,7 @@ func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) 
 
 const deleteCategory = `-- name: DeleteCategory :exec
 DELETE FROM categories
-WHERE id = ?
+WHERE id = ?1
 `
 
 func (q *Queries) DeleteCategory(ctx context.Context, id string) error {
@@ -114,7 +119,7 @@ SELECT
     k.increase_balance
 FROM categories AS c
 LEFT JOIN transaction_kinds AS k ON c.kind_id = k.id
-WHERE c.id = ?
+WHERE c.id = ?1
 `
 
 type GetCategoryRow struct {
@@ -158,10 +163,10 @@ func (q *Queries) TotalBudget(ctx context.Context) (float64, error) {
 const updateCategory = `-- name: UpdateCategory :exec
 UPDATE categories
 SET
-name = ?,
-kind_id = ?,
-budget_in_egp = ?
-WHERE id = ?
+    name = ?1,
+    kind_id = ?2,
+    budget_in_egp = ?3
+WHERE id = ?4
 `
 
 type UpdateCategoryParams struct {

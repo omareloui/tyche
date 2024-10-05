@@ -27,7 +27,7 @@ SELECT
     k.increase_balance
 FROM categories AS c
 LEFT JOIN transaction_kinds AS k ON c.kind_id = k.id
-WHERE c.id = ?;
+WHERE c.id = sqlc.arg(id);
 
 -- name: CreateCategory :exec
 INSERT INTO categories (
@@ -36,16 +36,21 @@ INSERT INTO categories (
     kind_id,
     budget_in_egp
 )
-VALUES (?, ?, ?, ?);
+VALUES (
+    sqlc.arg(id),
+    sqlc.arg(name),
+    sqlc.arg(kind_id),
+    sqlc.arg(budget_in_egp)
+);
 
 -- name: UpdateCategory :exec
 UPDATE categories
 SET
-name = ?,
-kind_id = ?,
-budget_in_egp = ?
-WHERE id = ?;
+    name = sqlc.arg(name),
+    kind_id = sqlc.arg(kind_id),
+    budget_in_egp = sqlc.arg(budget_in_egp)
+WHERE id = sqlc.arg(id);
 
 -- name: DeleteCategory :exec
 DELETE FROM categories
-WHERE id = ?;
+WHERE id = sqlc.arg(id);

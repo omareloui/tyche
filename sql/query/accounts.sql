@@ -1,8 +1,8 @@
 -- name: GetAccounts :many
 WITH gls_amts AS (
     SELECT
-        SUM(t.amount) AS amount,
-        t.account_id
+        t.account_id,
+        SUM(t.amount) AS amount
     FROM goals AS gl
     LEFT JOIN goals_progresses AS gp ON gl.id = gp.goal_id
     LEFT JOIN transactions AS t ON gp.transaction_id = t.id
@@ -35,8 +35,8 @@ ORDER BY a.created_at DESC;
 -- name: GetActiveAccounts :many
 WITH gls_amts AS (
     SELECT
-        SUM(t.amount) AS amount,
-        t.account_id
+        t.account_id,
+        SUM(t.amount) AS amount
     FROM goals AS gl
     LEFT JOIN goals_progresses AS gp ON gl.id = gp.goal_id
     LEFT JOIN transactions AS t ON gp.transaction_id = t.id
@@ -62,16 +62,16 @@ SELECT
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
-LEFT JOIN currencies AS c ON c.id = a.currency_id
-LEFT JOIN gls_amts AS gla ON gla.account_id = a.id
+LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN gls_amts AS gla ON a.id = gla.account_id
 WHERE a.is_archived IS FALSE
 ORDER BY a.created_at DESC;
 
 -- name: GetAccount :one
 WITH gls_amts AS (
     SELECT
-        SUM(t.amount) AS amount,
-        t.account_id
+        t.account_id,
+        SUM(t.amount) AS amount
     FROM goals AS gl
     LEFT JOIN goals_progresses AS gp ON gl.id = gp.goal_id
     LEFT JOIN transactions AS t ON gp.transaction_id = t.id
@@ -97,9 +97,9 @@ SELECT
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
-LEFT JOIN currencies AS c ON c.id = a.currency_id
-LEFT JOIN gls_amts AS gla ON gla.account_id = a.id
-WHERE a.id = ?;
+LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN gls_amts AS gla ON a.id = gla.account_id
+WHERE a.id = sqlc.arg(id);
 
 -- name: CreateAccount :exec
 INSERT INTO accounts (
@@ -115,43 +115,61 @@ INSERT INTO accounts (
     is_archived,
     is_default
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (
+    sqlc.arg(id),
+    sqlc.arg(name),
+    sqlc.arg(kind_id),
+    sqlc.arg(amount),
+    sqlc.arg(currency_id),
+    sqlc.arg(card_number),
+    sqlc.arg(iban),
+    sqlc.arg(note),
+    sqlc.arg(exclude_from_balance),
+    sqlc.arg(is_archived),
+    sqlc.arg(is_default)
+);
 
 -- name: UpdateAccount :exec
 UPDATE accounts
 SET
-name = ?,
-kind_id = ?,
-currency_id = ?,
-card_number = ?,
-iban = ?,
-note = ?,
-is_archived = ?,
-exclude_from_balance = ?
-WHERE id = ?;
+    name = sqlc.arg(name),
+    kind_id = sqlc.arg(kind_id),
+    currency_id = sqlc.arg(currency_id),
+    card_number = sqlc.arg(card_number),
+    iban = sqlc.arg(iban),
+    note = sqlc.arg(note),
+    is_archived = sqlc.arg(is_archived),
+    exclude_from_balance = sqlc.arg(exclude_from_balance)
+WHERE id = sqlc.arg(id);
 
 -- name: UnsetDefaultAccountExpect :exec
 UPDATE accounts
 SET
-is_default = FALSE
-WHERE id != ?;
+    is_default = FALSE
+WHERE id != sqlc.arg(id);
 
 -- name: SetDefaultAccount :exec
 UPDATE accounts
 SET
-is_default = TRUE
-WHERE id = ?;
+    is_default = TRUE
+WHERE id = sqlc.arg(id);
 
 
 -- name: DeleteAccount :exec
 DELETE FROM accounts
-WHERE id = ?;
+WHERE id = sqlc.arg(id);
 
 -- name: AddToAccount :exec
-UPDATE accounts SET amount = ROUND(amount + ?, 2) WHERE id = ?;
+UPDATE accounts
+SET
+    amount = ROUND(amount + sqlc.arg(amount), 2)
+WHERE id = sqlc.arg(id);
 
 -- name: RemoveFromAccount :exec
-UPDATE accounts SET amount = ROUND(amount - ?, 2) WHERE id = ?;
+UPDATE accounts
+SET
+    amount = ROUND(amount - sqlc.arg(amount), 2)
+WHERE id = sqlc.arg(id);
 
 -- name: GetBalances :many
 SELECT
@@ -161,7 +179,8 @@ SELECT
     TOTAL(a.amount) AS balance
 FROM accounts AS a
 LEFT JOIN currencies AS c ON a.currency_id = c.id
-WHERE a.is_archived IS FALSE
+WHERE
+    a.is_archived IS FALSE
     AND a.exclude_from_balance IS FALSE
-GROUP BY currency_id
+GROUP BY a.currency_id
 ORDER BY balance DESC;

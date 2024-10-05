@@ -24,7 +24,7 @@ SELECT
     c.egp_fx_rate
 FROM items AS i
 LEFT JOIN currencies AS c ON i.currency_id = c.id
-WHERE i.id = ? LIMIT 1;
+WHERE i.id = sqlc.arg(id) LIMIT 1;
 
 -- name: CreateItem :exec
 INSERT INTO items (
@@ -33,16 +33,21 @@ INSERT INTO items (
     price,
     currency_id
 )
-VALUES (?, ?, ?, ?);
+VALUES (
+    sqlc.arg(id),
+    sqlc.arg(name),
+    sqlc.arg(price),
+    sqlc.arg(currency_id)
+);
 
 -- name: UpdateItem :exec
 UPDATE items
 SET
-name = ?,
-price = ?,
-currency_id = ?
-WHERE id = ?;
+    name = sqlc.arg(name),
+    price = sqlc.arg(price),
+    currency_id = sqlc.arg(currency_id)
+WHERE id = sqlc.arg(id);
 
 -- name: DeleteItem :exec
 DELETE FROM items
-WHERE id = ?;
+WHERE id = sqlc.arg(id);

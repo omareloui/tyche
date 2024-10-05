@@ -18,7 +18,12 @@ INSERT INTO items (
     price,
     currency_id
 )
-VALUES (?, ?, ?, ?)
+VALUES (
+    ?1,
+    ?2,
+    ?3,
+    ?4
+)
 `
 
 type CreateItemParams struct {
@@ -40,7 +45,7 @@ func (q *Queries) CreateItem(ctx context.Context, arg CreateItemParams) error {
 
 const deleteItem = `-- name: DeleteItem :exec
 DELETE FROM items
-WHERE id = ?
+WHERE id = ?1
 `
 
 func (q *Queries) DeleteItem(ctx context.Context, id string) error {
@@ -60,7 +65,7 @@ SELECT
     c.egp_fx_rate
 FROM items AS i
 LEFT JOIN currencies AS c ON i.currency_id = c.id
-WHERE i.id = ? LIMIT 1
+WHERE i.id = ?1 LIMIT 1
 `
 
 type GetItemRow struct {
@@ -151,10 +156,10 @@ func (q *Queries) GetItems(ctx context.Context) ([]GetItemsRow, error) {
 const updateItem = `-- name: UpdateItem :exec
 UPDATE items
 SET
-name = ?,
-price = ?,
-currency_id = ?
-WHERE id = ?
+    name = ?1,
+    price = ?2,
+    currency_id = ?3
+WHERE id = ?4
 `
 
 type UpdateItemParams struct {

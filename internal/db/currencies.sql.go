@@ -11,7 +11,7 @@ import (
 
 const createCurrency = `-- name: CreateCurrency :exec
 INSERT INTO currencies (id, enum, egp_fx_rate)
-VALUES (?, ?, ?)
+VALUES (?1, ?2, ?3)
 `
 
 type CreateCurrencyParams struct {
@@ -61,7 +61,7 @@ SELECT
     id,
     enum,
     egp_fx_rate
-FROM currencies WHERE id = ? LIMIT 1
+FROM currencies WHERE id = ?1 LIMIT 1
 `
 
 func (q *Queries) GetCurrency(ctx context.Context, id string) (Currency, error) {

@@ -332,7 +332,7 @@ type UpdateTransactionParams struct {
 	CategoryID  sql.NullString
 	Description sql.NullString
 	ToAccountID sql.NullString
-	ToAmount    float64
+	ToAmount    sql.NullFloat64
 	ScheduledTo time.Time
 	ID          string
 }

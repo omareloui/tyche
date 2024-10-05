@@ -12,7 +12,10 @@ import (
 )
 
 const addToAccount = `-- name: AddToAccount :exec
-UPDATE accounts SET amount = ROUND(amount + ?, 2) WHERE id = ?
+UPDATE accounts
+SET
+    amount = ROUND(amount + ?1, 2)
+WHERE id = ?2
 `
 
 type AddToAccountParams struct {
@@ -39,7 +42,19 @@ INSERT INTO accounts (
     is_archived,
     is_default
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (
+    ?1,
+    ?2,
+    ?3,
+    ?4,
+    ?5,
+    ?6,
+    ?7,
+    ?8,
+    ?9,
+    ?10,
+    ?11
+)
 `
 
 type CreateAccountParams struct {
@@ -75,7 +90,7 @@ func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) er
 
 const deleteAccount = `-- name: DeleteAccount :exec
 DELETE FROM accounts
-WHERE id = ?
+WHERE id = ?1
 `
 
 func (q *Queries) DeleteAccount(ctx context.Context, id string) error {
@@ -86,8 +101,8 @@ func (q *Queries) DeleteAccount(ctx context.Context, id string) error {
 const getAccount = `-- name: GetAccount :one
 WITH gls_amts AS (
     SELECT
-        SUM(t.amount) AS amount,
-        t.account_id
+        t.account_id,
+        SUM(t.amount) AS amount
     FROM goals AS gl
     LEFT JOIN goals_progresses AS gp ON gl.id = gp.goal_id
     LEFT JOIN transactions AS t ON gp.transaction_id = t.id
@@ -113,9 +128,9 @@ SELECT
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
-LEFT JOIN currencies AS c ON c.id = a.currency_id
-LEFT JOIN gls_amts AS gla ON gla.account_id = a.id
-WHERE a.id = ?
+LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN gls_amts AS gla ON a.id = gla.account_id
+WHERE a.id = ?1
 `
 
 type GetAccountRow struct {
@@ -164,8 +179,8 @@ func (q *Queries) GetAccount(ctx context.Context, id string) (GetAccountRow, err
 const getAccounts = `-- name: GetAccounts :many
 WITH gls_amts AS (
     SELECT
-        SUM(t.amount) AS amount,
-        t.account_id
+        t.account_id,
+        SUM(t.amount) AS amount
     FROM goals AS gl
     LEFT JOIN goals_progresses AS gp ON gl.id = gp.goal_id
     LEFT JOIN transactions AS t ON gp.transaction_id = t.id
@@ -258,8 +273,8 @@ func (q *Queries) GetAccounts(ctx context.Context) ([]GetAccountsRow, error) {
 const getActiveAccounts = `-- name: GetActiveAccounts :many
 WITH gls_amts AS (
     SELECT
-        SUM(t.amount) AS amount,
-        t.account_id
+        t.account_id,
+        SUM(t.amount) AS amount
     FROM goals AS gl
     LEFT JOIN goals_progresses AS gp ON gl.id = gp.goal_id
     LEFT JOIN transactions AS t ON gp.transaction_id = t.id
@@ -285,8 +300,8 @@ SELECT
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
-LEFT JOIN currencies AS c ON c.id = a.currency_id
-LEFT JOIN gls_amts AS gla ON gla.account_id = a.id
+LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN gls_amts AS gla ON a.id = gla.account_id
 WHERE a.is_archived IS FALSE
 ORDER BY a.created_at DESC
 `
@@ -358,9 +373,10 @@ SELECT
     TOTAL(a.amount) AS balance
 FROM accounts AS a
 LEFT JOIN currencies AS c ON a.currency_id = c.id
-WHERE a.is_archived IS FALSE
+WHERE
+    a.is_archived IS FALSE
     AND a.exclude_from_balance IS FALSE
-GROUP BY currency_id
+GROUP BY a.currency_id
 ORDER BY balance DESC
 `
 
@@ -400,7 +416,10 @@ func (q *Queries) GetBalances(ctx context.Context) ([]GetBalancesRow, error) {
 }
 
 const removeFromAccount = `-- name: RemoveFromAccount :exec
-UPDATE accounts SET amount = ROUND(amount - ?, 2) WHERE id = ?
+UPDATE accounts
+SET
+    amount = ROUND(amount - ?1, 2)
+WHERE id = ?2
 `
 
 type RemoveFromAccountParams struct {
@@ -416,8 +435,8 @@ func (q *Queries) RemoveFromAccount(ctx context.Context, arg RemoveFromAccountPa
 const setDefaultAccount = `-- name: SetDefaultAccount :exec
 UPDATE accounts
 SET
-is_default = TRUE
-WHERE id = ?
+    is_default = TRUE
+WHERE id = ?1
 `
 
 func (q *Queries) SetDefaultAccount(ctx context.Context, id string) error {
@@ -428,8 +447,8 @@ func (q *Queries) SetDefaultAccount(ctx context.Context, id string) error {
 const unsetDefaultAccountExpect = `-- name: UnsetDefaultAccountExpect :exec
 UPDATE accounts
 SET
-is_default = FALSE
-WHERE id != ?
+    is_default = FALSE
+WHERE id != ?1
 `
 
 func (q *Queries) UnsetDefaultAccountExpect(ctx context.Context, id string) error {
@@ -440,15 +459,15 @@ func (q *Queries) UnsetDefaultAccountExpect(ctx context.Context, id string) erro
 const updateAccount = `-- name: UpdateAccount :exec
 UPDATE accounts
 SET
-name = ?,
-kind_id = ?,
-currency_id = ?,
-card_number = ?,
-iban = ?,
-note = ?,
-is_archived = ?,
-exclude_from_balance = ?
-WHERE id = ?
+    name = ?1,
+    kind_id = ?2,
+    currency_id = ?3,
+    card_number = ?4,
+    iban = ?5,
+    note = ?6,
+    is_archived = ?7,
+    exclude_from_balance = ?8
+WHERE id = ?9
 `
 
 type UpdateAccountParams struct {
