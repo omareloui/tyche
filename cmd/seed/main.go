@@ -70,10 +70,10 @@ func main() {
 	}
 
 	accKinds := []db.CreateAccountKindParams{
-		{ID: idgen.New(), Enum: int64(models.CreditCard)},
-		{ID: idgen.New(), Enum: int64(models.BankAccount)},
-		{ID: idgen.New(), Enum: int64(models.Debt)},
-		{ID: idgen.New(), Enum: int64(models.Cash)},
+		{ID: idgen.New(), Enum: int64(models.AccountKindCreditCard)},
+		{ID: idgen.New(), Enum: int64(models.AccountKindBankAccount)},
+		{ID: idgen.New(), Enum: int64(models.AccountKindDebtCard)},
+		{ID: idgen.New(), Enum: int64(models.AccountKindCash)},
 	}
 
 	for _, k := range accKinds {
