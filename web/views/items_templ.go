@@ -236,7 +236,7 @@ func itemFormBody(fd *ItemFD, id string, curs []models.Currency) templ.Component
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = AmountInputs(&fd.AmountFD, id, curs).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = AmountInputsWithCurrency(&fd.AmountFD, id, curs).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

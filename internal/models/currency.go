@@ -3,7 +3,7 @@ package models
 type CurrencyEnum uint8
 
 const (
-	CurrencyNull CurrencyEnum = iota
+	CurrencyNil CurrencyEnum = iota
 	CurrencyEgp
 	CurrencyUsd
 )
@@ -18,7 +18,7 @@ func (cs CurrencyEnum) Symbol() string {
 	return [...]string{"???", "EG£", "US$"}[cs]
 }
 
-func (cs CurrencyEnum) IBANPrefix() string {
+func (cs CurrencyEnum) IbanPrefix() string {
 	return [...]string{"??", "EG", "US"}[cs]
 }
 

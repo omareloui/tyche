@@ -35,6 +35,7 @@ INSERT INTO accounts (
     kind_id,
     amount,
     currency_id,
+    counterparty_id,
     card_number,
     iban,
     note,
@@ -53,7 +54,8 @@ VALUES (
     ?8,
     ?9,
     ?10,
-    ?11
+    ?11,
+    ?12
 )
 `
 
@@ -63,6 +65,7 @@ type CreateAccountParams struct {
 	KindID             string
 	Amount             float64
 	CurrencyID         string
+	CounterpartyID     sql.NullString
 	CardNumber         sql.NullString
 	Iban               sql.NullString
 	Note               sql.NullString
@@ -78,6 +81,7 @@ func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) er
 		arg.KindID,
 		arg.Amount,
 		arg.CurrencyID,
+		arg.CounterpartyID,
 		arg.CardNumber,
 		arg.Iban,
 		arg.Note,
@@ -115,6 +119,7 @@ SELECT
     a.kind_id,
     a.amount,
     a.currency_id,
+    a.counterparty_id,
     a.card_number,
     a.iban,
     a.note,
@@ -125,9 +130,11 @@ SELECT
     c.enum AS currency_enum,
     c.egp_fx_rate,
     k.enum AS kind_enum,
+    cp.name AS counterparty_name,
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
+LEFT JOIN counterparties AS cp ON a.counterparty_id = cp.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN gls_amts AS gla ON a.id = gla.account_id
 WHERE a.id = ?1
@@ -139,6 +146,7 @@ type GetAccountRow struct {
 	KindID             string
 	Amount             float64
 	CurrencyID         string
+	CounterpartyID     sql.NullString
 	CardNumber         sql.NullString
 	Iban               sql.NullString
 	Note               sql.NullString
@@ -149,6 +157,7 @@ type GetAccountRow struct {
 	CurrencyEnum       sql.NullInt64
 	EgpFxRate          sql.NullFloat64
 	KindEnum           sql.NullInt64
+	CounterpartyName   sql.NullString
 	ActualAmount       interface{}
 }
 
@@ -161,6 +170,7 @@ func (q *Queries) GetAccount(ctx context.Context, id string) (GetAccountRow, err
 		&i.KindID,
 		&i.Amount,
 		&i.CurrencyID,
+		&i.CounterpartyID,
 		&i.CardNumber,
 		&i.Iban,
 		&i.Note,
@@ -171,6 +181,7 @@ func (q *Queries) GetAccount(ctx context.Context, id string) (GetAccountRow, err
 		&i.CurrencyEnum,
 		&i.EgpFxRate,
 		&i.KindEnum,
+		&i.CounterpartyName,
 		&i.ActualAmount,
 	)
 	return i, err
@@ -193,6 +204,7 @@ SELECT
     a.kind_id,
     a.amount,
     a.currency_id,
+    a.counterparty_id,
     a.card_number,
     a.iban,
     a.note,
@@ -203,11 +215,13 @@ SELECT
     c.enum AS currency_enum,
     c.egp_fx_rate,
     k.enum AS kind_enum,
+    cp.name AS counterparty_name,
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
-LEFT JOIN currencies AS c ON c.id = a.currency_id
-LEFT JOIN gls_amts AS gla ON gla.account_id = a.id
+LEFT JOIN counterparties AS cp ON a.counterparty_id = cp.id
+LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN gls_amts AS gla ON a.id = gla.account_id
 ORDER BY a.created_at DESC
 `
 
@@ -217,6 +231,7 @@ type GetAccountsRow struct {
 	KindID             string
 	Amount             float64
 	CurrencyID         string
+	CounterpartyID     sql.NullString
 	CardNumber         sql.NullString
 	Iban               sql.NullString
 	Note               sql.NullString
@@ -227,6 +242,7 @@ type GetAccountsRow struct {
 	CurrencyEnum       sql.NullInt64
 	EgpFxRate          sql.NullFloat64
 	KindEnum           sql.NullInt64
+	CounterpartyName   sql.NullString
 	ActualAmount       interface{}
 }
 
@@ -245,6 +261,7 @@ func (q *Queries) GetAccounts(ctx context.Context) ([]GetAccountsRow, error) {
 			&i.KindID,
 			&i.Amount,
 			&i.CurrencyID,
+			&i.CounterpartyID,
 			&i.CardNumber,
 			&i.Iban,
 			&i.Note,
@@ -255,6 +272,7 @@ func (q *Queries) GetAccounts(ctx context.Context) ([]GetAccountsRow, error) {
 			&i.CurrencyEnum,
 			&i.EgpFxRate,
 			&i.KindEnum,
+			&i.CounterpartyName,
 			&i.ActualAmount,
 		); err != nil {
 			return nil, err
@@ -287,6 +305,7 @@ SELECT
     a.kind_id,
     a.amount,
     a.currency_id,
+    a.counterparty_id,
     a.card_number,
     a.iban,
     a.note,
@@ -297,9 +316,11 @@ SELECT
     c.enum AS currency_enum,
     c.egp_fx_rate,
     k.enum AS kind_enum,
+    cp.name AS counterparty_name,
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
+LEFT JOIN counterparties AS cp ON a.counterparty_id = cp.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN gls_amts AS gla ON a.id = gla.account_id
 WHERE a.is_archived IS FALSE
@@ -312,6 +333,7 @@ type GetActiveAccountsRow struct {
 	KindID             string
 	Amount             float64
 	CurrencyID         string
+	CounterpartyID     sql.NullString
 	CardNumber         sql.NullString
 	Iban               sql.NullString
 	Note               sql.NullString
@@ -322,6 +344,7 @@ type GetActiveAccountsRow struct {
 	CurrencyEnum       sql.NullInt64
 	EgpFxRate          sql.NullFloat64
 	KindEnum           sql.NullInt64
+	CounterpartyName   sql.NullString
 	ActualAmount       interface{}
 }
 
@@ -340,6 +363,7 @@ func (q *Queries) GetActiveAccounts(ctx context.Context) ([]GetActiveAccountsRow
 			&i.KindID,
 			&i.Amount,
 			&i.CurrencyID,
+			&i.CounterpartyID,
 			&i.CardNumber,
 			&i.Iban,
 			&i.Note,
@@ -350,6 +374,7 @@ func (q *Queries) GetActiveAccounts(ctx context.Context) ([]GetActiveAccountsRow
 			&i.CurrencyEnum,
 			&i.EgpFxRate,
 			&i.KindEnum,
+			&i.CounterpartyName,
 			&i.ActualAmount,
 		); err != nil {
 			return nil, err
@@ -462,18 +487,20 @@ SET
     name = ?1,
     kind_id = ?2,
     currency_id = ?3,
-    card_number = ?4,
-    iban = ?5,
-    note = ?6,
-    is_archived = ?7,
-    exclude_from_balance = ?8
-WHERE id = ?9
+    counterparty_id = ?4,
+    card_number = ?5,
+    iban = ?6,
+    note = ?7,
+    is_archived = ?8,
+    exclude_from_balance = ?9
+WHERE id = ?10
 `
 
 type UpdateAccountParams struct {
 	Name               string
 	KindID             string
 	CurrencyID         string
+	CounterpartyID     sql.NullString
 	CardNumber         sql.NullString
 	Iban               sql.NullString
 	Note               sql.NullString
@@ -487,6 +514,7 @@ func (q *Queries) UpdateAccount(ctx context.Context, arg UpdateAccountParams) er
 		arg.Name,
 		arg.KindID,
 		arg.CurrencyID,
+		arg.CounterpartyID,
 		arg.CardNumber,
 		arg.Iban,
 		arg.Note,

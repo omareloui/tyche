@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"time"
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/errs"
@@ -25,7 +24,7 @@ func (h *Handler) Accounts(w http.ResponseWriter, r *http.Request) (templ.Compon
 		return nil, err
 	}
 
-	curs, ak, err := h.getCurrenciesAndAccKinds(r.Context())
+	curs, knds, cps, err := h.getAccDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -37,8 +36,8 @@ func (h *Handler) Accounts(w http.ResponseWriter, r *http.Request) (templ.Compon
 	}
 	l.Info("fetched accounts", zap.Int("accounts_length", len(accs)))
 
-	fd := h.mapAccToFD(defaultAccount(curs, ak), &errs.ValidationError{})
-	return views.Accounts(balances, fd, ak, curs, accs), nil
+	fd := h.mapAccToFD(defaultAccount(curs, knds), &errs.ValidationError{}, knds)
+	return views.Accounts(balances, fd, knds, curs, accs, cps), nil
 }
 
 func (h *Handler) Account(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -69,24 +68,30 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 	l.Debug("parsed form data")
 
 	a.ID = idgen.New()
-	a.CreatedAt = time.Now()
 
-	if err := h.sani.SanitizeStruct(a); err != nil {
-		l.Error("sanitizing account", zap.Error(err))
+	curs, knds, cps, err := h.getAccDeps(r.Context())
+	if err != nil {
 		return nil, err
 	}
-	l.Debug("sanitized account")
+
+	a.Currency = *slicesutils.Find(curs, func(cur models.Currency) bool { return cur.ID == a.Currency.ID })
+	a.Kind = *slicesutils.Find(knds, func(k models.AccountKind) bool { return k.ID == a.Kind.ID })
+
+	if a.Counterparty != nil {
+		if cp := slicesutils.Find(cps, func(cp models.Counterparty) bool { return cp.ID == a.Counterparty.ID }); cp != nil {
+			a.Counterparty = cp
+		}
+	}
+
+	if a.Kind.Enum == models.AccountKindDebt && a.Counterparty != nil {
+		a.Name = a.Counterparty.Name
+	}
 
 	if err := a.SanitizeAndValidate(h.sani, h.valid); err != nil {
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("validating account", zap.Any("account", a), zap.Any("errors", valerr.Errors))
-			curs, ak, err := h.getCurrenciesAndAccKinds(r.Context())
-			if err != nil {
-				return nil, err
-			}
-			fd := h.mapAccToFD(a, &valerr)
-			return views.CreateAccountForm(fd, ak, curs), nil
+			return views.CreateAccountForm(h.mapAccToFD(a, &valerr, knds), knds, curs, cps), nil
 		}
 		l.Error("sanitizing account", zap.Error(err))
 		return nil, err
@@ -94,30 +99,15 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 	l.Debug("validated account")
 
 	err = h.repo.CreateAccount(r.Context(), a)
-
 	var valerr *errs.ValidationError
 	if err != nil && errors.As(err, &valerr) {
 		l.Error("duplication error", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-		curs, ak, err := h.getCurrenciesAndAccKinds(r.Context())
-		if err != nil {
-			return nil, err
-		}
-		fd := h.mapAccToFD(a, valerr)
-		return views.CreateAccountForm(
-			fd, ak, curs), nil
+		return views.CreateAccountForm(h.mapAccToFD(a, valerr, knds), knds, curs, cps), nil
 	} else if err != nil {
 		l.Error("creating account", zap.Error(err), zap.Any("account", a))
 		return nil, err
 	}
 	l.Info("created account", zap.Any("account", a))
-
-	curs, ak, err := h.getCurrenciesAndAccKinds(r.Context())
-	if err != nil {
-		return nil, err
-	}
-
-	a.Currency = *slicesutils.Find(curs, func(cur models.Currency) bool { return cur.ID == a.Currency.ID })
-	a.Kind = *slicesutils.Find(ak, func(k models.AccountKind) bool { return k.ID == a.Kind.ID })
 
 	if err := renderToBody(w, r, views.AccountOOB(a)); err != nil {
 		l.Error("rendering account oob", zap.Error(err))
@@ -129,9 +119,8 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 		return nil, err
 	}
 
-	fd := h.mapAccToFD(defaultAccount(curs, ak), &errs.ValidationError{})
-	return views.CreateAccountForm(
-		fd, ak, curs), nil
+	fd := h.mapAccToFD(defaultAccount(curs, knds), &errs.ValidationError{}, knds)
+	return views.CreateAccountForm(fd, knds, curs, cps), nil
 }
 
 func (h *Handler) GetEditAccount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -148,13 +137,13 @@ func (h *Handler) GetEditAccount(w http.ResponseWriter, r *http.Request) (templ.
 	}
 	l.Info("fetched account")
 
-	curs, ak, err := h.getCurrenciesAndAccKinds(r.Context())
+	curs, knds, cps, err := h.getAccDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
 
-	fd := h.mapAccToFD(a, &errs.ValidationError{})
-	return views.EditAccount(id, fd, ak, curs), nil
+	fd := h.mapAccToFD(a, &errs.ValidationError{}, knds)
+	return views.EditAccount(id, fd, knds, curs, cps), nil
 }
 
 func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -174,24 +163,24 @@ func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Com
 
 	a.ID = id
 
-	if err := h.sani.SanitizeStruct(a); err != nil {
-		l.Error("sanitizing account", zap.Error(err))
+	curs, knds, cps, err := h.getAccDeps(r.Context())
+	if err != nil {
 		return nil, err
 	}
-	l.Debug("sanitized account")
+	a.Currency = *slicesutils.Find(curs, func(cur models.Currency) bool { return a.Currency.ID == cur.ID })
+	a.Kind = *slicesutils.Find(knds, func(ak models.AccountKind) bool { return a.Kind.ID == ak.ID })
+
+	if a.Counterparty != nil {
+		if cp := slicesutils.Find(cps, func(cp models.Counterparty) bool { return a.Counterparty.ID == cp.ID }); cp != nil {
+			a.Counterparty = cp
+		}
+	}
 
 	if err := a.SanitizeAndValidate(h.sani, h.valid); err != nil {
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
-			l.Error("validating account", zap.Any("account", a), zap.Any("errors", valerr.Errors))
-			curs, ak, err := h.getCurrenciesAndAccKinds(r.Context())
-			if err != nil {
-				return nil, err
-			}
-			a.Currency = *slicesutils.Find(curs, func(cur models.Currency) bool { return a.Currency.ID == cur.ID })
-			a.Kind = *slicesutils.Find(ak, func(ak models.AccountKind) bool { return a.Kind.ID == ak.ID })
-			fd := h.mapAccToFD(a, &valerr)
-			return views.CreateAccountForm(fd, ak, curs), nil
+			l.Error("validating account", zap.Any("errors", valerr.Errors))
+			return views.CreateAccountForm(h.mapAccToFD(a, &valerr, knds), knds, curs, cps), nil
 		}
 		l.Error("sanitizing account", zap.Error(err))
 		return nil, err
@@ -203,16 +192,7 @@ func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Com
 	var valerr *errs.ValidationError
 	if err != nil && errors.As(err, &valerr) {
 		l.Error("duplication error", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-		curs, ak, err := h.getCurrenciesAndAccKinds(r.Context())
-		if err != nil {
-			return nil, err
-		}
-
-		a.Currency = *slicesutils.Find(curs, func(cur models.Currency) bool { return a.Currency.ID == cur.ID })
-		a.Kind = *slicesutils.Find(ak, func(ak models.AccountKind) bool { return a.Kind.ID == ak.ID })
-
-		fd := h.mapAccToFD(a, valerr)
-		return views.EditAccount(id, fd, ak, curs), nil
+		return views.EditAccount(id, h.mapAccToFD(a, valerr, knds), knds, curs, cps), nil
 	} else if err != nil {
 		l.Error("updating account", zap.Error(err), zap.Any("account", a))
 		return nil, err
@@ -222,14 +202,6 @@ func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Com
 	if err := h.getAndRenderBalancesOOB(w, r); err != nil {
 		return nil, err
 	}
-
-	curs, ak, err := h.getCurrenciesAndAccKinds(r.Context())
-	if err != nil {
-		return nil, err
-	}
-
-	a.Currency = *slicesutils.Find(curs, func(cur models.Currency) bool { return cur.ID == a.Currency.ID })
-	a.Kind = *slicesutils.Find(ak, func(k models.AccountKind) bool { return k.ID == a.Kind.ID })
 
 	return views.Account(a), nil
 }
@@ -267,49 +239,111 @@ func (h *Handler) SetDefaultAccount(w http.ResponseWriter, r *http.Request) (tem
 	return nil, nil
 }
 
-func (h Handler) getCurrenciesAndAccKinds(ctx context.Context) ([]models.Currency, []models.AccountKind, error) {
+func (h Handler) AccountInputs(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	l := logger.FromCtx(r.Context())
+
+	acc, err := h.mapFDToAcc(r)
+	if err != nil {
+		l.Error("mapping formdata to account", zap.Error(err))
+		return nil, err
+	}
+	l.Debug("mapped formdata to account")
+
+	curs, knds, cps, err := h.getAccDeps(r.Context())
+	if err != nil {
+		l.Error("fetching account deps", zap.Error(err))
+		return nil, err
+	}
+	l.Debug("fetched account deps")
+
+	id := r.FormValue("id")
+	if id == "" {
+		id = "0"
+	}
+
+	fd := h.mapAccToFD(acc, &errs.ValidationError{}, knds)
+	return views.AccountInputs(id, &fd.AccountPartialFD, knds, curs, cps), nil
+}
+
+func (h Handler) getAccDeps(ctx context.Context) ([]models.Currency, []models.AccountKind, []models.Counterparty, error) {
 	l := logger.FromCtx(ctx)
 
 	curs, err := h.repo.GetCurrencies(ctx)
 	if err != nil {
 		l.Error("error fetching currencies", zap.Error(err))
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	knds, err := h.repo.GetAccountKinds(ctx)
 	if err != nil {
 		l.Error("error fetching account kinds", zap.Error(err))
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	l.Debug("fetched currencies and account kinds")
-	return curs, knds, nil
+	cps, err := h.repo.GetCounterparties(ctx)
+	if err != nil {
+		l.Error("error fetching counterparties", zap.Error(err))
+		return nil, nil, nil, err
+	}
+	l.Debug("fetched account dependencies")
+	return curs, knds, cps, nil
 }
 
 func (h *Handler) mapFDToAcc(r *http.Request) (*models.Account, error) {
+	var cp *models.Counterparty
+	if cpId := r.FormValue("counterparty_id"); cpId != "" {
+		cp = &models.Counterparty{ID: cpId}
+	}
+
 	return &models.Account{
 		Name:               r.FormValue("name"),
 		Kind:               models.AccountKind{ID: r.FormValue("kind_id")},
-		IBAN:               r.FormValue("iban"),
+		Iban:               r.FormValue("iban"),
 		CardNumber:         r.FormValue("card_number"),
 		Note:               r.FormValue("note"),
 		Currency:           models.Currency{ID: r.FormValue("currency_id")},
+		Counterparty:       cp,
 		IsArchive:          parseBoolean(r.FormValue("is_archive")),
 		ExcludeFromBalance: parseBoolean(r.FormValue("exclude_from_balance")),
 	}, nil
 }
 
-func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError) *views.AccountFD {
-	return &views.AccountFD{
-		IBANFD: views.IBANFD{
-			CurrencyID: views.FDInput{Value: acc.Currency.ID, Error: errs.Errors.MsgFor("Currency.ID")},
-			IBAN:       views.FDInput{Value: acc.IBAN, Error: errs.Errors.MsgFor("IBAN")},
+func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, knds []models.AccountKind) *views.AccountFD {
+	knd := slicesutils.Find(knds, func(a models.AccountKind) bool { return a.ID == acc.Kind.ID })
+
+	var name, cc, iban, cpId *views.FDInput
+
+	if knd.Enum == models.AccountKindBankAccount ||
+		knd.Enum == models.AccountKindCreditCard ||
+		knd.Enum == models.AccountKindDebtCard {
+		iban = &views.FDInput{Value: acc.Iban, Error: errs.Errors.MsgFor("Iban")}
+		cc = &views.FDInput{Value: acc.CardNumber, Error: errs.Errors.MsgFor("CardNumber")}
+	}
+
+	if knd.Enum != models.AccountKindDebt {
+		name = &views.FDInput{Value: acc.Name, Error: errs.Errors.MsgFor("Name")}
+	}
+
+	if knd.Enum == models.AccountKindDebt {
+		cpId = &views.FDInput{Error: errs.Errors.MsgFor("CounterpartyID")}
+		if acc.Counterparty != nil {
+			cpId.Value = acc.Counterparty.ID
+		}
+	}
+
+	fd := &views.AccountFD{
+		AccountPartialFD: views.AccountPartialFD{
+			Name:           name,
+			KindID:         views.FDInput{Value: acc.Kind.ID, Error: errs.Errors.MsgFor("KindID")},
+			CurrencyID:     views.FDInput{Value: acc.Currency.ID, Error: errs.Errors.MsgFor("CurrencyID")},
+			Iban:           iban,
+			CardNumber:     cc,
+			CounterpartyID: cpId,
 		},
-		Name:               views.FDInput{Value: acc.Name, Error: errs.Errors.MsgFor("Name")},
-		KindID:             views.FDInput{Value: acc.Kind.ID, Error: errs.Errors.MsgFor("Kind.ID")},
-		CardNumber:         views.FDInput{Value: acc.CardNumber, Error: errs.Errors.MsgFor("CardNumber")},
 		Note:               views.FDInput{Value: acc.Note, Error: errs.Errors.MsgFor("Note")},
 		IsArchive:          views.FDInput{Value: formatBooleanIfNonZero(acc.IsArchive), Error: errs.Errors.MsgFor("IsArchive")},
 		ExcludeFromBalance: views.FDInput{Value: formatBooleanIfNonZero(acc.ExcludeFromBalance), Error: errs.Errors.MsgFor("IsArchive")},
 	}
+
+	return fd
 }
 
 func defaultAccount(curs []models.Currency, ak []models.AccountKind) *models.Account {

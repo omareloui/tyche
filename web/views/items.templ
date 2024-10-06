@@ -41,7 +41,7 @@ templ EditItem(fd *ItemFD, id string, curs []models.Currency) {
 
 templ itemFormBody(fd *ItemFD, id string, curs []models.Currency) {
 	@input("Name", "text", "name", "Enter item name", "", fd.Name)
-	@AmountInputs(&fd.AmountFD, id, curs)
+	@AmountInputsWithCurrency(&fd.AmountFD, id, curs)
 }
 
 templ itemsList(items []models.Item) {

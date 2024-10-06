@@ -20,6 +20,7 @@ CREATE TABLE accounts (
     kind_id VARCHAR NOT NULL,
     amount FLOAT NOT NULL,
     currency_id VARCHAR NOT NULL,
+    counterparty_id VARCHAR,
     card_number VARCHAR UNIQUE,
     iban VARCHAR UNIQUE,
     note VARCHAR,
@@ -28,6 +29,7 @@ CREATE TABLE accounts (
     exclude_from_balance BOOL NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (currency_id) REFERENCES currencies (id),
+    FOREIGN KEY (counterparty_id) REFERENCES counterparties (id),
     FOREIGN KEY (kind_id) REFERENCES account_kinds (id)
 );
 CREATE TABLE transactions (

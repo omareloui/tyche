@@ -6,6 +6,7 @@ import (
 	"log"
 
 	_ "github.com/mattn/go-sqlite3"
+	"go.uber.org/zap"
 
 	"github.com/joho/godotenv"
 	"github.com/omareloui/tyche/internal/config"
@@ -13,10 +14,13 @@ import (
 	"github.com/omareloui/tyche/internal/dbconn"
 	"github.com/omareloui/tyche/internal/fxrate"
 	"github.com/omareloui/tyche/internal/idgen"
+	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
 )
 
 func main() {
+	l := logger.Get()
+
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal("Error loading .env file")
@@ -52,7 +56,7 @@ func main() {
 
 	txKinds, err := q.GetTransactionKinds(context.Background())
 	if err != nil {
-		log.Fatalln("error while getting the kinds", err)
+		l.Error("error while getting the transaction kinds", zap.Error(err))
 	}
 
 	kindsSeed := []db.TransactionKind{
@@ -64,21 +68,29 @@ func main() {
 	if len(txKinds) != len(kindsSeed) {
 		for _, kind := range kindsSeed {
 			if err := q.CreateTransactionKind(context.Background(), db.CreateTransactionKindParams(kind)); err != nil {
-				log.Fatalln("error while seeding the transaction kinds", err)
+				l.Error("error while seeding the transaction kinds", zap.Error(err))
 			}
 		}
 	}
 
-	accKinds := []db.CreateAccountKindParams{
+	accKinds, err := q.GetAccountKinds(context.Background())
+	if err != nil {
+		l.Error("error while getting the account kinds", zap.Error(err))
+	}
+
+	accKindsSeed := []db.CreateAccountKindParams{
 		{ID: idgen.New(), Enum: int64(models.AccountKindCreditCard)},
 		{ID: idgen.New(), Enum: int64(models.AccountKindBankAccount)},
 		{ID: idgen.New(), Enum: int64(models.AccountKindDebtCard)},
 		{ID: idgen.New(), Enum: int64(models.AccountKindCash)},
+		{ID: idgen.New(), Enum: int64(models.AccountKindDebt)},
 	}
 
-	for _, k := range accKinds {
-		if err := q.CreateAccountKind(context.Background(), k); err != nil {
-			log.Fatalln("error while seeding the account kinds", err)
+	if len(accKinds) != len(accKindsSeed) {
+		for _, k := range accKindsSeed {
+			if err := q.CreateAccountKind(context.Background(), k); err != nil {
+				l.Error("error while seeding the account kinds", zap.Error(err))
+			}
 		}
 	}
 }

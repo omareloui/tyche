@@ -155,7 +155,7 @@ templ Goal(gl *models.Goal) {
 templ GoalProgressForm(gl *models.Goal, fd *TransactionFD, accounts []models.Account, kinds []models.TransactionKind) {
 	@form("post", fmt.Sprintf("/goals/%s/progress", gl.ID), templ.Attributes{"hx-target": "this"}) {
 		<h2 class="text-xl font-bold">{ gl.Title } <i class="text-gray-400 font-regular">({ gl.ViewAmount() })</i></h2>
-		@AccountInputs(&fd.AccountIFD, gl.ID, accounts)
+		@AmountInputsWithAccount(&fd.AccountIFD, gl.ID, accounts)
 		@dateInput("Date", "scheduled_to", gl.ID, fd.ScheduledTo)
 		@editFormButtons(fmt.Sprintf("/goals/%s", gl.ID))
 	}

@@ -39,7 +39,7 @@ func New() *Validator {
 	val := validator.New(validator.WithRequiredStructEnabled())
 	_ = val.RegisterValidation("not_blank", validators.NotBlank)
 	_ = val.RegisterValidation("alphanum_with_underscore", IsAlphaNumWithUnderScore)
-	_ = val.RegisterValidation("iban", IsIBAN)
+	_ = val.RegisterValidation("iban", IsIban)
 	return &Validator{validator: val}
 }
 
@@ -49,7 +49,7 @@ func IsAlphaNumWithUnderScore(fl validator.FieldLevel) bool {
 	return re.Match([]byte(field.String()))
 }
 
-func IsIBAN(fl validator.FieldLevel) bool {
+func IsIban(fl validator.FieldLevel) bool {
 	field := fl.Field().String()
 	_, err := iban.NewIBAN(field)
 	return err != nil

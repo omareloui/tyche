@@ -35,6 +35,8 @@ func (v ValidationField) String() string {
 	switch v.Tag {
 	case "required", "required_if":
 		return "This field is required"
+	case "excluded_unless":
+		return fmt.Sprintf("This field can't be included on %s", v.Param)
 	case "email":
 		return "Invalid email"
 	case "ulid":

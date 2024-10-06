@@ -15,6 +15,7 @@ type Account struct {
 	KindID             string
 	Amount             float64
 	CurrencyID         string
+	CounterpartyID     sql.NullString
 	CardNumber         sql.NullString
 	Iban               sql.NullString
 	Note               sql.NullString

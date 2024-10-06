@@ -13,7 +13,7 @@ import (
 	"github.com/omareloui/tyche/web/views"
 )
 
-func (h Handler) AmountInputs(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+func (h Handler) AmountInputsWithCurrency(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	l := logger.FromCtx(r.Context())
 
 	curs, err := h.repo.GetCurrencies(r.Context())
@@ -40,10 +40,10 @@ func (h Handler) AmountInputs(w http.ResponseWriter, r *http.Request) (templ.Com
 		CurrencyID: views.FDInput{Value: currency.ID},
 	}
 
-	return views.AmountInputs(fd, "", curs), nil
+	return views.AmountInputsWithCurrency(fd, r.FormValue("id"), curs), nil
 }
 
-func (h Handler) AccountInputs(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+func (h Handler) AmountInputsWithAccount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	l := logger.FromCtx(r.Context())
 
 	accs, err := h.repo.GetAccounts(r.Context())
@@ -68,37 +68,7 @@ func (h Handler) AccountInputs(w http.ResponseWriter, r *http.Request) (templ.Co
 		AccountID: views.FDInput{Value: acc.ID},
 	}
 
-	return views.AccountInputs(fd, "", accs), nil
-}
-
-func (h Handler) IbanInputs(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	l := logger.FromCtx(r.Context())
-
-	curs, err := h.repo.GetCurrencies(r.Context())
-	if err != nil {
-		l.Error("fetching currencies")
-		return nil, err
-	}
-
-	curId := r.FormValue("currency_id")
-	if curId == "" {
-		return nil, errs.ErrInvalidID
-	}
-
-	currency := slicesutils.Find(curs, func(cur models.Currency) bool {
-		return cur.ID == curId
-	})
-
-	if currency == nil {
-		return nil, errs.ErrInvalidID
-	}
-
-	fd := &views.IBANFD{
-		IBAN:       views.FDInput{Value: r.FormValue("iban")},
-		CurrencyID: views.FDInput{Value: currency.ID},
-	}
-
-	return views.IbanInputs(fd, "", curs), nil
+	return views.AmountInputsWithAccount(fd, r.FormValue("id"), accs), nil
 }
 
 func (h Handler) TxInputs(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

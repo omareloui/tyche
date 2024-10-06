@@ -18,7 +18,8 @@ type Account struct {
 	ActualAmount       float64
 	Currency           Currency
 	Kind               AccountKind
-	IBAN               string
+	Counterparty       *Counterparty
+	Iban               string
 	CardNumber         string
 	Note               string
 	IsArchive          bool
@@ -30,8 +31,14 @@ type Account struct {
 type createAccount struct {
 	ID         string `validate:"required"`
 	Name       string `validate:"required"`
-	IBAN       string `validate:"omitempty,iban"`
+	KindID     string `validate:"required,ulid"`
+	KindString string `validate:"required,oneof='Credit Card' 'Bank Account' 'Debt Card' Cash Debt"`
+	Iban       string `validate:"omitempty,iban"`
 	CardNumber string `validate:"omitempty,credit_card"`
+	// NOTE: add this validation when this gets merged: https://github.com/go-playground/validator/pull/1307
+	// IBAN           string `validate:"excluded_unless=KindString 'Bank Account' KindString 'Debt Card',omitempty,iban"`
+	// CardNumber     string `validate:"excluded_unless=KindString 'Bank Account' KindString 'Debt Card',omitempty,credit_card"`
+	CounterpartyID string `validate:"required_if=KindString Debt"`
 }
 
 func (a *Account) ViewAmount() string {
@@ -42,8 +49,8 @@ func (a *Account) ViewActualAmount() string {
 	return formatAmount(a.ActualAmount, a.Currency.Enum)
 }
 
-func (a *Account) MaskIBAN() string {
-	rs := []rune(a.IBAN)
+func (a *Account) MaskIban() string {
+	rs := []rune(a.Iban)
 	for i := 0; i < len(rs)-4; i++ {
 		rs[i] = '*'
 	}
@@ -59,11 +66,20 @@ func (a *Account) MaskCardNumber() string {
 }
 
 func (a *Account) toValidate() *createAccount {
+	cpId := ""
+
+	if a.Counterparty != nil {
+		cpId = a.Counterparty.ID
+	}
+
 	return &createAccount{
-		ID:         a.ID,
-		Name:       a.Name,
-		IBAN:       a.IBAN,
-		CardNumber: a.CardNumber,
+		ID:             a.ID,
+		Name:           a.Name,
+		KindID:         a.Kind.ID,
+		KindString:     a.Kind.Enum.String(),
+		Iban:           a.Iban,
+		CardNumber:     a.CardNumber,
+		CounterpartyID: cpId,
 	}
 }
 

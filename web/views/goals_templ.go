@@ -742,7 +742,7 @@ func GoalProgressForm(gl *models.Goal, fd *TransactionFD, accounts []models.Acco
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = AccountInputs(&fd.AccountIFD, gl.ID, accounts).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = AmountInputsWithAccount(&fd.AccountIFD, gl.ID, accounts).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

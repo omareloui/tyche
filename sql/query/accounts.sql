@@ -15,6 +15,7 @@ SELECT
     a.kind_id,
     a.amount,
     a.currency_id,
+    a.counterparty_id,
     a.card_number,
     a.iban,
     a.note,
@@ -25,11 +26,13 @@ SELECT
     c.enum AS currency_enum,
     c.egp_fx_rate,
     k.enum AS kind_enum,
+    cp.name AS counterparty_name,
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
-LEFT JOIN currencies AS c ON c.id = a.currency_id
-LEFT JOIN gls_amts AS gla ON gla.account_id = a.id
+LEFT JOIN counterparties AS cp ON a.counterparty_id = cp.id
+LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN gls_amts AS gla ON a.id = gla.account_id
 ORDER BY a.created_at DESC;
 
 -- name: GetActiveAccounts :many
@@ -49,6 +52,7 @@ SELECT
     a.kind_id,
     a.amount,
     a.currency_id,
+    a.counterparty_id,
     a.card_number,
     a.iban,
     a.note,
@@ -59,9 +63,11 @@ SELECT
     c.enum AS currency_enum,
     c.egp_fx_rate,
     k.enum AS kind_enum,
+    cp.name AS counterparty_name,
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
+LEFT JOIN counterparties AS cp ON a.counterparty_id = cp.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN gls_amts AS gla ON a.id = gla.account_id
 WHERE a.is_archived IS FALSE
@@ -84,6 +90,7 @@ SELECT
     a.kind_id,
     a.amount,
     a.currency_id,
+    a.counterparty_id,
     a.card_number,
     a.iban,
     a.note,
@@ -94,9 +101,11 @@ SELECT
     c.enum AS currency_enum,
     c.egp_fx_rate,
     k.enum AS kind_enum,
+    cp.name AS counterparty_name,
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
+LEFT JOIN counterparties AS cp ON a.counterparty_id = cp.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN gls_amts AS gla ON a.id = gla.account_id
 WHERE a.id = sqlc.arg(id);
@@ -108,6 +117,7 @@ INSERT INTO accounts (
     kind_id,
     amount,
     currency_id,
+    counterparty_id,
     card_number,
     iban,
     note,
@@ -121,6 +131,7 @@ VALUES (
     sqlc.arg(kind_id),
     sqlc.arg(amount),
     sqlc.arg(currency_id),
+    sqlc.arg(counterparty_id),
     sqlc.arg(card_number),
     sqlc.arg(iban),
     sqlc.arg(note),
@@ -135,6 +146,7 @@ SET
     name = sqlc.arg(name),
     kind_id = sqlc.arg(kind_id),
     currency_id = sqlc.arg(currency_id),
+    counterparty_id = sqlc.arg(counterparty_id),
     card_number = sqlc.arg(card_number),
     iban = sqlc.arg(iban),
     note = sqlc.arg(note),

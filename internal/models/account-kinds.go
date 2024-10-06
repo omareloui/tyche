@@ -3,19 +3,21 @@ package models
 type AccountKindEnum uint8
 
 const (
-	AccountKindCreditCard AccountKindEnum = iota + 1
+	AccountKindNil AccountKindEnum = iota
+	AccountKindCreditCard
 	AccountKindBankAccount
 	AccountKindDebtCard
 	AccountKindCash
+	AccountKindDebt
 )
 
 const DfltAccountKind = AccountKindCreditCard
 
 func (a AccountKindEnum) String() string {
 	return [...]string{
-		"Credit Card", "Bank Account",
-		"Debt Card", "Cash",
-	}[a-1]
+		"???", "Credit Card", "Bank Account",
+		"Debt Card", "Cash", "Debt",
+	}[a]
 }
 
 type AccountKind struct {

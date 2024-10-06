@@ -76,9 +76,9 @@ func New(h *handler.Handler) Router {
 	mux.Handle("PUT /counterparties/{id}", handle(h.EditCounterparty))
 	mux.Handle("DELETE /counterparties/{id}", handle(h.DeleteCounterparty))
 
-	mux.Handle("POST /amount-inputs", handle(h.AmountInputs))
-	mux.Handle("POST /account-inputs", handle(h.AccountInputs))
-	mux.Handle("POST /iban-inputs", handle(h.IbanInputs))
+	mux.Handle("POST /amount-inputs-with-currency/{id}", handle(h.AmountInputsWithCurrency))
+	mux.Handle("POST /amount-inputs-with-account/{id}", handle(h.AmountInputsWithAccount))
+	mux.Handle("POST /accounts-inputs/{id}", handle(h.AccountInputs))
 	mux.Handle("POST /tx-inputs/{id}", handle(h.TxInputs))
 
 	static(mux, []string{"styles", "js"}, "./web/public")

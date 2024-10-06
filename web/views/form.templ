@@ -22,11 +22,6 @@ type AmountFD struct {
 	CurrencyID FDInput
 }
 
-type IBANFD struct {
-	CurrencyID FDInput
-	IBAN       FDInput
-}
-
 type TransactionAmountsAndKindFD struct {
 	AccountIFD     AccountIFD
 	KindID         FDInput
@@ -92,51 +87,31 @@ templ creationForm(title, postTo, submitStr string, close ...bool) {
 	</div>
 }
 
-templ AmountInputs(fd *AmountFD, id string, curs []models.Currency) {
-	<div data-amount class="grid grid-cols-3 gap-4">
+templ AmountInputsWithCurrency(fd *AmountFD, id string, curs []models.Currency) {
+	<div hx-target="this" class="grid grid-cols-3 gap-4">
 		@moneyInput("Amount", "amount", getCurSymbolByCurrency(curs, fd.CurrencyID.Value), id,
 			fd.Amount, "col-span-2")
 		@selectInput("Currency", "currency_id", "Select a Currency", id, currenciesToMap(curs), fd.CurrencyID,
 			false, templ.Attributes{
-				"hx-post":    "/amount-inputs",
+				"hx-post":    fmt.Sprintf("/amount-inputs-with-currency/%s", id),
 				"hx-trigger": "change",
-				"hx-target":  "closest [data-amount]",
 				"hx-swap":    "outerHTML",
 				"hx-sync":    "closest form:abort",
 			})
 	</div>
 }
 
-templ AccountInputs(fd *AccountIFD, id string, accs []models.Account) {
-	@accountInputs(fd, id, "", accs)
-}
-
-templ accountInputs(fd *AccountIFD, id, nameSuffix string, accs []models.Account) {
-	<div data-account class="grid grid-cols-3 gap-4">
-		@moneyInput("Amount", join("amount", nameSuffix, "_"), getCurSymbolByAccount(accs, fd.AccountID.Value), id,
+templ AmountInputsWithAccount(fd *AccountIFD, id string, accs []models.Account) {
+	<div hx-target="this" class="grid grid-cols-3 gap-4">
+		@moneyInput("Amount", "amount", getCurSymbolByAccount(accs, fd.AccountID.Value), id,
 			fd.Amount, "col-span-2")
-		@selectAccount(join("account_id", nameSuffix, "_"), id, accs, fd.AccountID,
+		@selectAccount("account_id", id, accs, fd.AccountID,
 			templ.Attributes{
-				"hx-post":    "/account-inputs",
+				"hx-post":    fmt.Sprintf("/amount-inputs-with-amounts/%s", id),
 				"hx-trigger": "change",
-				"hx-target":  "closest [data-account]",
 				"hx-swap":    "outerHTML",
 				"hx-sync":    "closest form:abort",
 			})
-	</div>
-}
-
-templ IbanInputs(fd *IBANFD, id string, curs []models.Currency) {
-	<div data-iban class="grid gap-4">
-		@selectCurrency("currency_id", id, curs, fd.CurrencyID,
-			templ.Attributes{
-				"hx-post":    "/iban-inputs",
-				"hx-trigger": "change",
-				"hx-target":  "closest [data-iban]",
-				"hx-swap":    "outerHTML",
-				"hx-sync":    "closest form:abort",
-			})
-		@ibanInput("IBAN", "iban", id, getCurIbanPrefixByCurrency(curs, fd.CurrencyID.Value), fd.IBAN)
 	</div>
 }
 
@@ -172,7 +147,7 @@ templ TransactionAmountsAndKindFormBody(fd *TransactionAmountsAndKindFD,
 			@selectTxCat("category_id", id, getCategoriesOfKinds(cats, fd.KindID.Value), *fd.CategoryID)
 		}
 		if fd.CounterpartyID != nil {
-			@selectCounterparty("counterparty_id", id, cps, *fd.CounterpartyID)
+			@selectCounterparty("counterparty_id", id, cps, *fd.CounterpartyID, true)
 		}
 		if fd.ToAccountIFD != nil {
 			<div class="grid grid-cols-3 gap-4">
@@ -342,8 +317,8 @@ templ selectTxKind(name, id string, knds []models.TransactionKind, data FDInput,
 	@selectInput("Transaction Kind", name, "Select Kind", id, txKindsToMap(knds), data, false, inputAttrs...)
 }
 
-templ selectCounterparty(name, id string, cps []models.Counterparty, data FDInput, inputAttrs ...templ.Attributes) {
-	@selectInput("Counterparty", name, "Select Counterparty", id, counterpartiesToMap(cps), data, true, inputAttrs...)
+templ selectCounterparty(name, id string, cps []models.Counterparty, data FDInput, nullable bool, inputAttrs ...templ.Attributes) {
+	@selectInput("Counterparty", name, "Select Counterparty", id, counterpartiesToMap(cps), data, nullable, inputAttrs...)
 }
 
 templ selectTxCat(name, id string, cats []models.Category, data FDInput, inputAttrs ...templ.Attributes) {
@@ -519,9 +494,9 @@ func getCurIbanPrefixByCurrency(curs []models.Currency, curId string) string {
 		return c.ID == curId
 	})
 	if cur == nil {
-		return models.DfltCurrency.IBANPrefix()
+		return models.DfltCurrency.IbanPrefix()
 	}
-	return cur.Enum.IBANPrefix()
+	return cur.Enum.IbanPrefix()
 }
 
 func getTxKindsForAccounts(accs []models.Account, knds []models.TransactionKind) []models.TransactionKind {

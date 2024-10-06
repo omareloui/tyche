@@ -7,50 +7,83 @@ import (
 )
 
 type AccountFD struct {
-	IBANFD
-	Name               FDInput
-	KindID             FDInput
-	CardNumber         FDInput
+	AccountPartialFD   AccountPartialFD
 	Note               FDInput
 	IsArchive          FDInput
 	ExcludeFromBalance FDInput
 }
 
+type AccountPartialFD struct {
+	Name           *FDInput
+	KindID         FDInput
+	CurrencyID     FDInput
+	Iban           *FDInput
+	CardNumber     *FDInput
+	CounterpartyID *FDInput
+}
+
 templ Accounts(
 	balances []models.Balance,
 	fd *AccountFD, aknds []models.AccountKind,
-	curs []models.Currency, accounts []models.Account) {
+	curs []models.Currency, accounts []models.Account,
+	cps []models.Counterparty) {
 	@baseLayout("Accounts", balances) {
 		@container() {
 			@mainHeader("Accounts")
-			@CreateAccountForm(fd, aknds, curs)
+			@CreateAccountForm(fd, aknds, curs, cps)
 			@accountsList(accounts)
 		}
 	}
 }
 
-templ CreateAccountForm(fd *AccountFD, aknds []models.AccountKind, curs []models.Currency) {
+templ CreateAccountForm(fd *AccountFD, aknds []models.AccountKind, curs []models.Currency, cps []models.Counterparty) {
 	@creationForm("Create Account", "/accounts", "Create Account") {
-		@accountFormBody("", fd, aknds, curs)
+		@accountFormBody("0", fd, aknds, curs, cps)
 	}
 }
 
-templ EditAccount(id string, fd *AccountFD, aknds []models.AccountKind, curs []models.Currency) {
+templ EditAccount(id string, fd *AccountFD, aknds []models.AccountKind, curs []models.Currency, cps []models.Counterparty) {
 	@form("put", fmt.Sprintf("/accounts/%s", id), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { id }</p>
-		@accountFormBody(id, fd, aknds, curs)
+		@accountFormBody(id, fd, aknds, curs, cps)
 		@editFormButtons(fmt.Sprintf("/accounts/%s", id))
 	}
 }
 
-templ accountFormBody(id string, fd *AccountFD, aknds []models.AccountKind, curs []models.Currency) {
-	@input("Name", "text", "name", "Enter account name", id, fd.Name)
-	@selectAccKind("kind_id", id, aknds, fd.KindID)
-	@IbanInputs(&fd.IBANFD, id, curs)
-	@creditCardInput("Card Number", "card_number", id, fd.CardNumber)
+templ accountFormBody(id string, fd *AccountFD, aknds []models.AccountKind, curs []models.Currency, cps []models.Counterparty) {
+	@AccountInputs(id, &fd.AccountPartialFD, aknds, curs, cps)
 	@input("Note", "text", "note", "Enter note", id, fd.Note)
 	@checkbox("Is Archive", "is_archive", id, fd.IsArchive)
 	@checkbox("Exclude From Balance", "exclude_from_balance", id, fd.ExcludeFromBalance)
+}
+
+templ AccountInputs(id string, fd *AccountPartialFD, aknds []models.AccountKind, curs []models.Currency, cps []models.Counterparty) {
+	<div
+		class="contents"
+		hx-target="this"
+		hx-swap="outerHTML"
+		hx-sync="closest form:abort"
+	>
+		@selectAccKind("kind_id", id, aknds, fd.KindID, templ.Attributes{
+			"hx-post": fmt.Sprintf("/accounts-inputs/%s", id),
+		})
+		@selectCurrency("currency_id", id, curs, fd.CurrencyID,
+			templ.Attributes{
+				"hx-post": fmt.Sprintf("/accounts-inputs/%s", id),
+			})
+		if fd.Name != nil {
+			@input("Name", "text", "name", "Enter account name", id, *fd.Name)
+		}
+		if fd.Iban != nil {
+			@ibanInput("IBAN", "iban", id, getCurIbanPrefixByCurrency(curs, fd.CurrencyID.Value), *fd.Iban)
+		}
+		if fd.CardNumber != nil {
+			@creditCardInput("Card Number", "card_number", id, *fd.CardNumber)
+		}
+		if fd.CounterpartyID != nil {
+			@selectCounterparty("counterparty_id", id, cps, *fd.CounterpartyID, false)
+		}
+	</div>
 }
 
 templ accountsList(accounts []models.Account) {
@@ -71,8 +104,12 @@ templ Account(a *models.Account) {
 		<p>Amount: { a.ViewAmount() } </p>
 		<p>Actual Amount: { a.ViewActualAmount() } </p>
 		<p>Kind: { a.Kind.Enum.String() } </p>
-		if a.IBAN != "" {
-			<p>IBAN: { a.MaskIBAN() } </p>
+		if a.Iban != "" {
+			<p>IBAN: { a.MaskIban() } </p>
+		}
+		if a.Counterparty != nil {
+			<p>Counterparty ID: { a.Counterparty.ID }</p>
+			<p>Counterparty: { a.Counterparty.Name }</p>
 		}
 		if a.CardNumber != "" {
 			<p>Card Number: { a.MaskCardNumber() } </p>

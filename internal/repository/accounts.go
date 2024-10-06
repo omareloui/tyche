@@ -13,21 +13,28 @@ import (
 
 func (r *Repository) CreateAccount(ctx context.Context, a *models.Account) error {
 	l := logger.FromCtx(ctx)
+
+	cpId := ""
+	if a.Counterparty != nil {
+		cpId = a.Counterparty.ID
+	}
+
 	if err := r.q.CreateAccount(ctx, db.CreateAccountParams{
 		ID:                 a.ID,
 		Name:               a.Name,
 		KindID:             a.Kind.ID,
 		Amount:             a.Amount,
 		CurrencyID:         a.Currency.ID,
+		CounterpartyID:     sql.NullString{String: cpId, Valid: cpId != ""},
+		Iban:               sql.NullString{String: a.Iban, Valid: a.Iban != ""},
 		CardNumber:         sql.NullString{String: a.CardNumber, Valid: a.CardNumber != ""},
-		Iban:               sql.NullString{String: a.IBAN, Valid: a.IBAN != ""},
 		Note:               sql.NullString{String: a.Note, Valid: a.Note != ""},
 		IsArchived:         a.IsArchive,
 		ExcludeFromBalance: a.ExcludeFromBalance,
 	}); err != nil {
 		l.Error("creating account", zap.Error(err))
 		if strings.Contains(err.Error(), "UNIQUE constraint failed: accounts.name") {
-			return newDuplicationError("Name")
+			return newDuplicationError("Name", "CounterpartyID")
 		}
 
 		if strings.Contains(err.Error(), "UNIQUE constraint failed: accounts.card_number") {
@@ -67,13 +74,20 @@ func (r *Repository) GetAccount(ctx context.Context, id string) (*models.Account
 
 func (r *Repository) UpdateAccount(ctx context.Context, a *models.Account) error {
 	l := logger.FromCtx(ctx)
+
+	cpId := ""
+	if a.Counterparty != nil {
+		cpId = a.Counterparty.ID
+	}
+
 	if err := r.q.UpdateAccount(ctx, db.UpdateAccountParams{
 		ID:                 a.ID,
 		Name:               a.Name,
 		KindID:             a.Kind.ID,
 		CurrencyID:         a.Currency.ID,
+		CounterpartyID:     sql.NullString{String: cpId, Valid: cpId != ""},
+		Iban:               sql.NullString{String: a.Iban, Valid: a.Iban != ""},
 		CardNumber:         sql.NullString{String: a.CardNumber, Valid: a.CardNumber != ""},
-		Iban:               sql.NullString{String: a.IBAN, Valid: a.IBAN != ""},
 		Note:               sql.NullString{String: a.Note, Valid: a.Note != ""},
 		IsArchived:         a.IsArchive,
 		ExcludeFromBalance: a.ExcludeFromBalance,
@@ -211,6 +225,15 @@ func (r *Repository) GetBalances(ctx context.Context) ([]models.Balance, error) 
 
 func dbAccountRowToAccount[T db.GetAccountRow | db.GetAccountsRow](dbAcc *T) *models.Account {
 	_dbAcc := db.GetAccountsRow(*dbAcc)
+	var cp *models.Counterparty
+
+	if _dbAcc.CounterpartyID.Valid {
+		cp = &models.Counterparty{
+			ID:   _dbAcc.CounterpartyID.String,
+			Name: _dbAcc.CounterpartyName.String,
+		}
+	}
+
 	return &models.Account{
 		ID:           _dbAcc.ID,
 		Name:         _dbAcc.Name,
@@ -222,11 +245,12 @@ func dbAccountRowToAccount[T db.GetAccountRow | db.GetAccountsRow](dbAcc *T) *mo
 			Enum:      models.CurrencyEnum(_dbAcc.CurrencyEnum.Int64),
 			EgpFxRate: _dbAcc.EgpFxRate.Float64,
 		},
+		Counterparty: cp,
 		Kind: models.AccountKind{
 			ID:   _dbAcc.KindID,
 			Enum: models.AccountKindEnum(_dbAcc.KindEnum.Int64),
 		},
-		IBAN:               _dbAcc.Iban.String,
+		Iban:               _dbAcc.Iban.String,
 		CardNumber:         _dbAcc.CardNumber.String,
 		Note:               _dbAcc.Note.String,
 		IsArchive:          _dbAcc.IsArchived,
