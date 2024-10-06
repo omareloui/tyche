@@ -176,11 +176,15 @@ func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Com
 		}
 	}
 
+	if a.Kind.Enum == models.AccountKindDebt && a.Counterparty != nil {
+		a.Name = a.Counterparty.Name
+	}
+
 	if err := a.SanitizeAndValidate(h.sani, h.valid); err != nil {
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("validating account", zap.Any("errors", valerr.Errors))
-			return views.CreateAccountForm(h.mapAccToFD(a, &valerr, knds), knds, curs, cps), nil
+			return views.EditAccount(id, h.mapAccToFD(a, &valerr, knds), knds, curs, cps), nil
 		}
 		l.Error("sanitizing account", zap.Error(err))
 		return nil, err
