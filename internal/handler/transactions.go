@@ -339,8 +339,6 @@ func (h Handler) getTxDeps(ctx context.Context) ([]models.Account, []models.Tran
 }
 
 func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationError, knds []models.TransactionKind) *views.TransactionFD {
-	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == t.Kind.ID })
-
 	fd := &views.TransactionFD{
 		TransactionAmountsAndKindFD: views.TransactionAmountsAndKindFD{
 			AccountIFD: views.AccountIFD{
@@ -354,6 +352,7 @@ func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationE
 		FrequencyFD: &views.FrequencyFD{},
 	}
 
+	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == t.Kind.ID })
 	hasToAccount := knd.Kind == models.DebtTxKind || knd.Kind == models.TransferTxKind
 
 	if t.Category != nil {

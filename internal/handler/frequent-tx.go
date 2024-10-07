@@ -92,7 +92,7 @@ func (h Handler) GetEditFrequentTx(w http.ResponseWriter, r *http.Request) (temp
 	l.Info("fetched frequent tx")
 
 	return views.EditFrequentTx(ftx,
-		h.mapFrequentTxToFD(ftx, &errs.ValidationError{}),
+		h.mapFrequentTxToFD(ftx, &errs.ValidationError{}, knds),
 		accs, knds, cats, cps, false), nil
 }
 
@@ -127,7 +127,7 @@ func (h Handler) EditFrequentTx(w http.ResponseWriter, r *http.Request) (templ.C
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("validating frequent transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-			return views.EditFrequentTx(ftx, h.mapFrequentTxToFD(ftx, &valerr),
+			return views.EditFrequentTx(ftx, h.mapFrequentTxToFD(ftx, &valerr, knds),
 				accs, knds, cats, cps, false), nil
 		}
 		l.Error("sanitizing frequent transaction", zap.Error(err))
@@ -299,7 +299,7 @@ func (h Handler) mapFDToFrequentTx(r *http.Request) (*models.FrequentTx, error) 
 	}, nil
 }
 
-func (h Handler) mapFrequentTxToFD(ftx *models.FrequentTx, valerr *errs.ValidationError) *views.FrequentTxFD {
+func (h Handler) mapFrequentTxToFD(ftx *models.FrequentTx, valerr *errs.ValidationError, knds []models.TransactionKind) *views.FrequentTxFD {
 	fd := &views.FrequentTxFD{
 		FrequencyFD: views.FrequencyFD{
 			IsFrequent: views.FDInput{Value: "on"},
@@ -317,15 +317,18 @@ func (h Handler) mapFrequentTxToFD(ftx *models.FrequentTx, valerr *errs.Validati
 		Description: views.FDInput{Value: ftx.Description, Error: valerr.Errors.MsgFor("Description")},
 	}
 
+	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == ftx.Kind.ID })
+	hasToAccount := knd.Kind == models.DebtTxKind || knd.Kind == models.TransferTxKind
+
 	if ftx.Category != nil {
 		fd.CategoryID = &views.FDInput{Value: ftx.Category.ID, Error: valerr.Errors.MsgFor("CategoryID")}
-	} else if ftx.Kind.Kind != models.TransferTxKind {
+	} else if !hasToAccount {
 		fd.CategoryID = &views.FDInput{}
 	}
 
 	if ftx.Counterparty != nil {
 		fd.CounterpartyID = &views.FDInput{Value: ftx.Counterparty.ID, Error: valerr.Errors.MsgFor("CounterpartyID")}
-	} else if ftx.Kind.Kind != models.TransferTxKind {
+	} else if !hasToAccount {
 		fd.CounterpartyID = &views.FDInput{}
 	}
 
@@ -334,7 +337,7 @@ func (h Handler) mapFrequentTxToFD(ftx *models.FrequentTx, valerr *errs.Validati
 			Amount:    views.FDInput{Value: formatFloatIfNonZero(ftx.ToAmount), Error: valerr.Errors.MsgFor("ToAmount")},
 			AccountID: views.FDInput{Value: ftx.ToAccount.ID, Error: valerr.Errors.MsgFor("ToAccountID")},
 		}
-	} else if ftx.Kind.Kind == models.TransferTxKind {
+	} else if hasToAccount {
 		fd.ToAccountIFD = &views.AccountIFD{
 			Amount:    views.FDInput{Error: valerr.Errors.MsgFor("ToAmount")},
 			AccountID: views.FDInput{Error: valerr.Errors.MsgFor("ToAccountID")},
