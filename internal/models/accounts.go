@@ -32,12 +32,11 @@ type createAccount struct {
 	ID         string `validate:"required"`
 	Name       string `validate:"required"`
 	KindID     string `validate:"required,ulid"`
-	KindString string `validate:"required,oneof='Credit Card' 'Bank Account' 'Debt Card' Cash Debt"`
-	Iban       string `validate:"omitempty,iban"`
+	KindString string `validate:"required,oneof='Credit Card' 'Bank Account' Cash Debt"`
+	Iban       string `validate:"excluded_unless=KindString 'Bank Account',omitempty,iban"`
 	CardNumber string `validate:"omitempty,credit_card"`
 	// NOTE: add this validation when this gets merged: https://github.com/go-playground/validator/pull/1307
-	// IBAN           string `validate:"excluded_unless=KindString 'Bank Account' KindString 'Debt Card',omitempty,iban"`
-	// CardNumber     string `validate:"excluded_unless=KindString 'Bank Account' KindString 'Debt Card',omitempty,credit_card"`
+	// CardNumber     string `validate:"excluded_unless=KindString 'Bank Account' KindString 'Credit Card',omitempty,credit_card"`
 	CounterpartyID string `validate:"required_if=KindString Debt"`
 }
 

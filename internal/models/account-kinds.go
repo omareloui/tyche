@@ -6,7 +6,6 @@ const (
 	AccountKindNil AccountKindEnum = iota
 	AccountKindCreditCard
 	AccountKindBankAccount
-	AccountKindDebtCard
 	AccountKindCash
 	AccountKindDebt
 )
@@ -15,8 +14,9 @@ const DfltAccountKind = AccountKindCreditCard
 
 func (a AccountKindEnum) String() string {
 	return [...]string{
-		"???", "Credit Card", "Bank Account",
-		"Debt Card", "Cash", "Debt",
+		"???", "Credit Card",
+		"Bank Account",
+		"Cash", "Debt",
 	}[a]
 }
 

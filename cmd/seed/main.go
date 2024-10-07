@@ -63,6 +63,7 @@ func main() {
 		{ID: idgen.New(), Kind: models.ExpenseTxKind, IncreaseBalance: sql.NullBool{Bool: false, Valid: true}},
 		{ID: idgen.New(), Kind: models.IncomeTxKind, IncreaseBalance: sql.NullBool{Bool: true, Valid: true}},
 		{ID: idgen.New(), Kind: models.TransferTxKind, IncreaseBalance: sql.NullBool{Valid: false}},
+		{ID: idgen.New(), Kind: models.DebtTxKind, IncreaseBalance: sql.NullBool{Valid: false}},
 	}
 
 	if len(txKinds) != len(kindsSeed) {
@@ -81,7 +82,6 @@ func main() {
 	accKindsSeed := []db.CreateAccountKindParams{
 		{ID: idgen.New(), Enum: int64(models.AccountKindCreditCard)},
 		{ID: idgen.New(), Enum: int64(models.AccountKindBankAccount)},
-		{ID: idgen.New(), Enum: int64(models.AccountKindDebtCard)},
 		{ID: idgen.New(), Enum: int64(models.AccountKindCash)},
 		{ID: idgen.New(), Enum: int64(models.AccountKindDebt)},
 	}

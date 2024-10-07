@@ -316,10 +316,12 @@ func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, kn
 	var name, cc, iban, cpId *views.FDInput
 
 	if knd.Enum == models.AccountKindBankAccount ||
-		knd.Enum == models.AccountKindCreditCard ||
-		knd.Enum == models.AccountKindDebtCard {
-		iban = &views.FDInput{Value: acc.Iban, Error: errs.Errors.MsgFor("Iban")}
+		knd.Enum == models.AccountKindCreditCard {
 		cc = &views.FDInput{Value: acc.CardNumber, Error: errs.Errors.MsgFor("CardNumber")}
+	}
+
+	if knd.Enum == models.AccountKindBankAccount {
+		iban = &views.FDInput{Value: acc.Iban, Error: errs.Errors.MsgFor("Iban")}
 	}
 
 	if knd.Enum != models.AccountKindDebt {
