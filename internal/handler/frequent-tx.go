@@ -93,7 +93,7 @@ func (h Handler) GetEditFrequentTx(w http.ResponseWriter, r *http.Request) (temp
 
 	return views.EditFrequentTx(ftx,
 		h.mapFrequentTxToFD(ftx, &errs.ValidationError{}),
-		accs, knds, cats, cps), nil
+		accs, knds, cats, cps, false), nil
 }
 
 func (h Handler) EditFrequentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -128,7 +128,7 @@ func (h Handler) EditFrequentTx(w http.ResponseWriter, r *http.Request) (templ.C
 		if errors.As(err, &valerr) {
 			l.Error("validating frequent transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
 			return views.EditFrequentTx(ftx, h.mapFrequentTxToFD(ftx, &valerr),
-				accs, knds, cats, cps), nil
+				accs, knds, cats, cps, false), nil
 		}
 		l.Error("sanitizing frequent transaction", zap.Error(err))
 		return nil, err

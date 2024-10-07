@@ -42,7 +42,7 @@ func (r *Repository) CreateAccount(ctx context.Context, a *models.Account) error
 		}
 
 		if strings.Contains(err.Error(), "UNIQUE constraint failed: accounts.iban") {
-			return newDuplicationError("IBAN")
+			return newDuplicationError("Iban")
 		}
 		return err
 	}
@@ -141,7 +141,7 @@ func (r *Repository) DeleteAccount(ctx context.Context, id string) error {
 func (r *Repository) applyTxToAccountWithTxn(qtx *db.Queries, ctx context.Context, tx *models.Transaction) error {
 	l := logger.FromCtx(ctx)
 
-	if tx.Kind.Kind == models.TransferTxKind {
+	if tx.Kind.Kind == models.TransferTxKind || tx.Kind.Kind == models.DebtTxKind {
 		if err := r.removeFromAccountWithTxn(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {
 			l.Error("applying transfer: remove from account", zap.Error(err), zap.Any("transaction", tx))
 			return err

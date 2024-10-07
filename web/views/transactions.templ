@@ -5,6 +5,7 @@ import (
 	"time"
 	"strconv"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/slicesutils"
 )
 
 type TransactionFD struct {
@@ -12,6 +13,19 @@ type TransactionFD struct {
 	FrequencyFD *FrequencyFD
 	ScheduledTo FDInput
 	Description FDInput
+}
+
+type TransactionAmountsAndKindFD struct {
+	AccountIFD     AccountIFD
+	KindID         FDInput
+	CategoryID     *FDInput
+	CounterpartyID *FDInput
+	ToAccountIFD   *AccountIFD
+}
+
+type AccountIFD struct {
+	Amount    FDInput
+	AccountID FDInput
 }
 
 templ Transactions(
@@ -42,11 +56,8 @@ templ CreateTransactionForm(
 }
 
 templ transactionFormBody(
-	fd *TransactionFD,
-	id string,
-	accs []models.Account,
-	knds []models.TransactionKind,
-	cats []models.Category,
+	fd *TransactionFD, id string, accs []models.Account,
+	knds []models.TransactionKind, cats []models.Category,
 	cps []models.Counterparty) {
 	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs, cps)
 	@input("Description", "text", "description", "Enter a description", id, fd.Description)
@@ -63,12 +74,9 @@ templ TransactionOOB(tx *models.Transaction) {
 }
 
 templ EditTransaction(
-	tx *models.Transaction,
-	fd *TransactionFD,
-	accounts []models.Account,
-	knds []models.TransactionKind,
-	cats []models.Category,
-	cps []models.Counterparty) {
+	tx *models.Transaction, fd *TransactionFD,
+	accounts []models.Account, knds []models.TransactionKind,
+	cats []models.Category, cps []models.Counterparty) {
 	@form("put", fmt.Sprintf("/transactions/%s", tx.ID), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { tx.ID }</p>
 		@transactionFormBody(fd, tx.ID, accounts, knds, cats, cps)
@@ -129,4 +137,98 @@ templ Transaction(tx *models.Transaction) {
 			@deleteButton(fmt.Sprintf("/transactions/%s", tx.ID))
 		</div>
 	</div>
+}
+
+templ TransactionAmountsAndKindFormBody(
+	fd *TransactionAmountsAndKindFD, id string,
+	knds []models.TransactionKind, cats []models.Category,
+	accs []models.Account, cps []models.Counterparty) {
+	<div
+		class="contents"
+		hx-target="this"
+		hx-swap="outerHTML"
+		hx-sync="closest form:abort"
+	>
+		<div class="grid grid-cols-3 gap-4">
+			@moneyInput("Amount", "amount", getCurSymbolByAccount(accs, fd.AccountIFD.AccountID.Value), id,
+				fd.AccountIFD.Amount, "col-span-2", templ.Attributes{
+					"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
+					"hx-trigger": "keyup changed delay:200ms",
+				})
+			@selectAccount("account_id", id, getTxAccs(accs, knds, fd.KindID.Value, isSwitched(accs, fd.AccountIFD.AccountID.Value)), fd.AccountIFD.AccountID,
+				templ.Attributes{
+					"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
+					"hx-trigger": "change",
+				})
+		</div>
+		@selectTxKind("kind_id", id, getTxKindsForAccounts(accs, knds), fd.KindID, templ.Attributes{
+			"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
+			"hx-trigger": "change",
+		})
+		if fd.CategoryID != nil {
+			@selectTxCat("category_id", id, getCategoriesOfKinds(cats, fd.KindID.Value), *fd.CategoryID)
+		}
+		if fd.CounterpartyID != nil {
+			@selectCounterparty("counterparty_id", id, cps, *fd.CounterpartyID, true)
+		}
+		if fd.ToAccountIFD != nil {
+			<div class="grid grid-cols-3 gap-4">
+				@moneyInput("To Amount", "to_amount",
+					getCurSymbolByAccount(accs, fd.ToAccountIFD.AccountID.Value), id,
+					fd.ToAccountIFD.Amount, "col-span-2")
+				@selectToAccount("to_account_id", id, getTxCounterAccs(accs, knds, fd.KindID.Value, isSwitched(accs, fd.AccountIFD.AccountID.Value)),
+					fd.ToAccountIFD.AccountID, templ.Attributes{
+						"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
+						"hx-trigger": "change",
+					})
+			</div>
+		}
+	</div>
+}
+
+func getTxKindsForAccounts(accs []models.Account, knds []models.TransactionKind) []models.TransactionKind {
+	nknds := knds
+	notDebt := slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum != models.AccountKindDebt })
+	if len(notDebt) < 2 {
+		nknds = slicesutils.Filter(nknds, func(k models.TransactionKind) bool { return k.Kind != models.TransferTxKind })
+	}
+	if len(notDebt) == len(accs) {
+		nknds = slicesutils.Filter(nknds, func(k models.TransactionKind) bool { return k.Kind != models.DebtTxKind })
+	}
+	return nknds
+}
+
+func getTxAccs(accs []models.Account, knds []models.TransactionKind, kndId string, isSwitched bool) []models.Account {
+	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == kndId })
+
+	if knd.Kind == models.DebtTxKind && isSwitched {
+		return slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum == models.AccountKindDebt })
+	}
+
+	return slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum != models.AccountKindDebt })
+}
+
+func getTxCounterAccs(accs []models.Account, knds []models.TransactionKind, kndId string, isSwitched bool) []models.Account {
+	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == kndId })
+
+	if knd.Kind != models.DebtTxKind || isSwitched {
+		return slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum != models.AccountKindDebt })
+	}
+
+	return slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum == models.AccountKindDebt })
+}
+
+func isSwitched(accs []models.Account, accId string) bool {
+	acc := slicesutils.Find(accs, func(a models.Account) bool { return a.ID == accId })
+	return acc.Kind.Enum == models.AccountKindDebt
+}
+
+func getCategoriesOfKinds(cats []models.Category, kndId string) []models.Category {
+	kndsCats := []models.Category{}
+	for _, cat := range cats {
+		if cat.Kind.ID == kndId {
+			kndsCats = append(kndsCats, cat)
+		}
+	}
+	return kndsCats
 }

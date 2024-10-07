@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/a-h/templ"
@@ -25,7 +27,7 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 		return nil, err
 	}
 
-	fd := h.mapTransactionToFD(defaultTransaction(accs, knds), new(errs.ValidationError))
+	fd := h.mapTransactionToFD(defaultTransaction(accs, knds), new(errs.ValidationError), knds)
 
 	txs, err := h.repo.GetTransactions(r.Context())
 	if err != nil {
@@ -89,7 +91,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 			var valerr errs.ValidationError
 			if errors.As(err, &valerr) {
 				l.Error("validating frequent transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-				fd := h.mapTransactionToFD(tx, &valerr)
+				fd := h.mapTransactionToFD(tx, &valerr, knds)
 				fd.FrequencyFD = h.parseFrequencyFD(r, &valerr)
 				return views.CreateTransactionForm(fd, accs, knds, cats, cps), nil
 			}
@@ -126,7 +128,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		}
 	}
 
-	fd = h.mapTransactionToFD(defaultTransaction(accs, knds), new(errs.ValidationError))
+	fd = h.mapTransactionToFD(defaultTransaction(accs, knds), new(errs.ValidationError), knds)
 	return views.CreateTransactionForm(fd, accs, knds, cats, cps), nil
 }
 
@@ -169,7 +171,7 @@ func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (tem
 		return nil, err
 	}
 
-	fd := h.mapTransactionToFD(tx, new(errs.ValidationError))
+	fd := h.mapTransactionToFD(tx, new(errs.ValidationError), knds)
 	fd.FrequencyFD = nil
 
 	return views.EditTransaction(tx, fd, accs, knds, cats, cps), nil
@@ -336,7 +338,9 @@ func (h Handler) getTxDeps(ctx context.Context) ([]models.Account, []models.Tran
 	return accs, knds, cats, cps, nil
 }
 
-func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationError) *views.TransactionFD {
+func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationError, knds []models.TransactionKind) *views.TransactionFD {
+	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == t.Kind.ID })
+
 	fd := &views.TransactionFD{
 		TransactionAmountsAndKindFD: views.TransactionAmountsAndKindFD{
 			AccountIFD: views.AccountIFD{
@@ -350,15 +354,17 @@ func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationE
 		FrequencyFD: &views.FrequencyFD{},
 	}
 
+	hasToAccount := knd.Kind == models.DebtTxKind || knd.Kind == models.TransferTxKind
+
 	if t.Category != nil {
 		fd.CategoryID = &views.FDInput{Value: t.Category.ID, Error: err.Errors.MsgFor("CategoryID")}
-	} else if t.Kind.Kind != models.TransferTxKind {
+	} else if !hasToAccount {
 		fd.CategoryID = &views.FDInput{}
 	}
 
 	if t.Counterparty != nil {
 		fd.CounterpartyID = &views.FDInput{Value: t.Counterparty.ID, Error: err.Errors.MsgFor("CounterpartyID")}
-	} else if t.Kind.Kind != models.TransferTxKind {
+	} else if !hasToAccount {
 		fd.CounterpartyID = &views.FDInput{}
 	}
 
@@ -367,7 +373,7 @@ func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationE
 			Amount:    views.FDInput{Value: formatFloatIfNonZero(t.ToAmount), Error: err.Errors.MsgFor("ToAmount")},
 			AccountID: views.FDInput{Value: t.ToAccount.ID, Error: err.Errors.MsgFor("ToAccountID")},
 		}
-	} else if t.Kind.Kind == models.TransferTxKind {
+	} else if hasToAccount {
 		fd.ToAccountIFD = &views.AccountIFD{
 			Amount:    views.FDInput{Error: err.Errors.MsgFor("ToAmount")},
 			AccountID: views.FDInput{Error: err.Errors.MsgFor("ToAccountID")},
@@ -427,13 +433,13 @@ func (h Handler) mapFDToTransaction(r *http.Request) (*models.Transaction, error
 func defaultTransaction(accs []models.Account, knds []models.TransactionKind) *models.Transaction {
 	dfltKindIdx := slices.IndexFunc(knds, func(knd models.TransactionKind) bool { return knd.Kind == models.ExpenseTxKind })
 
-	var dfltAccId string
+	dfltAcc := models.Account{}
 	if len(accs) > 0 {
-		dfltAcc := slicesutils.Find(accs, func(a models.Account) bool { return a.IsDefault })
-		if dfltAcc != nil {
-			dfltAccId = dfltAcc.ID
+		_dfltAcc := slicesutils.Find(accs, func(a models.Account) bool { return a.IsDefault })
+		if _dfltAcc != nil {
+			dfltAcc = *_dfltAcc
 		} else {
-			dfltAccId = accs[0].ID
+			dfltAcc = accs[0]
 		}
 	}
 
@@ -441,7 +447,7 @@ func defaultTransaction(accs []models.Account, knds []models.TransactionKind) *m
 
 	tx := &models.Transaction{
 		Amount:      0,
-		Account:     models.Account{ID: dfltAccId},
+		Account:     dfltAcc,
 		Kind:        knd,
 		ScheduledTo: time.Now(),
 	}
@@ -496,7 +502,7 @@ func (h Handler) prepareTx(r *http.Request, tx *models.Transaction,
 		valerr := &errs.ValidationError{Errors: errs.ValidationErrors{}}
 		valerr.Errors["KindID"] = errs.ValidationField{Tag: "required"}
 		l.Error("tx kind doesn't exist")
-		fd := h.mapTransactionToFD(tx, valerr)
+		fd := h.mapTransactionToFD(tx, valerr, knds)
 		fd.FrequencyFD = h.parseFrequencyFD(r, valerr)
 		return fd, nil
 	}
@@ -507,7 +513,7 @@ func (h Handler) prepareTx(r *http.Request, tx *models.Transaction,
 		valerr := &errs.ValidationError{Errors: errs.ValidationErrors{}}
 		valerr.Errors["AccountID"] = errs.ValidationField{Tag: "required"}
 		l.Error("account doesn't exist")
-		fd := h.mapTransactionToFD(tx, valerr)
+		fd := h.mapTransactionToFD(tx, valerr, knds)
 		fd.FrequencyFD = h.parseFrequencyFD(r, valerr)
 		return fd, nil
 	}
@@ -526,7 +532,7 @@ func (h Handler) prepareTx(r *http.Request, tx *models.Transaction,
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("validating transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-			fd := h.mapTransactionToFD(tx, &valerr)
+			fd := h.mapTransactionToFD(tx, &valerr, knds)
 			return fd, nil
 		}
 		l.Error("sanitizing transaction", zap.Error(err))
@@ -548,4 +554,88 @@ func (h Handler) prepareCreatingTx(r *http.Request, tx *models.Transaction,
 	}
 
 	return h.prepareTx(r, tx, accs, knds, cats, cps)
+}
+
+func (h Handler) parseTransactionAmountsAndKindFD(r *http.Request, accs []models.Account, knds []models.TransactionKind) (*views.TransactionAmountsAndKindFD, error) {
+	l := logger.FromCtx(r.Context())
+
+	accId := r.FormValue("account_id")
+	kndId := r.FormValue("kind_id")
+
+	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == kndId })
+	if knd == nil {
+		l.Error("finding transaction kind to create TransactionAmountsAndKindFD")
+		return nil, errs.ErrInvalidID
+	}
+
+	fd := &views.TransactionAmountsAndKindFD{
+		AccountIFD: views.AccountIFD{
+			Amount:    views.FDInput{Value: r.FormValue("amount")},
+			AccountID: views.FDInput{Value: accId},
+		},
+		KindID: views.FDInput{Value: kndId},
+	}
+
+	trigger := r.Header.Get("Hx-Trigger")
+
+	if knd.Kind == models.TransferTxKind || knd.Kind == models.DebtTxKind {
+
+		toAccId := r.FormValue("to_account_id")
+		toAmt := r.FormValue("to_amount")
+
+		isDebtTx := knd.Kind == models.DebtTxKind
+
+		acc := slicesutils.Find(accs, func(a models.Account) bool { return a.ID == accId })
+		toAcc := slicesutils.Find(accs, func(a models.Account) bool { return a.ID == toAccId })
+
+		// Set to account
+		if toAccId == "" || strings.HasPrefix(trigger, "kind_id") ||
+			(strings.HasPrefix(trigger, "account_id") && toAccId == accId) {
+			if nAcc := slicesutils.Find(accs, func(a models.Account) bool {
+				isDebtAcc := a.Kind.Enum == models.AccountKindDebt
+				if a.ID == accId {
+					return false
+				}
+				if isDebtTx {
+					return isDebtAcc
+				}
+				return !isDebtAcc
+			}); nAcc != nil {
+				toAccId = nAcc.ID
+				toAcc = nAcc
+			}
+		}
+
+		// Set from account
+		if strings.HasPrefix(trigger, "to_account_id") && toAccId == accId {
+			if nAcc := slicesutils.Find(accs, func(a models.Account) bool { return a.ID != toAccId }); nAcc != nil {
+				fd.AccountIFD.AccountID.Value = nAcc.ID
+				acc = nAcc
+			}
+		}
+
+		// Set to amount
+		if strings.HasPrefix(trigger, "amount") ||
+			strings.HasPrefix(trigger, "kind_id") ||
+			strings.HasPrefix(trigger, "to_account_id") ||
+			strings.HasPrefix(trigger, "account_id") {
+			fxRate := 1.0
+			if acc != nil && toAcc != nil {
+				fxRate = models.GetFxRate(acc.Currency, toAcc.Currency)
+			}
+			amt, _ := parseFloatIfExists(fd.AccountIFD.Amount.Value)
+			toAmt = strconv.FormatFloat(amt/fxRate, 'f', 2, 64)
+		}
+
+		fd.ToAccountIFD = &views.AccountIFD{
+			Amount:    views.FDInput{Value: toAmt},
+			AccountID: views.FDInput{Value: toAccId},
+		}
+
+	} else {
+		fd.CategoryID = &views.FDInput{Value: r.FormValue("category_id")}
+		fd.CounterpartyID = &views.FDInput{Value: r.FormValue("counterparty_id")}
+	}
+
+	return fd, nil
 }

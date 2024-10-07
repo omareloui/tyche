@@ -11,6 +11,7 @@ import templruntime "github.com/a-h/templ/runtime"
 import (
 	"fmt"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/slicesutils"
 	"strconv"
 	"time"
 )
@@ -20,6 +21,19 @@ type TransactionFD struct {
 	FrequencyFD *FrequencyFD
 	ScheduledTo FDInput
 	Description FDInput
+}
+
+type TransactionAmountsAndKindFD struct {
+	AccountIFD     AccountIFD
+	KindID         FDInput
+	CategoryID     *FDInput
+	CounterpartyID *FDInput
+	ToAccountIFD   *AccountIFD
+}
+
+type AccountIFD struct {
+	Amount    FDInput
+	AccountID FDInput
 }
 
 func Transactions(
@@ -156,11 +170,8 @@ func CreateTransactionForm(
 }
 
 func transactionFormBody(
-	fd *TransactionFD,
-	id string,
-	accs []models.Account,
-	knds []models.TransactionKind,
-	cats []models.Category,
+	fd *TransactionFD, id string, accs []models.Account,
+	knds []models.TransactionKind, cats []models.Category,
 	cps []models.Counterparty) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -236,12 +247,9 @@ func TransactionOOB(tx *models.Transaction) templ.Component {
 }
 
 func EditTransaction(
-	tx *models.Transaction,
-	fd *TransactionFD,
-	accounts []models.Account,
-	knds []models.TransactionKind,
-	cats []models.Category,
-	cps []models.Counterparty) templ.Component {
+	tx *models.Transaction, fd *TransactionFD,
+	accounts []models.Account, knds []models.TransactionKind,
+	cats []models.Category, cps []models.Counterparty) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
@@ -278,7 +286,7 @@ func EditTransaction(
 			var templ_7745c5c3_Var10 string
 			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(tx.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 73, Col: 16}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 81, Col: 16}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 			if templ_7745c5c3_Err != nil {
@@ -396,7 +404,7 @@ func Transaction(tx *models.Transaction) templ.Component {
 		var templ_7745c5c3_Var14 string
 		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(tx.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 96, Col: 16}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 104, Col: 16}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 		if templ_7745c5c3_Err != nil {
@@ -409,7 +417,7 @@ func Transaction(tx *models.Transaction) templ.Component {
 		var templ_7745c5c3_Var15 string
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(tx.Account.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 97, Col: 31}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 105, Col: 31}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 		if templ_7745c5c3_Err != nil {
@@ -422,7 +430,7 @@ func Transaction(tx *models.Transaction) templ.Component {
 		var templ_7745c5c3_Var16 string
 		templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(tx.ViewAmount())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 98, Col: 30}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 106, Col: 30}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 		if templ_7745c5c3_Err != nil {
@@ -440,7 +448,7 @@ func Transaction(tx *models.Transaction) templ.Component {
 			var templ_7745c5c3_Var17 string
 			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(tx.ToAccount.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 100, Col: 37}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 108, Col: 37}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 			if templ_7745c5c3_Err != nil {
@@ -453,7 +461,7 @@ func Transaction(tx *models.Transaction) templ.Component {
 			var templ_7745c5c3_Var18 string
 			templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(tx.ViewToAmount())
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 101, Col: 36}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 109, Col: 36}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 			if templ_7745c5c3_Err != nil {
@@ -471,7 +479,7 @@ func Transaction(tx *models.Transaction) templ.Component {
 		var templ_7745c5c3_Var19 string
 		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(tx.Kind.Kind)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 103, Col: 25}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 111, Col: 25}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 		if templ_7745c5c3_Err != nil {
@@ -489,7 +497,7 @@ func Transaction(tx *models.Transaction) templ.Component {
 			var templ_7745c5c3_Var20 string
 			templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(tx.Category.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 105, Col: 35}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 113, Col: 35}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 			if templ_7745c5c3_Err != nil {
@@ -502,7 +510,7 @@ func Transaction(tx *models.Transaction) templ.Component {
 			var templ_7745c5c3_Var21 string
 			templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(tx.Category.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 106, Col: 39}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 114, Col: 39}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 			if templ_7745c5c3_Err != nil {
@@ -521,7 +529,7 @@ func Transaction(tx *models.Transaction) templ.Component {
 			var templ_7745c5c3_Var22 string
 			templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(tx.Counterparty.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 109, Col: 43}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 117, Col: 43}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 			if templ_7745c5c3_Err != nil {
@@ -534,7 +542,7 @@ func Transaction(tx *models.Transaction) templ.Component {
 			var templ_7745c5c3_Var23 string
 			templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(tx.Counterparty.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 110, Col: 47}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 118, Col: 47}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 			if templ_7745c5c3_Err != nil {
@@ -553,7 +561,7 @@ func Transaction(tx *models.Transaction) templ.Component {
 			var templ_7745c5c3_Var24 string
 			templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(tx.Description)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 113, Col: 35}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 121, Col: 35}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 			if templ_7745c5c3_Err != nil {
@@ -572,7 +580,7 @@ func Transaction(tx *models.Transaction) templ.Component {
 			var templ_7745c5c3_Var25 string
 			templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(tx.GoalTitle)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 116, Col: 26}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 124, Col: 26}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
 			if templ_7745c5c3_Err != nil {
@@ -585,7 +593,7 @@ func Transaction(tx *models.Transaction) templ.Component {
 			var templ_7745c5c3_Var26 string
 			templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.FormatFloat(tx.GoalPercentage*100, 'f', 2, 64))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 117, Col: 81}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 125, Col: 81}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
 			if templ_7745c5c3_Err != nil {
@@ -603,7 +611,7 @@ func Transaction(tx *models.Transaction) templ.Component {
 		var templ_7745c5c3_Var27 string
 		templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinStringErrs(tx.ScheduledTo.Format(time.DateOnly))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 119, Col: 57}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 127, Col: 57}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
 		if templ_7745c5c3_Err != nil {
@@ -621,7 +629,7 @@ func Transaction(tx *models.Transaction) templ.Component {
 			var templ_7745c5c3_Var28 string
 			templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(tx.FulfilledOn.Format(time.RFC1123Z))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 121, Col: 58}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 129, Col: 58}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
 			if templ_7745c5c3_Err != nil {
@@ -639,7 +647,7 @@ func Transaction(tx *models.Transaction) templ.Component {
 		var templ_7745c5c3_Var29 string
 		templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinStringErrs(tx.CreatedAt.Format(time.RFC1123Z))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 123, Col: 53}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 131, Col: 53}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
 		if templ_7745c5c3_Err != nil {
@@ -669,4 +677,147 @@ func Transaction(tx *models.Transaction) templ.Component {
 		}
 		return templ_7745c5c3_Err
 	})
+}
+
+func TransactionAmountsAndKindFormBody(
+	fd *TransactionAmountsAndKindFD, id string,
+	knds []models.TransactionKind, cats []models.Category,
+	accs []models.Account, cps []models.Counterparty) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var30 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var30 == nil {
+			templ_7745c5c3_Var30 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("<div class=\"contents\" hx-target=\"this\" hx-swap=\"outerHTML\" hx-sync=\"closest form:abort\"><div class=\"grid grid-cols-3 gap-4\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = moneyInput("Amount", "amount", getCurSymbolByAccount(accs, fd.AccountIFD.AccountID.Value), id,
+			fd.AccountIFD.Amount, "col-span-2", templ.Attributes{
+				"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
+				"hx-trigger": "keyup changed delay:200ms",
+			}).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = selectAccount("account_id", id, getTxAccs(accs, knds, fd.KindID.Value, isSwitched(accs, fd.AccountIFD.AccountID.Value)), fd.AccountIFD.AccountID,
+			templ.Attributes{
+				"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
+				"hx-trigger": "change",
+			}).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("</div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = selectTxKind("kind_id", id, getTxKindsForAccounts(accs, knds), fd.KindID, templ.Attributes{
+			"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
+			"hx-trigger": "change",
+		}).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if fd.CategoryID != nil {
+			templ_7745c5c3_Err = selectTxCat("category_id", id, getCategoriesOfKinds(cats, fd.KindID.Value), *fd.CategoryID).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		if fd.CounterpartyID != nil {
+			templ_7745c5c3_Err = selectCounterparty("counterparty_id", id, cps, *fd.CounterpartyID, true).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		if fd.ToAccountIFD != nil {
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("<div class=\"grid grid-cols-3 gap-4\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = moneyInput("To Amount", "to_amount",
+				getCurSymbolByAccount(accs, fd.ToAccountIFD.AccountID.Value), id,
+				fd.ToAccountIFD.Amount, "col-span-2").Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = selectToAccount("to_account_id", id, getTxCounterAccs(accs, knds, fd.KindID.Value, isSwitched(accs, fd.AccountIFD.AccountID.Value)),
+				fd.ToAccountIFD.AccountID, templ.Attributes{
+					"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
+					"hx-trigger": "change",
+				}).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("</div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("</div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return templ_7745c5c3_Err
+	})
+}
+
+func getTxKindsForAccounts(accs []models.Account, knds []models.TransactionKind) []models.TransactionKind {
+	nknds := knds
+	notDebt := slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum != models.AccountKindDebt })
+	if len(notDebt) < 2 {
+		nknds = slicesutils.Filter(nknds, func(k models.TransactionKind) bool { return k.Kind != models.TransferTxKind })
+	}
+	if len(notDebt) == len(accs) {
+		nknds = slicesutils.Filter(nknds, func(k models.TransactionKind) bool { return k.Kind != models.DebtTxKind })
+	}
+	return nknds
+}
+
+func getTxAccs(accs []models.Account, knds []models.TransactionKind, kndId string, isSwitched bool) []models.Account {
+	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == kndId })
+
+	if knd.Kind == models.DebtTxKind && isSwitched {
+		return slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum == models.AccountKindDebt })
+	}
+
+	return slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum != models.AccountKindDebt })
+}
+
+func getTxCounterAccs(accs []models.Account, knds []models.TransactionKind, kndId string, isSwitched bool) []models.Account {
+	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == kndId })
+
+	if knd.Kind != models.DebtTxKind || isSwitched {
+		return slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum != models.AccountKindDebt })
+	}
+
+	return slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum == models.AccountKindDebt })
+}
+
+func isSwitched(accs []models.Account, accId string) bool {
+	acc := slicesutils.Find(accs, func(a models.Account) bool { return a.ID == accId })
+	return acc.Kind.Enum == models.AccountKindDebt
+}
+
+func getCategoriesOfKinds(cats []models.Category, kndId string) []models.Category {
+	kndsCats := []models.Category{}
+	for _, cat := range cats {
+		if cat.Kind.ID == kndId {
+			kndsCats = append(kndsCats, cat)
+		}
+	}
+	return kndsCats
 }

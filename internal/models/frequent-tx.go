@@ -59,7 +59,7 @@ type createFrequentTx struct {
 	AccountID      string  `validate:"required,ulid"`
 	Amount         float64 `validate:"required"`
 	KindID         string  `validate:"required,ulid"`
-	KindString     string  `validate:"required,oneof=EXPENSE INCOME TRANSFER"`
+	KindString     string  `validate:"required,oneof=EXPENSE INCOME TRANSFER DEBT"`
 	CategoryID     string  `validate:"excluded_if=KindString TRANSFER,omitempty,ulid"`
 	CounterpartyID string  `validate:"excluded_if=KindString TRANSFER,omitempty,ulid"`
 	ToAccountID    string  `validate:"required_if=KindString TRANSFER,omitempty,ulid"`

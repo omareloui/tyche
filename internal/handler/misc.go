@@ -2,8 +2,6 @@ package handler
 
 import (
 	"net/http"
-	"strconv"
-	"strings"
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/errs"
@@ -76,70 +74,9 @@ func (h Handler) TxInputs(w http.ResponseWriter, r *http.Request) (templ.Compone
 	if err != nil {
 		return nil, err
 	}
-
-	kndId := r.FormValue("kind_id")
-	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == kndId })
-	if knd == nil {
-		return nil, errs.ErrInvalidID
+	fd, err := h.parseTransactionAmountsAndKindFD(r, accs, knds)
+	if err != nil {
+		return nil, err
 	}
-
-	accId := r.FormValue("account_id")
-
-	fd := &views.TransactionAmountsAndKindFD{
-		AccountIFD: views.AccountIFD{
-			Amount:    views.FDInput{Value: r.FormValue("amount")},
-			AccountID: views.FDInput{Value: accId},
-		},
-		KindID: views.FDInput{Value: kndId},
-	}
-
-	trigger := r.Header.Get("Hx-Trigger")
-
-	if knd.Kind == models.TransferTxKind {
-		toAccId := r.FormValue("to_account_id")
-		toAmt := r.FormValue("to_amount")
-
-		acc := slicesutils.Find(accs, func(a models.Account) bool { return a.ID == accId })
-		toAcc := slicesutils.Find(accs, func(a models.Account) bool { return a.ID == toAccId })
-
-		// Set to account
-		if toAccId == "" || (strings.HasPrefix(trigger, "account_id") && toAccId == accId) {
-			if nAcc := slicesutils.Find(accs, func(a models.Account) bool { return a.ID != accId }); nAcc != nil {
-				toAccId = nAcc.ID
-				toAcc = nAcc
-			}
-		}
-
-		// Set from account
-		if strings.HasPrefix(trigger, "to_account_id") && toAccId == accId {
-			if nAcc := slicesutils.Find(accs, func(a models.Account) bool { return a.ID != toAccId }); nAcc != nil {
-				fd.AccountIFD.AccountID.Value = nAcc.ID
-				acc = nAcc
-			}
-		}
-
-		// Set to amount
-		if strings.HasPrefix(trigger, "amount") ||
-			strings.HasPrefix(trigger, "kind_id") ||
-			strings.HasPrefix(trigger, "to_account_id") ||
-			strings.HasPrefix(trigger, "account_id") {
-			fxRate := 1.0
-			if acc != nil && toAcc != nil {
-				fxRate = models.GetFxRate(acc.Currency, toAcc.Currency)
-			}
-			amt, _ := parseFloatIfExists(fd.AccountIFD.Amount.Value)
-			toAmt = strconv.FormatFloat(amt/fxRate, 'f', 2, 64)
-		}
-
-		fd.ToAccountIFD = &views.AccountIFD{
-			Amount:    views.FDInput{Value: toAmt},
-			AccountID: views.FDInput{Value: toAccId},
-		}
-
-	} else {
-		fd.CategoryID = &views.FDInput{Value: r.FormValue("category_id")}
-		fd.CounterpartyID = &views.FDInput{Value: r.FormValue("counterparty_id")}
-	}
-
 	return views.TransactionAmountsAndKindFormBody(fd, r.PathValue("id"), knds, cats, accs, cps), nil
 }

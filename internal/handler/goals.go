@@ -149,7 +149,7 @@ func (h Handler) GetGoalProgressForm(w http.ResponseWriter, r *http.Request) (te
 		return nil, err
 	}
 
-	fd := h.mapTransactionToFD(defaultTransaction(accs, knds), &errs.ValidationError{})
+	fd := h.mapTransactionToFD(defaultTransaction(accs, knds), &errs.ValidationError{}, knds)
 	return views.GoalProgressForm(gl, fd, accs, knds), nil
 }
 

@@ -30,11 +30,11 @@ type createTransaction struct {
 	AccountID      string    `validate:"required,ulid"`
 	Amount         float64   `validate:"required"`
 	KindID         string    `validate:"required,ulid"`
-	KindString     string    `validate:"required,oneof=EXPENSE INCOME TRANSFER"`
-	CategoryID     string    `validate:"excluded_if=KindString TRANSFER,omitempty,ulid"`
-	CounterpartyID string    `validate:"excluded_if=KindString TRANSFER,omitempty,ulid"`
-	ToAccountID    string    `validate:"required_if=KindString TRANSFER,omitempty,ulid"`
-	ToAmount       float64   `validate:"required_if=KindString TRANSFER"`
+	KindString     string    `validate:"required,oneof=EXPENSE INCOME TRANSFER DEBT"`
+	CategoryID     string    `validate:"excluded_if=KindString TRANSFER,excluded_if=KindString DEBT,omitempty,ulid"`
+	CounterpartyID string    `validate:"excluded_if=KindString TRANSFER,excluded_if=KindString DEBT,omitempty,ulid"`
+	ToAccountID    string    `validate:"required_if=KindString TRANSFER,required_if=KindString DEBT,omitempty,ulid"`
+	ToAmount       float64   `validate:"required_if=KindString TRANSFER,required_if=KindString DEBT"`
 	Description    string    `conform:"trim"`
 	ScheduledTo    time.Time `validate:"required"`
 }

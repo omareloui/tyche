@@ -12,22 +12,9 @@ type FDInput struct {
 	Error string `json:"error"`
 }
 
-type AccountIFD struct {
-	Amount    FDInput
-	AccountID FDInput
-}
-
 type AmountFD struct {
 	Amount     FDInput
 	CurrencyID FDInput
-}
-
-type TransactionAmountsAndKindFD struct {
-	AccountIFD     AccountIFD
-	KindID         FDInput
-	CategoryID     *FDInput
-	CounterpartyID *FDInput
-	ToAccountIFD   *AccountIFD
 }
 
 templ form(action, path string, attrs ...templ.Attributes) {
@@ -112,56 +99,6 @@ templ AmountInputsWithAccount(fd *AccountIFD, id string, accs []models.Account) 
 				"hx-swap":    "outerHTML",
 				"hx-sync":    "closest form:abort",
 			})
-	</div>
-}
-
-templ TransactionAmountsAndKindFormBody(fd *TransactionAmountsAndKindFD,
-	id string,
-	knds []models.TransactionKind,
-	cats []models.Category,
-	accs []models.Account,
-	cps []models.Counterparty) {
-	<div
-		class="contents"
-		hx-target="this"
-		hx-swap="outerHTML"
-		hx-sync="closest form:abort"
-	>
-		<div class="grid grid-cols-3 gap-4">
-			@moneyInput("Amount", "amount", getCurSymbolByAccount(accs, fd.AccountIFD.AccountID.Value), id,
-				fd.AccountIFD.Amount, "col-span-2", templ.Attributes{
-					"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
-					"hx-trigger": "keyup changed delay:200ms",
-				})
-			@selectAccount("account_id", id, accs, fd.AccountIFD.AccountID,
-				templ.Attributes{
-					"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
-					"hx-trigger": "change",
-				})
-		</div>
-		@selectTxKind("kind_id", id, getTxKindsForAccounts(accs, knds), fd.KindID, templ.Attributes{
-			"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
-			"hx-trigger": "change",
-		})
-		if fd.CategoryID != nil {
-			@selectTxCat("category_id", id, getCategoriesOfKinds(cats, fd.KindID.Value), *fd.CategoryID)
-		}
-		if fd.CounterpartyID != nil {
-			@selectCounterparty("counterparty_id", id, cps, *fd.CounterpartyID, true)
-		}
-		if fd.ToAccountIFD != nil {
-			<div class="grid grid-cols-3 gap-4">
-				@moneyInput("To Amount", "to_amount",
-					getCurSymbolByAccount(accs, fd.ToAccountIFD.AccountID.Value), id,
-					fd.ToAccountIFD.Amount, "col-span-2")
-				@selectInput("To Account", "to_account_id", "Select Account", id,
-					accountsToMap(accs),
-					fd.ToAccountIFD.AccountID, false, templ.Attributes{
-						"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
-						"hx-trigger": "change",
-					})
-			</div>
-		}
 	</div>
 }
 
@@ -307,6 +244,10 @@ templ selectAccKind(name, id string, aknds []models.AccountKind, data FDInput, i
 
 templ selectAccount(name, id string, accs []models.Account, data FDInput, inputAttrs ...templ.Attributes) {
 	@selectInput("Account", name, "Select Account", id, accountsToMap(accs), data, false, inputAttrs...)
+}
+
+templ selectToAccount(name, id string, accs []models.Account, data FDInput, inputAttrs ...templ.Attributes) {
+	@selectInput("To Account", name, "Select Account", id, accountsToMap(accs), data, false, inputAttrs...)
 }
 
 templ selectCurrency(name, id string, curs []models.Currency, data FDInput, inputAttrs ...templ.Attributes) {
@@ -497,22 +438,4 @@ func getCurIbanPrefixByCurrency(curs []models.Currency, curId string) string {
 		return models.DfltCurrency.IbanPrefix()
 	}
 	return cur.Enum.IbanPrefix()
-}
-
-func getTxKindsForAccounts(accs []models.Account, knds []models.TransactionKind) []models.TransactionKind {
-	nknds := knds
-	if len(accs) < 2 {
-		nknds = slicesutils.Filter(knds, func(k models.TransactionKind) bool { return k.Kind != models.TransferTxKind })
-	}
-	return nknds
-}
-
-func getCategoriesOfKinds(cats []models.Category, kndId string) []models.Category {
-	kndsCats := []models.Category{}
-	for _, cat := range cats {
-		if cat.Kind.ID == kndId {
-			kndsCats = append(kndsCats, cat)
-		}
-	}
-	return kndsCats
 }

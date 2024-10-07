@@ -4,6 +4,7 @@ const (
 	ExpenseTxKind  = "EXPENSE"
 	IncomeTxKind   = "INCOME"
 	TransferTxKind = "TRANSFER"
+	DebtTxKind     = "DEBT"
 )
 
 type TransactionKind struct {
