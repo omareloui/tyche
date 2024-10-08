@@ -117,6 +117,6 @@ type Transaction struct {
 
 type TransactionKind struct {
 	ID              string
-	Kind            string
+	Enum            int64
 	IncreaseBalance sql.NullBool
 }

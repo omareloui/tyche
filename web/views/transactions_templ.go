@@ -477,9 +477,9 @@ func Transaction(tx *models.Transaction) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var19 string
-		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(tx.Kind.Kind)
+		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(tx.Kind.Enum.String())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 111, Col: 25}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 111, Col: 34}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 		if templ_7745c5c3_Err != nil {
@@ -794,12 +794,12 @@ func TransactionAmountsAndKindFormBody(
 
 func getTxKindsForAccounts(accs []models.Account, knds []models.TransactionKind) []models.TransactionKind {
 	nknds := knds
-	notDebt := slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum != models.AccountKindDebt })
+	notDebt := slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum != models.AccKindDebt })
 	if len(notDebt) < 2 {
-		nknds = slicesutils.Filter(nknds, func(k models.TransactionKind) bool { return k.Kind != models.TransferTxKind })
+		nknds = slicesutils.Filter(nknds, func(k models.TransactionKind) bool { return k.Enum != models.TransferTxKind })
 	}
 	if len(notDebt) == len(accs) {
-		nknds = slicesutils.Filter(nknds, func(k models.TransactionKind) bool { return k.Kind != models.DebtTxKind })
+		nknds = slicesutils.Filter(nknds, func(k models.TransactionKind) bool { return k.Enum != models.DebtTxKind })
 	}
 	return nknds
 }
@@ -807,26 +807,26 @@ func getTxKindsForAccounts(accs []models.Account, knds []models.TransactionKind)
 func getTxAccs(accs []models.Account, knds []models.TransactionKind, kndId string, isSwitched bool) []models.Account {
 	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == kndId })
 
-	if knd.Kind == models.DebtTxKind && isSwitched {
-		return slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum == models.AccountKindDebt })
+	if knd.Enum == models.DebtTxKind && isSwitched {
+		return slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum == models.AccKindDebt })
 	}
 
-	return slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum != models.AccountKindDebt })
+	return slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum != models.AccKindDebt })
 }
 
 func getTxCounterAccs(accs []models.Account, knds []models.TransactionKind, kndId string, isSwitched bool) []models.Account {
 	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == kndId })
 
-	if knd.Kind != models.DebtTxKind || isSwitched {
-		return slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum != models.AccountKindDebt })
+	if knd.Enum != models.DebtTxKind || isSwitched {
+		return slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum != models.AccKindDebt })
 	}
 
-	return slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum == models.AccountKindDebt })
+	return slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum == models.AccKindDebt })
 }
 
 func isSwitched(accs []models.Account, accId string) bool {
 	acc := slicesutils.Find(accs, func(a models.Account) bool { return a.ID == accId })
-	return acc.Kind.Enum == models.AccountKindDebt
+	return acc != nil && acc.Kind.Enum == models.AccKindDebt
 }
 
 func getCategoriesOfKinds(cats []models.Category, kndId string) []models.Category {

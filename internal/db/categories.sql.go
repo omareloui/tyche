@@ -60,7 +60,7 @@ SELECT
     c.kind_id,
     c.budget_in_egp,
     c.created_at,
-    k.kind,
+    k.enum AS kind_enum,
     k.increase_balance
 FROM categories AS c
 LEFT JOIN transaction_kinds AS k ON c.kind_id = k.id
@@ -73,7 +73,7 @@ type GetCategoriesRow struct {
 	KindID          string
 	BudgetInEgp     float64
 	CreatedAt       time.Time
-	Kind            sql.NullString
+	KindEnum        sql.NullInt64
 	IncreaseBalance sql.NullBool
 }
 
@@ -92,7 +92,7 @@ func (q *Queries) GetCategories(ctx context.Context) ([]GetCategoriesRow, error)
 			&i.KindID,
 			&i.BudgetInEgp,
 			&i.CreatedAt,
-			&i.Kind,
+			&i.KindEnum,
 			&i.IncreaseBalance,
 		); err != nil {
 			return nil, err
@@ -115,7 +115,7 @@ SELECT
     c.kind_id,
     c.budget_in_egp,
     c.created_at,
-    k.kind,
+    k.enum AS kind_enum,
     k.increase_balance
 FROM categories AS c
 LEFT JOIN transaction_kinds AS k ON c.kind_id = k.id
@@ -128,7 +128,7 @@ type GetCategoryRow struct {
 	KindID          string
 	BudgetInEgp     float64
 	CreatedAt       time.Time
-	Kind            sql.NullString
+	KindEnum        sql.NullInt64
 	IncreaseBalance sql.NullBool
 }
 
@@ -141,7 +141,7 @@ func (q *Queries) GetCategory(ctx context.Context, id string) (GetCategoryRow, e
 		&i.KindID,
 		&i.BudgetInEgp,
 		&i.CreatedAt,
-		&i.Kind,
+		&i.KindEnum,
 		&i.IncreaseBalance,
 	)
 	return i, err

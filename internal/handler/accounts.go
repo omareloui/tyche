@@ -83,7 +83,7 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 		}
 	}
 
-	if a.Kind.Enum == models.AccountKindDebt && a.Counterparty != nil {
+	if a.Kind.Enum == models.AccKindDebt && a.Counterparty != nil {
 		a.Name = a.Counterparty.Name
 	}
 
@@ -176,7 +176,7 @@ func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Com
 		}
 	}
 
-	if a.Kind.Enum == models.AccountKindDebt && a.Counterparty != nil {
+	if a.Kind.Enum == models.AccKindDebt && a.Counterparty != nil {
 		a.Name = a.Counterparty.Name
 	}
 
@@ -315,20 +315,20 @@ func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, kn
 
 	var name, cc, iban, cpId *views.FDInput
 
-	if knd.Enum == models.AccountKindBankAccount ||
-		knd.Enum == models.AccountKindCreditCard {
+	if knd.Enum == models.AccKindBankAcc ||
+		knd.Enum == models.AccKindCreditCard {
 		cc = &views.FDInput{Value: acc.CardNumber, Error: errs.Errors.MsgFor("CardNumber")}
 	}
 
-	if knd.Enum == models.AccountKindBankAccount {
+	if knd.Enum == models.AccKindBankAcc {
 		iban = &views.FDInput{Value: acc.Iban, Error: errs.Errors.MsgFor("Iban")}
 	}
 
-	if knd.Enum != models.AccountKindDebt {
+	if knd.Enum != models.AccKindDebt {
 		name = &views.FDInput{Value: acc.Name, Error: errs.Errors.MsgFor("Name")}
 	}
 
-	if knd.Enum == models.AccountKindDebt {
+	if knd.Enum == models.AccKindDebt {
 		cpId = &views.FDInput{Error: errs.Errors.MsgFor("CounterpartyID")}
 		if acc.Counterparty != nil {
 			cpId.Value = acc.Counterparty.ID
@@ -355,7 +355,7 @@ func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, kn
 func defaultAccount(curs []models.Currency, ak []models.AccountKind) *models.Account {
 	return &models.Account{
 		Currency:           *slicesutils.Find(curs, func(cur models.Currency) bool { return cur.Enum == models.DfltCurrency }),
-		Kind:               *slicesutils.Find(ak, func(k models.AccountKind) bool { return k.Enum == models.DfltAccountKind }),
+		Kind:               *slicesutils.Find(ak, func(k models.AccountKind) bool { return k.Enum == models.DfltAccKind }),
 		IsArchive:          false,
 		ExcludeFromBalance: false,
 	}

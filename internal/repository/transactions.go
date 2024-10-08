@@ -268,7 +268,7 @@ func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRo
 		CreatedAt:      _dbTx.CreatedAt,
 		Kind: models.TransactionKind{
 			ID:              _dbTx.KindID,
-			Kind:            _dbTx.Kind.String,
+			Enum:            models.TxKind(_dbTx.KindEnum.Int64),
 			IncreaseBalance: _dbTx.IncreaseBalance.Bool,
 		},
 		Category:     cat,

@@ -33,7 +33,7 @@ func (r *Repository) AccountKindsToMap(knds []models.AccountKind) map[string]str
 func (r *Repository) dbAccountKindToAccountKind(dbAk *db.AccountKind) *models.AccountKind {
 	return &models.AccountKind{
 		ID:   dbAk.ID,
-		Enum: models.AccountKindEnum(dbAk.Enum),
+		Enum: models.AccKind(dbAk.Enum),
 	}
 }
 

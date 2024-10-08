@@ -187,7 +187,7 @@ func (h Handler) mapFDToCategory(r *http.Request) (*models.Category, error) {
 }
 
 func dfltCategory(knds []models.TransactionKind) *models.Category {
-	dfltKindIdx := slices.IndexFunc(knds, func(knd models.TransactionKind) bool { return knd.Kind == models.ExpenseTxKind })
+	dfltKindIdx := slices.IndexFunc(knds, func(knd models.TransactionKind) bool { return knd.Enum == models.ExpenseTxKind })
 
 	if dfltKindIdx == -1 {
 		return &models.Category{
@@ -202,6 +202,6 @@ func dfltCategory(knds []models.TransactionKind) *models.Category {
 
 func getAllowedKindsForCategories(knds []models.TransactionKind) []models.TransactionKind {
 	return slicesutils.Filter(knds, func(k models.TransactionKind) bool {
-		return k.Kind != models.TransferTxKind && k.Kind != models.DebtTxKind
+		return k.Enum != models.TransferTxKind && k.Enum != models.DebtTxKind
 	})
 }

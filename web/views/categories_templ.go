@@ -356,15 +356,15 @@ func Category(cat *models.Category) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		if cat.Kind.Kind != "" {
+		if cat.Kind.Enum != models.NilTxKind {
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("<p>Kind: ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var16 string
-			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(cat.Kind.Kind)
+			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(cat.Kind.Enum.String())
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/categories.templ`, Line: 63, Col: 27}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/categories.templ`, Line: 63, Col: 36}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 			if templ_7745c5c3_Err != nil {

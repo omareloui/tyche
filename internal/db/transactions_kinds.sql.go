@@ -11,7 +11,7 @@ import (
 )
 
 const createTransactionKind = `-- name: CreateTransactionKind :exec
-INSERT INTO transaction_kinds (id, kind, increase_balance)
+INSERT INTO transaction_kinds (id, enum, increase_balance)
 VALUES (
     ?1,
     ?2,
@@ -21,19 +21,19 @@ VALUES (
 
 type CreateTransactionKindParams struct {
 	ID              string
-	Kind            string
+	Enum            int64
 	IncreaseBalance sql.NullBool
 }
 
 func (q *Queries) CreateTransactionKind(ctx context.Context, arg CreateTransactionKindParams) error {
-	_, err := q.db.ExecContext(ctx, createTransactionKind, arg.ID, arg.Kind, arg.IncreaseBalance)
+	_, err := q.db.ExecContext(ctx, createTransactionKind, arg.ID, arg.Enum, arg.IncreaseBalance)
 	return err
 }
 
 const getTransactionKind = `-- name: GetTransactionKind :one
 SELECT
     id,
-    kind,
+    enum,
     increase_balance
 FROM transaction_kinds
 WHERE id = ?1 LIMIT 1
@@ -42,17 +42,17 @@ WHERE id = ?1 LIMIT 1
 func (q *Queries) GetTransactionKind(ctx context.Context, id string) (TransactionKind, error) {
 	row := q.db.QueryRowContext(ctx, getTransactionKind, id)
 	var i TransactionKind
-	err := row.Scan(&i.ID, &i.Kind, &i.IncreaseBalance)
+	err := row.Scan(&i.ID, &i.Enum, &i.IncreaseBalance)
 	return i, err
 }
 
 const getTransactionKinds = `-- name: GetTransactionKinds :many
 SELECT
     id,
-    kind,
+    enum,
     increase_balance
 FROM transaction_kinds
-ORDER BY kind
+ORDER BY enum
 `
 
 func (q *Queries) GetTransactionKinds(ctx context.Context) ([]TransactionKind, error) {
@@ -64,7 +64,7 @@ func (q *Queries) GetTransactionKinds(ctx context.Context) ([]TransactionKind, e
 	var items []TransactionKind
 	for rows.Next() {
 		var i TransactionKind
-		if err := rows.Scan(&i.ID, &i.Kind, &i.IncreaseBalance); err != nil {
+		if err := rows.Scan(&i.ID, &i.Enum, &i.IncreaseBalance); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -141,7 +141,7 @@ func (r *Repository) DeleteAccount(ctx context.Context, id string) error {
 func (r *Repository) applyTxToAccountWithTxn(qtx *db.Queries, ctx context.Context, tx *models.Transaction) error {
 	l := logger.FromCtx(ctx)
 
-	if tx.Kind.Kind == models.TransferTxKind || tx.Kind.Kind == models.DebtTxKind {
+	if tx.Kind.Enum == models.TransferTxKind || tx.Kind.Enum == models.DebtTxKind {
 		if err := r.removeFromAccountWithTxn(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {
 			l.Error("applying transfer: remove from account", zap.Error(err), zap.Any("transaction", tx))
 			return err
@@ -168,7 +168,7 @@ func (r *Repository) applyTxToAccountWithTxn(qtx *db.Queries, ctx context.Contex
 
 func (r *Repository) undoTxToAccountWithTxn(qtx *db.Queries, ctx context.Context, tx *models.Transaction) error {
 	l := logger.FromCtx(ctx)
-	if tx.Kind.Kind == models.TransferTxKind {
+	if tx.Kind.Enum == models.TransferTxKind {
 		if err := r.addToAccountWithTxn(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {
 			l.Error("undoing transfer: remove from account", zap.Error(err), zap.Any("transaction", tx))
 			return err
@@ -248,7 +248,7 @@ func dbAccountRowToAccount[T db.GetAccountRow | db.GetAccountsRow](dbAcc *T) *mo
 		Counterparty: cp,
 		Kind: models.AccountKind{
 			ID:   _dbAcc.KindID,
-			Enum: models.AccountKindEnum(_dbAcc.KindEnum.Int64),
+			Enum: models.AccKind(_dbAcc.KindEnum.Int64),
 		},
 		Iban:               _dbAcc.Iban.String,
 		CardNumber:         _dbAcc.CardNumber.String,

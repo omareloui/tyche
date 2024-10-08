@@ -28,22 +28,10 @@ func (r *Repository) GetTransactionKind(ctx context.Context, id string) (*models
 	return dbTransactionKindToTransactionKind(&k), nil
 }
 
-func (r *Repository) GetTransactionKindsMap(ctx context.Context) (map[string]string, error) {
-	kinds, err := r.GetTransactionKinds(ctx)
-	if err != nil {
-		return nil, err
-	}
-	m := make(map[string]string, len(kinds))
-	for _, k := range kinds {
-		m[k.ID] = k.Kind
-	}
-	return m, nil
-}
-
 func dbTransactionKindToTransactionKind(dbKind *db.TransactionKind) *models.TransactionKind {
 	return &models.TransactionKind{
 		ID:              dbKind.ID,
-		Kind:            dbKind.Kind,
+		Enum:            models.TxKind(dbKind.Enum),
 		IncreaseBalance: dbKind.IncreaseBalance.Bool,
 	}
 }

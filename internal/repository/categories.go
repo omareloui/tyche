@@ -60,7 +60,7 @@ func dbCategoryRowToCategory[T db.GetCategoryRow | db.GetCategoriesRow](dbCat *T
 		Name: _dbCat.Name,
 		Kind: models.TransactionKind{
 			ID:              _dbCat.KindID,
-			Kind:            _dbCat.Kind.String,
+			Enum:            models.TxKind(_dbCat.KindEnum.Int64),
 			IncreaseBalance: _dbCat.IncreaseBalance.Bool,
 		},
 		BudgetInEgp: _dbCat.BudgetInEgp,

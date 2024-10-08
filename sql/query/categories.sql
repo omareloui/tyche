@@ -10,7 +10,7 @@ SELECT
     c.kind_id,
     c.budget_in_egp,
     c.created_at,
-    k.kind,
+    k.enum AS kind_enum,
     k.increase_balance
 FROM categories AS c
 LEFT JOIN transaction_kinds AS k ON c.kind_id = k.id
@@ -23,7 +23,7 @@ SELECT
     c.kind_id,
     c.budget_in_egp,
     c.created_at,
-    k.kind,
+    k.enum AS kind_enum,
     k.increase_balance
 FROM categories AS c
 LEFT JOIN transaction_kinds AS k ON c.kind_id = k.id

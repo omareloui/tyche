@@ -42,6 +42,7 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 		l.Error("fetching balances", zap.Error(err))
 		return nil, err
 	}
+	l.Debug("fetched balances")
 
 	return views.Transactions(balances, txs, fd, accs, knds, cats, cps), nil
 }
@@ -353,7 +354,7 @@ func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationE
 	}
 
 	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == t.Kind.ID })
-	hasToAccount := knd.Kind == models.DebtTxKind || knd.Kind == models.TransferTxKind
+	hasToAccount := knd.Enum == models.DebtTxKind || knd.Enum == models.TransferTxKind
 
 	if t.Category != nil {
 		fd.CategoryID = &views.FDInput{Value: t.Category.ID, Error: err.Errors.MsgFor("CategoryID")}
@@ -430,7 +431,7 @@ func (h Handler) mapFDToTransaction(r *http.Request) (*models.Transaction, error
 }
 
 func defaultTransaction(accs []models.Account, knds []models.TransactionKind) *models.Transaction {
-	dfltKindIdx := slices.IndexFunc(knds, func(knd models.TransactionKind) bool { return knd.Kind == models.ExpenseTxKind })
+	dfltKindIdx := slices.IndexFunc(knds, func(knd models.TransactionKind) bool { return knd.Enum == models.ExpenseTxKind })
 
 	dfltAcc := models.Account{}
 	if len(accs) > 0 {
@@ -451,7 +452,7 @@ func defaultTransaction(accs []models.Account, knds []models.TransactionKind) *m
 		ScheduledTo: time.Now(),
 	}
 
-	if knd.Kind == models.ExpenseTxKind {
+	if knd.Enum == models.ExpenseTxKind {
 		tx.Category = &models.Category{}
 	}
 
@@ -577,12 +578,11 @@ func (h Handler) parseTransactionAmountsAndKindFD(r *http.Request, accs []models
 
 	trigger := r.Header.Get("Hx-Trigger")
 
-	if knd.Kind == models.TransferTxKind || knd.Kind == models.DebtTxKind {
-
+	if knd.Enum == models.TransferTxKind || knd.Enum == models.DebtTxKind {
 		toAccId := r.FormValue("to_account_id")
 		toAmt := r.FormValue("to_amount")
 
-		isDebtTx := knd.Kind == models.DebtTxKind
+		isDebtTx := knd.Enum == models.DebtTxKind
 
 		acc := slicesutils.Find(accs, func(a models.Account) bool { return a.ID == accId })
 		toAcc := slicesutils.Find(accs, func(a models.Account) bool { return a.ID == toAccId })
@@ -591,7 +591,7 @@ func (h Handler) parseTransactionAmountsAndKindFD(r *http.Request, accs []models
 		if toAccId == "" || strings.HasPrefix(trigger, "kind_id") ||
 			(strings.HasPrefix(trigger, "account_id") && toAccId == accId) {
 			if nAcc := slicesutils.Find(accs, func(a models.Account) bool {
-				isDebtAcc := a.Kind.Enum == models.AccountKindDebt
+				isDebtAcc := a.Kind.Enum == models.AccKindDebt
 				if a.ID == accId {
 					return false
 				}
@@ -608,7 +608,7 @@ func (h Handler) parseTransactionAmountsAndKindFD(r *http.Request, accs []models
 		// Set from account
 		if strings.HasPrefix(trigger, "to_account_id") || toAccId == accId {
 			if nAcc := slicesutils.Find(accs, func(a models.Account) bool {
-				isDebtAcc := a.Kind.Enum == models.AccountKindDebt
+				isDebtAcc := a.Kind.Enum == models.AccKindDebt
 				if a.ID == toAccId {
 					return false
 				}

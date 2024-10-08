@@ -318,7 +318,7 @@ func (h Handler) mapFrequentTxToFD(ftx *models.FrequentTx, valerr *errs.Validati
 	}
 
 	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == ftx.Kind.ID })
-	hasToAccount := knd.Kind == models.DebtTxKind || knd.Kind == models.TransferTxKind
+	hasToAccount := knd.Enum == models.DebtTxKind || knd.Enum == models.TransferTxKind
 
 	if ftx.Category != nil {
 		fd.CategoryID = &views.FDInput{Value: ftx.Category.ID, Error: valerr.Errors.MsgFor("CategoryID")}

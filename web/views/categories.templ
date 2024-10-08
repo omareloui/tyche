@@ -59,8 +59,8 @@ templ Category(cat *models.Category) {
 		<p>ID: { cat.ID }</p>
 		<p>Name: { cat.Name }</p>
 		<p>Kind ID: { cat.Kind.ID }</p>
-		if cat.Kind.Kind != "" {
-			<p>Kind: { cat.Kind.Kind }</p>
+		if cat.Kind.Enum != models.NilTxKind {
+			<p>Kind: { cat.Kind.Enum.String() }</p>
 		}
 		<p>
 			Budget: { cat.ViewBudgetInEgp() }

@@ -116,7 +116,7 @@ SELECT
     ta.currency_id AS to_currency_id,
     tc.enum AS to_currency_enum,
     tc.egp_fx_rate AS to_egp_fx_rate,
-    k.kind,
+    k.enum AS kind_enum,
     k.increase_balance,
     cat.name AS category_name,
     cat.budget_in_egp AS category_budget_in_egp,
@@ -158,7 +158,7 @@ type GetTransactionRow struct {
 	ToCurrencyID        sql.NullString
 	ToCurrencyEnum      sql.NullInt64
 	ToEgpFxRate         sql.NullFloat64
-	Kind                sql.NullString
+	KindEnum            sql.NullInt64
 	IncreaseBalance     sql.NullBool
 	CategoryName        sql.NullString
 	CategoryBudgetInEgp sql.NullFloat64
@@ -192,7 +192,7 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 		&i.ToCurrencyID,
 		&i.ToCurrencyEnum,
 		&i.ToEgpFxRate,
-		&i.Kind,
+		&i.KindEnum,
 		&i.IncreaseBalance,
 		&i.CategoryName,
 		&i.CategoryBudgetInEgp,
@@ -226,7 +226,7 @@ SELECT
     ta.currency_id AS to_currency_id,
     tc.enum AS to_currency_enum,
     tc.egp_fx_rate AS to_egp_fx_rate,
-    k.kind,
+    k.enum AS kind_enum,
     k.increase_balance,
     cat.name AS category_name,
     cat.budget_in_egp AS category_budget_in_egp,
@@ -268,7 +268,7 @@ type GetTransactionsRow struct {
 	ToCurrencyID        sql.NullString
 	ToCurrencyEnum      sql.NullInt64
 	ToEgpFxRate         sql.NullFloat64
-	Kind                sql.NullString
+	KindEnum            sql.NullInt64
 	IncreaseBalance     sql.NullBool
 	CategoryName        sql.NullString
 	CategoryBudgetInEgp sql.NullFloat64
@@ -308,7 +308,7 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.ToCurrencyID,
 			&i.ToCurrencyEnum,
 			&i.ToEgpFxRate,
-			&i.Kind,
+			&i.KindEnum,
 			&i.IncreaseBalance,
 			&i.CategoryName,
 			&i.CategoryBudgetInEgp,

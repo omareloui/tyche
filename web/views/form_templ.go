@@ -1877,7 +1877,7 @@ func accKindsToMap(accs []models.AccountKind) map[string]string {
 func txKindsToMap(kinds []models.TransactionKind) map[string]string {
 	m := make(map[string]string, len(kinds))
 	for _, k := range kinds {
-		m[k.ID] = k.Kind
+		m[k.ID] = k.Enum.String()
 	}
 	return m
 }

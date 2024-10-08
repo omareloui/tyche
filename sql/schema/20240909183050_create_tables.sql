@@ -7,8 +7,8 @@ CREATE TABLE currencies (
 );
 CREATE TABLE transaction_kinds (
     id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
-    kind VARCHAR UNIQUE NOT NULL,
-    increase_balance BOOLEAN DEFAULT FALSE
+    enum INT UNIQUE NOT NULL,
+    increase_balance BOOLEAN
 );
 CREATE TABLE account_kinds (
     id VARCHAR UNIQUE NOT NULL PRIMARY KEY,

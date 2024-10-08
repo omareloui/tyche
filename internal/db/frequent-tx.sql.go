@@ -156,7 +156,7 @@ SELECT
     ftta.currency_id AS to_currency_id,
     fttc.enum AS to_currency_enum,
     fttc.egp_fx_rate AS to_egp_fx_rate,
-    k.kind,
+    k.enum AS kind_enum,
     k.increase_balance,
     cat.name AS category_name,
     cat.budget_in_egp AS category_budget_in_egp,
@@ -178,7 +178,7 @@ SELECT
     tta.currency_id AS transaction_to_currency_id,
     ttc.enum AS transaction_to_currency_enum,
     ttc.egp_fx_rate AS transaction_to_egp_fx_rate,
-    tk.kind AS transaction_kind,
+    tk.enum AS transaction_kind_enum,
     tk.increase_balance AS transaction_increase_balance,
     tcat.name AS transaction_category_name,
     tcat.budget_in_egp AS transaction_category_budget_in_egp
@@ -227,7 +227,7 @@ type GetFrequentTxRow struct {
 	ToCurrencyID                   sql.NullString
 	ToCurrencyEnum                 sql.NullInt64
 	ToEgpFxRate                    sql.NullFloat64
-	Kind                           sql.NullString
+	KindEnum                       sql.NullInt64
 	IncreaseBalance                sql.NullBool
 	CategoryName                   sql.NullString
 	CategoryBudgetInEgp            sql.NullFloat64
@@ -249,7 +249,7 @@ type GetFrequentTxRow struct {
 	TransactionToCurrencyID        sql.NullString
 	TransactionToCurrencyEnum      sql.NullInt64
 	TransactionToEgpFxRate         sql.NullFloat64
-	TransactionKind                sql.NullString
+	TransactionKindEnum            sql.NullInt64
 	TransactionIncreaseBalance     sql.NullBool
 	TransactionCategoryName        sql.NullString
 	TransactionCategoryBudgetInEgp sql.NullFloat64
@@ -289,7 +289,7 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) ([]GetFrequentTx
 			&i.ToCurrencyID,
 			&i.ToCurrencyEnum,
 			&i.ToEgpFxRate,
-			&i.Kind,
+			&i.KindEnum,
 			&i.IncreaseBalance,
 			&i.CategoryName,
 			&i.CategoryBudgetInEgp,
@@ -311,7 +311,7 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) ([]GetFrequentTx
 			&i.TransactionToCurrencyID,
 			&i.TransactionToCurrencyEnum,
 			&i.TransactionToEgpFxRate,
-			&i.TransactionKind,
+			&i.TransactionKindEnum,
 			&i.TransactionIncreaseBalance,
 			&i.TransactionCategoryName,
 			&i.TransactionCategoryBudgetInEgp,
@@ -355,7 +355,7 @@ SELECT
     ftta.currency_id AS to_currency_id,
     fttc.enum AS to_currency_enum,
     fttc.egp_fx_rate AS to_egp_fx_rate,
-    k.kind,
+    k.enum AS kind_enum,
     k.increase_balance,
     cat.name AS category_name,
     cat.budget_in_egp AS category_budget_in_egp,
@@ -377,7 +377,7 @@ SELECT
     tta.currency_id AS transaction_to_currency_id,
     ttc.enum AS transaction_to_currency_enum,
     ttc.egp_fx_rate AS transaction_to_egp_fx_rate,
-    tk.kind AS transaction_kind,
+    tk.enum AS transaction_kind_enum,
     tk.increase_balance AS transaction_increase_balance,
     tcat.name AS transaction_category_name,
     tcat.budget_in_egp AS transaction_category_budget_in_egp
@@ -425,7 +425,7 @@ type GetFrequentTxsRow struct {
 	ToCurrencyID                   sql.NullString
 	ToCurrencyEnum                 sql.NullInt64
 	ToEgpFxRate                    sql.NullFloat64
-	Kind                           sql.NullString
+	KindEnum                       sql.NullInt64
 	IncreaseBalance                sql.NullBool
 	CategoryName                   sql.NullString
 	CategoryBudgetInEgp            sql.NullFloat64
@@ -447,7 +447,7 @@ type GetFrequentTxsRow struct {
 	TransactionToCurrencyID        sql.NullString
 	TransactionToCurrencyEnum      sql.NullInt64
 	TransactionToEgpFxRate         sql.NullFloat64
-	TransactionKind                sql.NullString
+	TransactionKindEnum            sql.NullInt64
 	TransactionIncreaseBalance     sql.NullBool
 	TransactionCategoryName        sql.NullString
 	TransactionCategoryBudgetInEgp sql.NullFloat64
@@ -487,7 +487,7 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 			&i.ToCurrencyID,
 			&i.ToCurrencyEnum,
 			&i.ToEgpFxRate,
-			&i.Kind,
+			&i.KindEnum,
 			&i.IncreaseBalance,
 			&i.CategoryName,
 			&i.CategoryBudgetInEgp,
@@ -509,7 +509,7 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 			&i.TransactionToCurrencyID,
 			&i.TransactionToCurrencyEnum,
 			&i.TransactionToEgpFxRate,
-			&i.TransactionKind,
+			&i.TransactionKindEnum,
 			&i.TransactionIncreaseBalance,
 			&i.TransactionCategoryName,
 			&i.TransactionCategoryBudgetInEgp,

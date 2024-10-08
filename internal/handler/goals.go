@@ -174,7 +174,7 @@ func (h Handler) CreateGoalProgress(w http.ResponseWriter, r *http.Request) (tem
 	if err != nil {
 		return nil, err
 	}
-	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.Kind == models.ExpenseTxKind })
+	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.Enum == models.ExpenseTxKind })
 	if knd != nil {
 		tx.Kind = *knd
 	}

@@ -1,14 +1,24 @@
 package models
 
+type TxKind uint8
+
 const (
-	ExpenseTxKind  = "EXPENSE"
-	IncomeTxKind   = "INCOME"
-	TransferTxKind = "TRANSFER"
-	DebtTxKind     = "DEBT"
+	NilTxKind TxKind = iota
+	ExpenseTxKind
+	IncomeTxKind
+	TransferTxKind
+	DebtTxKind
 )
+
+func (tk TxKind) String() string {
+	return [...]string{
+		"???", "Expense", "Income",
+		"Transfer", "Debt",
+	}[tk]
+}
 
 type TransactionKind struct {
 	ID              string `validate:"required"`
-	Kind            string `conform:"trim,upper"`
+	Enum            TxKind `conform:"trim,upper"`
 	IncreaseBalance bool
 }

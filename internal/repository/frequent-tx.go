@@ -245,7 +245,7 @@ func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 				CreatedAt:   dbFtx.CreatedAt,
 				Kind: models.TransactionKind{
 					ID:              dbFtx.KindID,
-					Kind:            dbFtx.Kind.String,
+					Enum:            models.TxKind(dbFtx.KindEnum.Int64),
 					IncreaseBalance: dbFtx.IncreaseBalance.Bool,
 				},
 				Category:                 cat,
@@ -311,7 +311,7 @@ func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 			CreatedAt:   dbFtx.TransactionCreatedAt.Time,
 			Kind: models.TransactionKind{
 				ID:              dbFtx.TransactionKindID.String,
-				Kind:            dbFtx.TransactionKind.String,
+				Enum:            models.TxKind(dbFtx.TransactionKindEnum.Int64),
 				IncreaseBalance: dbFtx.TransactionIncreaseBalance.Bool,
 			},
 			Category:     tCat,

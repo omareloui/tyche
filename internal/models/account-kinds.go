@@ -1,18 +1,18 @@
 package models
 
-type AccountKindEnum uint8
+type AccKind uint8
 
 const (
-	AccountKindNil AccountKindEnum = iota
-	AccountKindCreditCard
-	AccountKindBankAccount
-	AccountKindCash
-	AccountKindDebt
+	AccKindNil AccKind = iota
+	AccKindCreditCard
+	AccKindBankAcc
+	AccKindCash
+	AccKindDebt
 )
 
-const DfltAccountKind = AccountKindCreditCard
+const DfltAccKind = AccKindBankAcc
 
-func (a AccountKindEnum) String() string {
+func (a AccKind) String() string {
 	return [...]string{
 		"???", "Credit Card",
 		"Bank Account",
@@ -22,5 +22,5 @@ func (a AccountKindEnum) String() string {
 
 type AccountKind struct {
 	ID   string `validate:"required"`
-	Enum AccountKindEnum
+	Enum AccKind
 }
