@@ -149,6 +149,10 @@ templ TransactionAmountsAndKindFormBody(
 		hx-swap="outerHTML"
 		hx-sync="closest form:abort"
 	>
+		@selectTxKind("kind_id", id, getTxKindsForAccounts(accs, knds), fd.KindID, templ.Attributes{
+			"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
+			"hx-trigger": "change",
+		})
 		<div class="grid grid-cols-3 gap-4">
 			@moneyInput("Amount", "amount", getCurSymbolByAccount(accs, fd.AccountIFD.AccountID.Value), id,
 				fd.AccountIFD.Amount, "col-span-2", templ.Attributes{
@@ -161,10 +165,6 @@ templ TransactionAmountsAndKindFormBody(
 					"hx-trigger": "change",
 				})
 		</div>
-		@selectTxKind("kind_id", id, getTxKindsForAccounts(accs, knds), fd.KindID, templ.Attributes{
-			"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
-			"hx-trigger": "change",
-		})
 		if fd.CategoryID != nil {
 			@selectTxCat("category_id", id, getCategoriesOfKinds(cats, fd.KindID.Value), *fd.CategoryID)
 		}
@@ -172,6 +172,7 @@ templ TransactionAmountsAndKindFormBody(
 			@selectCounterparty("counterparty_id", id, cps, *fd.CounterpartyID, true)
 		}
 		if fd.ToAccountIFD != nil {
+			<button hx-post={ fmt.Sprintf("/tx-inputs/switch/%s", id) }>Switch</button>
 			<div class="grid grid-cols-3 gap-4">
 				@moneyInput("To Amount", "to_amount",
 					getCurSymbolByAccount(accs, fd.ToAccountIFD.AccountID.Value), id,

@@ -80,3 +80,26 @@ func (h Handler) TxInputs(w http.ResponseWriter, r *http.Request) (templ.Compone
 	}
 	return views.TransactionAmountsAndKindFormBody(fd, r.PathValue("id"), knds, cats, accs, cps), nil
 }
+
+func (h Handler) TxInputsSwitch(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	accs, knds, cats, cps, err := h.getTxDeps(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	fd, err := h.parseTransactionAmountsAndKindFD(r, accs, knds)
+	if err != nil {
+		return nil, err
+	}
+
+	accId := fd.AccountIFD.AccountID.Value
+	toAccId := ""
+	if fd.ToAccountIFD != nil {
+		toAccId = fd.ToAccountIFD.AccountID.Value
+		fd.ToAccountIFD.AccountID.Value = accId
+	}
+	if toAccId != "" {
+		fd.AccountIFD.AccountID.Value = toAccId
+	}
+
+	return views.TransactionAmountsAndKindFormBody(fd, r.PathValue("id"), knds, cats, accs, cps), nil
+}

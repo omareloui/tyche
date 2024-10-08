@@ -80,6 +80,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("POST /amount-inputs-with-account/{id}", handle(h.AmountInputsWithAccount))
 	mux.Handle("POST /accounts-inputs/{id}", handle(h.AccountInputs))
 	mux.Handle("POST /tx-inputs/{id}", handle(h.TxInputs))
+	mux.Handle("POST /tx-inputs/switch/{id}", handle(h.TxInputsSwitch))
 
 	static(mux, []string{"styles", "js"}, "./web/public")
 	mux.Handle("/", handle(h.NotFound))

@@ -606,8 +606,17 @@ func (h Handler) parseTransactionAmountsAndKindFD(r *http.Request, accs []models
 		}
 
 		// Set from account
-		if strings.HasPrefix(trigger, "to_account_id") && toAccId == accId {
-			if nAcc := slicesutils.Find(accs, func(a models.Account) bool { return a.ID != toAccId }); nAcc != nil {
+		if strings.HasPrefix(trigger, "to_account_id") || toAccId == accId {
+			if nAcc := slicesutils.Find(accs, func(a models.Account) bool {
+				isDebtAcc := a.Kind.Enum == models.AccountKindDebt
+				if a.ID == toAccId {
+					return false
+				}
+				if isDebtTx {
+					return isDebtAcc
+				}
+				return !isDebtAcc
+			}); nAcc != nil {
 				fd.AccountIFD.AccountID.Value = nAcc.ID
 				acc = nAcc
 			}
@@ -630,7 +639,6 @@ func (h Handler) parseTransactionAmountsAndKindFD(r *http.Request, accs []models
 			Amount:    views.FDInput{Value: toAmt},
 			AccountID: views.FDInput{Value: toAccId},
 		}
-
 	} else {
 		fd.CategoryID = &views.FDInput{Value: r.FormValue("category_id")}
 		fd.CounterpartyID = &views.FDInput{Value: r.FormValue("counterparty_id")}
