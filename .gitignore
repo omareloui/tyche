@@ -2,3 +2,13 @@
 data
 tmp
 logs
+
+# Sqlc
+internal/db
+
+# Templ
+web/views
+!web/views/*.templ
+
+# Tailwind
+web/public/styles
