@@ -23,7 +23,7 @@ INSERT INTO transactions (
     to_account_id,
     to_amount,
     scheduled_to,
-    fulfilled_on
+    fulfilled_at
 )
 VALUES (
     ?1,
@@ -51,7 +51,7 @@ type CreateTransactionParams struct {
 	ToAccountID    sql.NullString
 	ToAmount       interface{}
 	ScheduledTo    time.Time
-	FulfilledOn    sql.NullTime
+	FulfilledAt    sql.NullTime
 }
 
 func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionParams) error {
@@ -66,7 +66,7 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 		arg.ToAccountID,
 		arg.ToAmount,
 		arg.ScheduledTo,
-		arg.FulfilledOn,
+		arg.FulfilledAt,
 	)
 	return err
 }
@@ -84,7 +84,7 @@ func (q *Queries) DeleteTransaction(ctx context.Context, id string) error {
 const fulfillTransaction = `-- name: FulfillTransaction :exec
 UPDATE transactions
 SET
-    fulfilled_on = DATETIME('now')
+    fulfilled_at = DATETIME('now')
 WHERE id = ?1
 `
 
@@ -104,7 +104,7 @@ SELECT
     t.description,
     t.to_account_id,
     t.to_amount,
-    t.fulfilled_on,
+    t.fulfilled_at,
     t.scheduled_to,
     t.created_at,
     a.name AS account_name,
@@ -146,7 +146,7 @@ type GetTransactionRow struct {
 	Description         sql.NullString
 	ToAccountID         sql.NullString
 	ToAmount            sql.NullFloat64
-	FulfilledOn         sql.NullTime
+	FulfilledAt         sql.NullTime
 	ScheduledTo         time.Time
 	CreatedAt           time.Time
 	AccountName         sql.NullString
@@ -180,7 +180,7 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 		&i.Description,
 		&i.ToAccountID,
 		&i.ToAmount,
-		&i.FulfilledOn,
+		&i.FulfilledAt,
 		&i.ScheduledTo,
 		&i.CreatedAt,
 		&i.AccountName,
@@ -214,7 +214,7 @@ SELECT
     t.description,
     t.to_account_id,
     t.to_amount,
-    t.fulfilled_on,
+    t.fulfilled_at,
     t.scheduled_to,
     t.created_at,
     a.name AS account_name,
@@ -256,7 +256,7 @@ type GetTransactionsRow struct {
 	Description         sql.NullString
 	ToAccountID         sql.NullString
 	ToAmount            sql.NullFloat64
-	FulfilledOn         sql.NullTime
+	FulfilledAt         sql.NullTime
 	ScheduledTo         time.Time
 	CreatedAt           time.Time
 	AccountName         sql.NullString
@@ -296,7 +296,7 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.Description,
 			&i.ToAccountID,
 			&i.ToAmount,
-			&i.FulfilledOn,
+			&i.FulfilledAt,
 			&i.ScheduledTo,
 			&i.CreatedAt,
 			&i.AccountName,

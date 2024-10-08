@@ -12,20 +12,21 @@ import (
 type FrequencyBy uint8
 
 const (
-	Day FrequencyBy = iota + 1
-	Month
-	Year
+	FreqByNil FrequencyBy = iota
+	FreqByDay
+	FreqbyMonth
+	FreqByYear
 )
 
 func (fb FrequencyBy) String() string {
-	return [...]string{"Day", "Month", "Year"}[fb-1]
+	return [...]string{"???", "Day", "Month", "Year"}[fb]
 }
 
 func FrequencyByOptions() map[string]string {
 	m := make(map[string]string, 3)
-	m[fmt.Sprintf("%d", Day)] = Day.String()
-	m[fmt.Sprintf("%d", Month)] = Month.String()
-	m[fmt.Sprintf("%d", Year)] = Year.String()
+	m[fmt.Sprintf("%d", FreqByDay)] = FreqByDay.String()
+	m[fmt.Sprintf("%d", FreqbyMonth)] = FreqbyMonth.String()
+	m[fmt.Sprintf("%d", FreqByYear)] = FreqByYear.String()
 	return m
 }
 
@@ -43,17 +44,17 @@ type FrequentTx struct {
 	ToAmount     float64
 	Description  string
 
-	StartsOn                 time.Time
-	StopsOn                  time.Time
-	CreatedAt                time.Time
-	LastTransactionCreatedAt time.Time
+	StartsAt                   time.Time
+	StopsAt                    time.Time
+	CreatedAt                  time.Time
+	LastTransactionScheduledTo time.Time
 
 	Transactions []Transaction
 }
 
 type createFrequentTx struct {
 	ID          string      `validate:"required,ulid"`
-	FrequencyBy FrequencyBy `validate:"required,oneof=0 1 2"`
+	FrequencyBy FrequencyBy `validate:"required"`
 	Frequency   uint        `validate:"required"`
 
 	AccountID      string  `validate:"required,ulid"`
@@ -66,9 +67,9 @@ type createFrequentTx struct {
 	ToAmount       float64 `validate:"required_if=Kind 3,required_if=Kind 4"`
 	Description    string  `conform:"trim"`
 
-	StartsOn                 time.Time
-	StopsOn                  time.Time `validate:"omitempty,gtfield=StartsOn"`
-	LastTransactionCreatedAt time.Time `validate:"required"`
+	StartsAt                   time.Time `validate:"required"`
+	StopsAt                    time.Time `validate:"omitempty,gtfield=StartsOn"`
+	LastTransactionScheduledTo time.Time `validate:"required"`
 }
 
 func (ft *FrequentTx) ViewFrequency() string {
@@ -100,21 +101,21 @@ func (ft *FrequentTx) toValidate() *createFrequentTx {
 	}
 
 	return &createFrequentTx{
-		ID:                       ft.ID,
-		AccountID:                ft.Account.ID,
-		Amount:                   ft.Amount,
-		KindID:                   ft.Kind.ID,
-		Kind:                     ft.Kind.Enum,
-		CategoryID:               catId,
-		CounterpartyID:           cpId,
-		ToAccountID:              toAccId,
-		ToAmount:                 ft.ToAmount,
-		Description:              ft.Description,
-		StartsOn:                 ft.StartsOn,
-		FrequencyBy:              ft.FrequencyBy,
-		Frequency:                ft.Frequency,
-		StopsOn:                  ft.StopsOn,
-		LastTransactionCreatedAt: ft.LastTransactionCreatedAt,
+		ID:                         ft.ID,
+		AccountID:                  ft.Account.ID,
+		Amount:                     ft.Amount,
+		KindID:                     ft.Kind.ID,
+		Kind:                       ft.Kind.Enum,
+		CategoryID:                 catId,
+		CounterpartyID:             cpId,
+		ToAccountID:                toAccId,
+		ToAmount:                   ft.ToAmount,
+		Description:                ft.Description,
+		FrequencyBy:                ft.FrequencyBy,
+		Frequency:                  ft.Frequency,
+		StartsAt:                   ft.StartsAt,
+		StopsAt:                    ft.StopsAt,
+		LastTransactionScheduledTo: ft.LastTransactionScheduledTo,
 	}
 }
 

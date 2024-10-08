@@ -533,13 +533,13 @@ func Goal(gl *models.Goal) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			if !tx.FulfilledOn.IsZero() {
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("<p>Fulfilled On: ")
+			if !tx.FulfilledAt.IsZero() {
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("<p>Fulfilled At: ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var25 string
-				templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(tx.FulfilledOn.Format(time.RFC1123Z))
+				templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(tx.FulfilledAt.Format(time.RFC1123Z))
 				if templ_7745c5c3_Err != nil {
 					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/goals.templ`, Line: 104, Col: 60}
 				}
@@ -556,7 +556,7 @@ func Goal(gl *models.Goal) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			if tx.FulfilledOn.IsZero() {
+			if tx.FulfilledAt.IsZero() {
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("<button class=\"px-5 py-2.5 my-2 text-white bg-green-500 hover:bg-green-600 focus:outline-none focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm sm:w-auto text-center\" hx-put=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err

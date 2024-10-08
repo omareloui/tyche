@@ -58,7 +58,7 @@ SELECT
     i.id,
     i.name,
     i.price,
-    i.purchased_on,
+    i.purchased_at,
     i.currency_id,
     i.created_at,
     c.enum,
@@ -72,7 +72,7 @@ type GetItemRow struct {
 	ID          string
 	Name        string
 	Price       float64
-	PurchasedOn sql.NullTime
+	PurchasedAt sql.NullTime
 	CurrencyID  string
 	CreatedAt   time.Time
 	Enum        sql.NullInt64
@@ -86,7 +86,7 @@ func (q *Queries) GetItem(ctx context.Context, id string) (GetItemRow, error) {
 		&i.ID,
 		&i.Name,
 		&i.Price,
-		&i.PurchasedOn,
+		&i.PurchasedAt,
 		&i.CurrencyID,
 		&i.CreatedAt,
 		&i.Enum,
@@ -100,7 +100,7 @@ SELECT
     i.id,
     i.name,
     i.price,
-    i.purchased_on,
+    i.purchased_at,
     i.currency_id,
     i.created_at,
     c.enum,
@@ -114,7 +114,7 @@ type GetItemsRow struct {
 	ID          string
 	Name        string
 	Price       float64
-	PurchasedOn sql.NullTime
+	PurchasedAt sql.NullTime
 	CurrencyID  string
 	CreatedAt   time.Time
 	Enum        sql.NullInt64
@@ -134,7 +134,7 @@ func (q *Queries) GetItems(ctx context.Context) ([]GetItemsRow, error) {
 			&i.ID,
 			&i.Name,
 			&i.Price,
-			&i.PurchasedOn,
+			&i.PurchasedAt,
 			&i.CurrencyID,
 			&i.CreatedAt,
 			&i.Enum,

@@ -20,8 +20,8 @@ type Transaction struct {
 	Description    string
 	GoalTitle      string
 	GoalPercentage float64
-	FulfilledOn    time.Time
 	ScheduledTo    time.Time
+	FulfilledAt    time.Time
 	CreatedAt      time.Time
 }
 

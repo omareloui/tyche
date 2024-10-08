@@ -1,0 +1,37 @@
+ 
+<div data-frequency-form class=\"grid gap-2\">
+</div>
+<div class=\"grid grid-cols-3 gap-4\">
+</div>
+<div id=\"tx-list\" hx-swap-oob=\"afterbegin\">
+</div>
+<p>ID: 
+</p>
+ 
+<div hx-target=\"this\" class=\"entry-container\"><p>ID: 
+</p><p>Account: 
+</p><p>Amount: 
+</p>
+<p>To Account: 
+</p><p>To Amount: 
+</p>
+<p>Kind: 
+</p>
+<p>Description: 
+</p>
+<p>Category ID: 
+</p><p>Category Name: 
+</p>
+<p>Counterparty ID: 
+</p><p>Counterparty Name: 
+</p>
+<p>Frequency: 
+</p><p>Frequency By: 
+</p><p>Starts At: 
+</p>
+<p>Stops At: 
+</p>
+<p>Last Transaction Created At: 
+</p><p>Created At: 
+</p><div class=\"flex gap-4\">
+</div></div>

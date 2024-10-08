@@ -58,7 +58,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 
 	sod := time.Now().Truncate(24 * time.Hour)
 	if tx.ScheduledTo.Equal(sod) || tx.ScheduledTo.Before(sod) {
-		tx.FulfilledOn = time.Now()
+		tx.FulfilledAt = time.Now()
 	}
 
 	accs, knds, cats, cps, err := h.getTxDeps(r.Context())
@@ -86,7 +86,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		l.Debug("parsed frequent transaction")
 
 		ftx.ID = idgen.New()
-		ftx.LastTransactionCreatedAt = time.Now()
+		ftx.LastTransactionScheduledTo = time.Now()
 
 		if err := ftx.SanitizeAndValidate(h.sani, h.valid); err != nil {
 			var valerr errs.ValidationError
@@ -123,7 +123,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		l.Debug("rendered scheduled transaction OOB")
 	}
 
-	if !tx.FulfilledOn.IsZero() {
+	if !tx.FulfilledAt.IsZero() {
 		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
 			return nil, err
 		}
@@ -211,7 +211,7 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 		return nil, err
 	}
 
-	tx.FulfilledOn = oldTx.FulfilledOn
+	tx.FulfilledAt = oldTx.FulfilledAt
 	tx.CreatedAt = oldTx.CreatedAt
 
 	if err := h.repo.UpdateTransaction(r.Context(), oldTx, tx); err != nil {
@@ -228,7 +228,7 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 
 	tx.Kind = *txKind
 
-	if !oldTx.FulfilledOn.IsZero() {
+	if !oldTx.FulfilledAt.IsZero() {
 		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
 			return nil, err
 		}
@@ -252,7 +252,7 @@ func (h Handler) FulfillTransaction(w http.ResponseWriter, r *http.Request) (tem
 	}
 	l.Debug("fetched transaction", zap.Any("tx", tx))
 
-	tx.FulfilledOn = time.Now()
+	tx.FulfilledAt = time.Now()
 
 	if err := h.repo.FulfillTransaction(r.Context(), tx); err != nil {
 		return nil, err
@@ -287,7 +287,7 @@ func (h Handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) (temp
 	}
 	l.Info("deleted transaction")
 
-	if !tx.FulfilledOn.IsZero() {
+	if !tx.FulfilledAt.IsZero() {
 		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
 			return nil, err
 		}
@@ -486,8 +486,8 @@ func (h Handler) mapFDToTransactionFrequency(r *http.Request, parsedTx *models.T
 		ToAmount:     parsedTx.ToAmount,
 		FrequencyBy:  models.FrequencyBy(frequencyBy),
 		Frequency:    uint(frequency),
-		StartsOn:     parsedTx.ScheduledTo,
-		StopsOn:      stopsOn,
+		StartsAt:     parsedTx.ScheduledTo,
+		StopsAt:      stopsOn,
 	}, nil
 }
 
@@ -548,9 +548,9 @@ func (h Handler) prepareCreatingTx(r *http.Request, tx *models.Transaction,
 	tx.ID = idgen.New()
 	tx.CreatedAt = time.Now()
 
-	sod := time.Now().Truncate(24 * time.Hour)
-	if tx.ScheduledTo.Equal(sod) || tx.ScheduledTo.Before(sod) {
-		tx.FulfilledOn = tx.CreatedAt
+	now := time.Now()
+	if tx.ScheduledTo.Equal(now) || tx.ScheduledTo.Before(now) {
+		tx.FulfilledAt = tx.CreatedAt
 	}
 
 	return h.prepareTx(r, tx, accs, knds, cats, cps)

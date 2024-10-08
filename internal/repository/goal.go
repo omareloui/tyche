@@ -128,7 +128,7 @@ func dbGoalRowToGoal(dbGl []db.GetGoalRow) *models.Goal {
 				ID:          gl.ItemID.String,
 				Name:        gl.ItemName.String,
 				Price:       gl.ItemPrice.Float64,
-				PurchasedOn: gl.ItemPurchasedOn.Time,
+				PurchasedAt: gl.ItemPurchasedAt.Time,
 				Currency: models.Currency{
 					ID:        gl.ItemCurrencyID.String,
 					Enum:      models.CurrencyEnum(gl.ItemCurrency.Int64),
@@ -172,7 +172,7 @@ func dbGoalRowsToGoals(dbGls []db.GetGoalsRow) []models.Goal {
 					ID:          dbGl.ItemID.String,
 					Name:        dbGl.ItemName.String,
 					Price:       dbGl.ItemPrice.Float64,
-					PurchasedOn: dbGl.ItemPurchasedOn.Time,
+					PurchasedAt: dbGl.ItemPurchasedAt.Time,
 					Currency: models.Currency{
 						ID:        dbGl.ItemCurrencyID.String,
 						Enum:      models.CurrencyEnum(dbGl.ItemCurrency.Int64),
@@ -197,7 +197,7 @@ func dbGoalRowsToGoals(dbGls []db.GetGoalsRow) []models.Goal {
 						},
 					},
 					ScheduledTo: dbGl.TransactionScheduledTo.Time,
-					FulfilledOn: dbGl.TransactionFulfilledOn.Time,
+					FulfilledAt: dbGl.TransactionFulfilledAt.Time,
 				})
 			}
 		}

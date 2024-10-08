@@ -1,0 +1,15 @@
+ 
+ 
+<p>ID: 
+</p>
+ 
+<div hx-target=\"this\" class=\"entry-container\"><p>ID: 
+</p><p>Name: 
+</p><p>Price:
+</p><div class=\"flex gap-4\">
+</div></div>
+ 
+<i class=\"text-gray-400\">[
+]</i>
+<div id=\"items-list\" hx-swap-oob=\"afterbegin\">
+</div>

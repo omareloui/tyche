@@ -32,20 +32,20 @@ func (r *Repository) createFrequentTxWithTxn(qtx *db.Queries, ctx context.Contex
 	}
 
 	if err := qtx.CreateFrequentTx(ctx, db.CreateFrequentTxParams{
-		ID:                       ftx.ID,
-		AccountID:                ftx.Account.ID,
-		FrequencyBy:              int64(ftx.FrequencyBy),
-		Frequency:                int64(ftx.Frequency),
-		Amount:                   ftx.Amount,
-		KindID:                   ftx.Kind.ID,
-		CategoryID:               catId,
-		CounterpartyID:           cpId,
-		Description:              sql.NullString{String: ftx.Description, Valid: ftx.Description != ""},
-		ToAccountID:              toAccId,
-		ToAmount:                 ftx.ToAmount,
-		StartsOn:                 ftx.StartsOn,
-		StopsOn:                  sql.NullTime{Time: ftx.StopsOn, Valid: !ftx.StopsOn.IsZero()},
-		LastTransactionCreatedAt: ftx.LastTransactionCreatedAt,
+		ID:                         ftx.ID,
+		AccountID:                  ftx.Account.ID,
+		FrequencyBy:                int64(ftx.FrequencyBy),
+		Frequency:                  int64(ftx.Frequency),
+		Amount:                     ftx.Amount,
+		KindID:                     ftx.Kind.ID,
+		CategoryID:                 catId,
+		CounterpartyID:             cpId,
+		Description:                sql.NullString{String: ftx.Description, Valid: ftx.Description != ""},
+		ToAccountID:                toAccId,
+		ToAmount:                   ftx.ToAmount,
+		StartsAt:                   ftx.StartsAt,
+		StopsAt:                    sql.NullTime{Time: ftx.StopsAt, Valid: !ftx.StopsAt.IsZero()},
+		LastTransactionScheduledTo: ftx.LastTransactionScheduledTo,
 	}); err != nil {
 		l.Error("creating frequent transaction", zap.Error(err), zap.Any("frequent tx", ftx))
 		return err
@@ -120,19 +120,19 @@ func (r *Repository) UpdateFrequentTx(ctx context.Context, ftx *models.FrequentT
 		}
 
 		if err := qtx.UpdateFrequentTx(ctx, db.UpdateFrequentTxParams{
-			ID:                       ftx.ID,
-			AccountID:                ftx.Account.ID,
-			Amount:                   ftx.Amount,
-			KindID:                   ftx.Kind.ID,
-			CategoryID:               catId,
-			CounterpartyID:           cpId,
-			FrequencyBy:              int64(ftx.FrequencyBy),
-			Frequency:                int64(ftx.Frequency),
-			Description:              sql.NullString{String: ftx.Description, Valid: ftx.Description != ""},
-			ToAccountID:              toAccId,
-			ToAmount:                 ftx.ToAmount,
-			StopsOn:                  sql.NullTime{Time: ftx.StopsOn, Valid: !ftx.StopsOn.IsZero()},
-			LastTransactionCreatedAt: ftx.LastTransactionCreatedAt,
+			ID:                         ftx.ID,
+			AccountID:                  ftx.Account.ID,
+			Amount:                     ftx.Amount,
+			KindID:                     ftx.Kind.ID,
+			CategoryID:                 catId,
+			CounterpartyID:             cpId,
+			FrequencyBy:                int64(ftx.FrequencyBy),
+			Frequency:                  int64(ftx.Frequency),
+			Description:                sql.NullString{String: ftx.Description, Valid: ftx.Description != ""},
+			ToAccountID:                toAccId,
+			ToAmount:                   ftx.ToAmount,
+			StopsAt:                    sql.NullTime{Time: ftx.StopsAt, Valid: !ftx.StopsAt.IsZero()},
+			LastTransactionScheduledTo: ftx.LastTransactionScheduledTo,
 		}); err != nil {
 			l.Error("updating frequent tx", zap.Any("frequent tx", ftx), zap.Error(err))
 			return err
@@ -175,8 +175,8 @@ func (r *Repository) DeleteFrequentTx(ctx context.Context, id string) error {
 func (r *Repository) GenerateScheduledTransactions(ctx context.Context, ftx *models.FrequentTx, scheduledTxs []models.Transaction) error {
 	return r.transact(func(qtx *db.Queries) error {
 		if err := qtx.UpdateFrequentTxLastTransactionCreatedAt(ctx, db.UpdateFrequentTxLastTransactionCreatedAtParams{
-			ID:                       ftx.ID,
-			LastTransactionCreatedAt: ftx.LastTransactionCreatedAt,
+			ID:                         ftx.ID,
+			LastTransactionScheduledTo: ftx.LastTransactionScheduledTo,
 		}); err != nil {
 			return err
 		}
@@ -248,16 +248,16 @@ func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 					Enum:            models.TxKind(dbFtx.KindEnum.Int64),
 					IncreaseBalance: dbFtx.IncreaseBalance.Bool,
 				},
-				Category:                 cat,
-				Counterparty:             cp,
-				ToAccount:                toAcc,
-				ToAmount:                 dbFtx.ToAmount.Float64,
-				Frequency:                uint(dbFtx.Frequency),
-				FrequencyBy:              models.FrequencyBy(dbFtx.FrequencyBy),
-				StartsOn:                 dbFtx.StartsOn,
-				StopsOn:                  dbFtx.StopsOn.Time,
-				LastTransactionCreatedAt: dbFtx.LastTransactionCreatedAt,
-				Transactions:             []models.Transaction{},
+				Category:                   cat,
+				Counterparty:               cp,
+				ToAccount:                  toAcc,
+				ToAmount:                   dbFtx.ToAmount.Float64,
+				Frequency:                  uint(dbFtx.Frequency),
+				FrequencyBy:                models.FrequencyBy(dbFtx.FrequencyBy),
+				StartsAt:                   dbFtx.StartsAt,
+				StopsAt:                    dbFtx.StopsAt.Time,
+				LastTransactionScheduledTo: dbFtx.LastTransactionScheduledTo,
+				Transactions:               []models.Transaction{},
 			})
 			ftxIdx = len(ftxs) - 1
 		}
@@ -306,7 +306,7 @@ func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 			Description: dbFtx.TransactionDescription.String,
 			ToAccount:   tToAcc,
 			ToAmount:    dbFtx.TransactionToAmount.Float64,
-			FulfilledOn: dbFtx.TransactionFulfilledOn.Time,
+			FulfilledAt: dbFtx.TransactionFulfilledAt.Time,
 			ScheduledTo: dbFtx.TransactionScheduledTo.Time,
 			CreatedAt:   dbFtx.TransactionCreatedAt.Time,
 			Kind: models.TransactionKind{

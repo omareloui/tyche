@@ -11,9 +11,9 @@ INSERT INTO frequent_txs (
     description,
     to_account_id,
     to_amount,
-    starts_on,
-    stops_on,
-    last_transaction_created_at
+    starts_at,
+    stops_at,
+    last_transaction_scheduled_to
 )
 VALUES (
     sqlc.arg(id),
@@ -27,9 +27,9 @@ VALUES (
     sqlc.arg(description),
     sqlc.arg(to_account_id),
     IIF(sqlc.narg(to_amount) > 0.0, ROUND(sqlc.narg(to_amount), 2), NULL),
-    sqlc.arg(starts_on),
-    sqlc.arg(stops_on),
-    sqlc.arg(last_transaction_created_at)
+    sqlc.arg(starts_at),
+    sqlc.arg(stops_at),
+    sqlc.arg(last_transaction_scheduled_to)
 );
 
 -- name: CreateFrequentTxTransaction :exec
@@ -56,9 +56,9 @@ SELECT
     ft.created_at,
     ft.frequency_by,
     ft.frequency,
-    ft.starts_on,
-    ft.stops_on,
-    ft.last_transaction_created_at,
+    ft.starts_at,
+    ft.stops_at,
+    ft.last_transaction_scheduled_to,
     a.name AS account_name,
     a.currency_id,
     c.enum AS currency_enum,
@@ -80,7 +80,7 @@ SELECT
     t.description AS transaction_description,
     t.to_account_id AS transaction_to_account_id,
     t.to_amount AS transaction_to_amount,
-    t.fulfilled_on AS transaction_fulfilled_on,
+    t.fulfilled_at AS transaction_fulfilled_at,
     t.scheduled_to AS transaction_scheduled_to,
     t.created_at AS transaction_created_at,
     ta.currency_id AS transaction_currency_id,
@@ -127,9 +127,9 @@ SELECT
     ft.created_at,
     ft.frequency_by,
     ft.frequency,
-    ft.starts_on,
-    ft.stops_on,
-    ft.last_transaction_created_at,
+    ft.starts_at,
+    ft.stops_at,
+    ft.last_transaction_scheduled_to,
     a.name AS account_name,
     a.currency_id,
     c.enum AS currency_enum,
@@ -151,7 +151,7 @@ SELECT
     t.description AS transaction_description,
     t.to_account_id AS transaction_to_account_id,
     t.to_amount AS transaction_to_amount,
-    t.fulfilled_on AS transaction_fulfilled_on,
+    t.fulfilled_at AS transaction_fulfilled_at,
     t.scheduled_to AS transaction_scheduled_to,
     t.created_at AS transaction_created_at,
     ta.currency_id AS transaction_currency_id,
@@ -197,15 +197,15 @@ SET
     description = sqlc.arg(description),
     to_account_id = sqlc.arg(to_account_id),
     to_amount = IIF(sqlc.narg(to_amount) > 0.0, ROUND(sqlc.narg(to_amount), 2), NULL),
-    stops_on = sqlc.arg(stops_on),
-    last_transaction_created_at = sqlc.arg(last_transaction_created_at)
+    stops_at = sqlc.arg(stops_at),
+    last_transaction_scheduled_to = sqlc.arg(last_transaction_scheduled_to)
 WHERE id = sqlc.arg(id);
 
 
 -- name: UpdateFrequentTxLastTransactionCreatedAt :exec
 UPDATE frequent_txs
 SET
-    last_transaction_created_at = sqlc.arg(last_transaction_created_at)
+    last_transaction_scheduled_to = sqlc.arg(last_transaction_scheduled_to)
 WHERE id = sqlc.arg(id);
 
 
@@ -220,5 +220,5 @@ WHERE rowid IN (
     LEFT JOIN frequent_txs_transactions AS ftxt ON tx.id = ftxt.transaction_id
     WHERE
         ftxt.frequency_id = sqlc.arg(frequency_id)
-    AND tx.fulfilled_on IS NULL
+    AND tx.fulfilled_at IS NULL
 );

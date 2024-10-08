@@ -10,7 +10,7 @@ INSERT INTO transactions (
     to_account_id,
     to_amount,
     scheduled_to,
-    fulfilled_on
+    fulfilled_at
 )
 VALUES (
     sqlc.arg(id),
@@ -23,7 +23,7 @@ VALUES (
     sqlc.arg(to_account_id),
     IIF(sqlc.narg(to_amount) > 0.0, ROUND(sqlc.narg(to_amount), 2), NULL),
     sqlc.arg(scheduled_to),
-    sqlc.arg(fulfilled_on)
+    sqlc.arg(fulfilled_at)
 );
 
 -- name: GetTransactions :many
@@ -37,7 +37,7 @@ SELECT
     t.description,
     t.to_account_id,
     t.to_amount,
-    t.fulfilled_on,
+    t.fulfilled_at,
     t.scheduled_to,
     t.created_at,
     a.name AS account_name,
@@ -79,7 +79,7 @@ SELECT
     t.description,
     t.to_account_id,
     t.to_amount,
-    t.fulfilled_on,
+    t.fulfilled_at,
     t.scheduled_to,
     t.created_at,
     a.name AS account_name,
@@ -127,7 +127,7 @@ WHERE id = sqlc.arg(id);
 -- name: FulfillTransaction :exec
 UPDATE transactions
 SET
-    fulfilled_on = DATETIME('now')
+    fulfilled_at = DATETIME('now')
 WHERE id = sqlc.arg(id);
 
 -- name: DeleteTransaction :exec

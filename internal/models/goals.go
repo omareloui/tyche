@@ -31,7 +31,7 @@ func (gl *Goal) CalculateEgpSubtotal() float64 {
 func (gl *Goal) Remaining() float64 {
 	sum := float64(0)
 	for _, tx := range gl.Transactions {
-		if !tx.FulfilledOn.IsZero() {
+		if !tx.FulfilledAt.IsZero() {
 			sum += tx.Amount * tx.Account.Currency.EgpFxRate
 		}
 	}

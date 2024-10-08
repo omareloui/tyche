@@ -593,12 +593,12 @@ func FrequentTx(ftx *models.FrequentTx) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("</p><p>Starts On: ")
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("</p><p>Starts At: ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var27 string
-		templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinStringErrs(ftx.StartsOn.Format(time.DateOnly))
+		templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinStringErrs(ftx.StartsAt.Format(time.RFC1123Z))
 		if templ_7745c5c3_Err != nil {
 			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/frequent-tx.templ`, Line: 111, Col: 52}
 		}
@@ -610,13 +610,13 @@ func FrequentTx(ftx *models.FrequentTx) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		if !ftx.StopsOn.IsZero() {
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("<p>Stops On: ")
+		if !ftx.StopsAt.IsZero() {
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("<p>Stops At: ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var28 string
-			templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(ftx.StopsOn.Format(time.DateOnly))
+			templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(ftx.StopsAt.Format(time.RFC1123Z))
 			if templ_7745c5c3_Err != nil {
 				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/frequent-tx.templ`, Line: 113, Col: 51}
 			}
@@ -634,9 +634,9 @@ func FrequentTx(ftx *models.FrequentTx) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var29 string
-		templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinStringErrs(ftx.LastTransactionCreatedAt.Format(time.RFC1123Z))
+		templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinStringErrs(ftx.LastTransactionScheduledTo.Format(time.RFC1123Z))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/frequent-tx.templ`, Line: 115, Col: 86}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/frequent-tx.templ`, Line: 115, Col: 88}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
 		if templ_7745c5c3_Err != nil {

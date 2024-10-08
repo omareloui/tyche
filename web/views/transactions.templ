@@ -95,7 +95,7 @@ templ transactionsList(transactions []models.Transaction) {
 templ Transaction(tx *models.Transaction) {
 	<div
 		hx-target="this"
-		if tx.FulfilledOn.IsZero() {
+		if tx.FulfilledAt.IsZero() {
 			class="entry-container"
 		} else {
 			class="entry-container stale"
@@ -125,12 +125,12 @@ templ Transaction(tx *models.Transaction) {
 			<p>Goal Percentage: { strconv.FormatFloat(tx.GoalPercentage * 100, 'f', 2, 64) }%</p>
 		}
 		<p>Scheduled To: { tx.ScheduledTo.Format(time.DateOnly) }</p>
-		if !tx.FulfilledOn.IsZero() {
-			<p>Fulfilled On: { tx.FulfilledOn.Format(time.RFC1123Z) }</p>
+		if !tx.FulfilledAt.IsZero() {
+			<p>Fulfilled At: { tx.FulfilledAt.Format(time.RFC1123Z) }</p>
 		}
 		<p>Created At: { tx.CreatedAt.Format(time.RFC1123Z) }</p>
 		<div class="flex gap-4">
-			if tx.FulfilledOn.IsZero() {
+			if tx.FulfilledAt.IsZero() {
 				@saveButton("Fulfill", fmt.Sprintf("/transactions/%s/fulfill", tx.ID))
 			}
 			@editButton(fmt.Sprintf("/transactions/%s/edit", tx.ID))

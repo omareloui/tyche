@@ -24,9 +24,9 @@ INSERT INTO frequent_txs (
     description,
     to_account_id,
     to_amount,
-    starts_on,
-    stops_on,
-    last_transaction_created_at
+    starts_at,
+    stops_at,
+    last_transaction_scheduled_to
 )
 VALUES (
     ?1,
@@ -47,20 +47,20 @@ VALUES (
 `
 
 type CreateFrequentTxParams struct {
-	ID                       string
-	FrequencyBy              int64
-	Frequency                int64
-	AccountID                string
-	Amount                   float64
-	KindID                   string
-	CategoryID               sql.NullString
-	CounterpartyID           sql.NullString
-	Description              sql.NullString
-	ToAccountID              sql.NullString
-	ToAmount                 interface{}
-	StartsOn                 time.Time
-	StopsOn                  sql.NullTime
-	LastTransactionCreatedAt time.Time
+	ID                         string
+	FrequencyBy                int64
+	Frequency                  int64
+	AccountID                  string
+	Amount                     float64
+	KindID                     string
+	CategoryID                 sql.NullString
+	CounterpartyID             sql.NullString
+	Description                sql.NullString
+	ToAccountID                sql.NullString
+	ToAmount                   interface{}
+	StartsAt                   time.Time
+	StopsAt                    sql.NullTime
+	LastTransactionScheduledTo time.Time
 }
 
 func (q *Queries) CreateFrequentTx(ctx context.Context, arg CreateFrequentTxParams) error {
@@ -76,9 +76,9 @@ func (q *Queries) CreateFrequentTx(ctx context.Context, arg CreateFrequentTxPara
 		arg.Description,
 		arg.ToAccountID,
 		arg.ToAmount,
-		arg.StartsOn,
-		arg.StopsOn,
-		arg.LastTransactionCreatedAt,
+		arg.StartsAt,
+		arg.StopsAt,
+		arg.LastTransactionScheduledTo,
 	)
 	return err
 }
@@ -121,7 +121,7 @@ WHERE rowid IN (
     LEFT JOIN frequent_txs_transactions AS ftxt ON tx.id = ftxt.transaction_id
     WHERE
         ftxt.frequency_id = ?1
-    AND tx.fulfilled_on IS NULL
+    AND tx.fulfilled_at IS NULL
 )
 `
 
@@ -144,9 +144,9 @@ SELECT
     ft.created_at,
     ft.frequency_by,
     ft.frequency,
-    ft.starts_on,
-    ft.stops_on,
-    ft.last_transaction_created_at,
+    ft.starts_at,
+    ft.stops_at,
+    ft.last_transaction_scheduled_to,
     a.name AS account_name,
     a.currency_id,
     c.enum AS currency_enum,
@@ -168,7 +168,7 @@ SELECT
     t.description AS transaction_description,
     t.to_account_id AS transaction_to_account_id,
     t.to_amount AS transaction_to_amount,
-    t.fulfilled_on AS transaction_fulfilled_on,
+    t.fulfilled_at AS transaction_fulfilled_at,
     t.scheduled_to AS transaction_scheduled_to,
     t.created_at AS transaction_created_at,
     ta.currency_id AS transaction_currency_id,
@@ -215,9 +215,9 @@ type GetFrequentTxRow struct {
 	CreatedAt                      time.Time
 	FrequencyBy                    int64
 	Frequency                      int64
-	StartsOn                       time.Time
-	StopsOn                        sql.NullTime
-	LastTransactionCreatedAt       time.Time
+	StartsAt                       time.Time
+	StopsAt                        sql.NullTime
+	LastTransactionScheduledTo     time.Time
 	AccountName                    sql.NullString
 	CurrencyID                     sql.NullString
 	CurrencyEnum                   sql.NullInt64
@@ -239,7 +239,7 @@ type GetFrequentTxRow struct {
 	TransactionDescription         sql.NullString
 	TransactionToAccountID         sql.NullString
 	TransactionToAmount            sql.NullFloat64
-	TransactionFulfilledOn         sql.NullTime
+	TransactionFulfilledAt         sql.NullTime
 	TransactionScheduledTo         sql.NullTime
 	TransactionCreatedAt           sql.NullTime
 	TransactionCurrencyID          sql.NullString
@@ -277,9 +277,9 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) ([]GetFrequentTx
 			&i.CreatedAt,
 			&i.FrequencyBy,
 			&i.Frequency,
-			&i.StartsOn,
-			&i.StopsOn,
-			&i.LastTransactionCreatedAt,
+			&i.StartsAt,
+			&i.StopsAt,
+			&i.LastTransactionScheduledTo,
 			&i.AccountName,
 			&i.CurrencyID,
 			&i.CurrencyEnum,
@@ -301,7 +301,7 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) ([]GetFrequentTx
 			&i.TransactionDescription,
 			&i.TransactionToAccountID,
 			&i.TransactionToAmount,
-			&i.TransactionFulfilledOn,
+			&i.TransactionFulfilledAt,
 			&i.TransactionScheduledTo,
 			&i.TransactionCreatedAt,
 			&i.TransactionCurrencyID,
@@ -343,9 +343,9 @@ SELECT
     ft.created_at,
     ft.frequency_by,
     ft.frequency,
-    ft.starts_on,
-    ft.stops_on,
-    ft.last_transaction_created_at,
+    ft.starts_at,
+    ft.stops_at,
+    ft.last_transaction_scheduled_to,
     a.name AS account_name,
     a.currency_id,
     c.enum AS currency_enum,
@@ -367,7 +367,7 @@ SELECT
     t.description AS transaction_description,
     t.to_account_id AS transaction_to_account_id,
     t.to_amount AS transaction_to_amount,
-    t.fulfilled_on AS transaction_fulfilled_on,
+    t.fulfilled_at AS transaction_fulfilled_at,
     t.scheduled_to AS transaction_scheduled_to,
     t.created_at AS transaction_created_at,
     ta.currency_id AS transaction_currency_id,
@@ -413,9 +413,9 @@ type GetFrequentTxsRow struct {
 	CreatedAt                      time.Time
 	FrequencyBy                    int64
 	Frequency                      int64
-	StartsOn                       time.Time
-	StopsOn                        sql.NullTime
-	LastTransactionCreatedAt       time.Time
+	StartsAt                       time.Time
+	StopsAt                        sql.NullTime
+	LastTransactionScheduledTo     time.Time
 	AccountName                    sql.NullString
 	CurrencyID                     sql.NullString
 	CurrencyEnum                   sql.NullInt64
@@ -437,7 +437,7 @@ type GetFrequentTxsRow struct {
 	TransactionDescription         sql.NullString
 	TransactionToAccountID         sql.NullString
 	TransactionToAmount            sql.NullFloat64
-	TransactionFulfilledOn         sql.NullTime
+	TransactionFulfilledAt         sql.NullTime
 	TransactionScheduledTo         sql.NullTime
 	TransactionCreatedAt           sql.NullTime
 	TransactionCurrencyID          sql.NullString
@@ -475,9 +475,9 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 			&i.CreatedAt,
 			&i.FrequencyBy,
 			&i.Frequency,
-			&i.StartsOn,
-			&i.StopsOn,
-			&i.LastTransactionCreatedAt,
+			&i.StartsAt,
+			&i.StopsAt,
+			&i.LastTransactionScheduledTo,
 			&i.AccountName,
 			&i.CurrencyID,
 			&i.CurrencyEnum,
@@ -499,7 +499,7 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 			&i.TransactionDescription,
 			&i.TransactionToAccountID,
 			&i.TransactionToAmount,
-			&i.TransactionFulfilledOn,
+			&i.TransactionFulfilledAt,
 			&i.TransactionScheduledTo,
 			&i.TransactionCreatedAt,
 			&i.TransactionCurrencyID,
@@ -540,25 +540,25 @@ SET
     description = ?8,
     to_account_id = ?9,
     to_amount = IIF(?10 > 0.0, ROUND(?10, 2), NULL),
-    stops_on = ?11,
-    last_transaction_created_at = ?12
+    stops_at = ?11,
+    last_transaction_scheduled_to = ?12
 WHERE id = ?13
 `
 
 type UpdateFrequentTxParams struct {
-	FrequencyBy              int64
-	Frequency                int64
-	AccountID                string
-	Amount                   float64
-	KindID                   string
-	CategoryID               sql.NullString
-	CounterpartyID           sql.NullString
-	Description              sql.NullString
-	ToAccountID              sql.NullString
-	ToAmount                 interface{}
-	StopsOn                  sql.NullTime
-	LastTransactionCreatedAt time.Time
-	ID                       string
+	FrequencyBy                int64
+	Frequency                  int64
+	AccountID                  string
+	Amount                     float64
+	KindID                     string
+	CategoryID                 sql.NullString
+	CounterpartyID             sql.NullString
+	Description                sql.NullString
+	ToAccountID                sql.NullString
+	ToAmount                   interface{}
+	StopsAt                    sql.NullTime
+	LastTransactionScheduledTo time.Time
+	ID                         string
 }
 
 func (q *Queries) UpdateFrequentTx(ctx context.Context, arg UpdateFrequentTxParams) error {
@@ -573,8 +573,8 @@ func (q *Queries) UpdateFrequentTx(ctx context.Context, arg UpdateFrequentTxPara
 		arg.Description,
 		arg.ToAccountID,
 		arg.ToAmount,
-		arg.StopsOn,
-		arg.LastTransactionCreatedAt,
+		arg.StopsAt,
+		arg.LastTransactionScheduledTo,
 		arg.ID,
 	)
 	return err
@@ -583,16 +583,16 @@ func (q *Queries) UpdateFrequentTx(ctx context.Context, arg UpdateFrequentTxPara
 const updateFrequentTxLastTransactionCreatedAt = `-- name: UpdateFrequentTxLastTransactionCreatedAt :exec
 UPDATE frequent_txs
 SET
-    last_transaction_created_at = ?1
+    last_transaction_scheduled_to = ?1
 WHERE id = ?2
 `
 
 type UpdateFrequentTxLastTransactionCreatedAtParams struct {
-	LastTransactionCreatedAt time.Time
-	ID                       string
+	LastTransactionScheduledTo time.Time
+	ID                         string
 }
 
 func (q *Queries) UpdateFrequentTxLastTransactionCreatedAt(ctx context.Context, arg UpdateFrequentTxLastTransactionCreatedAtParams) error {
-	_, err := q.db.ExecContext(ctx, updateFrequentTxLastTransactionCreatedAt, arg.LastTransactionCreatedAt, arg.ID)
+	_, err := q.db.ExecContext(ctx, updateFrequentTxLastTransactionCreatedAt, arg.LastTransactionScheduledTo, arg.ID)
 	return err
 }

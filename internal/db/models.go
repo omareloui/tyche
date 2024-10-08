@@ -51,21 +51,21 @@ type Currency struct {
 }
 
 type FrequentTx struct {
-	ID                       string
-	FrequencyBy              int64
-	Frequency                int64
-	AccountID                string
-	Amount                   float64
-	KindID                   string
-	CategoryID               sql.NullString
-	CounterpartyID           sql.NullString
-	Description              sql.NullString
-	ToAccountID              sql.NullString
-	ToAmount                 sql.NullFloat64
-	StartsOn                 time.Time
-	StopsOn                  sql.NullTime
-	LastTransactionCreatedAt time.Time
-	CreatedAt                time.Time
+	ID                         string
+	FrequencyBy                int64
+	Frequency                  int64
+	AccountID                  string
+	Amount                     float64
+	KindID                     string
+	CategoryID                 sql.NullString
+	CounterpartyID             sql.NullString
+	Description                sql.NullString
+	ToAccountID                sql.NullString
+	ToAmount                   sql.NullFloat64
+	StartsAt                   time.Time
+	StopsAt                    sql.NullTime
+	LastTransactionScheduledTo time.Time
+	CreatedAt                  time.Time
 }
 
 type FrequentTxsTransaction struct {
@@ -96,7 +96,7 @@ type Item struct {
 	Name        string
 	Price       float64
 	CurrencyID  string
-	PurchasedOn sql.NullTime
+	PurchasedAt sql.NullTime
 	CreatedAt   time.Time
 }
 
@@ -110,7 +110,7 @@ type Transaction struct {
 	Description    sql.NullString
 	ToAccountID    sql.NullString
 	ToAmount       sql.NullFloat64
-	FulfilledOn    sql.NullTime
+	FulfilledAt    sql.NullTime
 	ScheduledTo    time.Time
 	CreatedAt      time.Time
 }

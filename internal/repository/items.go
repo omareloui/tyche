@@ -55,7 +55,7 @@ func dbItemRowToItem(dbIt *db.GetItemRow) *models.Item {
 		ID:          dbIt.ID,
 		Name:        dbIt.Name,
 		Price:       dbIt.Price,
-		PurchasedOn: dbIt.PurchasedOn.Time,
+		PurchasedAt: dbIt.PurchasedAt.Time,
 		Currency: models.Currency{
 			ID:        dbIt.CurrencyID,
 			Enum:      models.CurrencyEnum(dbIt.Enum.Int64),
@@ -72,7 +72,7 @@ func dbItemsRowToItems(dbIts []db.GetItemsRow) []models.Item {
 			ID:          it.ID,
 			Name:        it.Name,
 			Price:       it.Price,
-			PurchasedOn: it.PurchasedOn.Time,
+			PurchasedAt: it.PurchasedAt.Time,
 			Currency: models.Currency{
 				ID:        it.CurrencyID,
 				Enum:      models.CurrencyEnum(it.Enum.Int64),

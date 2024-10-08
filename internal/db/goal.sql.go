@@ -99,7 +99,7 @@ SELECT
     i.name AS item_name,
     i.price AS item_price,
     i.currency_id AS item_currency_id,
-    i.purchased_on AS item_purchased_on,
+    i.purchased_at AS item_purchased_at,
     c.enum AS item_currency,
     c.egp_fx_rate AS item_currency_fx_rate
 FROM goals AS gl
@@ -119,7 +119,7 @@ type GetGoalRow struct {
 	ItemName           sql.NullString
 	ItemPrice          sql.NullFloat64
 	ItemCurrencyID     sql.NullString
-	ItemPurchasedOn    sql.NullTime
+	ItemPurchasedAt    sql.NullTime
 	ItemCurrency       sql.NullInt64
 	ItemCurrencyFxRate sql.NullFloat64
 }
@@ -143,7 +143,7 @@ func (q *Queries) GetGoal(ctx context.Context, id string) ([]GetGoalRow, error) 
 			&i.ItemName,
 			&i.ItemPrice,
 			&i.ItemCurrencyID,
-			&i.ItemPurchasedOn,
+			&i.ItemPurchasedAt,
 			&i.ItemCurrency,
 			&i.ItemCurrencyFxRate,
 		); err != nil {
@@ -171,14 +171,14 @@ SELECT
     i.name AS item_name,
     i.price AS item_price,
     i.currency_id AS item_currency_id,
-    i.purchased_on AS item_purchased_on,
+    i.purchased_at AS item_purchased_at,
     c.enum AS item_currency,
     c.egp_fx_rate AS item_currency_fx_rate,
     t.id AS transaction_id,
     t.account_id AS transaction_account_id,
     t.amount AS transaction_amount,
     t.scheduled_to AS transaction_scheduled_to,
-    t.fulfilled_on AS transaction_fulfilled_on,
+    t.fulfilled_at AS transaction_fulfilled_at,
     a.name AS transaction_account_name,
     ac.id AS transaction_account_currency_id,
     ac.enum AS transaction_account_currency_enum,
@@ -204,14 +204,14 @@ type GetGoalsRow struct {
 	ItemName                         sql.NullString
 	ItemPrice                        sql.NullFloat64
 	ItemCurrencyID                   sql.NullString
-	ItemPurchasedOn                  sql.NullTime
+	ItemPurchasedAt                  sql.NullTime
 	ItemCurrency                     sql.NullInt64
 	ItemCurrencyFxRate               sql.NullFloat64
 	TransactionID                    sql.NullString
 	TransactionAccountID             sql.NullString
 	TransactionAmount                sql.NullFloat64
 	TransactionScheduledTo           sql.NullTime
-	TransactionFulfilledOn           sql.NullTime
+	TransactionFulfilledAt           sql.NullTime
 	TransactionAccountName           sql.NullString
 	TransactionAccountCurrencyID     sql.NullString
 	TransactionAccountCurrencyEnum   sql.NullInt64
@@ -237,14 +237,14 @@ func (q *Queries) GetGoals(ctx context.Context) ([]GetGoalsRow, error) {
 			&i.ItemName,
 			&i.ItemPrice,
 			&i.ItemCurrencyID,
-			&i.ItemPurchasedOn,
+			&i.ItemPurchasedAt,
 			&i.ItemCurrency,
 			&i.ItemCurrencyFxRate,
 			&i.TransactionID,
 			&i.TransactionAccountID,
 			&i.TransactionAmount,
 			&i.TransactionScheduledTo,
-			&i.TransactionFulfilledOn,
+			&i.TransactionFulfilledAt,
 			&i.TransactionAccountName,
 			&i.TransactionAccountCurrencyID,
 			&i.TransactionAccountCurrencyEnum,

@@ -69,7 +69,7 @@ func (r *Repository) createTransactionWithTxn(ctx context.Context, qtx *db.Queri
 		ToAccountID:    toAccId,
 		ToAmount:       sql.NullFloat64{Float64: tx.ToAmount, Valid: tx.ToAmount != 0},
 		ScheduledTo:    tx.ScheduledTo,
-		FulfilledOn:    sql.NullTime{Time: tx.FulfilledOn, Valid: !tx.FulfilledOn.IsZero()},
+		FulfilledAt:    sql.NullTime{Time: tx.FulfilledAt, Valid: !tx.FulfilledAt.IsZero()},
 	}); err != nil {
 		l.Error("create transaction", zap.Error(err), zap.Any("transaction", tx))
 		return err
@@ -84,7 +84,7 @@ func (r *Repository) createTransactionAndApplyToAccountIfNeededWithTxn(ctx conte
 		return err
 	}
 
-	if !tx.FulfilledOn.IsZero() {
+	if !tx.FulfilledAt.IsZero() {
 		if err := r.applyTxToAccountWithTxn(qtx, ctx, tx); err != nil {
 			l.Error("applying transaction", zap.Error(err), zap.Any("transaction", tx))
 			return err
@@ -131,7 +131,7 @@ func (r *Repository) DeleteTransaction(ctx context.Context, tx *models.Transacti
 		}
 		l.Debug("deleted transaction", zap.String("id", tx.ID))
 
-		if !tx.FulfilledOn.IsZero() {
+		if !tx.FulfilledAt.IsZero() {
 			if err := r.undoTxToAccountWithTxn(qtx, ctx, tx); err != nil {
 				l.Error("undoing transaction after deletion", zap.Error(err))
 				return err
@@ -182,7 +182,7 @@ func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transa
 		}
 		l.Debug("updated transaction", zap.Any("new_transaction", tx), zap.Any("old_transaction", oldTx))
 
-		if !oldTx.FulfilledOn.IsZero() {
+		if !oldTx.FulfilledAt.IsZero() {
 			if err := r.undoTxToAccountWithTxn(qtx, ctx, oldTx); err != nil {
 				return err
 			}
@@ -199,10 +199,10 @@ func (r *Repository) FulfillTransaction(ctx context.Context, tx *models.Transact
 	return r.transact(func(qtx *db.Queries) error {
 		l := logger.FromCtx(ctx)
 		if err := qtx.FulfillTransaction(ctx, tx.ID); err != nil {
-			l.Error("fulfilling transaction", zap.Error(err), zap.String("id", tx.ID), zap.Time("fulfilled_on", tx.FulfilledOn))
+			l.Error("fulfilling transaction", zap.Error(err), zap.String("id", tx.ID), zap.Time("fulfilled_on", tx.FulfilledAt))
 			return err
 		}
-		l.Debug("fulfilled transaction", zap.String("id", tx.ID), zap.Time("fulfilled_on", tx.FulfilledOn))
+		l.Debug("fulfilled transaction", zap.String("id", tx.ID), zap.Time("fulfilled_on", tx.FulfilledAt))
 		if err := r.applyTxToAccountWithTxn(qtx, ctx, tx); err != nil {
 			l.Error("applying transaction to account", zap.Error(err))
 			return err
@@ -263,7 +263,7 @@ func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRo
 		ToAmount:       _dbTx.ToAmount.Float64,
 		GoalTitle:      _dbTx.GoalTitle.String,
 		GoalPercentage: _dbTx.GoalPercentage.(float64),
-		FulfilledOn:    _dbTx.FulfilledOn.Time,
+		FulfilledAt:    _dbTx.FulfilledAt.Time,
 		ScheduledTo:    _dbTx.ScheduledTo,
 		CreatedAt:      _dbTx.CreatedAt,
 		Kind: models.TransactionKind{

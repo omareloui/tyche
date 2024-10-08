@@ -1,0 +1,12 @@
+ 
+ 
+<p>ID: 
+</p>
+ 
+<div hx-target=\"this\" hx-swap=\"outerHTML\" class=\"entry-container\"><p>ID: 
+</p><p>Name: 
+</p><p>CreatedAt: 
+</p><div class=\"flex gap-4\">
+</div></div>
+<div id=\"counterparties-list\" hx-swap-oob=\"afterbegin\">
+</div>

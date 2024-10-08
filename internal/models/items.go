@@ -8,8 +8,8 @@ type Item struct {
 	ID          string  `validate:"required"`
 	Name        string  `validate:"required" conform:"trim,title"`
 	Price       float64 `validate:"required"`
-	PurchasedOn time.Time
 	Currency    Currency
+	PurchasedAt time.Time
 	CreatedAt   time.Time
 }
 

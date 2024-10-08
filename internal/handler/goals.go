@@ -192,7 +192,7 @@ func (h Handler) CreateGoalProgress(w http.ResponseWriter, r *http.Request) (tem
 	}
 	l.Info("created transaction")
 
-	if !tx.FulfilledOn.IsZero() {
+	if !tx.FulfilledAt.IsZero() {
 		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
 			return nil, err
 		}

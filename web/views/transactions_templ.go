@@ -386,7 +386,7 @@ func Transaction(tx *models.Transaction) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		if tx.FulfilledOn.IsZero() {
+		if tx.FulfilledAt.IsZero() {
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(" class=\"entry-container\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
@@ -621,13 +621,13 @@ func Transaction(tx *models.Transaction) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		if !tx.FulfilledOn.IsZero() {
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("<p>Fulfilled On: ")
+		if !tx.FulfilledAt.IsZero() {
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("<p>Fulfilled At: ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var28 string
-			templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(tx.FulfilledOn.Format(time.RFC1123Z))
+			templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(tx.FulfilledAt.Format(time.RFC1123Z))
 			if templ_7745c5c3_Err != nil {
 				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/views/transactions.templ`, Line: 129, Col: 58}
 			}
@@ -657,7 +657,7 @@ func Transaction(tx *models.Transaction) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		if tx.FulfilledOn.IsZero() {
+		if tx.FulfilledAt.IsZero() {
 			templ_7745c5c3_Err = saveButton("Fulfill", fmt.Sprintf("/transactions/%s/fulfill", tx.ID)).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err

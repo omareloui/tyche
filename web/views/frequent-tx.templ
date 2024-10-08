@@ -108,11 +108,11 @@ templ FrequentTx(ftx *models.FrequentTx) {
 		}
 		<p>Frequency: { strconv.FormatUint(uint64(ftx.Frequency), 10) }</p>
 		<p>Frequency By: { ftx.FrequencyBy.String() }</p>
-		<p>Starts On: { ftx.StartsOn.Format(time.DateOnly) }</p>
-		if !ftx.StopsOn.IsZero() {
-			<p>Stops On: { ftx.StopsOn.Format(time.DateOnly) }</p>
+		<p>Starts At: { ftx.StartsAt.Format(time.RFC1123Z) }</p>
+		if !ftx.StopsAt.IsZero() {
+			<p>Stops At: { ftx.StopsAt.Format(time.RFC1123Z) }</p>
 		}
-		<p>Last Transaction Created At: { ftx.LastTransactionCreatedAt.Format(time.RFC1123Z) }</p>
+		<p>Last Transaction Created At: { ftx.LastTransactionScheduledTo.Format(time.RFC1123Z) }</p>
 		<p>Created At: { ftx.CreatedAt.Format(time.RFC1123Z) }</p>
 		<div class="flex gap-4">
 			@postButton(fmt.Sprintf("Generate Transactions"), fmt.Sprintf("/frequent-tx/%s/generate-txs", ftx.ID))
