@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"errors"
 
 	"github.com/joho/godotenv"
 	_ "github.com/mattn/go-sqlite3"
@@ -20,7 +22,9 @@ import (
 func main() {
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal("Error loading .env file")
+		if !errors.Is(err, os.ErrNotExist) {
+			log.Fatal("Error loading .env file")
+		}
 	}
 
 	port := config.GetApplicationPort()

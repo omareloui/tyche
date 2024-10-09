@@ -1,37 +1,12 @@
 services:
-  # db:
-  #   container_name: db
-  #   image: mongo
-  #   restart: always
-  #   environment:
-  #     MONGO_INITDB_ROOT_USERNAME: ${MONGO_DB_USER}
-  #     MONGO_INITDB_ROOT_PASSWORD: ${MONGO_DB_PASSWORD}
-  #   volumes:
-  #     - db:/data/db
-  #   healthcheck:
-  #     test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017 --quiet
-  #     interval: 10s
-  #     timeout: 10s
-  #     retries: 5
-  #   ports:
-  #     - 27017:27017
-  #   env_file:
-  #     - path: ./.env
-  #       required: true
-  #   networks:
-  #     - default
-  #   attach: false
-
-  financial-plans:
-    container_name: financial-plans
+  tyche:
+    container_name: tyche
     build:
       context: .
       dockerfile: ./build/package/Dockerfile
     init: true
     ports:
       - 3333:3333
-    # depends_on:
-    #   - db
     env_file:
       - path: ./.env
         required: true
@@ -40,8 +15,8 @@ services:
     profiles:
       - prod
 
-  financial-plans-dev:
-    container_name: financial-plans-dev
+  tyche-dev:
+    container_name: tyche-dev
     build:
       context: .
       dockerfile: ./build/package/dev.Dockerfile
@@ -55,8 +30,6 @@ services:
       - default
     profiles:
       - dev
-    # depends_on:
-    #   - db
     develop:
       watch:
         - action: rebuild

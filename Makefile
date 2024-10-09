@@ -5,8 +5,11 @@ export GOOSE_MIGRATION_DIR=./sql/schema
 run:
 	@air -c internal/config/.air.toml
 
-build: sqlgen migrate templ css
+build: prebuild
 	@go build -o ./tmp/main ./cmd/tyche
+
+
+prebuild: templ css sqlgen migrate
 
 start:
 	@./tmp/main
@@ -37,10 +40,10 @@ templ-dev:
 	@templ generate --path web/views --watch
 
 css:
-	@pnpm dlx tailwindcss -c internal/config/.tailwind.config.js -i ./web/assets/styles/main.css -o ./web/public/styles/main.css --minify
+	@npx tailwindcss -c internal/config/.tailwind.config.js -i ./web/assets/styles/main.css -o ./web/public/styles/main.css --minify
 
 css-dev:
-	@pnpm dlx tailwindcss -c internal/config/.tailwind.config.js -i ./web/assets/styles/main.css -o ./web/public/styles/main.css --minify --watch
+	@npx tailwindcss -c internal/config/.tailwind.config.js -i ./web/assets/styles/main.css -o ./web/public/styles/main.css --minify --watch
 
 dev: migrate sqlgen
 	@make -j2 run templ-dev
