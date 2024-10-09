@@ -11,4 +11,4 @@ web/views
 !web/views/*.templ
 
 # Tailwind
-web/public/styles
+web/public/styles/main.css
