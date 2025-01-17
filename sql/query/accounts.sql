@@ -17,11 +17,14 @@ SELECT
     a.currency_id,
     a.counterparty_id,
     a.card_number,
+    a.card_limit,
+    a.name_on_card,
     a.iban,
     a.note,
     a.exclude_from_balance,
     a.is_archived,
     a.is_default,
+    a.expiration_date,
     a.created_at,
     c.enum AS currency_enum,
     c.egp_fx_rate,
@@ -54,11 +57,14 @@ SELECT
     a.currency_id,
     a.counterparty_id,
     a.card_number,
+    a.card_limit,
+    a.name_on_card,
     a.iban,
     a.note,
     a.exclude_from_balance,
     a.is_archived,
     a.is_default,
+    a.expiration_date,
     a.created_at,
     c.enum AS currency_enum,
     c.egp_fx_rate,
@@ -92,11 +98,14 @@ SELECT
     a.currency_id,
     a.counterparty_id,
     a.card_number,
+    a.card_limit,
+    a.name_on_card,
     a.iban,
     a.note,
     a.exclude_from_balance,
     a.is_archived,
     a.is_default,
+    a.expiration_date,
     a.created_at,
     c.enum AS currency_enum,
     c.egp_fx_rate,
@@ -119,11 +128,14 @@ INSERT INTO accounts (
     currency_id,
     counterparty_id,
     card_number,
+    card_limit,
+    name_on_card,
     iban,
     note,
     exclude_from_balance,
     is_archived,
-    is_default
+    is_default,
+    expiration_date
 )
 VALUES (
     sqlc.arg(id),
@@ -133,11 +145,14 @@ VALUES (
     sqlc.arg(currency_id),
     sqlc.arg(counterparty_id),
     sqlc.arg(card_number),
+    sqlc.arg(card_limit),
+    sqlc.arg(name_on_card),
     sqlc.arg(iban),
     sqlc.arg(note),
     sqlc.arg(exclude_from_balance),
     sqlc.arg(is_archived),
-    sqlc.arg(is_default)
+    sqlc.arg(is_default),
+    sqlc.arg(expiration_date)
 );
 
 -- name: UpdateAccount :exec
@@ -148,10 +163,13 @@ SET
     currency_id = sqlc.arg(currency_id),
     counterparty_id = sqlc.arg(counterparty_id),
     card_number = sqlc.arg(card_number),
+    card_limit = sqlc.arg(card_limit),
+    name_on_card = sqlc.arg(name_on_card),
     iban = sqlc.arg(iban),
     note = sqlc.arg(note),
     is_archived = sqlc.arg(is_archived),
-    exclude_from_balance = sqlc.arg(exclude_from_balance)
+    exclude_from_balance = sqlc.arg(exclude_from_balance),
+    expiration_date = sqlc.arg(expiration_date)
 WHERE id = sqlc.arg(id);
 
 -- name: UnsetDefaultAccountExpect :exec

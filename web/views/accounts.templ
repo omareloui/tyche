@@ -2,6 +2,7 @@ package views
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/omareloui/tyche/internal/models"
 )
@@ -20,6 +21,9 @@ type AccountPartialFD struct {
 	Iban           *FDInput
 	CardNumber     *FDInput
 	CounterpartyID *FDInput
+	CardLimit      *FDInput
+	NameOnCard     *FDInput
+	ExpirationDate *FDInput
 }
 
 templ Accounts(
@@ -80,6 +84,15 @@ templ AccountInputs(id string, fd *AccountPartialFD, aknds []models.AccountKind,
 		if fd.CardNumber != nil {
 			@creditCardInput("Card Number", "card_number", id, *fd.CardNumber)
 		}
+		if fd.NameOnCard != nil {
+			@input("Name on card", "text", "name_on_card", "John Doe", id, *fd.NameOnCard)
+		}
+		if fd.CardLimit != nil {
+			@moneyInput("Card Limit", "card_limit", getCurSymbolByCurrency(curs, fd.CurrencyID.Value), id, *fd.CardLimit, "")
+		}
+		if fd.ExpirationDate != nil {
+			@dateInput("Expiration Date", "expiration_date", id, *fd.ExpirationDate)
+		}
 		if fd.CounterpartyID != nil {
 			@selectCounterparty("counterparty_id", id, cps, *fd.CounterpartyID, false)
 		}
@@ -113,6 +126,15 @@ templ Account(a *models.Account) {
 		}
 		if a.CardNumber != "" {
 			<p>Card Number: { a.MaskCardNumber() } </p>
+		}
+		if a.CardLimit != 0 {
+			<p>Card Limit: { a.ViewCardLimit() } </p>
+		}
+		if a.NameOnCard != "" {
+			<p>Name on Card: { a.NameOnCard } </p>
+		}
+		if !a.ExpirationDate.IsZero() {
+			<p>Expiration Date: { a.ExpirationDate.Format(time.DateOnly) } </p>
 		}
 		if a.Note != "" {
 			<p>Note: { a.Note } </p>

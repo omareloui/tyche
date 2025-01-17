@@ -99,6 +99,7 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 	l.Debug("validated account")
 
 	err = h.repo.CreateAccount(r.Context(), a)
+
 	var valerr *errs.ValidationError
 	if err != nil && errors.As(err, &valerr) {
 		l.Error("duplication error", zap.Error(valerr), zap.Any("errors", valerr.Errors))
@@ -297,27 +298,39 @@ func (h *Handler) mapFDToAcc(r *http.Request) (*models.Account, error) {
 		cp = &models.Counterparty{ID: cpId}
 	}
 
+	cardLimit, _ := parseFloatIfExists(r.FormValue("card_limit"))
+	expirationDate, _ := parseDateOnlyIfExists(r.FormValue("expiration_date"))
+
 	return &models.Account{
 		Name:               r.FormValue("name"),
 		Kind:               models.AccountKind{ID: r.FormValue("kind_id")},
 		Iban:               r.FormValue("iban"),
 		CardNumber:         r.FormValue("card_number"),
+		CardLimit:          cardLimit,
+		NameOnCard:         r.FormValue("name_on_card"),
 		Note:               r.FormValue("note"),
 		Currency:           models.Currency{ID: r.FormValue("currency_id")},
 		Counterparty:       cp,
 		IsArchive:          parseBoolean(r.FormValue("is_archive")),
 		ExcludeFromBalance: parseBoolean(r.FormValue("exclude_from_balance")),
+		ExpirationDate:     expirationDate,
 	}, nil
 }
 
 func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, knds []models.AccountKind) *views.AccountFD {
 	knd := slicesutils.Find(knds, func(a models.AccountKind) bool { return a.ID == acc.Kind.ID })
 
-	var name, cc, iban, cpId *views.FDInput
+	var name, cc, iban, cpId, noc, exp, limit *views.FDInput
 
 	if knd.Enum == models.AccKindBankAcc ||
 		knd.Enum == models.AccKindCreditCard {
 		cc = &views.FDInput{Value: acc.CardNumber, Error: errs.Errors.MsgFor("CardNumber")}
+		noc = &views.FDInput{Value: acc.NameOnCard, Error: errs.Errors.MsgFor("NameOnCard")}
+	}
+
+	if knd.Enum == models.AccKindCreditCard {
+		limit = &views.FDInput{Value: formatFloatIfNonZero(acc.CardLimit), Error: errs.Errors.MsgFor("CardLimit")}
+		exp = &views.FDInput{Value: formatDateOnlyIfNonZero(acc.ExpirationDate), Error: errs.Errors.MsgFor("ExpirationDate")}
 	}
 
 	if knd.Enum == models.AccKindBankAcc {
@@ -343,6 +356,9 @@ func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, kn
 			Iban:           iban,
 			CardNumber:     cc,
 			CounterpartyID: cpId,
+			NameOnCard:     noc,
+			CardLimit:      limit,
+			ExpirationDate: exp,
 		},
 		Note:               views.FDInput{Value: acc.Note, Error: errs.Errors.MsgFor("Note")},
 		IsArchive:          views.FDInput{Value: formatBooleanIfNonZero(acc.IsArchive), Error: errs.Errors.MsgFor("IsArchive")},

@@ -20,17 +20,21 @@ func (r *Repository) CreateAccount(ctx context.Context, a *models.Account) error
 	}
 
 	if err := r.q.CreateAccount(ctx, db.CreateAccountParams{
-		ID:                 a.ID,
-		Name:               a.Name,
-		KindID:             a.Kind.ID,
-		Amount:             a.Amount,
-		CurrencyID:         a.Currency.ID,
-		CounterpartyID:     sql.NullString{String: cpId, Valid: cpId != ""},
-		Iban:               sql.NullString{String: a.Iban, Valid: a.Iban != ""},
-		CardNumber:         sql.NullString{String: a.CardNumber, Valid: a.CardNumber != ""},
+		ID:             a.ID,
+		Name:           a.Name,
+		KindID:         a.Kind.ID,
+		Amount:         a.Amount,
+		CurrencyID:     a.Currency.ID,
+		CardLimit:      a.CardLimit,
+		NameOnCard:     sql.NullString{String: a.NameOnCard, Valid: a.NameOnCard != ""},
+		CounterpartyID: sql.NullString{String: cpId, Valid: cpId != ""},
+		Iban:           sql.NullString{String: a.Iban, Valid: a.Iban != ""},
+		CardNumber:     sql.NullString{String: a.CardNumber, Valid: a.CardNumber != ""},
+
 		Note:               sql.NullString{String: a.Note, Valid: a.Note != ""},
 		IsArchived:         a.IsArchive,
 		ExcludeFromBalance: a.ExcludeFromBalance,
+		ExpirationDate:     sql.NullTime{Time: a.ExpirationDate, Valid: !a.ExpirationDate.IsZero()},
 	}); err != nil {
 		l.Error("creating account", zap.Error(err))
 		if strings.Contains(err.Error(), "UNIQUE constraint failed: accounts.name") {
@@ -88,9 +92,12 @@ func (r *Repository) UpdateAccount(ctx context.Context, a *models.Account) error
 		CounterpartyID:     sql.NullString{String: cpId, Valid: cpId != ""},
 		Iban:               sql.NullString{String: a.Iban, Valid: a.Iban != ""},
 		CardNumber:         sql.NullString{String: a.CardNumber, Valid: a.CardNumber != ""},
+		NameOnCard:         sql.NullString{String: a.NameOnCard, Valid: a.NameOnCard != ""},
+		CardLimit:          a.CardLimit,
 		Note:               sql.NullString{String: a.Note, Valid: a.Note != ""},
 		IsArchived:         a.IsArchive,
 		ExcludeFromBalance: a.ExcludeFromBalance,
+		ExpirationDate:     sql.NullTime{Time: a.ExpirationDate, Valid: !a.ExpirationDate.IsZero()},
 	}); err != nil {
 		l.Error("updating account", zap.Error(err))
 
@@ -250,11 +257,14 @@ func dbAccountRowToAccount[T db.GetAccountRow | db.GetAccountsRow](dbAcc *T) *mo
 			ID:   _dbAcc.KindID,
 			Enum: models.AccKind(_dbAcc.KindEnum.Int64),
 		},
+		NameOnCard:         _dbAcc.NameOnCard.String,
+		CardLimit:          _dbAcc.CardLimit,
 		Iban:               _dbAcc.Iban.String,
 		CardNumber:         _dbAcc.CardNumber.String,
 		Note:               _dbAcc.Note.String,
 		IsArchive:          _dbAcc.IsArchived,
 		ExcludeFromBalance: _dbAcc.ExcludeFromBalance,
+		ExpirationDate:     _dbAcc.ExpirationDate.Time,
 		CreatedAt:          _dbAcc.CreatedAt,
 	}
 }

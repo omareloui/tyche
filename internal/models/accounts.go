@@ -21,10 +21,13 @@ type Account struct {
 	Counterparty       *Counterparty
 	Iban               string
 	CardNumber         string
+	CardLimit          float64
+	NameOnCard         string
 	Note               string
 	IsArchive          bool
 	ExcludeFromBalance bool
 	IsDefault          bool
+	ExpirationDate     time.Time
 	CreatedAt          time.Time
 }
 
@@ -46,6 +49,10 @@ func (a *Account) ViewAmount() string {
 
 func (a *Account) ViewActualAmount() string {
 	return formatAmount(a.ActualAmount, a.Currency.Enum)
+}
+
+func (a *Account) ViewCardLimit() string {
+	return formatAmount(a.CardLimit, a.Currency.Enum)
 }
 
 func (a *Account) MaskIban() string {
