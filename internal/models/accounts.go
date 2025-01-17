@@ -110,9 +110,9 @@ func (b *Balance) ViewAmount() string {
 }
 
 func (b *Balance) ViewEgpAmount() string {
-	return formatAmount(b.Currency.EgpFxRate*b.Amount, CurrencyEgp)
+	return formatAmount(b.Currency.FxRate(CurrencyEgp)*b.Amount, CurrencyEgp)
 }
 
 func (b *Balance) EgpAmount() float64 {
-	return b.Currency.EgpFxRate * b.Amount
+	return b.Currency.FxRate(CurrencyEgp) * b.Amount
 }

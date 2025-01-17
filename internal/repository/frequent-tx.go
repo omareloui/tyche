@@ -222,9 +222,8 @@ func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 					ID:   dbFtx.ToAccountID.String,
 					Name: dbFtx.ToAccountName.String,
 					Currency: models.Currency{
-						ID:        dbFtx.ToCurrencyID.String,
-						Enum:      models.CurrencyEnum(dbFtx.ToCurrencyEnum.Int64),
-						EgpFxRate: dbFtx.ToEgpFxRate.Float64,
+						ID:   dbFtx.ToCurrencyID.String,
+						Enum: models.CurrencyEnum(dbFtx.ToCurrencyEnum.Int64),
 					},
 				}
 			}
@@ -235,9 +234,8 @@ func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 					ID:   dbFtx.AccountID,
 					Name: dbFtx.AccountName.String,
 					Currency: models.Currency{
-						ID:        dbFtx.CurrencyID.String,
-						Enum:      models.CurrencyEnum(dbFtx.CurrencyEnum.Int64),
-						EgpFxRate: dbFtx.EgpFxRate.Float64,
+						ID:   dbFtx.CurrencyID.String,
+						Enum: models.CurrencyEnum(dbFtx.CurrencyEnum.Int64),
 					},
 				},
 				Amount:      dbFtx.Amount,
@@ -297,9 +295,8 @@ func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.Frequ
 				ID:   dbFtx.TransactionAccountID.String,
 				Name: dbFtx.AccountName.String,
 				Currency: models.Currency{
-					ID:        dbFtx.CurrencyID.String,
-					Enum:      models.CurrencyEnum(dbFtx.CurrencyEnum.Int64),
-					EgpFxRate: dbFtx.EgpFxRate.Float64,
+					ID:   dbFtx.CurrencyID.String,
+					Enum: models.CurrencyEnum(dbFtx.CurrencyEnum.Int64),
 				},
 			},
 			Amount:      dbFtx.TransactionAmount.Float64,

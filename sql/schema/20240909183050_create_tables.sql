@@ -2,8 +2,7 @@
 -- +goose StatementBegin
 CREATE TABLE currencies (
     id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
-    enum INT UNIQUE NOT NULL,
-    egp_fx_rate FLOAT DEFAULT 1 NOT NULL
+    enum INT UNIQUE NOT NULL
 );
 CREATE TABLE transaction_kinds (
     id VARCHAR UNIQUE NOT NULL PRIMARY KEY,

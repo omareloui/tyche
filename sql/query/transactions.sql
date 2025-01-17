@@ -43,19 +43,16 @@ SELECT
     a.name AS account_name,
     a.currency_id,
     c.enum AS currency_enum,
-    c.egp_fx_rate,
     cp.name AS counterparty_name,
     ta.name AS to_account_name,
     ta.currency_id AS to_currency_id,
     tc.enum AS to_currency_enum,
-    tc.egp_fx_rate AS to_egp_fx_rate,
     k.enum AS kind_enum,
     k.increase_balance,
     cat.name AS category_name,
     cat.budget_in_egp AS category_budget_in_egp,
     g.title AS goal_title,
-    g.egp_subtotal AS goal_egp_subtotal,
-    IFNULL(t.amount * c.egp_fx_rate / g.egp_subtotal, 0.0) AS goal_percentage
+    g.egp_subtotal AS goal_egp_subtotal
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
@@ -85,19 +82,16 @@ SELECT
     a.name AS account_name,
     a.currency_id,
     c.enum AS currency_enum,
-    c.egp_fx_rate,
     cp.name AS counterparty_name,
     ta.name AS to_account_name,
     ta.currency_id AS to_currency_id,
     tc.enum AS to_currency_enum,
-    tc.egp_fx_rate AS to_egp_fx_rate,
     k.enum AS kind_enum,
     k.increase_balance,
     cat.name AS category_name,
     cat.budget_in_egp AS category_budget_in_egp,
     g.title AS goal_title,
-    g.egp_subtotal AS goal_egp_subtotal,
-    IFNULL(t.amount * c.egp_fx_rate / g.egp_subtotal, 0.0) AS goal_percentage
+    g.egp_subtotal AS goal_egp_subtotal
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id

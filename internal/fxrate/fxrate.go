@@ -2,27 +2,24 @@ package fxrate
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"strings"
 )
 
-type usdFxRate struct {
-	Date string             `json:"date"`
-	Usd  map[string]float64 `json:"usd"`
+type rate struct {
+	Date  string             `json:"date"`
+	Rates map[string]float64 `json:"rates"`
 }
 
-var usdFxRates usdFxRate
+type fxRates map[string]rate
 
-func (fx *usdFxRate) To(cur string) float64 {
-	return fx.Usd[cur]
-}
+var rates fxRates = make(fxRates)
 
-func (fx *usdFxRate) ToEgp() float64 {
-	return fx.To("egp")
-}
-
-func fetchFXRates() error {
-	resp, err := http.Get("https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.min.json")
+func fetchFXRates(currency string) error {
+	url := fmt.Sprintf("https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/%s.min.json", currency)
+	resp, err := http.Get(url)
 	if err != nil {
 		return err
 	}
@@ -32,14 +29,35 @@ func fetchFXRates() error {
 		return err
 	}
 
-	return json.Unmarshal(body, &usdFxRates)
+	var parsed map[string]any
+	if err = json.Unmarshal(body, &parsed); err != nil {
+		return err
+	}
+
+	_rates := make(map[string]float64, len(parsed[currency].(map[string]any)))
+
+	for k, v := range parsed[currency].(map[string]any) {
+		_rates[k] = float64(v.(float64))
+	}
+
+	rates[currency] = rate{
+		Date:  parsed["date"].(string),
+		Rates: _rates,
+	}
+
+	return nil
 }
 
-func UsdToEgp() (float64, error) {
-	if len(usdFxRates.Usd) == 0 {
-		if err := fetchFXRates(); err != nil {
+func GetFxRate(from, to string) (float64, error) {
+	from = strings.ToLower(from)
+	to = strings.ToLower(to)
+
+	r, ok := rates[from]
+	if !ok {
+		if err := fetchFXRates(from); err != nil {
 			return 0, err
 		}
+		r = rates[from]
 	}
-	return usdFxRates.ToEgp(), nil
+	return r.Rates[to], nil
 }

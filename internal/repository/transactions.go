@@ -239,33 +239,32 @@ func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRo
 			ID:   _dbTx.ToAccountID.String,
 			Name: _dbTx.ToAccountName.String,
 			Currency: models.Currency{
-				ID:        _dbTx.ToCurrencyID.String,
-				Enum:      models.CurrencyEnum(_dbTx.ToCurrencyEnum.Int64),
-				EgpFxRate: _dbTx.ToEgpFxRate.Float64,
+				ID:   _dbTx.ToCurrencyID.String,
+				Enum: models.CurrencyEnum(_dbTx.ToCurrencyEnum.Int64),
 			},
 		}
+	}
+
+	curr := models.Currency{
+		ID:   _dbTx.CurrencyID.String,
+		Enum: models.CurrencyEnum(_dbTx.CurrencyEnum.Int64),
 	}
 
 	tx := models.Transaction{
 		ID: _dbTx.ID,
 		Account: models.Account{
-			ID:   _dbTx.AccountID,
-			Name: _dbTx.AccountName.String,
-			Currency: models.Currency{
-				ID:        _dbTx.CurrencyID.String,
-				Enum:      models.CurrencyEnum(_dbTx.CurrencyEnum.Int64),
-				EgpFxRate: _dbTx.EgpFxRate.Float64,
-			},
+			ID:       _dbTx.AccountID,
+			Name:     _dbTx.AccountName.String,
+			Currency: curr,
 		},
-		Amount:         _dbTx.Amount,
-		Description:    _dbTx.Description.String,
-		ToAccount:      toAcc,
-		ToAmount:       _dbTx.ToAmount.Float64,
-		GoalTitle:      _dbTx.GoalTitle.String,
-		GoalPercentage: _dbTx.GoalPercentage.(float64),
-		FulfilledAt:    _dbTx.FulfilledAt.Time,
-		ScheduledTo:    _dbTx.ScheduledTo,
-		CreatedAt:      _dbTx.CreatedAt,
+		Amount:      _dbTx.Amount,
+		Description: _dbTx.Description.String,
+		ToAccount:   toAcc,
+		ToAmount:    _dbTx.ToAmount.Float64,
+		GoalTitle:   _dbTx.GoalTitle.String,
+		FulfilledAt: _dbTx.FulfilledAt.Time,
+		ScheduledTo: _dbTx.ScheduledTo,
+		CreatedAt:   _dbTx.CreatedAt,
 		Kind: models.TransactionKind{
 			ID:              _dbTx.KindID,
 			Enum:            models.TxKind(_dbTx.KindEnum.Int64),
@@ -274,6 +273,8 @@ func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRo
 		Category:     cat,
 		Counterparty: cp,
 	}
+
+	tx.GoalPercentage = tx.Percentage(_dbTx.GoalEgpSubtotal.Float64)
 
 	return &tx
 }

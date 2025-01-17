@@ -32,7 +32,7 @@ func (gl *Goal) Remaining() float64 {
 	sum := float64(0)
 	for _, tx := range gl.Transactions {
 		if !tx.FulfilledAt.IsZero() {
-			sum += tx.Amount * tx.Account.Currency.EgpFxRate
+			sum += tx.Amount * tx.Account.Currency.FxRate(CurrencyEgp)
 		}
 	}
 	rem := gl.EgpSubtotal - sum

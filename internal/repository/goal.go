@@ -130,9 +130,8 @@ func dbGoalRowToGoal(dbGl []db.GetGoalRow) *models.Goal {
 				Price:       gl.ItemPrice.Float64,
 				PurchasedAt: gl.ItemPurchasedAt.Time,
 				Currency: models.Currency{
-					ID:        gl.ItemCurrencyID.String,
-					Enum:      models.CurrencyEnum(gl.ItemCurrency.Int64),
-					EgpFxRate: gl.ItemCurrencyFxRate.Float64,
+					ID:   gl.ItemCurrencyID.String,
+					Enum: models.CurrencyEnum(gl.ItemCurrency.Int64),
 				},
 			})
 		}
@@ -174,9 +173,8 @@ func dbGoalRowsToGoals(dbGls []db.GetGoalsRow) []models.Goal {
 					Price:       dbGl.ItemPrice.Float64,
 					PurchasedAt: dbGl.ItemPurchasedAt.Time,
 					Currency: models.Currency{
-						ID:        dbGl.ItemCurrencyID.String,
-						Enum:      models.CurrencyEnum(dbGl.ItemCurrency.Int64),
-						EgpFxRate: dbGl.ItemCurrencyFxRate.Float64,
+						ID:   dbGl.ItemCurrencyID.String,
+						Enum: models.CurrencyEnum(dbGl.ItemCurrency.Int64),
 					},
 				})
 			}
@@ -191,9 +189,8 @@ func dbGoalRowsToGoals(dbGls []db.GetGoalsRow) []models.Goal {
 						ID:   dbGl.TransactionAccountID.String,
 						Name: dbGl.TransactionAccountName.String,
 						Currency: models.Currency{
-							ID:        dbGl.TransactionAccountCurrencyID.String,
-							EgpFxRate: dbGl.TransactionAccountCurrencyFxRate.Float64,
-							Enum:      models.CurrencyEnum(dbGl.TransactionAccountCurrencyEnum.Int64),
+							ID:   dbGl.TransactionAccountCurrencyID.String,
+							Enum: models.CurrencyEnum(dbGl.TransactionAccountCurrencyEnum.Int64),
 						},
 					},
 					ScheduledTo: dbGl.TransactionScheduledTo.Time,

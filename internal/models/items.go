@@ -14,7 +14,7 @@ type Item struct {
 }
 
 func (it *Item) EgpPrice() float64 {
-	return it.Currency.EgpFxRate * it.Price
+	return it.Currency.FxRate(CurrencyEgp) * it.Price
 }
 
 func (it *Item) ViewPrice() string {

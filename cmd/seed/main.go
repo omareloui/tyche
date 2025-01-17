@@ -12,7 +12,6 @@ import (
 	"github.com/omareloui/tyche/internal/config"
 	"github.com/omareloui/tyche/internal/db"
 	"github.com/omareloui/tyche/internal/dbconn"
-	"github.com/omareloui/tyche/internal/fxrate"
 	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
@@ -37,13 +36,10 @@ func main() {
 		log.Fatalln("error while getting the currencies", err)
 	}
 
-	usdToEgp, err := fxrate.UsdToEgp()
-	if err != nil {
-		log.Fatalln("error while fetching usd fx rate", err)
-	}
 	currenciesSeed := []db.Currency{
-		{ID: idgen.New(), Enum: int64(models.CurrencyEgp), EgpFxRate: 1},
-		{ID: idgen.New(), Enum: int64(models.CurrencyUsd), EgpFxRate: usdToEgp},
+		{ID: idgen.New(), Enum: int64(models.CurrencyEgp)},
+		{ID: idgen.New(), Enum: int64(models.CurrencyUsd)},
+		{ID: idgen.New(), Enum: int64(models.CurrencyAed)},
 	}
 
 	if len(currencies) != len(currenciesSeed) {

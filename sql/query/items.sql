@@ -6,8 +6,7 @@ SELECT
     i.purchased_at,
     i.currency_id,
     i.created_at,
-    c.enum,
-    c.egp_fx_rate
+    c.enum
 FROM items AS i
 LEFT JOIN currencies AS c ON i.currency_id = c.id
 ORDER BY i.created_at DESC;
@@ -20,8 +19,7 @@ SELECT
     i.purchased_at,
     i.currency_id,
     i.created_at,
-    c.enum,
-    c.egp_fx_rate
+    c.enum
 FROM items AS i
 LEFT JOIN currencies AS c ON i.currency_id = c.id
 WHERE i.id = sqlc.arg(id) LIMIT 1;

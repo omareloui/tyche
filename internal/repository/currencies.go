@@ -25,9 +25,8 @@ func (r *Repository) GetCurrency(ctx context.Context, id string) (*models.Curren
 
 func dbCurrencyToCurrency(dbCurr *db.Currency) *models.Currency {
 	return &models.Currency{
-		ID:        dbCurr.ID,
-		Enum:      models.CurrencyEnum(dbCurr.Enum),
-		EgpFxRate: dbCurr.EgpFxRate,
+		ID:   dbCurr.ID,
+		Enum: models.CurrencyEnum(dbCurr.Enum),
 	}
 }
 

@@ -33,7 +33,6 @@ SELECT
     i.currency_id AS item_currency_id,
     i.purchased_at AS item_purchased_at,
     c.enum AS item_currency,
-    c.egp_fx_rate AS item_currency_fx_rate,
     t.id AS transaction_id,
     t.account_id AS transaction_account_id,
     t.amount AS transaction_amount,
@@ -41,8 +40,7 @@ SELECT
     t.fulfilled_at AS transaction_fulfilled_at,
     a.name AS transaction_account_name,
     ac.id AS transaction_account_currency_id,
-    ac.enum AS transaction_account_currency_enum,
-    ac.egp_fx_rate AS transaction_account_currency_fx_rate
+    ac.enum AS transaction_account_currency_enum
 FROM goals AS gl
 LEFT JOIN goals_items AS gi ON gl.id = gi.goal_id
 LEFT JOIN items AS i ON gi.item_id = i.id
@@ -65,8 +63,7 @@ SELECT
     i.price AS item_price,
     i.currency_id AS item_currency_id,
     i.purchased_at AS item_purchased_at,
-    c.enum AS item_currency,
-    c.egp_fx_rate AS item_currency_fx_rate
+    c.enum AS item_currency
 FROM goals AS gl
 LEFT JOIN goals_items AS gi ON gl.id = gi.goal_id
 LEFT JOIN items AS i ON gi.item_id = i.id

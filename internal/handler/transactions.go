@@ -11,6 +11,7 @@ import (
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/errs"
+	"github.com/omareloui/tyche/internal/fxrate"
 	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
@@ -629,7 +630,7 @@ func (h Handler) parseTransactionAmountsAndKindFD(r *http.Request, accs []models
 			strings.HasPrefix(trigger, "account_id") {
 			fxRate := 1.0
 			if acc != nil && toAcc != nil {
-				fxRate = models.GetFxRate(acc.Currency, toAcc.Currency)
+				fxRate, _ = fxrate.GetFxRate(acc.Currency.Enum.String(), toAcc.Currency.Enum.String())
 			}
 			amt, _ := parseFloatIfExists(fd.AccountIFD.Amount.Value)
 			toAmt = strconv.FormatFloat(amt/fxRate, 'f', 2, 64)

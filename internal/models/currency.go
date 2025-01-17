@@ -1,36 +1,47 @@
 package models
 
+import (
+	"github.com/omareloui/tyche/internal/fxrate"
+)
+
 type CurrencyEnum uint8
 
 const (
 	CurrencyNil CurrencyEnum = iota
 	CurrencyEgp
 	CurrencyUsd
+	CurrencyAed
 )
 
 const DfltCurrency = CurrencyEgp
 
 func (cs CurrencyEnum) String() string {
-	return [...]string{"???", "EGP", "USD"}[cs]
+	return [...]string{
+		"???", "EGP",
+		"USD", "AED",
+	}[cs]
 }
 
 func (cs CurrencyEnum) Symbol() string {
-	return [...]string{"???", "EG£", "US$"}[cs]
+	return [...]string{
+		"???", "EG£",
+		"US$", "AED",
+	}[cs]
 }
 
 func (cs CurrencyEnum) IbanPrefix() string {
-	return [...]string{"??", "EG", "US"}[cs]
+	return [...]string{
+		"??", "EG",
+		"US", "AE",
+	}[cs]
 }
 
 type Currency struct {
-	ID        string `validate:"required"`
-	Enum      CurrencyEnum
-	EgpFxRate float64
+	ID   string `validate:"required"`
+	Enum CurrencyEnum
 }
 
-func GetFxRate(from, to Currency) float64 {
-	if from.ID == to.ID {
-		return 1
-	}
-	return to.EgpFxRate / from.EgpFxRate
+func (c *Currency) FxRate(to CurrencyEnum) float64 {
+	v, _ := fxrate.GetFxRate(c.Enum.String(), to.String())
+	return v
 }

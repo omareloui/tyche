@@ -248,9 +248,8 @@ func dbAccountRowToAccount[T db.GetAccountRow | db.GetAccountsRow](dbAcc *T) *mo
 		ActualAmount: _dbAcc.ActualAmount.(float64),
 		IsDefault:    _dbAcc.IsDefault,
 		Currency: models.Currency{
-			ID:        _dbAcc.CurrencyID,
-			Enum:      models.CurrencyEnum(_dbAcc.CurrencyEnum.Int64),
-			EgpFxRate: _dbAcc.EgpFxRate.Float64,
+			ID:   _dbAcc.CurrencyID,
+			Enum: models.CurrencyEnum(_dbAcc.CurrencyEnum.Int64),
 		},
 		Counterparty: cp,
 		Kind: models.AccountKind{
@@ -283,9 +282,8 @@ func dbBalancesToBalances(dbBs []db.GetBalancesRow) []models.Balance {
 		b[i] = models.Balance{
 			Amount: dbB.Balance,
 			Currency: models.Currency{
-				ID:        dbB.CurrencyID,
-				Enum:      models.CurrencyEnum(dbB.CurrencyEnum.Int64),
-				EgpFxRate: dbB.EgpFxRate.Float64,
+				ID:   dbB.CurrencyID,
+				Enum: models.CurrencyEnum(dbB.CurrencyEnum.Int64),
 			},
 		}
 	}

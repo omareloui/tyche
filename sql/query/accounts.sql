@@ -27,7 +27,6 @@ SELECT
     a.expiration_date,
     a.created_at,
     c.enum AS currency_enum,
-    c.egp_fx_rate,
     k.enum AS kind_enum,
     cp.name AS counterparty_name,
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
@@ -67,7 +66,6 @@ SELECT
     a.expiration_date,
     a.created_at,
     c.enum AS currency_enum,
-    c.egp_fx_rate,
     k.enum AS kind_enum,
     cp.name AS counterparty_name,
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
@@ -108,7 +106,6 @@ SELECT
     a.expiration_date,
     a.created_at,
     c.enum AS currency_enum,
-    c.egp_fx_rate,
     k.enum AS kind_enum,
     cp.name AS counterparty_name,
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
@@ -205,7 +202,6 @@ WHERE id = sqlc.arg(id);
 SELECT
     a.currency_id,
     c.enum AS currency_enum,
-    c.egp_fx_rate,
     TOTAL(a.amount) AS balance
 FROM accounts AS a
 LEFT JOIN currencies AS c ON a.currency_id = c.id
