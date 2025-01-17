@@ -57,4 +57,3 @@ regen-db:
 	@  make --no-print-directory sqlgen &&
 	@  make --no-print-directory seed
 	@fi
-

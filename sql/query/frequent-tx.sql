@@ -220,5 +220,5 @@ WHERE rowid IN (
     LEFT JOIN frequent_txs_transactions AS ftxt ON tx.id = ftxt.transaction_id
     WHERE
         ftxt.frequency_id = sqlc.arg(frequency_id)
-    AND tx.fulfilled_at IS NULL
+        AND tx.fulfilled_at IS NULL
 );
