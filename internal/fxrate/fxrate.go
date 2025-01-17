@@ -1,5 +1,8 @@
 package fxrate
 
+// NOTE: Check this
+// https://openexchangerates.org/
+
 import (
 	"encoding/json"
 	"fmt"

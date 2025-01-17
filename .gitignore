@@ -12,3 +12,6 @@ web/views
 
 # Tailwind
 web/public/styles/main.css
+
+bin
+vendor

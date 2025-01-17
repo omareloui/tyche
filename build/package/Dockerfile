@@ -1,15 +1,8 @@
-FROM golang:1.22-bullseye AS build
-
-# To bash the bash commands work
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+FROM golang:1.23-bullseye AS build
 
 WORKDIR /usr/src/
 
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash -  && \
-  apt-get -y --no-install-recommends install nodejs && \
-  npm i -g tailwindcss && \
-  \
-  go install github.com/a-h/templ/cmd/templ@latest && \
+RUN go install github.com/a-h/templ/cmd/templ@v0.2.771 && \
   go install github.com/pressly/goose/v3/cmd/goose@latest && \
   go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 
@@ -18,21 +11,39 @@ RUN useradd -u 1001 nonroot
 COPY go.mod go.sum ./
 RUN go mod download && go mod verify
 
-COPY ./sqlc.yaml ./sqlc.yaml
-COPY ./Makefile ./Makefile
-COPY ./web ./web
-COPY ./cmd ./cmd
-COPY ./sql ./sql
-COPY ./internal ./internal
+COPY vendor vendor
+COPY Makefile Makefile
+COPY web web
+COPY cmd cmd
+COPY sql sql
+COPY internal internal
+COPY sqlc.yaml sqlc.yaml
+COPY data data
 
-RUN mkdir ./data && \
-  make prebuild
-
-RUN go build -v \
+RUN rm -rf web/views/*_templ.go && \
+  make templ sqlgen migrate && \
+  go build \
   -ldflags="-linkmode external -extldflags -static" \
   -tags netgo \
   -o /usr/src/bin/tyche \
   ./cmd/tyche
+
+###
+FROM node:23-alpine AS css
+
+RUN npm i -g tailwindcss
+
+WORKDIR /app
+
+COPY Makefile Makefile
+COPY web/assets web/assets
+COPY internal/config/.tailwind.config.js tailwind.config.js
+
+RUN tailwindcss \
+  -c tailwind.config.js \
+  -i ./web/assets/styles/main.css \
+  -o ./web/public/styles/main.css \
+  --minify 
 
 ###
 FROM scratch
@@ -41,9 +52,9 @@ WORKDIR /app
 COPY --from=build /etc/passwd /etc/passwd
 
 COPY --from=build /usr/src/data ./data
-COPY --from=build /usr/src/web/public ./web/public
-
 COPY --from=build /usr/src/bin/tyche ./bin/tyche
+
+COPY --from=css /app/web/public ./web/public
 
 USER nonroot
 

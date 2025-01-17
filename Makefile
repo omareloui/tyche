@@ -8,6 +8,8 @@ run:
 build: prebuild
 	@go build -o ./tmp/main ./cmd/tyche
 
+release: prebuild
+	@go build -v -ldflags="-linkmode external -extldflags -static" -tags netgo -o ./bin/main ./cmd/tyche
 
 prebuild: templ css sqlgen migrate
 
@@ -57,3 +59,9 @@ regen-db:
 	@  make --no-print-directory sqlgen &&
 	@  make --no-print-directory seed
 	@fi
+
+docker-dev:
+	@docker compose --profile dev up --watch
+
+docker-prod:
+	@docker compose --profile prod up

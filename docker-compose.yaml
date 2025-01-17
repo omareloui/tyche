@@ -10,10 +10,11 @@ services:
     env_file:
       - path: ./.env
         required: true
-    networks:
-      - default
     profiles:
       - prod
+    volumes:
+      - ./data:/usr/src/data
+      - ./logs:/usr/src/logs
 
   tyche-dev:
     container_name: tyche-dev
@@ -26,10 +27,10 @@ services:
     env_file:
       - path: ./.env
         required: true
-    networks:
-      - default
     profiles:
       - dev
+    volumes:
+      - ./data:/usr/src/data
     develop:
       watch:
         - action: rebuild
@@ -40,6 +41,12 @@ services:
           target: /usr/src/go.mod
         - action: rebuild
           path: ./.env
+        - action: rebuild
+          path: ./sqlc.yaml
+          target: /usr/src/sqlc.yaml
+        - action: rebuild
+          path: ./sql
+          target: /usr/src/sql
         - action: sync
           path: ./cmd
           target: /usr/src/cmd
@@ -55,8 +62,3 @@ services:
         - action: sync
           path: ./web
           target: /usr/src/web
-
-networks:
-  default:
-volumes:
-  db:
