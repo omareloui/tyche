@@ -80,7 +80,7 @@ templ AmountInputsWithCurrency(fd *AmountFD, id string, curs []models.Currency) 
 			fd.Amount, "col-span-2")
 		@selectInput("Currency", "currency_id", "Select a Currency", id, currenciesToMap(curs), fd.CurrencyID,
 			false, templ.Attributes{
-				"hx-post":    fmt.Sprintf("/amount-inputs-with-currency/%s", id),
+				"hx-post":    fmt.Sprintf("/amount-inputs-with-currency/%s", getId(id)),
 				"hx-trigger": "change",
 				"hx-swap":    "outerHTML",
 				"hx-sync":    "closest form:abort",
@@ -94,7 +94,7 @@ templ AmountInputsWithAccount(fd *AccountIFD, id string, accs []models.Account) 
 			fd.Amount, "col-span-2")
 		@selectAccount("account_id", id, accs, fd.AccountID,
 			templ.Attributes{
-				"hx-post":    fmt.Sprintf("/amount-inputs-with-amounts/%s", id),
+				"hx-post":    fmt.Sprintf("/amount-inputs-with-amounts/%s", getId(id)),
 				"hx-trigger": "change",
 				"hx-swap":    "outerHTML",
 				"hx-sync":    "closest form:abort",
@@ -438,4 +438,12 @@ func getCurIbanPrefixByCurrency(curs []models.Currency, curId string) string {
 		return models.DfltCurrency.IbanPrefix()
 	}
 	return cur.Enum.IbanPrefix()
+}
+
+func getId(id string) string {
+	if id == "" {
+		return "0"
+	}
+	return id
+
 }
