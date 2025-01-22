@@ -82,6 +82,9 @@ func New(h *handler.Handler) Router {
 	mux.Handle("POST /tx-inputs/{id}", handle(h.TxInputs))
 	mux.Handle("POST /tx-inputs/switch/{id}", handle(h.TxInputsSwitch))
 
+	mux.Handle("GET /oauth", handle(h.OAuth))
+	mux.Handle("GET /oauth/cb", handle(h.OAuthCB))
+
 	static(mux, []string{"styles", "js"}, "./web/public")
 	mux.Handle("/", handle(h.NotFound))
 

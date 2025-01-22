@@ -15,11 +15,13 @@ require (
 	github.com/oklog/ulid v1.3.1
 	go.uber.org/zap v1.27.0
 	golang.org/x/net v0.28.0
+	golang.org/x/oauth2 v0.25.0
 	golang.org/x/text v0.17.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 
 require (
+	cloud.google.com/go/compute/metadata v0.6.0 // indirect
 	github.com/etgryphon/stringUp v0.0.0-20121020160746-31534ccd8cac // indirect
 	github.com/gabriel-vasile/mimetype v1.4.3 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
@@ -28,5 +30,5 @@ require (
 	github.com/stretchr/testify v1.9.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.26.0 // indirect
-	golang.org/x/sys v0.23.0 // indirect
+	golang.org/x/sys v0.29.0 // indirect
 )

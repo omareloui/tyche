@@ -1,11 +1,11 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"errors"
 
 	"github.com/joho/godotenv"
 	_ "github.com/mattn/go-sqlite3"
@@ -19,14 +19,16 @@ import (
 	"github.com/omareloui/tyche/internal/valid"
 )
 
-func main() {
+func init() {
 	err := godotenv.Load()
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			log.Fatal("Error loading .env file")
 		}
 	}
+}
 
+func main() {
 	port := config.GetApplicationPort()
 
 	db, q, err := dbconn.New(config.GetDataSource())
