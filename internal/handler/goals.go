@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 
@@ -25,12 +24,12 @@ func (h Handler) Goals(w http.ResponseWriter, r *http.Request) (templ.Component,
 	}
 	l.Debug("fetched balances")
 
-	its, err := h.repo.GetItems(r.Context())
+	curs, err := h.repo.GetCurrencies(r.Context())
 	if err != nil {
-		l.Error("fetching items", zap.Error(err))
+		l.Error("fetching currencies", zap.Error(err))
 		return nil, err
 	}
-	l.Debug("fetched items")
+	l.Debug("fetched balances")
 
 	gls, err := h.repo.GetGoals(r.Context())
 	if err != nil {
@@ -39,7 +38,7 @@ func (h Handler) Goals(w http.ResponseWriter, r *http.Request) (templ.Component,
 	}
 	l.Info("fetched goals", zap.Int("count", len(gls)))
 
-	return views.Goals(getClaims(r), b, its, h.mapGlToFD(dfltGoal(), &errs.ValidationError{}), gls), nil
+	return views.Goals(getClaims(r), b, h.mapGlToFD(dfltGoal(curs), &errs.ValidationError{}), gls, curs), nil
 }
 
 func (h Handler) Goal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -70,27 +69,25 @@ func (h Handler) CreateGoal(w http.ResponseWriter, r *http.Request) (templ.Compo
 	}
 	l.Debug("parsed form to goal", zap.Any("goal", gl))
 
-	its, err := h.repo.GetItems(r.Context())
-	if err != nil {
-		l.Error("fetching items", zap.Error(err))
-		return nil, err
-	}
-	l.Debug("fetched items")
-
-	h.populateItemsToGoal(its, gl)
 	gl.ID = idgen.New()
 	gl.CreatedAt = time.Now()
-	gl.EgpSubtotal = gl.CalculateEgpSubtotal()
 
 	if err = h.sani.SanitizeStruct(gl); err != nil {
 		l.Error("sanitizing goal", zap.Error(err))
 		return nil, err
 	}
 
+	curs, err := h.repo.GetCurrencies(r.Context())
+	if err != nil {
+		l.Error("fetching currencies", zap.Error(err))
+		return nil, err
+	}
+	l.Debug("fetched balances")
+
 	if valerr := h.valid.Validate(gl); valerr != nil {
 		l.Error("validating goal", zap.Any("errors", valerr.Errors))
 		fd := h.mapGlToFD(gl, valerr)
-		return views.CreateGoalForm(fd, its), nil
+		return views.CreateGoalForm(fd, curs), nil
 	}
 
 	if err = h.repo.CreateGoal(r.Context(), gl); err != nil {
@@ -105,7 +102,7 @@ func (h Handler) CreateGoal(w http.ResponseWriter, r *http.Request) (templ.Compo
 	}
 	l.Debug("rendered goal")
 
-	return views.CreateGoalForm(h.mapGlToFD(dfltGoal(), &errs.ValidationError{}), its), nil
+	return views.CreateGoalForm(h.mapGlToFD(dfltGoal(curs), &errs.ValidationError{}), curs), nil
 }
 
 func (h Handler) GetEditGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -116,6 +113,13 @@ func (h Handler) GetEditGoal(w http.ResponseWriter, r *http.Request) (templ.Comp
 
 	l := logger.FromCtx(r.Context())
 
+	curs, err := h.repo.GetCurrencies(r.Context())
+	if err != nil {
+		l.Error("fetching currencies", zap.Error(err))
+		return nil, err
+	}
+	l.Debug("fetched balances")
+
 	gl, err := h.repo.GetGoal(r.Context(), id)
 	if err != nil {
 		l.Error("fetching goal", zap.Error(err))
@@ -123,14 +127,7 @@ func (h Handler) GetEditGoal(w http.ResponseWriter, r *http.Request) (templ.Comp
 	}
 	l.Info("fetched goal")
 
-	its, err := h.repo.GetItems(r.Context())
-	if err != nil {
-		l.Error("fetching items", zap.Error(err))
-		return nil, err
-	}
-	l.Debug("fetched items")
-
-	return views.EditGoal(id, h.mapGlToFD(gl, &errs.ValidationError{}), its), nil
+	return views.EditGoal(id, h.mapGlToFD(gl, &errs.ValidationError{}), curs), nil
 }
 
 func (h Handler) GetGoalProgressForm(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -216,16 +213,7 @@ func (h Handler) EditGoal(w http.ResponseWriter, r *http.Request) (templ.Compone
 	}
 	l.Debug("parsed form to goal", zap.Any("goal", gl))
 
-	its, err := h.repo.GetItems(r.Context())
-	if err != nil {
-		l.Error("fetching items", zap.Error(err))
-		return nil, err
-	}
-	l.Debug("fetched items")
-
-	h.populateItemsToGoal(its, gl)
 	gl.ID = id
-	gl.EgpSubtotal = gl.CalculateEgpSubtotal()
 
 	if err = h.sani.SanitizeStruct(gl); err != nil {
 		l.Error("sanitizing goal", zap.Error(err))
@@ -233,9 +221,16 @@ func (h Handler) EditGoal(w http.ResponseWriter, r *http.Request) (templ.Compone
 	}
 
 	if valerr := h.valid.Validate(gl); valerr != nil {
+		curs, err := h.repo.GetCurrencies(r.Context())
+		if err != nil {
+			l.Error("fetching currencies", zap.Error(err))
+			return nil, err
+		}
+		l.Debug("fetched balances")
+
 		l.Error("validating goal", zap.Any("errors", valerr.Errors))
 		fd := h.mapGlToFD(gl, valerr)
-		return views.EditGoal(id, fd, its), nil
+		return views.EditGoal(id, fd, curs), nil
 	}
 
 	if err = h.repo.UpdateGoal(r.Context(), gl); err != nil {
@@ -286,20 +281,13 @@ func (h Handler) DeleteGoal(w http.ResponseWriter, r *http.Request) (templ.Compo
 	return nil, nil
 }
 
-func (h Handler) populateItemsToGoal(its []models.Item, gl *models.Goal) {
-	for i, glIt := range gl.Items {
-		gl.Items[i] = *slicesutils.Find(its, func(it models.Item) bool { return glIt.ID == it.ID })
-	}
-}
-
 func (h Handler) mapGlToFD(gl *models.Goal, err *errs.ValidationError) *views.GoalFD {
-	itsFd := make([]views.FDInput, len(gl.Items))
-	for i := range gl.Items {
-		itsFd[i] = views.FDInput{Value: gl.Items[i].ID, Error: err.Errors.MsgFor(fmt.Sprintf("Items[%d]", i))}
-	}
 	return &views.GoalFD{
-		Title: views.FDInput{Value: gl.Title, Error: err.Errors.MsgFor("Title")},
-		Items: itsFd,
+		Name: views.FDInput{Value: gl.Name, Error: err.Errors.MsgFor("Name")},
+		AmountFD: &views.AmountFD{
+			Amount:     views.FDInput{Value: formatFloatIfNonZero(gl.Price), Error: err.Errors.MsgFor("Price")},
+			CurrencyID: views.FDInput{Value: gl.Currency.ID, Error: err.Errors.MsgFor("Currency.ID")},
+		},
 	}
 }
 
@@ -307,19 +295,21 @@ func (h Handler) mapFDToGoal(r *http.Request) (*models.Goal, error) {
 	if err := r.ParseForm(); err != nil {
 		return nil, err
 	}
-	fdIts := r.Form["item_id"]
-	its := make([]models.Item, len(fdIts))
-	for i, fdIt := range fdIts {
-		its[i] = models.Item{ID: fdIt}
+
+	amt, err := parseFloatIfExists(r.FormValue("amount"))
+	if err != nil {
+		return nil, err
 	}
+
 	return &models.Goal{
-		Title: r.FormValue("title"),
-		Items: its,
+		Name:     r.FormValue("name"),
+		Price:    amt,
+		Currency: models.Currency{ID: r.FormValue("currency_id")},
 	}, nil
 }
 
-func dfltGoal() *models.Goal {
+func dfltGoal(curs []models.Currency) *models.Goal {
 	return &models.Goal{
-		Items: []models.Item{},
+		Currency: *slicesutils.Find(curs, func(cur models.Currency) bool { return cur.Enum == models.DfltCurrency }),
 	}
 }

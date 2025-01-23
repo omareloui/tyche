@@ -250,6 +250,11 @@ func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRo
 		Enum: models.CurrencyEnum(_dbTx.CurrencyEnum.Int64),
 	}
 
+	goalCurr := models.Currency{
+		ID:   _dbTx.GoalCurrencyID.String,
+		Enum: models.CurrencyEnum(_dbTx.GoalCurrency.Int64),
+	}
+
 	tx := models.Transaction{
 		ID: _dbTx.ID,
 		Account: models.Account{
@@ -261,7 +266,7 @@ func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRo
 		Description: _dbTx.Description.String,
 		ToAccount:   toAcc,
 		ToAmount:    _dbTx.ToAmount.Float64,
-		GoalTitle:   _dbTx.GoalTitle.String,
+		GoalName:    _dbTx.GoalName.String,
 		FulfilledAt: _dbTx.FulfilledAt.Time,
 		ScheduledTo: _dbTx.ScheduledTo,
 		CreatedAt:   _dbTx.CreatedAt,
@@ -274,7 +279,7 @@ func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRo
 		Counterparty: cp,
 	}
 
-	tx.GoalPercentage = tx.Percentage(_dbTx.GoalEgpSubtotal.Float64)
+	tx.GoalPercentage = tx.Percentage(_dbTx.GoalPrice.Float64 * goalCurr.FxRate(curr.Enum))
 
 	return &tx
 }

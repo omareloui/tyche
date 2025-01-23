@@ -18,7 +18,7 @@ type Transaction struct {
 	Counterparty   *Counterparty
 	ToAmount       float64
 	Description    string
-	GoalTitle      string
+	GoalName       string
 	GoalPercentage float64
 	ScheduledTo    time.Time
 	FulfilledAt    time.Time

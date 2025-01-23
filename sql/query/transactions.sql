@@ -51,8 +51,10 @@ SELECT
     k.increase_balance,
     cat.name AS category_name,
     cat.budget_in_egp AS category_budget_in_egp,
-    g.title AS goal_title,
-    g.egp_subtotal AS goal_egp_subtotal
+    g.name AS goal_name,
+    g.price AS goal_price,
+    g.currency_id AS goal_currency_id,
+    gc.enum AS goal_currency
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
@@ -63,6 +65,7 @@ LEFT JOIN transaction_kinds AS k ON t.kind_id = k.id
 LEFT JOIN goals_progresses AS gp ON t.id = gp.transaction_id
 LEFT JOIN categories AS cat ON t.category_id = cat.id
 LEFT JOIN goals AS g ON gp.goal_id = g.id
+LEFT JOIN currencies AS gc ON g.currency_id = gc.id
 ORDER BY t.scheduled_to DESC, t.created_at DESC;
 
 -- name: GetTransaction :one
@@ -90,8 +93,10 @@ SELECT
     k.increase_balance,
     cat.name AS category_name,
     cat.budget_in_egp AS category_budget_in_egp,
-    g.title AS goal_title,
-    g.egp_subtotal AS goal_egp_subtotal
+    g.name AS goal_name,
+    g.price AS goal_price,
+    g.currency_id AS goal_currency_id,
+    gc.enum AS goal_currency
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
@@ -102,6 +107,7 @@ LEFT JOIN transaction_kinds AS k ON t.kind_id = k.id
 LEFT JOIN goals_progresses AS gp ON t.id = gp.transaction_id
 LEFT JOIN categories AS cat ON t.category_id = cat.id
 LEFT JOIN goals AS g ON gp.goal_id = g.id
+LEFT JOIN currencies AS gc ON g.currency_id = gc.id
 WHERE t.id = sqlc.arg(id) LIMIT 1;
 
 -- name: UpdateTransaction :exec

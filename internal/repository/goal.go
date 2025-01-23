@@ -30,52 +30,20 @@ func (r *Repository) GetGoal(ctx context.Context, id string) (*models.Goal, erro
 }
 
 func (r *Repository) CreateGoal(ctx context.Context, gl *models.Goal) error {
-	return r.transact(func(qtx *db.Queries) error {
-		if err := qtx.CreateGoal(ctx, db.CreateGoalParams{
-			ID:          gl.ID,
-			Title:       gl.Title,
-			EgpSubtotal: gl.EgpSubtotal,
-		}); err != nil {
-			return err
-		}
-
-		for _, it := range gl.Items {
-			if err := qtx.CreateGoalItem(ctx, db.CreateGoalItemParams{
-				GoalID: gl.ID,
-				ItemID: it.ID,
-			}); err != nil {
-				return err
-			}
-		}
-
-		return nil
+	return r.q.CreateGoal(ctx, db.CreateGoalParams{
+		ID:         gl.ID,
+		Name:       gl.Name,
+		Price:      gl.Price,
+		CurrencyID: gl.Currency.ID,
 	})
 }
 
 func (r *Repository) UpdateGoal(ctx context.Context, gl *models.Goal) error {
-	return r.transact(func(qtx *db.Queries) error {
-		if err := qtx.UpdateGoal(ctx, db.UpdateGoalParams{
-			ID:          gl.ID,
-			Title:       gl.Title,
-			EgpSubtotal: gl.EgpSubtotal,
-		}); err != nil {
-			return err
-		}
-
-		if err := qtx.DeleteGoalItems(ctx, gl.ID); err != nil {
-			return err
-		}
-
-		for _, it := range gl.Items {
-			if err := qtx.CreateGoalItem(ctx, db.CreateGoalItemParams{
-				GoalID: gl.ID,
-				ItemID: it.ID,
-			}); err != nil {
-				return err
-			}
-		}
-
-		return nil
+	return r.q.UpdateGoal(ctx, db.UpdateGoalParams{
+		ID:         gl.ID,
+		Name:       gl.Name,
+		Price:      gl.Price,
+		CurrencyID: gl.Currency.ID,
 	})
 }
 
@@ -119,31 +87,14 @@ func (r *Repository) DeleteGoal(ctx context.Context, id string) error {
 	return r.q.DeleteGoal(ctx, id)
 }
 
-func dbGoalRowToGoal(dbGl []db.GetGoalRow) *models.Goal {
-	items := []models.Item{}
-
-	for _, gl := range dbGl {
-		if gl.ItemID.Valid {
-			items = append(items, models.Item{
-				ID:          gl.ItemID.String,
-				Name:        gl.ItemName.String,
-				Price:       gl.ItemPrice.Float64,
-				PurchasedAt: gl.ItemPurchasedAt.Time,
-				Currency: models.Currency{
-					ID:   gl.ItemCurrencyID.String,
-					Enum: models.CurrencyEnum(gl.ItemCurrency.Int64),
-				},
-			})
-		}
-	}
-
+func dbGoalRowToGoal(dbGl db.GetGoalRow) *models.Goal {
 	return &models.Goal{
-		ID:          dbGl[0].ID,
-		Title:       dbGl[0].Title,
-		EgpSubtotal: dbGl[0].EgpSubtotal,
-		FulfilledAt: dbGl[0].FulfilledAt.Time,
-		CreatedAt:   dbGl[0].CreatedAt,
-		Items:       items,
+		ID:          dbGl.ID,
+		Name:        dbGl.Name,
+		Price:       dbGl.Price,
+		Currency:    models.Currency{ID: dbGl.CurrencyID, Enum: models.CurrencyEnum(dbGl.Currency.Int64)},
+		FulfilledAt: dbGl.FulfilledAt.Time,
+		CreatedAt:   dbGl.CreatedAt,
 	}
 }
 
@@ -155,29 +106,14 @@ func dbGoalRowsToGoals(dbGls []db.GetGoalsRow) []models.Goal {
 		if glIdx == -1 {
 			gls = append(gls, models.Goal{
 				ID:           dbGl.ID,
-				Title:        dbGl.Title,
-				EgpSubtotal:  dbGl.EgpSubtotal,
+				Name:         dbGl.Name,
+				Price:        dbGl.Price,
+				Currency:     models.Currency{ID: dbGl.CurrencyID, Enum: models.CurrencyEnum(dbGl.Currency.Int64)},
 				FulfilledAt:  dbGl.FulfilledAt.Time,
 				CreatedAt:    dbGl.CreatedAt,
-				Items:        []models.Item{},
 				Transactions: []models.Transaction{},
 			})
 			glIdx = len(gls) - 1
-		}
-
-		if dbGl.ItemID.Valid {
-			if idx := slices.IndexFunc(gls[glIdx].Items, func(it models.Item) bool { return it.ID == dbGl.ItemID.String }); idx == -1 {
-				gls[glIdx].Items = append(gls[glIdx].Items, models.Item{
-					ID:          dbGl.ItemID.String,
-					Name:        dbGl.ItemName.String,
-					Price:       dbGl.ItemPrice.Float64,
-					PurchasedAt: dbGl.ItemPurchasedAt.Time,
-					Currency: models.Currency{
-						ID:   dbGl.ItemCurrencyID.String,
-						Enum: models.CurrencyEnum(dbGl.ItemCurrency.Int64),
-					},
-				})
-			}
 		}
 
 		if dbGl.TransactionID.Valid {

@@ -3,68 +3,47 @@ package views
 import (
 	"fmt"
 	"time"
-	"slices"
 
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/jwt"
 )
 
 type GoalFD struct {
-	Title FDInput
-	Items []FDInput
+	Name     FDInput
+	AmountFD *AmountFD
 }
 
 templ Goals(
 	claims *jwt.AccessClaims,
 	balances []models.Balance,
-	its []models.Item,
-	fd *GoalFD,
-	goals []models.Goal) {
+	fd *GoalFD, goals []models.Goal,
+	curs []models.Currency) {
 	@baseLayout(claims, "Goals", balances, nil) {
 		@container() {
 			@mainHeader("Goals")
-			@CreateGoalForm(fd, its)
+			@CreateGoalForm(fd, curs)
 			@goalsList(goals)
 		}
 	}
 }
 
-templ CreateGoalForm(fd *GoalFD, its []models.Item) {
+templ CreateGoalForm(fd *GoalFD, curs []models.Currency) {
 	@creationForm("Create Goal", "/goals", "Create Goal") {
-		@goalFormBody("", fd, its)
+		@goalFormBody("", fd, curs)
 	}
 }
 
-templ EditGoal(id string, fd *GoalFD, its []models.Item) {
+templ EditGoal(id string, fd *GoalFD, curs []models.Currency) {
 	@form("put", fmt.Sprintf("/goals/%s", id), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { id }</p>
-		@goalFormBody(id, fd, its)
+		@goalFormBody(id, fd, curs)
 		@editFormButtons(fmt.Sprintf("/goals/%s", id))
 	}
 }
 
-templ goalFormBody(id string, fd *GoalFD, its []models.Item) {
-	@input("Title", "text", "title", "Enter goal title", id, fd.Title)
-	if len(its) > 0 {
-		<h3 class="font-bold text-xl mt-2">Items</h3>
-	}
-	for _, it := range its {
-		<label class="cursor-pointer">
-			<input
-				type="checkbox"
-				name="item_id"
-				value={ it.ID }
-				class="mr-2"
-				if slices.IndexFunc(fd.Items, func(itFd FDInput) bool {return itFd.Value == it.ID}) > -1 {
-					checked="true"
-				}
-			/>
-			{ it.Name } { it.ViewPrice() }
-			if it.Currency.Enum != models.CurrencyEgp {
-				<i class="text-gray-400">[{ it.ViewEgpPrice() }]</i>
-			}
-		</label>
-	}
+templ goalFormBody(id string, fd *GoalFD, curs []models.Currency) {
+	@input("Name", "text", "name", "Enter goal title", id, fd.Name)
+	@AmountInputsWithCurrency(fd.AmountFD, id, curs)
 }
 
 templ goalsList(goals []models.Goal) {
@@ -78,22 +57,9 @@ templ goalsList(goals []models.Goal) {
 templ Goal(gl *models.Goal) {
 	<div hx-target="this" hx-swap="outerHTML" class="entry-container">
 		<p>ID: { gl.ID }</p>
-		<p>Name: { gl.Title }</p>
-		<p>EGP Subtotal: { gl.ViewAmount() } </p>
+		<p>Name: { gl.Name }</p>
+		<p>Price: { gl.ViewAmount() } </p>
 		<p>Remaining: { gl.ViewRemaining() } </p>
-		<div>
-			if len(gl.Items) > 0 {
-				<h4 class="font-bold text-xl">Items</h4>
-			}
-			for _, it := range gl.Items {
-				<p>
-					<strong>{ it.Name }</strong>
-					<span>
-						@itemPrice(&it)
-					</span>
-				</p>
-			}
-		</div>
 		if len(gl.Transactions) > 0 {
 			<h4 class="font-bold text-xl">Progress</h4>
 		}
@@ -156,7 +122,7 @@ templ Goal(gl *models.Goal) {
 
 templ GoalProgressForm(gl *models.Goal, fd *TransactionFD, accounts []models.Account, kinds []models.TransactionKind) {
 	@form("post", fmt.Sprintf("/goals/%s/progress", gl.ID), templ.Attributes{"hx-target": "this"}) {
-		<h2 class="text-xl font-bold">{ gl.Title } <i class="text-gray-400 font-regular">({ gl.ViewAmount() })</i></h2>
+		<h2 class="text-xl font-bold">{ gl.Name } <i class="text-gray-400 font-regular">({ gl.ViewAmount() })</i></h2>
 		@AmountInputsWithAccount(&fd.AccountIFD, gl.ID, accounts)
 		@dateInput("Date", "scheduled_to", gl.ID, fd.ScheduledTo)
 		@editFormButtons(fmt.Sprintf("/goals/%s", gl.ID))

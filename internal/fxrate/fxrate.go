@@ -55,6 +55,10 @@ func GetFxRate(from, to string) (float64, error) {
 	from = strings.ToLower(from)
 	to = strings.ToLower(to)
 
+	if from == to {
+		return 1, nil
+	}
+
 	r, ok := rates[from]
 	if !ok {
 		if err := fetchFXRates(from); err != nil {

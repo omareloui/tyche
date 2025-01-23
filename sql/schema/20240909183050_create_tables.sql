@@ -81,31 +81,18 @@ CREATE TABLE frequent_txs_transactions (
 );
 CREATE TABLE goals (
     id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
-    title VARCHAR NOT NULL,
-    egp_subtotal FLOAT NOT NULL,
+    name VARCHAR NOT NULL,
+    price FLOAT DEFAULT 0 NOT NULL,
+    currency_id VARCHAR NOT NULL,
     fulfilled_at TIMESTAMP,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE TABLE goals_items (
-    goal_id VARCHAR NOT NULL,
-    item_id VARCHAR NOT NULL,
-    FOREIGN KEY (goal_id) REFERENCES goals (id) ON DELETE CASCADE,
-    FOREIGN KEY (item_id) REFERENCES items (id) ON DELETE CASCADE
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE
 );
 CREATE TABLE goals_progresses (
     goal_id VARCHAR NOT NULL,
     transaction_id VARCHAR NOT NULL,
     FOREIGN KEY (goal_id) REFERENCES goals (id) ON DELETE CASCADE,
     FOREIGN KEY (transaction_id) REFERENCES transactions (id) ON DELETE CASCADE
-);
-CREATE TABLE items (
-    id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
-    name VARCHAR NOT NULL,
-    price FLOAT DEFAULT 0 NOT NULL,
-    currency_id VARCHAR NOT NULL,
-    purchased_at DATE,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE
 );
 CREATE TABLE categories (
     id VARCHAR UNIQUE NOT NULL PRIMARY KEY,

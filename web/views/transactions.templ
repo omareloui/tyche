@@ -122,8 +122,8 @@ templ Transaction(tx *models.Transaction) {
 		if tx.Description != "" {
 			<p>Description: { tx.Description }</p>
 		}
-		if tx.GoalTitle != "" {
-			<p>Goal: { tx.GoalTitle }</p>
+		if tx.GoalName != "" {
+			<p>Goal: { tx.GoalName }</p>
 			<p>Goal Percentage: { strconv.FormatFloat(tx.GoalPercentage * 100, 'f', 2, 64) }%</p>
 		}
 		<p>Scheduled To: { tx.ScheduledTo.Format(time.DateOnly) }</p>

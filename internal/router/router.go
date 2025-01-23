@@ -62,13 +62,6 @@ func New(h *handler.Handler) Router {
 	mux.Handle("PUT /goals/{id}/unfulfill", handle(h.UnfulfillGoal))
 	mux.Handle("DELETE /goals/{id}", handle(h.DeleteGoal))
 
-	mux.Handle("GET /items", handle(h.Items))
-	mux.Handle("POST /items", handle(h.CreateItem))
-	mux.Handle("GET /items/{id}", handle(h.Item))
-	mux.Handle("GET /items/{id}/edit", handle(h.GetEditItem))
-	mux.Handle("PUT /items/{id}", handle(h.EditItem))
-	mux.Handle("DELETE /items/{id}", handle(h.DeleteItem))
-
 	mux.Handle("GET /counterparties", handle(h.Counterparties))
 	mux.Handle("POST /counterparties", handle(h.CreateCounterparty))
 	mux.Handle("GET /counterparties/{id}", handle(h.Counterparty))
