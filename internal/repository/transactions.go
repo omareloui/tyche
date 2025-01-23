@@ -251,7 +251,6 @@ func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRo
 	}
 
 	goalCurr := models.Currency{
-		ID:   _dbTx.GoalCurrencyID.String,
 		Enum: models.CurrencyEnum(_dbTx.GoalCurrency.Int64),
 	}
 
@@ -279,7 +278,7 @@ func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRo
 		Counterparty: cp,
 	}
 
-	tx.GoalPercentage = tx.Percentage(_dbTx.GoalPrice.Float64 * goalCurr.FxRate(curr.Enum))
+	tx.GoalPercentage = tx.Percentage(_dbTx.GoalPrice.Float64, goalCurr.Enum)
 
 	return &tx
 }

@@ -89,6 +89,6 @@ func (t *Transaction) SanitizeAndValidate(sani *sanitizer.Sanitizer, valid *vali
 	return nil
 }
 
-func (t *Transaction) Percentage(from float64) float64 {
-	return t.Amount * t.Account.Currency.FxRate(CurrencyEgp) / from
+func (t *Transaction) Percentage(of float64, ofCur CurrencyEnum) float64 {
+	return t.Amount * t.Account.Currency.FxRate(ofCur) / of
 }
