@@ -6,6 +6,7 @@ templ HomePage(balances []models.Balance) {
 	@baseLayout("Homepage", balances) {
 		@container() {
 			@mainHeader("Tyche: Fortune Builder")
+			@link("/oauth", "Signing with Google")
 		}
 	}
 }

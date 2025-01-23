@@ -7,6 +7,7 @@ import (
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/config"
+	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/logger"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
@@ -14,12 +15,11 @@ import (
 )
 
 var (
-	oauthConf *oauth2.Config
-	// TODO: In production, generate this randomly for each request
-	oauthStateString = "random-string"
+	oauthConf         *oauth2.Config
+	oauthStateStrings = make(map[string]struct{})
 )
 
-type GoogleUser struct {
+type User struct {
 	ID            string `json:"id"`
 	Email         string `json:"email"`
 	VerifiedEmail bool   `json:"verified_email"`
@@ -30,7 +30,9 @@ type GoogleUser struct {
 }
 
 func (h *Handler) OAuth(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	url := getOAuth2Conf().AuthCodeURL(oauthStateString)
+	csrfId := idgen.New()
+	oauthStateStrings[csrfId] = struct{}{}
+	url := getOAuth2Conf().AuthCodeURL(csrfId)
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 	return nil, nil
 }
@@ -40,11 +42,12 @@ func (h *Handler) OAuthCB(w http.ResponseWriter, r *http.Request) (templ.Compone
 	conf := getOAuth2Conf()
 
 	state := r.FormValue("state")
-	if state != oauthStateString {
-		err := fmt.Errorf("invalid oauth state, expected '%s', got '%s'", oauthStateString, state)
+	if _, ok := oauthStateStrings[state]; !ok {
+		err := fmt.Errorf("invalid oauth state, got '%s'", state)
 		l.Error("preventing CSRF", zap.Error(err))
 		return nil, err
 	}
+	delete(oauthStateStrings, state)
 
 	code := r.FormValue("code")
 	token, err := conf.Exchange(r.Context(), code)
@@ -61,8 +64,8 @@ func (h *Handler) OAuthCB(w http.ResponseWriter, r *http.Request) (templ.Compone
 	}
 	defer resp.Body.Close()
 
-	var googleUser GoogleUser
-	if err := json.NewDecoder(resp.Body).Decode(&googleUser); err != nil {
+	var user User
+	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
 		l.Error("parsing json user", zap.Error(err))
 		return nil, err
 	}
@@ -74,7 +77,7 @@ func (h *Handler) OAuthCB(w http.ResponseWriter, r *http.Request) (templ.Compone
 	// 3. Generate JWT token
 	// 4. Redirect to frontend with token/session
 
-	fmt.Printf("User: %+v\n", googleUser)
+	fmt.Printf("User: %+v\n", user)
 
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 
