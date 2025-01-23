@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/jwt"
 )
 
 type AccountFD struct {
@@ -27,11 +28,12 @@ type AccountPartialFD struct {
 }
 
 templ Accounts(
+	claims *jwt.AccessClaims,
 	balances []models.Balance,
 	fd *AccountFD, aknds []models.AccountKind,
 	curs []models.Currency, accounts []models.Account,
 	cps []models.Counterparty) {
-	@baseLayout("Accounts", balances) {
+	@baseLayout(claims, "Accounts", balances, nil) {
 		@container() {
 			@mainHeader("Accounts")
 			@CreateAccountForm(fd, aknds, curs, cps)

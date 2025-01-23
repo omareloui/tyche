@@ -45,7 +45,7 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 	}
 	l.Debug("fetched balances")
 
-	return views.Transactions(balances, txs, fd, accs, knds, cats, cps), nil
+	return views.Transactions(getClaims(r), balances, txs, fd, accs, knds, cats, cps), nil
 }
 
 func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

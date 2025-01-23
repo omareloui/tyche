@@ -4,14 +4,9 @@ import "github.com/omareloui/tyche/internal/models"
 import "github.com/omareloui/tyche/internal/jwt"
 
 templ HomePage(claims *jwt.AccessClaims, balances []models.Balance) {
-	@baseLayout("Homepage", balances) {
+	@baseLayout(claims, "Homepage", balances, nil) {
 		@container() {
 			@mainHeader("Tyche: Fortune Builder")
-			if claims == nil {
-				@link("/oauth", "Sign In with Google")
-			} else {
-				@link("/signout", "Signout")
-			}
 		}
 	}
 }

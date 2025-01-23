@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/jwt"
 )
 
 type CategoryFD struct {
@@ -13,11 +14,12 @@ type CategoryFD struct {
 }
 
 templ Categories(
+	claims *jwt.AccessClaims,
 	balances []models.Balance,
 	fd *CategoryFD,
 	knds []models.TransactionKind,
 	categories []models.Category) {
-	@baseLayout("Categories", balances) {
+	@baseLayout(claims, "Categories", balances, nil) {
 		@container() {
 			@mainHeader("Categories")
 			@CreateCategoryForm(fd, knds)

@@ -37,7 +37,7 @@ func (h *Handler) Accounts(w http.ResponseWriter, r *http.Request) (templ.Compon
 	l.Info("fetched accounts", zap.Int("accounts_length", len(accs)))
 
 	fd := h.mapAccToFD(defaultAccount(curs, knds), &errs.ValidationError{}, knds)
-	return views.Accounts(balances, fd, knds, curs, accs, cps), nil
+	return views.Accounts(getClaims(r), balances, fd, knds, curs, accs, cps), nil
 }
 
 func (h *Handler) Account(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

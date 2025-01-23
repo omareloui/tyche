@@ -50,7 +50,7 @@ func (h Handler) FrequentTxs(w http.ResponseWriter, r *http.Request) (templ.Comp
 	}
 	l.Info("fetched frequent transactions")
 
-	return views.FrequentTxs(balances, ftxs), nil
+	return views.FrequentTxs(getClaims(r), balances, ftxs), nil
 }
 
 func (h Handler) FrequentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

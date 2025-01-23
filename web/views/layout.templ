@@ -1,8 +1,16 @@
 package views
 
 import "github.com/omareloui/tyche/internal/models"
+import "github.com/omareloui/tyche/internal/jwt"
 
-templ baseLayout(pageTitle string, balances []models.Balance) {
+type layoutOpts struct {
+	includeDatePicker     bool
+	includeAlpine         bool
+	includeAlpineMask     bool
+	includeAlpineCollapse bool
+}
+
+templ baseLayout(claims *jwt.AccessClaims, pageTitle string, balances []models.Balance, opts *layoutOpts) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
@@ -13,16 +21,24 @@ templ baseLayout(pageTitle string, balances []models.Balance) {
 			<link rel="icon" type="image/x-svg" href="/images/favicon.svg"/>
 			<link rel="stylesheet" href="/styles/main.css"/>
 			<script src="/js/vendor/htmx.lib.js"></script>
-			<script src="/js/vendor/litepicker.lib.js"></script>
-			<script defer src="/js/datepickers.js"></script>
+			if opts != nil && opts.includeDatePicker {
+				<script src="/js/vendor/litepicker.lib.js"></script>
+				<script defer src="/js/datepickers.js"></script>
+			}
 			<script defer src="/js/main.js"></script>
-			<script defer src="/js/vendor/alpine.mask.lib.js"></script>
-			<script defer src="/js/vendor/alpine.collapse.lib.js"></script>
-			<script defer src="/js/vendor/alpine.lib.js"></script>
+			if opts != nil && opts.includeAlpineMask {
+				<script defer src="/js/vendor/alpine.mask.lib.js"></script>
+			}
+			if opts != nil && opts.includeAlpineCollapse {
+				<script defer src="/js/vendor/alpine.collapse.lib.js"></script>
+			}
+			if opts != nil && opts.includeAlpine {
+				<script defer src="/js/vendor/alpine.lib.js"></script>
+			}
 		</head>
 		<body>
 			@container() {
-				@navbar(balances)
+				@navbar(claims, balances)
 			}
 			<div class="pb-5">
 				{ children... }
@@ -41,20 +57,30 @@ templ baseLayout(pageTitle string, balances []models.Balance) {
 	</html>
 }
 
-templ navbar(balances []models.Balance) {
+templ navbar(claims *jwt.AccessClaims, balances []models.Balance) {
 	<nav class="flex gap-6 items-start my-4">
 		<div hx-boost="true" class="flex gap-6 justify-between w-full">
 			<div class="flex gap-4 items-start">
 				@navlink("/")
-				@navlink("/accounts")
-				@navlink("/categories")
-				@navlink("/transactions")
-				@navlink("/frequent-tx")
-				@navlink("/items")
-				@navlink("/goals")
-				@navlink("/counterparties")
+				if claims != nil {
+					@navlink("/accounts")
+					@navlink("/categories")
+					@navlink("/transactions")
+					@navlink("/frequent-tx")
+					@navlink("/items")
+					@navlink("/goals")
+					@navlink("/counterparties")
+				}
 			</div>
-			@Balance(balances)
+			<div class="flex gap-4 items-end">
+				if claims != nil {
+					<p>Hello, { claims.GivenName }.</p>
+					@Balance(balances)
+					@navlink("/signout")
+				} else {
+					@navlink("/oauth", templ.Attributes{"hx-disable": true})
+				}
+			</div>
 		</div>
 	</nav>
 }

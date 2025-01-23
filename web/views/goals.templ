@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/jwt"
 )
 
 type GoalFD struct {
@@ -14,11 +15,12 @@ type GoalFD struct {
 }
 
 templ Goals(
+	claims *jwt.AccessClaims,
 	balances []models.Balance,
 	its []models.Item,
 	fd *GoalFD,
 	goals []models.Goal) {
-	@baseLayout("Goals", balances) {
+	@baseLayout(claims, "Goals", balances, nil) {
 		@container() {
 			@mainHeader("Goals")
 			@CreateGoalForm(fd, its)

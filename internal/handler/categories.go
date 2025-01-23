@@ -37,7 +37,7 @@ func (h Handler) Categories(w http.ResponseWriter, r *http.Request) (templ.Compo
 	}
 	knds = getAllowedKindsForCategories(knds)
 
-	return views.Categories(b, h.mapCategoryToFD(dfltCategory(knds), &errs.ValidationError{}), knds, cats), nil
+	return views.Categories(getClaims(r), b, h.mapCategoryToFD(dfltCategory(knds), &errs.ValidationError{}), knds, cats), nil
 }
 
 func (h Handler) Category(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

@@ -39,7 +39,7 @@ func (h Handler) Goals(w http.ResponseWriter, r *http.Request) (templ.Component,
 	}
 	l.Info("fetched goals", zap.Int("count", len(gls)))
 
-	return views.Goals(b, its, h.mapGlToFD(dfltGoal(), &errs.ValidationError{}), gls), nil
+	return views.Goals(getClaims(r), b, its, h.mapGlToFD(dfltGoal(), &errs.ValidationError{}), gls), nil
 }
 
 func (h Handler) Goal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

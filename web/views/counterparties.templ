@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/jwt"
 )
 
 type CounterpartyFD struct {
@@ -12,10 +13,11 @@ type CounterpartyFD struct {
 }
 
 templ Counterparties(
+	claims *jwt.AccessClaims,
 	balances []models.Balance,
 	fd *CounterpartyFD,
 	counterparties []models.Counterparty) {
-	@baseLayout("Counterparties", balances) {
+	@baseLayout(claims, "Counterparties", balances, nil) {
 		@container() {
 			@mainHeader("Counterparties")
 			@CreateCounterpartyForm(fd)

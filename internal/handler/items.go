@@ -41,7 +41,7 @@ func (h Handler) Items(w http.ResponseWriter, r *http.Request) (templ.Component,
 	}
 	l.Debug("fetched items")
 
-	return views.Items(b, fd, its, cur), nil
+	return views.Items(getClaims(r), b, fd, its, cur), nil
 }
 
 func (h Handler) Item(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

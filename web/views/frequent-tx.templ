@@ -5,6 +5,7 @@ import (
 	"time"
 	"strconv"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/jwt"
 )
 
 type FrequencyFD struct {
@@ -20,8 +21,8 @@ type FrequentTxFD struct {
 	Description FDInput
 }
 
-templ FrequentTxs(balances []models.Balance, ftxs []models.FrequentTx) {
-	@baseLayout("Frequent Transactions", balances) {
+templ FrequentTxs(claims *jwt.AccessClaims, balances []models.Balance, ftxs []models.FrequentTx) {
+	@baseLayout(claims, "Frequent Transactions", balances, nil) {
 		@container() {
 			@mainHeader("Frequent Transactions")
 			@ftxsList(ftxs)

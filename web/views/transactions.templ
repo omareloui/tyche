@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/slicesutils"
+	"github.com/omareloui/tyche/internal/jwt"
 )
 
 type TransactionFD struct {
@@ -29,13 +30,14 @@ type AccountIFD struct {
 }
 
 templ Transactions(
+	claims *jwt.AccessClaims,
 	balances []models.Balance,
 	transactions []models.Transaction,
 	fd *TransactionFD, accounts []models.Account,
 	knds []models.TransactionKind,
 	cats []models.Category,
 	cps []models.Counterparty) {
-	@baseLayout("Transactions", balances) {
+	@baseLayout(claims, "Transactions", balances, nil) {
 		@container() {
 			@mainHeader("Transactions")
 			@CreateTransactionForm(fd, accounts, knds, cats, cps)

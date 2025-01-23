@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/jwt"
 )
 
 type ItemFD struct {
@@ -12,11 +13,12 @@ type ItemFD struct {
 }
 
 templ Items(
+	claims *jwt.AccessClaims,
 	balances []models.Balance,
 	fd *ItemFD,
 	items []models.Item,
 	curs []models.Currency) {
-	@baseLayout("Items", balances) {
+	@baseLayout(claims, "Items", balances, nil) {
 		@container() {
 			@mainHeader("Items")
 			@CreateItemForm(fd, curs)
