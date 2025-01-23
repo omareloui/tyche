@@ -84,6 +84,7 @@ func New(h *handler.Handler) Router {
 
 	mux.Handle("GET /oauth", handle(h.OAuth))
 	mux.Handle("GET /oauth/cb", handle(h.OAuthCB))
+	mux.Handle("GET /signout", handle(h.Signout))
 
 	static(mux, []string{"styles", "js"}, "./web/public")
 	mux.Handle("/", handle(h.NotFound))

@@ -97,9 +97,7 @@ func (h *Handler) OAuthCB(w http.ResponseWriter, r *http.Request) (templ.Compone
 func (h *Handler) Signout(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	unsetCookie(w, refreshTokenCookieName)
 	unsetCookie(w, accessTokenCookieName)
-	if err := hxRespondWithRedirect(w, "/"); err != nil {
-		return nil, err
-	}
+	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 	return nil, nil
 }
 
