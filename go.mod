@@ -10,6 +10,7 @@ require (
 require (
 	github.com/almerlucke/go-iban v0.0.0-20220324081643-09bcab81b879
 	github.com/go-playground/validator/v10 v10.22.1
+	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/joho/godotenv v1.5.1
 	github.com/leebenson/conform v1.2.2
 	github.com/oklog/ulid v1.3.1

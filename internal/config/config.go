@@ -18,6 +18,10 @@ func GetLogLevel() int {
 	return getEnvironmentIntWithDefault("LOG_LEVEL", 0)
 }
 
+func GetJWTSecret() []byte {
+	return []byte(getEnvironmentValue("JWT_SECRET"))
+}
+
 func GetOAuthCBEndpoint() string {
 	domain := getEnvironmentValue("OAUTH_CB_ORIGIN")
 	return fmt.Sprintf("%s/oauth/cb", domain)

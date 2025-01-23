@@ -2,32 +2,31 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/config"
 	"github.com/omareloui/tyche/internal/idgen"
+	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/logger"
+	"github.com/omareloui/tyche/internal/models"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+)
+
+const (
+	accessTokenCookieName  = "access_token"
+	refreshTokenCookieName = "refresh_token"
 )
 
 var (
 	oauthConf         *oauth2.Config
 	oauthStateStrings = make(map[string]struct{})
 )
-
-type User struct {
-	ID            string `json:"id"`
-	Email         string `json:"email"`
-	VerifiedEmail bool   `json:"verified_email"`
-	Name          string `json:"name"`
-	GivenName     string `json:"given_name"`
-	FamilyName    string `json:"family_name"`
-	Picture       string `json:"picture"`
-}
 
 func (h *Handler) OAuth(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	csrfId := idgen.New()
@@ -64,23 +63,43 @@ func (h *Handler) OAuthCB(w http.ResponseWriter, r *http.Request) (templ.Compone
 	}
 	defer resp.Body.Close()
 
-	var user User
-	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
+	var usr *models.User
+
+	if err := json.NewDecoder(resp.Body).Decode(&usr); err != nil {
 		l.Error("parsing json user", zap.Error(err))
 		return nil, err
 	}
 
-	// At this point, you have the user's information in the googleUser struct
-	// You can:
-	// 1. Create a session
-	// 2. Create or update user in your database
-	// 3. Generate JWT token
-	// 4. Redirect to frontend with token/session
+	myGoogleID := "110711621731459269840"
+	if usr.OAuthID != myGoogleID {
+		err := errors.New("the site isn't available to the public yet")
+		l.Error("invalid user", zap.Error(err), zap.Any("user", usr))
+		return nil, err
+	}
 
-	fmt.Printf("User: %+v\n", user)
+	// TODO: safe the user in my db and connect it with his/her own db
+
+	access, refresh, err := generateJWTCookies(usr)
+	if err != nil {
+		l.Error("error generating jwt cookies", zap.Error(err), zap.Any("user", usr))
+		return nil, err
+	}
+
+	http.SetCookie(w, access)
+	http.SetCookie(w, refresh)
+
+	l.Info("new user singed", zap.Any("user", usr))
 
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+	return nil, nil
+}
 
+func (h *Handler) Signout(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	unsetCookie(w, refreshTokenCookieName)
+	unsetCookie(w, accessTokenCookieName)
+	if err := hxRespondWithRedirect(w, "/"); err != nil {
+		return nil, err
+	}
 	return nil, nil
 }
 
@@ -99,4 +118,38 @@ func getOAuth2Conf() *oauth2.Config {
 	}
 
 	return oauthConf
+}
+
+func generateJWTCookies(usr *models.User) (access *http.Cookie, refresh *http.Cookie, err error) {
+	var tokens *jwt.TokenPair
+
+	tokens, err = jwt.NewPair(usr)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	access = newCookie(refreshTokenCookieName, tokens.Refresh.Encoded, tokens.Refresh.Expiration)
+	refresh = newCookie(accessTokenCookieName, tokens.Access.Encoded, tokens.Access.Expiration)
+
+	return access, refresh, nil
+}
+
+func newCookie(name, value string, exp time.Time) *http.Cookie {
+	return &http.Cookie{
+		Name:     name,
+		Value:    value,
+		HttpOnly: true,
+		Expires:  exp,
+		Path:     "/",
+	}
+}
+
+func unsetCookie(w http.ResponseWriter, name string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     name,
+		Value:    "",
+		HttpOnly: true,
+		Expires:  time.Unix(0, 0),
+		Path:     "/",
+	})
 }
