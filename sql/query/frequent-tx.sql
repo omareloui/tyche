@@ -11,6 +11,7 @@ INSERT INTO frequent_txs (
     description,
     to_account_id,
     to_amount,
+    goal_id,
     starts_at,
     stops_at,
     last_transaction_scheduled_to
@@ -27,6 +28,7 @@ VALUES (
     sqlc.arg(description),
     sqlc.arg(to_account_id),
     IIF(sqlc.narg(to_amount) > 0.0, ROUND(sqlc.narg(to_amount), 2), NULL),
+    sqlc.arg(goal_id),
     sqlc.arg(starts_at),
     sqlc.arg(stops_at),
     sqlc.arg(last_transaction_scheduled_to)
@@ -89,7 +91,12 @@ SELECT
     tk.enum AS transaction_kind_enum,
     tk.increase_balance AS transaction_increase_balance,
     tcat.name AS transaction_category_name,
-    tcat.budget_in_egp AS transaction_category_budget_in_egp
+    tcat.budget_in_egp AS transaction_category_budget_in_egp,
+    g.id AS goal_id,
+    g.name AS goal_name,
+    g.price AS goal_price,
+    g.currency_id AS goal_currency_id,
+    gc.enum AS goal_currency
 FROM frequent_txs AS ft
 LEFT JOIN frequent_txs_transactions AS ftt ON ftt.frequency_id = ft.id
 LEFT JOIN counterparties AS cp ON ft.counterparty_id = cp.id
@@ -106,6 +113,8 @@ LEFT JOIN accounts AS tta ON t.to_account_id = tta.id
 LEFT JOIN currencies AS ttc ON tta.currency_id = ttc.id
 LEFT JOIN transaction_kinds AS tk ON t.kind_id = k.id
 LEFT JOIN categories AS tcat ON t.category_id = tcat.id
+LEFT JOIN goals AS g ON g.id = ft.goal_id
+LEFT JOIN currencies AS gc ON gc.id = g.currency_id
 LEFT JOIN counterparties AS tcp ON t.counterparty_id = tcp.id;
 
 
@@ -156,7 +165,12 @@ SELECT
     tk.enum AS transaction_kind_enum,
     tk.increase_balance AS transaction_increase_balance,
     tcat.name AS transaction_category_name,
-    tcat.budget_in_egp AS transaction_category_budget_in_egp
+    tcat.budget_in_egp AS transaction_category_budget_in_egp,
+    g.id AS goal_id,
+    g.name AS goal_name,
+    g.price AS goal_price,
+    g.currency_id AS goal_currency_id,
+    gc.enum AS goal_currency
 FROM frequent_txs AS ft
 LEFT JOIN frequent_txs_transactions AS ftt ON ftt.frequency_id = ft.id
 LEFT JOIN counterparties AS cp ON ft.counterparty_id = cp.id
@@ -174,6 +188,8 @@ LEFT JOIN currencies AS ttc ON tta.currency_id = ttc.id
 LEFT JOIN transaction_kinds AS tk ON t.kind_id = k.id
 LEFT JOIN categories AS tcat ON t.category_id = tcat.id
 LEFT JOIN counterparties AS tcp ON t.counterparty_id = tcp.id
+LEFT JOIN goals AS g ON g.id = ft.goal_id
+LEFT JOIN currencies AS gc ON gc.id = g.currency_id
 WHERE ft.id = sqlc.arg(id);
 
 -- name: UpdateFrequentTx :exec
@@ -189,6 +205,7 @@ SET
     description = sqlc.arg(description),
     to_account_id = sqlc.arg(to_account_id),
     to_amount = IIF(sqlc.narg(to_amount) > 0.0, ROUND(sqlc.narg(to_amount), 2), NULL),
+    goal_id = sqlc.arg(goal_id),
     stops_at = sqlc.arg(stops_at),
     last_transaction_scheduled_to = sqlc.arg(last_transaction_scheduled_to)
 WHERE id = sqlc.arg(id);

@@ -44,13 +44,15 @@ CREATE TABLE transactions (
     description VARCHAR,
     to_account_id VARCHAR,
     to_amount FLOAT,
+    goal_id VARCHAR,
     fulfilled_at DATE,
     scheduled_to DATE NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE,
     FOREIGN KEY (to_account_id) REFERENCES accounts (id) ON DELETE CASCADE,
     FOREIGN KEY (counterparty_id) REFERENCES counterparties (id) ON DELETE SET NULL,
-    FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id)
+    FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id),
+    FOREIGN KEY (goal_id) REFERENCES goals (id) ON DELETE SET NULL
 );
 CREATE TABLE frequent_txs (
     id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
@@ -64,6 +66,7 @@ CREATE TABLE frequent_txs (
     description VARCHAR,
     to_account_id VARCHAR,
     to_amount FLOAT,
+    goal_id VARCHAR,
     starts_at TIMESTAMP NOT NULL,
     stops_at TIMESTAMP,
     last_transaction_scheduled_to TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -71,7 +74,8 @@ CREATE TABLE frequent_txs (
     FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE,
     FOREIGN KEY (to_account_id) REFERENCES accounts (id) ON DELETE CASCADE,
     FOREIGN KEY (counterparty_id) REFERENCES counterparties (id) ON DELETE SET NULL,
-    FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id)
+    FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id),
+    FOREIGN KEY (goal_id) REFERENCES goals (id) ON DELETE SET NULL
 );
 CREATE TABLE frequent_txs_transactions (
     transaction_id VARCHAR NOT NULL,
@@ -87,12 +91,6 @@ CREATE TABLE goals (
     fulfilled_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (currency_id) REFERENCES currencies (id) ON DELETE CASCADE
-);
-CREATE TABLE goals_progresses (
-    goal_id VARCHAR NOT NULL,
-    transaction_id VARCHAR NOT NULL,
-    FOREIGN KEY (goal_id) REFERENCES goals (id) ON DELETE CASCADE,
-    FOREIGN KEY (transaction_id) REFERENCES transactions (id) ON DELETE CASCADE
 );
 CREATE TABLE categories (
     id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
@@ -115,9 +113,6 @@ DROP TABLE currencies;
 DROP TABLE transaction_kinds;
 DROP TABLE transactions;
 DROP TABLE goals;
-DROP TABLE goals_items;
-DROP TABLE goals_progresses;
-DROP TABLE items;
 DROP TABLE accounts;
 DROP TABLE account_kinds;
 DROP TABLE categories;

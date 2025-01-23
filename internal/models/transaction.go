@@ -18,7 +18,7 @@ type Transaction struct {
 	Counterparty   *Counterparty
 	ToAmount       float64
 	Description    string
-	GoalName       string
+	Goal           *Goal
 	GoalPercentage float64
 	ScheduledTo    time.Time
 	FulfilledAt    time.Time
@@ -36,6 +36,7 @@ type createTransaction struct {
 	ToAccountID    string    `validate:"required_if=Kind 3,required_if=Kind 4,omitempty,ulid"`
 	ToAmount       float64   `validate:"required_if=Kind 3,required_if=Kind 4"`
 	Description    string    `conform:"trim"`
+	GoalID         string    `validate:"omitempty,ulid"`
 	ScheduledTo    time.Time `validate:"required"`
 }
 
@@ -51,7 +52,7 @@ func (t *Transaction) ViewToAmount() string {
 }
 
 func (t *Transaction) toValidate() *createTransaction {
-	var catId, toAccId, cpId string
+	var catId, toAccId, cpId, glId string
 
 	if cat := t.Category; cat != nil {
 		catId = cat.ID
@@ -61,6 +62,9 @@ func (t *Transaction) toValidate() *createTransaction {
 	}
 	if toAcc := t.ToAccount; toAcc != nil {
 		toAccId = toAcc.ID
+	}
+	if gl := t.ToAccount; gl != nil {
+		glId = gl.ID
 	}
 
 	return &createTransaction{
@@ -74,6 +78,7 @@ func (t *Transaction) toValidate() *createTransaction {
 		ToAccountID:    toAccId,
 		ToAmount:       t.ToAmount,
 		Description:    t.Description,
+		GoalID:         glId,
 		ScheduledTo:    t.ScheduledTo,
 	}
 }

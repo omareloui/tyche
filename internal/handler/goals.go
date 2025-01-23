@@ -151,30 +151,36 @@ func (h Handler) GetGoalProgressForm(w http.ResponseWriter, r *http.Request) (te
 }
 
 func (h Handler) CreateGoalProgress(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	l := logger.FromCtx(r.Context())
+
 	id := r.PathValue("id")
 	if id == "" {
 		return nil, errs.ErrInvalidID
 	}
 
-	l := logger.FromCtx(r.Context())
 	gl, err := h.repo.GetGoal(r.Context(), id)
 	if err != nil {
+		l.Error("getting goal", zap.String("id", id), zap.Error(err))
 		return nil, err
 	}
 
 	tx, err := h.mapFDToTransaction(r)
 	if err != nil {
+		l.Error("mapping from data to transaction for goal", zap.Any("tx", tx), zap.Any("goal", gl), zap.Error(err))
 		return nil, err
 	}
+	tx.Goal = gl
 
 	accs, knds, cats, cps, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
+
 	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.Enum == models.ExpenseTxKind })
 	if knd != nil {
 		tx.Kind = *knd
 	}
+
 	fd, err := h.prepareCreatingTx(r, tx, accs, knds, cats, cps)
 	if fd != nil {
 		return views.GoalProgressForm(gl, fd, accs, knds), nil
@@ -183,17 +189,19 @@ func (h Handler) CreateGoalProgress(w http.ResponseWriter, r *http.Request) (tem
 		return nil, err
 	}
 
-	if err := h.repo.CreateGoalProgress(r.Context(), id, tx); err != nil {
-		l.Error("creating transaction", zap.Error(err))
+	if err = h.repo.CreateTransaction(r.Context(), tx, nil, nil); err != nil {
+		l.Error("creating transaction for goal", zap.Any("tx", tx), zap.Any("goal", gl), zap.Error(err))
 		return nil, err
 	}
-	l.Info("created transaction")
 
 	if !tx.FulfilledAt.IsZero() {
 		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
+			l.Error("getting and rendering balance", zap.Any("tx", tx), zap.Any("goal", gl), zap.Error(err))
 			return nil, err
 		}
 	}
+
+	gl.Transactions = append(gl.Transactions, *tx)
 
 	return views.Goal(gl), nil
 }

@@ -67,35 +67,44 @@ func (r *Repository) UnfulfillGoal(ctx context.Context, id string) error {
 	return nil
 }
 
-func (r *Repository) CreateGoalProgress(ctx context.Context, glId string, tx *models.Transaction) error {
-	return r.transact(func(qtx *db.Queries) error {
-		if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, tx); err != nil {
-			return err
-		}
-
-		l := logger.FromCtx(ctx)
-		if err := qtx.CreateGoalProgress(ctx, db.CreateGoalProgressParams{GoalID: glId, TransactionID: tx.ID}); err != nil {
-			l.Error("creating goal progress", zap.Error(err))
-			return err
-		}
-		l.Debug("created goal progress")
-		return nil
-	})
-}
-
 func (r *Repository) DeleteGoal(ctx context.Context, id string) error {
 	return r.q.DeleteGoal(ctx, id)
 }
 
-func dbGoalRowToGoal(dbGl db.GetGoalRow) *models.Goal {
-	return &models.Goal{
-		ID:          dbGl.ID,
-		Name:        dbGl.Name,
-		Price:       dbGl.Price,
-		Currency:    models.Currency{ID: dbGl.CurrencyID, Enum: models.CurrencyEnum(dbGl.Currency.Int64)},
-		FulfilledAt: dbGl.FulfilledAt.Time,
-		CreatedAt:   dbGl.CreatedAt,
+func dbGoalRowToGoal(dbGl []db.GetGoalRow) *models.Goal {
+	gl := models.Goal{
+		ID:           dbGl[0].ID,
+		Name:         dbGl[0].Name,
+		Price:        dbGl[0].Price,
+		Currency:     models.Currency{ID: dbGl[0].CurrencyID, Enum: models.CurrencyEnum(dbGl[0].Currency.Int64)},
+		FulfilledAt:  dbGl[0].FulfilledAt.Time,
+		CreatedAt:    dbGl[0].CreatedAt,
+		Transactions: []models.Transaction{},
 	}
+
+	for _, g := range dbGl {
+		if g.TransactionID.Valid {
+			tx := models.Transaction{
+				ID:     g.TransactionID.String,
+				Amount: g.TransactionAmount.Float64,
+				Account: models.Account{
+					ID:   g.TransactionAccountID.String,
+					Name: g.TransactionAccountName.String,
+					Currency: models.Currency{
+						ID:   g.TransactionAccountCurrencyID.String,
+						Enum: models.CurrencyEnum(g.TransactionAccountCurrencyEnum.Int64),
+					},
+				},
+				ScheduledTo: g.TransactionScheduledTo.Time,
+				FulfilledAt: g.TransactionFulfilledAt.Time,
+			}
+
+			tx.GoalPercentage = tx.Percentage(gl.Price, gl.Currency.Enum)
+			gl.Transactions = append(gl.Transactions, tx)
+		}
+	}
+
+	return &gl
 }
 
 func dbGoalRowsToGoals(dbGls []db.GetGoalsRow) []models.Goal {
@@ -118,7 +127,7 @@ func dbGoalRowsToGoals(dbGls []db.GetGoalsRow) []models.Goal {
 
 		if dbGl.TransactionID.Valid {
 			if idx := slices.IndexFunc(gls[glIdx].Transactions, func(tx models.Transaction) bool { return tx.ID == dbGl.TransactionID.String }); idx == -1 {
-				gls[glIdx].Transactions = append(gls[glIdx].Transactions, models.Transaction{
+				tx := models.Transaction{
 					ID:     dbGl.TransactionID.String,
 					Amount: dbGl.TransactionAmount.Float64,
 					Account: models.Account{
@@ -131,7 +140,9 @@ func dbGoalRowsToGoals(dbGls []db.GetGoalsRow) []models.Goal {
 					},
 					ScheduledTo: dbGl.TransactionScheduledTo.Time,
 					FulfilledAt: dbGl.TransactionFulfilledAt.Time,
-				})
+				}
+				tx.GoalPercentage = tx.Percentage(dbGl.Price, models.CurrencyEnum(dbGl.Currency.Int64))
+				gls[glIdx].Transactions = append(gls[glIdx].Transactions, tx)
 			}
 		}
 	}

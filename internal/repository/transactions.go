@@ -41,9 +41,7 @@ func (r *Repository) CreateTransaction(ctx context.Context, tx *models.Transacti
 func (r *Repository) createTransactionWithTxn(ctx context.Context, qtx *db.Queries, tx *models.Transaction) error {
 	l := logger.FromCtx(ctx)
 
-	catId := sql.NullString{}
-	cpId := sql.NullString{}
-	toAccId := sql.NullString{}
+	var catId, cpId, toAccId, goalId sql.NullString
 
 	if tx.Category != nil {
 		catId.Valid = tx.Category.ID != ""
@@ -57,6 +55,10 @@ func (r *Repository) createTransactionWithTxn(ctx context.Context, qtx *db.Queri
 		toAccId.Valid = tx.ToAccount.ID != ""
 		toAccId.String = tx.ToAccount.ID
 	}
+	if tx.Goal != nil {
+		goalId.Valid = tx.Goal.ID != ""
+		goalId.String = tx.Goal.ID
+	}
 
 	if err := qtx.CreateTransaction(ctx, db.CreateTransactionParams{
 		ID:             tx.ID,
@@ -68,6 +70,7 @@ func (r *Repository) createTransactionWithTxn(ctx context.Context, qtx *db.Queri
 		Description:    sql.NullString{String: tx.Description, Valid: tx.Description != ""},
 		ToAccountID:    toAccId,
 		ToAmount:       sql.NullFloat64{Float64: tx.ToAmount, Valid: tx.ToAmount != 0},
+		GoalID:         goalId,
 		ScheduledTo:    tx.ScheduledTo,
 		FulfilledAt:    sql.NullTime{Time: tx.FulfilledAt, Valid: !tx.FulfilledAt.IsZero()},
 	}); err != nil {
@@ -146,23 +149,23 @@ func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transa
 	return r.transact(func(qtx *db.Queries) error {
 		l := logger.FromCtx(ctx)
 
-		catId := sql.NullString{}
-		cpId := sql.NullString{}
-		toAccId := sql.NullString{}
+		var catId, cpId, toAccId, goalId sql.NullString
 
 		if tx.Category != nil {
 			catId.Valid = tx.Category.ID != ""
 			catId.String = tx.Category.ID
 		}
-
 		if tx.Counterparty != nil {
 			cpId.Valid = tx.Counterparty.ID != ""
 			cpId.String = tx.Counterparty.ID
 		}
-
 		if tx.ToAccount != nil {
 			toAccId.Valid = tx.ToAccount.ID != ""
 			toAccId.String = tx.ToAccount.ID
+		}
+		if tx.Goal != nil {
+			goalId.Valid = tx.Goal.ID != ""
+			goalId.String = tx.Goal.ID
 		}
 
 		if err := qtx.UpdateTransaction(ctx, db.UpdateTransactionParams{
@@ -174,6 +177,7 @@ func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transa
 			CounterpartyID: cpId,
 			ToAccountID:    toAccId,
 			ToAmount:       sql.NullFloat64{Float64: tx.ToAmount, Valid: tx.ToAmount != 0},
+			GoalID:         goalId,
 			Description:    sql.NullString{String: tx.Description, Valid: tx.Description != ""},
 			ScheduledTo:    tx.ScheduledTo,
 		}); err != nil {
@@ -215,43 +219,9 @@ func (r *Repository) FulfillTransaction(ctx context.Context, tx *models.Transact
 func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRow](dbTx *T) *models.Transaction {
 	_dbTx := db.GetTransactionsRow(*dbTx)
 
-	var cat *models.Category
-	var cp *models.Counterparty
-	var toAcc *models.Account
-
-	if _dbTx.CategoryID.Valid {
-		cat = &models.Category{
-			ID:          _dbTx.CategoryID.String,
-			Name:        _dbTx.CategoryName.String,
-			BudgetInEgp: _dbTx.CategoryBudgetInEgp.Float64,
-		}
-	}
-
-	if _dbTx.CounterpartyID.Valid {
-		cp = &models.Counterparty{
-			ID:   _dbTx.CounterpartyID.String,
-			Name: _dbTx.CounterpartyName.String,
-		}
-	}
-
-	if _dbTx.ToAccountID.Valid {
-		toAcc = &models.Account{
-			ID:   _dbTx.ToAccountID.String,
-			Name: _dbTx.ToAccountName.String,
-			Currency: models.Currency{
-				ID:   _dbTx.ToCurrencyID.String,
-				Enum: models.CurrencyEnum(_dbTx.ToCurrencyEnum.Int64),
-			},
-		}
-	}
-
 	curr := models.Currency{
 		ID:   _dbTx.CurrencyID.String,
 		Enum: models.CurrencyEnum(_dbTx.CurrencyEnum.Int64),
-	}
-
-	goalCurr := models.Currency{
-		Enum: models.CurrencyEnum(_dbTx.GoalCurrency.Int64),
 	}
 
 	tx := models.Transaction{
@@ -263,9 +233,7 @@ func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRo
 		},
 		Amount:      _dbTx.Amount,
 		Description: _dbTx.Description.String,
-		ToAccount:   toAcc,
 		ToAmount:    _dbTx.ToAmount.Float64,
-		GoalName:    _dbTx.GoalName.String,
 		FulfilledAt: _dbTx.FulfilledAt.Time,
 		ScheduledTo: _dbTx.ScheduledTo,
 		CreatedAt:   _dbTx.CreatedAt,
@@ -274,11 +242,47 @@ func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRo
 			Enum:            models.TxKind(_dbTx.KindEnum.Int64),
 			IncreaseBalance: _dbTx.IncreaseBalance.Bool,
 		},
-		Category:     cat,
-		Counterparty: cp,
 	}
 
-	tx.GoalPercentage = tx.Percentage(_dbTx.GoalPrice.Float64, goalCurr.Enum)
+	if _dbTx.ToAccountID.Valid {
+		tx.ToAccount = &models.Account{
+			ID:   _dbTx.ToAccountID.String,
+			Name: _dbTx.ToAccountName.String,
+			Currency: models.Currency{
+				ID:   _dbTx.ToCurrencyID.String,
+				Enum: models.CurrencyEnum(_dbTx.ToCurrencyEnum.Int64),
+			},
+		}
+	}
+
+	if _dbTx.CategoryID.Valid {
+		tx.Category = &models.Category{
+			ID:          _dbTx.CategoryID.String,
+			Name:        _dbTx.CategoryName.String,
+			BudgetInEgp: _dbTx.CategoryBudgetInEgp.Float64,
+		}
+	}
+
+	if _dbTx.CounterpartyID.Valid {
+		tx.Counterparty = &models.Counterparty{
+			ID:   _dbTx.CounterpartyID.String,
+			Name: _dbTx.CounterpartyName.String,
+		}
+	}
+
+	if _dbTx.GoalID.Valid {
+		goalCurr := models.Currency{
+			ID:   _dbTx.GoalCurrencyID.String,
+			Enum: models.CurrencyEnum(_dbTx.GoalCurrency.Int64),
+		}
+		tx.Goal = &models.Goal{
+			ID:       _dbTx.GoalCurrencyID.String,
+			Currency: goalCurr,
+			Name:     _dbTx.GoalName.String,
+			Price:    _dbTx.GoalPrice.Float64,
+		}
+		tx.GoalPercentage = tx.Percentage(_dbTx.GoalPrice.Float64, goalCurr.Enum)
+	}
 
 	return &tx
 }

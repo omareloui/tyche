@@ -43,6 +43,7 @@ type FrequentTx struct {
 	Counterparty *Counterparty
 	ToAmount     float64
 	Description  string
+	Goal         *Goal
 
 	StartsAt                   time.Time
 	StopsAt                    time.Time
@@ -66,6 +67,7 @@ type createFrequentTx struct {
 	ToAccountID    string  `validate:"required_if=Kind 3,required_if=Kind 4,omitempty,ulid"`
 	ToAmount       float64 `validate:"required_if=Kind 3,required_if=Kind 4"`
 	Description    string  `conform:"trim"`
+	GoalID         string  `validate:"omitempty,ulid"`
 
 	StartsAt                   time.Time `validate:"required"`
 	StopsAt                    time.Time `validate:"omitempty,gtfield=StartsOn"`
@@ -88,7 +90,7 @@ func (ft *FrequentTx) ViewToAmount() string {
 }
 
 func (ft *FrequentTx) toValidate() *createFrequentTx {
-	var catId, toAccId, cpId string
+	var catId, toAccId, cpId, glId string
 
 	if cat := ft.Category; cat != nil {
 		catId = cat.ID
@@ -98,6 +100,9 @@ func (ft *FrequentTx) toValidate() *createFrequentTx {
 	}
 	if toAcc := ft.ToAccount; toAcc != nil {
 		toAccId = toAcc.ID
+	}
+	if gl := ft.Goal; gl != nil {
+		glId = gl.ID
 	}
 
 	return &createFrequentTx{
@@ -111,6 +116,7 @@ func (ft *FrequentTx) toValidate() *createFrequentTx {
 		ToAccountID:                toAccId,
 		ToAmount:                   ft.ToAmount,
 		Description:                ft.Description,
+		GoalID:                     glId,
 		FrequencyBy:                ft.FrequencyBy,
 		Frequency:                  ft.Frequency,
 		StartsAt:                   ft.StartsAt,

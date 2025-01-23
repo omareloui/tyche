@@ -4,8 +4,7 @@ WITH gls_amts AS (
         t.account_id,
         SUM(t.amount) AS amount
     FROM goals AS gl
-    LEFT JOIN goals_progresses AS gp ON gl.id = gp.goal_id
-    LEFT JOIN transactions AS t ON gp.transaction_id = t.id
+    LEFT JOIN transactions AS t ON gl.id = t.goal_id
     WHERE gl.fulfilled_at IS NULL
     GROUP BY t.amount
 )
@@ -43,8 +42,7 @@ WITH gls_amts AS (
         t.account_id,
         SUM(t.amount) AS amount
     FROM goals AS gl
-    LEFT JOIN goals_progresses AS gp ON gl.id = gp.goal_id
-    LEFT JOIN transactions AS t ON gp.transaction_id = t.id
+    LEFT JOIN transactions AS t ON gl.id = t.goal_id
     WHERE gl.fulfilled_at IS NULL
     GROUP BY t.amount
 )
@@ -83,8 +81,7 @@ WITH gls_amts AS (
         t.account_id,
         SUM(t.amount) AS amount
     FROM goals AS gl
-    LEFT JOIN goals_progresses AS gp ON gl.id = gp.goal_id
-    LEFT JOIN transactions AS t ON gp.transaction_id = t.id
+    LEFT JOIN transactions AS t ON gl.id = t.goal_id
     WHERE gl.fulfilled_at IS NULL
     GROUP BY t.amount
 )
