@@ -16,7 +16,9 @@ const (
 	refreshToken
 
 	refreshExpiration = time.Hour * 24 * 30
-	accessExpiration  = time.Minute * 15
+	// TODO: update on prod
+	accessExpiration = time.Hour * 24 * 30
+	// accessExpiration  = time.Minute * 15
 )
 
 type tokenDetails struct {

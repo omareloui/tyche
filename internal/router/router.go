@@ -16,7 +16,7 @@ type Router interface {
 func New(h *handler.Handler) Router {
 	mux := http.NewServeMux()
 
-	mux.Handle("GET /{$}", handle(h.HomePage))
+	mux.Handle("GET /{$}", handlePub(h.HomePage))
 
 	mux.Handle("GET /accounts", handle(h.Accounts))
 	mux.Handle("POST /accounts", handle(h.CreateAccount))
@@ -82,8 +82,8 @@ func New(h *handler.Handler) Router {
 	mux.Handle("POST /tx-inputs/{id}", handle(h.TxInputs))
 	mux.Handle("POST /tx-inputs/switch/{id}", handle(h.TxInputsSwitch))
 
-	mux.Handle("GET /oauth", handle(h.OAuth))
-	mux.Handle("GET /oauth/cb", handle(h.OAuthCB))
+	mux.Handle("GET /oauth", handlePub(h.OAuth))
+	mux.Handle("GET /oauth/cb", handlePub(h.OAuthCB))
 	mux.Handle("GET /signout", handle(h.Signout))
 
 	static(mux, []string{"styles", "js"}, "./web/public")
@@ -99,6 +99,31 @@ func static(mux *http.ServeMux, paths []string, fspath string) {
 	}
 }
 
-func handle(h handler.HandlerMethod) http.Handler {
-	return middleware.CorrelationID(middleware.RequestLogger(route_handler.RouteHandler(h)))
+func handle(h handler.HandlerMethod, appendMiddlewares ...(func(http.Handler) http.Handler)) http.Handler {
+	var handler http.Handler = route_handler.RouteHandler(h)
+
+	for i := len(appendMiddlewares) - 1; i >= 0; i-- {
+		handler = appendMiddlewares[i](handler)
+	}
+
+	handler = middleware.Protected(handler)
+	handler = middleware.Auth(handler)
+	handler = middleware.RequestLogger(handler)
+	handler = middleware.CorrelationID(handler)
+
+	return handler
+}
+
+func handlePub(h handler.HandlerMethod, appendMiddlewares ...(func(http.Handler) http.Handler)) http.Handler {
+	var handler http.Handler = route_handler.RouteHandler(h)
+
+	for i := len(appendMiddlewares) - 1; i >= 0; i-- {
+		handler = appendMiddlewares[i](handler)
+	}
+
+	handler = middleware.Auth(handler)
+	handler = middleware.RequestLogger(handler)
+	handler = middleware.CorrelationID(handler)
+
+	return handler
 }

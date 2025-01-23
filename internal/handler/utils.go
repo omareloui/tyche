@@ -8,9 +8,19 @@ import (
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/errs"
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/middleware"
 )
 
 var nonDigitRegexp *regexp.Regexp = regexp.MustCompile(`[^0-9\.]`)
+
+func getClaims(r *http.Request) *jwt.AccessClaims {
+	v := r.Context().Value(middleware.AccessClaimsCtxKey{})
+	if v == nil {
+		return nil
+	}
+	return v.(*jwt.AccessClaims)
+}
 
 func renderToBody(w http.ResponseWriter, r *http.Request, template templ.Component) error {
 	return template.Render(r.Context(), w)
