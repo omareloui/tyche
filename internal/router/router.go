@@ -100,18 +100,8 @@ func static(mux *http.ServeMux, paths []string, fspath string) {
 }
 
 func handle(h handler.HandlerMethod, appendMiddlewares ...(func(http.Handler) http.Handler)) http.Handler {
-	var handler http.Handler = route_handler.RouteHandler(h)
-
-	for i := len(appendMiddlewares) - 1; i >= 0; i-- {
-		handler = appendMiddlewares[i](handler)
-	}
-
-	handler = middleware.Protected(handler)
-	handler = middleware.Auth(handler)
-	handler = middleware.RequestLogger(handler)
-	handler = middleware.CorrelationID(handler)
-
-	return handler
+	appendMiddlewares = append(appendMiddlewares, middleware.Protected)
+	return handlePub(h, appendMiddlewares...)
 }
 
 func handlePub(h handler.HandlerMethod, appendMiddlewares ...(func(http.Handler) http.Handler)) http.Handler {
