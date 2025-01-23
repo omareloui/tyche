@@ -18,7 +18,7 @@ templ Goals(
 	balances []models.Balance,
 	fd *GoalFD, goals []models.Goal,
 	curs []models.Currency) {
-	@baseLayout(claims, "Goals", balances, nil) {
+	@baseLayout(claims, "Goals", balances, &layoutOpts{includeAlpine: true, includeAlpineCollapse: true}) {
 		@container() {
 			@mainHeader("Goals")
 			@CreateGoalForm(fd, curs)

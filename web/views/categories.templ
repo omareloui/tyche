@@ -19,7 +19,7 @@ templ Categories(
 	fd *CategoryFD,
 	knds []models.TransactionKind,
 	categories []models.Category) {
-	@baseLayout(claims, "Categories", balances, nil) {
+	@baseLayout(claims, "Categories", balances, &layoutOpts{includeAlpine: true, includeAlpineCollapse: true}) {
 		@container() {
 			@mainHeader("Categories")
 			@CreateCategoryForm(fd, knds)

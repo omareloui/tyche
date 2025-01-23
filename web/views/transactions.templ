@@ -37,7 +37,7 @@ templ Transactions(
 	knds []models.TransactionKind,
 	cats []models.Category,
 	cps []models.Counterparty) {
-	@baseLayout(claims, "Transactions", balances, nil) {
+	@baseLayout(claims, "Transactions", balances, &layoutOpts{includeAlpine: true, includeAlpineCollapse: true}) {
 		@container() {
 			@mainHeader("Transactions")
 			@CreateTransactionForm(fd, accounts, knds, cats, cps)

@@ -17,7 +17,7 @@ templ Counterparties(
 	balances []models.Balance,
 	fd *CounterpartyFD,
 	counterparties []models.Counterparty) {
-	@baseLayout(claims, "Counterparties", balances, nil) {
+	@baseLayout(claims, "Counterparties", balances, &layoutOpts{includeAlpine: true, includeAlpineCollapse: true}) {
 		@container() {
 			@mainHeader("Counterparties")
 			@CreateCounterpartyForm(fd)

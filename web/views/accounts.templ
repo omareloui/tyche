@@ -33,7 +33,7 @@ templ Accounts(
 	fd *AccountFD, aknds []models.AccountKind,
 	curs []models.Currency, accounts []models.Account,
 	cps []models.Counterparty) {
-	@baseLayout(claims, "Accounts", balances, nil) {
+	@baseLayout(claims, "Accounts", balances, &layoutOpts{includeAlpine: true, includeAlpineCollapse: true}) {
 		@container() {
 			@mainHeader("Accounts")
 			@CreateAccountForm(fd, aknds, curs, cps)

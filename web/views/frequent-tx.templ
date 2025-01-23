@@ -22,7 +22,7 @@ type FrequentTxFD struct {
 }
 
 templ FrequentTxs(claims *jwt.AccessClaims, balances []models.Balance, ftxs []models.FrequentTx) {
-	@baseLayout(claims, "Frequent Transactions", balances, nil) {
+	@baseLayout(claims, "Frequent Transactions", balances, &layoutOpts{includeAlpine: true, includeAlpineCollapse: true}) {
 		@container() {
 			@mainHeader("Frequent Transactions")
 			@ftxsList(ftxs)
