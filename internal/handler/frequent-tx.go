@@ -79,7 +79,7 @@ func (h Handler) GetEditFrequentTx(w http.ResponseWriter, r *http.Request) (temp
 
 	l := logger.FromCtx(r.Context())
 
-	accs, knds, cats, cps, err := h.getTxDeps(r.Context())
+	accs, knds, cats, cps, gls, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func (h Handler) GetEditFrequentTx(w http.ResponseWriter, r *http.Request) (temp
 
 	return views.EditFrequentTx(ftx,
 		h.mapFrequentTxToFD(ftx, &errs.ValidationError{}, knds),
-		accs, knds, cats, cps, false), nil
+		accs, knds, cats, cps, gls), nil
 }
 
 func (h Handler) EditFrequentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -111,7 +111,7 @@ func (h Handler) EditFrequentTx(w http.ResponseWriter, r *http.Request) (templ.C
 	ftx.ID = id
 	ftx.LastTransactionScheduledTo = time.Now()
 
-	accs, knds, cats, cps, err := h.getTxDeps(r.Context())
+	accs, knds, cats, cps, gls, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -123,12 +123,20 @@ func (h Handler) EditFrequentTx(w http.ResponseWriter, r *http.Request) (templ.C
 		return nil, errs.ErrInvalidID
 	}
 
+	oldFtx, err := h.repo.GetFrequentTx(r.Context(), id)
+	if err != nil {
+		l.Error("getting old frequent tx", zap.String("id", id), zap.Error(err))
+		return nil, err
+	}
+
+	ftx.StartsAt = oldFtx.StartsAt
+
 	if err := ftx.SanitizeAndValidate(h.sani, h.valid); err != nil {
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("validating frequent transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
 			return views.EditFrequentTx(ftx, h.mapFrequentTxToFD(ftx, &valerr, knds),
-				accs, knds, cats, cps, false), nil
+				accs, knds, cats, cps, gls), nil
 		}
 		l.Error("sanitizing frequent transaction", zap.Error(err))
 		return nil, err
@@ -283,6 +291,12 @@ func (h Handler) mapFDToFrequentTx(r *http.Request) (*models.FrequentTx, error) 
 		toAcc = &models.Account{ID: toAccId}
 	}
 
+	glId := r.FormValue("goal_id")
+	var gl *models.Goal
+	if glId != "" {
+		gl = &models.Goal{ID: glId}
+	}
+
 	return &models.FrequentTx{
 		Account:      models.Account{ID: r.FormValue("account_id")},
 		Amount:       amount,
@@ -292,6 +306,7 @@ func (h Handler) mapFDToFrequentTx(r *http.Request) (*models.FrequentTx, error) 
 		Transactions: []models.Transaction{},
 		Description:  r.FormValue("description"),
 		Kind:         models.TransactionKind{ID: kndId},
+		Goal:         gl,
 		Category:     cat,
 		Counterparty: cp,
 		ToAccount:    toAcc,
@@ -319,6 +334,7 @@ func (h Handler) mapFrequentTxToFD(ftx *models.FrequentTx, valerr *errs.Validati
 
 	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == ftx.Kind.ID })
 	hasToAccount := knd.Enum == models.DebtTxKind || knd.Enum == models.TransferTxKind
+	hasGoal := knd.Enum == models.ExpenseTxKind
 
 	if ftx.Category != nil {
 		fd.CategoryID = &views.FDInput{Value: ftx.Category.ID, Error: valerr.Errors.MsgFor("CategoryID")}
@@ -342,6 +358,12 @@ func (h Handler) mapFrequentTxToFD(ftx *models.FrequentTx, valerr *errs.Validati
 			Amount:    views.FDInput{Error: valerr.Errors.MsgFor("ToAmount")},
 			AccountID: views.FDInput{Error: valerr.Errors.MsgFor("ToAccountID")},
 		}
+	}
+
+	if ftx.Goal != nil {
+		fd.GoalID = &views.FDInput{Value: ftx.Goal.ID, Error: valerr.Errors.MsgFor("GoalID")}
+	} else if hasGoal {
+		fd.GoalID = &views.FDInput{Error: valerr.Errors.MsgFor("GoalID")}
 	}
 
 	return fd

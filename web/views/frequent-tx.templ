@@ -54,8 +54,12 @@ templ frequencyFormBody(id string, fd *FrequencyFD) {
 	</div>
 }
 
-templ ftxFormBody(id string, fd *FrequentTxFD, accs []models.Account, knds []models.TransactionKind, cats []models.Category, cps []models.Counterparty, isSwitched bool) {
-	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs, cps)
+templ ftxFormBody(
+	id string, fd *FrequentTxFD,
+	accs []models.Account, knds []models.TransactionKind,
+	cats []models.Category, cps []models.Counterparty,
+	gls []models.Goal) {
+	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs, cps, gls)
 	@input("Description", "text", "description", "Enter a description", id, fd.Description)
 	@frequencyFormBody(id, &fd.FrequencyFD)
 }
@@ -70,10 +74,10 @@ templ EditFrequentTx(
 	ftx *models.FrequentTx, fd *FrequentTxFD,
 	accs []models.Account, knds []models.TransactionKind,
 	cats []models.Category, cps []models.Counterparty,
-	isSwitched bool) {
+	gls []models.Goal) {
 	@form("put", fmt.Sprintf("/frequent-tx/%s", ftx.ID), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { ftx.ID }</p>
-		@ftxFormBody(ftx.ID, fd, accs, knds, cats, cps, isSwitched)
+		@ftxFormBody(ftx.ID, fd, accs, knds, cats, cps, gls)
 		@editFormButtons(fmt.Sprintf("/frequent-tx/%s", ftx.ID))
 	}
 }
@@ -106,6 +110,10 @@ templ FrequentTx(ftx *models.FrequentTx) {
 		if ftx.Counterparty != nil {
 			<p>Counterparty ID: { ftx.Counterparty.ID }</p>
 			<p>Counterparty Name: { ftx.Counterparty.Name }</p>
+		}
+		if ftx.Goal != nil {
+			<p>Goal ID: { ftx.Goal.ID }</p>
+			<p>Goal Name: { ftx.Goal.Name }</p>
 		}
 		<p>Frequency: { strconv.FormatUint(uint64(ftx.Frequency), 10) }</p>
 		<p>Frequency By: { ftx.FrequencyBy.String() }</p>

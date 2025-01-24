@@ -25,19 +25,23 @@ type Transaction struct {
 	CreatedAt      time.Time
 }
 
+type commonFieldsForTxAndFtx struct {
+	ID             string  `validate:"required,ulid"`
+	AccountID      string  `validate:"required,ulid"`
+	Amount         float64 `validate:"required"`
+	KindID         string  `validate:"required,ulid"`
+	Kind           TxKind  `validate:"required"`
+	CategoryID     string  `validate:"excluded_if=Kind 3,excluded_if=Kind 4,omitempty,ulid"`
+	CounterpartyID string  `validate:"excluded_if=Kind 3,excluded_if=Kind 4,omitempty,ulid"`
+	ToAccountID    string  `validate:"required_if=Kind 3,required_if=Kind 4,omitempty,ulid"`
+	ToAmount       float64 `validate:"required_if=Kind 3,required_if=Kind 4"`
+	Description    string  `conform:"trim"`
+	GoalID         string  `validate:"excluded_if=Kind 2,excluded_if=Kind 3,excluded_if=Kind 4,omitempty,ulid"`
+}
+
 type createTransaction struct {
-	ID             string    `validate:"required,ulid"`
-	AccountID      string    `validate:"required,ulid"`
-	Amount         float64   `validate:"required"`
-	KindID         string    `validate:"required,ulid"`
-	Kind           TxKind    `validate:"required"`
-	CategoryID     string    `validate:"excluded_if=Kind 3,excluded_if=Kind 4,omitempty,ulid"`
-	CounterpartyID string    `validate:"excluded_if=Kind 3,excluded_if=Kind 4,omitempty,ulid"`
-	ToAccountID    string    `validate:"required_if=Kind 3,required_if=Kind 4,omitempty,ulid"`
-	ToAmount       float64   `validate:"required_if=Kind 3,required_if=Kind 4"`
-	Description    string    `conform:"trim"`
-	GoalID         string    `validate:"omitempty,ulid"`
-	ScheduledTo    time.Time `validate:"required"`
+	commonFieldsForTxAndFtx
+	ScheduledTo time.Time `validate:"required"`
 }
 
 func (t *Transaction) ViewAmount() string {
@@ -63,23 +67,25 @@ func (t *Transaction) toValidate() *createTransaction {
 	if toAcc := t.ToAccount; toAcc != nil {
 		toAccId = toAcc.ID
 	}
-	if gl := t.ToAccount; gl != nil {
+	if gl := t.Goal; gl != nil {
 		glId = gl.ID
 	}
 
 	return &createTransaction{
-		ID:             t.ID,
-		AccountID:      t.Account.ID,
-		Amount:         t.Amount,
-		KindID:         t.Kind.ID,
-		Kind:           t.Kind.Enum,
-		CategoryID:     catId,
-		CounterpartyID: cpId,
-		ToAccountID:    toAccId,
-		ToAmount:       t.ToAmount,
-		Description:    t.Description,
-		GoalID:         glId,
-		ScheduledTo:    t.ScheduledTo,
+		commonFieldsForTxAndFtx: commonFieldsForTxAndFtx{
+			ID:             t.ID,
+			AccountID:      t.Account.ID,
+			Amount:         t.Amount,
+			KindID:         t.Kind.ID,
+			Kind:           t.Kind.Enum,
+			CategoryID:     catId,
+			CounterpartyID: cpId,
+			ToAccountID:    toAccId,
+			ToAmount:       t.ToAmount,
+			Description:    t.Description,
+			GoalID:         glId,
+		},
+		ScheduledTo: t.ScheduledTo,
 	}
 }
 

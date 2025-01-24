@@ -266,6 +266,10 @@ templ selectTxCat(name, id string, cats []models.Category, data FDInput, inputAt
 	@selectInput("Category", name, "Select Category", id, catsToMap(cats), data, true, inputAttrs...)
 }
 
+templ selectGoal(name, id string, gls []models.Goal, data FDInput, inputAttrs ...templ.Attributes) {
+	@selectInput("Goal", name, "Select Goal", id, glsToMap(gls), data, true, inputAttrs...)
+}
+
 templ checkbox(label, name, id string, data FDInput, attrs ...templ.Attributes) {
 	<div>
 		<input
@@ -406,6 +410,14 @@ func catsToMap(cats []models.Category) map[string]string {
 	m := make(map[string]string, len(cats))
 	for _, c := range cats {
 		m[c.ID] = c.Name
+	}
+	return m
+}
+
+func glsToMap(gls []models.Goal) map[string]string {
+	m := make(map[string]string, len(gls))
+	for _, gl := range gls {
+		m[gl.ID] = gl.Name
 	}
 	return m
 }

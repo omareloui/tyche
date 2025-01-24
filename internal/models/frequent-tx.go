@@ -54,20 +54,9 @@ type FrequentTx struct {
 }
 
 type createFrequentTx struct {
-	ID          string      `validate:"required,ulid"`
+	commonFieldsForTxAndFtx
 	FrequencyBy FrequencyBy `validate:"required"`
 	Frequency   uint        `validate:"required"`
-
-	AccountID      string  `validate:"required,ulid"`
-	Amount         float64 `validate:"required"`
-	KindID         string  `validate:"required,ulid"`
-	Kind           TxKind  `validate:"required"`
-	CategoryID     string  `validate:"excluded_if=Kind 3,excluded_if=Kind 4,omitempty,ulid"`
-	CounterpartyID string  `validate:"excluded_if=Kind 3,excluded_if=Kind 4,omitempty,ulid"`
-	ToAccountID    string  `validate:"required_if=Kind 3,required_if=Kind 4,omitempty,ulid"`
-	ToAmount       float64 `validate:"required_if=Kind 3,required_if=Kind 4"`
-	Description    string  `conform:"trim"`
-	GoalID         string  `validate:"omitempty,ulid"`
 
 	StartsAt                   time.Time `validate:"required"`
 	StopsAt                    time.Time `validate:"omitempty,gtfield=StartsOn"`
@@ -106,17 +95,19 @@ func (ft *FrequentTx) toValidate() *createFrequentTx {
 	}
 
 	return &createFrequentTx{
-		ID:                         ft.ID,
-		AccountID:                  ft.Account.ID,
-		Amount:                     ft.Amount,
-		KindID:                     ft.Kind.ID,
-		Kind:                       ft.Kind.Enum,
-		CategoryID:                 catId,
-		CounterpartyID:             cpId,
-		ToAccountID:                toAccId,
-		ToAmount:                   ft.ToAmount,
-		Description:                ft.Description,
-		GoalID:                     glId,
+		commonFieldsForTxAndFtx: commonFieldsForTxAndFtx{
+			ID:             ft.ID,
+			AccountID:      ft.Account.ID,
+			Amount:         ft.Amount,
+			KindID:         ft.Kind.ID,
+			Kind:           ft.Kind.Enum,
+			CategoryID:     catId,
+			CounterpartyID: cpId,
+			ToAccountID:    toAccId,
+			ToAmount:       ft.ToAmount,
+			Description:    ft.Description,
+			GoalID:         glId,
+		},
 		FrequencyBy:                ft.FrequencyBy,
 		Frequency:                  ft.Frequency,
 		StartsAt:                   ft.StartsAt,

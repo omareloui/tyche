@@ -21,6 +21,17 @@ func (r *Repository) GetGoals(ctx context.Context) ([]models.Goal, error) {
 	return dbGoalRowsToGoals(dbGoals), nil
 }
 
+func (r *Repository) GetUnfulfilledGoals(ctx context.Context) ([]models.Goal, error) {
+	l := logger.FromCtx(ctx)
+	dbGoals, err := r.q.GetUnfulfilledGoals(ctx)
+	if err != nil {
+		l.Error("fetching unfulfilled goals", zap.Error(err))
+		return nil, err
+	}
+	l.Debug("fetched unfulfilled goals")
+	return dbGoalUnfulfilledRowsToGoals(dbGoals), nil
+}
+
 func (r *Repository) GetGoal(ctx context.Context, id string) (*models.Goal, error) {
 	dbGls, err := r.q.GetGoal(ctx, id)
 	if err != nil {
@@ -108,6 +119,49 @@ func dbGoalRowToGoal(dbGl []db.GetGoalRow) *models.Goal {
 }
 
 func dbGoalRowsToGoals(dbGls []db.GetGoalsRow) []models.Goal {
+	gls := []models.Goal{}
+
+	for _, dbGl := range dbGls {
+		glIdx := slices.IndexFunc(gls, func(gl models.Goal) bool { return gl.ID == dbGl.ID })
+		if glIdx == -1 {
+			gls = append(gls, models.Goal{
+				ID:           dbGl.ID,
+				Name:         dbGl.Name,
+				Price:        dbGl.Price,
+				Currency:     models.Currency{ID: dbGl.CurrencyID, Enum: models.CurrencyEnum(dbGl.Currency.Int64)},
+				FulfilledAt:  dbGl.FulfilledAt.Time,
+				CreatedAt:    dbGl.CreatedAt,
+				Transactions: []models.Transaction{},
+			})
+			glIdx = len(gls) - 1
+		}
+
+		if dbGl.TransactionID.Valid {
+			if idx := slices.IndexFunc(gls[glIdx].Transactions, func(tx models.Transaction) bool { return tx.ID == dbGl.TransactionID.String }); idx == -1 {
+				tx := models.Transaction{
+					ID:     dbGl.TransactionID.String,
+					Amount: dbGl.TransactionAmount.Float64,
+					Account: models.Account{
+						ID:   dbGl.TransactionAccountID.String,
+						Name: dbGl.TransactionAccountName.String,
+						Currency: models.Currency{
+							ID:   dbGl.TransactionAccountCurrencyID.String,
+							Enum: models.CurrencyEnum(dbGl.TransactionAccountCurrencyEnum.Int64),
+						},
+					},
+					ScheduledTo: dbGl.TransactionScheduledTo.Time,
+					FulfilledAt: dbGl.TransactionFulfilledAt.Time,
+				}
+				tx.GoalPercentage = tx.Percentage(dbGl.Price, models.CurrencyEnum(dbGl.Currency.Int64))
+				gls[glIdx].Transactions = append(gls[glIdx].Transactions, tx)
+			}
+		}
+	}
+
+	return gls
+}
+
+func dbGoalUnfulfilledRowsToGoals(dbGls []db.GetUnfulfilledGoalsRow) []models.Goal {
 	gls := []models.Goal{}
 
 	for _, dbGl := range dbGls {

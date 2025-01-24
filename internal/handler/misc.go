@@ -70,7 +70,7 @@ func (h Handler) AmountInputsWithAccount(w http.ResponseWriter, r *http.Request)
 }
 
 func (h Handler) TxInputs(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	accs, knds, cats, cps, err := h.getTxDeps(r.Context())
+	accs, knds, cats, cps, gls, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -78,11 +78,11 @@ func (h Handler) TxInputs(w http.ResponseWriter, r *http.Request) (templ.Compone
 	if err != nil {
 		return nil, err
 	}
-	return views.TransactionAmountsAndKindFormBody(fd, r.PathValue("id"), knds, cats, accs, cps), nil
+	return views.TransactionAmountsAndKindFormBody(fd, r.PathValue("id"), knds, cats, accs, cps, gls), nil
 }
 
 func (h Handler) TxInputsSwitch(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	accs, knds, cats, cps, err := h.getTxDeps(r.Context())
+	accs, knds, cats, cps, gls, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -101,5 +101,5 @@ func (h Handler) TxInputsSwitch(w http.ResponseWriter, r *http.Request) (templ.C
 		fd.AccountIFD.AccountID.Value = toAccId
 	}
 
-	return views.TransactionAmountsAndKindFormBody(fd, r.PathValue("id"), knds, cats, accs, cps), nil
+	return views.TransactionAmountsAndKindFormBody(fd, r.PathValue("id"), knds, cats, accs, cps, gls), nil
 }
