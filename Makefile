@@ -42,10 +42,10 @@ templ-dev:
 	@templ generate --path web/views --watch
 
 css:
-	@npx tailwindcss -c internal/config/.tailwind.config.js -i ./web/assets/styles/main.css -o ./web/public/styles/main.css --minify
+	@npm run css
 
 css-dev:
-	@npx tailwindcss -c internal/config/.tailwind.config.js -i ./web/assets/styles/main.css -o ./web/public/styles/main.css --minify --watch
+	@npm run css:dev
 
 dev: migrate sqlgen
 	@make -j2 run templ-dev

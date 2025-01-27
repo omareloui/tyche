@@ -11,17 +11,15 @@ RUN useradd -u 1001 nonroot
 COPY go.mod go.sum ./
 RUN go mod download && go mod verify
 
-COPY vendor vendor
-COPY Makefile Makefile
-COPY web web
 COPY cmd cmd
 COPY sql sql
 COPY internal internal
 COPY sqlc.yaml sqlc.yaml
-COPY data data
+COPY web web
 
-RUN rm -rf web/views/*_templ.go && \
-  make templ sqlgen migrate && \
+COPY Makefile Makefile
+
+RUN make templ sqlgen && \
   go build \
   -ldflags="-linkmode external -extldflags -static" \
   -tags netgo \
@@ -29,32 +27,35 @@ RUN rm -rf web/views/*_templ.go && \
   ./cmd/tyche
 
 ###
-FROM node:23-alpine AS css
-
-RUN npm i -g tailwindcss
+FROM node:23-bullseye AS css
 
 WORKDIR /app
 
-COPY Makefile Makefile
-COPY web/assets web/assets
-COPY internal/config/.tailwind.config.js tailwind.config.js
+COPY package* .
 
-RUN tailwindcss \
-  -c tailwind.config.js \
-  -i ./web/assets/styles/main.css \
-  -o ./web/public/styles/main.css \
-  --minify 
+RUN --mount=type=cache,target=/root/.npm npm ci
+
+COPY web/assets web/assets
+COPY web/views/*.templ web/views
+COPY internal/config/.tailwind.config.js internal/config/.tailwind.config.js
+COPY Makefile Makefile
+
+RUN make css
 
 ###
-FROM scratch
+FROM scratch AS final
+
 WORKDIR /app
 
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /etc/passwd /etc/passwd
 
-COPY --from=build /usr/src/data ./data
 COPY --from=build /usr/src/bin/tyche ./bin/tyche
 
-COPY --from=css /app/web/public ./web/public
+COPY --from=css /app/web/public/styles ./web/public/styles
+COPY ./web/public/js ./web/public/js
+
+COPY ./data data
 
 USER nonroot
 

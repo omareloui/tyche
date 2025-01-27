@@ -29,9 +29,11 @@ var (
 )
 
 func (h *Handler) OAuth(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	l := logger.FromCtx(r.Context())
 	csrfId := idgen.New()
 	oauthStateStrings[csrfId] = struct{}{}
 	url := getOAuth2Conf().AuthCodeURL(csrfId)
+	l.Debug("going to sign a user", zap.String("url", url), zap.String("csrfId", csrfId))
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 	return nil, nil
 }
