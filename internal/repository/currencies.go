@@ -23,6 +23,14 @@ func (r *Repository) GetCurrency(ctx context.Context, id string) (*models.Curren
 	return dbCurrencyToCurrency(&dbCurrency), nil
 }
 
+func (r *Repository) GetCurrencyByEnum(ctx context.Context, enum models.CurrencyEnum) (*models.Currency, error) {
+	dbCurrency, err := r.q.GetCurrencyByEnum(ctx, int64(enum))
+	if err != nil {
+		return nil, err
+	}
+	return dbCurrencyToCurrency(&dbCurrency), nil
+}
+
 func dbCurrencyToCurrency(dbCurr *db.Currency) *models.Currency {
 	return &models.Currency{
 		ID:   dbCurr.ID,

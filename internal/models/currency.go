@@ -8,8 +8,8 @@ type CurrencyEnum uint8
 
 const (
 	CurrencyNil CurrencyEnum = iota
-	CurrencyEgp
 	CurrencyUsd
+	CurrencyEgp
 	CurrencyAed
 )
 
@@ -17,22 +17,22 @@ const DfltCurrency = CurrencyEgp
 
 func (cs CurrencyEnum) String() string {
 	return [...]string{
-		"???", "EGP",
-		"USD", "AED",
+		"???", "USD",
+		"EGP", "AED",
 	}[cs]
 }
 
 func (cs CurrencyEnum) Symbol() string {
 	return [...]string{
-		"???", "EG£",
-		"US$", "AED",
+		"???", "US$",
+		"EG£", "AED",
 	}[cs]
 }
 
 func (cs CurrencyEnum) IbanPrefix() string {
 	return [...]string{
-		"??", "EG",
-		"US", "AE",
+		"??", "US",
+		"EG", "AE",
 	}[cs]
 }
 

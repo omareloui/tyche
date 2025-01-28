@@ -5,6 +5,13 @@ SELECT
 FROM currencies
 WHERE id = sqlc.arg(id) LIMIT 1;
 
+-- name: GetCurrencyByEnum :one
+SELECT
+    id,
+    enum
+FROM currencies
+WHERE enum = sqlc.arg(enum) LIMIT 1;
+
 -- name: GetCurrencies :many
 SELECT
     id,

@@ -73,7 +73,7 @@ templ navbar(claims *jwt.AccessClaims, balances []models.Balance) {
 			</div>
 			<div class="flex gap-4 items-end">
 				if claims != nil {
-					<p>Hello, { claims.GivenName }.</p>
+					<p>Hello, { claims.FirstName }.</p>
 					@Balance(balances)
 					@navlink("/signout")
 				} else {

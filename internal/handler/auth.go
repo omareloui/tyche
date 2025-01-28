@@ -1,7 +1,8 @@
 package handler
 
 import (
-	"encoding/json"
+	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -65,21 +66,30 @@ func (h *Handler) OAuthCB(w http.ResponseWriter, r *http.Request) (templ.Compone
 	}
 	defer resp.Body.Close()
 
-	var usr *models.User
-
-	if err := json.NewDecoder(resp.Body).Decode(&usr); err != nil {
+	_usr, err := models.UserFromGoogleUserBody(resp.Body)
+	if err != nil {
 		l.Error("parsing json user", zap.Error(err))
 		return nil, err
 	}
 
 	myGoogleID := "110711621731459269840"
-	if usr.OAuthID != myGoogleID {
+	if _usr.OAuthID != myGoogleID {
 		err := errors.New("the site isn't available to the public yet")
-		l.Error("invalid user", zap.Error(err), zap.Any("user", usr))
+		l.Error("invalid user", zap.Error(err), zap.Any("user", _usr))
 		return nil, err
 	}
 
-	// TODO: safe the user in my db and connect it with his/her own db
+	usr, err := h.repo.GetUserByOAuthID(r.Context(), _usr.OAuthID)
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+
+		if err = h.initUser(r.Context(), _usr); err != nil {
+			return nil, err
+		}
+		usr = _usr
+	}
 
 	access, refresh, err := generateJWTCookies(usr)
 	if err != nil {
@@ -101,6 +111,20 @@ func (h *Handler) Signout(w http.ResponseWriter, r *http.Request) (templ.Compone
 	unsetCookie(w, accessTokenCookieName)
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 	return nil, nil
+}
+
+func (h *Handler) initUser(ctx context.Context, usr *models.User) error {
+	cur, err := h.repo.GetCurrencyByEnum(ctx, models.CurrencyUsd)
+	if err != nil {
+		return err
+	}
+	usr.DefaultCurrency = cur
+
+	if err := h.repo.CreateUser(ctx, usr); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func getOAuth2Conf() *oauth2.Config {

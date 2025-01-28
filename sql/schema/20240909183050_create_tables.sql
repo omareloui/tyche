@@ -1,5 +1,18 @@
 -- +goose Up
 -- +goose StatementBegin
+CREATE TABLE user (
+    id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
+    oauth_id VARCHAR UNIQUE NOT NULL,
+    oauth_provider INT NOT NULL,
+    email VARCHAR NOT NULL,
+    verified_email BOOLEAN NOT NULL DEFAULT FALSE,
+    first_name VARCHAR NOT NULL,
+    last_name VARCHAR NOT NULL,
+    picture VARCHAR,
+    default_currency_id VARCHAR NOT NULL,
+    start_of_period INT NOT NULL DEFAULT 1 CHECK (start_of_period BETWEEN 1 AND 31),
+    FOREIGN KEY (default_currency_id) REFERENCES currencies (id)
+);
 CREATE TABLE currencies (
     id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
     enum INT UNIQUE NOT NULL
@@ -109,6 +122,7 @@ CREATE TABLE counterparties (
 
 -- +goose Down
 -- +goose StatementBegin
+DROP TABLE user;
 DROP TABLE currencies;
 DROP TABLE transaction_kinds;
 DROP TABLE transactions;

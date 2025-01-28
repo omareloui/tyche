@@ -41,12 +41,12 @@ type RefreshClaims struct {
 }
 
 type AccessClaims struct {
-	OAuthID    string
-	Email      string
-	Name       string
-	GivenName  string
-	FamilyName string
-	Picture    string
+	ID        string
+	Email     string
+	Name      string
+	FirstName string
+	LastName  string
+	Picture   string
 }
 
 var (
@@ -73,12 +73,12 @@ func ParseAccessClaims(token string) (*AccessClaims, error) {
 		return nil, err
 	}
 	return &AccessClaims{
-		OAuthID:    (*claims)["id"].(string),
-		Name:       (*claims)["name"].(string),
-		Email:      (*claims)["email"].(string),
-		GivenName:  (*claims)["given_name"].(string),
-		FamilyName: (*claims)["family_name"].(string),
-		Picture:    (*claims)["picture"].(string),
+		ID:        (*claims)["id"].(string),
+		Name:      (*claims)["name"].(string),
+		Email:     (*claims)["email"].(string),
+		FirstName: (*claims)["first_name"].(string),
+		LastName:  (*claims)["last_name"].(string),
+		Picture:   (*claims)["picture"].(string),
 	}, nil
 }
 
@@ -121,7 +121,7 @@ func newToken(kind TokenType, usr *models.User) (string, time.Time, error) {
 	if kind == refreshToken {
 		exp = time.Now().Add(refreshExpiration)
 		claims = &jwt.MapClaims{
-			"id": usr.OAuthID,
+			"id": usr.ID,
 
 			"iat": now.Unix(),
 			"exp": exp.Unix(),
@@ -129,13 +129,13 @@ func newToken(kind TokenType, usr *models.User) (string, time.Time, error) {
 	} else {
 		exp = time.Now().Add(accessExpiration)
 		claims = &jwt.MapClaims{
-			"id": usr.OAuthID,
+			"id": usr.ID,
 
-			"name":        usr.Name,
-			"email":       usr.Email,
-			"given_name":  usr.GivenName,
-			"family_name": usr.FamilyName,
-			"picture":     usr.Picture,
+			"name":       usr.FullName(),
+			"email":      usr.Email,
+			"first_name": usr.FirstName,
+			"last_name":  usr.LastName,
+			"picture":    usr.Picture,
 
 			"iat": now.Unix(),
 			"exp": exp.Unix(),
