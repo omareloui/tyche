@@ -47,8 +47,8 @@ css:
 css-dev:
 	@npm run css:dev
 
-dev: migrate sqlgen
-	@make -j2 run templ-dev
+dev: sqlgen
+	@make -j2 run templ-dev css-dev
 
 .ONESHELL:
 regen-db:

@@ -15,7 +15,6 @@ import (
 	"github.com/omareloui/tyche/internal/repository"
 	"github.com/omareloui/tyche/internal/router"
 	"github.com/omareloui/tyche/internal/sanitizer"
-	tenantmanager "github.com/omareloui/tyche/internal/tenant_manager"
 	"github.com/omareloui/tyche/internal/valid"
 )
 
@@ -31,8 +30,7 @@ func init() {
 func main() {
 	port := config.GetApplicationPort()
 
-	tm := tenantmanager.NewTenantManager()
-	repo := repository.New(tm)
+	repo := repository.New()
 	valid := valid.New()
 	sani := sanitizer.New()
 	h := handler.New(repo, valid, sani)
