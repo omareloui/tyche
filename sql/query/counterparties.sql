@@ -10,17 +10,13 @@ VALUES (
 
 -- name: GetCounterparties :many
 SELECT
-    id,
-    name,
-    created_at
+    sqlc.embed(counterparties)
 FROM counterparties
 ORDER BY created_at DESC;
 
 -- name: GetCounterparty :one
 SELECT
-    id,
-    name,
-    created_at
+    sqlc.embed(counterparties)
 FROM counterparties
 WHERE id = sqlc.arg(id);
 

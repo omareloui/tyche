@@ -1,16 +1,13 @@
 package repository
 
 import (
-	"database/sql"
-
-	"github.com/omareloui/tyche/internal/db"
+	tenantmanager "github.com/omareloui/tyche/internal/tenant_manager"
 )
 
 type Repository struct {
-	db *sql.DB
-	q  *db.Queries
+	tm *tenantmanager.TenantManager
 }
 
-func New(db *sql.DB, q *db.Queries) *Repository {
-	return &Repository{db: db, q: q}
+func New(tm *tenantmanager.TenantManager) *Repository {
+	return &Repository{tm: tm}
 }

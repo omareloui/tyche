@@ -3,45 +3,71 @@ package repository
 import (
 	"context"
 
-	"github.com/omareloui/tyche/internal/db"
+	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/queries"
+	"go.uber.org/zap"
 )
 
 func (r *Repository) GetCurrencies(ctx context.Context) ([]models.Currency, error) {
-	dbCurrencies, err := r.q.GetCurrencies(ctx)
+	l := logger.FromCtx(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		l.Error("getting db from context", zap.Error(err))
+		return nil, err
+	}
+
+	dbCurrencies, err := q.GetCurrencies(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return dbCurrenciesToCurrencies(dbCurrencies), nil
+	return dbCurrenciesRowToCurrencies(dbCurrencies), nil
 }
 
 func (r *Repository) GetCurrency(ctx context.Context, id string) (*models.Currency, error) {
-	dbCurrency, err := r.q.GetCurrency(ctx, id)
+	l := logger.FromCtx(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		l.Error("getting db from context", zap.Error(err))
+		return nil, err
+	}
+
+	dbCurrency, err := q.GetCurrency(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	return dbCurrencyToCurrency(&dbCurrency), nil
+	return dbCurrencyToCurrency(&dbCurrency.Currency), nil
 }
 
 func (r *Repository) GetCurrencyByEnum(ctx context.Context, enum models.CurrencyEnum) (*models.Currency, error) {
-	dbCurrency, err := r.q.GetCurrencyByEnum(ctx, int64(enum))
+	l := logger.FromCtx(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		l.Error("getting db from context", zap.Error(err))
+		return nil, err
+	}
+
+	dbCurrency, err := q.GetCurrencyByEnum(ctx, int64(enum))
 	if err != nil {
 		return nil, err
 	}
-	return dbCurrencyToCurrency(&dbCurrency), nil
+	return dbCurrencyToCurrency(&dbCurrency.Currency), nil
 }
 
-func dbCurrencyToCurrency(dbCurr *db.Currency) *models.Currency {
+func dbCurrencyToCurrency(dbCurr *queries.Currency) *models.Currency {
 	return &models.Currency{
 		ID:   dbCurr.ID,
 		Enum: models.CurrencyEnum(dbCurr.Enum),
 	}
 }
 
-func dbCurrenciesToCurrencies(dbCurrency []db.Currency) []models.Currency {
+func dbCurrenciesRowToCurrencies(dbCurrency []queries.GetCurrenciesRow) []models.Currency {
 	currencies := make([]models.Currency, len(dbCurrency))
 	for i, cur := range dbCurrency {
-		currencies[i] = *dbCurrencyToCurrency(&cur)
+		currencies[i] = *dbCurrencyToCurrency(&cur.Currency)
 	}
 	return currencies
 }

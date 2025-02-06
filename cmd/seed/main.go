@@ -10,11 +10,10 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/omareloui/tyche/internal/config"
-	"github.com/omareloui/tyche/internal/db"
-	"github.com/omareloui/tyche/internal/dbconn"
 	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/queries"
 )
 
 func main() {
@@ -36,7 +35,7 @@ func main() {
 		log.Fatalln("error while getting the currencies", err)
 	}
 
-	currenciesSeed := []db.Currency{
+	currenciesSeed := []queries.Currency{
 		{ID: idgen.New(), Enum: int64(models.CurrencyEgp)},
 		{ID: idgen.New(), Enum: int64(models.CurrencyUsd)},
 		{ID: idgen.New(), Enum: int64(models.CurrencyAed)},
@@ -44,7 +43,7 @@ func main() {
 
 	if len(currencies) != len(currenciesSeed) {
 		for _, cur := range currenciesSeed {
-			if err := q.CreateCurrency(context.Background(), db.CreateCurrencyParams(cur)); err != nil {
+			if err := q.CreateCurrency(context.Background(), queries.CreateCurrencyParams(cur)); err != nil {
 				log.Fatalln("error while seeding the currencies", err)
 			}
 		}
@@ -55,7 +54,7 @@ func main() {
 		l.Error("error while getting the transaction kinds", zap.Error(err))
 	}
 
-	kindsSeed := []db.TransactionKind{
+	kindsSeed := []queries.TransactionKind{
 		{ID: idgen.New(), Enum: int64(models.ExpenseTxKind), IncreaseBalance: sql.NullBool{Bool: false, Valid: true}},
 		{ID: idgen.New(), Enum: int64(models.IncomeTxKind), IncreaseBalance: sql.NullBool{Bool: true, Valid: true}},
 		{ID: idgen.New(), Enum: int64(models.TransferTxKind), IncreaseBalance: sql.NullBool{Valid: false}},
@@ -75,7 +74,7 @@ func main() {
 		l.Error("error while getting the account kinds", zap.Error(err))
 	}
 
-	accKindsSeed := []db.CreateAccountKindParams{
+	accKindsSeed := []queries.CreateAccountKindParams{
 		{ID: idgen.New(), Enum: int64(models.AccKindCreditCard)},
 		{ID: idgen.New(), Enum: int64(models.AccKindBankAcc)},
 		{ID: idgen.New(), Enum: int64(models.AccKindCash)},

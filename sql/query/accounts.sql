@@ -9,25 +9,10 @@ WITH gls_amts AS (
     GROUP BY t.amount
 )
 SELECT
-    a.id,
-    a.name,
-    a.kind_id,
-    a.amount,
-    a.currency_id,
-    a.counterparty_id,
-    a.card_number,
-    a.card_limit,
-    a.name_on_card,
-    a.iban,
-    a.note,
-    a.exclude_from_balance,
-    a.is_archived,
-    a.is_default,
-    a.expiration_date,
-    a.created_at,
-    c.enum AS currency_enum,
-    k.enum AS kind_enum,
-    cp.name AS counterparty_name,
+    sqlc.embed(a),
+    sqlc.embed(k),
+    sqlc.embed(cp),
+    sqlc.embed(c),
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
@@ -47,25 +32,10 @@ WITH gls_amts AS (
     GROUP BY t.amount
 )
 SELECT
-    a.id,
-    a.name,
-    a.kind_id,
-    a.amount,
-    a.currency_id,
-    a.counterparty_id,
-    a.card_number,
-    a.card_limit,
-    a.name_on_card,
-    a.iban,
-    a.note,
-    a.exclude_from_balance,
-    a.is_archived,
-    a.is_default,
-    a.expiration_date,
-    a.created_at,
-    c.enum AS currency_enum,
-    k.enum AS kind_enum,
-    cp.name AS counterparty_name,
+    sqlc.embed(a),
+    sqlc.embed(k),
+    sqlc.embed(cp),
+    sqlc.embed(c),
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
@@ -86,25 +56,10 @@ WITH gls_amts AS (
     GROUP BY t.amount
 )
 SELECT
-    a.id,
-    a.name,
-    a.kind_id,
-    a.amount,
-    a.currency_id,
-    a.counterparty_id,
-    a.card_number,
-    a.card_limit,
-    a.name_on_card,
-    a.iban,
-    a.note,
-    a.exclude_from_balance,
-    a.is_archived,
-    a.is_default,
-    a.expiration_date,
-    a.created_at,
-    c.enum AS currency_enum,
-    k.enum AS kind_enum,
-    cp.name AS counterparty_name,
+    sqlc.embed(a),
+    sqlc.embed(k),
+    sqlc.embed(cp),
+    sqlc.embed(c),
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id

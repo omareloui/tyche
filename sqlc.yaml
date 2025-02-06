@@ -5,5 +5,5 @@ sql:
     schema: sql/schema
     gen:
       go:
-        package: db
-        out: internal/db
+        package: queries
+        out: internal/queries

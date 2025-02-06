@@ -1,21 +1,18 @@
 -- name: GetCurrency :one
 SELECT
-    id,
-    enum
+    sqlc.embed(currencies)
 FROM currencies
 WHERE id = sqlc.arg(id) LIMIT 1;
 
 -- name: GetCurrencyByEnum :one
 SELECT
-    id,
-    enum
+    sqlc.embed(currencies)
 FROM currencies
 WHERE enum = sqlc.arg(enum) LIMIT 1;
 
 -- name: GetCurrencies :many
 SELECT
-    id,
-    enum
+    sqlc.embed(currencies)
 FROM currencies
 ORDER BY enum;
 

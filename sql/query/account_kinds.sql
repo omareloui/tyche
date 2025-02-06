@@ -1,7 +1,6 @@
 -- name: GetAccountKinds :many
 SELECT
-    id,
-    enum
+    sqlc.embed(account_kinds)
 FROM account_kinds
 ORDER BY enum;
 

@@ -3,15 +3,22 @@ package repository
 import (
 	"context"
 
-	"github.com/omareloui/tyche/internal/db"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/queries"
 	"go.uber.org/zap"
 )
 
 func (r *Repository) GetCounterparties(ctx context.Context) ([]models.Counterparty, error) {
 	l := logger.FromCtx(ctx)
-	dbCp, err := r.q.GetCounterparties(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		l.Error("getting db from context", zap.Error(err))
+		return nil, err
+	}
+
+	dbCp, err := q.GetCounterparties(ctx)
 	if err != nil {
 		l.Error("fetching counter parties", zap.Error(err))
 		return nil, err
@@ -21,32 +28,64 @@ func (r *Repository) GetCounterparties(ctx context.Context) ([]models.Counterpar
 }
 
 func (r *Repository) GetCounterparty(ctx context.Context, id string) (*models.Counterparty, error) {
-	dbP, err := r.q.GetCounterparty(ctx, id)
+	l := logger.FromCtx(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		l.Error("getting db from context", zap.Error(err))
+		return nil, err
+	}
+
+	dbP, err := q.GetCounterparty(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	return dbCounterpartyRowToCounterparty(&dbP), nil
+	return dbCounterpartyToCounterparty(&dbP.Counterparty), nil
 }
 
 func (r *Repository) UpdateCounterparty(ctx context.Context, it *models.Counterparty) error {
-	return r.q.UpdateCounterparty(ctx, db.UpdateCounterpartyParams{
+	l := logger.FromCtx(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		l.Error("getting db from context", zap.Error(err))
+		return err
+	}
+
+	return q.UpdateCounterparty(ctx, queries.UpdateCounterpartyParams{
 		ID:   it.ID,
 		Name: it.Name,
 	})
 }
 
 func (r *Repository) CreateCounterparty(ctx context.Context, it *models.Counterparty) error {
-	return r.q.CreateCounterparty(ctx, db.CreateCounterpartyParams{
+	l := logger.FromCtx(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		l.Error("getting db from context", zap.Error(err))
+		return err
+	}
+
+	return q.CreateCounterparty(ctx, queries.CreateCounterpartyParams{
 		ID:   it.ID,
 		Name: it.Name,
 	})
 }
 
 func (r *Repository) DeleteCounterparty(ctx context.Context, id string) error {
-	return r.q.DeleteCounterparty(ctx, id)
+	l := logger.FromCtx(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		l.Error("getting db from context", zap.Error(err))
+		return err
+	}
+
+	return q.DeleteCounterparty(ctx, id)
 }
 
-func dbCounterpartyRowToCounterparty(dbP *db.Counterparty) *models.Counterparty {
+func dbCounterpartyToCounterparty(dbP *queries.Counterparty) *models.Counterparty {
 	return &models.Counterparty{
 		ID:        dbP.ID,
 		Name:      dbP.Name,
@@ -54,14 +93,10 @@ func dbCounterpartyRowToCounterparty(dbP *db.Counterparty) *models.Counterparty 
 	}
 }
 
-func dbCounterpartiesRowToCounterparties(dbCps []db.Counterparty) []models.Counterparty {
+func dbCounterpartiesRowToCounterparties(dbCps []queries.GetCounterpartiesRow) []models.Counterparty {
 	cps := make([]models.Counterparty, len(dbCps))
 	for i, cp := range dbCps {
-		cps[i] = models.Counterparty{
-			ID:        cp.ID,
-			Name:      cp.Name,
-			CreatedAt: cp.CreatedAt,
-		}
+		cps[i] = *dbCounterpartyToCounterparty(&cp.Counterparty)
 	}
 	return cps
 }

@@ -1,16 +1,12 @@
 -- name: GetTransactionKinds :many
 SELECT
-    id,
-    enum,
-    increase_balance
+    sqlc.embed(transaction_kinds)
 FROM transaction_kinds
 ORDER BY enum;
 
 -- name: GetTransactionKind :one
 SELECT
-    id,
-    enum,
-    increase_balance
+    sqlc.embed(transaction_kinds)
 FROM transaction_kinds
 WHERE id = sqlc.arg(id) LIMIT 1;
 

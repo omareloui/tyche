@@ -4,14 +4,14 @@ import (
 	"database/sql"
 	"slices"
 
-	"github.com/omareloui/tyche/internal/db"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/queries"
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
 )
 
-func (r *Repository) createFrequentTxWithTxn(qtx *db.Queries, ctx context.Context, ftx *models.FrequentTx) error {
+func (r *Repository) createFrequentTxWithTxn(qtx *queries.Queries, ctx context.Context, ftx *models.FrequentTx) error {
 	l := logger.FromCtx(ctx)
 
 	var catId, cpId, toAccId, goalId sql.NullString
@@ -33,7 +33,7 @@ func (r *Repository) createFrequentTxWithTxn(qtx *db.Queries, ctx context.Contex
 		goalId.String = ftx.Goal.ID
 	}
 
-	if err := qtx.CreateFrequentTx(ctx, db.CreateFrequentTxParams{
+	if err := qtx.CreateFrequentTx(ctx, queries.CreateFrequentTxParams{
 		ID:                         ftx.ID,
 		AccountID:                  ftx.Account.ID,
 		FrequencyBy:                int64(ftx.FrequencyBy),
@@ -57,9 +57,9 @@ func (r *Repository) createFrequentTxWithTxn(qtx *db.Queries, ctx context.Contex
 	return nil
 }
 
-func (r *Repository) createFrequentTxTransactionWithTxn(ctx context.Context, qtx *db.Queries, ftxId, txId string) error {
+func (r *Repository) createFrequentTxTransactionWithTxn(ctx context.Context, qtx *queries.Queries, ftxId, txId string) error {
 	l := logger.FromCtx(ctx)
-	if err := qtx.CreateFrequentTxTransaction(ctx, db.CreateFrequentTxTransactionParams{
+	if err := qtx.CreateFrequentTxTransaction(ctx, queries.CreateFrequentTxTransactionParams{
 		TransactionID: txId,
 		FrequencyID:   ftxId,
 	}); err != nil {
@@ -72,7 +72,14 @@ func (r *Repository) createFrequentTxTransactionWithTxn(ctx context.Context, qtx
 
 func (r *Repository) GetFrequentTxs(ctx context.Context) ([]models.FrequentTx, error) {
 	l := logger.FromCtx(ctx)
-	dbFtx, err := r.q.GetFrequentTxs(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		l.Error("getting db from context", zap.Error(err))
+		return nil, err
+	}
+
+	dbFtx, err := q.GetFrequentTxs(ctx)
 	if err != nil {
 		l.Error("querying frequent transactions", zap.Error(err))
 		return nil, err
@@ -84,19 +91,26 @@ func (r *Repository) GetFrequentTxs(ctx context.Context) ([]models.FrequentTx, e
 
 func (r *Repository) GetFrequentTx(ctx context.Context, id string) (*models.FrequentTx, error) {
 	l := logger.FromCtx(ctx)
-	dbFtx, err := r.q.GetFrequentTx(ctx, id)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		l.Error("getting db from context", zap.Error(err))
+		return nil, err
+	}
+
+	dbFtx, err := q.GetFrequentTx(ctx, id)
 	if err != nil {
 		l.Error("querying frequent transactions", zap.Error(err))
 		return nil, err
 	}
 	l.Debug("queried frequent transactions")
 
-	ftx := dbFrequentTxsRowToFrequentTxs(dbFrequentTxRowToDBFrequentTxsRow(dbFtx))
+	ftx := dbFrequentTxsRowToFrequentTxs(dbFtx)
 	return &ftx[0], nil
 }
 
 func (r *Repository) UpdateFrequentTx(ctx context.Context, ftx *models.FrequentTx, scheduledTxs []models.Transaction) error {
-	return r.transact(func(qtx *db.Queries) error {
+	return r.transact(ctx, func(qtx *queries.Queries) error {
 		l := logger.FromCtx(ctx)
 
 		if err := qtx.DeleteScheduledTransactionsOfFrequentTx(ctx, ftx.ID); err != nil {
@@ -124,7 +138,7 @@ func (r *Repository) UpdateFrequentTx(ctx context.Context, ftx *models.FrequentT
 			goalId.String = ftx.Goal.ID
 		}
 
-		if err := qtx.UpdateFrequentTx(ctx, db.UpdateFrequentTxParams{
+		if err := qtx.UpdateFrequentTx(ctx, queries.UpdateFrequentTxParams{
 			ID:                         ftx.ID,
 			AccountID:                  ftx.Account.ID,
 			Amount:                     ftx.Amount,
@@ -159,7 +173,7 @@ func (r *Repository) UpdateFrequentTx(ctx context.Context, ftx *models.FrequentT
 }
 
 func (r *Repository) DeleteFrequentTx(ctx context.Context, id string) error {
-	return r.transact(func(qtx *db.Queries) error {
+	return r.transact(ctx, func(qtx *queries.Queries) error {
 		l := logger.FromCtx(ctx)
 
 		if err := qtx.DeleteScheduledTransactionsOfFrequentTx(ctx, id); err != nil {
@@ -179,8 +193,8 @@ func (r *Repository) DeleteFrequentTx(ctx context.Context, id string) error {
 }
 
 func (r *Repository) GenerateScheduledTransactions(ctx context.Context, ftx *models.FrequentTx, scheduledTxs []models.Transaction) error {
-	return r.transact(func(qtx *db.Queries) error {
-		if err := qtx.UpdateFrequentTxLastTransactionCreatedAt(ctx, db.UpdateFrequentTxLastTransactionCreatedAtParams{
+	return r.transact(ctx, func(qtx *queries.Queries) error {
+		if err := qtx.UpdateFrequentTxLastTransactionCreatedAt(ctx, queries.UpdateFrequentTxLastTransactionCreatedAtParams{
 			ID:                         ftx.ID,
 			LastTransactionScheduledTo: ftx.LastTransactionScheduledTo,
 		}); err != nil {
@@ -198,151 +212,79 @@ func (r *Repository) GenerateScheduledTransactions(ctx context.Context, ftx *mod
 	})
 }
 
-func dbFrequentTxsRowToFrequentTxs(dbFtxs []db.GetFrequentTxsRow) []models.FrequentTx {
+func dbFrequentTxsRowToFrequentTxs[T queries.GetFrequentTxRow | queries.GetFrequentTxsRow](dbFtxs []T) []models.FrequentTx {
 	ftxs := []models.FrequentTx{}
 
-	for _, dbFtx := range dbFtxs {
-		ftxIdx := slices.IndexFunc(ftxs, func(ftx models.FrequentTx) bool { return ftx.ID == dbFtx.ID })
+	for _, _dbFtx := range dbFtxs {
+		dbFt := queries.GetFrequentTxsRow(_dbFtx)
+		ftxIdx := slices.IndexFunc(ftxs, func(ftx models.FrequentTx) bool { return ftx.ID == dbFt.FrequentTx.ID })
 		if ftxIdx == -1 {
-			ft := models.FrequentTx{
-				ID: dbFtx.ID,
-				Account: models.Account{
-					ID:   dbFtx.AccountID,
-					Name: dbFtx.AccountName.String,
-					Currency: models.Currency{
-						ID:   dbFtx.CurrencyID.String,
-						Enum: models.CurrencyEnum(dbFtx.CurrencyEnum.Int64),
-					},
-				},
-				Amount:      dbFtx.Amount,
-				Description: dbFtx.Description.String,
-				CreatedAt:   dbFtx.CreatedAt,
-				Kind: models.TransactionKind{
-					ID:              dbFtx.KindID,
-					Enum:            models.TxKind(dbFtx.KindEnum.Int64),
-					IncreaseBalance: dbFtx.IncreaseBalance.Bool,
-				},
-				ToAmount:                   dbFtx.ToAmount.Float64,
-				Frequency:                  uint(dbFtx.Frequency),
-				FrequencyBy:                models.FrequencyBy(dbFtx.FrequencyBy),
-				StartsAt:                   dbFtx.StartsAt,
-				StopsAt:                    dbFtx.StopsAt.Time,
-				LastTransactionScheduledTo: dbFtx.LastTransactionScheduledTo,
-				Transactions:               []models.Transaction{},
-			}
-
-			if dbFtx.CategoryID.Valid {
-				ft.Category = &models.Category{
-					ID:          dbFtx.CategoryID.String,
-					Name:        dbFtx.CategoryName.String,
-					BudgetInEgp: dbFtx.CategoryBudgetInEgp.Float64,
-				}
-			}
-
-			if dbFtx.CounterpartyID.Valid {
-				ft.Counterparty = &models.Counterparty{
-					ID:   dbFtx.CounterpartyID.String,
-					Name: dbFtx.CounterpartyName.String,
-				}
-			}
-
-			if dbFtx.GoalID.Valid {
-				ft.Goal = &models.Goal{
-					ID:    dbFtx.GoalID.String,
-					Name:  dbFtx.GoalName.String,
-					Price: dbFtx.GoalPrice.Float64,
-					Currency: models.Currency{
-						ID:   dbFtx.GoalCurrencyID.String,
-						Enum: models.CurrencyEnum(dbFtx.GoalCurrency.Int64),
-					},
-				}
-			}
-
-			if dbFtx.ToAccountID.Valid {
-				ft.ToAccount = &models.Account{
-					ID:   dbFtx.ToAccountID.String,
-					Name: dbFtx.ToAccountName.String,
-					Currency: models.Currency{
-						ID:   dbFtx.ToCurrencyID.String,
-						Enum: models.CurrencyEnum(dbFtx.ToCurrencyEnum.Int64),
-					},
-				}
-			}
-
-			ftxs = append(ftxs, ft)
+			ftxs = append(ftxs, *dbFrequentTxToFrequentTx(
+				&dbFt.FrequentTx, &dbFt.TransactionKind, &dbFt.Account,
+				&dbFt.Currency, &dbFt.Account_2, &dbFt.Currency_2,
+				&dbFt.Category, &dbFt.Counterparty, &dbFt.Goal,
+				&dbFt.Currency_5, nil))
 			ftxIdx = len(ftxs) - 1
 		}
 
-		if !dbFtx.TransactionID.Valid {
-			continue
-		}
-
-		ft := models.Transaction{
-			ID: dbFtx.TransactionID.String,
-			Account: models.Account{
-				ID:   dbFtx.TransactionAccountID.String,
-				Name: dbFtx.AccountName.String,
-				Currency: models.Currency{
-					ID:   dbFtx.CurrencyID.String,
-					Enum: models.CurrencyEnum(dbFtx.CurrencyEnum.Int64),
-				},
-			},
-			Amount:      dbFtx.TransactionAmount.Float64,
-			Description: dbFtx.TransactionDescription.String,
-			ToAmount:    dbFtx.TransactionToAmount.Float64,
-			FulfilledAt: dbFtx.TransactionFulfilledAt.Time,
-			ScheduledTo: dbFtx.TransactionScheduledTo.Time,
-			CreatedAt:   dbFtx.TransactionCreatedAt.Time,
-			Kind: models.TransactionKind{
-				ID:              dbFtx.TransactionKindID.String,
-				Enum:            models.TxKind(dbFtx.TransactionKindEnum.Int64),
-				IncreaseBalance: dbFtx.TransactionIncreaseBalance.Bool,
-			},
-		}
-
-		if !dbFtx.TransactionCurrencyID.Valid {
-			ft.Category = &models.Category{
-				ID:          dbFtx.TransactionCurrencyID.String,
-				Name:        dbFtx.TransactionCategoryName.String,
-				BudgetInEgp: dbFtx.TransactionCategoryBudgetInEgp.Float64,
-			}
-		}
-
-		if dbFtx.TransactionCounterpartyID.Valid {
-			ft.Counterparty = &models.Counterparty{
-				ID:   dbFtx.TransactionCounterpartyID.String,
-				Name: dbFtx.TransactionCounterpartyName.String,
-			}
-		}
-
-		if !dbFtx.TransactionToAccountID.Valid {
-			ft.ToAccount = &models.Account{
-				ID: dbFtx.TransactionToAccountID.String,
-			}
-		}
-
-		if dbFtx.GoalID.Valid {
-			ft.Goal = &models.Goal{
-				ID:    dbFtx.GoalID.String,
-				Name:  dbFtx.GoalName.String,
-				Price: dbFtx.GoalPrice.Float64,
-				Currency: models.Currency{
-					ID:   dbFtx.GoalCurrencyID.String,
-					Enum: models.CurrencyEnum(dbFtx.GoalCurrency.Int64),
-				},
-			}
-		}
-
-		ftxs[ftxIdx].Transactions = append(ftxs[ftxIdx].Transactions, ft)
+		ftxs[ftxIdx].Transactions = append(ftxs[ftxIdx].Transactions, *dbTransactionToTransaction(
+			&dbFt.Transaction, &dbFt.TransactionKind_2, &dbFt.Account_3,
+			&dbFt.Currency_3, &dbFt.Account_4, &dbFt.Currency_4,
+			&dbFt.Category_2, &dbFt.Counterparty_2, nil, nil))
 	}
 
 	return ftxs
 }
 
-func dbFrequentTxRowToDBFrequentTxsRow(ftx []db.GetFrequentTxRow) []db.GetFrequentTxsRow {
-	ftxs := make([]db.GetFrequentTxsRow, len(ftx))
-	for i, f := range ftx {
-		ftxs[i] = db.GetFrequentTxsRow(f)
+func dbFrequentTxToFrequentTx(
+	dbFtx *queries.FrequentTx, knd *queries.TransactionKind, acc *queries.Account,
+	cur *queries.Currency, toAcc *queries.Account, toCur *queries.Currency,
+	cat *queries.Category, cp *queries.Counterparty, gl *queries.Goal,
+	glCur *queries.Currency, txs []queries.Transaction,
+) *models.FrequentTx {
+	ft := models.FrequentTx{
+		ID:          dbFtx.ID,
+		Account:     models.Account{ID: dbFtx.AccountID},
+		Amount:      dbFtx.Amount,
+		Description: dbFtx.Description.String,
+		CreatedAt:   dbFtx.CreatedAt,
+		Kind:        models.TransactionKind{ID: dbFtx.KindID},
+
+		ToAmount:                   dbFtx.ToAmount.Float64,
+		Frequency:                  uint(dbFtx.Frequency),
+		FrequencyBy:                models.FrequencyBy(dbFtx.FrequencyBy),
+		StartsAt:                   dbFtx.StartsAt,
+		StopsAt:                    dbFtx.StopsAt.Time,
+		LastTransactionScheduledTo: dbFtx.LastTransactionScheduledTo,
 	}
-	return ftxs
+
+	if toAcc != nil {
+		ft.ToAccount = dbAccountToAccount(toAcc, 0, toCur, nil, nil)
+	} else if dbFtx.ToAccountID.Valid {
+		ft.ToAccount = &models.Account{ID: dbFtx.ToAccountID.String}
+	}
+
+	if cat != nil {
+		ft.Category = dbCategoryToCategory(cat, knd)
+	} else if dbFtx.CategoryID.Valid {
+		ft.Category = &models.Category{ID: dbFtx.CategoryID.String}
+	}
+
+	if cp != nil {
+		ft.Counterparty = dbCounterpartyToCounterparty(cp)
+	} else if dbFtx.CounterpartyID.Valid {
+		ft.Counterparty = &models.Counterparty{ID: dbFtx.CounterpartyID.String}
+	}
+
+	if gl != nil {
+		ft.Goal = dbGoalToGoal(gl, glCur)
+	} else if dbFtx.GoalID.Valid {
+		ft.Goal = &models.Goal{ID: dbFtx.GoalID.String}
+	}
+
+	for _, tx := range txs {
+		ft.Transactions = append(ft.Transactions, *dbTransactionToTransaction(&tx, nil, nil, nil, nil, nil, nil, nil, nil, nil))
+	}
+
+	return &ft
 }

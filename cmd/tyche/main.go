@@ -11,11 +11,11 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 
 	"github.com/omareloui/tyche/internal/config"
-	"github.com/omareloui/tyche/internal/dbconn"
 	"github.com/omareloui/tyche/internal/handler"
 	"github.com/omareloui/tyche/internal/repository"
 	"github.com/omareloui/tyche/internal/router"
 	"github.com/omareloui/tyche/internal/sanitizer"
+	tenantmanager "github.com/omareloui/tyche/internal/tenant_manager"
 	"github.com/omareloui/tyche/internal/valid"
 )
 
@@ -31,12 +31,8 @@ func init() {
 func main() {
 	port := config.GetApplicationPort()
 
-	db, q, err := dbconn.New(config.GetDataSource())
-	if err != nil {
-		log.Fatalln("error connecting to the database", err)
-		return
-	}
-	repo := repository.New(db, q)
+	tm := tenantmanager.NewTenantManager()
+	repo := repository.New(tm)
 	valid := valid.New()
 	sani := sanitizer.New()
 	h := handler.New(repo, valid, sani)

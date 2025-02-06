@@ -118,7 +118,7 @@ func (h *Handler) initUser(ctx context.Context, usr *models.User) error {
 	if err != nil {
 		return err
 	}
-	usr.DefaultCurrency = cur
+	usr.DefaultCurrency = *cur
 
 	if err := h.repo.CreateUser(ctx, usr); err != nil {
 		return err

@@ -14,21 +14,11 @@ VALUES (
 
 -- name: GetGoals :many
 SELECT
-    gl.id,
-    gl.name,
-    gl.price,
-    gl.currency_id,
-    gl.fulfilled_at,
-    gl.created_at,
-    c.enum AS currency,
-    t.id AS transaction_id,
-    t.account_id AS transaction_account_id,
-    t.amount AS transaction_amount,
-    t.scheduled_to AS transaction_scheduled_to,
-    t.fulfilled_at AS transaction_fulfilled_at,
-    a.name AS transaction_account_name,
-    ac.id AS transaction_account_currency_id,
-    ac.enum AS transaction_account_currency_enum
+    sqlc.embed(gl),
+    sqlc.embed(c),
+    sqlc.embed(t),
+    sqlc.embed(a),
+    sqlc.embed(ac)
 FROM goals AS gl
 LEFT JOIN currencies AS c ON c.id = gl.currency_id
 LEFT JOIN transactions AS t ON t.goal_id = gl.id
@@ -39,21 +29,11 @@ ORDER BY gl.created_at DESC;
 
 -- name: GetUnfulfilledGoals :many
 SELECT
-    gl.id,
-    gl.name,
-    gl.price,
-    gl.currency_id,
-    gl.fulfilled_at,
-    gl.created_at,
-    c.enum AS currency,
-    t.id AS transaction_id,
-    t.account_id AS transaction_account_id,
-    t.amount AS transaction_amount,
-    t.scheduled_to AS transaction_scheduled_to,
-    t.fulfilled_at AS transaction_fulfilled_at,
-    a.name AS transaction_account_name,
-    ac.id AS transaction_account_currency_id,
-    ac.enum AS transaction_account_currency_enum
+    sqlc.embed(gl),
+    sqlc.embed(c),
+    sqlc.embed(t),
+    sqlc.embed(a),
+    sqlc.embed(ac)
 FROM goals AS gl
 LEFT JOIN currencies AS c ON c.id = gl.currency_id
 LEFT JOIN transactions AS t ON t.goal_id = gl.id
@@ -65,21 +45,11 @@ ORDER BY gl.created_at DESC;
 
 -- name: GetGoal :many
 SELECT
-    gl.id,
-    gl.name,
-    gl.price,
-    gl.currency_id,
-    gl.fulfilled_at,
-    gl.created_at,
-    c.enum AS currency,
-    t.id AS transaction_id,
-    t.account_id AS transaction_account_id,
-    t.amount AS transaction_amount,
-    t.scheduled_to AS transaction_scheduled_to,
-    t.fulfilled_at AS transaction_fulfilled_at,
-    a.name AS transaction_account_name,
-    ac.id AS transaction_account_currency_id,
-    ac.enum AS transaction_account_currency_enum
+    sqlc.embed(gl),
+    sqlc.embed(c),
+    sqlc.embed(t),
+    sqlc.embed(a),
+    sqlc.embed(ac)
 FROM goals AS gl
 LEFT JOIN currencies AS c ON c.id = gl.currency_id
 LEFT JOIN transactions AS t ON t.goal_id = gl.id

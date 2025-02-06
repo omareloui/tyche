@@ -2,6 +2,7 @@ package jwt
 
 import (
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -41,12 +42,14 @@ type RefreshClaims struct {
 }
 
 type AccessClaims struct {
-	ID        string
-	Email     string
-	Name      string
-	FirstName string
-	LastName  string
-	Picture   string
+	ID            string
+	OAuthID       string
+	OAuthProvider models.OAuthProvider
+	Email         string
+	Name          string
+	FirstName     string
+	LastName      string
+	Picture       string
 }
 
 var (
@@ -73,12 +76,14 @@ func ParseAccessClaims(token string) (*AccessClaims, error) {
 		return nil, err
 	}
 	return &AccessClaims{
-		ID:        (*claims)["id"].(string),
-		Name:      (*claims)["name"].(string),
-		Email:     (*claims)["email"].(string),
-		FirstName: (*claims)["first_name"].(string),
-		LastName:  (*claims)["last_name"].(string),
-		Picture:   (*claims)["picture"].(string),
+		ID:            (*claims)["id"].(string),
+		OAuthID:       (*claims)["oauth_id"].(string),
+		OAuthProvider: (*claims)["oauth_provider"].(models.OAuthProvider),
+		Name:          (*claims)["name"].(string),
+		Email:         (*claims)["email"].(string),
+		FirstName:     (*claims)["first_name"].(string),
+		LastName:      (*claims)["last_name"].(string),
+		Picture:       (*claims)["picture"].(string),
 	}, nil
 }
 
@@ -130,6 +135,9 @@ func newToken(kind TokenType, usr *models.User) (string, time.Time, error) {
 		exp = time.Now().Add(accessExpiration)
 		claims = &jwt.MapClaims{
 			"id": usr.ID,
+
+			"oauth_id":       usr.OAuthID,
+			"oauth_provider": strconv.FormatUint(uint64(usr.OAuthProvider), 10),
 
 			"name":       usr.FullName(),
 			"email":      usr.Email,

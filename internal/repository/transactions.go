@@ -4,14 +4,14 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/omareloui/tyche/internal/db"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/queries"
 	"go.uber.org/zap"
 )
 
 func (r *Repository) CreateTransaction(ctx context.Context, tx *models.Transaction, ftx *models.FrequentTx, scheduledTxs []models.Transaction) error {
-	return r.transact(func(qtx *db.Queries) error {
+	return r.transact(ctx, func(qtx *queries.Queries) error {
 		if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, tx); err != nil {
 			return err
 		}
@@ -38,7 +38,7 @@ func (r *Repository) CreateTransaction(ctx context.Context, tx *models.Transacti
 	})
 }
 
-func (r *Repository) createTransactionWithTxn(ctx context.Context, qtx *db.Queries, tx *models.Transaction) error {
+func (r *Repository) createTransactionWithTxn(ctx context.Context, qtx *queries.Queries, tx *models.Transaction) error {
 	l := logger.FromCtx(ctx)
 
 	var catId, cpId, toAccId, goalId sql.NullString
@@ -60,7 +60,7 @@ func (r *Repository) createTransactionWithTxn(ctx context.Context, qtx *db.Queri
 		goalId.String = tx.Goal.ID
 	}
 
-	if err := qtx.CreateTransaction(ctx, db.CreateTransactionParams{
+	if err := qtx.CreateTransaction(ctx, queries.CreateTransactionParams{
 		ID:             tx.ID,
 		AccountID:      tx.Account.ID,
 		Amount:         tx.Amount,
@@ -81,7 +81,7 @@ func (r *Repository) createTransactionWithTxn(ctx context.Context, qtx *db.Queri
 	return nil
 }
 
-func (r *Repository) createTransactionAndApplyToAccountIfNeededWithTxn(ctx context.Context, qtx *db.Queries, tx *models.Transaction) error {
+func (r *Repository) createTransactionAndApplyToAccountIfNeededWithTxn(ctx context.Context, qtx *queries.Queries, tx *models.Transaction) error {
 	l := logger.FromCtx(ctx)
 	if err := r.createTransactionWithTxn(ctx, qtx, tx); err != nil {
 		return err
@@ -100,7 +100,14 @@ func (r *Repository) createTransactionAndApplyToAccountIfNeededWithTxn(ctx conte
 
 func (r *Repository) GetTransactions(ctx context.Context) ([]models.Transaction, error) {
 	l := logger.FromCtx(ctx)
-	dbTransactions, err := r.q.GetTransactions(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		l.Error("getting db from context", zap.Error(err))
+		return nil, err
+	}
+
+	dbTransactions, err := q.GetTransactions(ctx)
 	if err != nil {
 		l.Error("querying transactions", zap.Error(err))
 		return nil, err
@@ -116,7 +123,14 @@ func (r *Repository) GetTransactions(ctx context.Context) ([]models.Transaction,
 
 func (r *Repository) GetTransaction(ctx context.Context, id string) (*models.Transaction, error) {
 	l := logger.FromCtx(ctx)
-	dbTx, err := r.q.GetTransaction(ctx, id)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		l.Error("getting db from context", zap.Error(err))
+		return nil, err
+	}
+
+	dbTx, err := q.GetTransaction(ctx, id)
 	if err != nil {
 		l.Error("querying transaction", zap.Error(err))
 		return nil, err
@@ -126,7 +140,7 @@ func (r *Repository) GetTransaction(ctx context.Context, id string) (*models.Tra
 }
 
 func (r *Repository) DeleteTransaction(ctx context.Context, tx *models.Transaction) error {
-	return r.transact(func(qtx *db.Queries) error {
+	return r.transact(ctx, func(qtx *queries.Queries) error {
 		l := logger.FromCtx(ctx)
 		if err := qtx.DeleteTransaction(ctx, tx.ID); err != nil {
 			l.Error("deleting transaction", zap.Error(err), zap.String("id", tx.ID))
@@ -146,7 +160,7 @@ func (r *Repository) DeleteTransaction(ctx context.Context, tx *models.Transacti
 }
 
 func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transaction, tx *models.Transaction) error {
-	return r.transact(func(qtx *db.Queries) error {
+	return r.transact(ctx, func(qtx *queries.Queries) error {
 		l := logger.FromCtx(ctx)
 
 		var catId, cpId, toAccId, goalId sql.NullString
@@ -168,7 +182,7 @@ func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transa
 			goalId.String = tx.Goal.ID
 		}
 
-		if err := qtx.UpdateTransaction(ctx, db.UpdateTransactionParams{
+		if err := qtx.UpdateTransaction(ctx, queries.UpdateTransactionParams{
 			ID:             tx.ID,
 			AccountID:      tx.Account.ID,
 			Amount:         tx.Amount,
@@ -200,7 +214,7 @@ func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transa
 }
 
 func (r *Repository) FulfillTransaction(ctx context.Context, tx *models.Transaction) error {
-	return r.transact(func(qtx *db.Queries) error {
+	return r.transact(ctx, func(qtx *queries.Queries) error {
 		l := logger.FromCtx(ctx)
 		if err := qtx.FulfillTransaction(ctx, tx.ID); err != nil {
 			l.Error("fulfilling transaction", zap.Error(err), zap.String("id", tx.ID), zap.Time("fulfilled_on", tx.FulfilledAt))
@@ -216,73 +230,57 @@ func (r *Repository) FulfillTransaction(ctx context.Context, tx *models.Transact
 	})
 }
 
-func dbTransactionRowToTransaction[T db.GetTransactionRow | db.GetTransactionsRow](dbTx *T) *models.Transaction {
-	_dbTx := db.GetTransactionsRow(*dbTx)
-
-	curr := models.Currency{
-		ID:   _dbTx.CurrencyID.String,
-		Enum: models.CurrencyEnum(_dbTx.CurrencyEnum.Int64),
-	}
-
+func dbTransactionToTransaction(
+	dbTx *queries.Transaction, knd *queries.TransactionKind, acc *queries.Account,
+	cur *queries.Currency, toAcc *queries.Account, toCur *queries.Currency,
+	cat *queries.Category, cp *queries.Counterparty, gl *queries.Goal,
+	glCur *queries.Currency,
+) *models.Transaction {
 	tx := models.Transaction{
-		ID: _dbTx.ID,
-		Account: models.Account{
-			ID:       _dbTx.AccountID,
-			Name:     _dbTx.AccountName.String,
-			Currency: curr,
-		},
-		Amount:      _dbTx.Amount,
-		Description: _dbTx.Description.String,
-		ToAmount:    _dbTx.ToAmount.Float64,
-		FulfilledAt: _dbTx.FulfilledAt.Time,
-		ScheduledTo: _dbTx.ScheduledTo,
-		CreatedAt:   _dbTx.CreatedAt,
-		Kind: models.TransactionKind{
-			ID:              _dbTx.KindID,
-			Enum:            models.TxKind(_dbTx.KindEnum.Int64),
-			IncreaseBalance: _dbTx.IncreaseBalance.Bool,
-		},
+		ID:          dbTx.ID,
+		Account:     *dbAccountToAccount(acc, 0, cur, nil, nil),
+		Amount:      dbTx.Amount,
+		Description: dbTx.Description.String,
+		ToAmount:    dbTx.ToAmount.Float64,
+		FulfilledAt: dbTx.FulfilledAt.Time,
+		ScheduledTo: dbTx.ScheduledTo,
+		CreatedAt:   dbTx.CreatedAt,
+		Kind:        *dbTransactionKindToTransactionKind(knd),
 	}
 
-	if _dbTx.ToAccountID.Valid {
-		tx.ToAccount = &models.Account{
-			ID:   _dbTx.ToAccountID.String,
-			Name: _dbTx.ToAccountName.String,
-			Currency: models.Currency{
-				ID:   _dbTx.ToCurrencyID.String,
-				Enum: models.CurrencyEnum(_dbTx.ToCurrencyEnum.Int64),
-			},
-		}
+	if toAcc != nil {
+		tx.ToAccount = dbAccountToAccount(toAcc, 0, toCur, nil, nil)
+	} else if dbTx.ToAccountID.Valid {
+		tx.ToAccount = &models.Account{ID: dbTx.ToAccountID.String}
 	}
 
-	if _dbTx.CategoryID.Valid {
-		tx.Category = &models.Category{
-			ID:          _dbTx.CategoryID.String,
-			Name:        _dbTx.CategoryName.String,
-			BudgetInEgp: _dbTx.CategoryBudgetInEgp.Float64,
-		}
+	if cat != nil {
+		tx.Category = dbCategoryToCategory(cat, knd)
+	} else if dbTx.CategoryID.Valid {
+		tx.Category = &models.Category{ID: dbTx.CategoryID.String}
 	}
 
-	if _dbTx.CounterpartyID.Valid {
-		tx.Counterparty = &models.Counterparty{
-			ID:   _dbTx.CounterpartyID.String,
-			Name: _dbTx.CounterpartyName.String,
-		}
+	if cp != nil {
+		tx.Counterparty = dbCounterpartyToCounterparty(cp)
+	} else if dbTx.CounterpartyID.Valid {
+		tx.Counterparty = &models.Counterparty{ID: dbTx.CounterpartyID.String}
 	}
 
-	if _dbTx.GoalID.Valid {
-		goalCurr := models.Currency{
-			ID:   _dbTx.GoalCurrencyID.String,
-			Enum: models.CurrencyEnum(_dbTx.GoalCurrency.Int64),
-		}
-		tx.Goal = &models.Goal{
-			ID:       _dbTx.GoalCurrencyID.String,
-			Currency: goalCurr,
-			Name:     _dbTx.GoalName.String,
-			Price:    _dbTx.GoalPrice.Float64,
-		}
-		tx.GoalPercentage = tx.Percentage(_dbTx.GoalPrice.Float64, goalCurr.Enum)
+	if gl != nil {
+		tx.Goal = dbGoalToGoal(gl, glCur)
+		tx.GoalPercentage = tx.Percentage(tx.Goal.Price, tx.Goal.Currency.Enum)
+	} else if dbTx.GoalID.Valid {
+		tx.Goal = &models.Goal{ID: dbTx.GoalID.String}
 	}
 
 	return &tx
+}
+
+func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTransactionsRow](dbTx *T) *models.Transaction {
+	_dbTx := queries.GetTransactionsRow(*dbTx)
+	return dbTransactionToTransaction(
+		&_dbTx.Transaction, &_dbTx.TransactionKind, &_dbTx.Account,
+		&_dbTx.Currency, &_dbTx.Account_2, &_dbTx.Currency_2,
+		&_dbTx.Category, &_dbTx.Counterparty, &_dbTx.Goal,
+		&_dbTx.Currency_3)
 }

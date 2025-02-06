@@ -3,32 +3,47 @@ package repository
 import (
 	"context"
 
-	"github.com/omareloui/tyche/internal/db"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/queries"
 	"go.uber.org/zap"
 )
 
 func (r *Repository) GetTransactionKinds(ctx context.Context) ([]models.TransactionKind, error) {
 	l := logger.FromCtx(ctx)
-	dbKinds, err := r.q.GetTransactionKinds(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		l.Error("getting db from context", zap.Error(err))
+		return nil, err
+	}
+
+	dbKinds, err := q.GetTransactionKinds(ctx)
 	if err != nil {
 		l.Error("fetching tx kinds", zap.Error(err))
 		return nil, err
 	}
 	l.Debug("fetched transaction kinds")
-	return dbTransactionKindsToTransactionKinds(dbKinds), nil
+	return dbTransactionKindsRowToTransactionKinds(dbKinds), nil
 }
 
 func (r *Repository) GetTransactionKind(ctx context.Context, id string) (*models.TransactionKind, error) {
-	k, err := r.q.GetTransactionKind(ctx, id)
+	l := logger.FromCtx(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		l.Error("getting db from context", zap.Error(err))
+		return nil, err
+	}
+
+	k, err := q.GetTransactionKind(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	return dbTransactionKindToTransactionKind(&k), nil
+	return dbTransactionKindToTransactionKind(&k.TransactionKind), nil
 }
 
-func dbTransactionKindToTransactionKind(dbKind *db.TransactionKind) *models.TransactionKind {
+func dbTransactionKindToTransactionKind(dbKind *queries.TransactionKind) *models.TransactionKind {
 	return &models.TransactionKind{
 		ID:              dbKind.ID,
 		Enum:            models.TxKind(dbKind.Enum),
@@ -36,10 +51,10 @@ func dbTransactionKindToTransactionKind(dbKind *db.TransactionKind) *models.Tran
 	}
 }
 
-func dbTransactionKindsToTransactionKinds(dbKinds []db.TransactionKind) []models.TransactionKind {
+func dbTransactionKindsRowToTransactionKinds(dbKinds []queries.GetTransactionKindsRow) []models.TransactionKind {
 	kinds := make([]models.TransactionKind, len(dbKinds))
 	for i, kind := range dbKinds {
-		kinds[i] = *dbTransactionKindToTransactionKind(&kind)
+		kinds[i] = *dbTransactionKindToTransactionKind(&kind.TransactionKind)
 	}
 	return kinds
 }

@@ -8,15 +8,30 @@ import (
 	"github.com/omareloui/tyche/internal/idgen"
 )
 
-type OAuthProvider int
+type OAuthProvider uint8
 
 const (
 	NilOAuthProvider OAuthProvider = iota
 	Google
+	Facebook
+	Microsoft
+	Github
 )
 
 func (p OAuthProvider) String() string {
-	return [...]string{"NilOAuthProvider", "Google"}[p]
+	return [...]string{
+		"NilOAuthProvider", "Google",
+		"Facebook", "Microsofto",
+		"Github",
+	}[p]
+}
+
+func (p OAuthProvider) Prefix() string {
+	return [...]string{
+		"??", "GL",
+		"FB", "MS",
+		"GH",
+	}[p]
 }
 
 type User struct {
@@ -25,11 +40,11 @@ type User struct {
 	OAuthProvider   OAuthProvider `validate:"required"`
 	Email           string        `validate:"required,email"`
 	VerifiedEmail   bool
-	FirstName       string    `validate:"required,min=2"`
-	LastName        string    `validate:"required,min=2"`
-	Picture         string    `validate:"required,url"`
-	DefaultCurrency *Currency `validate:"required"`
-	StartOfPeriod   uint8     `validate:"required,min=1,max=31"`
+	FirstName       string   `validate:"required,min=2"`
+	LastName        string   `validate:"required,min=2"`
+	Picture         string   `validate:"required,url"`
+	DefaultCurrency Currency `validate:"required"`
+	StartOfPeriod   uint8    `validate:"required,min=1,max=31"`
 }
 
 func (u *User) FullName() string {

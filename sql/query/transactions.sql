@@ -30,34 +30,16 @@ VALUES (
 
 -- name: GetTransactions :many
 SELECT
-    t.id,
-    t.account_id,
-    t.amount,
-    t.kind_id,
-    t.category_id,
-    t.counterparty_id,
-    t.description,
-    t.to_account_id,
-    t.to_amount,
-    t.fulfilled_at,
-    t.scheduled_to,
-    t.created_at,
-    a.name AS account_name,
-    a.currency_id,
-    c.enum AS currency_enum,
-    cp.name AS counterparty_name,
-    ta.name AS to_account_name,
-    ta.currency_id AS to_currency_id,
-    tc.enum AS to_currency_enum,
-    k.enum AS kind_enum,
-    k.increase_balance,
-    cat.name AS category_name,
-    cat.budget_in_egp AS category_budget_in_egp,
-    g.id AS goal_id,
-    g.name AS goal_name,
-    g.price AS goal_price,
-    g.currency_id AS goal_currency_id,
-    gc.enum AS goal_currency
+    sqlc.embed(t),
+    sqlc.embed(a),
+    sqlc.embed(c),
+    sqlc.embed(cp),
+    sqlc.embed(ta),
+    sqlc.embed(tc),
+    sqlc.embed(k),
+    sqlc.embed(cat),
+    sqlc.embed(g),
+    sqlc.embed(gc)
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
@@ -72,34 +54,16 @@ ORDER BY t.scheduled_to DESC, t.created_at DESC;
 
 -- name: GetTransaction :one
 SELECT
-    t.id,
-    t.account_id,
-    t.amount,
-    t.kind_id,
-    t.category_id,
-    t.counterparty_id,
-    t.description,
-    t.to_account_id,
-    t.to_amount,
-    t.fulfilled_at,
-    t.scheduled_to,
-    t.created_at,
-    a.name AS account_name,
-    a.currency_id,
-    c.enum AS currency_enum,
-    cp.name AS counterparty_name,
-    ta.name AS to_account_name,
-    ta.currency_id AS to_currency_id,
-    tc.enum AS to_currency_enum,
-    k.enum AS kind_enum,
-    k.increase_balance,
-    cat.name AS category_name,
-    cat.budget_in_egp AS category_budget_in_egp,
-    g.id AS goal_id,
-    g.name AS goal_name,
-    g.price AS goal_price,
-    g.currency_id AS goal_currency_id,
-    gc.enum AS goal_currency
+    sqlc.embed(t),
+    sqlc.embed(a),
+    sqlc.embed(c),
+    sqlc.embed(cp),
+    sqlc.embed(ta),
+    sqlc.embed(tc),
+    sqlc.embed(k),
+    sqlc.embed(cat),
+    sqlc.embed(g),
+    sqlc.embed(gc)
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id

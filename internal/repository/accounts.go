@@ -5,21 +5,27 @@ import (
 	"database/sql"
 	"strings"
 
-	"github.com/omareloui/tyche/internal/db"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/queries"
 	"go.uber.org/zap"
 )
 
 func (r *Repository) CreateAccount(ctx context.Context, a *models.Account) error {
 	l := logger.FromCtx(ctx)
 
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		l.Error("getting db from context", zap.Error(err))
+		return err
+	}
+
 	cpId := ""
 	if a.Counterparty != nil {
 		cpId = a.Counterparty.ID
 	}
 
-	if err := r.q.CreateAccount(ctx, db.CreateAccountParams{
+	if err := q.CreateAccount(ctx, queries.CreateAccountParams{
 		ID:             a.ID,
 		Name:           a.Name,
 		KindID:         a.Kind.ID,
@@ -56,7 +62,14 @@ func (r *Repository) CreateAccount(ctx context.Context, a *models.Account) error
 
 func (r *Repository) GetAccounts(ctx context.Context) ([]models.Account, error) {
 	l := logger.FromCtx(ctx)
-	accs, err := r.q.GetAccounts(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		l.Error("getting db from context", zap.Error(err))
+		return nil, err
+	}
+
+	accs, err := q.GetAccounts(ctx)
 	if err != nil {
 		l.Error("querying accounts", zap.Error(err))
 		return nil, err
@@ -67,7 +80,14 @@ func (r *Repository) GetAccounts(ctx context.Context) ([]models.Account, error) 
 
 func (r *Repository) GetAccount(ctx context.Context, id string) (*models.Account, error) {
 	l := logger.FromCtx(ctx)
-	acc, err := r.q.GetAccount(ctx, id)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		l.Error("getting db from context", zap.Error(err))
+		return nil, err
+	}
+
+	acc, err := q.GetAccount(ctx, id)
 	if err != nil {
 		l.Error("querying account", zap.Error(err))
 		return nil, err
@@ -79,12 +99,18 @@ func (r *Repository) GetAccount(ctx context.Context, id string) (*models.Account
 func (r *Repository) UpdateAccount(ctx context.Context, a *models.Account) error {
 	l := logger.FromCtx(ctx)
 
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		l.Error("getting db from context", zap.Error(err))
+		return err
+	}
+
 	cpId := ""
 	if a.Counterparty != nil {
 		cpId = a.Counterparty.ID
 	}
 
-	if err := r.q.UpdateAccount(ctx, db.UpdateAccountParams{
+	if err := q.UpdateAccount(ctx, queries.UpdateAccountParams{
 		ID:                 a.ID,
 		Name:               a.Name,
 		KindID:             a.Kind.ID,
@@ -119,7 +145,7 @@ func (r *Repository) UpdateAccount(ctx context.Context, a *models.Account) error
 }
 
 func (r *Repository) SetDefaultAccountExpect(ctx context.Context, id string) error {
-	return r.transact(func(qtx *db.Queries) error {
+	return r.transact(ctx, func(qtx *queries.Queries) error {
 		l := logger.FromCtx(ctx)
 		err := qtx.UnsetDefaultAccountExpect(ctx, id)
 		if err != nil {
@@ -137,7 +163,14 @@ func (r *Repository) SetDefaultAccountExpect(ctx context.Context, id string) err
 
 func (r *Repository) DeleteAccount(ctx context.Context, id string) error {
 	l := logger.FromCtx(ctx)
-	if err := r.q.DeleteAccount(ctx, id); err != nil {
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		l.Error("getting db from context", zap.Error(err))
+		return err
+	}
+
+	if err := q.DeleteAccount(ctx, id); err != nil {
 		l.Error("deleting account", zap.Error(err))
 		return err
 	}
@@ -145,7 +178,7 @@ func (r *Repository) DeleteAccount(ctx context.Context, id string) error {
 	return nil
 }
 
-func (r *Repository) applyTxToAccountWithTxn(qtx *db.Queries, ctx context.Context, tx *models.Transaction) error {
+func (r *Repository) applyTxToAccountWithTxn(qtx *queries.Queries, ctx context.Context, tx *models.Transaction) error {
 	l := logger.FromCtx(ctx)
 
 	if tx.Kind.Enum == models.TransferTxKind || tx.Kind.Enum == models.DebtTxKind {
@@ -173,7 +206,7 @@ func (r *Repository) applyTxToAccountWithTxn(qtx *db.Queries, ctx context.Contex
 	return nil
 }
 
-func (r *Repository) undoTxToAccountWithTxn(qtx *db.Queries, ctx context.Context, tx *models.Transaction) error {
+func (r *Repository) undoTxToAccountWithTxn(qtx *queries.Queries, ctx context.Context, tx *models.Transaction) error {
 	l := logger.FromCtx(ctx)
 	if tx.Kind.Enum == models.TransferTxKind {
 		if err := r.addToAccountWithTxn(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {
@@ -200,8 +233,8 @@ func (r *Repository) undoTxToAccountWithTxn(qtx *db.Queries, ctx context.Context
 	return nil
 }
 
-func (r *Repository) addToAccountWithTxn(qtx *db.Queries, ctx context.Context, id string, amount float64) error {
-	err := qtx.AddToAccount(ctx, db.AddToAccountParams{ID: id, Amount: amount})
+func (r *Repository) addToAccountWithTxn(qtx *queries.Queries, ctx context.Context, id string, amount float64) error {
+	err := qtx.AddToAccount(ctx, queries.AddToAccountParams{ID: id, Amount: amount})
 	if err != nil {
 		l := logger.FromCtx(ctx)
 		l.Error("adding to account", zap.Error(err), zap.String("id", id), zap.Float64("amount", amount))
@@ -210,8 +243,8 @@ func (r *Repository) addToAccountWithTxn(qtx *db.Queries, ctx context.Context, i
 	return nil
 }
 
-func (r *Repository) removeFromAccountWithTxn(qtx *db.Queries, ctx context.Context, id string, amount float64) error {
-	err := qtx.RemoveFromAccount(ctx, db.RemoveFromAccountParams{ID: id, Amount: amount})
+func (r *Repository) removeFromAccountWithTxn(qtx *queries.Queries, ctx context.Context, id string, amount float64) error {
+	err := qtx.RemoveFromAccount(ctx, queries.RemoveFromAccountParams{ID: id, Amount: amount})
 	if err != nil {
 		l := logger.FromCtx(ctx)
 		l.Error("removing from account", zap.Error(err), zap.String("id", id), zap.Float64("amount", amount))
@@ -221,54 +254,64 @@ func (r *Repository) removeFromAccountWithTxn(qtx *db.Queries, ctx context.Conte
 }
 
 func (r *Repository) GetBalances(ctx context.Context) ([]models.Balance, error) {
-	dbBalances, err := r.q.GetBalances(ctx)
+	l := logger.FromCtx(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l := logger.FromCtx(ctx)
+		l.Error("getting db from context", zap.Error(err))
+		return nil, err
+	}
+
+	dbBalances, err := q.GetBalances(ctx)
+	if err != nil {
 		l.Error("querying balances", zap.Error(err))
 		return nil, err
 	}
 	return dbBalancesToBalances(dbBalances), nil
 }
 
-func dbAccountRowToAccount[T db.GetAccountRow | db.GetAccountsRow](dbAcc *T) *models.Account {
-	_dbAcc := db.GetAccountsRow(*dbAcc)
-	var cp *models.Counterparty
+func dbAccountToAccount(dbAcc *queries.Account, actualAmount float64, cur *queries.Currency, k *queries.AccountKind, cp *queries.Counterparty) *models.Account {
+	acc := &models.Account{
+		ID:                 dbAcc.ID,
+		Name:               dbAcc.Name,
+		Amount:             dbAcc.Amount,
+		ActualAmount:       actualAmount,
+		IsDefault:          dbAcc.IsDefault,
+		NameOnCard:         dbAcc.NameOnCard.String,
+		CardLimit:          dbAcc.CardLimit,
+		Iban:               dbAcc.Iban.String,
+		CardNumber:         dbAcc.CardNumber.String,
+		Note:               dbAcc.Note.String,
+		IsArchive:          dbAcc.IsArchived,
+		ExcludeFromBalance: dbAcc.ExcludeFromBalance,
+		ExpirationDate:     dbAcc.ExpirationDate.Time,
+		CreatedAt:          dbAcc.CreatedAt,
 
-	if _dbAcc.CounterpartyID.Valid {
-		cp = &models.Counterparty{
-			ID:   _dbAcc.CounterpartyID.String,
-			Name: _dbAcc.CounterpartyName.String,
-		}
+		Currency: models.Currency{ID: dbAcc.CurrencyID},
+		Kind:     models.AccountKind{ID: dbAcc.KindID},
+	}
+	if cur != nil {
+		acc.Currency = *dbCurrencyToCurrency(cur)
 	}
 
-	return &models.Account{
-		ID:           _dbAcc.ID,
-		Name:         _dbAcc.Name,
-		Amount:       _dbAcc.Amount,
-		ActualAmount: _dbAcc.ActualAmount.(float64),
-		IsDefault:    _dbAcc.IsDefault,
-		Currency: models.Currency{
-			ID:   _dbAcc.CurrencyID,
-			Enum: models.CurrencyEnum(_dbAcc.CurrencyEnum.Int64),
-		},
-		Counterparty: cp,
-		Kind: models.AccountKind{
-			ID:   _dbAcc.KindID,
-			Enum: models.AccKind(_dbAcc.KindEnum.Int64),
-		},
-		NameOnCard:         _dbAcc.NameOnCard.String,
-		CardLimit:          _dbAcc.CardLimit,
-		Iban:               _dbAcc.Iban.String,
-		CardNumber:         _dbAcc.CardNumber.String,
-		Note:               _dbAcc.Note.String,
-		IsArchive:          _dbAcc.IsArchived,
-		ExcludeFromBalance: _dbAcc.ExcludeFromBalance,
-		ExpirationDate:     _dbAcc.ExpirationDate.Time,
-		CreatedAt:          _dbAcc.CreatedAt,
+	if cp != nil {
+		acc.Counterparty = dbCounterpartyToCounterparty(cp)
+	} else if dbAcc.CounterpartyID.Valid {
+		acc.Counterparty = &models.Counterparty{ID: dbAcc.CounterpartyID.String}
 	}
+
+	if k != nil {
+		acc.Kind = *dbAccountKindToAccountKind(k)
+	}
+	return acc
 }
 
-func dbAccountsRowToAccounts(dbAccs []db.GetAccountsRow) []models.Account {
+func dbAccountRowToAccount[T queries.GetAccountRow | queries.GetAccountsRow](dbAcc *T) *models.Account {
+	_dbAcc := queries.GetAccountsRow(*dbAcc)
+	return dbAccountToAccount(&_dbAcc.Account, _dbAcc.ActualAmount.(float64), &_dbAcc.Currency, &_dbAcc.AccountKind, &_dbAcc.Counterparty)
+}
+
+func dbAccountsRowToAccounts(dbAccs []queries.GetAccountsRow) []models.Account {
 	acc := make([]models.Account, len(dbAccs))
 	for i, dbAcc := range dbAccs {
 		acc[i] = *dbAccountRowToAccount(&dbAcc)
@@ -276,7 +319,7 @@ func dbAccountsRowToAccounts(dbAccs []db.GetAccountsRow) []models.Account {
 	return acc
 }
 
-func dbBalancesToBalances(dbBs []db.GetBalancesRow) []models.Balance {
+func dbBalancesToBalances(dbBs []queries.GetBalancesRow) []models.Balance {
 	b := make([]models.Balance, len(dbBs))
 	for i, dbB := range dbBs {
 		b[i] = models.Balance{

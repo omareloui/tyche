@@ -3,12 +3,22 @@ package repository
 import (
 	"context"
 
-	"github.com/omareloui/tyche/internal/db"
+	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/queries"
+	"go.uber.org/zap"
 )
 
 func (r *Repository) GetCategories(ctx context.Context) ([]models.Category, error) {
-	dbCats, err := r.q.GetCategories(ctx)
+	l := logger.FromCtx(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		l.Error("getting db from context", zap.Error(err))
+		return nil, err
+	}
+
+	dbCats, err := q.GetCategories(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -16,7 +26,15 @@ func (r *Repository) GetCategories(ctx context.Context) ([]models.Category, erro
 }
 
 func (r *Repository) GetCategory(ctx context.Context, id string) (*models.Category, error) {
-	dbCat, err := r.q.GetCategory(ctx, id)
+	l := logger.FromCtx(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		l.Error("getting db from context", zap.Error(err))
+		return nil, err
+	}
+
+	dbCat, err := q.GetCategory(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -24,7 +42,15 @@ func (r *Repository) GetCategory(ctx context.Context, id string) (*models.Catego
 }
 
 func (r *Repository) GetTotalBudget(ctx context.Context) (float64, error) {
-	budget, err := r.q.TotalBudget(ctx)
+	l := logger.FromCtx(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		l.Error("getting db from context", zap.Error(err))
+		return 0, err
+	}
+
+	budget, err := q.TotalBudget(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -32,7 +58,15 @@ func (r *Repository) GetTotalBudget(ctx context.Context) (float64, error) {
 }
 
 func (r *Repository) UpdateCategory(ctx context.Context, cat *models.Category) error {
-	return r.q.UpdateCategory(ctx, db.UpdateCategoryParams{
+	l := logger.FromCtx(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		l.Error("getting db from context", zap.Error(err))
+		return err
+	}
+
+	return q.UpdateCategory(ctx, queries.UpdateCategoryParams{
 		ID:          cat.ID,
 		Name:        cat.Name,
 		KindID:      cat.Kind.ID,
@@ -41,7 +75,15 @@ func (r *Repository) UpdateCategory(ctx context.Context, cat *models.Category) e
 }
 
 func (r *Repository) CreateCategory(ctx context.Context, cat *models.Category) error {
-	return r.q.CreateCategory(ctx, db.CreateCategoryParams{
+	l := logger.FromCtx(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		l.Error("getting db from context", zap.Error(err))
+		return err
+	}
+
+	return q.CreateCategory(ctx, queries.CreateCategoryParams{
 		ID:          cat.ID,
 		Name:        cat.Name,
 		KindID:      cat.Kind.ID,
@@ -50,25 +92,41 @@ func (r *Repository) CreateCategory(ctx context.Context, cat *models.Category) e
 }
 
 func (r *Repository) DeleteCategory(ctx context.Context, id string) error {
-	return r.q.DeleteCategory(ctx, id)
-}
+	l := logger.FromCtx(ctx)
 
-func dbCategoryRowToCategory[T db.GetCategoryRow | db.GetCategoriesRow](dbCat *T) *models.Category {
-	_dbCat := db.GetCategoryRow(*dbCat)
-	return &models.Category{
-		ID:   _dbCat.ID,
-		Name: _dbCat.Name,
-		Kind: models.TransactionKind{
-			ID:              _dbCat.KindID,
-			Enum:            models.TxKind(_dbCat.KindEnum.Int64),
-			IncreaseBalance: _dbCat.IncreaseBalance.Bool,
-		},
-		BudgetInEgp: _dbCat.BudgetInEgp,
-		CreatedAt:   _dbCat.CreatedAt,
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		l.Error("getting db from context", zap.Error(err))
+		return err
 	}
+
+	return q.DeleteCategory(ctx, id)
 }
 
-func dbCategoriesRowToCategories(dbCats []db.GetCategoriesRow) []models.Category {
+func dbCategoryToCategory(dbCat *queries.Category, kind *queries.TransactionKind) *models.Category {
+	cat := &models.Category{
+		ID:   dbCat.ID,
+		Name: dbCat.Name,
+		Kind: models.TransactionKind{
+			ID: dbCat.KindID,
+		},
+		BudgetInEgp: dbCat.BudgetInEgp,
+		CreatedAt:   dbCat.CreatedAt,
+	}
+
+	if kind != nil {
+		cat.Kind = *dbTransactionKindToTransactionKind(kind)
+	}
+
+	return cat
+}
+
+func dbCategoryRowToCategory[T queries.GetCategoryRow | queries.GetCategoriesRow](dbCat *T) *models.Category {
+	_dbCat := queries.GetCategoryRow(*dbCat)
+	return dbCategoryToCategory(&_dbCat.Category, &_dbCat.TransactionKind)
+}
+
+func dbCategoriesRowToCategories(dbCats []queries.GetCategoriesRow) []models.Category {
 	categories := make([]models.Category, len(dbCats))
 	for i, cat := range dbCats {
 		categories[i] = *dbCategoryRowToCategory(&cat)
