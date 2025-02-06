@@ -15,7 +15,6 @@ func (r *Repository) GetUserByOAuthID(ctx context.Context, oauthId string) (*mod
 
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return nil, err
 	}
 
@@ -29,11 +28,8 @@ func (r *Repository) GetUserByOAuthID(ctx context.Context, oauthId string) (*mod
 }
 
 func (r *Repository) CreateUser(ctx context.Context, usr *models.User) error {
-	l := logger.FromCtx(ctx)
-
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return err
 	}
 

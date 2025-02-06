@@ -15,7 +15,6 @@ func (r *Repository) GetGoals(ctx context.Context) ([]models.Goal, error) {
 
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return nil, err
 	}
 
@@ -33,7 +32,6 @@ func (r *Repository) GetUnfulfilledGoals(ctx context.Context) ([]models.Goal, er
 
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return nil, err
 	}
 
@@ -47,11 +45,8 @@ func (r *Repository) GetUnfulfilledGoals(ctx context.Context) ([]models.Goal, er
 }
 
 func (r *Repository) GetGoal(ctx context.Context, id string) (*models.Goal, error) {
-	l := logger.FromCtx(ctx)
-
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return nil, err
 	}
 
@@ -63,11 +58,8 @@ func (r *Repository) GetGoal(ctx context.Context, id string) (*models.Goal, erro
 }
 
 func (r *Repository) CreateGoal(ctx context.Context, gl *models.Goal) error {
-	l := logger.FromCtx(ctx)
-
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return err
 	}
 
@@ -80,11 +72,8 @@ func (r *Repository) CreateGoal(ctx context.Context, gl *models.Goal) error {
 }
 
 func (r *Repository) UpdateGoal(ctx context.Context, gl *models.Goal) error {
-	l := logger.FromCtx(ctx)
-
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return err
 	}
 
@@ -101,7 +90,6 @@ func (r *Repository) FulfillGoal(ctx context.Context, id string) error {
 
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return err
 	}
 
@@ -118,7 +106,6 @@ func (r *Repository) UnfulfillGoal(ctx context.Context, id string) error {
 
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return err
 	}
 
@@ -131,11 +118,8 @@ func (r *Repository) UnfulfillGoal(ctx context.Context, id string) error {
 }
 
 func (r *Repository) DeleteGoal(ctx context.Context, id string) error {
-	l := logger.FromCtx(ctx)
-
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return err
 	}
 

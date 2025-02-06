@@ -3,18 +3,13 @@ package repository
 import (
 	"context"
 
-	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/queries"
-	"go.uber.org/zap"
 )
 
 func (r *Repository) GetCurrencies(ctx context.Context) ([]models.Currency, error) {
-	l := logger.FromCtx(ctx)
-
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return nil, err
 	}
 
@@ -26,11 +21,8 @@ func (r *Repository) GetCurrencies(ctx context.Context) ([]models.Currency, erro
 }
 
 func (r *Repository) GetCurrency(ctx context.Context, id string) (*models.Currency, error) {
-	l := logger.FromCtx(ctx)
-
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return nil, err
 	}
 
@@ -42,11 +34,8 @@ func (r *Repository) GetCurrency(ctx context.Context, id string) (*models.Curren
 }
 
 func (r *Repository) GetCurrencyByEnum(ctx context.Context, enum models.CurrencyEnum) (*models.Currency, error) {
-	l := logger.FromCtx(ctx)
-
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return nil, err
 	}
 

@@ -14,7 +14,6 @@ func (r *Repository) GetAccountKinds(ctx context.Context) ([]models.AccountKind,
 
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return nil, err
 	}
 

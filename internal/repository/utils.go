@@ -6,8 +6,10 @@ import (
 	"fmt"
 
 	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/middleware"
 	"github.com/omareloui/tyche/internal/queries"
+	"go.uber.org/zap"
 )
 
 func (r *Repository) transact(ctx context.Context, txFunc func(*queries.Queries) error) error {
@@ -43,5 +45,11 @@ func (r *Repository) dbFromCtx(ctx context.Context) (*sql.DB, *queries.Queries, 
 	}
 
 	claims := ctxValue.(jwt.AccessClaims)
-	return r.tm.GetTenant(claims.OAuthProvider, claims.OAuthID)
+	db, q, err := r.tm.GetTenant(claims.OAuthProvider, claims.OAuthID)
+	if err != nil {
+		l := logger.FromCtx(ctx)
+		l.Error("getting db from context", zap.Error(err))
+		return nil, nil, err
+	}
+	return db, q, nil
 }

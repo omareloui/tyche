@@ -75,7 +75,6 @@ func (r *Repository) GetFrequentTxs(ctx context.Context) ([]models.FrequentTx, e
 
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return nil, err
 	}
 
@@ -94,7 +93,6 @@ func (r *Repository) GetFrequentTx(ctx context.Context, id string) (*models.Freq
 
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return nil, err
 	}
 
@@ -256,6 +254,12 @@ func dbFrequentTxToFrequentTx(
 		StartsAt:                   dbFtx.StartsAt,
 		StopsAt:                    dbFtx.StopsAt.Time,
 		LastTransactionScheduledTo: dbFtx.LastTransactionScheduledTo,
+	}
+
+	if acc != nil {
+		ft.Account = *dbAccountToAccount(acc, 0, cur, nil, nil)
+	} else if dbFtx.ToAccountID.Valid {
+		ft.ToAccount = &models.Account{ID: dbFtx.ToAccountID.String}
 	}
 
 	if toAcc != nil {

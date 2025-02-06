@@ -16,7 +16,6 @@ func (r *Repository) CreateAccount(ctx context.Context, a *models.Account) error
 
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return err
 	}
 
@@ -65,7 +64,6 @@ func (r *Repository) GetAccounts(ctx context.Context) ([]models.Account, error) 
 
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return nil, err
 	}
 
@@ -83,7 +81,6 @@ func (r *Repository) GetAccount(ctx context.Context, id string) (*models.Account
 
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return nil, err
 	}
 
@@ -101,7 +98,6 @@ func (r *Repository) UpdateAccount(ctx context.Context, a *models.Account) error
 
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return err
 	}
 
@@ -166,7 +162,6 @@ func (r *Repository) DeleteAccount(ctx context.Context, id string) error {
 
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return err
 	}
 
@@ -258,7 +253,6 @@ func (r *Repository) GetBalances(ctx context.Context) ([]models.Balance, error) 
 
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return nil, err
 	}
 

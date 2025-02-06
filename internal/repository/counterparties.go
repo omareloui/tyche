@@ -14,7 +14,6 @@ func (r *Repository) GetCounterparties(ctx context.Context) ([]models.Counterpar
 
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return nil, err
 	}
 
@@ -28,11 +27,8 @@ func (r *Repository) GetCounterparties(ctx context.Context) ([]models.Counterpar
 }
 
 func (r *Repository) GetCounterparty(ctx context.Context, id string) (*models.Counterparty, error) {
-	l := logger.FromCtx(ctx)
-
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return nil, err
 	}
 
@@ -44,11 +40,8 @@ func (r *Repository) GetCounterparty(ctx context.Context, id string) (*models.Co
 }
 
 func (r *Repository) UpdateCounterparty(ctx context.Context, it *models.Counterparty) error {
-	l := logger.FromCtx(ctx)
-
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return err
 	}
 
@@ -59,11 +52,8 @@ func (r *Repository) UpdateCounterparty(ctx context.Context, it *models.Counterp
 }
 
 func (r *Repository) CreateCounterparty(ctx context.Context, it *models.Counterparty) error {
-	l := logger.FromCtx(ctx)
-
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return err
 	}
 
@@ -74,11 +64,8 @@ func (r *Repository) CreateCounterparty(ctx context.Context, it *models.Counterp
 }
 
 func (r *Repository) DeleteCounterparty(ctx context.Context, id string) error {
-	l := logger.FromCtx(ctx)
-
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return err
 	}
 

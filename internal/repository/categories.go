@@ -3,18 +3,13 @@ package repository
 import (
 	"context"
 
-	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/queries"
-	"go.uber.org/zap"
 )
 
 func (r *Repository) GetCategories(ctx context.Context) ([]models.Category, error) {
-	l := logger.FromCtx(ctx)
-
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return nil, err
 	}
 
@@ -26,11 +21,8 @@ func (r *Repository) GetCategories(ctx context.Context) ([]models.Category, erro
 }
 
 func (r *Repository) GetCategory(ctx context.Context, id string) (*models.Category, error) {
-	l := logger.FromCtx(ctx)
-
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return nil, err
 	}
 
@@ -42,11 +34,8 @@ func (r *Repository) GetCategory(ctx context.Context, id string) (*models.Catego
 }
 
 func (r *Repository) GetTotalBudget(ctx context.Context) (float64, error) {
-	l := logger.FromCtx(ctx)
-
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return 0, err
 	}
 
@@ -58,11 +47,8 @@ func (r *Repository) GetTotalBudget(ctx context.Context) (float64, error) {
 }
 
 func (r *Repository) UpdateCategory(ctx context.Context, cat *models.Category) error {
-	l := logger.FromCtx(ctx)
-
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return err
 	}
 
@@ -75,11 +61,8 @@ func (r *Repository) UpdateCategory(ctx context.Context, cat *models.Category) e
 }
 
 func (r *Repository) CreateCategory(ctx context.Context, cat *models.Category) error {
-	l := logger.FromCtx(ctx)
-
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return err
 	}
 
@@ -92,11 +75,8 @@ func (r *Repository) CreateCategory(ctx context.Context, cat *models.Category) e
 }
 
 func (r *Repository) DeleteCategory(ctx context.Context, id string) error {
-	l := logger.FromCtx(ctx)
-
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return err
 	}
 

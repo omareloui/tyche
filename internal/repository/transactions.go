@@ -103,7 +103,6 @@ func (r *Repository) GetTransactions(ctx context.Context) ([]models.Transaction,
 
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return nil, err
 	}
 
@@ -126,7 +125,6 @@ func (r *Repository) GetTransaction(ctx context.Context, id string) (*models.Tra
 
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return nil, err
 	}
 

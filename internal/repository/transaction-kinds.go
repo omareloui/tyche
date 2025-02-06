@@ -14,7 +14,6 @@ func (r *Repository) GetTransactionKinds(ctx context.Context) ([]models.Transact
 
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return nil, err
 	}
 
@@ -28,11 +27,8 @@ func (r *Repository) GetTransactionKinds(ctx context.Context) ([]models.Transact
 }
 
 func (r *Repository) GetTransactionKind(ctx context.Context, id string) (*models.TransactionKind, error) {
-	l := logger.FromCtx(ctx)
-
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
-		l.Error("getting db from context", zap.Error(err))
 		return nil, err
 	}
 
