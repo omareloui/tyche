@@ -72,13 +72,6 @@ func (h *Handler) OAuthCB(w http.ResponseWriter, r *http.Request) (templ.Compone
 		return nil, err
 	}
 
-	myGoogleID := "110711621731459269840"
-	if _usr.OAuthID != myGoogleID {
-		err := errors.New("the site isn't available to the public yet")
-		l.Error("invalid user", zap.Error(err), zap.Any("user", _usr))
-		return nil, err
-	}
-
 	usr, err := h.repo.GetUserByOAuthID(r.Context(), _usr.OAuthID)
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
