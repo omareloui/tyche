@@ -5,10 +5,10 @@
 To run the application, first copy the `.env.example` file to `.env`
 and fill in the information if needed.
 
-Make sure you have `data` directory
+Make sure you have `data` and `logs` directories
 
 ```bash
-mkdir data
+mkdir data logs
 ```
 
 To start the application on development mode run
