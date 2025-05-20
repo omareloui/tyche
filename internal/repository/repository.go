@@ -85,14 +85,12 @@ func (tm *TenantManager) GetTenant(provider models.OAuthProvider, oauthID string
 		seeder:     seeder.NewSeeder(),
 	}
 
-	go func() {
-		tenant.migrateOnce.Do(func() {
-			if err := tm.runMigrations(db); err != nil {
-				fmt.Printf("Failed to run migrations for tenant %s: %v\n", tenantID, err)
-			}
-		})
-		tenant.seeder.Seed(context.Background(), tenant.queries)
-	}()
+	tenant.migrateOnce.Do(func() {
+		if err := tm.runMigrations(db); err != nil {
+			fmt.Printf("Failed to run migrations for tenant %s: %v\n", tenantID, err)
+		}
+	})
+	tenant.seeder.Seed(context.Background(), tenant.queries)
 
 	tm.connections[tenantID] = tenant
 	return tenant.db, tenant.queries, nil
