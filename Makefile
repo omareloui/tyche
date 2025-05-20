@@ -42,8 +42,7 @@ regen-db:
 	@read -p "Are you sure you want to delete the current databases (y/N) " _res
 	@if [[ $$_res == "y" || $$_res == "Y" ]]; then
 	@  rm -rf data/*.sqlite internal/db
-	@  make --no-print-directory sqlgen &&
-	@  make --no-print-directory seed
+	@  make --no-print-directory sqlgen
 	@fi
 
 docker-dev:
