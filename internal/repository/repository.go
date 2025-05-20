@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/queries"
+	"github.com/omareloui/tyche/internal/seeder"
 	"github.com/pressly/goose/v3"
 )
 
@@ -23,6 +25,7 @@ type TenantDB struct {
 	queries     *queries.Queries
 	lastAccess  time.Time
 	migrateOnce sync.Once
+	seeder      *seeder.Seeder
 }
 
 type TenantManager struct {
@@ -79,6 +82,7 @@ func (tm *TenantManager) GetTenant(provider models.OAuthProvider, oauthID string
 		db:         db,
 		queries:    queries.New(db),
 		lastAccess: time.Now(),
+		seeder:     seeder.NewSeeder(),
 	}
 
 	go func() {
@@ -87,6 +91,7 @@ func (tm *TenantManager) GetTenant(provider models.OAuthProvider, oauthID string
 				fmt.Printf("Failed to run migrations for tenant %s: %v\n", tenantID, err)
 			}
 		})
+		tenant.seeder.Seed(context.Background(), tenant.queries)
 	}()
 
 	tm.connections[tenantID] = tenant

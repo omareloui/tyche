@@ -1,7 +1,3 @@
-export GOOSE_DRIVER=sqlite3
-export GOOSE_DBSTRING=./data/db.sqlite
-export GOOSE_MIGRATION_DIR=./sql/schema
-
 run:
 	@air -c internal/config/.air.toml
 
@@ -11,22 +7,13 @@ build: prebuild
 release: prebuild
 	@go build -v -ldflags="-linkmode external -extldflags -static" -tags netgo -o ./bin/main ./cmd/tyche
 
-prebuild: templ css sqlgen migrate
+prebuild: templ css sqlgen
 
 start:
 	@./tmp/main
 
-seed:
-	@go run cmd/seed/main.go
-
 sqlgen:
 	@sqlc generate
-
-migrate:
-	@goose up
-
-migrate-down:
-	@goose down
 
 .ONESHELL:
 migrate-create:
@@ -48,14 +35,13 @@ css-dev:
 	@npm run css:dev
 
 dev: sqlgen
-	@make -j2 run templ-dev css-dev
+	@make -j3 run templ-dev css-dev
 
 .ONESHELL:
 regen-db:
-	@read -p "Are you sure you want to delete the current database (y/N) " _res
+	@read -p "Are you sure you want to delete the current databases (y/N) " _res
 	@if [[ $$_res == "y" || $$_res == "Y" ]]; then
-	@  rm -rf data/db.sqlite internal/db
-	@  make --no-print-directory migrate &&
+	@  rm -rf data/*.sqlite internal/db
 	@  make --no-print-directory sqlgen &&
 	@  make --no-print-directory seed
 	@fi

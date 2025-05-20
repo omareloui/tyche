@@ -41,10 +41,10 @@ func (r *Repository) dbFromCtx(ctx context.Context) (*sql.DB, *queries.Queries, 
 	ctxValue := ctx.Value(middleware.AccessClaimsCtxKey{})
 
 	if ctxValue == nil {
-		return nil, nil, fmt.Errorf("")
+		return nil, nil, fmt.Errorf("no access claims in the context")
 	}
 
-	claims := ctxValue.(jwt.AccessClaims)
+	claims := ctxValue.(*jwt.AccessClaims)
 	db, q, err := r.tm.GetTenant(claims.OAuthProvider, claims.OAuthID)
 	if err != nil {
 		l := logger.FromCtx(ctx)

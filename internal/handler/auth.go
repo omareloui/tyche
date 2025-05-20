@@ -13,6 +13,7 @@ import (
 	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/logger"
+	"github.com/omareloui/tyche/internal/middleware"
 	"github.com/omareloui/tyche/internal/models"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
@@ -71,18 +72,29 @@ func (h *Handler) OAuthCB(w http.ResponseWriter, r *http.Request) (templ.Compone
 		l.Error("parsing json user", zap.Error(err))
 		return nil, err
 	}
+	l.Debug("user info", zap.Any("user", _usr))
 
-	usr, err := h.repo.GetUserByOAuthID(r.Context(), _usr.OAuthID)
+	accessCtx := context.WithValue(r.Context(), middleware.AccessClaimsCtxKey{}, &jwt.AccessClaims{
+		OAuthID:       _usr.OAuthID,
+		OAuthProvider: models.Google,
+	})
+
+	usr, err := h.repo.GetUserByOAuthID(accessCtx, _usr.OAuthID)
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
 
-		if err = h.initUser(r.Context(), _usr); err != nil {
+		l.Debug("didn't find the user, creating a new one")
+
+		if err = h.initUser(accessCtx, _usr); err != nil {
+			l.Error("error initing user", zap.Error(err))
 			return nil, err
 		}
 		usr = _usr
 	}
+
+	l.Debug("generating cookies for the user", zap.Any("user", _usr))
 
 	access, refresh, err := generateJWTCookies(usr)
 	if err != nil {
@@ -109,6 +121,10 @@ func (h *Handler) Signout(w http.ResponseWriter, r *http.Request) (templ.Compone
 func (h *Handler) initUser(ctx context.Context, usr *models.User) error {
 	cur, err := h.repo.GetCurrencyByEnum(ctx, models.CurrencyUsd)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			l := logger.FromCtx(ctx)
+			l.Error("couldn't find currencies to create a user, try seeding the database")
+		}
 		return err
 	}
 	usr.DefaultCurrency = *cur

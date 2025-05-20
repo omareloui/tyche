@@ -2,7 +2,6 @@ package jwt
 
 import (
 	"errors"
-	"strconv"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -78,7 +77,7 @@ func ParseAccessClaims(token string) (*AccessClaims, error) {
 	return &AccessClaims{
 		ID:            (*claims)["id"].(string),
 		OAuthID:       (*claims)["oauth_id"].(string),
-		OAuthProvider: (*claims)["oauth_provider"].(models.OAuthProvider),
+		OAuthProvider: models.OAuthProvider((*claims)["oauth_provider"].(float64)),
 		Name:          (*claims)["name"].(string),
 		Email:         (*claims)["email"].(string),
 		FirstName:     (*claims)["first_name"].(string),
@@ -96,7 +95,7 @@ func ParseRefreshClaims(token string) (*RefreshClaims, error) {
 }
 
 func parse(tokenStr string) (*jwt.MapClaims, error) {
-	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, ErrInvalidTokenMethod
 		}
@@ -137,7 +136,7 @@ func newToken(kind TokenType, usr *models.User) (string, time.Time, error) {
 			"id": usr.ID,
 
 			"oauth_id":       usr.OAuthID,
-			"oauth_provider": strconv.FormatUint(uint64(usr.OAuthProvider), 10),
+			"oauth_provider": uint64(usr.OAuthProvider),
 
 			"name":       usr.FullName(),
 			"email":      usr.Email,

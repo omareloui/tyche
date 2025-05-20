@@ -1,38 +1,45 @@
-package main
+package seeder
 
 import (
 	"context"
 	"database/sql"
-	"log"
+	"sync"
 
 	_ "github.com/mattn/go-sqlite3"
 	"go.uber.org/zap"
 
-	"github.com/joho/godotenv"
-	"github.com/omareloui/tyche/internal/config"
 	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/queries"
 )
 
-func main() {
-	l := logger.Get()
+type Seeder struct{}
 
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
-	}
+func NewSeeder() *Seeder {
+	return &Seeder{}
+}
 
-	_, q, err := dbconn.New(config.GetDataSource())
+func (s *Seeder) Seed(ctx context.Context, q *queries.Queries) {
+	wg := new(sync.WaitGroup)
+
+	go s.seedCurrencies(ctx, wg, q)
+	go s.seedAccountKinds(ctx, wg, q)
+	go s.seedTxKinds(ctx, wg, q)
+
+	wg.Add(3)
+	wg.Wait()
+}
+
+func (s *Seeder) seedCurrencies(ctx context.Context, wg *sync.WaitGroup, q *queries.Queries) {
+	defer wg.Done()
+
+	l := logger.FromCtx(ctx)
+
+	currencies, err := q.GetCurrencies(ctx)
 	if err != nil {
-		log.Fatalln("error connecting to the database", err)
+		l.Error("error while getting the currencies", zap.Error(err))
 		return
-	}
-
-	currencies, err := q.GetCurrencies(context.Background())
-	if err != nil {
-		log.Fatalln("error while getting the currencies", err)
 	}
 
 	currenciesSeed := []queries.Currency{
@@ -43,15 +50,22 @@ func main() {
 
 	if len(currencies) != len(currenciesSeed) {
 		for _, cur := range currenciesSeed {
-			if err := q.CreateCurrency(context.Background(), queries.CreateCurrencyParams(cur)); err != nil {
-				log.Fatalln("error while seeding the currencies", err)
+			if err := q.CreateCurrency(ctx, queries.CreateCurrencyParams(cur)); err != nil {
+				l.Error("error while seeding the currencies", zap.Error(err))
 			}
 		}
 	}
+}
 
-	txKinds, err := q.GetTransactionKinds(context.Background())
+func (s *Seeder) seedTxKinds(ctx context.Context, wg *sync.WaitGroup, q *queries.Queries) {
+	defer wg.Done()
+
+	l := logger.FromCtx(ctx)
+
+	txKinds, err := q.GetTransactionKinds(ctx)
 	if err != nil {
 		l.Error("error while getting the transaction kinds", zap.Error(err))
+		return
 	}
 
 	kindsSeed := []queries.TransactionKind{
@@ -63,15 +77,22 @@ func main() {
 
 	if len(txKinds) != len(kindsSeed) {
 		for _, kind := range kindsSeed {
-			if err := q.CreateTransactionKind(context.Background(), db.CreateTransactionKindParams(kind)); err != nil {
+			if err := q.CreateTransactionKind(ctx, queries.CreateTransactionKindParams(kind)); err != nil {
 				l.Error("error while seeding the transaction kinds", zap.Error(err))
 			}
 		}
 	}
+}
 
-	accKinds, err := q.GetAccountKinds(context.Background())
+func (s *Seeder) seedAccountKinds(ctx context.Context, wg *sync.WaitGroup, q *queries.Queries) {
+	defer wg.Done()
+
+	l := logger.FromCtx(ctx)
+
+	accKinds, err := q.GetAccountKinds(ctx)
 	if err != nil {
 		l.Error("error while getting the account kinds", zap.Error(err))
+		return
 	}
 
 	accKindsSeed := []queries.CreateAccountKindParams{
@@ -83,7 +104,7 @@ func main() {
 
 	if len(accKinds) != len(accKindsSeed) {
 		for _, k := range accKindsSeed {
-			if err := q.CreateAccountKind(context.Background(), k); err != nil {
+			if err := q.CreateAccountKind(ctx, k); err != nil {
 				l.Error("error while seeding the account kinds", zap.Error(err))
 			}
 		}

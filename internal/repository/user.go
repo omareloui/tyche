@@ -33,6 +33,10 @@ func (r *Repository) CreateUser(ctx context.Context, usr *models.User) error {
 		return err
 	}
 
+	if usr.StartOfPeriod == 0 {
+		usr.StartOfPeriod = 1
+	}
+
 	return q.CreateUser(ctx, queries.CreateUserParams{
 		ID:                usr.ID,
 		OauthID:           usr.OAuthID,
