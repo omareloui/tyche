@@ -35,6 +35,26 @@ func (r *Repository) AccountKindsToMap(knds []models.AccountKind) map[string]str
 	return m
 }
 
+func (r *Repository) createAccountKind(ctx context.Context, knd models.AccountKind) error {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+
+	l := logger.FromCtx(ctx)
+
+	if err := q.CreateAccountKind(ctx, queries.CreateAccountKindParams{
+		ID:   knd.ID,
+		Enum: int64(knd.Enum),
+	}); err != nil {
+		l.Error("error creating account kind", zap.Any("kind", knd), zap.Error(err))
+		return err
+	}
+
+	l.Debug("created account kind", zap.Any("kind", knd))
+	return nil
+}
+
 func dbAccountKindToAccountKind(dbAk *queries.AccountKind) *models.AccountKind {
 	return &models.AccountKind{
 		ID:   dbAk.ID,

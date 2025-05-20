@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
@@ -37,6 +38,27 @@ func (r *Repository) GetTransactionKind(ctx context.Context, id string) (*models
 		return nil, err
 	}
 	return dbTransactionKindToTransactionKind(&k.TransactionKind), nil
+}
+
+func (r *Repository) createTransactionKind(ctx context.Context, tk models.TransactionKind) error {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+
+	l := logger.FromCtx(ctx)
+
+	if err := q.CreateTransactionKind(ctx, queries.CreateTransactionKindParams{
+		ID:              tk.ID,
+		Enum:            int64(tk.Enum),
+		IncreaseBalance: sql.NullBool{Bool: tk.IncreaseBalance, Valid: true},
+	}); err != nil {
+		l.Error("error creating transaction kind", zap.Any("kind", tk), zap.Error(err))
+		return err
+	}
+
+	l.Debug("created transaction kind", zap.Any("kind", tk))
+	return nil
 }
 
 func dbTransactionKindToTransactionKind(dbKind *queries.TransactionKind) *models.TransactionKind {

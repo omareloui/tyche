@@ -21,3 +21,23 @@ func Filter[S ~[]E, E any](s S, fun func(E) bool) []E {
 	}
 	return a
 }
+
+func FilterNewItems[T any, K comparable](
+	existing []T,
+	seed []T,
+	keyFn func(T) K,
+) []T {
+	existingKeys := make(map[K]struct{})
+	for _, item := range existing {
+		existingKeys[keyFn(item)] = struct{}{}
+	}
+
+	var result []T
+	for _, item := range seed {
+		if _, exists := existingKeys[keyFn(item)]; !exists {
+			result = append(result, item)
+		}
+	}
+
+	return result
+}
