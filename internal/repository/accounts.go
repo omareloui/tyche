@@ -73,6 +73,7 @@ func (r *Repository) GetAccounts(ctx context.Context) ([]models.Account, error) 
 		return nil, err
 	}
 	l.Debug("queried accounts")
+
 	return dbAccountsRowToAccounts(accs), nil
 }
 
@@ -264,7 +265,7 @@ func (r *Repository) GetBalances(ctx context.Context) ([]models.Balance, error) 
 	return dbBalancesToBalances(dbBalances), nil
 }
 
-func dbAccountToAccount(dbAcc *queries.Account, actualAmount float64, cur *queries.Currency, k *queries.AccountKind, cp *queries.Counterparty) *models.Account {
+func dbAccountToAccount(dbAcc *queries.Account, actualAmount float64, cur *queries.Currency, k *queries.AccountKind, cpName sql.NullString) *models.Account {
 	acc := &models.Account{
 		ID:                 dbAcc.ID,
 		Name:               dbAcc.Name,
@@ -288,10 +289,11 @@ func dbAccountToAccount(dbAcc *queries.Account, actualAmount float64, cur *queri
 		acc.Currency = *dbCurrencyToCurrency(cur)
 	}
 
-	if cp != nil {
-		acc.Counterparty = dbCounterpartyToCounterparty(cp)
-	} else if dbAcc.CounterpartyID.Valid {
+	if dbAcc.CounterpartyID.Valid {
 		acc.Counterparty = &models.Counterparty{ID: dbAcc.CounterpartyID.String}
+		if cpName.Valid {
+			acc.Counterparty.Name = cpName.String
+		}
 	}
 
 	if k != nil {
@@ -301,8 +303,8 @@ func dbAccountToAccount(dbAcc *queries.Account, actualAmount float64, cur *queri
 }
 
 func dbAccountRowToAccount[T queries.GetAccountRow | queries.GetAccountsRow](dbAcc *T) *models.Account {
-	_dbAcc := queries.GetAccountsRow(*dbAcc)
-	return dbAccountToAccount(&_dbAcc.Account, _dbAcc.ActualAmount.(float64), &_dbAcc.Currency, &_dbAcc.AccountKind, &_dbAcc.Counterparty)
+	_dbAcc := queries.GetAccountRow(*dbAcc)
+	return dbAccountToAccount(&_dbAcc.Account, _dbAcc.ActualAmount.(float64), &_dbAcc.Currency, &_dbAcc.AccountKind, _dbAcc.CounterpartyName)
 }
 
 func dbAccountsRowToAccounts(dbAccs []queries.GetAccountsRow) []models.Account {

@@ -126,7 +126,7 @@ WITH gls_amts AS (
 SELECT
     a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_default, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
     k.id, k.enum,
-    cp.id, cp.name, cp.created_at,
+    cp.name AS counterparty_name,
     c.id, c.enum,
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
@@ -138,11 +138,11 @@ WHERE a.id = ?1
 `
 
 type GetAccountRow struct {
-	Account      Account
-	AccountKind  AccountKind
-	Counterparty Counterparty
-	Currency     Currency
-	ActualAmount interface{}
+	Account          Account
+	AccountKind      AccountKind
+	CounterpartyName sql.NullString
+	Currency         Currency
+	ActualAmount     interface{}
 }
 
 func (q *Queries) GetAccount(ctx context.Context, id string) (GetAccountRow, error) {
@@ -167,9 +167,7 @@ func (q *Queries) GetAccount(ctx context.Context, id string) (GetAccountRow, err
 		&i.Account.CreatedAt,
 		&i.AccountKind.ID,
 		&i.AccountKind.Enum,
-		&i.Counterparty.ID,
-		&i.Counterparty.Name,
-		&i.Counterparty.CreatedAt,
+		&i.CounterpartyName,
 		&i.Currency.ID,
 		&i.Currency.Enum,
 		&i.ActualAmount,
@@ -190,7 +188,7 @@ WITH gls_amts AS (
 SELECT
     a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_default, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
     k.id, k.enum,
-    cp.id, cp.name, cp.created_at,
+    cp.name AS counterparty_name,
     c.id, c.enum,
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
@@ -202,11 +200,11 @@ ORDER BY a.created_at DESC
 `
 
 type GetAccountsRow struct {
-	Account      Account
-	AccountKind  AccountKind
-	Counterparty Counterparty
-	Currency     Currency
-	ActualAmount interface{}
+	Account          Account
+	AccountKind      AccountKind
+	CounterpartyName sql.NullString
+	Currency         Currency
+	ActualAmount     interface{}
 }
 
 func (q *Queries) GetAccounts(ctx context.Context) ([]GetAccountsRow, error) {
@@ -237,9 +235,7 @@ func (q *Queries) GetAccounts(ctx context.Context) ([]GetAccountsRow, error) {
 			&i.Account.CreatedAt,
 			&i.AccountKind.ID,
 			&i.AccountKind.Enum,
-			&i.Counterparty.ID,
-			&i.Counterparty.Name,
-			&i.Counterparty.CreatedAt,
+			&i.CounterpartyName,
 			&i.Currency.ID,
 			&i.Currency.Enum,
 			&i.ActualAmount,
@@ -270,7 +266,7 @@ WITH gls_amts AS (
 SELECT
     a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_default, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
     k.id, k.enum,
-    cp.id, cp.name, cp.created_at,
+    cp.name AS counterparty_name,
     c.id, c.enum,
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
@@ -283,11 +279,11 @@ ORDER BY a.created_at DESC
 `
 
 type GetActiveAccountsRow struct {
-	Account      Account
-	AccountKind  AccountKind
-	Counterparty Counterparty
-	Currency     Currency
-	ActualAmount interface{}
+	Account          Account
+	AccountKind      AccountKind
+	CounterpartyName sql.NullString
+	Currency         Currency
+	ActualAmount     interface{}
 }
 
 func (q *Queries) GetActiveAccounts(ctx context.Context) ([]GetActiveAccountsRow, error) {
@@ -318,9 +314,7 @@ func (q *Queries) GetActiveAccounts(ctx context.Context) ([]GetActiveAccountsRow
 			&i.Account.CreatedAt,
 			&i.AccountKind.ID,
 			&i.AccountKind.Enum,
-			&i.Counterparty.ID,
-			&i.Counterparty.Name,
-			&i.Counterparty.CreatedAt,
+			&i.CounterpartyName,
 			&i.Currency.ID,
 			&i.Currency.Enum,
 			&i.ActualAmount,

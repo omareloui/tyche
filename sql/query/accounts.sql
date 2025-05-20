@@ -11,7 +11,7 @@ WITH gls_amts AS (
 SELECT
     sqlc.embed(a),
     sqlc.embed(k),
-    sqlc.embed(cp),
+    cp.name AS counterparty_name,
     sqlc.embed(c),
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
@@ -34,7 +34,7 @@ WITH gls_amts AS (
 SELECT
     sqlc.embed(a),
     sqlc.embed(k),
-    sqlc.embed(cp),
+    cp.name AS counterparty_name,
     sqlc.embed(c),
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
@@ -58,7 +58,7 @@ WITH gls_amts AS (
 SELECT
     sqlc.embed(a),
     sqlc.embed(k),
-    sqlc.embed(cp),
+    cp.name AS counterparty_name,
     sqlc.embed(c),
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
