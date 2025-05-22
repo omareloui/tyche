@@ -134,26 +134,254 @@ func (q *Queries) DeleteScheduledTransactionsOfFrequentTx(ctx context.Context, f
 	return err
 }
 
-const getFrequentTx = `-- name: GetFrequentTx :many
+const getFrequentTx = `-- name: GetFrequentTx :one
 SELECT
     ft.id, ft.frequency_by, ft.frequency, ft.account_id, ft.amount, ft.kind_id, ft.category_id, ft.counterparty_id, ft.description, ft.to_account_id, ft.to_amount, ft.goal_id, ft.starts_at, ft.stops_at, ft.last_transaction_scheduled_to, ft.created_at,
     a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_default, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
     c.id, c.enum,
-    cp.id, cp.name, cp.created_at,
-    ftta.id, ftta.name, ftta.kind_id, ftta.amount, ftta.currency_id, ftta.counterparty_id, ftta.card_number, ftta.card_limit, ftta.name_on_card, ftta.iban, ftta.note, ftta.is_default, ftta.is_archived, ftta.exclude_from_balance, ftta.expiration_date, ftta.created_at,
-    fttc.id, fttc.enum,
     k.id, k.enum, k.increase_balance,
-    cat.id, cat.name, cat.budget_in_egp, cat.kind_id, cat.created_at,
-    t.id, t.account_id, t.amount, t.kind_id, t.category_id, t.counterparty_id, t.description, t.to_account_id, t.to_amount, t.goal_id, t.fulfilled_at, t.scheduled_to, t.created_at,
-    ta.id, ta.name, ta.kind_id, ta.amount, ta.currency_id, ta.counterparty_id, ta.card_number, ta.card_limit, ta.name_on_card, ta.iban, ta.note, ta.is_default, ta.is_archived, ta.exclude_from_balance, ta.expiration_date, ta.created_at,
-    tc.id, tc.enum,
-    tcp.id, tcp.name, tcp.created_at,
-    tta.id, tta.name, tta.kind_id, tta.amount, tta.currency_id, tta.counterparty_id, tta.card_number, tta.card_limit, tta.name_on_card, tta.iban, tta.note, tta.is_default, tta.is_archived, tta.exclude_from_balance, tta.expiration_date, tta.created_at,
-    ttc.id, ttc.enum,
-    tk.id, tk.enum, tk.increase_balance,
-    tcat.id, tcat.name, tcat.budget_in_egp, tcat.kind_id, tcat.created_at,
-    g.id, g.name, g.price, g.currency_id, g.fulfilled_at, g.created_at,
-    gc.id, gc.enum
+    cp.name AS counterparty_name,
+    ftta.id AS frequent_to_account_id,
+    ftta.name AS frequent_to_account_name,
+    ftta.kind_id AS frequent_to_account_kind_id,
+    ftta.amount AS frequent_to_account_amount,
+    ftta.currency_id AS frequent_to_account_currency_id,
+    ftta.counterparty_id AS frequent_to_account_counterparty_id,
+    ftta.card_number AS frequent_to_account_card_number,
+    ftta.card_limit AS frequent_to_account_card_limit,
+    ftta.name_on_card AS frequent_to_account_name_on_card,
+    ftta.iban AS frequent_to_account_iban,
+    ftta.note AS frequent_to_account_note,
+    ftta.is_default AS frequent_to_account_is_default,
+    ftta.is_archived AS frequent_to_account_is_archived,
+    ftta.exclude_from_balance AS frequent_to_account_exclude_from_balance,
+    ftta.expiration_date AS frequent_to_account_expiration_date,
+    ftta.created_at AS frequent_to_account_created_at,
+    fttc.id AS frequent_to_account_currency_id,
+    fttc.enum AS frequent_to_account_currency_enum,
+    cat.id AS category_id,
+    cat.name AS category_name,
+    cat.budget_in_egp AS category_budget_in_egp,
+    cat.kind_id AS category_kind_id,
+    cat.created_at AS category_created_at,
+    g.name AS goal_name,
+    g.price AS goal_price,
+    g.currency_id AS goal_currency_id,
+    g.fulfilled_at AS goal_fulfilled_at,
+    gc.enum AS goal_currency_enum
+FROM frequent_txs AS ft
+LEFT JOIN counterparties AS cp ON ft.counterparty_id = cp.id
+LEFT JOIN accounts AS a ON ft.account_id = a.id
+LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN accounts AS ftta ON ft.to_account_id = a.id
+LEFT JOIN currencies AS fttc ON ftta.currency_id = c.id
+LEFT JOIN transaction_kinds AS k ON ft.kind_id = k.id
+LEFT JOIN categories AS cat ON ft.category_id = cat.id
+LEFT JOIN goals AS g ON g.id = ft.goal_id
+LEFT JOIN currencies AS gc ON gc.id = g.currency_id
+WHERE ft.id = ?1
+`
+
+type GetFrequentTxRow struct {
+	FrequentTx                          FrequentTx
+	Account                             Account
+	Currency                            Currency
+	TransactionKind                     TransactionKind
+	CounterpartyName                    sql.NullString
+	FrequentToAccountID                 sql.NullString
+	FrequentToAccountName               sql.NullString
+	FrequentToAccountKindID             sql.NullString
+	FrequentToAccountAmount             sql.NullFloat64
+	FrequentToAccountCurrencyID         sql.NullString
+	FrequentToAccountCounterpartyID     sql.NullString
+	FrequentToAccountCardNumber         sql.NullString
+	FrequentToAccountCardLimit          sql.NullFloat64
+	FrequentToAccountNameOnCard         sql.NullString
+	FrequentToAccountIban               sql.NullString
+	FrequentToAccountNote               sql.NullString
+	FrequentToAccountIsDefault          sql.NullBool
+	FrequentToAccountIsArchived         sql.NullBool
+	FrequentToAccountExcludeFromBalance sql.NullBool
+	FrequentToAccountExpirationDate     sql.NullTime
+	FrequentToAccountCreatedAt          sql.NullTime
+	FrequentToAccountCurrencyID_2       sql.NullString
+	FrequentToAccountCurrencyEnum       sql.NullInt64
+	CategoryID                          sql.NullString
+	CategoryName                        sql.NullString
+	CategoryBudgetInEgp                 sql.NullFloat64
+	CategoryKindID                      sql.NullString
+	CategoryCreatedAt                   sql.NullTime
+	GoalName                            sql.NullString
+	GoalPrice                           sql.NullFloat64
+	GoalCurrencyID                      sql.NullString
+	GoalFulfilledAt                     sql.NullTime
+	GoalCurrencyEnum                    sql.NullInt64
+}
+
+func (q *Queries) GetFrequentTx(ctx context.Context, id string) (GetFrequentTxRow, error) {
+	row := q.db.QueryRowContext(ctx, getFrequentTx, id)
+	var i GetFrequentTxRow
+	err := row.Scan(
+		&i.FrequentTx.ID,
+		&i.FrequentTx.FrequencyBy,
+		&i.FrequentTx.Frequency,
+		&i.FrequentTx.AccountID,
+		&i.FrequentTx.Amount,
+		&i.FrequentTx.KindID,
+		&i.FrequentTx.CategoryID,
+		&i.FrequentTx.CounterpartyID,
+		&i.FrequentTx.Description,
+		&i.FrequentTx.ToAccountID,
+		&i.FrequentTx.ToAmount,
+		&i.FrequentTx.GoalID,
+		&i.FrequentTx.StartsAt,
+		&i.FrequentTx.StopsAt,
+		&i.FrequentTx.LastTransactionScheduledTo,
+		&i.FrequentTx.CreatedAt,
+		&i.Account.ID,
+		&i.Account.Name,
+		&i.Account.KindID,
+		&i.Account.Amount,
+		&i.Account.CurrencyID,
+		&i.Account.CounterpartyID,
+		&i.Account.CardNumber,
+		&i.Account.CardLimit,
+		&i.Account.NameOnCard,
+		&i.Account.Iban,
+		&i.Account.Note,
+		&i.Account.IsDefault,
+		&i.Account.IsArchived,
+		&i.Account.ExcludeFromBalance,
+		&i.Account.ExpirationDate,
+		&i.Account.CreatedAt,
+		&i.Currency.ID,
+		&i.Currency.Enum,
+		&i.TransactionKind.ID,
+		&i.TransactionKind.Enum,
+		&i.TransactionKind.IncreaseBalance,
+		&i.CounterpartyName,
+		&i.FrequentToAccountID,
+		&i.FrequentToAccountName,
+		&i.FrequentToAccountKindID,
+		&i.FrequentToAccountAmount,
+		&i.FrequentToAccountCurrencyID,
+		&i.FrequentToAccountCounterpartyID,
+		&i.FrequentToAccountCardNumber,
+		&i.FrequentToAccountCardLimit,
+		&i.FrequentToAccountNameOnCard,
+		&i.FrequentToAccountIban,
+		&i.FrequentToAccountNote,
+		&i.FrequentToAccountIsDefault,
+		&i.FrequentToAccountIsArchived,
+		&i.FrequentToAccountExcludeFromBalance,
+		&i.FrequentToAccountExpirationDate,
+		&i.FrequentToAccountCreatedAt,
+		&i.FrequentToAccountCurrencyID_2,
+		&i.FrequentToAccountCurrencyEnum,
+		&i.CategoryID,
+		&i.CategoryName,
+		&i.CategoryBudgetInEgp,
+		&i.CategoryKindID,
+		&i.CategoryCreatedAt,
+		&i.GoalName,
+		&i.GoalPrice,
+		&i.GoalCurrencyID,
+		&i.GoalFulfilledAt,
+		&i.GoalCurrencyEnum,
+	)
+	return i, err
+}
+
+const getFrequentTxWTxs = `-- name: GetFrequentTxWTxs :many
+SELECT
+    ft.id, ft.frequency_by, ft.frequency, ft.account_id, ft.amount, ft.kind_id, ft.category_id, ft.counterparty_id, ft.description, ft.to_account_id, ft.to_amount, ft.goal_id, ft.starts_at, ft.stops_at, ft.last_transaction_scheduled_to, ft.created_at,
+    a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_default, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
+    c.id, c.enum,
+    k.id, k.enum, k.increase_balance,
+    cp.name AS counterparty_name,
+    ftta.id AS frequent_to_account_id,
+    ftta.name AS frequent_to_account_name,
+    ftta.kind_id AS frequent_to_account_kind_id,
+    ftta.amount AS frequent_to_account_amount,
+    ftta.currency_id AS frequent_to_account_currency_id,
+    ftta.counterparty_id AS frequent_to_account_counterparty_id,
+    ftta.card_number AS frequent_to_account_card_number,
+    ftta.card_limit AS frequent_to_account_card_limit,
+    ftta.name_on_card AS frequent_to_account_name_on_card,
+    ftta.iban AS frequent_to_account_iban,
+    ftta.note AS frequent_to_account_note,
+    ftta.is_default AS frequent_to_account_is_default,
+    ftta.is_archived AS frequent_to_account_is_archived,
+    ftta.exclude_from_balance AS frequent_to_account_exclude_from_balance,
+    ftta.expiration_date AS frequent_to_account_expiration_date,
+    ftta.created_at AS frequent_to_account_created_at,
+    fttc.id AS frequent_to_account_currency_id,
+    fttc.enum AS frequent_to_account_currency_enum,
+    cat.id AS category_id,
+    cat.name AS category_name,
+    cat.budget_in_egp AS category_budget_in_egp,
+    cat.kind_id AS category_kind_id,
+    cat.created_at AS category_created_at,
+    g.name AS goal_name,
+    g.price AS goal_price,
+    g.currency_id AS goal_currency_id,
+    g.fulfilled_at AS goal_fulfilled_at,
+    gc.enum AS goal_currency_enum,
+    t.id AS transaction_id,
+    t.account_id AS transaction_account_id,
+    t.amount AS transaction_amount,
+    t.kind_id AS transaction_kind_id,
+    t.category_id AS transaction_category_id,
+    t.counterparty_id AS transaction_counterparty_id,
+    t.description AS transaction_description,
+    t.to_account_id AS transaction_to_account_id,
+    t.to_amount AS transaction_to_amount,
+    t.goal_id AS transaction_goal_id,
+    t.fulfilled_at AS transaction_fulfilled_at,
+    t.scheduled_to AS transaction_scheduled_to,
+    t.created_at AS transaction_created_at,
+    ta.id AS transaction_account_id,
+    ta.name AS transaction_account_name,
+    ta.kind_id AS transaction_account_kind_id,
+    ta.amount AS transaction_account_amount,
+    ta.currency_id AS transaction_account_currency_id,
+    ta.counterparty_id AS transaction_account_counterparty_id,
+    ta.card_number AS transaction_account_card_number,
+    ta.card_limit AS transaction_account_card_limit,
+    ta.name_on_card AS transaction_account_name_on_card,
+    ta.iban AS transaction_account_iban,
+    ta.note AS transaction_account_note,
+    ta.is_default AS transaction_account_is_default,
+    ta.is_archived AS transaction_account_is_archived,
+    ta.exclude_from_balance AS transaction_account_exclude_from_balance,
+    ta.expiration_date AS transaction_account_expiration_date,
+    ta.created_at AS transaction_account_created_at,
+    tc.enum AS transaction_currency_enum,
+    tcp.name AS transaction_counterparty_name,
+    tta.id AS transaction_to_account_id,
+    tta.name AS transaction_to_account_name,
+    tta.kind_id AS transaction_to_account_kind_id,
+    tta.amount AS transaction_to_account_amount,
+    tta.currency_id AS transaction_to_account_currency_id,
+    tta.counterparty_id AS transaction_to_account_counterparty_id,
+    tta.card_number AS transaction_to_account_card_number,
+    tta.card_limit AS transaction_to_account_card_limit,
+    tta.name_on_card AS transaction_to_account_name_on_card,
+    tta.iban AS transaction_to_account_iban,
+    tta.note AS transaction_to_account_note,
+    tta.is_default AS transaction_to_account_is_default,
+    tta.is_archived AS transaction_to_account_is_archived,
+    tta.exclude_from_balance AS transaction_to_account_exclude_from_balance,
+    tta.expiration_date AS transaction_to_account_expiration_date,
+    tta.created_at AS transaction_to_account_created_at,
+    ttc.enum AS transaction_to_account_currency_enum,
+    tcat.id AS transaction_category_id,
+    tcat.name AS transaction_category_name,
+    tcat.budget_in_egp AS transaction_category_budget_in_egp,
+    tcat.kind_id AS transaction_category_kind_id,
+    tcat.created_at AS transaction_category_created_at,
+    tk.enum AS transaction_kind_enum,
+    tk.increase_balance AS transaction_kind_increase_balance
 FROM frequent_txs AS ft
 LEFT JOIN frequent_txs_transactions AS ftt ON ftt.frequency_id = ft.id
 LEFT JOIN counterparties AS cp ON ft.counterparty_id = cp.id
@@ -176,36 +404,106 @@ LEFT JOIN currencies AS gc ON gc.id = g.currency_id
 WHERE ft.id = ?1
 `
 
-type GetFrequentTxRow struct {
-	FrequentTx        FrequentTx
-	Account           Account
-	Currency          Currency
-	Counterparty      Counterparty
-	Account_2         Account
-	Currency_2        Currency
-	TransactionKind   TransactionKind
-	Category          Category
-	Transaction       Transaction
-	Account_3         Account
-	Currency_3        Currency
-	Counterparty_2    Counterparty
-	Account_4         Account
-	Currency_4        Currency
-	TransactionKind_2 TransactionKind
-	Category_2        Category
-	Goal              Goal
-	Currency_5        Currency
+type GetFrequentTxWTxsRow struct {
+	FrequentTx                             FrequentTx
+	Account                                Account
+	Currency                               Currency
+	TransactionKind                        TransactionKind
+	CounterpartyName                       sql.NullString
+	FrequentToAccountID                    sql.NullString
+	FrequentToAccountName                  sql.NullString
+	FrequentToAccountKindID                sql.NullString
+	FrequentToAccountAmount                sql.NullFloat64
+	FrequentToAccountCurrencyID            sql.NullString
+	FrequentToAccountCounterpartyID        sql.NullString
+	FrequentToAccountCardNumber            sql.NullString
+	FrequentToAccountCardLimit             sql.NullFloat64
+	FrequentToAccountNameOnCard            sql.NullString
+	FrequentToAccountIban                  sql.NullString
+	FrequentToAccountNote                  sql.NullString
+	FrequentToAccountIsDefault             sql.NullBool
+	FrequentToAccountIsArchived            sql.NullBool
+	FrequentToAccountExcludeFromBalance    sql.NullBool
+	FrequentToAccountExpirationDate        sql.NullTime
+	FrequentToAccountCreatedAt             sql.NullTime
+	FrequentToAccountCurrencyID_2          sql.NullString
+	FrequentToAccountCurrencyEnum          sql.NullInt64
+	CategoryID                             sql.NullString
+	CategoryName                           sql.NullString
+	CategoryBudgetInEgp                    sql.NullFloat64
+	CategoryKindID                         sql.NullString
+	CategoryCreatedAt                      sql.NullTime
+	GoalName                               sql.NullString
+	GoalPrice                              sql.NullFloat64
+	GoalCurrencyID                         sql.NullString
+	GoalFulfilledAt                        sql.NullTime
+	GoalCurrencyEnum                       sql.NullInt64
+	TransactionID                          sql.NullString
+	TransactionAccountID                   sql.NullString
+	TransactionAmount                      sql.NullFloat64
+	TransactionKindID                      sql.NullString
+	TransactionCategoryID                  sql.NullString
+	TransactionCounterpartyID              sql.NullString
+	TransactionDescription                 sql.NullString
+	TransactionToAccountID                 sql.NullString
+	TransactionToAmount                    sql.NullFloat64
+	TransactionGoalID                      sql.NullString
+	TransactionFulfilledAt                 sql.NullTime
+	TransactionScheduledTo                 sql.NullTime
+	TransactionCreatedAt                   sql.NullTime
+	TransactionAccountID_2                 sql.NullString
+	TransactionAccountName                 sql.NullString
+	TransactionAccountKindID               sql.NullString
+	TransactionAccountAmount               sql.NullFloat64
+	TransactionAccountCurrencyID           sql.NullString
+	TransactionAccountCounterpartyID       sql.NullString
+	TransactionAccountCardNumber           sql.NullString
+	TransactionAccountCardLimit            sql.NullFloat64
+	TransactionAccountNameOnCard           sql.NullString
+	TransactionAccountIban                 sql.NullString
+	TransactionAccountNote                 sql.NullString
+	TransactionAccountIsDefault            sql.NullBool
+	TransactionAccountIsArchived           sql.NullBool
+	TransactionAccountExcludeFromBalance   sql.NullBool
+	TransactionAccountExpirationDate       sql.NullTime
+	TransactionAccountCreatedAt            sql.NullTime
+	TransactionCurrencyEnum                sql.NullInt64
+	TransactionCounterpartyName            sql.NullString
+	TransactionToAccountID_2               sql.NullString
+	TransactionToAccountName               sql.NullString
+	TransactionToAccountKindID             sql.NullString
+	TransactionToAccountAmount             sql.NullFloat64
+	TransactionToAccountCurrencyID         sql.NullString
+	TransactionToAccountCounterpartyID     sql.NullString
+	TransactionToAccountCardNumber         sql.NullString
+	TransactionToAccountCardLimit          sql.NullFloat64
+	TransactionToAccountNameOnCard         sql.NullString
+	TransactionToAccountIban               sql.NullString
+	TransactionToAccountNote               sql.NullString
+	TransactionToAccountIsDefault          sql.NullBool
+	TransactionToAccountIsArchived         sql.NullBool
+	TransactionToAccountExcludeFromBalance sql.NullBool
+	TransactionToAccountExpirationDate     sql.NullTime
+	TransactionToAccountCreatedAt          sql.NullTime
+	TransactionToAccountCurrencyEnum       sql.NullInt64
+	TransactionCategoryID_2                sql.NullString
+	TransactionCategoryName                sql.NullString
+	TransactionCategoryBudgetInEgp         sql.NullFloat64
+	TransactionCategoryKindID              sql.NullString
+	TransactionCategoryCreatedAt           sql.NullTime
+	TransactionKindEnum                    sql.NullInt64
+	TransactionKindIncreaseBalance         sql.NullBool
 }
 
-func (q *Queries) GetFrequentTx(ctx context.Context, id string) ([]GetFrequentTxRow, error) {
-	rows, err := q.db.QueryContext(ctx, getFrequentTx, id)
+func (q *Queries) GetFrequentTxWTxs(ctx context.Context, id string) ([]GetFrequentTxWTxsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getFrequentTxWTxs, id)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []GetFrequentTxRow
+	var items []GetFrequentTxWTxsRow
 	for rows.Next() {
-		var i GetFrequentTxRow
+		var i GetFrequentTxWTxsRow
 		if err := rows.Scan(
 			&i.FrequentTx.ID,
 			&i.FrequentTx.FrequencyBy,
@@ -241,103 +539,93 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) ([]GetFrequentTx
 			&i.Account.CreatedAt,
 			&i.Currency.ID,
 			&i.Currency.Enum,
-			&i.Counterparty.ID,
-			&i.Counterparty.Name,
-			&i.Counterparty.CreatedAt,
-			&i.Account_2.ID,
-			&i.Account_2.Name,
-			&i.Account_2.KindID,
-			&i.Account_2.Amount,
-			&i.Account_2.CurrencyID,
-			&i.Account_2.CounterpartyID,
-			&i.Account_2.CardNumber,
-			&i.Account_2.CardLimit,
-			&i.Account_2.NameOnCard,
-			&i.Account_2.Iban,
-			&i.Account_2.Note,
-			&i.Account_2.IsDefault,
-			&i.Account_2.IsArchived,
-			&i.Account_2.ExcludeFromBalance,
-			&i.Account_2.ExpirationDate,
-			&i.Account_2.CreatedAt,
-			&i.Currency_2.ID,
-			&i.Currency_2.Enum,
 			&i.TransactionKind.ID,
 			&i.TransactionKind.Enum,
 			&i.TransactionKind.IncreaseBalance,
-			&i.Category.ID,
-			&i.Category.Name,
-			&i.Category.BudgetInEgp,
-			&i.Category.KindID,
-			&i.Category.CreatedAt,
-			&i.Transaction.ID,
-			&i.Transaction.AccountID,
-			&i.Transaction.Amount,
-			&i.Transaction.KindID,
-			&i.Transaction.CategoryID,
-			&i.Transaction.CounterpartyID,
-			&i.Transaction.Description,
-			&i.Transaction.ToAccountID,
-			&i.Transaction.ToAmount,
-			&i.Transaction.GoalID,
-			&i.Transaction.FulfilledAt,
-			&i.Transaction.ScheduledTo,
-			&i.Transaction.CreatedAt,
-			&i.Account_3.ID,
-			&i.Account_3.Name,
-			&i.Account_3.KindID,
-			&i.Account_3.Amount,
-			&i.Account_3.CurrencyID,
-			&i.Account_3.CounterpartyID,
-			&i.Account_3.CardNumber,
-			&i.Account_3.CardLimit,
-			&i.Account_3.NameOnCard,
-			&i.Account_3.Iban,
-			&i.Account_3.Note,
-			&i.Account_3.IsDefault,
-			&i.Account_3.IsArchived,
-			&i.Account_3.ExcludeFromBalance,
-			&i.Account_3.ExpirationDate,
-			&i.Account_3.CreatedAt,
-			&i.Currency_3.ID,
-			&i.Currency_3.Enum,
-			&i.Counterparty_2.ID,
-			&i.Counterparty_2.Name,
-			&i.Counterparty_2.CreatedAt,
-			&i.Account_4.ID,
-			&i.Account_4.Name,
-			&i.Account_4.KindID,
-			&i.Account_4.Amount,
-			&i.Account_4.CurrencyID,
-			&i.Account_4.CounterpartyID,
-			&i.Account_4.CardNumber,
-			&i.Account_4.CardLimit,
-			&i.Account_4.NameOnCard,
-			&i.Account_4.Iban,
-			&i.Account_4.Note,
-			&i.Account_4.IsDefault,
-			&i.Account_4.IsArchived,
-			&i.Account_4.ExcludeFromBalance,
-			&i.Account_4.ExpirationDate,
-			&i.Account_4.CreatedAt,
-			&i.Currency_4.ID,
-			&i.Currency_4.Enum,
-			&i.TransactionKind_2.ID,
-			&i.TransactionKind_2.Enum,
-			&i.TransactionKind_2.IncreaseBalance,
-			&i.Category_2.ID,
-			&i.Category_2.Name,
-			&i.Category_2.BudgetInEgp,
-			&i.Category_2.KindID,
-			&i.Category_2.CreatedAt,
-			&i.Goal.ID,
-			&i.Goal.Name,
-			&i.Goal.Price,
-			&i.Goal.CurrencyID,
-			&i.Goal.FulfilledAt,
-			&i.Goal.CreatedAt,
-			&i.Currency_5.ID,
-			&i.Currency_5.Enum,
+			&i.CounterpartyName,
+			&i.FrequentToAccountID,
+			&i.FrequentToAccountName,
+			&i.FrequentToAccountKindID,
+			&i.FrequentToAccountAmount,
+			&i.FrequentToAccountCurrencyID,
+			&i.FrequentToAccountCounterpartyID,
+			&i.FrequentToAccountCardNumber,
+			&i.FrequentToAccountCardLimit,
+			&i.FrequentToAccountNameOnCard,
+			&i.FrequentToAccountIban,
+			&i.FrequentToAccountNote,
+			&i.FrequentToAccountIsDefault,
+			&i.FrequentToAccountIsArchived,
+			&i.FrequentToAccountExcludeFromBalance,
+			&i.FrequentToAccountExpirationDate,
+			&i.FrequentToAccountCreatedAt,
+			&i.FrequentToAccountCurrencyID_2,
+			&i.FrequentToAccountCurrencyEnum,
+			&i.CategoryID,
+			&i.CategoryName,
+			&i.CategoryBudgetInEgp,
+			&i.CategoryKindID,
+			&i.CategoryCreatedAt,
+			&i.GoalName,
+			&i.GoalPrice,
+			&i.GoalCurrencyID,
+			&i.GoalFulfilledAt,
+			&i.GoalCurrencyEnum,
+			&i.TransactionID,
+			&i.TransactionAccountID,
+			&i.TransactionAmount,
+			&i.TransactionKindID,
+			&i.TransactionCategoryID,
+			&i.TransactionCounterpartyID,
+			&i.TransactionDescription,
+			&i.TransactionToAccountID,
+			&i.TransactionToAmount,
+			&i.TransactionGoalID,
+			&i.TransactionFulfilledAt,
+			&i.TransactionScheduledTo,
+			&i.TransactionCreatedAt,
+			&i.TransactionAccountID_2,
+			&i.TransactionAccountName,
+			&i.TransactionAccountKindID,
+			&i.TransactionAccountAmount,
+			&i.TransactionAccountCurrencyID,
+			&i.TransactionAccountCounterpartyID,
+			&i.TransactionAccountCardNumber,
+			&i.TransactionAccountCardLimit,
+			&i.TransactionAccountNameOnCard,
+			&i.TransactionAccountIban,
+			&i.TransactionAccountNote,
+			&i.TransactionAccountIsDefault,
+			&i.TransactionAccountIsArchived,
+			&i.TransactionAccountExcludeFromBalance,
+			&i.TransactionAccountExpirationDate,
+			&i.TransactionAccountCreatedAt,
+			&i.TransactionCurrencyEnum,
+			&i.TransactionCounterpartyName,
+			&i.TransactionToAccountID_2,
+			&i.TransactionToAccountName,
+			&i.TransactionToAccountKindID,
+			&i.TransactionToAccountAmount,
+			&i.TransactionToAccountCurrencyID,
+			&i.TransactionToAccountCounterpartyID,
+			&i.TransactionToAccountCardNumber,
+			&i.TransactionToAccountCardLimit,
+			&i.TransactionToAccountNameOnCard,
+			&i.TransactionToAccountIban,
+			&i.TransactionToAccountNote,
+			&i.TransactionToAccountIsDefault,
+			&i.TransactionToAccountIsArchived,
+			&i.TransactionToAccountExcludeFromBalance,
+			&i.TransactionToAccountExpirationDate,
+			&i.TransactionToAccountCreatedAt,
+			&i.TransactionToAccountCurrencyEnum,
+			&i.TransactionCategoryID_2,
+			&i.TransactionCategoryName,
+			&i.TransactionCategoryBudgetInEgp,
+			&i.TransactionCategoryKindID,
+			&i.TransactionCategoryCreatedAt,
+			&i.TransactionKindEnum,
+			&i.TransactionKindIncreaseBalance,
 		); err != nil {
 			return nil, err
 		}
@@ -357,23 +645,37 @@ SELECT
     ft.id, ft.frequency_by, ft.frequency, ft.account_id, ft.amount, ft.kind_id, ft.category_id, ft.counterparty_id, ft.description, ft.to_account_id, ft.to_amount, ft.goal_id, ft.starts_at, ft.stops_at, ft.last_transaction_scheduled_to, ft.created_at,
     a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_default, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
     c.id, c.enum,
-    cp.id, cp.name, cp.created_at,
-    ftta.id, ftta.name, ftta.kind_id, ftta.amount, ftta.currency_id, ftta.counterparty_id, ftta.card_number, ftta.card_limit, ftta.name_on_card, ftta.iban, ftta.note, ftta.is_default, ftta.is_archived, ftta.exclude_from_balance, ftta.expiration_date, ftta.created_at,
-    fttc.id, fttc.enum,
     k.id, k.enum, k.increase_balance,
-    cat.id, cat.name, cat.budget_in_egp, cat.kind_id, cat.created_at,
-    t.id, t.account_id, t.amount, t.kind_id, t.category_id, t.counterparty_id, t.description, t.to_account_id, t.to_amount, t.goal_id, t.fulfilled_at, t.scheduled_to, t.created_at,
-    ta.id, ta.name, ta.kind_id, ta.amount, ta.currency_id, ta.counterparty_id, ta.card_number, ta.card_limit, ta.name_on_card, ta.iban, ta.note, ta.is_default, ta.is_archived, ta.exclude_from_balance, ta.expiration_date, ta.created_at,
-    tc.id, tc.enum,
-    tcp.id, tcp.name, tcp.created_at,
-    tta.id, tta.name, tta.kind_id, tta.amount, tta.currency_id, tta.counterparty_id, tta.card_number, tta.card_limit, tta.name_on_card, tta.iban, tta.note, tta.is_default, tta.is_archived, tta.exclude_from_balance, tta.expiration_date, tta.created_at,
-    ttc.id, ttc.enum,
-    tk.id, tk.enum, tk.increase_balance,
-    tcat.id, tcat.name, tcat.budget_in_egp, tcat.kind_id, tcat.created_at,
-    g.id, g.name, g.price, g.currency_id, g.fulfilled_at, g.created_at,
-    gc.id, gc.enum
+    cp.name AS counterparty_name,
+    ftta.id AS frequent_to_account_id,
+    ftta.name AS frequent_to_account_name,
+    ftta.kind_id AS frequent_to_account_kind_id,
+    ftta.amount AS frequent_to_account_amount,
+    ftta.currency_id AS frequent_to_account_currency_id,
+    ftta.counterparty_id AS frequent_to_account_counterparty_id,
+    ftta.card_number AS frequent_to_account_card_number,
+    ftta.card_limit AS frequent_to_account_card_limit,
+    ftta.name_on_card AS frequent_to_account_name_on_card,
+    ftta.iban AS frequent_to_account_iban,
+    ftta.note AS frequent_to_account_note,
+    ftta.is_default AS frequent_to_account_is_default,
+    ftta.is_archived AS frequent_to_account_is_archived,
+    ftta.exclude_from_balance AS frequent_to_account_exclude_from_balance,
+    ftta.expiration_date AS frequent_to_account_expiration_date,
+    ftta.created_at AS frequent_to_account_created_at,
+    fttc.id AS frequent_to_account_currency_id,
+    fttc.enum AS frequent_to_account_currency_enum,
+    cat.id AS category_id,
+    cat.name AS category_name,
+    cat.budget_in_egp AS category_budget_in_egp,
+    cat.kind_id AS category_kind_id,
+    cat.created_at AS category_created_at,
+    g.name AS goal_name,
+    g.price AS goal_price,
+    g.currency_id AS goal_currency_id,
+    g.fulfilled_at AS goal_fulfilled_at,
+    gc.enum AS goal_currency_enum
 FROM frequent_txs AS ft
-LEFT JOIN frequent_txs_transactions AS ftt ON ftt.frequency_id = ft.id
 LEFT JOIN counterparties AS cp ON ft.counterparty_id = cp.id
 LEFT JOIN accounts AS a ON ft.account_id = a.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
@@ -381,37 +683,44 @@ LEFT JOIN accounts AS ftta ON ft.to_account_id = a.id
 LEFT JOIN currencies AS fttc ON ftta.currency_id = c.id
 LEFT JOIN transaction_kinds AS k ON ft.kind_id = k.id
 LEFT JOIN categories AS cat ON ft.category_id = cat.id
-LEFT JOIN transactions AS t ON t.id = ftt.transaction_id
-LEFT JOIN accounts AS ta ON t.account_id = ta.id
-LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
-LEFT JOIN accounts AS tta ON t.to_account_id = tta.id
-LEFT JOIN currencies AS ttc ON tta.currency_id = ttc.id
-LEFT JOIN transaction_kinds AS tk ON t.kind_id = k.id
-LEFT JOIN categories AS tcat ON t.category_id = tcat.id
 LEFT JOIN goals AS g ON g.id = ft.goal_id
 LEFT JOIN currencies AS gc ON gc.id = g.currency_id
-LEFT JOIN counterparties AS tcp ON t.counterparty_id = tcp.id
 `
 
 type GetFrequentTxsRow struct {
-	FrequentTx        FrequentTx
-	Account           Account
-	Currency          Currency
-	Counterparty      Counterparty
-	Account_2         Account
-	Currency_2        Currency
-	TransactionKind   TransactionKind
-	Category          Category
-	Transaction       Transaction
-	Account_3         Account
-	Currency_3        Currency
-	Counterparty_2    Counterparty
-	Account_4         Account
-	Currency_4        Currency
-	TransactionKind_2 TransactionKind
-	Category_2        Category
-	Goal              Goal
-	Currency_5        Currency
+	FrequentTx                          FrequentTx
+	Account                             Account
+	Currency                            Currency
+	TransactionKind                     TransactionKind
+	CounterpartyName                    sql.NullString
+	FrequentToAccountID                 sql.NullString
+	FrequentToAccountName               sql.NullString
+	FrequentToAccountKindID             sql.NullString
+	FrequentToAccountAmount             sql.NullFloat64
+	FrequentToAccountCurrencyID         sql.NullString
+	FrequentToAccountCounterpartyID     sql.NullString
+	FrequentToAccountCardNumber         sql.NullString
+	FrequentToAccountCardLimit          sql.NullFloat64
+	FrequentToAccountNameOnCard         sql.NullString
+	FrequentToAccountIban               sql.NullString
+	FrequentToAccountNote               sql.NullString
+	FrequentToAccountIsDefault          sql.NullBool
+	FrequentToAccountIsArchived         sql.NullBool
+	FrequentToAccountExcludeFromBalance sql.NullBool
+	FrequentToAccountExpirationDate     sql.NullTime
+	FrequentToAccountCreatedAt          sql.NullTime
+	FrequentToAccountCurrencyID_2       sql.NullString
+	FrequentToAccountCurrencyEnum       sql.NullInt64
+	CategoryID                          sql.NullString
+	CategoryName                        sql.NullString
+	CategoryBudgetInEgp                 sql.NullFloat64
+	CategoryKindID                      sql.NullString
+	CategoryCreatedAt                   sql.NullTime
+	GoalName                            sql.NullString
+	GoalPrice                           sql.NullFloat64
+	GoalCurrencyID                      sql.NullString
+	GoalFulfilledAt                     sql.NullTime
+	GoalCurrencyEnum                    sql.NullInt64
 }
 
 func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, error) {
@@ -458,103 +767,385 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 			&i.Account.CreatedAt,
 			&i.Currency.ID,
 			&i.Currency.Enum,
-			&i.Counterparty.ID,
-			&i.Counterparty.Name,
-			&i.Counterparty.CreatedAt,
-			&i.Account_2.ID,
-			&i.Account_2.Name,
-			&i.Account_2.KindID,
-			&i.Account_2.Amount,
-			&i.Account_2.CurrencyID,
-			&i.Account_2.CounterpartyID,
-			&i.Account_2.CardNumber,
-			&i.Account_2.CardLimit,
-			&i.Account_2.NameOnCard,
-			&i.Account_2.Iban,
-			&i.Account_2.Note,
-			&i.Account_2.IsDefault,
-			&i.Account_2.IsArchived,
-			&i.Account_2.ExcludeFromBalance,
-			&i.Account_2.ExpirationDate,
-			&i.Account_2.CreatedAt,
-			&i.Currency_2.ID,
-			&i.Currency_2.Enum,
 			&i.TransactionKind.ID,
 			&i.TransactionKind.Enum,
 			&i.TransactionKind.IncreaseBalance,
-			&i.Category.ID,
-			&i.Category.Name,
-			&i.Category.BudgetInEgp,
-			&i.Category.KindID,
-			&i.Category.CreatedAt,
-			&i.Transaction.ID,
-			&i.Transaction.AccountID,
-			&i.Transaction.Amount,
-			&i.Transaction.KindID,
-			&i.Transaction.CategoryID,
-			&i.Transaction.CounterpartyID,
-			&i.Transaction.Description,
-			&i.Transaction.ToAccountID,
-			&i.Transaction.ToAmount,
-			&i.Transaction.GoalID,
-			&i.Transaction.FulfilledAt,
-			&i.Transaction.ScheduledTo,
-			&i.Transaction.CreatedAt,
-			&i.Account_3.ID,
-			&i.Account_3.Name,
-			&i.Account_3.KindID,
-			&i.Account_3.Amount,
-			&i.Account_3.CurrencyID,
-			&i.Account_3.CounterpartyID,
-			&i.Account_3.CardNumber,
-			&i.Account_3.CardLimit,
-			&i.Account_3.NameOnCard,
-			&i.Account_3.Iban,
-			&i.Account_3.Note,
-			&i.Account_3.IsDefault,
-			&i.Account_3.IsArchived,
-			&i.Account_3.ExcludeFromBalance,
-			&i.Account_3.ExpirationDate,
-			&i.Account_3.CreatedAt,
-			&i.Currency_3.ID,
-			&i.Currency_3.Enum,
-			&i.Counterparty_2.ID,
-			&i.Counterparty_2.Name,
-			&i.Counterparty_2.CreatedAt,
-			&i.Account_4.ID,
-			&i.Account_4.Name,
-			&i.Account_4.KindID,
-			&i.Account_4.Amount,
-			&i.Account_4.CurrencyID,
-			&i.Account_4.CounterpartyID,
-			&i.Account_4.CardNumber,
-			&i.Account_4.CardLimit,
-			&i.Account_4.NameOnCard,
-			&i.Account_4.Iban,
-			&i.Account_4.Note,
-			&i.Account_4.IsDefault,
-			&i.Account_4.IsArchived,
-			&i.Account_4.ExcludeFromBalance,
-			&i.Account_4.ExpirationDate,
-			&i.Account_4.CreatedAt,
-			&i.Currency_4.ID,
-			&i.Currency_4.Enum,
-			&i.TransactionKind_2.ID,
-			&i.TransactionKind_2.Enum,
-			&i.TransactionKind_2.IncreaseBalance,
-			&i.Category_2.ID,
-			&i.Category_2.Name,
-			&i.Category_2.BudgetInEgp,
-			&i.Category_2.KindID,
-			&i.Category_2.CreatedAt,
-			&i.Goal.ID,
-			&i.Goal.Name,
-			&i.Goal.Price,
-			&i.Goal.CurrencyID,
-			&i.Goal.FulfilledAt,
-			&i.Goal.CreatedAt,
-			&i.Currency_5.ID,
-			&i.Currency_5.Enum,
+			&i.CounterpartyName,
+			&i.FrequentToAccountID,
+			&i.FrequentToAccountName,
+			&i.FrequentToAccountKindID,
+			&i.FrequentToAccountAmount,
+			&i.FrequentToAccountCurrencyID,
+			&i.FrequentToAccountCounterpartyID,
+			&i.FrequentToAccountCardNumber,
+			&i.FrequentToAccountCardLimit,
+			&i.FrequentToAccountNameOnCard,
+			&i.FrequentToAccountIban,
+			&i.FrequentToAccountNote,
+			&i.FrequentToAccountIsDefault,
+			&i.FrequentToAccountIsArchived,
+			&i.FrequentToAccountExcludeFromBalance,
+			&i.FrequentToAccountExpirationDate,
+			&i.FrequentToAccountCreatedAt,
+			&i.FrequentToAccountCurrencyID_2,
+			&i.FrequentToAccountCurrencyEnum,
+			&i.CategoryID,
+			&i.CategoryName,
+			&i.CategoryBudgetInEgp,
+			&i.CategoryKindID,
+			&i.CategoryCreatedAt,
+			&i.GoalName,
+			&i.GoalPrice,
+			&i.GoalCurrencyID,
+			&i.GoalFulfilledAt,
+			&i.GoalCurrencyEnum,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getFrequentTxsWTxs = `-- name: GetFrequentTxsWTxs :many
+SELECT
+    ft.id, ft.frequency_by, ft.frequency, ft.account_id, ft.amount, ft.kind_id, ft.category_id, ft.counterparty_id, ft.description, ft.to_account_id, ft.to_amount, ft.goal_id, ft.starts_at, ft.stops_at, ft.last_transaction_scheduled_to, ft.created_at,
+    a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_default, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
+    c.id, c.enum,
+    k.id, k.enum, k.increase_balance,
+    cp.name AS counterparty_name,
+    ftta.id AS frequent_to_account_id,
+    ftta.name AS frequent_to_account_name,
+    ftta.kind_id AS frequent_to_account_kind_id,
+    ftta.amount AS frequent_to_account_amount,
+    ftta.currency_id AS frequent_to_account_currency_id,
+    ftta.counterparty_id AS frequent_to_account_counterparty_id,
+    ftta.card_number AS frequent_to_account_card_number,
+    ftta.card_limit AS frequent_to_account_card_limit,
+    ftta.name_on_card AS frequent_to_account_name_on_card,
+    ftta.iban AS frequent_to_account_iban,
+    ftta.note AS frequent_to_account_note,
+    ftta.is_default AS frequent_to_account_is_default,
+    ftta.is_archived AS frequent_to_account_is_archived,
+    ftta.exclude_from_balance AS frequent_to_account_exclude_from_balance,
+    ftta.expiration_date AS frequent_to_account_expiration_date,
+    ftta.created_at AS frequent_to_account_created_at,
+    fttc.id AS frequent_to_account_currency_id,
+    fttc.enum AS frequent_to_account_currency_enum,
+    cat.id AS category_id,
+    cat.name AS category_name,
+    cat.budget_in_egp AS category_budget_in_egp,
+    cat.kind_id AS category_kind_id,
+    cat.created_at AS category_created_at,
+    g.name AS goal_name,
+    g.price AS goal_price,
+    g.currency_id AS goal_currency_id,
+    g.fulfilled_at AS goal_fulfilled_at,
+    gc.enum AS goal_currency_enum,
+    t.id AS transaction_id,
+    t.account_id AS transaction_account_id,
+    t.amount AS transaction_amount,
+    t.kind_id AS transaction_kind_id,
+    t.category_id AS transaction_category_id,
+    t.counterparty_id AS transaction_counterparty_id,
+    t.description AS transaction_description,
+    t.to_account_id AS transaction_to_account_id,
+    t.to_amount AS transaction_to_amount,
+    t.goal_id AS transaction_goal_id,
+    t.fulfilled_at AS transaction_fulfilled_at,
+    t.scheduled_to AS transaction_scheduled_to,
+    t.created_at AS transaction_created_at,
+    ta.id AS transaction_account_id,
+    ta.name AS transaction_account_name,
+    ta.kind_id AS transaction_account_kind_id,
+    ta.amount AS transaction_account_amount,
+    ta.currency_id AS transaction_account_currency_id,
+    ta.counterparty_id AS transaction_account_counterparty_id,
+    ta.card_number AS transaction_account_card_number,
+    ta.card_limit AS transaction_account_card_limit,
+    ta.name_on_card AS transaction_account_name_on_card,
+    ta.iban AS transaction_account_iban,
+    ta.note AS transaction_account_note,
+    ta.is_default AS transaction_account_is_default,
+    ta.is_archived AS transaction_account_is_archived,
+    ta.exclude_from_balance AS transaction_account_exclude_from_balance,
+    ta.expiration_date AS transaction_account_expiration_date,
+    ta.created_at AS transaction_account_created_at,
+    tc.enum AS transaction_currency_enum,
+    tcp.name AS transaction_counterparty_name,
+    tta.id AS transaction_to_account_id,
+    tta.name AS transaction_to_account_name,
+    tta.kind_id AS transaction_to_account_kind_id,
+    tta.amount AS transaction_to_account_amount,
+    tta.currency_id AS transaction_to_account_currency_id,
+    tta.counterparty_id AS transaction_to_account_counterparty_id,
+    tta.card_number AS transaction_to_account_card_number,
+    tta.card_limit AS transaction_to_account_card_limit,
+    tta.name_on_card AS transaction_to_account_name_on_card,
+    tta.iban AS transaction_to_account_iban,
+    tta.note AS transaction_to_account_note,
+    tta.is_default AS transaction_to_account_is_default,
+    tta.is_archived AS transaction_to_account_is_archived,
+    tta.exclude_from_balance AS transaction_to_account_exclude_from_balance,
+    tta.expiration_date AS transaction_to_account_expiration_date,
+    tta.created_at AS transaction_to_account_created_at,
+    ttc.enum AS transaction_to_account_currency_enum,
+    tcat.id AS transaction_category_id,
+    tcat.name AS transaction_category_name,
+    tcat.budget_in_egp AS transaction_category_budget_in_egp,
+    tcat.kind_id AS transaction_category_kind_id,
+    tcat.created_at AS transaction_category_created_at,
+    tk.enum AS transaction_kind_enum,
+    tk.increase_balance AS transaction_kind_increase_balance
+FROM frequent_txs AS ft
+LEFT JOIN frequent_txs_transactions AS ftt ON ftt.frequency_id = ft.id
+LEFT JOIN counterparties AS cp ON ft.counterparty_id = cp.id
+LEFT JOIN accounts AS a ON ft.account_id = a.id
+LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN accounts AS ftta ON ft.to_account_id = a.id
+LEFT JOIN currencies AS fttc ON ftta.currency_id = c.id
+LEFT JOIN transaction_kinds AS k ON ft.kind_id = k.id
+LEFT JOIN categories AS cat ON ft.category_id = cat.id
+LEFT JOIN transactions AS t ON t.id = ftt.transaction_id
+LEFT JOIN accounts AS ta ON t.account_id = ta.id
+LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
+LEFT JOIN accounts AS tta ON t.to_account_id = tta.id
+LEFT JOIN currencies AS ttc ON tta.currency_id = ttc.id
+LEFT JOIN transaction_kinds AS tk ON t.kind_id = k.id
+LEFT JOIN categories AS tcat ON t.category_id = tcat.id
+LEFT JOIN goals AS g ON g.id = ft.goal_id
+LEFT JOIN currencies AS gc ON gc.id = g.currency_id
+LEFT JOIN counterparties AS tcp ON t.counterparty_id = tcp.id
+`
+
+type GetFrequentTxsWTxsRow struct {
+	FrequentTx                             FrequentTx
+	Account                                Account
+	Currency                               Currency
+	TransactionKind                        TransactionKind
+	CounterpartyName                       sql.NullString
+	FrequentToAccountID                    sql.NullString
+	FrequentToAccountName                  sql.NullString
+	FrequentToAccountKindID                sql.NullString
+	FrequentToAccountAmount                sql.NullFloat64
+	FrequentToAccountCurrencyID            sql.NullString
+	FrequentToAccountCounterpartyID        sql.NullString
+	FrequentToAccountCardNumber            sql.NullString
+	FrequentToAccountCardLimit             sql.NullFloat64
+	FrequentToAccountNameOnCard            sql.NullString
+	FrequentToAccountIban                  sql.NullString
+	FrequentToAccountNote                  sql.NullString
+	FrequentToAccountIsDefault             sql.NullBool
+	FrequentToAccountIsArchived            sql.NullBool
+	FrequentToAccountExcludeFromBalance    sql.NullBool
+	FrequentToAccountExpirationDate        sql.NullTime
+	FrequentToAccountCreatedAt             sql.NullTime
+	FrequentToAccountCurrencyID_2          sql.NullString
+	FrequentToAccountCurrencyEnum          sql.NullInt64
+	CategoryID                             sql.NullString
+	CategoryName                           sql.NullString
+	CategoryBudgetInEgp                    sql.NullFloat64
+	CategoryKindID                         sql.NullString
+	CategoryCreatedAt                      sql.NullTime
+	GoalName                               sql.NullString
+	GoalPrice                              sql.NullFloat64
+	GoalCurrencyID                         sql.NullString
+	GoalFulfilledAt                        sql.NullTime
+	GoalCurrencyEnum                       sql.NullInt64
+	TransactionID                          sql.NullString
+	TransactionAccountID                   sql.NullString
+	TransactionAmount                      sql.NullFloat64
+	TransactionKindID                      sql.NullString
+	TransactionCategoryID                  sql.NullString
+	TransactionCounterpartyID              sql.NullString
+	TransactionDescription                 sql.NullString
+	TransactionToAccountID                 sql.NullString
+	TransactionToAmount                    sql.NullFloat64
+	TransactionGoalID                      sql.NullString
+	TransactionFulfilledAt                 sql.NullTime
+	TransactionScheduledTo                 sql.NullTime
+	TransactionCreatedAt                   sql.NullTime
+	TransactionAccountID_2                 sql.NullString
+	TransactionAccountName                 sql.NullString
+	TransactionAccountKindID               sql.NullString
+	TransactionAccountAmount               sql.NullFloat64
+	TransactionAccountCurrencyID           sql.NullString
+	TransactionAccountCounterpartyID       sql.NullString
+	TransactionAccountCardNumber           sql.NullString
+	TransactionAccountCardLimit            sql.NullFloat64
+	TransactionAccountNameOnCard           sql.NullString
+	TransactionAccountIban                 sql.NullString
+	TransactionAccountNote                 sql.NullString
+	TransactionAccountIsDefault            sql.NullBool
+	TransactionAccountIsArchived           sql.NullBool
+	TransactionAccountExcludeFromBalance   sql.NullBool
+	TransactionAccountExpirationDate       sql.NullTime
+	TransactionAccountCreatedAt            sql.NullTime
+	TransactionCurrencyEnum                sql.NullInt64
+	TransactionCounterpartyName            sql.NullString
+	TransactionToAccountID_2               sql.NullString
+	TransactionToAccountName               sql.NullString
+	TransactionToAccountKindID             sql.NullString
+	TransactionToAccountAmount             sql.NullFloat64
+	TransactionToAccountCurrencyID         sql.NullString
+	TransactionToAccountCounterpartyID     sql.NullString
+	TransactionToAccountCardNumber         sql.NullString
+	TransactionToAccountCardLimit          sql.NullFloat64
+	TransactionToAccountNameOnCard         sql.NullString
+	TransactionToAccountIban               sql.NullString
+	TransactionToAccountNote               sql.NullString
+	TransactionToAccountIsDefault          sql.NullBool
+	TransactionToAccountIsArchived         sql.NullBool
+	TransactionToAccountExcludeFromBalance sql.NullBool
+	TransactionToAccountExpirationDate     sql.NullTime
+	TransactionToAccountCreatedAt          sql.NullTime
+	TransactionToAccountCurrencyEnum       sql.NullInt64
+	TransactionCategoryID_2                sql.NullString
+	TransactionCategoryName                sql.NullString
+	TransactionCategoryBudgetInEgp         sql.NullFloat64
+	TransactionCategoryKindID              sql.NullString
+	TransactionCategoryCreatedAt           sql.NullTime
+	TransactionKindEnum                    sql.NullInt64
+	TransactionKindIncreaseBalance         sql.NullBool
+}
+
+func (q *Queries) GetFrequentTxsWTxs(ctx context.Context) ([]GetFrequentTxsWTxsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getFrequentTxsWTxs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetFrequentTxsWTxsRow
+	for rows.Next() {
+		var i GetFrequentTxsWTxsRow
+		if err := rows.Scan(
+			&i.FrequentTx.ID,
+			&i.FrequentTx.FrequencyBy,
+			&i.FrequentTx.Frequency,
+			&i.FrequentTx.AccountID,
+			&i.FrequentTx.Amount,
+			&i.FrequentTx.KindID,
+			&i.FrequentTx.CategoryID,
+			&i.FrequentTx.CounterpartyID,
+			&i.FrequentTx.Description,
+			&i.FrequentTx.ToAccountID,
+			&i.FrequentTx.ToAmount,
+			&i.FrequentTx.GoalID,
+			&i.FrequentTx.StartsAt,
+			&i.FrequentTx.StopsAt,
+			&i.FrequentTx.LastTransactionScheduledTo,
+			&i.FrequentTx.CreatedAt,
+			&i.Account.ID,
+			&i.Account.Name,
+			&i.Account.KindID,
+			&i.Account.Amount,
+			&i.Account.CurrencyID,
+			&i.Account.CounterpartyID,
+			&i.Account.CardNumber,
+			&i.Account.CardLimit,
+			&i.Account.NameOnCard,
+			&i.Account.Iban,
+			&i.Account.Note,
+			&i.Account.IsDefault,
+			&i.Account.IsArchived,
+			&i.Account.ExcludeFromBalance,
+			&i.Account.ExpirationDate,
+			&i.Account.CreatedAt,
+			&i.Currency.ID,
+			&i.Currency.Enum,
+			&i.TransactionKind.ID,
+			&i.TransactionKind.Enum,
+			&i.TransactionKind.IncreaseBalance,
+			&i.CounterpartyName,
+			&i.FrequentToAccountID,
+			&i.FrequentToAccountName,
+			&i.FrequentToAccountKindID,
+			&i.FrequentToAccountAmount,
+			&i.FrequentToAccountCurrencyID,
+			&i.FrequentToAccountCounterpartyID,
+			&i.FrequentToAccountCardNumber,
+			&i.FrequentToAccountCardLimit,
+			&i.FrequentToAccountNameOnCard,
+			&i.FrequentToAccountIban,
+			&i.FrequentToAccountNote,
+			&i.FrequentToAccountIsDefault,
+			&i.FrequentToAccountIsArchived,
+			&i.FrequentToAccountExcludeFromBalance,
+			&i.FrequentToAccountExpirationDate,
+			&i.FrequentToAccountCreatedAt,
+			&i.FrequentToAccountCurrencyID_2,
+			&i.FrequentToAccountCurrencyEnum,
+			&i.CategoryID,
+			&i.CategoryName,
+			&i.CategoryBudgetInEgp,
+			&i.CategoryKindID,
+			&i.CategoryCreatedAt,
+			&i.GoalName,
+			&i.GoalPrice,
+			&i.GoalCurrencyID,
+			&i.GoalFulfilledAt,
+			&i.GoalCurrencyEnum,
+			&i.TransactionID,
+			&i.TransactionAccountID,
+			&i.TransactionAmount,
+			&i.TransactionKindID,
+			&i.TransactionCategoryID,
+			&i.TransactionCounterpartyID,
+			&i.TransactionDescription,
+			&i.TransactionToAccountID,
+			&i.TransactionToAmount,
+			&i.TransactionGoalID,
+			&i.TransactionFulfilledAt,
+			&i.TransactionScheduledTo,
+			&i.TransactionCreatedAt,
+			&i.TransactionAccountID_2,
+			&i.TransactionAccountName,
+			&i.TransactionAccountKindID,
+			&i.TransactionAccountAmount,
+			&i.TransactionAccountCurrencyID,
+			&i.TransactionAccountCounterpartyID,
+			&i.TransactionAccountCardNumber,
+			&i.TransactionAccountCardLimit,
+			&i.TransactionAccountNameOnCard,
+			&i.TransactionAccountIban,
+			&i.TransactionAccountNote,
+			&i.TransactionAccountIsDefault,
+			&i.TransactionAccountIsArchived,
+			&i.TransactionAccountExcludeFromBalance,
+			&i.TransactionAccountExpirationDate,
+			&i.TransactionAccountCreatedAt,
+			&i.TransactionCurrencyEnum,
+			&i.TransactionCounterpartyName,
+			&i.TransactionToAccountID_2,
+			&i.TransactionToAccountName,
+			&i.TransactionToAccountKindID,
+			&i.TransactionToAccountAmount,
+			&i.TransactionToAccountCurrencyID,
+			&i.TransactionToAccountCounterpartyID,
+			&i.TransactionToAccountCardNumber,
+			&i.TransactionToAccountCardLimit,
+			&i.TransactionToAccountNameOnCard,
+			&i.TransactionToAccountIban,
+			&i.TransactionToAccountNote,
+			&i.TransactionToAccountIsDefault,
+			&i.TransactionToAccountIsArchived,
+			&i.TransactionToAccountExcludeFromBalance,
+			&i.TransactionToAccountExpirationDate,
+			&i.TransactionToAccountCreatedAt,
+			&i.TransactionToAccountCurrencyEnum,
+			&i.TransactionCategoryID_2,
+			&i.TransactionCategoryName,
+			&i.TransactionCategoryBudgetInEgp,
+			&i.TransactionCategoryKindID,
+			&i.TransactionCategoryCreatedAt,
+			&i.TransactionKindEnum,
+			&i.TransactionKindIncreaseBalance,
 		); err != nil {
 			return nil, err
 		}

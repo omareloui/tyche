@@ -236,13 +236,16 @@ func dbTransactionToTransaction(
 ) *models.Transaction {
 	tx := models.Transaction{
 		ID:          dbTx.ID,
-		Account:     *dbAccountToAccount(acc, 0, cur, nil, sql.NullString{}),
 		Amount:      dbTx.Amount,
 		Description: dbTx.Description.String,
 		ToAmount:    dbTx.ToAmount.Float64,
 		FulfilledAt: dbTx.FulfilledAt.Time,
 		ScheduledTo: dbTx.ScheduledTo,
 		CreatedAt:   dbTx.CreatedAt,
+	}
+
+	if acc != nil {
+		tx.Account = *dbAccountToAccount(acc, 0, cur, nil, sql.NullString{})
 	}
 
 	if knd != nil {
@@ -281,12 +284,12 @@ func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTran
 	_dbTx := queries.GetTransactionsRow(*dbTx)
 
 	var cp *queries.Counterparty
-
 	if _dbTx.Transaction.CounterpartyID.Valid {
 		cp = &queries.Counterparty{ID: _dbTx.Transaction.CounterpartyID.String, Name: _dbTx.CounterpartyName.String}
 	}
 
 	var gl *queries.Goal
+	var glCur *queries.Currency
 	if _dbTx.Transaction.GoalID.Valid {
 		gl = &queries.Goal{
 			ID:          _dbTx.Transaction.GoalID.String,
@@ -295,11 +298,9 @@ func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTran
 			Price:       _dbTx.GoalPrice.Float64,
 			FulfilledAt: _dbTx.GoalFulfilledAt,
 		}
-	}
-
-	var glCur *queries.Currency
-	if _dbTx.GoalCurrencyID.Valid {
-		glCur = &queries.Currency{ID: _dbTx.GoalCurrencyID.String, Enum: _dbTx.GoalCurrencyEnum.Int64}
+		if _dbTx.GoalCurrencyID.Valid {
+			glCur = &queries.Currency{ID: _dbTx.GoalCurrencyID.String, Enum: _dbTx.GoalCurrencyEnum.Int64}
+		}
 	}
 
 	var toAcc *queries.Account

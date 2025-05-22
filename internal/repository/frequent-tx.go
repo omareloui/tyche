@@ -85,7 +85,7 @@ func (r *Repository) GetFrequentTxs(ctx context.Context) ([]models.FrequentTx, e
 	}
 	l.Debug("queried frequent transactions")
 
-	return dbFrequentTxsRowToFrequentTxs(dbFtx), nil
+	return dbFrequentTxsRowFrequentTxs(dbFtx), nil
 }
 
 func (r *Repository) GetFrequentTx(ctx context.Context, id string) (*models.FrequentTx, error) {
@@ -103,8 +103,7 @@ func (r *Repository) GetFrequentTx(ctx context.Context, id string) (*models.Freq
 	}
 	l.Debug("queried frequent transactions")
 
-	ftx := dbFrequentTxsRowToFrequentTxs(dbFtx)
-	return &ftx[0], nil
+	return dbFrequentTxRowFrequentTx(dbFtx), nil
 }
 
 func (r *Repository) UpdateFrequentTx(ctx context.Context, ftx *models.FrequentTx, scheduledTxs []models.Transaction) error {
@@ -210,25 +209,268 @@ func (r *Repository) GenerateScheduledTransactions(ctx context.Context, ftx *mod
 	})
 }
 
-func dbFrequentTxsRowToFrequentTxs[T queries.GetFrequentTxRow | queries.GetFrequentTxsRow](dbFtxs []T) []models.FrequentTx {
+func dbFrequentTxsRowFrequentTxs[T queries.GetFrequentTxRow | queries.GetFrequentTxsRow](dbFtxs []T) []models.FrequentTx {
+	var ftxs []models.FrequentTx
+
+	for _, dbFtx := range dbFtxs {
+		ftxs = append(ftxs, *dbFrequentTxRowFrequentTx(queries.GetFrequentTxRow(dbFtx)))
+	}
+
+	return ftxs
+}
+
+func dbFrequentTxRowFrequentTx(dbFtx queries.GetFrequentTxRow) *models.FrequentTx {
+	var toAcc *queries.Account
+	var toAccCurr *queries.Currency
+	if dbFtx.FrequentToAccountID.Valid {
+		toAcc = &queries.Account{
+			ID:                 dbFtx.FrequentToAccountID.String,
+			Name:               dbFtx.FrequentToAccountName.String,
+			KindID:             dbFtx.FrequentToAccountKindID.String,
+			Amount:             dbFtx.FrequentToAccountAmount.Float64,
+			CurrencyID:         dbFtx.FrequentToAccountCurrencyID.String,
+			CounterpartyID:     dbFtx.FrequentToAccountCurrencyID,
+			CardNumber:         dbFtx.FrequentToAccountCardNumber,
+			CardLimit:          dbFtx.FrequentToAccountCardLimit.Float64,
+			NameOnCard:         dbFtx.FrequentToAccountNameOnCard,
+			Iban:               dbFtx.FrequentToAccountIban,
+			Note:               dbFtx.FrequentToAccountNote,
+			IsDefault:          dbFtx.FrequentToAccountIsDefault.Bool,
+			IsArchived:         dbFtx.FrequentToAccountIsArchived.Bool,
+			ExcludeFromBalance: dbFtx.FrequentToAccountExcludeFromBalance.Bool,
+			ExpirationDate:     dbFtx.FrequentToAccountExpirationDate,
+			CreatedAt:          dbFtx.FrequentToAccountCreatedAt.Time,
+		}
+		if dbFtx.FrequentToAccountCurrencyID.Valid {
+			toAccCurr = &queries.Currency{
+				ID:   toAcc.CurrencyID,
+				Enum: dbFtx.FrequentToAccountCurrencyEnum.Int64,
+			}
+		}
+	}
+
+	var cp *queries.Counterparty
+	if dbFtx.FrequentTx.CounterpartyID.Valid {
+		cp = &queries.Counterparty{ID: dbFtx.FrequentTx.CounterpartyID.String, Name: dbFtx.CounterpartyName.String}
+	}
+
+	var cat *queries.Category
+	if dbFtx.CategoryID.Valid {
+		cat = &queries.Category{
+			ID:          dbFtx.CategoryID.String,
+			Name:        dbFtx.CategoryName.String,
+			BudgetInEgp: dbFtx.CategoryBudgetInEgp.Float64,
+			KindID:      dbFtx.CategoryKindID.String,
+			CreatedAt:   dbFtx.CategoryCreatedAt.Time,
+		}
+	}
+
+	var gl *queries.Goal
+	var glCur *queries.Currency
+	if dbFtx.FrequentTx.GoalID.Valid {
+		gl = &queries.Goal{
+			ID:          dbFtx.FrequentTx.GoalID.String,
+			Name:        dbFtx.GoalName.String,
+			CurrencyID:  dbFtx.GoalCurrencyID.String,
+			Price:       dbFtx.GoalPrice.Float64,
+			FulfilledAt: dbFtx.GoalFulfilledAt,
+		}
+		if dbFtx.GoalCurrencyID.Valid {
+			glCur = &queries.Currency{ID: dbFtx.GoalCurrencyID.String, Enum: dbFtx.GoalCurrencyEnum.Int64}
+		}
+	}
+
+	return dbFrequentTxToFrequentTx(
+		&dbFtx.FrequentTx, &dbFtx.TransactionKind, &dbFtx.Account,
+		&dbFtx.Currency, toAcc, toAccCurr, cat, cp,
+		gl, glCur, nil)
+}
+
+func dbFrequentTxsWTxsRowToFrequentTxs[T queries.GetFrequentTxWTxsRow | queries.GetFrequentTxsWTxsRow](dbFtxs []T) []models.FrequentTx {
 	ftxs := []models.FrequentTx{}
 
 	for _, _dbFtx := range dbFtxs {
-		dbFt := queries.GetFrequentTxsRow(_dbFtx)
+		dbFt := queries.GetFrequentTxWTxsRow(_dbFtx)
 		ftxIdx := slices.IndexFunc(ftxs, func(ftx models.FrequentTx) bool { return ftx.ID == dbFt.FrequentTx.ID })
 		if ftxIdx == -1 {
+			var toAcc *queries.Account
+			var toAccCurr *queries.Currency
+			if dbFt.FrequentToAccountID.Valid {
+				toAcc = &queries.Account{
+					ID:                 dbFt.FrequentToAccountID.String,
+					Name:               dbFt.FrequentToAccountName.String,
+					KindID:             dbFt.FrequentToAccountKindID.String,
+					Amount:             dbFt.FrequentToAccountAmount.Float64,
+					CurrencyID:         dbFt.FrequentToAccountCurrencyID.String,
+					CounterpartyID:     dbFt.FrequentToAccountCurrencyID,
+					CardNumber:         dbFt.FrequentToAccountCardNumber,
+					CardLimit:          dbFt.FrequentToAccountCardLimit.Float64,
+					NameOnCard:         dbFt.FrequentToAccountNameOnCard,
+					Iban:               dbFt.FrequentToAccountIban,
+					Note:               dbFt.FrequentToAccountNote,
+					IsDefault:          dbFt.FrequentToAccountIsDefault.Bool,
+					IsArchived:         dbFt.FrequentToAccountIsArchived.Bool,
+					ExcludeFromBalance: dbFt.FrequentToAccountExcludeFromBalance.Bool,
+					ExpirationDate:     dbFt.FrequentToAccountExpirationDate,
+					CreatedAt:          dbFt.FrequentToAccountCreatedAt.Time,
+				}
+				if dbFt.FrequentToAccountCurrencyID.Valid {
+					toAccCurr = &queries.Currency{
+						ID:   toAcc.CurrencyID,
+						Enum: dbFt.FrequentToAccountCurrencyEnum.Int64,
+					}
+				}
+			}
+
+			var cp *queries.Counterparty
+			if dbFt.FrequentTx.CounterpartyID.Valid {
+				cp = &queries.Counterparty{ID: dbFt.FrequentTx.CounterpartyID.String, Name: dbFt.CounterpartyName.String}
+			}
+
+			var cat *queries.Category
+			if dbFt.CategoryID.Valid {
+				cat = &queries.Category{
+					ID:          dbFt.CategoryID.String,
+					Name:        dbFt.CategoryName.String,
+					BudgetInEgp: dbFt.CategoryBudgetInEgp.Float64,
+					KindID:      dbFt.CategoryKindID.String,
+					CreatedAt:   dbFt.CategoryCreatedAt.Time,
+				}
+			}
+
+			var gl *queries.Goal
+			var glCur *queries.Currency
+			if dbFt.FrequentTx.GoalID.Valid {
+				gl = &queries.Goal{
+					ID:          dbFt.FrequentTx.GoalID.String,
+					Name:        dbFt.GoalName.String,
+					CurrencyID:  dbFt.GoalCurrencyID.String,
+					Price:       dbFt.GoalPrice.Float64,
+					FulfilledAt: dbFt.GoalFulfilledAt,
+				}
+				if dbFt.GoalCurrencyID.Valid {
+					glCur = &queries.Currency{ID: dbFt.GoalCurrencyID.String, Enum: dbFt.GoalCurrencyEnum.Int64}
+				}
+			}
+
 			ftxs = append(ftxs, *dbFrequentTxToFrequentTx(
 				&dbFt.FrequentTx, &dbFt.TransactionKind, &dbFt.Account,
-				&dbFt.Currency, &dbFt.Account_2, &dbFt.Currency_2,
-				&dbFt.Category, &dbFt.Counterparty, &dbFt.Goal,
-				&dbFt.Currency_5, nil))
+				&dbFt.Currency, toAcc, toAccCurr, cat, cp,
+				gl, glCur, nil))
 			ftxIdx = len(ftxs) - 1
 		}
 
+		if !dbFt.TransactionID.Valid {
+			continue
+		}
+		existingTransactionIdx := slices.IndexFunc(ftxs[ftxIdx].Transactions, func(t models.Transaction) bool {
+			return t.ID == dbFt.TransactionID.String
+		})
+		if existingTransactionIdx > -1 {
+			continue
+		}
+
+		tx := &queries.Transaction{
+			ID:             dbFt.TransactionID.String,
+			AccountID:      dbFt.TransactionAccountID.String,
+			Amount:         dbFt.TransactionAmount.Float64,
+			KindID:         dbFt.TransactionKindID.String,
+			CategoryID:     dbFt.TransactionCategoryID,
+			CounterpartyID: dbFt.TransactionCounterpartyID,
+			Description:    dbFt.TransactionDescription,
+			ToAccountID:    dbFt.TransactionToAccountID,
+			ToAmount:       dbFt.TransactionToAmount,
+			GoalID:         dbFt.TransactionGoalID,
+			FulfilledAt:    dbFt.TransactionFulfilledAt,
+			ScheduledTo:    dbFt.TransactionScheduledTo.Time,
+			CreatedAt:      dbFt.TransactionCreatedAt.Time,
+		}
+
+		var kind *queries.TransactionKind
+		if dbFt.TransactionKindID.Valid {
+			kind = &queries.TransactionKind{
+				ID:              dbFt.TransactionKindID.String,
+				Enum:            dbFt.TransactionKind.Enum,
+				IncreaseBalance: dbFt.TransactionKindIncreaseBalance,
+			}
+		}
+
+		var cp *queries.Counterparty
+		if dbFt.TransactionCounterpartyID.Valid {
+			cp = &queries.Counterparty{ID: dbFt.TransactionCounterpartyID.String, Name: dbFt.TransactionCounterpartyName.String}
+		}
+
+		var acc *queries.Account
+		var accCurr *queries.Currency
+		if dbFt.TransactionAccountID.Valid {
+			acc = &queries.Account{
+				ID:                 dbFt.TransactionAccountID.String,
+				Name:               dbFt.TransactionAccountName.String,
+				KindID:             dbFt.TransactionAccountKindID.String,
+				Amount:             dbFt.TransactionAccountAmount.Float64,
+				CurrencyID:         dbFt.TransactionAccountCurrencyID.String,
+				CounterpartyID:     dbFt.TransactionAccountCurrencyID,
+				CardNumber:         dbFt.TransactionAccountCardNumber,
+				CardLimit:          dbFt.TransactionAccountCardLimit.Float64,
+				NameOnCard:         dbFt.TransactionAccountNameOnCard,
+				Iban:               dbFt.TransactionAccountIban,
+				Note:               dbFt.TransactionAccountNote,
+				IsDefault:          dbFt.TransactionAccountIsDefault.Bool,
+				IsArchived:         dbFt.TransactionAccountIsArchived.Bool,
+				ExcludeFromBalance: dbFt.TransactionAccountExcludeFromBalance.Bool,
+				ExpirationDate:     dbFt.TransactionAccountExpirationDate,
+				CreatedAt:          dbFt.TransactionAccountCreatedAt.Time,
+			}
+			if dbFt.TransactionAccountCurrencyID.Valid {
+				accCurr = &queries.Currency{
+					ID:   acc.CurrencyID,
+					Enum: dbFt.TransactionCurrencyEnum.Int64,
+				}
+			}
+		}
+
+		var toAcc *queries.Account
+		var toAccCurr *queries.Currency
+		if dbFt.TransactionToAccountID.Valid {
+			toAcc = &queries.Account{
+				ID:                 dbFt.TransactionToAccountID.String,
+				Name:               dbFt.TransactionToAccountName.String,
+				KindID:             dbFt.TransactionToAccountKindID.String,
+				Amount:             dbFt.TransactionToAccountAmount.Float64,
+				CurrencyID:         dbFt.TransactionToAccountCurrencyID.String,
+				CounterpartyID:     dbFt.TransactionToAccountCurrencyID,
+				CardNumber:         dbFt.TransactionToAccountCardNumber,
+				CardLimit:          dbFt.TransactionToAccountCardLimit.Float64,
+				NameOnCard:         dbFt.TransactionToAccountNameOnCard,
+				Iban:               dbFt.TransactionToAccountIban,
+				Note:               dbFt.TransactionToAccountNote,
+				IsDefault:          dbFt.TransactionToAccountIsDefault.Bool,
+				IsArchived:         dbFt.TransactionToAccountIsArchived.Bool,
+				ExcludeFromBalance: dbFt.TransactionToAccountExcludeFromBalance.Bool,
+				ExpirationDate:     dbFt.TransactionToAccountExpirationDate,
+				CreatedAt:          dbFt.TransactionToAccountCreatedAt.Time,
+			}
+			if dbFt.TransactionToAccountCurrencyID.Valid {
+				toAccCurr = &queries.Currency{
+					ID:   toAcc.CurrencyID,
+					Enum: dbFt.TransactionToAccountCurrencyEnum.Int64,
+				}
+			}
+		}
+
+		var cat *queries.Category
+		if dbFt.TransactionCategoryID.Valid {
+			cat = &queries.Category{
+				ID:          dbFt.TransactionCategoryID.String,
+				Name:        dbFt.TransactionCategoryName.String,
+				BudgetInEgp: dbFt.TransactionCategoryBudgetInEgp.Float64,
+				KindID:      dbFt.TransactionCategoryKindID.String,
+				CreatedAt:   dbFt.TransactionCategoryCreatedAt.Time,
+			}
+		}
+
 		ftxs[ftxIdx].Transactions = append(ftxs[ftxIdx].Transactions, *dbTransactionToTransaction(
-			&dbFt.Transaction, &dbFt.TransactionKind_2, &dbFt.Account_3,
-			&dbFt.Currency_3, &dbFt.Account_4, &dbFt.Currency_4,
-			&dbFt.Category_2, &dbFt.Counterparty_2, nil, nil))
+			tx, kind, acc, accCurr, toAcc, toAccCurr, cat, cp, nil, nil))
 	}
 
 	return ftxs
@@ -246,7 +488,6 @@ func dbFrequentTxToFrequentTx(
 		Amount:      dbFtx.Amount,
 		Description: dbFtx.Description.String,
 		CreatedAt:   dbFtx.CreatedAt,
-		Kind:        models.TransactionKind{ID: dbFtx.KindID},
 
 		ToAmount:                   dbFtx.ToAmount.Float64,
 		Frequency:                  uint(dbFtx.Frequency),
@@ -254,6 +495,12 @@ func dbFrequentTxToFrequentTx(
 		StartsAt:                   dbFtx.StartsAt,
 		StopsAt:                    dbFtx.StopsAt.Time,
 		LastTransactionScheduledTo: dbFtx.LastTransactionScheduledTo,
+	}
+
+	if knd != nil {
+		ft.Kind = *dbTransactionKindToTransactionKind(knd)
+	} else if dbFtx.KindID != "" {
+		ft.Kind = models.TransactionKind{ID: dbFtx.KindID}
 	}
 
 	if acc != nil {
