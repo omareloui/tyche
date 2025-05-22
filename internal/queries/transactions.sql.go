@@ -102,11 +102,31 @@ SELECT
     t.id, t.account_id, t.amount, t.kind_id, t.category_id, t.counterparty_id, t.description, t.to_account_id, t.to_amount, t.goal_id, t.fulfilled_at, t.scheduled_to, t.created_at,
     a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_default, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
     c.id, c.enum,
-    cp.name AS counterparty_name,
-    ta.id, ta.name, ta.kind_id, ta.amount, ta.currency_id, ta.counterparty_id, ta.card_number, ta.card_limit, ta.name_on_card, ta.iban, ta.note, ta.is_default, ta.is_archived, ta.exclude_from_balance, ta.expiration_date, ta.created_at,
-    tc.id, tc.enum,
     k.id, k.enum, k.increase_balance,
-    cat.id, cat.name, cat.budget_in_egp, cat.kind_id, cat.created_at,
+    cp.name AS counterparty_name,
+    ta.id AS to_account_id,
+    ta.name AS to_account_name,
+    ta.kind_id AS to_account_kind_id,
+    ta.amount AS to_account_amount,
+    ta.currency_id AS to_account_currency_id,
+    ta.counterparty_id AS to_account_counterparty_id,
+    ta.card_number AS to_account_card_number,
+    ta.card_limit AS to_account_card_limit,
+    ta.name_on_card AS to_account_name_on_card,
+    ta.iban AS to_account_iban,
+    ta.note AS to_account_note,
+    ta.is_default AS to_account_is_default,
+    ta.is_archived AS to_account_is_archived,
+    ta.exclude_from_balance AS to_account_exclude_from_balance,
+    ta.expiration_date AS to_account_expiration_date,
+    ta.created_at AS to_account_created_at,
+    tc.id AS to_account_currency_id,
+    tc.enum AS to_account_currency_enum,
+    cat.id AS category_id,
+    cat.name AS category_name,
+    cat.budget_in_egp AS category_budget_in_egp,
+    cat.kind_id AS category_kind_id,
+    cat.created_at AS category_created_at,
     g.name AS goal_name,
     g.price AS goal_price,
     g.currency_id AS goal_currency_id,
@@ -126,19 +146,39 @@ WHERE t.id = ?1 LIMIT 1
 `
 
 type GetTransactionRow struct {
-	Transaction      Transaction
-	Account          Account
-	Currency         Currency
-	CounterpartyName sql.NullString
-	Account_2        Account
-	Currency_2       Currency
-	TransactionKind  TransactionKind
-	Category         Category
-	GoalName         sql.NullString
-	GoalPrice        sql.NullFloat64
-	GoalCurrencyID   sql.NullString
-	GoalFulfilledAt  sql.NullTime
-	GoalCurrencyEnum sql.NullInt64
+	Transaction                 Transaction
+	Account                     Account
+	Currency                    Currency
+	TransactionKind             TransactionKind
+	CounterpartyName            sql.NullString
+	ToAccountID                 sql.NullString
+	ToAccountName               sql.NullString
+	ToAccountKindID             sql.NullString
+	ToAccountAmount             sql.NullFloat64
+	ToAccountCurrencyID         sql.NullString
+	ToAccountCounterpartyID     sql.NullString
+	ToAccountCardNumber         sql.NullString
+	ToAccountCardLimit          sql.NullFloat64
+	ToAccountNameOnCard         sql.NullString
+	ToAccountIban               sql.NullString
+	ToAccountNote               sql.NullString
+	ToAccountIsDefault          sql.NullBool
+	ToAccountIsArchived         sql.NullBool
+	ToAccountExcludeFromBalance sql.NullBool
+	ToAccountExpirationDate     sql.NullTime
+	ToAccountCreatedAt          sql.NullTime
+	ToAccountCurrencyID_2       sql.NullString
+	ToAccountCurrencyEnum       sql.NullInt64
+	CategoryID                  sql.NullString
+	CategoryName                sql.NullString
+	CategoryBudgetInEgp         sql.NullFloat64
+	CategoryKindID              sql.NullString
+	CategoryCreatedAt           sql.NullTime
+	GoalName                    sql.NullString
+	GoalPrice                   sql.NullFloat64
+	GoalCurrencyID              sql.NullString
+	GoalFulfilledAt             sql.NullTime
+	GoalCurrencyEnum            sql.NullInt64
 }
 
 func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransactionRow, error) {
@@ -176,33 +216,33 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 		&i.Account.CreatedAt,
 		&i.Currency.ID,
 		&i.Currency.Enum,
-		&i.CounterpartyName,
-		&i.Account_2.ID,
-		&i.Account_2.Name,
-		&i.Account_2.KindID,
-		&i.Account_2.Amount,
-		&i.Account_2.CurrencyID,
-		&i.Account_2.CounterpartyID,
-		&i.Account_2.CardNumber,
-		&i.Account_2.CardLimit,
-		&i.Account_2.NameOnCard,
-		&i.Account_2.Iban,
-		&i.Account_2.Note,
-		&i.Account_2.IsDefault,
-		&i.Account_2.IsArchived,
-		&i.Account_2.ExcludeFromBalance,
-		&i.Account_2.ExpirationDate,
-		&i.Account_2.CreatedAt,
-		&i.Currency_2.ID,
-		&i.Currency_2.Enum,
 		&i.TransactionKind.ID,
 		&i.TransactionKind.Enum,
 		&i.TransactionKind.IncreaseBalance,
-		&i.Category.ID,
-		&i.Category.Name,
-		&i.Category.BudgetInEgp,
-		&i.Category.KindID,
-		&i.Category.CreatedAt,
+		&i.CounterpartyName,
+		&i.ToAccountID,
+		&i.ToAccountName,
+		&i.ToAccountKindID,
+		&i.ToAccountAmount,
+		&i.ToAccountCurrencyID,
+		&i.ToAccountCounterpartyID,
+		&i.ToAccountCardNumber,
+		&i.ToAccountCardLimit,
+		&i.ToAccountNameOnCard,
+		&i.ToAccountIban,
+		&i.ToAccountNote,
+		&i.ToAccountIsDefault,
+		&i.ToAccountIsArchived,
+		&i.ToAccountExcludeFromBalance,
+		&i.ToAccountExpirationDate,
+		&i.ToAccountCreatedAt,
+		&i.ToAccountCurrencyID_2,
+		&i.ToAccountCurrencyEnum,
+		&i.CategoryID,
+		&i.CategoryName,
+		&i.CategoryBudgetInEgp,
+		&i.CategoryKindID,
+		&i.CategoryCreatedAt,
 		&i.GoalName,
 		&i.GoalPrice,
 		&i.GoalCurrencyID,
@@ -217,11 +257,31 @@ SELECT
     t.id, t.account_id, t.amount, t.kind_id, t.category_id, t.counterparty_id, t.description, t.to_account_id, t.to_amount, t.goal_id, t.fulfilled_at, t.scheduled_to, t.created_at,
     a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_default, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
     c.id, c.enum,
-    cp.name AS counterparty_name,
-    ta.id, ta.name, ta.kind_id, ta.amount, ta.currency_id, ta.counterparty_id, ta.card_number, ta.card_limit, ta.name_on_card, ta.iban, ta.note, ta.is_default, ta.is_archived, ta.exclude_from_balance, ta.expiration_date, ta.created_at,
-    tc.id, tc.enum,
     k.id, k.enum, k.increase_balance,
-    cat.id, cat.name, cat.budget_in_egp, cat.kind_id, cat.created_at,
+    cp.name AS counterparty_name,
+    ta.id AS to_account_id,
+    ta.name AS to_account_name,
+    ta.kind_id AS to_account_kind_id,
+    ta.amount AS to_account_amount,
+    ta.currency_id AS to_account_currency_id,
+    ta.counterparty_id AS to_account_counterparty_id,
+    ta.card_number AS to_account_card_number,
+    ta.card_limit AS to_account_card_limit,
+    ta.name_on_card AS to_account_name_on_card,
+    ta.iban AS to_account_iban,
+    ta.note AS to_account_note,
+    ta.is_default AS to_account_is_default,
+    ta.is_archived AS to_account_is_archived,
+    ta.exclude_from_balance AS to_account_exclude_from_balance,
+    ta.expiration_date AS to_account_expiration_date,
+    ta.created_at AS to_account_created_at,
+    tc.id AS to_account_currency_id,
+    tc.enum AS to_account_currency_enum,
+    cat.id AS category_id,
+    cat.name AS category_name,
+    cat.budget_in_egp AS category_budget_in_egp,
+    cat.kind_id AS category_kind_id,
+    cat.created_at AS category_created_at,
     g.name AS goal_name,
     g.price AS goal_price,
     g.currency_id AS goal_currency_id,
@@ -241,19 +301,39 @@ ORDER BY t.scheduled_to DESC, t.created_at DESC
 `
 
 type GetTransactionsRow struct {
-	Transaction      Transaction
-	Account          Account
-	Currency         Currency
-	CounterpartyName sql.NullString
-	Account_2        Account
-	Currency_2       Currency
-	TransactionKind  TransactionKind
-	Category         Category
-	GoalName         sql.NullString
-	GoalPrice        sql.NullFloat64
-	GoalCurrencyID   sql.NullString
-	GoalFulfilledAt  sql.NullTime
-	GoalCurrencyEnum sql.NullInt64
+	Transaction                 Transaction
+	Account                     Account
+	Currency                    Currency
+	TransactionKind             TransactionKind
+	CounterpartyName            sql.NullString
+	ToAccountID                 sql.NullString
+	ToAccountName               sql.NullString
+	ToAccountKindID             sql.NullString
+	ToAccountAmount             sql.NullFloat64
+	ToAccountCurrencyID         sql.NullString
+	ToAccountCounterpartyID     sql.NullString
+	ToAccountCardNumber         sql.NullString
+	ToAccountCardLimit          sql.NullFloat64
+	ToAccountNameOnCard         sql.NullString
+	ToAccountIban               sql.NullString
+	ToAccountNote               sql.NullString
+	ToAccountIsDefault          sql.NullBool
+	ToAccountIsArchived         sql.NullBool
+	ToAccountExcludeFromBalance sql.NullBool
+	ToAccountExpirationDate     sql.NullTime
+	ToAccountCreatedAt          sql.NullTime
+	ToAccountCurrencyID_2       sql.NullString
+	ToAccountCurrencyEnum       sql.NullInt64
+	CategoryID                  sql.NullString
+	CategoryName                sql.NullString
+	CategoryBudgetInEgp         sql.NullFloat64
+	CategoryKindID              sql.NullString
+	CategoryCreatedAt           sql.NullTime
+	GoalName                    sql.NullString
+	GoalPrice                   sql.NullFloat64
+	GoalCurrencyID              sql.NullString
+	GoalFulfilledAt             sql.NullTime
+	GoalCurrencyEnum            sql.NullInt64
 }
 
 func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, error) {
@@ -297,33 +377,33 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.Account.CreatedAt,
 			&i.Currency.ID,
 			&i.Currency.Enum,
-			&i.CounterpartyName,
-			&i.Account_2.ID,
-			&i.Account_2.Name,
-			&i.Account_2.KindID,
-			&i.Account_2.Amount,
-			&i.Account_2.CurrencyID,
-			&i.Account_2.CounterpartyID,
-			&i.Account_2.CardNumber,
-			&i.Account_2.CardLimit,
-			&i.Account_2.NameOnCard,
-			&i.Account_2.Iban,
-			&i.Account_2.Note,
-			&i.Account_2.IsDefault,
-			&i.Account_2.IsArchived,
-			&i.Account_2.ExcludeFromBalance,
-			&i.Account_2.ExpirationDate,
-			&i.Account_2.CreatedAt,
-			&i.Currency_2.ID,
-			&i.Currency_2.Enum,
 			&i.TransactionKind.ID,
 			&i.TransactionKind.Enum,
 			&i.TransactionKind.IncreaseBalance,
-			&i.Category.ID,
-			&i.Category.Name,
-			&i.Category.BudgetInEgp,
-			&i.Category.KindID,
-			&i.Category.CreatedAt,
+			&i.CounterpartyName,
+			&i.ToAccountID,
+			&i.ToAccountName,
+			&i.ToAccountKindID,
+			&i.ToAccountAmount,
+			&i.ToAccountCurrencyID,
+			&i.ToAccountCounterpartyID,
+			&i.ToAccountCardNumber,
+			&i.ToAccountCardLimit,
+			&i.ToAccountNameOnCard,
+			&i.ToAccountIban,
+			&i.ToAccountNote,
+			&i.ToAccountIsDefault,
+			&i.ToAccountIsArchived,
+			&i.ToAccountExcludeFromBalance,
+			&i.ToAccountExpirationDate,
+			&i.ToAccountCreatedAt,
+			&i.ToAccountCurrencyID_2,
+			&i.ToAccountCurrencyEnum,
+			&i.CategoryID,
+			&i.CategoryName,
+			&i.CategoryBudgetInEgp,
+			&i.CategoryKindID,
+			&i.CategoryCreatedAt,
 			&i.GoalName,
 			&i.GoalPrice,
 			&i.GoalCurrencyID,

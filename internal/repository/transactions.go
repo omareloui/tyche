@@ -279,18 +279,72 @@ func dbTransactionToTransaction(
 
 func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTransactionsRow](dbTx *T) *models.Transaction {
 	_dbTx := queries.GetTransactionsRow(*dbTx)
-	cp := queries.Counterparty{ID: _dbTx.Transaction.CounterpartyID.String, Name: _dbTx.CounterpartyName.String}
-	gl := queries.Goal{
-		ID:          _dbTx.Transaction.GoalID.String,
-		Name:        _dbTx.GoalName.String,
-		CurrencyID:  _dbTx.GoalCurrencyID.String,
-		Price:       _dbTx.GoalPrice.Float64,
-		FulfilledAt: _dbTx.GoalFulfilledAt,
+
+	var cp *queries.Counterparty
+
+	if _dbTx.Transaction.CounterpartyID.Valid {
+		cp = &queries.Counterparty{ID: _dbTx.Transaction.CounterpartyID.String, Name: _dbTx.CounterpartyName.String}
 	}
-	glCur := queries.Currency{ID: _dbTx.GoalCurrencyID.String, Enum: _dbTx.GoalCurrencyEnum.Int64}
+
+	var gl *queries.Goal
+	if _dbTx.Transaction.GoalID.Valid {
+		gl = &queries.Goal{
+			ID:          _dbTx.Transaction.GoalID.String,
+			Name:        _dbTx.GoalName.String,
+			CurrencyID:  _dbTx.GoalCurrencyID.String,
+			Price:       _dbTx.GoalPrice.Float64,
+			FulfilledAt: _dbTx.GoalFulfilledAt,
+		}
+	}
+
+	var glCur *queries.Currency
+	if _dbTx.GoalCurrencyID.Valid {
+		glCur = &queries.Currency{ID: _dbTx.GoalCurrencyID.String, Enum: _dbTx.GoalCurrencyEnum.Int64}
+	}
+
+	var toAcc *queries.Account
+	var toAccCurr *queries.Currency
+	if _dbTx.ToAccountID.Valid {
+		toAcc = &queries.Account{
+			ID:                 _dbTx.ToAccountID.String,
+			Name:               _dbTx.ToAccountName.String,
+			KindID:             _dbTx.ToAccountKindID.String,
+			Amount:             _dbTx.ToAccountAmount.Float64,
+			CurrencyID:         _dbTx.ToAccountCurrencyID.String,
+			CounterpartyID:     _dbTx.ToAccountCurrencyID,
+			CardNumber:         _dbTx.ToAccountCardNumber,
+			CardLimit:          _dbTx.ToAccountCardLimit.Float64,
+			NameOnCard:         _dbTx.ToAccountNameOnCard,
+			Iban:               _dbTx.ToAccountIban,
+			Note:               _dbTx.ToAccountNote,
+			IsDefault:          _dbTx.ToAccountIsDefault.Bool,
+			IsArchived:         _dbTx.ToAccountIsArchived.Bool,
+			ExcludeFromBalance: _dbTx.ToAccountExcludeFromBalance.Bool,
+			ExpirationDate:     _dbTx.ToAccountExpirationDate,
+			CreatedAt:          _dbTx.ToAccountCreatedAt.Time,
+		}
+		if _dbTx.ToAccountCurrencyID.Valid {
+			toAccCurr = &queries.Currency{
+				ID:   toAcc.CurrencyID,
+				Enum: _dbTx.ToAccountCurrencyEnum.Int64,
+			}
+		}
+
+	}
+
+	var cat *queries.Category
+	if _dbTx.CategoryID.Valid {
+		cat = &queries.Category{
+			ID:          _dbTx.CategoryID.String,
+			Name:        _dbTx.CategoryName.String,
+			BudgetInEgp: _dbTx.CategoryBudgetInEgp.Float64,
+			KindID:      _dbTx.CategoryKindID.String,
+			CreatedAt:   _dbTx.CategoryCreatedAt.Time,
+		}
+	}
 
 	return dbTransactionToTransaction(
 		&_dbTx.Transaction, &_dbTx.TransactionKind, &_dbTx.Account,
-		&_dbTx.Currency, &_dbTx.Account_2, &_dbTx.Currency_2,
-		&_dbTx.Category, &cp, &gl, &glCur)
+		&_dbTx.Currency, toAcc, toAccCurr,
+		cat, cp, gl, glCur)
 }
