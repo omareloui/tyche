@@ -33,13 +33,16 @@ SELECT
     sqlc.embed(t),
     sqlc.embed(a),
     sqlc.embed(c),
-    sqlc.embed(cp),
+    cp.name AS counterparty_name,
     sqlc.embed(ta),
     sqlc.embed(tc),
     sqlc.embed(k),
     sqlc.embed(cat),
-    sqlc.embed(g),
-    sqlc.embed(gc)
+    g.name AS goal_name,
+    g.price AS goal_price,
+    g.currency_id AS goal_currency_id,
+    g.fulfilled_at AS goal_fulfilled_at,
+    gc.enum AS goal_currency_enum
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
@@ -57,13 +60,16 @@ SELECT
     sqlc.embed(t),
     sqlc.embed(a),
     sqlc.embed(c),
-    sqlc.embed(cp),
+    cp.name AS counterparty_name,
     sqlc.embed(ta),
     sqlc.embed(tc),
     sqlc.embed(k),
     sqlc.embed(cat),
-    sqlc.embed(g),
-    sqlc.embed(gc)
+    g.name AS goal_name,
+    g.price AS goal_price,
+    g.currency_id AS goal_currency_id,
+    g.fulfilled_at AS goal_fulfilled_at,
+    gc.enum AS goal_currency_enum
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id

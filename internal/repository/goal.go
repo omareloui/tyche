@@ -154,7 +154,54 @@ func dbGoalRowsToGoals[T queries.GetGoalsRow | queries.GetGoalRow | queries.GetU
 			glIdx = len(gls) - 1
 		}
 
-		tx := dbTransactionToTransaction(&dbGl.Transaction, nil, &dbGl.Account, &dbGl.Currency_2, nil, nil, nil, nil, &dbGl.Goal, &dbGl.Currency)
+		if !dbGl.TransactionID.Valid {
+			continue
+		}
+
+		_tx := queries.Transaction{
+			ID:             dbGl.TransactionID.String,
+			AccountID:      dbGl.TransactionAccountID.String,
+			Amount:         dbGl.TransactionAmount.Float64,
+			KindID:         dbGl.TransactionKindID.String,
+			CategoryID:     dbGl.TransactionCategoryID,
+			CounterpartyID: dbGl.TransactionCounterpartyID,
+			Description:    dbGl.TransactionDescription,
+			ToAccountID:    dbGl.TransactionToAccountID,
+			ToAmount:       dbGl.TransactionToAmount,
+			GoalID:         dbGl.TransactionGoalID,
+			FulfilledAt:    dbGl.TransactionFulfilledAt,
+			ScheduledTo:    dbGl.TransactionScheduledTo.Time,
+			CreatedAt:      dbGl.TransactionCreatedAt.Time,
+		}
+
+		acc := queries.Account{
+			ID:                 dbGl.AccountID.String,
+			Name:               dbGl.AccountName.String,
+			KindID:             dbGl.AccountKindID.String,
+			Amount:             dbGl.AccountAmount.Float64,
+			CurrencyID:         dbGl.AccountCurrencyID.String,
+			CounterpartyID:     dbGl.AccountCurrencyID,
+			CardNumber:         dbGl.AccountCardNumber,
+			CardLimit:          dbGl.AccountCardLimit.Float64,
+			NameOnCard:         dbGl.AccountNameOnCard,
+			Iban:               dbGl.AccountIban,
+			Note:               dbGl.AccountNote,
+			IsDefault:          dbGl.AccountIsDefault.Bool,
+			IsArchived:         dbGl.AccountIsArchived.Bool,
+			ExcludeFromBalance: dbGl.AccountExcludeFromBalance.Bool,
+			ExpirationDate:     dbGl.AccountExpirationDate,
+			CreatedAt:          dbGl.AccountCreatedAt.Time,
+		}
+
+		accCurr := queries.Currency{
+			ID:   acc.CurrencyID,
+			Enum: dbGl.AccountCurrencyEnum.Int64,
+		}
+
+		tx := dbTransactionToTransaction(
+			&_tx, nil, &acc,
+			&accCurr, nil, nil, nil, nil,
+			&dbGl.Goal, &dbGl.Currency)
 		tx.GoalPercentage = tx.Percentage(gls[glIdx].Price, gls[glIdx].Currency.Enum)
 		gls[glIdx].Transactions = append(gls[glIdx].Transactions, *tx)
 	}

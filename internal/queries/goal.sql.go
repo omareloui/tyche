@@ -7,6 +7,7 @@ package queries
 
 import (
 	"context"
+	"database/sql"
 )
 
 const createGoal = `-- name: CreateGoal :exec
@@ -67,9 +68,37 @@ const getGoal = `-- name: GetGoal :many
 SELECT
     gl.id, gl.name, gl.price, gl.currency_id, gl.fulfilled_at, gl.created_at,
     c.id, c.enum,
-    t.id, t.account_id, t.amount, t.kind_id, t.category_id, t.counterparty_id, t.description, t.to_account_id, t.to_amount, t.goal_id, t.fulfilled_at, t.scheduled_to, t.created_at,
-    a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_default, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
-    ac.id, ac.enum
+    t.id AS transaction_id,
+    t.account_id AS transaction_account_id,
+    t.amount AS transaction_amount,
+    t.kind_id AS transaction_kind_id,
+    t.category_id AS transaction_category_id,
+    t.counterparty_id AS transaction_counterparty_id,
+    t.description AS transaction_description,
+    t.to_account_id AS transaction_to_account_id,
+    t.to_amount AS transaction_to_amount,
+    t.goal_id AS transaction_goal_id,
+    t.fulfilled_at AS transaction_fulfilled_at,
+    t.scheduled_to AS transaction_scheduled_to,
+    t.created_at AS transaction_created_at,
+    a.id AS account_id,
+    a.name AS account_name,
+    a.kind_id AS account_kind_id,
+    a.amount AS account_amount,
+    a.currency_id AS account_currency_id,
+    a.counterparty_id AS account_counterparty_id,
+    a.card_number AS account_card_number,
+    a.card_limit AS account_card_limit,
+    a.name_on_card AS account_name_on_card,
+    a.iban AS account_iban,
+    a.note AS account_note,
+    a.is_default AS account_is_default,
+    a.is_archived AS account_is_archived,
+    a.exclude_from_balance AS account_exclude_from_balance,
+    a.expiration_date AS account_expiration_date,
+    a.created_at AS account_created_at,
+    ac.id AS account_currency_id,
+    ac.enum AS account_currency_enum
 FROM goals AS gl
 LEFT JOIN currencies AS c ON c.id = gl.currency_id
 LEFT JOIN transactions AS t ON t.goal_id = gl.id
@@ -79,11 +108,39 @@ WHERE gl.id = ?1
 `
 
 type GetGoalRow struct {
-	Goal        Goal
-	Currency    Currency
-	Transaction Transaction
-	Account     Account
-	Currency_2  Currency
+	Goal                      Goal
+	Currency                  Currency
+	TransactionID             sql.NullString
+	TransactionAccountID      sql.NullString
+	TransactionAmount         sql.NullFloat64
+	TransactionKindID         sql.NullString
+	TransactionCategoryID     sql.NullString
+	TransactionCounterpartyID sql.NullString
+	TransactionDescription    sql.NullString
+	TransactionToAccountID    sql.NullString
+	TransactionToAmount       sql.NullFloat64
+	TransactionGoalID         sql.NullString
+	TransactionFulfilledAt    sql.NullTime
+	TransactionScheduledTo    sql.NullTime
+	TransactionCreatedAt      sql.NullTime
+	AccountID                 sql.NullString
+	AccountName               sql.NullString
+	AccountKindID             sql.NullString
+	AccountAmount             sql.NullFloat64
+	AccountCurrencyID         sql.NullString
+	AccountCounterpartyID     sql.NullString
+	AccountCardNumber         sql.NullString
+	AccountCardLimit          sql.NullFloat64
+	AccountNameOnCard         sql.NullString
+	AccountIban               sql.NullString
+	AccountNote               sql.NullString
+	AccountIsDefault          sql.NullBool
+	AccountIsArchived         sql.NullBool
+	AccountExcludeFromBalance sql.NullBool
+	AccountExpirationDate     sql.NullTime
+	AccountCreatedAt          sql.NullTime
+	AccountCurrencyID_2       sql.NullString
+	AccountCurrencyEnum       sql.NullInt64
 }
 
 func (q *Queries) GetGoal(ctx context.Context, id string) ([]GetGoalRow, error) {
@@ -104,37 +161,37 @@ func (q *Queries) GetGoal(ctx context.Context, id string) ([]GetGoalRow, error) 
 			&i.Goal.CreatedAt,
 			&i.Currency.ID,
 			&i.Currency.Enum,
-			&i.Transaction.ID,
-			&i.Transaction.AccountID,
-			&i.Transaction.Amount,
-			&i.Transaction.KindID,
-			&i.Transaction.CategoryID,
-			&i.Transaction.CounterpartyID,
-			&i.Transaction.Description,
-			&i.Transaction.ToAccountID,
-			&i.Transaction.ToAmount,
-			&i.Transaction.GoalID,
-			&i.Transaction.FulfilledAt,
-			&i.Transaction.ScheduledTo,
-			&i.Transaction.CreatedAt,
-			&i.Account.ID,
-			&i.Account.Name,
-			&i.Account.KindID,
-			&i.Account.Amount,
-			&i.Account.CurrencyID,
-			&i.Account.CounterpartyID,
-			&i.Account.CardNumber,
-			&i.Account.CardLimit,
-			&i.Account.NameOnCard,
-			&i.Account.Iban,
-			&i.Account.Note,
-			&i.Account.IsDefault,
-			&i.Account.IsArchived,
-			&i.Account.ExcludeFromBalance,
-			&i.Account.ExpirationDate,
-			&i.Account.CreatedAt,
-			&i.Currency_2.ID,
-			&i.Currency_2.Enum,
+			&i.TransactionID,
+			&i.TransactionAccountID,
+			&i.TransactionAmount,
+			&i.TransactionKindID,
+			&i.TransactionCategoryID,
+			&i.TransactionCounterpartyID,
+			&i.TransactionDescription,
+			&i.TransactionToAccountID,
+			&i.TransactionToAmount,
+			&i.TransactionGoalID,
+			&i.TransactionFulfilledAt,
+			&i.TransactionScheduledTo,
+			&i.TransactionCreatedAt,
+			&i.AccountID,
+			&i.AccountName,
+			&i.AccountKindID,
+			&i.AccountAmount,
+			&i.AccountCurrencyID,
+			&i.AccountCounterpartyID,
+			&i.AccountCardNumber,
+			&i.AccountCardLimit,
+			&i.AccountNameOnCard,
+			&i.AccountIban,
+			&i.AccountNote,
+			&i.AccountIsDefault,
+			&i.AccountIsArchived,
+			&i.AccountExcludeFromBalance,
+			&i.AccountExpirationDate,
+			&i.AccountCreatedAt,
+			&i.AccountCurrencyID_2,
+			&i.AccountCurrencyEnum,
 		); err != nil {
 			return nil, err
 		}
@@ -153,9 +210,37 @@ const getGoals = `-- name: GetGoals :many
 SELECT
     gl.id, gl.name, gl.price, gl.currency_id, gl.fulfilled_at, gl.created_at,
     c.id, c.enum,
-    t.id, t.account_id, t.amount, t.kind_id, t.category_id, t.counterparty_id, t.description, t.to_account_id, t.to_amount, t.goal_id, t.fulfilled_at, t.scheduled_to, t.created_at,
-    a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_default, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
-    ac.id, ac.enum
+    t.id AS transaction_id,
+    t.account_id AS transaction_account_id,
+    t.amount AS transaction_amount,
+    t.kind_id AS transaction_kind_id,
+    t.category_id AS transaction_category_id,
+    t.counterparty_id AS transaction_counterparty_id,
+    t.description AS transaction_description,
+    t.to_account_id AS transaction_to_account_id,
+    t.to_amount AS transaction_to_amount,
+    t.goal_id AS transaction_goal_id,
+    t.fulfilled_at AS transaction_fulfilled_at,
+    t.scheduled_to AS transaction_scheduled_to,
+    t.created_at AS transaction_created_at,
+    a.id AS account_id,
+    a.name AS account_name,
+    a.kind_id AS account_kind_id,
+    a.amount AS account_amount,
+    a.currency_id AS account_currency_id,
+    a.counterparty_id AS account_counterparty_id,
+    a.card_number AS account_card_number,
+    a.card_limit AS account_card_limit,
+    a.name_on_card AS account_name_on_card,
+    a.iban AS account_iban,
+    a.note AS account_note,
+    a.is_default AS account_is_default,
+    a.is_archived AS account_is_archived,
+    a.exclude_from_balance AS account_exclude_from_balance,
+    a.expiration_date AS account_expiration_date,
+    a.created_at AS account_created_at,
+    ac.id AS account_currency_id,
+    ac.enum AS account_currency_enum
 FROM goals AS gl
 LEFT JOIN currencies AS c ON c.id = gl.currency_id
 LEFT JOIN transactions AS t ON t.goal_id = gl.id
@@ -165,11 +250,39 @@ ORDER BY gl.created_at DESC
 `
 
 type GetGoalsRow struct {
-	Goal        Goal
-	Currency    Currency
-	Transaction Transaction
-	Account     Account
-	Currency_2  Currency
+	Goal                      Goal
+	Currency                  Currency
+	TransactionID             sql.NullString
+	TransactionAccountID      sql.NullString
+	TransactionAmount         sql.NullFloat64
+	TransactionKindID         sql.NullString
+	TransactionCategoryID     sql.NullString
+	TransactionCounterpartyID sql.NullString
+	TransactionDescription    sql.NullString
+	TransactionToAccountID    sql.NullString
+	TransactionToAmount       sql.NullFloat64
+	TransactionGoalID         sql.NullString
+	TransactionFulfilledAt    sql.NullTime
+	TransactionScheduledTo    sql.NullTime
+	TransactionCreatedAt      sql.NullTime
+	AccountID                 sql.NullString
+	AccountName               sql.NullString
+	AccountKindID             sql.NullString
+	AccountAmount             sql.NullFloat64
+	AccountCurrencyID         sql.NullString
+	AccountCounterpartyID     sql.NullString
+	AccountCardNumber         sql.NullString
+	AccountCardLimit          sql.NullFloat64
+	AccountNameOnCard         sql.NullString
+	AccountIban               sql.NullString
+	AccountNote               sql.NullString
+	AccountIsDefault          sql.NullBool
+	AccountIsArchived         sql.NullBool
+	AccountExcludeFromBalance sql.NullBool
+	AccountExpirationDate     sql.NullTime
+	AccountCreatedAt          sql.NullTime
+	AccountCurrencyID_2       sql.NullString
+	AccountCurrencyEnum       sql.NullInt64
 }
 
 func (q *Queries) GetGoals(ctx context.Context) ([]GetGoalsRow, error) {
@@ -190,37 +303,37 @@ func (q *Queries) GetGoals(ctx context.Context) ([]GetGoalsRow, error) {
 			&i.Goal.CreatedAt,
 			&i.Currency.ID,
 			&i.Currency.Enum,
-			&i.Transaction.ID,
-			&i.Transaction.AccountID,
-			&i.Transaction.Amount,
-			&i.Transaction.KindID,
-			&i.Transaction.CategoryID,
-			&i.Transaction.CounterpartyID,
-			&i.Transaction.Description,
-			&i.Transaction.ToAccountID,
-			&i.Transaction.ToAmount,
-			&i.Transaction.GoalID,
-			&i.Transaction.FulfilledAt,
-			&i.Transaction.ScheduledTo,
-			&i.Transaction.CreatedAt,
-			&i.Account.ID,
-			&i.Account.Name,
-			&i.Account.KindID,
-			&i.Account.Amount,
-			&i.Account.CurrencyID,
-			&i.Account.CounterpartyID,
-			&i.Account.CardNumber,
-			&i.Account.CardLimit,
-			&i.Account.NameOnCard,
-			&i.Account.Iban,
-			&i.Account.Note,
-			&i.Account.IsDefault,
-			&i.Account.IsArchived,
-			&i.Account.ExcludeFromBalance,
-			&i.Account.ExpirationDate,
-			&i.Account.CreatedAt,
-			&i.Currency_2.ID,
-			&i.Currency_2.Enum,
+			&i.TransactionID,
+			&i.TransactionAccountID,
+			&i.TransactionAmount,
+			&i.TransactionKindID,
+			&i.TransactionCategoryID,
+			&i.TransactionCounterpartyID,
+			&i.TransactionDescription,
+			&i.TransactionToAccountID,
+			&i.TransactionToAmount,
+			&i.TransactionGoalID,
+			&i.TransactionFulfilledAt,
+			&i.TransactionScheduledTo,
+			&i.TransactionCreatedAt,
+			&i.AccountID,
+			&i.AccountName,
+			&i.AccountKindID,
+			&i.AccountAmount,
+			&i.AccountCurrencyID,
+			&i.AccountCounterpartyID,
+			&i.AccountCardNumber,
+			&i.AccountCardLimit,
+			&i.AccountNameOnCard,
+			&i.AccountIban,
+			&i.AccountNote,
+			&i.AccountIsDefault,
+			&i.AccountIsArchived,
+			&i.AccountExcludeFromBalance,
+			&i.AccountExpirationDate,
+			&i.AccountCreatedAt,
+			&i.AccountCurrencyID_2,
+			&i.AccountCurrencyEnum,
 		); err != nil {
 			return nil, err
 		}
@@ -239,9 +352,37 @@ const getUnfulfilledGoals = `-- name: GetUnfulfilledGoals :many
 SELECT
     gl.id, gl.name, gl.price, gl.currency_id, gl.fulfilled_at, gl.created_at,
     c.id, c.enum,
-    t.id, t.account_id, t.amount, t.kind_id, t.category_id, t.counterparty_id, t.description, t.to_account_id, t.to_amount, t.goal_id, t.fulfilled_at, t.scheduled_to, t.created_at,
-    a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_default, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
-    ac.id, ac.enum
+    t.id AS transaction_id,
+    t.account_id AS transaction_account_id,
+    t.amount AS transaction_amount,
+    t.kind_id AS transaction_kind_id,
+    t.category_id AS transaction_category_id,
+    t.counterparty_id AS transaction_counterparty_id,
+    t.description AS transaction_description,
+    t.to_account_id AS transaction_to_account_id,
+    t.to_amount AS transaction_to_amount,
+    t.goal_id AS transaction_goal_id,
+    t.fulfilled_at AS transaction_fulfilled_at,
+    t.scheduled_to AS transaction_scheduled_to,
+    t.created_at AS transaction_created_at,
+    a.id AS account_id,
+    a.name AS account_name,
+    a.kind_id AS account_kind_id,
+    a.amount AS account_amount,
+    a.currency_id AS account_currency_id,
+    a.counterparty_id AS account_counterparty_id,
+    a.card_number AS account_card_number,
+    a.card_limit AS account_card_limit,
+    a.name_on_card AS account_name_on_card,
+    a.iban AS account_iban,
+    a.note AS account_note,
+    a.is_default AS account_is_default,
+    a.is_archived AS account_is_archived,
+    a.exclude_from_balance AS account_exclude_from_balance,
+    a.expiration_date AS account_expiration_date,
+    a.created_at AS account_created_at,
+    ac.id AS account_currency_id,
+    ac.enum AS account_currency_enum
 FROM goals AS gl
 LEFT JOIN currencies AS c ON c.id = gl.currency_id
 LEFT JOIN transactions AS t ON t.goal_id = gl.id
@@ -252,11 +393,39 @@ ORDER BY gl.created_at DESC
 `
 
 type GetUnfulfilledGoalsRow struct {
-	Goal        Goal
-	Currency    Currency
-	Transaction Transaction
-	Account     Account
-	Currency_2  Currency
+	Goal                      Goal
+	Currency                  Currency
+	TransactionID             sql.NullString
+	TransactionAccountID      sql.NullString
+	TransactionAmount         sql.NullFloat64
+	TransactionKindID         sql.NullString
+	TransactionCategoryID     sql.NullString
+	TransactionCounterpartyID sql.NullString
+	TransactionDescription    sql.NullString
+	TransactionToAccountID    sql.NullString
+	TransactionToAmount       sql.NullFloat64
+	TransactionGoalID         sql.NullString
+	TransactionFulfilledAt    sql.NullTime
+	TransactionScheduledTo    sql.NullTime
+	TransactionCreatedAt      sql.NullTime
+	AccountID                 sql.NullString
+	AccountName               sql.NullString
+	AccountKindID             sql.NullString
+	AccountAmount             sql.NullFloat64
+	AccountCurrencyID         sql.NullString
+	AccountCounterpartyID     sql.NullString
+	AccountCardNumber         sql.NullString
+	AccountCardLimit          sql.NullFloat64
+	AccountNameOnCard         sql.NullString
+	AccountIban               sql.NullString
+	AccountNote               sql.NullString
+	AccountIsDefault          sql.NullBool
+	AccountIsArchived         sql.NullBool
+	AccountExcludeFromBalance sql.NullBool
+	AccountExpirationDate     sql.NullTime
+	AccountCreatedAt          sql.NullTime
+	AccountCurrencyID_2       sql.NullString
+	AccountCurrencyEnum       sql.NullInt64
 }
 
 func (q *Queries) GetUnfulfilledGoals(ctx context.Context) ([]GetUnfulfilledGoalsRow, error) {
@@ -277,37 +446,37 @@ func (q *Queries) GetUnfulfilledGoals(ctx context.Context) ([]GetUnfulfilledGoal
 			&i.Goal.CreatedAt,
 			&i.Currency.ID,
 			&i.Currency.Enum,
-			&i.Transaction.ID,
-			&i.Transaction.AccountID,
-			&i.Transaction.Amount,
-			&i.Transaction.KindID,
-			&i.Transaction.CategoryID,
-			&i.Transaction.CounterpartyID,
-			&i.Transaction.Description,
-			&i.Transaction.ToAccountID,
-			&i.Transaction.ToAmount,
-			&i.Transaction.GoalID,
-			&i.Transaction.FulfilledAt,
-			&i.Transaction.ScheduledTo,
-			&i.Transaction.CreatedAt,
-			&i.Account.ID,
-			&i.Account.Name,
-			&i.Account.KindID,
-			&i.Account.Amount,
-			&i.Account.CurrencyID,
-			&i.Account.CounterpartyID,
-			&i.Account.CardNumber,
-			&i.Account.CardLimit,
-			&i.Account.NameOnCard,
-			&i.Account.Iban,
-			&i.Account.Note,
-			&i.Account.IsDefault,
-			&i.Account.IsArchived,
-			&i.Account.ExcludeFromBalance,
-			&i.Account.ExpirationDate,
-			&i.Account.CreatedAt,
-			&i.Currency_2.ID,
-			&i.Currency_2.Enum,
+			&i.TransactionID,
+			&i.TransactionAccountID,
+			&i.TransactionAmount,
+			&i.TransactionKindID,
+			&i.TransactionCategoryID,
+			&i.TransactionCounterpartyID,
+			&i.TransactionDescription,
+			&i.TransactionToAccountID,
+			&i.TransactionToAmount,
+			&i.TransactionGoalID,
+			&i.TransactionFulfilledAt,
+			&i.TransactionScheduledTo,
+			&i.TransactionCreatedAt,
+			&i.AccountID,
+			&i.AccountName,
+			&i.AccountKindID,
+			&i.AccountAmount,
+			&i.AccountCurrencyID,
+			&i.AccountCounterpartyID,
+			&i.AccountCardNumber,
+			&i.AccountCardLimit,
+			&i.AccountNameOnCard,
+			&i.AccountIban,
+			&i.AccountNote,
+			&i.AccountIsDefault,
+			&i.AccountIsArchived,
+			&i.AccountExcludeFromBalance,
+			&i.AccountExpirationDate,
+			&i.AccountCreatedAt,
+			&i.AccountCurrencyID_2,
+			&i.AccountCurrencyEnum,
 		); err != nil {
 			return nil, err
 		}

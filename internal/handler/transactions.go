@@ -318,28 +318,28 @@ func (h Handler) getTxDeps(ctx context.Context) ([]models.Account, []models.Tran
 	l := logger.FromCtx(ctx)
 	accs, err := h.repo.GetAccounts(ctx)
 	if err != nil {
-		l.Error("error fetching accounts", zap.Error(err))
+		l.Error("error fetching accounts for dx deps", zap.Error(err))
 		return nil, nil, nil, nil, nil, err
 	}
 	knds, err := h.repo.GetTransactionKinds(ctx)
 	if err != nil {
-		l.Error("error fetching transaction kinds", zap.Error(err))
+		l.Error("error fetching transaction kinds for dx deps", zap.Error(err))
 		return nil, nil, nil, nil, nil, err
 	}
 	cats, err := h.repo.GetCategories(ctx)
 	if err != nil {
-		l.Error("error fetching categories", zap.Error(err))
+		l.Error("error fetching categories for dx deps", zap.Error(err))
 		return nil, nil, nil, nil, nil, err
 	}
 	cps, err := h.repo.GetCounterparties(ctx)
 	if err != nil {
-		l.Error("error fetching counterparties", zap.Error(err))
+		l.Error("error fetching counterparties for dx deps", zap.Error(err))
 		return nil, nil, nil, nil, nil, err
 	}
 	l.Debug("fetched transactions dependencies")
 	gls, err := h.repo.GetUnfulfilledGoals(ctx)
 	if err != nil {
-		l.Error("error fetching unfulfilled goals", zap.Error(err))
+		l.Error("error fetching unfulfilled goals for dx deps", zap.Error(err))
 		return nil, nil, nil, nil, nil, err
 	}
 	l.Debug("fetched transactions dependencies")

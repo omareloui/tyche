@@ -102,13 +102,16 @@ SELECT
     t.id, t.account_id, t.amount, t.kind_id, t.category_id, t.counterparty_id, t.description, t.to_account_id, t.to_amount, t.goal_id, t.fulfilled_at, t.scheduled_to, t.created_at,
     a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_default, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
     c.id, c.enum,
-    cp.id, cp.name, cp.created_at,
+    cp.name AS counterparty_name,
     ta.id, ta.name, ta.kind_id, ta.amount, ta.currency_id, ta.counterparty_id, ta.card_number, ta.card_limit, ta.name_on_card, ta.iban, ta.note, ta.is_default, ta.is_archived, ta.exclude_from_balance, ta.expiration_date, ta.created_at,
     tc.id, tc.enum,
     k.id, k.enum, k.increase_balance,
     cat.id, cat.name, cat.budget_in_egp, cat.kind_id, cat.created_at,
-    g.id, g.name, g.price, g.currency_id, g.fulfilled_at, g.created_at,
-    gc.id, gc.enum
+    g.name AS goal_name,
+    g.price AS goal_price,
+    g.currency_id AS goal_currency_id,
+    g.fulfilled_at AS goal_fulfilled_at,
+    gc.enum AS goal_currency_enum
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
@@ -123,16 +126,19 @@ WHERE t.id = ?1 LIMIT 1
 `
 
 type GetTransactionRow struct {
-	Transaction     Transaction
-	Account         Account
-	Currency        Currency
-	Counterparty    Counterparty
-	Account_2       Account
-	Currency_2      Currency
-	TransactionKind TransactionKind
-	Category        Category
-	Goal            Goal
-	Currency_3      Currency
+	Transaction      Transaction
+	Account          Account
+	Currency         Currency
+	CounterpartyName sql.NullString
+	Account_2        Account
+	Currency_2       Currency
+	TransactionKind  TransactionKind
+	Category         Category
+	GoalName         sql.NullString
+	GoalPrice        sql.NullFloat64
+	GoalCurrencyID   sql.NullString
+	GoalFulfilledAt  sql.NullTime
+	GoalCurrencyEnum sql.NullInt64
 }
 
 func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransactionRow, error) {
@@ -170,9 +176,7 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 		&i.Account.CreatedAt,
 		&i.Currency.ID,
 		&i.Currency.Enum,
-		&i.Counterparty.ID,
-		&i.Counterparty.Name,
-		&i.Counterparty.CreatedAt,
+		&i.CounterpartyName,
 		&i.Account_2.ID,
 		&i.Account_2.Name,
 		&i.Account_2.KindID,
@@ -199,14 +203,11 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 		&i.Category.BudgetInEgp,
 		&i.Category.KindID,
 		&i.Category.CreatedAt,
-		&i.Goal.ID,
-		&i.Goal.Name,
-		&i.Goal.Price,
-		&i.Goal.CurrencyID,
-		&i.Goal.FulfilledAt,
-		&i.Goal.CreatedAt,
-		&i.Currency_3.ID,
-		&i.Currency_3.Enum,
+		&i.GoalName,
+		&i.GoalPrice,
+		&i.GoalCurrencyID,
+		&i.GoalFulfilledAt,
+		&i.GoalCurrencyEnum,
 	)
 	return i, err
 }
@@ -216,13 +217,16 @@ SELECT
     t.id, t.account_id, t.amount, t.kind_id, t.category_id, t.counterparty_id, t.description, t.to_account_id, t.to_amount, t.goal_id, t.fulfilled_at, t.scheduled_to, t.created_at,
     a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_default, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
     c.id, c.enum,
-    cp.id, cp.name, cp.created_at,
+    cp.name AS counterparty_name,
     ta.id, ta.name, ta.kind_id, ta.amount, ta.currency_id, ta.counterparty_id, ta.card_number, ta.card_limit, ta.name_on_card, ta.iban, ta.note, ta.is_default, ta.is_archived, ta.exclude_from_balance, ta.expiration_date, ta.created_at,
     tc.id, tc.enum,
     k.id, k.enum, k.increase_balance,
     cat.id, cat.name, cat.budget_in_egp, cat.kind_id, cat.created_at,
-    g.id, g.name, g.price, g.currency_id, g.fulfilled_at, g.created_at,
-    gc.id, gc.enum
+    g.name AS goal_name,
+    g.price AS goal_price,
+    g.currency_id AS goal_currency_id,
+    g.fulfilled_at AS goal_fulfilled_at,
+    gc.enum AS goal_currency_enum
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
@@ -237,16 +241,19 @@ ORDER BY t.scheduled_to DESC, t.created_at DESC
 `
 
 type GetTransactionsRow struct {
-	Transaction     Transaction
-	Account         Account
-	Currency        Currency
-	Counterparty    Counterparty
-	Account_2       Account
-	Currency_2      Currency
-	TransactionKind TransactionKind
-	Category        Category
-	Goal            Goal
-	Currency_3      Currency
+	Transaction      Transaction
+	Account          Account
+	Currency         Currency
+	CounterpartyName sql.NullString
+	Account_2        Account
+	Currency_2       Currency
+	TransactionKind  TransactionKind
+	Category         Category
+	GoalName         sql.NullString
+	GoalPrice        sql.NullFloat64
+	GoalCurrencyID   sql.NullString
+	GoalFulfilledAt  sql.NullTime
+	GoalCurrencyEnum sql.NullInt64
 }
 
 func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, error) {
@@ -290,9 +297,7 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.Account.CreatedAt,
 			&i.Currency.ID,
 			&i.Currency.Enum,
-			&i.Counterparty.ID,
-			&i.Counterparty.Name,
-			&i.Counterparty.CreatedAt,
+			&i.CounterpartyName,
 			&i.Account_2.ID,
 			&i.Account_2.Name,
 			&i.Account_2.KindID,
@@ -319,14 +324,11 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.Category.BudgetInEgp,
 			&i.Category.KindID,
 			&i.Category.CreatedAt,
-			&i.Goal.ID,
-			&i.Goal.Name,
-			&i.Goal.Price,
-			&i.Goal.CurrencyID,
-			&i.Goal.FulfilledAt,
-			&i.Goal.CreatedAt,
-			&i.Currency_3.ID,
-			&i.Currency_3.Enum,
+			&i.GoalName,
+			&i.GoalPrice,
+			&i.GoalCurrencyID,
+			&i.GoalFulfilledAt,
+			&i.GoalCurrencyEnum,
 		); err != nil {
 			return nil, err
 		}

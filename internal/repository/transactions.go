@@ -243,7 +243,10 @@ func dbTransactionToTransaction(
 		FulfilledAt: dbTx.FulfilledAt.Time,
 		ScheduledTo: dbTx.ScheduledTo,
 		CreatedAt:   dbTx.CreatedAt,
-		Kind:        *dbTransactionKindToTransactionKind(knd),
+	}
+
+	if knd != nil {
+		tx.Kind = *dbTransactionKindToTransactionKind(knd)
 	}
 
 	if toAcc != nil {
@@ -276,9 +279,18 @@ func dbTransactionToTransaction(
 
 func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTransactionsRow](dbTx *T) *models.Transaction {
 	_dbTx := queries.GetTransactionsRow(*dbTx)
+	cp := queries.Counterparty{ID: _dbTx.Transaction.CounterpartyID.String, Name: _dbTx.CounterpartyName.String}
+	gl := queries.Goal{
+		ID:          _dbTx.Transaction.GoalID.String,
+		Name:        _dbTx.GoalName.String,
+		CurrencyID:  _dbTx.GoalCurrencyID.String,
+		Price:       _dbTx.GoalPrice.Float64,
+		FulfilledAt: _dbTx.GoalFulfilledAt,
+	}
+	glCur := queries.Currency{ID: _dbTx.GoalCurrencyID.String, Enum: _dbTx.GoalCurrencyEnum.Int64}
+
 	return dbTransactionToTransaction(
 		&_dbTx.Transaction, &_dbTx.TransactionKind, &_dbTx.Account,
 		&_dbTx.Currency, &_dbTx.Account_2, &_dbTx.Currency_2,
-		&_dbTx.Category, &_dbTx.Counterparty, &_dbTx.Goal,
-		&_dbTx.Currency_3)
+		&_dbTx.Category, &cp, &gl, &glCur)
 }
