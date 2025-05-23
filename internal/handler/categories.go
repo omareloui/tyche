@@ -96,7 +96,7 @@ func (h Handler) CreateCategory(w http.ResponseWriter, r *http.Request) (templ.C
 			l.Error("create category validation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
 			return views.CreateCategoryForm(h.mapCategoryToFD(cat, &valerr), knds, currs), nil
 		}
-		l.Error("sanitizing frequent transaction", zap.Error(err))
+		l.Error("sanitizing category", zap.Error(err))
 		return nil, err
 	}
 
@@ -160,6 +160,28 @@ func (h Handler) EditCategory(w http.ResponseWriter, r *http.Request) (templ.Com
 		return nil, err
 	}
 	cat.ID = id
+
+	knds, err := h.repo.GetTransactionKinds(r.Context())
+	if err != nil {
+		l.Error("fetching transaction kinds", zap.Error(err))
+		return nil, err
+	}
+	knds = getAllowedKindsForCategories(knds)
+	currs, err := h.repo.GetCurrencies(r.Context())
+	if err != nil {
+		l.Error("fetching currencies", zap.Error(err))
+		return nil, err
+	}
+
+	if err := cat.SanitizeAndValidate(h.sani, h.valid); err != nil {
+		var valerr errs.ValidationError
+		if errors.As(err, &valerr) {
+			l.Error("update category validation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
+			return views.EditCategory(h.mapCategoryToFD(cat, &valerr), id, knds, currs), nil
+		}
+		l.Error("sanitizing category", zap.Error(err))
+		return nil, err
+	}
 
 	l.Debug("update category", zap.Any("category", cat))
 
