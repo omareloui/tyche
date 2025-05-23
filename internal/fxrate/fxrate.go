@@ -9,12 +9,15 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 type rate struct {
 	Date  string             `json:"date"`
 	Rates map[string]float64 `json:"rates"`
 }
+
+var mu sync.RWMutex
 
 type fxRates map[string]rate
 
@@ -43,6 +46,8 @@ func fetchFXRates(currency string) error {
 		_rates[k] = float64(v.(float64))
 	}
 
+	mu.Lock()
+	defer mu.Unlock()
 	rates[currency] = rate{
 		Date:  parsed["date"].(string),
 		Rates: _rates,
@@ -59,12 +64,19 @@ func GetFxRate(from, to string) (float64, error) {
 		return 1, nil
 	}
 
+	mu.RLock()
 	r, ok := rates[from]
+	mu.RUnlock()
+
 	if !ok {
 		if err := fetchFXRates(from); err != nil {
 			return 0, err
 		}
+
+		mu.RLock()
 		r = rates[from]
+		mu.RUnlock()
 	}
+
 	return r.Rates[to], nil
 }
