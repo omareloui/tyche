@@ -186,7 +186,6 @@ func dbGoalRowsToGoals[T queries.GetGoalsRow | queries.GetGoalRow | queries.GetU
 			NameOnCard:         dbGl.AccountNameOnCard,
 			Iban:               dbGl.AccountIban,
 			Note:               dbGl.AccountNote,
-			IsDefault:          dbGl.AccountIsDefault.Bool,
 			IsArchived:         dbGl.AccountIsArchived.Bool,
 			ExcludeFromBalance: dbGl.AccountExcludeFromBalance.Bool,
 			ExpirationDate:     dbGl.AccountExpirationDate,

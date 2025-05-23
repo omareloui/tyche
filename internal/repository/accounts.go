@@ -144,14 +144,9 @@ func (r *Repository) UpdateAccount(ctx context.Context, a *models.Account) error
 func (r *Repository) SetDefaultAccountExpect(ctx context.Context, id string) error {
 	return r.transact(ctx, func(qtx *queries.Queries) error {
 		l := logger.FromCtx(ctx)
-		err := qtx.UnsetDefaultAccountExpect(ctx, id)
+		err := qtx.SetDefaultAccount(ctx, sql.NullString{String: id, Valid: true})
 		if err != nil {
-			l.Error("unsetting default accounts", zap.Error(err))
-			return err
-		}
-		err = qtx.SetDefaultAccount(ctx, id)
-		if err != nil {
-			l.Error("setting default accounts", zap.Error(err))
+			l.Error("setting default account", zap.String("account_id", id), zap.Error(err))
 			return err
 		}
 		return nil
@@ -265,13 +260,13 @@ func (r *Repository) GetBalances(ctx context.Context) ([]models.Balance, error) 
 	return dbBalancesToBalances(dbBalances), nil
 }
 
-func dbAccountToAccount(dbAcc *queries.Account, actualAmount float64, cur *queries.Currency, k *queries.AccountKind, cpName sql.NullString) *models.Account {
+func dbAccountToAccount(dbAcc *queries.Account, actualAmount float64, cur *queries.Currency, k *queries.AccountKind, cpName sql.NullString, isDefault bool) *models.Account {
 	acc := &models.Account{
 		ID:                 dbAcc.ID,
 		Name:               dbAcc.Name,
 		Amount:             dbAcc.Amount,
 		ActualAmount:       actualAmount,
-		IsDefault:          dbAcc.IsDefault,
+		IsDefault:          isDefault,
 		NameOnCard:         dbAcc.NameOnCard.String,
 		CardLimit:          dbAcc.CardLimit,
 		Iban:               dbAcc.Iban.String,
@@ -304,7 +299,13 @@ func dbAccountToAccount(dbAcc *queries.Account, actualAmount float64, cur *queri
 
 func dbAccountRowToAccount[T queries.GetAccountRow | queries.GetAccountsRow](dbAcc *T) *models.Account {
 	_dbAcc := queries.GetAccountRow(*dbAcc)
-	return dbAccountToAccount(&_dbAcc.Account, _dbAcc.ActualAmount.(float64), &_dbAcc.Currency, &_dbAcc.AccountKind, _dbAcc.CounterpartyName)
+	return dbAccountToAccount(
+		&_dbAcc.Account,
+		_dbAcc.ActualAmount.(float64),
+		&_dbAcc.Currency,
+		&_dbAcc.AccountKind,
+		_dbAcc.CounterpartyName,
+		_dbAcc.IsDefault.(int64) == 1)
 }
 
 func dbAccountsRowToAccounts(dbAccs []queries.GetAccountsRow) []models.Account {

@@ -42,7 +42,6 @@ INSERT INTO accounts (
     note,
     exclude_from_balance,
     is_archived,
-    is_default,
     expiration_date
 )
 VALUES (
@@ -59,8 +58,7 @@ VALUES (
     ?11,
     ?12,
     ?13,
-    ?14,
-    ?15
+    ?14
 )
 `
 
@@ -78,7 +76,6 @@ type CreateAccountParams struct {
 	Note               sql.NullString
 	ExcludeFromBalance bool
 	IsArchived         bool
-	IsDefault          bool
 	ExpirationDate     sql.NullTime
 }
 
@@ -97,7 +94,6 @@ func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) er
 		arg.Note,
 		arg.ExcludeFromBalance,
 		arg.IsArchived,
-		arg.IsDefault,
 		arg.ExpirationDate,
 	)
 	return err
@@ -124,15 +120,17 @@ WITH gls_amts AS (
     GROUP BY t.amount
 )
 SELECT
-    a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_default, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
+    a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
     k.id, k.enum,
     cp.name AS counterparty_name,
     c.id, c.enum,
+    (u.id IS NOT NULL) AS is_default,
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
 LEFT JOIN counterparties AS cp ON a.counterparty_id = cp.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN user AS u ON u.default_account_id = a.id
 LEFT JOIN gls_amts AS gla ON a.id = gla.account_id
 WHERE a.id = ?1
 `
@@ -142,6 +140,7 @@ type GetAccountRow struct {
 	AccountKind      AccountKind
 	CounterpartyName sql.NullString
 	Currency         Currency
+	IsDefault        interface{}
 	ActualAmount     interface{}
 }
 
@@ -160,7 +159,6 @@ func (q *Queries) GetAccount(ctx context.Context, id string) (GetAccountRow, err
 		&i.Account.NameOnCard,
 		&i.Account.Iban,
 		&i.Account.Note,
-		&i.Account.IsDefault,
 		&i.Account.IsArchived,
 		&i.Account.ExcludeFromBalance,
 		&i.Account.ExpirationDate,
@@ -170,6 +168,7 @@ func (q *Queries) GetAccount(ctx context.Context, id string) (GetAccountRow, err
 		&i.CounterpartyName,
 		&i.Currency.ID,
 		&i.Currency.Enum,
+		&i.IsDefault,
 		&i.ActualAmount,
 	)
 	return i, err
@@ -186,15 +185,17 @@ WITH gls_amts AS (
     GROUP BY t.amount
 )
 SELECT
-    a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_default, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
+    a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
     k.id, k.enum,
     cp.name AS counterparty_name,
     c.id, c.enum,
+    (u.id IS NOT NULL) AS is_default,
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
 LEFT JOIN counterparties AS cp ON a.counterparty_id = cp.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN user AS u ON u.default_account_id = a.id
 LEFT JOIN gls_amts AS gla ON a.id = gla.account_id
 ORDER BY a.created_at DESC
 `
@@ -204,6 +205,7 @@ type GetAccountsRow struct {
 	AccountKind      AccountKind
 	CounterpartyName sql.NullString
 	Currency         Currency
+	IsDefault        interface{}
 	ActualAmount     interface{}
 }
 
@@ -228,7 +230,6 @@ func (q *Queries) GetAccounts(ctx context.Context) ([]GetAccountsRow, error) {
 			&i.Account.NameOnCard,
 			&i.Account.Iban,
 			&i.Account.Note,
-			&i.Account.IsDefault,
 			&i.Account.IsArchived,
 			&i.Account.ExcludeFromBalance,
 			&i.Account.ExpirationDate,
@@ -238,6 +239,7 @@ func (q *Queries) GetAccounts(ctx context.Context) ([]GetAccountsRow, error) {
 			&i.CounterpartyName,
 			&i.Currency.ID,
 			&i.Currency.Enum,
+			&i.IsDefault,
 			&i.ActualAmount,
 		); err != nil {
 			return nil, err
@@ -264,15 +266,17 @@ WITH gls_amts AS (
     GROUP BY t.amount
 )
 SELECT
-    a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_default, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
+    a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
     k.id, k.enum,
     cp.name AS counterparty_name,
     c.id, c.enum,
+    (u.id IS NOT NULL) AS is_default,
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
 LEFT JOIN counterparties AS cp ON a.counterparty_id = cp.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN user AS u ON u.default_account_id = a.id
 LEFT JOIN gls_amts AS gla ON a.id = gla.account_id
 WHERE a.is_archived IS FALSE
 ORDER BY a.created_at DESC
@@ -283,6 +287,7 @@ type GetActiveAccountsRow struct {
 	AccountKind      AccountKind
 	CounterpartyName sql.NullString
 	Currency         Currency
+	IsDefault        interface{}
 	ActualAmount     interface{}
 }
 
@@ -307,7 +312,6 @@ func (q *Queries) GetActiveAccounts(ctx context.Context) ([]GetActiveAccountsRow
 			&i.Account.NameOnCard,
 			&i.Account.Iban,
 			&i.Account.Note,
-			&i.Account.IsDefault,
 			&i.Account.IsArchived,
 			&i.Account.ExcludeFromBalance,
 			&i.Account.ExpirationDate,
@@ -317,6 +321,7 @@ func (q *Queries) GetActiveAccounts(ctx context.Context) ([]GetActiveAccountsRow
 			&i.CounterpartyName,
 			&i.Currency.ID,
 			&i.Currency.Enum,
+			&i.IsDefault,
 			&i.ActualAmount,
 		); err != nil {
 			return nil, err
@@ -389,30 +394,6 @@ type RemoveFromAccountParams struct {
 
 func (q *Queries) RemoveFromAccount(ctx context.Context, arg RemoveFromAccountParams) error {
 	_, err := q.db.ExecContext(ctx, removeFromAccount, arg.Amount, arg.ID)
-	return err
-}
-
-const setDefaultAccount = `-- name: SetDefaultAccount :exec
-UPDATE accounts
-SET
-    is_default = TRUE
-WHERE id = ?1
-`
-
-func (q *Queries) SetDefaultAccount(ctx context.Context, id string) error {
-	_, err := q.db.ExecContext(ctx, setDefaultAccount, id)
-	return err
-}
-
-const unsetDefaultAccountExpect = `-- name: UnsetDefaultAccountExpect :exec
-UPDATE accounts
-SET
-    is_default = FALSE
-WHERE id != ?1
-`
-
-func (q *Queries) UnsetDefaultAccountExpect(ctx context.Context, id string) error {
-	_, err := q.db.ExecContext(ctx, unsetDefaultAccountExpect, id)
 	return err
 }
 

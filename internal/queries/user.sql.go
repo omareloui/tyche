@@ -68,7 +68,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 
 const getUserByOAuthID = `-- name: GetUserByOAuthID :one
 SELECT
-    user.id, user.oauth_id, user.oauth_provider, user.email, user.verified_email, user.first_name, user.last_name, user.picture, user.default_currency_id, user.start_of_period, user.seeded_at, user.created_at,
+    user.id, user.oauth_id, user.oauth_provider, user.email, user.verified_email, user.first_name, user.last_name, user.picture, user.default_currency_id, user.default_account_id, user.start_of_period, user.seeded_at, user.created_at,
     currencies.id, currencies.enum
 FROM user
 LEFT JOIN currencies ON user.default_currency_id = currencies.id
@@ -93,6 +93,7 @@ func (q *Queries) GetUserByOAuthID(ctx context.Context, oauthID string) (GetUser
 		&i.User.LastName,
 		&i.User.Picture,
 		&i.User.DefaultCurrencyID,
+		&i.User.DefaultAccountID,
 		&i.User.StartOfPeriod,
 		&i.User.SeededAt,
 		&i.User.CreatedAt,
@@ -100,6 +101,17 @@ func (q *Queries) GetUserByOAuthID(ctx context.Context, oauthID string) (GetUser
 		&i.Currency.Enum,
 	)
 	return i, err
+}
+
+const setDefaultAccount = `-- name: SetDefaultAccount :exec
+UPDATE user
+SET
+    default_account_id = ?1
+`
+
+func (q *Queries) SetDefaultAccount(ctx context.Context, accountID sql.NullString) error {
+	_, err := q.db.ExecContext(ctx, setDefaultAccount, accountID)
+	return err
 }
 
 const updateSeededAt = `-- name: UpdateSeededAt :exec

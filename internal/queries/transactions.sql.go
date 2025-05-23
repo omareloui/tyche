@@ -100,7 +100,7 @@ func (q *Queries) FulfillTransaction(ctx context.Context, id string) error {
 const getTransaction = `-- name: GetTransaction :one
 SELECT
     t.id, t.account_id, t.amount, t.kind_id, t.category_id, t.counterparty_id, t.description, t.to_account_id, t.to_amount, t.goal_id, t.fulfilled_at, t.scheduled_to, t.created_at,
-    a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_default, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
+    a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
     c.id, c.enum,
     k.id, k.enum, k.increase_balance,
     cp.name AS counterparty_name,
@@ -115,7 +115,6 @@ SELECT
     ta.name_on_card AS to_account_name_on_card,
     ta.iban AS to_account_iban,
     ta.note AS to_account_note,
-    ta.is_default AS to_account_is_default,
     ta.is_archived AS to_account_is_archived,
     ta.exclude_from_balance AS to_account_exclude_from_balance,
     ta.expiration_date AS to_account_expiration_date,
@@ -162,7 +161,6 @@ type GetTransactionRow struct {
 	ToAccountNameOnCard         sql.NullString
 	ToAccountIban               sql.NullString
 	ToAccountNote               sql.NullString
-	ToAccountIsDefault          sql.NullBool
 	ToAccountIsArchived         sql.NullBool
 	ToAccountExcludeFromBalance sql.NullBool
 	ToAccountExpirationDate     sql.NullTime
@@ -209,7 +207,6 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 		&i.Account.NameOnCard,
 		&i.Account.Iban,
 		&i.Account.Note,
-		&i.Account.IsDefault,
 		&i.Account.IsArchived,
 		&i.Account.ExcludeFromBalance,
 		&i.Account.ExpirationDate,
@@ -231,7 +228,6 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 		&i.ToAccountNameOnCard,
 		&i.ToAccountIban,
 		&i.ToAccountNote,
-		&i.ToAccountIsDefault,
 		&i.ToAccountIsArchived,
 		&i.ToAccountExcludeFromBalance,
 		&i.ToAccountExpirationDate,
@@ -255,7 +251,7 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 const getTransactions = `-- name: GetTransactions :many
 SELECT
     t.id, t.account_id, t.amount, t.kind_id, t.category_id, t.counterparty_id, t.description, t.to_account_id, t.to_amount, t.goal_id, t.fulfilled_at, t.scheduled_to, t.created_at,
-    a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_default, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
+    a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
     c.id, c.enum,
     k.id, k.enum, k.increase_balance,
     cp.name AS counterparty_name,
@@ -270,7 +266,6 @@ SELECT
     ta.name_on_card AS to_account_name_on_card,
     ta.iban AS to_account_iban,
     ta.note AS to_account_note,
-    ta.is_default AS to_account_is_default,
     ta.is_archived AS to_account_is_archived,
     ta.exclude_from_balance AS to_account_exclude_from_balance,
     ta.expiration_date AS to_account_expiration_date,
@@ -317,7 +312,6 @@ type GetTransactionsRow struct {
 	ToAccountNameOnCard         sql.NullString
 	ToAccountIban               sql.NullString
 	ToAccountNote               sql.NullString
-	ToAccountIsDefault          sql.NullBool
 	ToAccountIsArchived         sql.NullBool
 	ToAccountExcludeFromBalance sql.NullBool
 	ToAccountExpirationDate     sql.NullTime
@@ -370,7 +364,6 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.Account.NameOnCard,
 			&i.Account.Iban,
 			&i.Account.Note,
-			&i.Account.IsDefault,
 			&i.Account.IsArchived,
 			&i.Account.ExcludeFromBalance,
 			&i.Account.ExpirationDate,
@@ -392,7 +385,6 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.ToAccountNameOnCard,
 			&i.ToAccountIban,
 			&i.ToAccountNote,
-			&i.ToAccountIsDefault,
 			&i.ToAccountIsArchived,
 			&i.ToAccountExcludeFromBalance,
 			&i.ToAccountExpirationDate,

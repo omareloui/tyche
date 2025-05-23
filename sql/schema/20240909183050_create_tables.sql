@@ -10,9 +10,11 @@ CREATE TABLE user (
     last_name VARCHAR NOT NULL,
     picture VARCHAR,
     default_currency_id VARCHAR NOT NULL,
+    default_account_id VARCHAR,
     start_of_period INT NOT NULL DEFAULT 1 CHECK (start_of_period BETWEEN 1 AND 31),
     seeded_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (default_account_id) REFERENCES accounts (id) ON DELETE SET NULL,
     FOREIGN KEY (default_currency_id) REFERENCES currencies (id)
 );
 CREATE TABLE currencies (
@@ -40,7 +42,6 @@ CREATE TABLE accounts (
     name_on_card VARCHAR,
     iban VARCHAR,
     note VARCHAR,
-    is_default BOOL NOT NULL DEFAULT FALSE,
     is_archived BOOL NOT NULL DEFAULT FALSE,
     exclude_from_balance BOOL NOT NULL DEFAULT FALSE,
     expiration_date DATE,

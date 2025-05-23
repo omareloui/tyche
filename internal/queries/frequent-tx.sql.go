@@ -137,7 +137,7 @@ func (q *Queries) DeleteScheduledTransactionsOfFrequentTx(ctx context.Context, f
 const getFrequentTx = `-- name: GetFrequentTx :one
 SELECT
     ft.id, ft.frequency_by, ft.frequency, ft.account_id, ft.amount, ft.kind_id, ft.category_id, ft.counterparty_id, ft.description, ft.to_account_id, ft.to_amount, ft.goal_id, ft.starts_at, ft.stops_at, ft.last_transaction_scheduled_to, ft.created_at,
-    a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_default, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
+    a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
     c.id, c.enum,
     k.id, k.enum, k.increase_balance,
     cp.name AS counterparty_name,
@@ -152,7 +152,6 @@ SELECT
     ftta.name_on_card AS frequent_to_account_name_on_card,
     ftta.iban AS frequent_to_account_iban,
     ftta.note AS frequent_to_account_note,
-    ftta.is_default AS frequent_to_account_is_default,
     ftta.is_archived AS frequent_to_account_is_archived,
     ftta.exclude_from_balance AS frequent_to_account_exclude_from_balance,
     ftta.expiration_date AS frequent_to_account_expiration_date,
@@ -199,7 +198,6 @@ type GetFrequentTxRow struct {
 	FrequentToAccountNameOnCard         sql.NullString
 	FrequentToAccountIban               sql.NullString
 	FrequentToAccountNote               sql.NullString
-	FrequentToAccountIsDefault          sql.NullBool
 	FrequentToAccountIsArchived         sql.NullBool
 	FrequentToAccountExcludeFromBalance sql.NullBool
 	FrequentToAccountExpirationDate     sql.NullTime
@@ -249,7 +247,6 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) (GetFrequentTxRo
 		&i.Account.NameOnCard,
 		&i.Account.Iban,
 		&i.Account.Note,
-		&i.Account.IsDefault,
 		&i.Account.IsArchived,
 		&i.Account.ExcludeFromBalance,
 		&i.Account.ExpirationDate,
@@ -271,7 +268,6 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) (GetFrequentTxRo
 		&i.FrequentToAccountNameOnCard,
 		&i.FrequentToAccountIban,
 		&i.FrequentToAccountNote,
-		&i.FrequentToAccountIsDefault,
 		&i.FrequentToAccountIsArchived,
 		&i.FrequentToAccountExcludeFromBalance,
 		&i.FrequentToAccountExpirationDate,
@@ -295,7 +291,7 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) (GetFrequentTxRo
 const getFrequentTxWTxs = `-- name: GetFrequentTxWTxs :many
 SELECT
     ft.id, ft.frequency_by, ft.frequency, ft.account_id, ft.amount, ft.kind_id, ft.category_id, ft.counterparty_id, ft.description, ft.to_account_id, ft.to_amount, ft.goal_id, ft.starts_at, ft.stops_at, ft.last_transaction_scheduled_to, ft.created_at,
-    a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_default, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
+    a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
     c.id, c.enum,
     k.id, k.enum, k.increase_balance,
     cp.name AS counterparty_name,
@@ -310,7 +306,6 @@ SELECT
     ftta.name_on_card AS frequent_to_account_name_on_card,
     ftta.iban AS frequent_to_account_iban,
     ftta.note AS frequent_to_account_note,
-    ftta.is_default AS frequent_to_account_is_default,
     ftta.is_archived AS frequent_to_account_is_archived,
     ftta.exclude_from_balance AS frequent_to_account_exclude_from_balance,
     ftta.expiration_date AS frequent_to_account_expiration_date,
@@ -351,7 +346,6 @@ SELECT
     ta.name_on_card AS transaction_account_name_on_card,
     ta.iban AS transaction_account_iban,
     ta.note AS transaction_account_note,
-    ta.is_default AS transaction_account_is_default,
     ta.is_archived AS transaction_account_is_archived,
     ta.exclude_from_balance AS transaction_account_exclude_from_balance,
     ta.expiration_date AS transaction_account_expiration_date,
@@ -369,7 +363,6 @@ SELECT
     tta.name_on_card AS transaction_to_account_name_on_card,
     tta.iban AS transaction_to_account_iban,
     tta.note AS transaction_to_account_note,
-    tta.is_default AS transaction_to_account_is_default,
     tta.is_archived AS transaction_to_account_is_archived,
     tta.exclude_from_balance AS transaction_to_account_exclude_from_balance,
     tta.expiration_date AS transaction_to_account_expiration_date,
@@ -421,7 +414,6 @@ type GetFrequentTxWTxsRow struct {
 	FrequentToAccountNameOnCard            sql.NullString
 	FrequentToAccountIban                  sql.NullString
 	FrequentToAccountNote                  sql.NullString
-	FrequentToAccountIsDefault             sql.NullBool
 	FrequentToAccountIsArchived            sql.NullBool
 	FrequentToAccountExcludeFromBalance    sql.NullBool
 	FrequentToAccountExpirationDate        sql.NullTime
@@ -462,7 +454,6 @@ type GetFrequentTxWTxsRow struct {
 	TransactionAccountNameOnCard           sql.NullString
 	TransactionAccountIban                 sql.NullString
 	TransactionAccountNote                 sql.NullString
-	TransactionAccountIsDefault            sql.NullBool
 	TransactionAccountIsArchived           sql.NullBool
 	TransactionAccountExcludeFromBalance   sql.NullBool
 	TransactionAccountExpirationDate       sql.NullTime
@@ -480,7 +471,6 @@ type GetFrequentTxWTxsRow struct {
 	TransactionToAccountNameOnCard         sql.NullString
 	TransactionToAccountIban               sql.NullString
 	TransactionToAccountNote               sql.NullString
-	TransactionToAccountIsDefault          sql.NullBool
 	TransactionToAccountIsArchived         sql.NullBool
 	TransactionToAccountExcludeFromBalance sql.NullBool
 	TransactionToAccountExpirationDate     sql.NullTime
@@ -532,7 +522,6 @@ func (q *Queries) GetFrequentTxWTxs(ctx context.Context, id string) ([]GetFreque
 			&i.Account.NameOnCard,
 			&i.Account.Iban,
 			&i.Account.Note,
-			&i.Account.IsDefault,
 			&i.Account.IsArchived,
 			&i.Account.ExcludeFromBalance,
 			&i.Account.ExpirationDate,
@@ -554,7 +543,6 @@ func (q *Queries) GetFrequentTxWTxs(ctx context.Context, id string) ([]GetFreque
 			&i.FrequentToAccountNameOnCard,
 			&i.FrequentToAccountIban,
 			&i.FrequentToAccountNote,
-			&i.FrequentToAccountIsDefault,
 			&i.FrequentToAccountIsArchived,
 			&i.FrequentToAccountExcludeFromBalance,
 			&i.FrequentToAccountExpirationDate,
@@ -595,7 +583,6 @@ func (q *Queries) GetFrequentTxWTxs(ctx context.Context, id string) ([]GetFreque
 			&i.TransactionAccountNameOnCard,
 			&i.TransactionAccountIban,
 			&i.TransactionAccountNote,
-			&i.TransactionAccountIsDefault,
 			&i.TransactionAccountIsArchived,
 			&i.TransactionAccountExcludeFromBalance,
 			&i.TransactionAccountExpirationDate,
@@ -613,7 +600,6 @@ func (q *Queries) GetFrequentTxWTxs(ctx context.Context, id string) ([]GetFreque
 			&i.TransactionToAccountNameOnCard,
 			&i.TransactionToAccountIban,
 			&i.TransactionToAccountNote,
-			&i.TransactionToAccountIsDefault,
 			&i.TransactionToAccountIsArchived,
 			&i.TransactionToAccountExcludeFromBalance,
 			&i.TransactionToAccountExpirationDate,
@@ -643,7 +629,7 @@ func (q *Queries) GetFrequentTxWTxs(ctx context.Context, id string) ([]GetFreque
 const getFrequentTxs = `-- name: GetFrequentTxs :many
 SELECT
     ft.id, ft.frequency_by, ft.frequency, ft.account_id, ft.amount, ft.kind_id, ft.category_id, ft.counterparty_id, ft.description, ft.to_account_id, ft.to_amount, ft.goal_id, ft.starts_at, ft.stops_at, ft.last_transaction_scheduled_to, ft.created_at,
-    a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_default, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
+    a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
     c.id, c.enum,
     k.id, k.enum, k.increase_balance,
     cp.name AS counterparty_name,
@@ -658,7 +644,6 @@ SELECT
     ftta.name_on_card AS frequent_to_account_name_on_card,
     ftta.iban AS frequent_to_account_iban,
     ftta.note AS frequent_to_account_note,
-    ftta.is_default AS frequent_to_account_is_default,
     ftta.is_archived AS frequent_to_account_is_archived,
     ftta.exclude_from_balance AS frequent_to_account_exclude_from_balance,
     ftta.expiration_date AS frequent_to_account_expiration_date,
@@ -704,7 +689,6 @@ type GetFrequentTxsRow struct {
 	FrequentToAccountNameOnCard         sql.NullString
 	FrequentToAccountIban               sql.NullString
 	FrequentToAccountNote               sql.NullString
-	FrequentToAccountIsDefault          sql.NullBool
 	FrequentToAccountIsArchived         sql.NullBool
 	FrequentToAccountExcludeFromBalance sql.NullBool
 	FrequentToAccountExpirationDate     sql.NullTime
@@ -760,7 +744,6 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 			&i.Account.NameOnCard,
 			&i.Account.Iban,
 			&i.Account.Note,
-			&i.Account.IsDefault,
 			&i.Account.IsArchived,
 			&i.Account.ExcludeFromBalance,
 			&i.Account.ExpirationDate,
@@ -782,7 +765,6 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 			&i.FrequentToAccountNameOnCard,
 			&i.FrequentToAccountIban,
 			&i.FrequentToAccountNote,
-			&i.FrequentToAccountIsDefault,
 			&i.FrequentToAccountIsArchived,
 			&i.FrequentToAccountExcludeFromBalance,
 			&i.FrequentToAccountExpirationDate,
@@ -816,7 +798,7 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 const getFrequentTxsWTxs = `-- name: GetFrequentTxsWTxs :many
 SELECT
     ft.id, ft.frequency_by, ft.frequency, ft.account_id, ft.amount, ft.kind_id, ft.category_id, ft.counterparty_id, ft.description, ft.to_account_id, ft.to_amount, ft.goal_id, ft.starts_at, ft.stops_at, ft.last_transaction_scheduled_to, ft.created_at,
-    a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_default, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
+    a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
     c.id, c.enum,
     k.id, k.enum, k.increase_balance,
     cp.name AS counterparty_name,
@@ -831,7 +813,6 @@ SELECT
     ftta.name_on_card AS frequent_to_account_name_on_card,
     ftta.iban AS frequent_to_account_iban,
     ftta.note AS frequent_to_account_note,
-    ftta.is_default AS frequent_to_account_is_default,
     ftta.is_archived AS frequent_to_account_is_archived,
     ftta.exclude_from_balance AS frequent_to_account_exclude_from_balance,
     ftta.expiration_date AS frequent_to_account_expiration_date,
@@ -872,7 +853,6 @@ SELECT
     ta.name_on_card AS transaction_account_name_on_card,
     ta.iban AS transaction_account_iban,
     ta.note AS transaction_account_note,
-    ta.is_default AS transaction_account_is_default,
     ta.is_archived AS transaction_account_is_archived,
     ta.exclude_from_balance AS transaction_account_exclude_from_balance,
     ta.expiration_date AS transaction_account_expiration_date,
@@ -890,7 +870,6 @@ SELECT
     tta.name_on_card AS transaction_to_account_name_on_card,
     tta.iban AS transaction_to_account_iban,
     tta.note AS transaction_to_account_note,
-    tta.is_default AS transaction_to_account_is_default,
     tta.is_archived AS transaction_to_account_is_archived,
     tta.exclude_from_balance AS transaction_to_account_exclude_from_balance,
     tta.expiration_date AS transaction_to_account_expiration_date,
@@ -941,7 +920,6 @@ type GetFrequentTxsWTxsRow struct {
 	FrequentToAccountNameOnCard            sql.NullString
 	FrequentToAccountIban                  sql.NullString
 	FrequentToAccountNote                  sql.NullString
-	FrequentToAccountIsDefault             sql.NullBool
 	FrequentToAccountIsArchived            sql.NullBool
 	FrequentToAccountExcludeFromBalance    sql.NullBool
 	FrequentToAccountExpirationDate        sql.NullTime
@@ -982,7 +960,6 @@ type GetFrequentTxsWTxsRow struct {
 	TransactionAccountNameOnCard           sql.NullString
 	TransactionAccountIban                 sql.NullString
 	TransactionAccountNote                 sql.NullString
-	TransactionAccountIsDefault            sql.NullBool
 	TransactionAccountIsArchived           sql.NullBool
 	TransactionAccountExcludeFromBalance   sql.NullBool
 	TransactionAccountExpirationDate       sql.NullTime
@@ -1000,7 +977,6 @@ type GetFrequentTxsWTxsRow struct {
 	TransactionToAccountNameOnCard         sql.NullString
 	TransactionToAccountIban               sql.NullString
 	TransactionToAccountNote               sql.NullString
-	TransactionToAccountIsDefault          sql.NullBool
 	TransactionToAccountIsArchived         sql.NullBool
 	TransactionToAccountExcludeFromBalance sql.NullBool
 	TransactionToAccountExpirationDate     sql.NullTime
@@ -1052,7 +1028,6 @@ func (q *Queries) GetFrequentTxsWTxs(ctx context.Context) ([]GetFrequentTxsWTxsR
 			&i.Account.NameOnCard,
 			&i.Account.Iban,
 			&i.Account.Note,
-			&i.Account.IsDefault,
 			&i.Account.IsArchived,
 			&i.Account.ExcludeFromBalance,
 			&i.Account.ExpirationDate,
@@ -1074,7 +1049,6 @@ func (q *Queries) GetFrequentTxsWTxs(ctx context.Context) ([]GetFrequentTxsWTxsR
 			&i.FrequentToAccountNameOnCard,
 			&i.FrequentToAccountIban,
 			&i.FrequentToAccountNote,
-			&i.FrequentToAccountIsDefault,
 			&i.FrequentToAccountIsArchived,
 			&i.FrequentToAccountExcludeFromBalance,
 			&i.FrequentToAccountExpirationDate,
@@ -1115,7 +1089,6 @@ func (q *Queries) GetFrequentTxsWTxs(ctx context.Context) ([]GetFrequentTxsWTxsR
 			&i.TransactionAccountNameOnCard,
 			&i.TransactionAccountIban,
 			&i.TransactionAccountNote,
-			&i.TransactionAccountIsDefault,
 			&i.TransactionAccountIsArchived,
 			&i.TransactionAccountExcludeFromBalance,
 			&i.TransactionAccountExpirationDate,
@@ -1133,7 +1106,6 @@ func (q *Queries) GetFrequentTxsWTxs(ctx context.Context) ([]GetFrequentTxsWTxsR
 			&i.TransactionToAccountNameOnCard,
 			&i.TransactionToAccountIban,
 			&i.TransactionToAccountNote,
-			&i.TransactionToAccountIsDefault,
 			&i.TransactionToAccountIsArchived,
 			&i.TransactionToAccountExcludeFromBalance,
 			&i.TransactionToAccountExpirationDate,

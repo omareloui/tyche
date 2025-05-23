@@ -92,7 +92,6 @@ SELECT
     a.name_on_card AS account_name_on_card,
     a.iban AS account_iban,
     a.note AS account_note,
-    a.is_default AS account_is_default,
     a.is_archived AS account_is_archived,
     a.exclude_from_balance AS account_exclude_from_balance,
     a.expiration_date AS account_expiration_date,
@@ -134,7 +133,6 @@ type GetGoalRow struct {
 	AccountNameOnCard         sql.NullString
 	AccountIban               sql.NullString
 	AccountNote               sql.NullString
-	AccountIsDefault          sql.NullBool
 	AccountIsArchived         sql.NullBool
 	AccountExcludeFromBalance sql.NullBool
 	AccountExpirationDate     sql.NullTime
@@ -185,7 +183,6 @@ func (q *Queries) GetGoal(ctx context.Context, id string) ([]GetGoalRow, error) 
 			&i.AccountNameOnCard,
 			&i.AccountIban,
 			&i.AccountNote,
-			&i.AccountIsDefault,
 			&i.AccountIsArchived,
 			&i.AccountExcludeFromBalance,
 			&i.AccountExpirationDate,
@@ -234,7 +231,6 @@ SELECT
     a.name_on_card AS account_name_on_card,
     a.iban AS account_iban,
     a.note AS account_note,
-    a.is_default AS account_is_default,
     a.is_archived AS account_is_archived,
     a.exclude_from_balance AS account_exclude_from_balance,
     a.expiration_date AS account_expiration_date,
@@ -276,7 +272,6 @@ type GetGoalsRow struct {
 	AccountNameOnCard         sql.NullString
 	AccountIban               sql.NullString
 	AccountNote               sql.NullString
-	AccountIsDefault          sql.NullBool
 	AccountIsArchived         sql.NullBool
 	AccountExcludeFromBalance sql.NullBool
 	AccountExpirationDate     sql.NullTime
@@ -327,7 +322,6 @@ func (q *Queries) GetGoals(ctx context.Context) ([]GetGoalsRow, error) {
 			&i.AccountNameOnCard,
 			&i.AccountIban,
 			&i.AccountNote,
-			&i.AccountIsDefault,
 			&i.AccountIsArchived,
 			&i.AccountExcludeFromBalance,
 			&i.AccountExpirationDate,
@@ -376,7 +370,6 @@ SELECT
     a.name_on_card AS account_name_on_card,
     a.iban AS account_iban,
     a.note AS account_note,
-    a.is_default AS account_is_default,
     a.is_archived AS account_is_archived,
     a.exclude_from_balance AS account_exclude_from_balance,
     a.expiration_date AS account_expiration_date,
@@ -419,7 +412,6 @@ type GetUnfulfilledGoalsRow struct {
 	AccountNameOnCard         sql.NullString
 	AccountIban               sql.NullString
 	AccountNote               sql.NullString
-	AccountIsDefault          sql.NullBool
 	AccountIsArchived         sql.NullBool
 	AccountExcludeFromBalance sql.NullBool
 	AccountExpirationDate     sql.NullTime
@@ -470,7 +462,6 @@ func (q *Queries) GetUnfulfilledGoals(ctx context.Context) ([]GetUnfulfilledGoal
 			&i.AccountNameOnCard,
 			&i.AccountIban,
 			&i.AccountNote,
-			&i.AccountIsDefault,
 			&i.AccountIsArchived,
 			&i.AccountExcludeFromBalance,
 			&i.AccountExpirationDate,

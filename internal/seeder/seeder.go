@@ -99,7 +99,7 @@ func (s *Seeder) accounts(ctx context.Context, wg *sync.WaitGroup, q *queries.Qu
 	curr := slicesutils.Find(currencies, func(c queries.GetCurrenciesRow) bool { return c.Currency.Enum == int64(defaultCurr) })
 
 	seed := []queries.CreateAccountParams{
-		{ID: idgen.New(), Name: "Cash", KindID: cashKnd.AccountKind.ID, CurrencyID: curr.Currency.ID, IsDefault: true},
+		{ID: idgen.New(), Name: "Cash", KindID: cashKnd.AccountKind.ID, CurrencyID: curr.Currency.ID},
 	}
 
 	seedFn(ctx, q.GetAccounts, seed, q.CreateAccount,

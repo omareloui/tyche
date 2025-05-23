@@ -93,7 +93,7 @@ func (tm *TenantManager) GetTenant(provider models.OAuthProvider, oauthID string
 			l.Error("failed to run migrations", zap.String("tenantID", tenantID), zap.Error(err))
 		}
 
-		ctx := context.Background()
+		ctx := logger.WithContext(context.Background(), l)
 		tenant.seeder.Seed(ctx, tenant.queries, oauthID)
 		l.Info("ensured user database seeded", zap.String("oauthID", oauthID), zap.String("tenantID", tenantID))
 	})

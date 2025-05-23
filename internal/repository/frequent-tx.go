@@ -235,7 +235,6 @@ func dbFrequentTxRowFrequentTx(dbFtx queries.GetFrequentTxRow) *models.FrequentT
 			NameOnCard:         dbFtx.FrequentToAccountNameOnCard,
 			Iban:               dbFtx.FrequentToAccountIban,
 			Note:               dbFtx.FrequentToAccountNote,
-			IsDefault:          dbFtx.FrequentToAccountIsDefault.Bool,
 			IsArchived:         dbFtx.FrequentToAccountIsArchived.Bool,
 			ExcludeFromBalance: dbFtx.FrequentToAccountExcludeFromBalance.Bool,
 			ExpirationDate:     dbFtx.FrequentToAccountExpirationDate,
@@ -308,7 +307,6 @@ func dbFrequentTxsWTxsRowToFrequentTxs[T queries.GetFrequentTxWTxsRow | queries.
 					NameOnCard:         dbFt.FrequentToAccountNameOnCard,
 					Iban:               dbFt.FrequentToAccountIban,
 					Note:               dbFt.FrequentToAccountNote,
-					IsDefault:          dbFt.FrequentToAccountIsDefault.Bool,
 					IsArchived:         dbFt.FrequentToAccountIsArchived.Bool,
 					ExcludeFromBalance: dbFt.FrequentToAccountExcludeFromBalance.Bool,
 					ExpirationDate:     dbFt.FrequentToAccountExpirationDate,
@@ -415,7 +413,6 @@ func dbFrequentTxsWTxsRowToFrequentTxs[T queries.GetFrequentTxWTxsRow | queries.
 				NameOnCard:         dbFt.TransactionAccountNameOnCard,
 				Iban:               dbFt.TransactionAccountIban,
 				Note:               dbFt.TransactionAccountNote,
-				IsDefault:          dbFt.TransactionAccountIsDefault.Bool,
 				IsArchived:         dbFt.TransactionAccountIsArchived.Bool,
 				ExcludeFromBalance: dbFt.TransactionAccountExcludeFromBalance.Bool,
 				ExpirationDate:     dbFt.TransactionAccountExpirationDate,
@@ -444,7 +441,6 @@ func dbFrequentTxsWTxsRowToFrequentTxs[T queries.GetFrequentTxWTxsRow | queries.
 				NameOnCard:         dbFt.TransactionToAccountNameOnCard,
 				Iban:               dbFt.TransactionToAccountIban,
 				Note:               dbFt.TransactionToAccountNote,
-				IsDefault:          dbFt.TransactionToAccountIsDefault.Bool,
 				IsArchived:         dbFt.TransactionToAccountIsArchived.Bool,
 				ExcludeFromBalance: dbFt.TransactionToAccountExcludeFromBalance.Bool,
 				ExpirationDate:     dbFt.TransactionToAccountExpirationDate,
@@ -504,13 +500,13 @@ func dbFrequentTxToFrequentTx(
 	}
 
 	if acc != nil {
-		ft.Account = *dbAccountToAccount(acc, 0, cur, nil, sql.NullString{})
+		ft.Account = *dbAccountToAccount(acc, 0, cur, nil, sql.NullString{}, false)
 	} else if dbFtx.ToAccountID.Valid {
 		ft.ToAccount = &models.Account{ID: dbFtx.ToAccountID.String}
 	}
 
 	if toAcc != nil {
-		ft.ToAccount = dbAccountToAccount(toAcc, 0, toCur, nil, sql.NullString{})
+		ft.ToAccount = dbAccountToAccount(toAcc, 0, toCur, nil, sql.NullString{}, false)
 	} else if dbFtx.ToAccountID.Valid {
 		ft.ToAccount = &models.Account{ID: dbFtx.ToAccountID.String}
 	}

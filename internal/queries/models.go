@@ -21,7 +21,6 @@ type Account struct {
 	NameOnCard         sql.NullString
 	Iban               sql.NullString
 	Note               sql.NullString
-	IsDefault          bool
 	IsArchived         bool
 	ExcludeFromBalance bool
 	ExpirationDate     sql.NullTime
@@ -117,6 +116,7 @@ type User struct {
 	LastName          string
 	Picture           sql.NullString
 	DefaultCurrencyID string
+	DefaultAccountID  sql.NullString
 	StartOfPeriod     int64
 	SeededAt          sql.NullTime
 	CreatedAt         time.Time

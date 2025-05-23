@@ -13,11 +13,13 @@ SELECT
     sqlc.embed(k),
     cp.name AS counterparty_name,
     sqlc.embed(c),
+    (u.id IS NOT NULL) AS is_default,
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
 LEFT JOIN counterparties AS cp ON a.counterparty_id = cp.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN user AS u ON u.default_account_id = a.id
 LEFT JOIN gls_amts AS gla ON a.id = gla.account_id
 ORDER BY a.created_at DESC;
 
@@ -36,11 +38,13 @@ SELECT
     sqlc.embed(k),
     cp.name AS counterparty_name,
     sqlc.embed(c),
+    (u.id IS NOT NULL) AS is_default,
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
 LEFT JOIN counterparties AS cp ON a.counterparty_id = cp.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN user AS u ON u.default_account_id = a.id
 LEFT JOIN gls_amts AS gla ON a.id = gla.account_id
 WHERE a.is_archived IS FALSE
 ORDER BY a.created_at DESC;
@@ -60,11 +64,13 @@ SELECT
     sqlc.embed(k),
     cp.name AS counterparty_name,
     sqlc.embed(c),
+    (u.id IS NOT NULL) AS is_default,
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
 LEFT JOIN counterparties AS cp ON a.counterparty_id = cp.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN user AS u ON u.default_account_id = a.id
 LEFT JOIN gls_amts AS gla ON a.id = gla.account_id
 WHERE a.id = sqlc.arg(id);
 
@@ -83,7 +89,6 @@ INSERT INTO accounts (
     note,
     exclude_from_balance,
     is_archived,
-    is_default,
     expiration_date
 )
 VALUES (
@@ -100,7 +105,6 @@ VALUES (
     sqlc.arg(note),
     sqlc.arg(exclude_from_balance),
     sqlc.arg(is_archived),
-    sqlc.arg(is_default),
     sqlc.arg(expiration_date)
 );
 
@@ -120,19 +124,6 @@ SET
     exclude_from_balance = sqlc.arg(exclude_from_balance),
     expiration_date = sqlc.arg(expiration_date)
 WHERE id = sqlc.arg(id);
-
--- name: UnsetDefaultAccountExpect :exec
-UPDATE accounts
-SET
-    is_default = FALSE
-WHERE id != sqlc.arg(id);
-
--- name: SetDefaultAccount :exec
-UPDATE accounts
-SET
-    is_default = TRUE
-WHERE id = sqlc.arg(id);
-
 
 -- name: DeleteAccount :exec
 DELETE FROM accounts
