@@ -92,13 +92,13 @@ func (s *Seeder) accounts(ctx context.Context, wg *sync.WaitGroup, q *queries.Qu
 	}
 
 	// TODO: only get it if `GetDefaultCurrency` returns entry without an id?
-	currencies, err := q.GetCurrencies(ctx)
+	currencies, err := q.GetAllCurrencies(ctx)
 	if err != nil {
 		l.Error("error seeding accounts, could't get currencies", zap.Error(err))
 		return
 	}
 	curr := slicesutils.Find(currencies,
-		func(c queries.GetCurrenciesRow) bool {
+		func(c queries.GetAllCurrenciesRow) bool {
 			return c.Currency.String == models.GetDefaultCurrency().String
 		})
 
@@ -156,9 +156,9 @@ func (s *Seeder) categories(ctx context.Context, wg *sync.WaitGroup, q *queries.
 func (s *Seeder) currencies(ctx context.Context, wg *sync.WaitGroup, q *queries.Queries) {
 	defer wg.Done()
 
-	seedFn(ctx, q.GetCurrencies, currSeed, q.CreateCurrency,
+	seedFn(ctx, q.GetAllCurrencies, currSeed, q.CreateCurrency,
 		func(s queries.CreateCurrencyParams) string { return s.String },
-		func(e queries.GetCurrenciesRow) string { return e.Currency.String })
+		func(e queries.GetAllCurrenciesRow) string { return e.Currency.String })
 }
 
 func (s *Seeder) txKinds(ctx context.Context, wg *sync.WaitGroup, q *queries.Queries) {

@@ -9,9 +9,9 @@ import (
 )
 
 var currSeed = []queries.CreateCurrencyParams{
-	{ID: idgen.New(), String: "USD", Symbol: "U$", IbanPrefix: sql.NullString{String: "US", Valid: true}, Kind: string(models.CurrencyKindFiat)},
-	{ID: idgen.New(), String: "EGP", Symbol: "E£", IbanPrefix: sql.NullString{String: "EG", Valid: true}, Kind: string(models.CurrencyKindFiat)},
-	{ID: idgen.New(), String: "AED", Symbol: "AED", IbanPrefix: sql.NullString{String: "AE", Valid: true}, Kind: string(models.CurrencyKindFiat)},
+	{ID: idgen.New(), String: "USD", Symbol: "U$", IbanPrefix: sql.NullString{String: "US", Valid: true}, Kind: string(models.CurrencyKindFiat), IsShown: true},
+	{ID: idgen.New(), String: "EGP", Symbol: "E£", IbanPrefix: sql.NullString{String: "EG", Valid: true}, Kind: string(models.CurrencyKindFiat), IsShown: true},
+	{ID: idgen.New(), String: "AED", Symbol: "AED", IbanPrefix: sql.NullString{String: "AE", Valid: true}, Kind: string(models.CurrencyKindFiat), IsShown: true},
 	{ID: idgen.New(), String: "1inch", Symbol: "1inch", Kind: string(models.CurrencyKindCrypto)},
 	{ID: idgen.New(), String: "AAVE", Symbol: "AAVE", Kind: string(models.CurrencyKindCrypto)},
 	{ID: idgen.New(), String: "ADA", Symbol: "ADA", Kind: string(models.CurrencyKindCrypto)},
@@ -304,7 +304,7 @@ var currSeed = []queries.CreateCurrencyParams{
 	{ID: idgen.New(), String: "USDC", Symbol: "USDC", Kind: string(models.CurrencyKindCrypto)},
 	{ID: idgen.New(), String: "USDD", Symbol: "USDD", Kind: string(models.CurrencyKindCrypto)},
 	{ID: idgen.New(), String: "USDP", Symbol: "USDP", Kind: string(models.CurrencyKindCrypto)},
-	{ID: idgen.New(), String: "USDT", Symbol: "USDT", Kind: string(models.CurrencyKindCrypto)},
+	{ID: idgen.New(), String: "USDT", Symbol: "USDT", Kind: string(models.CurrencyKindCrypto), IsShown: true},
 	{ID: idgen.New(), String: "UYU", Symbol: "UYU", IbanPrefix: sql.NullString{String: "UY", Valid: true}, Kind: string(models.CurrencyKindFiat)},
 	{ID: idgen.New(), String: "UZS", Symbol: "UZS", IbanPrefix: sql.NullString{String: "UZ", Valid: true}, Kind: string(models.CurrencyKindFiat)},
 	{ID: idgen.New(), String: "VAL", Symbol: "VAL", Kind: string(models.CurrencyKindCrypto)},
@@ -321,7 +321,7 @@ var currSeed = []queries.CreateCurrencyParams{
 	{ID: idgen.New(), String: "WST", Symbol: "WST", IbanPrefix: sql.NullString{String: "WS", Valid: true}, Kind: string(models.CurrencyKindFiat)},
 	{ID: idgen.New(), String: "XAF", Symbol: "XAF", IbanPrefix: sql.NullString{String: "XA", Valid: true}, Kind: string(models.CurrencyKindFiat)},
 	{ID: idgen.New(), String: "XAG", Symbol: "XAG", Kind: string(models.CurrencyKindPreciousMetal)},
-	{ID: idgen.New(), String: "XAU", Symbol: "XAU", Kind: string(models.CurrencyKindPreciousMetal)},
+	{ID: idgen.New(), String: "XAU", Symbol: "XAU", Kind: string(models.CurrencyKindPreciousMetal), IsShown: true},
 	{ID: idgen.New(), String: "XAUT", Symbol: "XAUT", Kind: string(models.CurrencyKindCrypto)},
 	{ID: idgen.New(), String: "XBT", Symbol: "XBT", Kind: string(models.CurrencyKindCrypto)},
 	{ID: idgen.New(), String: "XCD", Symbol: "XCD", IbanPrefix: sql.NullString{String: "XC", Valid: true}, Kind: string(models.CurrencyKindFiat)},

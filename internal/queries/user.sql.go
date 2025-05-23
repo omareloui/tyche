@@ -69,7 +69,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 const getUserByOAuthID = `-- name: GetUserByOAuthID :one
 SELECT
     user.id, user.oauth_id, user.oauth_provider, user.email, user.verified_email, user.first_name, user.last_name, user.picture, user.default_currency_id, user.default_account_id, user.start_of_period, user.seeded_at, user.created_at,
-    currencies.id, currencies.string, currencies.symbol, currencies.kind, currencies.iban_prefix
+    currencies.id, currencies.string, currencies.symbol, currencies.kind, currencies.iban_prefix, currencies.is_shown
 FROM user
 LEFT JOIN currencies ON user.default_currency_id = currencies.id
 WHERE oauth_id = ?1 LIMIT 1
@@ -102,6 +102,7 @@ func (q *Queries) GetUserByOAuthID(ctx context.Context, oauthID string) (GetUser
 		&i.Currency.Symbol,
 		&i.Currency.Kind,
 		&i.Currency.IbanPrefix,
+		&i.Currency.IsShown,
 	)
 	return i, err
 }

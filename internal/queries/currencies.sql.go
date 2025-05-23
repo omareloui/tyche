@@ -16,14 +16,16 @@ INSERT INTO currencies (
     string,
     symbol,
     kind,
-    iban_prefix
+    iban_prefix,
+    is_shown
 )
 VALUES (
     ?1,
     ?2,
     ?3,
     ?4,
-    ?5
+    ?5,
+    ?6
 )
 `
 
@@ -33,6 +35,7 @@ type CreateCurrencyParams struct {
 	Symbol     string
 	Kind       string
 	IbanPrefix sql.NullString
+	IsShown    bool
 }
 
 func (q *Queries) CreateCurrency(ctx context.Context, arg CreateCurrencyParams) error {
@@ -42,14 +45,56 @@ func (q *Queries) CreateCurrency(ctx context.Context, arg CreateCurrencyParams) 
 		arg.Symbol,
 		arg.Kind,
 		arg.IbanPrefix,
+		arg.IsShown,
 	)
 	return err
 }
 
+const getAllCurrencies = `-- name: GetAllCurrencies :many
+SELECT
+    currencies.id, currencies.string, currencies.symbol, currencies.kind, currencies.iban_prefix, currencies.is_shown
+FROM currencies
+`
+
+type GetAllCurrenciesRow struct {
+	Currency Currency
+}
+
+func (q *Queries) GetAllCurrencies(ctx context.Context) ([]GetAllCurrenciesRow, error) {
+	rows, err := q.db.QueryContext(ctx, getAllCurrencies)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetAllCurrenciesRow
+	for rows.Next() {
+		var i GetAllCurrenciesRow
+		if err := rows.Scan(
+			&i.Currency.ID,
+			&i.Currency.String,
+			&i.Currency.Symbol,
+			&i.Currency.Kind,
+			&i.Currency.IbanPrefix,
+			&i.Currency.IsShown,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getCurrencies = `-- name: GetCurrencies :many
 SELECT
-    currencies.id, currencies.string, currencies.symbol, currencies.kind, currencies.iban_prefix
+    currencies.id, currencies.string, currencies.symbol, currencies.kind, currencies.iban_prefix, currencies.is_shown
 FROM currencies
+WHERE currencies.is_shown = TRUE
 `
 
 type GetCurrenciesRow struct {
@@ -71,6 +116,7 @@ func (q *Queries) GetCurrencies(ctx context.Context) ([]GetCurrenciesRow, error)
 			&i.Currency.Symbol,
 			&i.Currency.Kind,
 			&i.Currency.IbanPrefix,
+			&i.Currency.IsShown,
 		); err != nil {
 			return nil, err
 		}
@@ -87,7 +133,7 @@ func (q *Queries) GetCurrencies(ctx context.Context) ([]GetCurrenciesRow, error)
 
 const getCurrency = `-- name: GetCurrency :one
 SELECT
-    currencies.id, currencies.string, currencies.symbol, currencies.kind, currencies.iban_prefix
+    currencies.id, currencies.string, currencies.symbol, currencies.kind, currencies.iban_prefix, currencies.is_shown
 FROM currencies
 WHERE id = ?1 LIMIT 1
 `
@@ -105,13 +151,14 @@ func (q *Queries) GetCurrency(ctx context.Context, id string) (GetCurrencyRow, e
 		&i.Currency.Symbol,
 		&i.Currency.Kind,
 		&i.Currency.IbanPrefix,
+		&i.Currency.IsShown,
 	)
 	return i, err
 }
 
 const getCurrencyByString = `-- name: GetCurrencyByString :one
 SELECT
-    currencies.id, currencies.string, currencies.symbol, currencies.kind, currencies.iban_prefix
+    currencies.id, currencies.string, currencies.symbol, currencies.kind, currencies.iban_prefix, currencies.is_shown
 FROM currencies
 WHERE string = ?1 LIMIT 1
 `
@@ -129,6 +176,53 @@ func (q *Queries) GetCurrencyByString(ctx context.Context, string string) (GetCu
 		&i.Currency.Symbol,
 		&i.Currency.Kind,
 		&i.Currency.IbanPrefix,
+		&i.Currency.IsShown,
 	)
 	return i, err
+}
+
+const setCurrencyShown = `-- name: SetCurrencyShown :exec
+UPDATE currencies
+SET
+    is_shown = ?1
+WHERE id = ?2
+`
+
+type SetCurrencyShownParams struct {
+	IsShown bool
+	ID      string
+}
+
+func (q *Queries) SetCurrencyShown(ctx context.Context, arg SetCurrencyShownParams) error {
+	_, err := q.db.ExecContext(ctx, setCurrencyShown, arg.IsShown, arg.ID)
+	return err
+}
+
+const updateCurrency = `-- name: UpdateCurrency :exec
+UPDATE currencies
+SET
+    string = ?1,
+    symbol = ?2,
+    kind = ?3,
+    iban_prefix = ?4
+WHERE id = ?5
+`
+
+type UpdateCurrencyParams struct {
+	String     string
+	Symbol     string
+	Kind       string
+	IbanPrefix sql.NullString
+	ID         string
+}
+
+func (q *Queries) UpdateCurrency(ctx context.Context, arg UpdateCurrencyParams) error {
+	_, err := q.db.ExecContext(ctx, updateCurrency,
+		arg.String,
+		arg.Symbol,
+		arg.Kind,
+		arg.IbanPrefix,
+		arg.ID,
+	)
+	return err
 }

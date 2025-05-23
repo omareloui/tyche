@@ -13,7 +13,7 @@ ORDER BY c.created_at;
 -- name: GetCategory :one
 SELECT
     sqlc.embed(c),
-    cur.id AS currency_id,
+    cur.id AS budget_currency_id,
     cur.string AS budget_currency_string,
     cur.symbol AS budget_currency_symbol,
     sqlc.embed(k)

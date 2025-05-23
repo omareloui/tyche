@@ -101,7 +101,7 @@ const getTransaction = `-- name: GetTransaction :one
 SELECT
     t.id, t.account_id, t.amount, t.kind_id, t.category_id, t.counterparty_id, t.description, t.to_account_id, t.to_amount, t.goal_id, t.fulfilled_at, t.scheduled_to, t.created_at,
     a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
-    c.id, c.string, c.symbol, c.kind, c.iban_prefix,
+    c.id, c.string, c.symbol, c.kind, c.iban_prefix, c.is_shown,
     k.id, k.enum, k.increase_balance,
     cp.name AS counterparty_name,
     ta.id AS to_account_id,
@@ -220,6 +220,7 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 		&i.Currency.Symbol,
 		&i.Currency.Kind,
 		&i.Currency.IbanPrefix,
+		&i.Currency.IsShown,
 		&i.TransactionKind.ID,
 		&i.TransactionKind.Enum,
 		&i.TransactionKind.IncreaseBalance,
@@ -261,7 +262,7 @@ const getTransactions = `-- name: GetTransactions :many
 SELECT
     t.id, t.account_id, t.amount, t.kind_id, t.category_id, t.counterparty_id, t.description, t.to_account_id, t.to_amount, t.goal_id, t.fulfilled_at, t.scheduled_to, t.created_at,
     a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
-    c.id, c.string, c.symbol, c.kind, c.iban_prefix,
+    c.id, c.string, c.symbol, c.kind, c.iban_prefix, c.is_shown,
     k.id, k.enum, k.increase_balance,
     cp.name AS counterparty_name,
     ta.id AS to_account_id,
@@ -386,6 +387,7 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.Currency.Symbol,
 			&i.Currency.Kind,
 			&i.Currency.IbanPrefix,
+			&i.Currency.IsShown,
 			&i.TransactionKind.ID,
 			&i.TransactionKind.Enum,
 			&i.TransactionKind.IncreaseBalance,

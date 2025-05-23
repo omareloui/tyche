@@ -24,7 +24,7 @@ func (h Handler) Goals(w http.ResponseWriter, r *http.Request) (templ.Component,
 	}
 	l.Debug("fetched balances")
 
-	curs, err := h.repo.GetCurrencies(r.Context())
+	curs, err := h.repo.GetAllCurrencies(r.Context())
 	if err != nil {
 		l.Error("fetching currencies", zap.Error(err))
 		return nil, err
@@ -38,7 +38,9 @@ func (h Handler) Goals(w http.ResponseWriter, r *http.Request) (templ.Component,
 	}
 	l.Info("fetched goals", zap.Int("count", len(gls)))
 
-	return views.Goals(getClaims(r), b, h.mapGlToFD(dfltGoal(curs), &errs.ValidationError{}), gls, curs), nil
+	shownCurs := slicesutils.Filter(curs, func(cur models.Currency) bool { return cur.IsShown })
+
+	return views.Goals(getClaims(r), b, h.mapGlToFD(dfltGoal(curs), &errs.ValidationError{}), gls, shownCurs), nil
 }
 
 func (h Handler) Goal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -77,7 +79,7 @@ func (h Handler) CreateGoal(w http.ResponseWriter, r *http.Request) (templ.Compo
 		return nil, err
 	}
 
-	curs, err := h.repo.GetCurrencies(r.Context())
+	curs, err := h.repo.GetAllCurrencies(r.Context())
 	if err != nil {
 		l.Error("fetching currencies", zap.Error(err))
 		return nil, err
@@ -102,7 +104,9 @@ func (h Handler) CreateGoal(w http.ResponseWriter, r *http.Request) (templ.Compo
 	}
 	l.Debug("rendered goal")
 
-	return views.CreateGoalForm(h.mapGlToFD(dfltGoal(curs), &errs.ValidationError{}), curs), nil
+	shownCurs := slicesutils.Filter(curs, func(cur models.Currency) bool { return cur.IsShown })
+
+	return views.CreateGoalForm(h.mapGlToFD(dfltGoal(curs), &errs.ValidationError{}), shownCurs), nil
 }
 
 func (h Handler) GetEditGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

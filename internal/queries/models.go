@@ -53,6 +53,7 @@ type Currency struct {
 	Symbol     string
 	Kind       string
 	IbanPrefix sql.NullString
+	IsShown    bool
 }
 
 type FrequentTx struct {

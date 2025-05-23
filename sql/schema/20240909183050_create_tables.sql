@@ -22,7 +22,8 @@ CREATE TABLE currencies (
     string VARCHAR UNIQUE NOT NULL,
     symbol VARCHAR UNIQUE NOT NULL,
     kind VARCHAR NOT NULL,
-    iban_prefix VARCHAR
+    iban_prefix VARCHAR,
+    is_shown BOOLEAN NOT NULL DEFAULT FALSE
 );
 CREATE TABLE transaction_kinds (
     id VARCHAR UNIQUE NOT NULL PRIMARY KEY,

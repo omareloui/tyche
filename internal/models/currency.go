@@ -19,6 +19,7 @@ type Currency struct {
 	Symbol     string       `validate:"required,max=5,alphanum"`
 	IbanPrefix string       `validate:"len=2,alpha"`
 	Kind       CurrencyKind `validate:"required"`
+	IsShown    bool
 }
 
 func (c *Currency) FxRate(toCurrency string) float64 {

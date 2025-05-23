@@ -24,7 +24,7 @@ func (h *Handler) Accounts(w http.ResponseWriter, r *http.Request) (templ.Compon
 		return nil, err
 	}
 
-	curs, knds, cps, err := h.getAccDeps(r.Context())
+	curs, shownCurs, knds, cps, err := h.getAccDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +37,7 @@ func (h *Handler) Accounts(w http.ResponseWriter, r *http.Request) (templ.Compon
 	l.Info("fetched accounts", zap.Int("accounts_length", len(accs)))
 
 	fd := h.mapAccToFD(defaultAccount(curs, knds), &errs.ValidationError{}, knds)
-	return views.Accounts(getClaims(r), balances, fd, knds, curs, accs, cps), nil
+	return views.Accounts(getClaims(r), balances, fd, knds, shownCurs, accs, cps), nil
 }
 
 func (h *Handler) Account(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -69,7 +69,7 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 
 	a.ID = idgen.New()
 
-	curs, knds, cps, err := h.getAccDeps(r.Context())
+	curs, shownCurs, knds, cps, err := h.getAccDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +91,7 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("validating account", zap.Any("account", a), zap.Any("errors", valerr.Errors))
-			return views.CreateAccountForm(h.mapAccToFD(a, &valerr, knds), knds, curs, cps), nil
+			return views.CreateAccountForm(h.mapAccToFD(a, &valerr, knds), knds, shownCurs, cps), nil
 		}
 		l.Error("sanitizing account", zap.Error(err))
 		return nil, err
@@ -103,7 +103,7 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 	var valerr *errs.ValidationError
 	if err != nil && errors.As(err, &valerr) {
 		l.Error("duplication error", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-		return views.CreateAccountForm(h.mapAccToFD(a, valerr, knds), knds, curs, cps), nil
+		return views.CreateAccountForm(h.mapAccToFD(a, valerr, knds), knds, shownCurs, cps), nil
 	} else if err != nil {
 		l.Error("creating account", zap.Error(err), zap.Any("account", a))
 		return nil, err
@@ -121,7 +121,7 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 	}
 
 	fd := h.mapAccToFD(defaultAccount(curs, knds), &errs.ValidationError{}, knds)
-	return views.CreateAccountForm(fd, knds, curs, cps), nil
+	return views.CreateAccountForm(fd, knds, shownCurs, cps), nil
 }
 
 func (h *Handler) GetEditAccount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -138,13 +138,13 @@ func (h *Handler) GetEditAccount(w http.ResponseWriter, r *http.Request) (templ.
 	}
 	l.Info("fetched account")
 
-	curs, knds, cps, err := h.getAccDeps(r.Context())
+	_, shownCurs, knds, cps, err := h.getAccDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
 
 	fd := h.mapAccToFD(a, &errs.ValidationError{}, knds)
-	return views.EditAccount(id, fd, knds, curs, cps), nil
+	return views.EditAccount(id, fd, knds, shownCurs, cps), nil
 }
 
 func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -164,7 +164,7 @@ func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Com
 
 	a.ID = id
 
-	curs, knds, cps, err := h.getAccDeps(r.Context())
+	curs, shownCurs, knds, cps, err := h.getAccDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +185,7 @@ func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Com
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("validating account", zap.Any("errors", valerr.Errors))
-			return views.EditAccount(id, h.mapAccToFD(a, &valerr, knds), knds, curs, cps), nil
+			return views.EditAccount(id, h.mapAccToFD(a, &valerr, knds), knds, shownCurs, cps), nil
 		}
 		l.Error("sanitizing account", zap.Error(err))
 		return nil, err
@@ -197,7 +197,7 @@ func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Com
 	var valerr *errs.ValidationError
 	if err != nil && errors.As(err, &valerr) {
 		l.Error("duplication error", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-		return views.EditAccount(id, h.mapAccToFD(a, valerr, knds), knds, curs, cps), nil
+		return views.EditAccount(id, h.mapAccToFD(a, valerr, knds), knds, shownCurs, cps), nil
 	} else if err != nil {
 		l.Error("updating account", zap.Error(err), zap.Any("account", a))
 		return nil, err
@@ -254,7 +254,7 @@ func (h Handler) AccountInputs(w http.ResponseWriter, r *http.Request) (templ.Co
 	}
 	l.Debug("mapped formdata to account")
 
-	curs, knds, cps, err := h.getAccDeps(r.Context())
+	_, shownCurs, knds, cps, err := h.getAccDeps(r.Context())
 	if err != nil {
 		l.Error("fetching account deps", zap.Error(err))
 		return nil, err
@@ -267,29 +267,32 @@ func (h Handler) AccountInputs(w http.ResponseWriter, r *http.Request) (templ.Co
 	}
 
 	fd := h.mapAccToFD(acc, &errs.ValidationError{}, knds)
-	return views.AccountInputs(id, &fd.AccountPartialFD, knds, curs, cps), nil
+	return views.AccountInputs(id, &fd.AccountPartialFD, knds, shownCurs, cps), nil
 }
 
-func (h Handler) getAccDeps(ctx context.Context) ([]models.Currency, []models.AccountKind, []models.Counterparty, error) {
+func (h Handler) getAccDeps(ctx context.Context) ([]models.Currency, []models.Currency, []models.AccountKind, []models.Counterparty, error) {
 	l := logger.FromCtx(ctx)
 
-	curs, err := h.repo.GetCurrencies(ctx)
+	curs, err := h.repo.GetAllCurrencies(ctx)
 	if err != nil {
 		l.Error("error fetching currencies", zap.Error(err))
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
+
+	shownCurs := slicesutils.Filter(curs, func(cur models.Currency) bool { return cur.IsShown })
+
 	knds, err := h.repo.GetAccountKinds(ctx)
 	if err != nil {
 		l.Error("error fetching account kinds", zap.Error(err))
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	cps, err := h.repo.GetCounterparties(ctx)
 	if err != nil {
 		l.Error("error fetching counterparties", zap.Error(err))
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	l.Debug("fetched account dependencies")
-	return curs, knds, cps, nil
+	return curs, shownCurs, knds, cps, nil
 }
 
 func (h *Handler) mapFDToAcc(r *http.Request) (*models.Account, error) {

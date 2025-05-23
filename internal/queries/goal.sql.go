@@ -67,7 +67,7 @@ func (q *Queries) FulfillGoal(ctx context.Context, id string) error {
 const getGoal = `-- name: GetGoal :many
 SELECT
     gl.id, gl.name, gl.price, gl.currency_id, gl.fulfilled_at, gl.created_at,
-    c.id, c.string, c.symbol, c.kind, c.iban_prefix,
+    c.id, c.string, c.symbol, c.kind, c.iban_prefix, c.is_shown,
     t.id AS transaction_id,
     t.account_id AS transaction_account_id,
     t.amount AS transaction_amount,
@@ -164,6 +164,7 @@ func (q *Queries) GetGoal(ctx context.Context, id string) ([]GetGoalRow, error) 
 			&i.Currency.Symbol,
 			&i.Currency.Kind,
 			&i.Currency.IbanPrefix,
+			&i.Currency.IsShown,
 			&i.TransactionID,
 			&i.TransactionAccountID,
 			&i.TransactionAmount,
@@ -212,7 +213,7 @@ func (q *Queries) GetGoal(ctx context.Context, id string) ([]GetGoalRow, error) 
 const getGoals = `-- name: GetGoals :many
 SELECT
     gl.id, gl.name, gl.price, gl.currency_id, gl.fulfilled_at, gl.created_at,
-    c.id, c.string, c.symbol, c.kind, c.iban_prefix,
+    c.id, c.string, c.symbol, c.kind, c.iban_prefix, c.is_shown,
     t.id AS transaction_id,
     t.account_id AS transaction_account_id,
     t.amount AS transaction_amount,
@@ -309,6 +310,7 @@ func (q *Queries) GetGoals(ctx context.Context) ([]GetGoalsRow, error) {
 			&i.Currency.Symbol,
 			&i.Currency.Kind,
 			&i.Currency.IbanPrefix,
+			&i.Currency.IsShown,
 			&i.TransactionID,
 			&i.TransactionAccountID,
 			&i.TransactionAmount,
@@ -357,7 +359,7 @@ func (q *Queries) GetGoals(ctx context.Context) ([]GetGoalsRow, error) {
 const getUnfulfilledGoals = `-- name: GetUnfulfilledGoals :many
 SELECT
     gl.id, gl.name, gl.price, gl.currency_id, gl.fulfilled_at, gl.created_at,
-    c.id, c.string, c.symbol, c.kind, c.iban_prefix,
+    c.id, c.string, c.symbol, c.kind, c.iban_prefix, c.is_shown,
     t.id AS transaction_id,
     t.account_id AS transaction_account_id,
     t.amount AS transaction_amount,
@@ -455,6 +457,7 @@ func (q *Queries) GetUnfulfilledGoals(ctx context.Context) ([]GetUnfulfilledGoal
 			&i.Currency.Symbol,
 			&i.Currency.Kind,
 			&i.Currency.IbanPrefix,
+			&i.Currency.IsShown,
 			&i.TransactionID,
 			&i.TransactionAccountID,
 			&i.TransactionAmount,
