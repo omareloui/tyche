@@ -68,7 +68,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 
 const getUserByOAuthID = `-- name: GetUserByOAuthID :one
 SELECT
-    user.id, user.oauth_id, user.oauth_provider, user.email, user.verified_email, user.first_name, user.last_name, user.picture, user.default_currency_id, user.start_of_period,
+    user.id, user.oauth_id, user.oauth_provider, user.email, user.verified_email, user.first_name, user.last_name, user.picture, user.default_currency_id, user.start_of_period, user.seeded_at, user.created_at,
     currencies.id, currencies.enum
 FROM user
 LEFT JOIN currencies ON user.default_currency_id = currencies.id
@@ -80,8 +80,8 @@ type GetUserByOAuthIDRow struct {
 	Currency Currency
 }
 
-func (q *Queries) GetUserByOAuthID(ctx context.Context, oathID string) (GetUserByOAuthIDRow, error) {
-	row := q.db.QueryRowContext(ctx, getUserByOAuthID, oathID)
+func (q *Queries) GetUserByOAuthID(ctx context.Context, oauthID string) (GetUserByOAuthIDRow, error) {
+	row := q.db.QueryRowContext(ctx, getUserByOAuthID, oauthID)
 	var i GetUserByOAuthIDRow
 	err := row.Scan(
 		&i.User.ID,
@@ -94,8 +94,22 @@ func (q *Queries) GetUserByOAuthID(ctx context.Context, oathID string) (GetUserB
 		&i.User.Picture,
 		&i.User.DefaultCurrencyID,
 		&i.User.StartOfPeriod,
+		&i.User.SeededAt,
+		&i.User.CreatedAt,
 		&i.Currency.ID,
 		&i.Currency.Enum,
 	)
 	return i, err
+}
+
+const updateSeededAt = `-- name: UpdateSeededAt :exec
+UPDATE user
+SET
+    seeded_at = DATETIME('now')
+WHERE oauth_id = ?1
+`
+
+func (q *Queries) UpdateSeededAt(ctx context.Context, oauthID string) error {
+	_, err := q.db.ExecContext(ctx, updateSeededAt, oauthID)
+	return err
 }

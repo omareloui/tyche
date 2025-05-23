@@ -4,7 +4,16 @@ SELECT
     sqlc.embed(currencies)
 FROM user
 LEFT JOIN currencies ON user.default_currency_id = currencies.id
-WHERE oauth_id = sqlc.arg(oath_id) LIMIT 1;
+WHERE oauth_id = sqlc.arg(oauth_id) LIMIT 1;
+
+
+-- name: UpdateSeededAt :exec
+UPDATE user
+SET
+    seeded_at = DATETIME('now')
+WHERE oauth_id = sqlc.arg(oauth_id);
+
+
 
 -- name: CreateUser :exec
 INSERT INTO user (

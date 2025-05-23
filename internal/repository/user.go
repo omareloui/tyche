@@ -65,6 +65,8 @@ func dbUserToUser(dbU *queries.User, dfltCur *queries.Currency) *models.User {
 		DefaultCurrency: models.Currency{
 			ID: dbU.DefaultCurrencyID,
 		},
+		SeededAt:  dbU.SeededAt.Time,
+		CreatedAt: dbU.CreatedAt,
 	}
 
 	if dfltCur != nil {

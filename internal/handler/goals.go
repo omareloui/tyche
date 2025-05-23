@@ -318,6 +318,6 @@ func (h Handler) mapFDToGoal(r *http.Request) (*models.Goal, error) {
 
 func dfltGoal(curs []models.Currency) *models.Goal {
 	return &models.Goal{
-		Currency: *slicesutils.Find(curs, func(cur models.Currency) bool { return cur.Enum == models.DfltCurrency }),
+		Currency: *slicesutils.Find(curs, func(cur models.Currency) bool { return cur.Enum == models.GetDefaultCurrency() }),
 	}
 }

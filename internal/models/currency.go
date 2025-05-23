@@ -13,7 +13,10 @@ const (
 	CurrencyAed
 )
 
-const DfltCurrency = CurrencyEgp
+func GetDefaultCurrency() CurrencyEnum {
+	// TODO: get the currency according to the ip addr of the user
+	return CurrencyUsd
+}
 
 func (cs CurrencyEnum) String() string {
 	return [...]string{

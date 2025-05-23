@@ -118,4 +118,6 @@ type User struct {
 	Picture           sql.NullString
 	DefaultCurrencyID string
 	StartOfPeriod     int64
+	SeededAt          sql.NullTime
+	CreatedAt         time.Time
 }

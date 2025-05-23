@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/omareloui/tyche/internal/idgen"
 )
@@ -45,6 +46,8 @@ type User struct {
 	Picture         string   `validate:"required,url"`
 	DefaultCurrency Currency `validate:"required"`
 	StartOfPeriod   uint8    `validate:"required,min=1,max=31"`
+	SeededAt        time.Time
+	CreatedAt       time.Time
 }
 
 func (u *User) FullName() string {

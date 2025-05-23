@@ -119,7 +119,7 @@ func (h *Handler) Signout(w http.ResponseWriter, r *http.Request) (templ.Compone
 }
 
 func (h *Handler) initUser(ctx context.Context, usr *models.User) error {
-	cur, err := h.repo.GetCurrencyByEnum(ctx, models.CurrencyUsd)
+	cur, err := h.repo.GetCurrencyByEnum(ctx, models.GetDefaultCurrency())
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			l := logger.FromCtx(ctx)

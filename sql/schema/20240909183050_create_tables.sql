@@ -11,6 +11,8 @@ CREATE TABLE user (
     picture VARCHAR,
     default_currency_id VARCHAR NOT NULL,
     start_of_period INT NOT NULL DEFAULT 1 CHECK (start_of_period BETWEEN 1 AND 31),
+    seeded_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (default_currency_id) REFERENCES currencies (id)
 );
 CREATE TABLE currencies (

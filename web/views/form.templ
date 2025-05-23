@@ -427,7 +427,7 @@ func getCurSymbolByAccount(accs []models.Account, accId string) string {
 		return a.ID == accId
 	})
 	if acc == nil {
-		return models.DfltCurrency.Symbol()
+		return models.GetDefaultCurrency().Symbol()
 	}
 	return acc.Currency.Enum.Symbol()
 }
@@ -437,7 +437,7 @@ func getCurSymbolByCurrency(curs []models.Currency, curId string) string {
 		return c.ID == curId
 	})
 	if cur == nil {
-		return models.DfltCurrency.Symbol()
+		return models.GetDefaultCurrency().Symbol()
 	}
 	return cur.Enum.Symbol()
 }
@@ -447,7 +447,7 @@ func getCurIbanPrefixByCurrency(curs []models.Currency, curId string) string {
 		return c.ID == curId
 	})
 	if cur == nil {
-		return models.DfltCurrency.IbanPrefix()
+		return models.GetDefaultCurrency().IbanPrefix()
 	}
 	return cur.Enum.IbanPrefix()
 }

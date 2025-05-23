@@ -8,10 +8,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/queries"
 	"github.com/omareloui/tyche/internal/seeder"
 	"github.com/pressly/goose/v3"
+	"go.uber.org/zap"
 )
 
 type Repository struct {
@@ -86,11 +88,15 @@ func (tm *TenantManager) GetTenant(provider models.OAuthProvider, oauthID string
 	}
 
 	tenant.migrateOnce.Do(func() {
+		l := logger.Get()
 		if err := tm.runMigrations(db); err != nil {
-			fmt.Printf("Failed to run migrations for tenant %s: %v\n", tenantID, err)
+			l.Error("failed to run migrations", zap.String("tenantID", tenantID), zap.Error(err))
 		}
+
+		ctx := context.Background()
+		tenant.seeder.Seed(ctx, tenant.queries, oauthID)
+		l.Info("ensured user database seeded", zap.String("oauthID", oauthID), zap.String("tenantID", tenantID))
 	})
-	tenant.seeder.Seed(context.Background(), tenant.queries)
 
 	tm.connections[tenantID] = tenant
 	return tenant.db, tenant.queries, nil
