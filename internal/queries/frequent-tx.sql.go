@@ -161,7 +161,8 @@ SELECT
     fttc.symbol AS frequent_to_account_currency_symbol,
     cat.id AS category_id,
     cat.name AS category_name,
-    cat.budget_in_egp AS category_budget_in_egp,
+    cat.budget_amount AS category_budget_amount,
+    cat.budget_currency_id AS category_budget_currency_id,
     cat.kind_id AS category_kind_id,
     cat.created_at AS category_created_at,
     g.name AS goal_name,
@@ -209,7 +210,8 @@ type GetFrequentTxRow struct {
 	FrequentToAccountCurrencySymbol     sql.NullString
 	CategoryID                          sql.NullString
 	CategoryName                        sql.NullString
-	CategoryBudgetInEgp                 sql.NullFloat64
+	CategoryBudgetAmount                sql.NullFloat64
+	CategoryBudgetCurrencyID            sql.NullString
 	CategoryKindID                      sql.NullString
 	CategoryCreatedAt                   sql.NullTime
 	GoalName                            sql.NullString
@@ -284,7 +286,8 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) (GetFrequentTxRo
 		&i.FrequentToAccountCurrencySymbol,
 		&i.CategoryID,
 		&i.CategoryName,
-		&i.CategoryBudgetInEgp,
+		&i.CategoryBudgetAmount,
+		&i.CategoryBudgetCurrencyID,
 		&i.CategoryKindID,
 		&i.CategoryCreatedAt,
 		&i.GoalName,
@@ -324,7 +327,8 @@ SELECT
     fttc.symbol AS frequent_to_account_currency_symbol,
     cat.id AS category_id,
     cat.name AS category_name,
-    cat.budget_in_egp AS category_budget_in_egp,
+    cat.budget_amount AS category_budget_amount,
+    cat.budget_currency_id AS category_budget_currency_id,
     cat.kind_id AS category_kind_id,
     cat.created_at AS category_created_at,
     g.name AS goal_name,
@@ -383,7 +387,8 @@ SELECT
     ttc.symbol AS transaction_to_account_currency_symbol,
     tcat.id AS transaction_category_id,
     tcat.name AS transaction_category_name,
-    tcat.budget_in_egp AS transaction_category_budget_in_egp,
+    tcat.budget_amount AS transaction_category_budget_amount,
+    tcat.budget_currency_id AS transaction_category_budget_currency_id,
     tcat.kind_id AS transaction_category_kind_id,
     tcat.created_at AS transaction_category_created_at,
     tk.enum AS transaction_kind_enum,
@@ -436,7 +441,8 @@ type GetFrequentTxWTxsRow struct {
 	FrequentToAccountCurrencySymbol        sql.NullString
 	CategoryID                             sql.NullString
 	CategoryName                           sql.NullString
-	CategoryBudgetInEgp                    sql.NullFloat64
+	CategoryBudgetAmount                   sql.NullFloat64
+	CategoryBudgetCurrencyID               sql.NullString
 	CategoryKindID                         sql.NullString
 	CategoryCreatedAt                      sql.NullTime
 	GoalName                               sql.NullString
@@ -495,7 +501,8 @@ type GetFrequentTxWTxsRow struct {
 	TransactionToAccountCurrencySymbol     sql.NullString
 	TransactionCategoryID_2                sql.NullString
 	TransactionCategoryName                sql.NullString
-	TransactionCategoryBudgetInEgp         sql.NullFloat64
+	TransactionCategoryBudgetAmount        sql.NullFloat64
+	TransactionCategoryBudgetCurrencyID    sql.NullString
 	TransactionCategoryKindID              sql.NullString
 	TransactionCategoryCreatedAt           sql.NullTime
 	TransactionKindEnum                    sql.NullInt64
@@ -572,7 +579,8 @@ func (q *Queries) GetFrequentTxWTxs(ctx context.Context, id string) ([]GetFreque
 			&i.FrequentToAccountCurrencySymbol,
 			&i.CategoryID,
 			&i.CategoryName,
-			&i.CategoryBudgetInEgp,
+			&i.CategoryBudgetAmount,
+			&i.CategoryBudgetCurrencyID,
 			&i.CategoryKindID,
 			&i.CategoryCreatedAt,
 			&i.GoalName,
@@ -631,7 +639,8 @@ func (q *Queries) GetFrequentTxWTxs(ctx context.Context, id string) ([]GetFreque
 			&i.TransactionToAccountCurrencySymbol,
 			&i.TransactionCategoryID_2,
 			&i.TransactionCategoryName,
-			&i.TransactionCategoryBudgetInEgp,
+			&i.TransactionCategoryBudgetAmount,
+			&i.TransactionCategoryBudgetCurrencyID,
 			&i.TransactionCategoryKindID,
 			&i.TransactionCategoryCreatedAt,
 			&i.TransactionKindEnum,
@@ -677,7 +686,8 @@ SELECT
     fttc.symbol AS frequent_to_account_currency_symbol,
     cat.id AS category_id,
     cat.name AS category_name,
-    cat.budget_in_egp AS category_budget_in_egp,
+    cat.budget_amount AS category_budget_amount,
+    cat.budget_currency_id AS category_budget_currency_id,
     cat.kind_id AS category_kind_id,
     cat.created_at AS category_created_at,
     g.name AS goal_name,
@@ -724,7 +734,8 @@ type GetFrequentTxsRow struct {
 	FrequentToAccountCurrencySymbol     sql.NullString
 	CategoryID                          sql.NullString
 	CategoryName                        sql.NullString
-	CategoryBudgetInEgp                 sql.NullFloat64
+	CategoryBudgetAmount                sql.NullFloat64
+	CategoryBudgetCurrencyID            sql.NullString
 	CategoryKindID                      sql.NullString
 	CategoryCreatedAt                   sql.NullTime
 	GoalName                            sql.NullString
@@ -805,7 +816,8 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 			&i.FrequentToAccountCurrencySymbol,
 			&i.CategoryID,
 			&i.CategoryName,
-			&i.CategoryBudgetInEgp,
+			&i.CategoryBudgetAmount,
+			&i.CategoryBudgetCurrencyID,
 			&i.CategoryKindID,
 			&i.CategoryCreatedAt,
 			&i.GoalName,
@@ -855,7 +867,8 @@ SELECT
     fttc.symbol AS frequent_to_account_currency_symbol,
     cat.id AS category_id,
     cat.name AS category_name,
-    cat.budget_in_egp AS category_budget_in_egp,
+    cat.budget_amount AS category_budget_amount,
+    cat.budget_currency_id AS category_budget_currency_id,
     cat.kind_id AS category_kind_id,
     cat.created_at AS category_created_at,
     g.name AS goal_name,
@@ -914,7 +927,8 @@ SELECT
     ttc.symbol AS transaction_to_account_currency_symbol,
     tcat.id AS transaction_category_id,
     tcat.name AS transaction_category_name,
-    tcat.budget_in_egp AS transaction_category_budget_in_egp,
+    tcat.budget_amount AS transaction_category_budget_amount,
+    tcat.budget_currency_id AS transaction_category_budget_currency_id,
     tcat.kind_id AS transaction_category_kind_id,
     tcat.created_at AS transaction_category_created_at,
     tk.enum AS transaction_kind_enum,
@@ -966,7 +980,8 @@ type GetFrequentTxsWTxsRow struct {
 	FrequentToAccountCurrencySymbol        sql.NullString
 	CategoryID                             sql.NullString
 	CategoryName                           sql.NullString
-	CategoryBudgetInEgp                    sql.NullFloat64
+	CategoryBudgetAmount                   sql.NullFloat64
+	CategoryBudgetCurrencyID               sql.NullString
 	CategoryKindID                         sql.NullString
 	CategoryCreatedAt                      sql.NullTime
 	GoalName                               sql.NullString
@@ -1025,7 +1040,8 @@ type GetFrequentTxsWTxsRow struct {
 	TransactionToAccountCurrencySymbol     sql.NullString
 	TransactionCategoryID_2                sql.NullString
 	TransactionCategoryName                sql.NullString
-	TransactionCategoryBudgetInEgp         sql.NullFloat64
+	TransactionCategoryBudgetAmount        sql.NullFloat64
+	TransactionCategoryBudgetCurrencyID    sql.NullString
 	TransactionCategoryKindID              sql.NullString
 	TransactionCategoryCreatedAt           sql.NullTime
 	TransactionKindEnum                    sql.NullInt64
@@ -1102,7 +1118,8 @@ func (q *Queries) GetFrequentTxsWTxs(ctx context.Context) ([]GetFrequentTxsWTxsR
 			&i.FrequentToAccountCurrencySymbol,
 			&i.CategoryID,
 			&i.CategoryName,
-			&i.CategoryBudgetInEgp,
+			&i.CategoryBudgetAmount,
+			&i.CategoryBudgetCurrencyID,
 			&i.CategoryKindID,
 			&i.CategoryCreatedAt,
 			&i.GoalName,
@@ -1161,7 +1178,8 @@ func (q *Queries) GetFrequentTxsWTxs(ctx context.Context) ([]GetFrequentTxsWTxsR
 			&i.TransactionToAccountCurrencySymbol,
 			&i.TransactionCategoryID_2,
 			&i.TransactionCategoryName,
-			&i.TransactionCategoryBudgetInEgp,
+			&i.TransactionCategoryBudgetAmount,
+			&i.TransactionCategoryBudgetCurrencyID,
 			&i.TransactionCategoryKindID,
 			&i.TransactionCategoryCreatedAt,
 			&i.TransactionKindEnum,

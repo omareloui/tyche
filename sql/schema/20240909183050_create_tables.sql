@@ -114,10 +114,12 @@ CREATE TABLE goals (
 CREATE TABLE categories (
     id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
     name VARCHAR UNIQUE NOT NULL,
-    budget_in_egp FLOAT DEFAULT 0 NOT NULL,
+    budget_amount FLOAT,
+    budget_currency_id VARCHAR,
     kind_id VARCHAR NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id) ON DELETE CASCADE
+    FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id) ON DELETE CASCADE,
+    FOREIGN KEY (budget_currency_id) REFERENCES currencies (id) ON DELETE CASCADE
 );
 CREATE TABLE counterparties (
     id VARCHAR UNIQUE NOT NULL PRIMARY KEY,

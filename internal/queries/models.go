@@ -33,11 +33,12 @@ type AccountKind struct {
 }
 
 type Category struct {
-	ID          string
-	Name        string
-	BudgetInEgp float64
-	KindID      string
-	CreatedAt   time.Time
+	ID               string
+	Name             string
+	BudgetAmount     sql.NullFloat64
+	BudgetCurrencyID sql.NullString
+	KindID           string
+	CreatedAt        time.Time
 }
 
 type Counterparty struct {

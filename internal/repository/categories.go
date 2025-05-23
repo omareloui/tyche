@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/queries"
@@ -33,30 +34,23 @@ func (r *Repository) GetCategory(ctx context.Context, id string) (*models.Catego
 	return dbCategoryRowToCategory(&dbCat), nil
 }
 
-func (r *Repository) GetTotalBudget(ctx context.Context) (float64, error) {
-	_, q, err := r.dbFromCtx(ctx)
-	if err != nil {
-		return 0, err
-	}
-
-	budget, err := q.TotalBudget(ctx)
-	if err != nil {
-		return 0, err
-	}
-	return budget, nil
-}
-
 func (r *Repository) UpdateCategory(ctx context.Context, cat *models.Category) error {
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
 		return err
 	}
 
+	var curId string
+	if cat.BudgetCurrency != nil {
+		curId = cat.BudgetCurrency.ID
+	}
+
 	return q.UpdateCategory(ctx, queries.UpdateCategoryParams{
-		ID:          cat.ID,
-		Name:        cat.Name,
-		KindID:      cat.Kind.ID,
-		BudgetInEgp: cat.BudgetInEgp,
+		ID:               cat.ID,
+		Name:             cat.Name,
+		KindID:           cat.Kind.ID,
+		BudgetAmount:     sql.NullFloat64{Float64: cat.BudgetAmount, Valid: cat.BudgetAmount != 0},
+		BudgetCurrencyID: sql.NullString{String: curId, Valid: curId != ""},
 	})
 }
 
@@ -66,11 +60,17 @@ func (r *Repository) CreateCategory(ctx context.Context, cat *models.Category) e
 		return err
 	}
 
+	var curId string
+	if cat.BudgetCurrency != nil {
+		curId = cat.BudgetCurrency.ID
+	}
+
 	return q.CreateCategory(ctx, queries.CreateCategoryParams{
-		ID:          cat.ID,
-		Name:        cat.Name,
-		KindID:      cat.Kind.ID,
-		BudgetInEgp: cat.BudgetInEgp,
+		ID:               cat.ID,
+		Name:             cat.Name,
+		KindID:           cat.Kind.ID,
+		BudgetAmount:     sql.NullFloat64{Float64: cat.BudgetAmount, Valid: cat.BudgetAmount != 0},
+		BudgetCurrencyID: sql.NullString{String: curId, Valid: curId != ""},
 	})
 }
 
@@ -83,19 +83,29 @@ func (r *Repository) DeleteCategory(ctx context.Context, id string) error {
 	return q.DeleteCategory(ctx, id)
 }
 
-func dbCategoryToCategory(dbCat *queries.Category, kind *queries.TransactionKind) *models.Category {
+func dbCategoryToCategory(dbCat *queries.Category, kind *queries.TransactionKind, cur *queries.Currency) *models.Category {
 	cat := &models.Category{
 		ID:   dbCat.ID,
 		Name: dbCat.Name,
 		Kind: models.TransactionKind{
 			ID: dbCat.KindID,
 		},
-		BudgetInEgp: dbCat.BudgetInEgp,
-		CreatedAt:   dbCat.CreatedAt,
+		BudgetAmount: dbCat.BudgetAmount.Float64,
+		BudgetCurrency: &models.Currency{
+			ID: dbCat.BudgetCurrencyID.String,
+		},
+		CreatedAt: dbCat.CreatedAt,
 	}
 
 	if kind != nil {
 		cat.Kind = *dbTransactionKindToTransactionKind(kind)
+	}
+
+	if cur != nil {
+		cat.BudgetCurrency.String = cur.String
+		cat.BudgetCurrency.Symbol = cur.Symbol
+		cat.BudgetCurrency.IbanPrefix = cur.IbanPrefix.String
+		cat.BudgetCurrency.Kind = models.CurrencyKind(cur.Kind)
 	}
 
 	return cat
@@ -103,7 +113,11 @@ func dbCategoryToCategory(dbCat *queries.Category, kind *queries.TransactionKind
 
 func dbCategoryRowToCategory[T queries.GetCategoryRow | queries.GetCategoriesRow](dbCat *T) *models.Category {
 	_dbCat := queries.GetCategoryRow(*dbCat)
-	return dbCategoryToCategory(&_dbCat.Category, &_dbCat.TransactionKind)
+	return dbCategoryToCategory(&_dbCat.Category, &_dbCat.TransactionKind, &queries.Currency{
+		ID:     _dbCat.Category.BudgetCurrencyID.String,
+		String: _dbCat.BudgetCurrencyString.String,
+		Symbol: _dbCat.BudgetCurrencySymbol.String,
+	})
 }
 
 func dbCategoriesRowToCategories(dbCats []queries.GetCategoriesRow) []models.Category {

@@ -7,6 +7,7 @@ package queries
 
 import (
 	"context"
+	"database/sql"
 )
 
 const createCategory = `-- name: CreateCategory :exec
@@ -14,21 +15,24 @@ INSERT INTO categories (
     id,
     name,
     kind_id,
-    budget_in_egp
+    budget_amount,
+    budget_currency_id
 )
 VALUES (
     ?1,
     ?2,
     ?3,
-    ?4
+    ?4,
+    ?5
 )
 `
 
 type CreateCategoryParams struct {
-	ID          string
-	Name        string
-	KindID      string
-	BudgetInEgp float64
+	ID               string
+	Name             string
+	KindID           string
+	BudgetAmount     sql.NullFloat64
+	BudgetCurrencyID sql.NullString
 }
 
 func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) error {
@@ -36,7 +40,8 @@ func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) 
 		arg.ID,
 		arg.Name,
 		arg.KindID,
-		arg.BudgetInEgp,
+		arg.BudgetAmount,
+		arg.BudgetCurrencyID,
 	)
 	return err
 }
@@ -53,16 +58,23 @@ func (q *Queries) DeleteCategory(ctx context.Context, id string) error {
 
 const getCategories = `-- name: GetCategories :many
 SELECT
-    c.id, c.name, c.budget_in_egp, c.kind_id, c.created_at,
+    c.id, c.name, c.budget_amount, c.budget_currency_id, c.kind_id, c.created_at,
+    cur.id AS budget_currency_id,
+    cur.string AS budget_currency_string,
+    cur.symbol AS budget_currency_symbol,
     k.id, k.enum, k.increase_balance
 FROM categories AS c
 LEFT JOIN transaction_kinds AS k ON c.kind_id = k.id
+LEFT JOIN currencies AS cur ON cur.id = c.budget_currency_id
 ORDER BY c.created_at
 `
 
 type GetCategoriesRow struct {
-	Category        Category
-	TransactionKind TransactionKind
+	Category             Category
+	BudgetCurrencyID     sql.NullString
+	BudgetCurrencyString sql.NullString
+	BudgetCurrencySymbol sql.NullString
+	TransactionKind      TransactionKind
 }
 
 func (q *Queries) GetCategories(ctx context.Context) ([]GetCategoriesRow, error) {
@@ -77,9 +89,13 @@ func (q *Queries) GetCategories(ctx context.Context) ([]GetCategoriesRow, error)
 		if err := rows.Scan(
 			&i.Category.ID,
 			&i.Category.Name,
-			&i.Category.BudgetInEgp,
+			&i.Category.BudgetAmount,
+			&i.Category.BudgetCurrencyID,
 			&i.Category.KindID,
 			&i.Category.CreatedAt,
+			&i.BudgetCurrencyID,
+			&i.BudgetCurrencyString,
+			&i.BudgetCurrencySymbol,
 			&i.TransactionKind.ID,
 			&i.TransactionKind.Enum,
 			&i.TransactionKind.IncreaseBalance,
@@ -99,16 +115,23 @@ func (q *Queries) GetCategories(ctx context.Context) ([]GetCategoriesRow, error)
 
 const getCategory = `-- name: GetCategory :one
 SELECT
-    c.id, c.name, c.budget_in_egp, c.kind_id, c.created_at,
+    c.id, c.name, c.budget_amount, c.budget_currency_id, c.kind_id, c.created_at,
+    cur.id AS budget_currency_id,
+    cur.string AS budget_currency_string,
+    cur.symbol AS budget_currency_symbol,
     k.id, k.enum, k.increase_balance
 FROM categories AS c
 LEFT JOIN transaction_kinds AS k ON c.kind_id = k.id
+LEFT JOIN currencies AS cur ON cur.id = c.budget_currency_id
 WHERE c.id = ?1
 `
 
 type GetCategoryRow struct {
-	Category        Category
-	TransactionKind TransactionKind
+	Category             Category
+	BudgetCurrencyID     sql.NullString
+	BudgetCurrencyString sql.NullString
+	BudgetCurrencySymbol sql.NullString
+	TransactionKind      TransactionKind
 }
 
 func (q *Queries) GetCategory(ctx context.Context, id string) (GetCategoryRow, error) {
@@ -117,9 +140,13 @@ func (q *Queries) GetCategory(ctx context.Context, id string) (GetCategoryRow, e
 	err := row.Scan(
 		&i.Category.ID,
 		&i.Category.Name,
-		&i.Category.BudgetInEgp,
+		&i.Category.BudgetAmount,
+		&i.Category.BudgetCurrencyID,
 		&i.Category.KindID,
 		&i.Category.CreatedAt,
+		&i.BudgetCurrencyID,
+		&i.BudgetCurrencyString,
+		&i.BudgetCurrencySymbol,
 		&i.TransactionKind.ID,
 		&i.TransactionKind.Enum,
 		&i.TransactionKind.IncreaseBalance,
@@ -127,40 +154,30 @@ func (q *Queries) GetCategory(ctx context.Context, id string) (GetCategoryRow, e
 	return i, err
 }
 
-const totalBudget = `-- name: TotalBudget :one
-SELECT TOTAL(budget_in_egp)
-FROM categories
-GROUP BY id
-`
-
-func (q *Queries) TotalBudget(ctx context.Context) (float64, error) {
-	row := q.db.QueryRowContext(ctx, totalBudget)
-	var total float64
-	err := row.Scan(&total)
-	return total, err
-}
-
 const updateCategory = `-- name: UpdateCategory :exec
 UPDATE categories
 SET
     name = ?1,
     kind_id = ?2,
-    budget_in_egp = ?3
-WHERE id = ?4
+    budget_amount = ?3,
+    budget_currency_id = ?4
+WHERE id = ?5
 `
 
 type UpdateCategoryParams struct {
-	Name        string
-	KindID      string
-	BudgetInEgp float64
-	ID          string
+	Name             string
+	KindID           string
+	BudgetAmount     sql.NullFloat64
+	BudgetCurrencyID sql.NullString
+	ID               string
 }
 
 func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) error {
 	_, err := q.db.ExecContext(ctx, updateCategory,
 		arg.Name,
 		arg.KindID,
-		arg.BudgetInEgp,
+		arg.BudgetAmount,
+		arg.BudgetCurrencyID,
 		arg.ID,
 	)
 	return err

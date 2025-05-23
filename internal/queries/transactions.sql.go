@@ -123,7 +123,8 @@ SELECT
     tc.symbol AS to_account_currency_symbol,
     cat.id AS category_id,
     cat.name AS category_name,
-    cat.budget_in_egp AS category_budget_in_egp,
+    cat.budget_amount AS category_budget_amount,
+    cat.budget_currency_id AS category_budget_currency_id,
     cat.kind_id AS category_kind_id,
     cat.created_at AS category_created_at,
     g.name AS goal_name,
@@ -170,7 +171,8 @@ type GetTransactionRow struct {
 	ToAccountCurrencySymbol     sql.NullString
 	CategoryID                  sql.NullString
 	CategoryName                sql.NullString
-	CategoryBudgetInEgp         sql.NullFloat64
+	CategoryBudgetAmount        sql.NullFloat64
+	CategoryBudgetCurrencyID    sql.NullString
 	CategoryKindID              sql.NullString
 	CategoryCreatedAt           sql.NullTime
 	GoalName                    sql.NullString
@@ -241,7 +243,8 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 		&i.ToAccountCurrencySymbol,
 		&i.CategoryID,
 		&i.CategoryName,
-		&i.CategoryBudgetInEgp,
+		&i.CategoryBudgetAmount,
+		&i.CategoryBudgetCurrencyID,
 		&i.CategoryKindID,
 		&i.CategoryCreatedAt,
 		&i.GoalName,
@@ -280,7 +283,8 @@ SELECT
     tc.symbol AS to_account_currency_symbol,
     cat.id AS category_id,
     cat.name AS category_name,
-    cat.budget_in_egp AS category_budget_in_egp,
+    cat.budget_amount AS category_budget_amount,
+    cat.budget_currency_id AS category_budget_currency_id,
     cat.kind_id AS category_kind_id,
     cat.created_at AS category_created_at,
     g.name AS goal_name,
@@ -327,7 +331,8 @@ type GetTransactionsRow struct {
 	ToAccountCurrencySymbol     sql.NullString
 	CategoryID                  sql.NullString
 	CategoryName                sql.NullString
-	CategoryBudgetInEgp         sql.NullFloat64
+	CategoryBudgetAmount        sql.NullFloat64
+	CategoryBudgetCurrencyID    sql.NullString
 	CategoryKindID              sql.NullString
 	CategoryCreatedAt           sql.NullTime
 	GoalName                    sql.NullString
@@ -404,7 +409,8 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.ToAccountCurrencySymbol,
 			&i.CategoryID,
 			&i.CategoryName,
-			&i.CategoryBudgetInEgp,
+			&i.CategoryBudgetAmount,
+			&i.CategoryBudgetCurrencyID,
 			&i.CategoryKindID,
 			&i.CategoryCreatedAt,
 			&i.GoalName,

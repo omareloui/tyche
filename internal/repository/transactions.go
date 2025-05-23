@@ -259,7 +259,7 @@ func dbTransactionToTransaction(
 	}
 
 	if cat != nil {
-		tx.Category = dbCategoryToCategory(cat, knd)
+		tx.Category = dbCategoryToCategory(cat, knd, nil)
 	} else if dbTx.CategoryID.Valid {
 		tx.Category = &models.Category{ID: dbTx.CategoryID.String}
 	}
@@ -340,11 +340,12 @@ func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTran
 	var cat *queries.Category
 	if _dbTx.CategoryID.Valid {
 		cat = &queries.Category{
-			ID:          _dbTx.CategoryID.String,
-			Name:        _dbTx.CategoryName.String,
-			BudgetInEgp: _dbTx.CategoryBudgetInEgp.Float64,
-			KindID:      _dbTx.CategoryKindID.String,
-			CreatedAt:   _dbTx.CategoryCreatedAt.Time,
+			ID:               _dbTx.CategoryID.String,
+			Name:             _dbTx.CategoryName.String,
+			BudgetAmount:     _dbTx.CategoryBudgetAmount,
+			BudgetCurrencyID: _dbTx.CategoryBudgetCurrencyID,
+			KindID:           _dbTx.CategoryKindID.String,
+			CreatedAt:        _dbTx.CategoryCreatedAt.Time,
 		}
 	}
 

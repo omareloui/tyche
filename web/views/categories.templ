@@ -8,9 +8,9 @@ import (
 )
 
 type CategoryFD struct {
-	Name        FDInput
-	KindID      FDInput
-	BudgetInEgp FDInput
+	Name           FDInput
+	KindID         FDInput
+	BudgetAmountFD *AmountFD
 }
 
 templ Categories(
@@ -18,34 +18,35 @@ templ Categories(
 	balances []models.Balance,
 	fd *CategoryFD,
 	knds []models.TransactionKind,
-	categories []models.Category) {
+	categories []models.Category,
+	curs []models.Currency) {
 	@baseLayout(claims, "Categories", balances, &layoutOpts{includeAlpine: true, includeAlpineCollapse: true}) {
 		@container() {
 			@mainHeader("Categories")
-			@CreateCategoryForm(fd, knds)
+			@CreateCategoryForm(fd, knds, curs)
 			@categoriesList(categories)
 		}
 	}
 }
 
-templ CreateCategoryForm(fd *CategoryFD, knds []models.TransactionKind) {
+templ CreateCategoryForm(fd *CategoryFD, knds []models.TransactionKind, curs []models.Currency) {
 	@creationForm("Create Category", "/categories", "Create Category") {
-		@categoryFormBody(fd, "", knds)
+		@categoryFormBody(fd, "", knds, curs)
 	}
 }
 
-templ EditCategory(fd *CategoryFD, id string, knds []models.TransactionKind) {
+templ EditCategory(fd *CategoryFD, id string, knds []models.TransactionKind, curs []models.Currency) {
 	@form("put", fmt.Sprintf("/categories/%s", id), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { id }</p>
-		@categoryFormBody(fd, id, knds)
+		@categoryFormBody(fd, id, knds, curs)
 		@editFormButtons(fmt.Sprintf("/categories/%s", id))
 	}
 }
 
-templ categoryFormBody(fd *CategoryFD, id string, knds []models.TransactionKind) {
+templ categoryFormBody(fd *CategoryFD, id string, knds []models.TransactionKind, curs []models.Currency) {
 	@input("Name", "text", "name", "Enter category name", id, fd.Name)
 	@selectTxKind("kind_id", id, knds, fd.KindID)
-	@numberInput("Budget in EGP", "budget_in_egp", "Enter budget amount in EGP", id, fd.BudgetInEgp)
+	@AmountInputsWithCurrency(fd.BudgetAmountFD, id, curs)
 }
 
 templ categoriesList(categories []models.Category) {
@@ -64,9 +65,11 @@ templ Category(cat *models.Category) {
 		if cat.Kind.Enum != models.NilTxKind {
 			<p>Kind: { cat.Kind.Enum.String() }</p>
 		}
-		<p>
-			Budget: { cat.ViewBudgetInEgp() }
-		</p>
+		if cat.BudgetCurrency != nil && cat.BudgetAmount > 0 {
+			<p>
+				Budget: { cat.ViewBudgetAmount() }
+			</p>
+		}
 		<div class="flex gap-4">
 			@editButton(fmt.Sprintf("/categories/%s/edit", cat.ID))
 			@deleteButton(fmt.Sprintf("/categories/%s", cat.ID))

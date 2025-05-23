@@ -257,11 +257,12 @@ func dbFrequentTxRowFrequentTx(dbFtx queries.GetFrequentTxRow) *models.FrequentT
 	var cat *queries.Category
 	if dbFtx.CategoryID.Valid {
 		cat = &queries.Category{
-			ID:          dbFtx.CategoryID.String,
-			Name:        dbFtx.CategoryName.String,
-			BudgetInEgp: dbFtx.CategoryBudgetInEgp.Float64,
-			KindID:      dbFtx.CategoryKindID.String,
-			CreatedAt:   dbFtx.CategoryCreatedAt.Time,
+			ID:               dbFtx.CategoryID.String,
+			Name:             dbFtx.CategoryName.String,
+			BudgetAmount:     dbFtx.CategoryBudgetAmount,
+			BudgetCurrencyID: dbFtx.CategoryBudgetCurrencyID,
+			KindID:           dbFtx.CategoryKindID.String,
+			CreatedAt:        dbFtx.CategoryCreatedAt.Time,
 		}
 	}
 
@@ -334,11 +335,12 @@ func dbFrequentTxsWTxsRowToFrequentTxs[T queries.GetFrequentTxWTxsRow | queries.
 			var cat *queries.Category
 			if dbFt.CategoryID.Valid {
 				cat = &queries.Category{
-					ID:          dbFt.CategoryID.String,
-					Name:        dbFt.CategoryName.String,
-					BudgetInEgp: dbFt.CategoryBudgetInEgp.Float64,
-					KindID:      dbFt.CategoryKindID.String,
-					CreatedAt:   dbFt.CategoryCreatedAt.Time,
+					ID:               dbFt.CategoryID.String,
+					Name:             dbFt.CategoryName.String,
+					BudgetAmount:     dbFt.CategoryBudgetAmount,
+					BudgetCurrencyID: dbFt.CategoryBudgetCurrencyID,
+					KindID:           dbFt.CategoryKindID.String,
+					CreatedAt:        dbFt.CategoryCreatedAt.Time,
 				}
 			}
 
@@ -469,11 +471,12 @@ func dbFrequentTxsWTxsRowToFrequentTxs[T queries.GetFrequentTxWTxsRow | queries.
 		var cat *queries.Category
 		if dbFt.TransactionCategoryID.Valid {
 			cat = &queries.Category{
-				ID:          dbFt.TransactionCategoryID.String,
-				Name:        dbFt.TransactionCategoryName.String,
-				BudgetInEgp: dbFt.TransactionCategoryBudgetInEgp.Float64,
-				KindID:      dbFt.TransactionCategoryKindID.String,
-				CreatedAt:   dbFt.TransactionCategoryCreatedAt.Time,
+				ID:               dbFt.TransactionCategoryID.String,
+				Name:             dbFt.TransactionCategoryName.String,
+				BudgetAmount:     dbFt.TransactionCategoryBudgetAmount,
+				BudgetCurrencyID: dbFt.TransactionCategoryBudgetCurrencyID,
+				KindID:           dbFt.TransactionCategoryKindID.String,
+				CreatedAt:        dbFt.TransactionCategoryCreatedAt.Time,
 			}
 		}
 
@@ -524,7 +527,7 @@ func dbFrequentTxToFrequentTx(
 	}
 
 	if cat != nil {
-		ft.Category = dbCategoryToCategory(cat, knd)
+		ft.Category = dbCategoryToCategory(cat, knd, nil)
 	} else if dbFtx.CategoryID.Valid {
 		ft.Category = &models.Category{ID: dbFtx.CategoryID.String}
 	}
