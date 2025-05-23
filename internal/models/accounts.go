@@ -44,15 +44,15 @@ type createAccount struct {
 }
 
 func (a *Account) ViewAmount() string {
-	return formatAmount(a.Amount, a.Currency.Enum)
+	return formatAmount(a.Amount, a.Currency.Symbol)
 }
 
 func (a *Account) ViewActualAmount() string {
-	return formatAmount(a.ActualAmount, a.Currency.Enum)
+	return formatAmount(a.ActualAmount, a.Currency.Symbol)
 }
 
 func (a *Account) ViewCardLimit() string {
-	return formatAmount(a.CardLimit, a.Currency.Enum)
+	return formatAmount(a.CardLimit, a.Currency.Symbol)
 }
 
 func (a *Account) MaskIban() string {
@@ -106,13 +106,16 @@ type Balance struct {
 }
 
 func (b *Balance) ViewAmount() string {
-	return formatAmount(b.Amount, b.Currency.Enum)
+	return formatAmount(b.Amount, b.Currency.Symbol)
 }
 
-func (b *Balance) ViewEgpAmount() string {
-	return formatAmount(b.Currency.FxRate(CurrencyEgp)*b.Amount, CurrencyEgp)
+func (b *Balance) ViewAmountInDefaultCurrency() string {
+	cur := GetDefaultCurrency()
+	return formatAmount(b.Currency.FxRate(cur.String)*b.Amount,
+		cur.Symbol)
 }
 
-func (b *Balance) EgpAmount() float64 {
-	return b.Currency.FxRate(CurrencyEgp) * b.Amount
+func (b *Balance) AmountInDefaultCurrency() float64 {
+	cur := GetDefaultCurrency()
+	return b.Currency.FxRate(cur.String) * b.Amount
 }

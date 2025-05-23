@@ -22,9 +22,10 @@ templ balance(balances []models.Balance) {
 			}
 		>
 			{ b.ViewAmount() }
-			if b.Currency.Enum != models.CurrencyEgp {
-				<i class="text-gray-400">[{ b.ViewEgpAmount() }]</i>
-			}
+			// TODO: get the default currency here
+			// if b.Currency.Enum != models.CurrencyEgp {
+			// 	<i class="text-gray-400">[{ b.ViewEgpAmount() }]</i>
+			// }
 		</div>
 	}
 }

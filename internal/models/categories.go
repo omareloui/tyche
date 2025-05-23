@@ -13,5 +13,5 @@ type Category struct {
 }
 
 func (it *Category) ViewBudgetInEgp() string {
-	return formatAmount(it.BudgetInEgp, CurrencyEgp)
+	return formatAmount(it.BudgetInEgp, "EGP")
 }

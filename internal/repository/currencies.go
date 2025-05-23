@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
@@ -35,13 +36,13 @@ func (r *Repository) GetCurrency(ctx context.Context, id string) (*models.Curren
 	return dbCurrencyToCurrency(&dbCurrency.Currency), nil
 }
 
-func (r *Repository) GetCurrencyByEnum(ctx context.Context, enum models.CurrencyEnum) (*models.Currency, error) {
+func (r *Repository) GetCurrencyByString(ctx context.Context, cur string) (*models.Currency, error) {
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	dbCurrency, err := q.GetCurrencyByEnum(ctx, int64(enum))
+	dbCurrency, err := q.GetCurrencyByString(ctx, cur)
 	if err != nil {
 		return nil, err
 	}
@@ -57,8 +58,11 @@ func (r *Repository) createCurrency(ctx context.Context, curr models.Currency) e
 	l := logger.FromCtx(ctx)
 
 	if err := q.CreateCurrency(ctx, queries.CreateCurrencyParams{
-		ID:   curr.ID,
-		Enum: int64(curr.Enum),
+		ID:         curr.ID,
+		String:     curr.String,
+		Symbol:     curr.Symbol,
+		Kind:       string(curr.Kind),
+		IbanPrefix: sql.NullString{String: curr.IbanPrefix, Valid: curr.IbanPrefix != ""},
 	}); err != nil {
 		l.Error("error creating currency", zap.Any("curr", curr), zap.Error(err))
 		return err
@@ -70,8 +74,11 @@ func (r *Repository) createCurrency(ctx context.Context, curr models.Currency) e
 
 func dbCurrencyToCurrency(dbCurr *queries.Currency) *models.Currency {
 	return &models.Currency{
-		ID:   dbCurr.ID,
-		Enum: models.CurrencyEnum(dbCurr.Enum),
+		ID:         dbCurr.ID,
+		String:     dbCurr.String,
+		Symbol:     dbCurr.Symbol,
+		Kind:       models.CurrencyKind(dbCurr.Kind),
+		IbanPrefix: dbCurr.IbanPrefix.String,
 	}
 }
 

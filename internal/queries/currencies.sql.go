@@ -7,28 +7,49 @@ package queries
 
 import (
 	"context"
+	"database/sql"
 )
 
 const createCurrency = `-- name: CreateCurrency :exec
-INSERT INTO currencies (id, enum)
-VALUES (?1, ?2)
+INSERT INTO currencies (
+    id,
+    string,
+    symbol,
+    kind,
+    iban_prefix
+)
+VALUES (
+    ?1,
+    ?2,
+    ?3,
+    ?4,
+    ?5
+)
 `
 
 type CreateCurrencyParams struct {
-	ID   string
-	Enum int64
+	ID         string
+	String     string
+	Symbol     string
+	Kind       string
+	IbanPrefix sql.NullString
 }
 
 func (q *Queries) CreateCurrency(ctx context.Context, arg CreateCurrencyParams) error {
-	_, err := q.db.ExecContext(ctx, createCurrency, arg.ID, arg.Enum)
+	_, err := q.db.ExecContext(ctx, createCurrency,
+		arg.ID,
+		arg.String,
+		arg.Symbol,
+		arg.Kind,
+		arg.IbanPrefix,
+	)
 	return err
 }
 
 const getCurrencies = `-- name: GetCurrencies :many
 SELECT
-    currencies.id, currencies.enum
+    currencies.id, currencies.string, currencies.symbol, currencies.kind, currencies.iban_prefix
 FROM currencies
-ORDER BY enum
 `
 
 type GetCurrenciesRow struct {
@@ -44,7 +65,13 @@ func (q *Queries) GetCurrencies(ctx context.Context) ([]GetCurrenciesRow, error)
 	var items []GetCurrenciesRow
 	for rows.Next() {
 		var i GetCurrenciesRow
-		if err := rows.Scan(&i.Currency.ID, &i.Currency.Enum); err != nil {
+		if err := rows.Scan(
+			&i.Currency.ID,
+			&i.Currency.String,
+			&i.Currency.Symbol,
+			&i.Currency.Kind,
+			&i.Currency.IbanPrefix,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -60,7 +87,7 @@ func (q *Queries) GetCurrencies(ctx context.Context) ([]GetCurrenciesRow, error)
 
 const getCurrency = `-- name: GetCurrency :one
 SELECT
-    currencies.id, currencies.enum
+    currencies.id, currencies.string, currencies.symbol, currencies.kind, currencies.iban_prefix
 FROM currencies
 WHERE id = ?1 LIMIT 1
 `
@@ -72,24 +99,36 @@ type GetCurrencyRow struct {
 func (q *Queries) GetCurrency(ctx context.Context, id string) (GetCurrencyRow, error) {
 	row := q.db.QueryRowContext(ctx, getCurrency, id)
 	var i GetCurrencyRow
-	err := row.Scan(&i.Currency.ID, &i.Currency.Enum)
+	err := row.Scan(
+		&i.Currency.ID,
+		&i.Currency.String,
+		&i.Currency.Symbol,
+		&i.Currency.Kind,
+		&i.Currency.IbanPrefix,
+	)
 	return i, err
 }
 
-const getCurrencyByEnum = `-- name: GetCurrencyByEnum :one
+const getCurrencyByString = `-- name: GetCurrencyByString :one
 SELECT
-    currencies.id, currencies.enum
+    currencies.id, currencies.string, currencies.symbol, currencies.kind, currencies.iban_prefix
 FROM currencies
-WHERE enum = ?1 LIMIT 1
+WHERE string = ?1 LIMIT 1
 `
 
-type GetCurrencyByEnumRow struct {
+type GetCurrencyByStringRow struct {
 	Currency Currency
 }
 
-func (q *Queries) GetCurrencyByEnum(ctx context.Context, enum int64) (GetCurrencyByEnumRow, error) {
-	row := q.db.QueryRowContext(ctx, getCurrencyByEnum, enum)
-	var i GetCurrencyByEnumRow
-	err := row.Scan(&i.Currency.ID, &i.Currency.Enum)
+func (q *Queries) GetCurrencyByString(ctx context.Context, string string) (GetCurrencyByStringRow, error) {
+	row := q.db.QueryRowContext(ctx, getCurrencyByString, string)
+	var i GetCurrencyByStringRow
+	err := row.Scan(
+		&i.Currency.ID,
+		&i.Currency.String,
+		&i.Currency.Symbol,
+		&i.Currency.Kind,
+		&i.Currency.IbanPrefix,
+	)
 	return i, err
 }

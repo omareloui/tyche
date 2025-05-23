@@ -52,7 +52,7 @@ func (s *Seeder) Seed(ctx context.Context, q *queries.Queries, oauthID string) {
 	}
 
 	go s.categories(ctx, wg, q)
-	go s.accounts(ctx, wg, q, models.GetDefaultCurrency())
+	go s.accounts(ctx, wg, q)
 	wg.Add(2)
 
 	l.Debug("seeded categories, and accounts", zap.String("oauthID", oauthID))
@@ -71,7 +71,7 @@ func (s *Seeder) updateSeededAt(ctx context.Context, q *queries.Queries, oauthID
 	}
 }
 
-func (s *Seeder) accounts(ctx context.Context, wg *sync.WaitGroup, q *queries.Queries, defaultCurr models.CurrencyEnum) {
+func (s *Seeder) accounts(ctx context.Context, wg *sync.WaitGroup, q *queries.Queries) {
 	defer wg.Done()
 
 	l := logger.FromCtx(ctx)
@@ -91,12 +91,16 @@ func (s *Seeder) accounts(ctx context.Context, wg *sync.WaitGroup, q *queries.Qu
 		return
 	}
 
+	// TODO: only get it if `GetDefaultCurrency` returns entry without an id?
 	currencies, err := q.GetCurrencies(ctx)
 	if err != nil {
 		l.Error("error seeding accounts, could't get currencies", zap.Error(err))
 		return
 	}
-	curr := slicesutils.Find(currencies, func(c queries.GetCurrenciesRow) bool { return c.Currency.Enum == int64(defaultCurr) })
+	curr := slicesutils.Find(currencies,
+		func(c queries.GetCurrenciesRow) bool {
+			return c.Currency.String == models.GetDefaultCurrency().String
+		})
 
 	seed := []queries.CreateAccountParams{
 		{ID: idgen.New(), Name: "Cash", KindID: cashKnd.AccountKind.ID, CurrencyID: curr.Currency.ID},
@@ -152,15 +156,9 @@ func (s *Seeder) categories(ctx context.Context, wg *sync.WaitGroup, q *queries.
 func (s *Seeder) currencies(ctx context.Context, wg *sync.WaitGroup, q *queries.Queries) {
 	defer wg.Done()
 
-	seed := []queries.CreateCurrencyParams{
-		{ID: idgen.New(), Enum: int64(models.CurrencyEgp)},
-		{ID: idgen.New(), Enum: int64(models.CurrencyUsd)},
-		{ID: idgen.New(), Enum: int64(models.CurrencyAed)},
-	}
-
-	seedFn(ctx, q.GetCurrencies, seed, q.CreateCurrency,
-		func(s queries.CreateCurrencyParams) int64 { return s.Enum },
-		func(e queries.GetCurrenciesRow) int64 { return e.Currency.Enum })
+	seedFn(ctx, q.GetCurrencies, currSeed, q.CreateCurrency,
+		func(s queries.CreateCurrencyParams) string { return s.String },
+		func(e queries.GetCurrenciesRow) string { return e.Currency.String })
 }
 
 func (s *Seeder) txKinds(ctx context.Context, wg *sync.WaitGroup, q *queries.Queries) {

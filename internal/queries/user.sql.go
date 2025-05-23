@@ -69,7 +69,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 const getUserByOAuthID = `-- name: GetUserByOAuthID :one
 SELECT
     user.id, user.oauth_id, user.oauth_provider, user.email, user.verified_email, user.first_name, user.last_name, user.picture, user.default_currency_id, user.default_account_id, user.start_of_period, user.seeded_at, user.created_at,
-    currencies.id, currencies.enum
+    currencies.id, currencies.string, currencies.symbol, currencies.kind, currencies.iban_prefix
 FROM user
 LEFT JOIN currencies ON user.default_currency_id = currencies.id
 WHERE oauth_id = ?1 LIMIT 1
@@ -98,19 +98,31 @@ func (q *Queries) GetUserByOAuthID(ctx context.Context, oauthID string) (GetUser
 		&i.User.SeededAt,
 		&i.User.CreatedAt,
 		&i.Currency.ID,
-		&i.Currency.Enum,
+		&i.Currency.String,
+		&i.Currency.Symbol,
+		&i.Currency.Kind,
+		&i.Currency.IbanPrefix,
 	)
 	return i, err
 }
 
 const setDefaultAccount = `-- name: SetDefaultAccount :exec
 UPDATE user
-SET
-    default_account_id = ?1
+SET default_account_id = ?1
 `
 
 func (q *Queries) SetDefaultAccount(ctx context.Context, accountID sql.NullString) error {
 	_, err := q.db.ExecContext(ctx, setDefaultAccount, accountID)
+	return err
+}
+
+const setDefaultCurrency = `-- name: SetDefaultCurrency :exec
+UPDATE user
+SET default_currency_id = ?1
+`
+
+func (q *Queries) SetDefaultCurrency(ctx context.Context, currencyID string) error {
+	_, err := q.db.ExecContext(ctx, setDefaultCurrency, currencyID)
 	return err
 }
 

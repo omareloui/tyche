@@ -68,14 +68,14 @@ func (ft *FrequentTx) ViewFrequency() string {
 }
 
 func (ft *FrequentTx) ViewAmount() string {
-	return formatAmount(ft.Amount, ft.Account.Currency.Enum)
+	return formatAmount(ft.Amount, ft.Account.Currency.Symbol)
 }
 
 func (ft *FrequentTx) ViewToAmount() string {
 	if ft.ToAccount == nil {
 		return ""
 	}
-	return formatAmount(ft.ToAmount, ft.ToAccount.Currency.Enum)
+	return formatAmount(ft.ToAmount, ft.ToAccount.Currency.Symbol)
 }
 
 func (ft *FrequentTx) toValidate() *createFrequentTx {

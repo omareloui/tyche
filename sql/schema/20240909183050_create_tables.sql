@@ -19,7 +19,10 @@ CREATE TABLE user (
 );
 CREATE TABLE currencies (
     id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
-    enum INT UNIQUE NOT NULL
+    string VARCHAR UNIQUE NOT NULL,
+    symbol VARCHAR UNIQUE NOT NULL,
+    kind VARCHAR NOT NULL,
+    iban_prefix VARCHAR
 );
 CREATE TABLE transaction_kinds (
     id VARCHAR UNIQUE NOT NULL PRIMARY KEY,

@@ -123,7 +123,7 @@ SELECT
     a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
     k.id, k.enum,
     cp.name AS counterparty_name,
-    c.id, c.enum,
+    c.id, c.string, c.symbol, c.kind, c.iban_prefix,
     (u.id IS NOT NULL) AS is_default,
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
@@ -167,7 +167,10 @@ func (q *Queries) GetAccount(ctx context.Context, id string) (GetAccountRow, err
 		&i.AccountKind.Enum,
 		&i.CounterpartyName,
 		&i.Currency.ID,
-		&i.Currency.Enum,
+		&i.Currency.String,
+		&i.Currency.Symbol,
+		&i.Currency.Kind,
+		&i.Currency.IbanPrefix,
 		&i.IsDefault,
 		&i.ActualAmount,
 	)
@@ -188,7 +191,7 @@ SELECT
     a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
     k.id, k.enum,
     cp.name AS counterparty_name,
-    c.id, c.enum,
+    c.id, c.string, c.symbol, c.kind, c.iban_prefix,
     (u.id IS NOT NULL) AS is_default,
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
@@ -238,7 +241,10 @@ func (q *Queries) GetAccounts(ctx context.Context) ([]GetAccountsRow, error) {
 			&i.AccountKind.Enum,
 			&i.CounterpartyName,
 			&i.Currency.ID,
-			&i.Currency.Enum,
+			&i.Currency.String,
+			&i.Currency.Symbol,
+			&i.Currency.Kind,
+			&i.Currency.IbanPrefix,
 			&i.IsDefault,
 			&i.ActualAmount,
 		); err != nil {
@@ -269,7 +275,7 @@ SELECT
     a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
     k.id, k.enum,
     cp.name AS counterparty_name,
-    c.id, c.enum,
+    c.id, c.string, c.symbol, c.kind, c.iban_prefix,
     (u.id IS NOT NULL) AS is_default,
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
 FROM accounts AS a
@@ -320,7 +326,10 @@ func (q *Queries) GetActiveAccounts(ctx context.Context) ([]GetActiveAccountsRow
 			&i.AccountKind.Enum,
 			&i.CounterpartyName,
 			&i.Currency.ID,
-			&i.Currency.Enum,
+			&i.Currency.String,
+			&i.Currency.Symbol,
+			&i.Currency.Kind,
+			&i.Currency.IbanPrefix,
 			&i.IsDefault,
 			&i.ActualAmount,
 		); err != nil {
@@ -340,21 +349,20 @@ func (q *Queries) GetActiveAccounts(ctx context.Context) ([]GetActiveAccountsRow
 const getBalances = `-- name: GetBalances :many
 SELECT
     a.currency_id,
-    c.enum AS currency_enum,
+    c.id, c.string, c.symbol, c.kind, c.iban_prefix,
     TOTAL(a.amount) AS balance
 FROM accounts AS a
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 WHERE
     a.is_archived IS FALSE
     AND a.exclude_from_balance IS FALSE
-GROUP BY a.currency_id
-ORDER BY c.enum
+GROUP BY a.currency_id ORDER BY c.string
 `
 
 type GetBalancesRow struct {
-	CurrencyID   string
-	CurrencyEnum sql.NullInt64
-	Balance      float64
+	CurrencyID string
+	Currency   Currency
+	Balance    float64
 }
 
 func (q *Queries) GetBalances(ctx context.Context) ([]GetBalancesRow, error) {
@@ -366,7 +374,15 @@ func (q *Queries) GetBalances(ctx context.Context) ([]GetBalancesRow, error) {
 	var items []GetBalancesRow
 	for rows.Next() {
 		var i GetBalancesRow
-		if err := rows.Scan(&i.CurrencyID, &i.CurrencyEnum, &i.Balance); err != nil {
+		if err := rows.Scan(
+			&i.CurrencyID,
+			&i.Currency.ID,
+			&i.Currency.String,
+			&i.Currency.Symbol,
+			&i.Currency.Kind,
+			&i.Currency.IbanPrefix,
+			&i.Balance,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

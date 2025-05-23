@@ -15,9 +15,11 @@ WHERE oauth_id = sqlc.arg(oauth_id);
 
 -- name: SetDefaultAccount :exec
 UPDATE user
-SET
-    default_account_id = sqlc.arg(account_id);
+SET default_account_id = sqlc.arg(account_id);
 
+-- name: SetDefaultCurrency :exec
+UPDATE user
+SET default_currency_id = sqlc.arg(currency_id);
 
 -- name: CreateUser :exec
 INSERT INTO user (

@@ -101,7 +101,7 @@ const getTransaction = `-- name: GetTransaction :one
 SELECT
     t.id, t.account_id, t.amount, t.kind_id, t.category_id, t.counterparty_id, t.description, t.to_account_id, t.to_amount, t.goal_id, t.fulfilled_at, t.scheduled_to, t.created_at,
     a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
-    c.id, c.enum,
+    c.id, c.string, c.symbol, c.kind, c.iban_prefix,
     k.id, k.enum, k.increase_balance,
     cp.name AS counterparty_name,
     ta.id AS to_account_id,
@@ -119,8 +119,8 @@ SELECT
     ta.exclude_from_balance AS to_account_exclude_from_balance,
     ta.expiration_date AS to_account_expiration_date,
     ta.created_at AS to_account_created_at,
-    tc.id AS to_account_currency_id,
-    tc.enum AS to_account_currency_enum,
+    tc.string AS to_account_currency_string,
+    tc.symbol AS to_account_currency_symbol,
     cat.id AS category_id,
     cat.name AS category_name,
     cat.budget_in_egp AS category_budget_in_egp,
@@ -130,7 +130,8 @@ SELECT
     g.price AS goal_price,
     g.currency_id AS goal_currency_id,
     g.fulfilled_at AS goal_fulfilled_at,
-    gc.enum AS goal_currency_enum
+    gc.string AS goal_currency_string,
+    gc.symbol AS goal_currency_symbol
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
@@ -165,8 +166,8 @@ type GetTransactionRow struct {
 	ToAccountExcludeFromBalance sql.NullBool
 	ToAccountExpirationDate     sql.NullTime
 	ToAccountCreatedAt          sql.NullTime
-	ToAccountCurrencyID_2       sql.NullString
-	ToAccountCurrencyEnum       sql.NullInt64
+	ToAccountCurrencyString     sql.NullString
+	ToAccountCurrencySymbol     sql.NullString
 	CategoryID                  sql.NullString
 	CategoryName                sql.NullString
 	CategoryBudgetInEgp         sql.NullFloat64
@@ -176,7 +177,8 @@ type GetTransactionRow struct {
 	GoalPrice                   sql.NullFloat64
 	GoalCurrencyID              sql.NullString
 	GoalFulfilledAt             sql.NullTime
-	GoalCurrencyEnum            sql.NullInt64
+	GoalCurrencyString          sql.NullString
+	GoalCurrencySymbol          sql.NullString
 }
 
 func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransactionRow, error) {
@@ -212,7 +214,10 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 		&i.Account.ExpirationDate,
 		&i.Account.CreatedAt,
 		&i.Currency.ID,
-		&i.Currency.Enum,
+		&i.Currency.String,
+		&i.Currency.Symbol,
+		&i.Currency.Kind,
+		&i.Currency.IbanPrefix,
 		&i.TransactionKind.ID,
 		&i.TransactionKind.Enum,
 		&i.TransactionKind.IncreaseBalance,
@@ -232,8 +237,8 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 		&i.ToAccountExcludeFromBalance,
 		&i.ToAccountExpirationDate,
 		&i.ToAccountCreatedAt,
-		&i.ToAccountCurrencyID_2,
-		&i.ToAccountCurrencyEnum,
+		&i.ToAccountCurrencyString,
+		&i.ToAccountCurrencySymbol,
 		&i.CategoryID,
 		&i.CategoryName,
 		&i.CategoryBudgetInEgp,
@@ -243,7 +248,8 @@ func (q *Queries) GetTransaction(ctx context.Context, id string) (GetTransaction
 		&i.GoalPrice,
 		&i.GoalCurrencyID,
 		&i.GoalFulfilledAt,
-		&i.GoalCurrencyEnum,
+		&i.GoalCurrencyString,
+		&i.GoalCurrencySymbol,
 	)
 	return i, err
 }
@@ -252,7 +258,7 @@ const getTransactions = `-- name: GetTransactions :many
 SELECT
     t.id, t.account_id, t.amount, t.kind_id, t.category_id, t.counterparty_id, t.description, t.to_account_id, t.to_amount, t.goal_id, t.fulfilled_at, t.scheduled_to, t.created_at,
     a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
-    c.id, c.enum,
+    c.id, c.string, c.symbol, c.kind, c.iban_prefix,
     k.id, k.enum, k.increase_balance,
     cp.name AS counterparty_name,
     ta.id AS to_account_id,
@@ -270,8 +276,8 @@ SELECT
     ta.exclude_from_balance AS to_account_exclude_from_balance,
     ta.expiration_date AS to_account_expiration_date,
     ta.created_at AS to_account_created_at,
-    tc.id AS to_account_currency_id,
-    tc.enum AS to_account_currency_enum,
+    tc.string AS to_account_currency_string,
+    tc.symbol AS to_account_currency_symbol,
     cat.id AS category_id,
     cat.name AS category_name,
     cat.budget_in_egp AS category_budget_in_egp,
@@ -281,7 +287,8 @@ SELECT
     g.price AS goal_price,
     g.currency_id AS goal_currency_id,
     g.fulfilled_at AS goal_fulfilled_at,
-    gc.enum AS goal_currency_enum
+    gc.string AS goal_currency_string,
+    gc.symbol AS goal_currency_symbol
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
@@ -316,8 +323,8 @@ type GetTransactionsRow struct {
 	ToAccountExcludeFromBalance sql.NullBool
 	ToAccountExpirationDate     sql.NullTime
 	ToAccountCreatedAt          sql.NullTime
-	ToAccountCurrencyID_2       sql.NullString
-	ToAccountCurrencyEnum       sql.NullInt64
+	ToAccountCurrencyString     sql.NullString
+	ToAccountCurrencySymbol     sql.NullString
 	CategoryID                  sql.NullString
 	CategoryName                sql.NullString
 	CategoryBudgetInEgp         sql.NullFloat64
@@ -327,7 +334,8 @@ type GetTransactionsRow struct {
 	GoalPrice                   sql.NullFloat64
 	GoalCurrencyID              sql.NullString
 	GoalFulfilledAt             sql.NullTime
-	GoalCurrencyEnum            sql.NullInt64
+	GoalCurrencyString          sql.NullString
+	GoalCurrencySymbol          sql.NullString
 }
 
 func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, error) {
@@ -369,7 +377,10 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.Account.ExpirationDate,
 			&i.Account.CreatedAt,
 			&i.Currency.ID,
-			&i.Currency.Enum,
+			&i.Currency.String,
+			&i.Currency.Symbol,
+			&i.Currency.Kind,
+			&i.Currency.IbanPrefix,
 			&i.TransactionKind.ID,
 			&i.TransactionKind.Enum,
 			&i.TransactionKind.IncreaseBalance,
@@ -389,8 +400,8 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.ToAccountExcludeFromBalance,
 			&i.ToAccountExpirationDate,
 			&i.ToAccountCreatedAt,
-			&i.ToAccountCurrencyID_2,
-			&i.ToAccountCurrencyEnum,
+			&i.ToAccountCurrencyString,
+			&i.ToAccountCurrencySymbol,
 			&i.CategoryID,
 			&i.CategoryName,
 			&i.CategoryBudgetInEgp,
@@ -400,7 +411,8 @@ func (q *Queries) GetTransactions(ctx context.Context) ([]GetTransactionsRow, er
 			&i.GoalPrice,
 			&i.GoalCurrencyID,
 			&i.GoalFulfilledAt,
-			&i.GoalCurrencyEnum,
+			&i.GoalCurrencyString,
+			&i.GoalCurrencySymbol,
 		); err != nil {
 			return nil, err
 		}

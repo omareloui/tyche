@@ -17,14 +17,14 @@ type Goal struct {
 }
 
 func (gl *Goal) ViewAmount() string {
-	return formatAmount(gl.Price, gl.Currency.Enum)
+	return formatAmount(gl.Price, gl.Currency.Symbol)
 }
 
 func (gl *Goal) Remaining() float64 {
 	sum := float64(0)
 	for _, tx := range gl.Transactions {
 		if !tx.FulfilledAt.IsZero() {
-			sum += tx.Amount * tx.Account.Currency.FxRate(gl.Currency.Enum)
+			sum += tx.Amount * tx.Account.Currency.FxRate(gl.Currency.Symbol)
 		}
 	}
 	rem := gl.Price - sum
@@ -35,7 +35,7 @@ func (gl *Goal) Remaining() float64 {
 }
 
 func (gl *Goal) ViewRemaining() string {
-	return formatAmount(gl.Remaining(), gl.Currency.Enum)
+	return formatAmount(gl.Remaining(), gl.Currency.Symbol)
 }
 
 func (gl *Goal) Plan(numberOfMonths int) float64 {

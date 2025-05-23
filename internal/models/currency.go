@@ -4,47 +4,34 @@ import (
 	"github.com/omareloui/tyche/internal/fxrate"
 )
 
-type CurrencyEnum uint8
+type CurrencyKind string
 
 const (
-	CurrencyNil CurrencyEnum = iota
-	CurrencyUsd
-	CurrencyEgp
-	CurrencyAed
+	CurrencyKindNil           CurrencyKind = "???"
+	CurrencyKindFiat          CurrencyKind = "Fiat"
+	CurrencyKindCrypto        CurrencyKind = "Crypto"
+	CurrencyKindPreciousMetal CurrencyKind = "PreciousMetal"
 )
 
-func GetDefaultCurrency() CurrencyEnum {
-	// TODO: get the currency according to the ip addr of the user
-	return CurrencyUsd
-}
-
-func (cs CurrencyEnum) String() string {
-	return [...]string{
-		"???", "USD",
-		"EGP", "AED",
-	}[cs]
-}
-
-func (cs CurrencyEnum) Symbol() string {
-	return [...]string{
-		"???", "US$",
-		"EG£", "AED",
-	}[cs]
-}
-
-func (cs CurrencyEnum) IbanPrefix() string {
-	return [...]string{
-		"??", "US",
-		"EG", "AE",
-	}[cs]
-}
-
 type Currency struct {
-	ID   string `validate:"required"`
-	Enum CurrencyEnum
+	ID         string       `validate:"required"`
+	String     string       `validate:"required,max=5"`
+	Symbol     string       `validate:"required,max=5,alphanum"`
+	IbanPrefix string       `validate:"len=2,alpha"`
+	Kind       CurrencyKind `validate:"required"`
 }
 
-func (c *Currency) FxRate(to CurrencyEnum) float64 {
-	v, _ := fxrate.GetFxRate(c.Enum.String(), to.String())
+func (c *Currency) FxRate(toCurrency string) float64 {
+	v, _ := fxrate.GetFxRate(c.String, toCurrency)
 	return v
+}
+
+func GetDefaultCurrency() *Currency {
+	// TODO: get the currency from the db first if it doesn't exist then
+	//       get the currency according to the ip addr of the user
+	return &Currency{
+		String:     "USD",
+		Symbol:     "US$",
+		IbanPrefix: "US",
+	}
 }

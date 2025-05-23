@@ -45,14 +45,14 @@ type createTransaction struct {
 }
 
 func (t *Transaction) ViewAmount() string {
-	return formatAmount(t.Amount, t.Account.Currency.Enum)
+	return formatAmount(t.Amount, t.Account.Currency.Symbol)
 }
 
 func (t *Transaction) ViewToAmount() string {
 	if t.ToAccount == nil {
 		return ""
 	}
-	return formatAmount(t.ToAmount, t.ToAccount.Currency.Enum)
+	return formatAmount(t.ToAmount, t.ToAccount.Currency.Symbol)
 }
 
 func (t *Transaction) toValidate() *createTransaction {
@@ -100,6 +100,6 @@ func (t *Transaction) SanitizeAndValidate(sani *sanitizer.Sanitizer, valid *vali
 	return nil
 }
 
-func (t *Transaction) Percentage(of float64, ofCur CurrencyEnum) float64 {
+func (t *Transaction) Percentage(of float64, ofCur string) float64 {
 	return t.Amount * t.Account.Currency.FxRate(ofCur) / of
 }

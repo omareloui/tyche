@@ -4,18 +4,29 @@ SELECT
 FROM currencies
 WHERE id = sqlc.arg(id) LIMIT 1;
 
--- name: GetCurrencyByEnum :one
+-- name: GetCurrencyByString :one
 SELECT
     sqlc.embed(currencies)
 FROM currencies
-WHERE enum = sqlc.arg(enum) LIMIT 1;
+WHERE string = sqlc.arg(string) LIMIT 1;
 
 -- name: GetCurrencies :many
 SELECT
     sqlc.embed(currencies)
-FROM currencies
-ORDER BY enum;
+FROM currencies;
 
 -- name: CreateCurrency :exec
-INSERT INTO currencies (id, enum)
-VALUES (sqlc.arg(id), sqlc.arg(enum));
+INSERT INTO currencies (
+    id,
+    string,
+    symbol,
+    kind,
+    iban_prefix
+)
+VALUES (
+    sqlc.arg(id),
+    sqlc.arg(string),
+    sqlc.arg(symbol),
+    sqlc.arg(kind),
+    sqlc.arg(iban_prefix)
+);

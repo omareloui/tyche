@@ -370,7 +370,9 @@ func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, kn
 
 func defaultAccount(curs []models.Currency, ak []models.AccountKind) *models.Account {
 	return &models.Account{
-		Currency:           *slicesutils.Find(curs, func(cur models.Currency) bool { return cur.Enum == models.GetDefaultCurrency() }),
+		Currency: *slicesutils.Find(curs, func(cur models.Currency) bool {
+			return cur.String == models.GetDefaultCurrency().String
+		}),
 		Kind:               *slicesutils.Find(ak, func(k models.AccountKind) bool { return k.Enum == models.DfltAccKind }),
 		IsArchive:          false,
 		ExcludeFromBalance: false,

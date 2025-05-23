@@ -138,7 +138,7 @@ const getFrequentTx = `-- name: GetFrequentTx :one
 SELECT
     ft.id, ft.frequency_by, ft.frequency, ft.account_id, ft.amount, ft.kind_id, ft.category_id, ft.counterparty_id, ft.description, ft.to_account_id, ft.to_amount, ft.goal_id, ft.starts_at, ft.stops_at, ft.last_transaction_scheduled_to, ft.created_at,
     a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
-    c.id, c.enum,
+    c.id, c.string, c.symbol, c.kind, c.iban_prefix,
     k.id, k.enum, k.increase_balance,
     cp.name AS counterparty_name,
     ftta.id AS frequent_to_account_id,
@@ -157,7 +157,8 @@ SELECT
     ftta.expiration_date AS frequent_to_account_expiration_date,
     ftta.created_at AS frequent_to_account_created_at,
     fttc.id AS frequent_to_account_currency_id,
-    fttc.enum AS frequent_to_account_currency_enum,
+    fttc.string AS frequent_to_account_currency_string,
+    fttc.symbol AS frequent_to_account_currency_symbol,
     cat.id AS category_id,
     cat.name AS category_name,
     cat.budget_in_egp AS category_budget_in_egp,
@@ -167,7 +168,8 @@ SELECT
     g.price AS goal_price,
     g.currency_id AS goal_currency_id,
     g.fulfilled_at AS goal_fulfilled_at,
-    gc.enum AS goal_currency_enum
+    gc.string AS goal_currency_string,
+    gc.symbol AS goal_currency_symbol
 FROM frequent_txs AS ft
 LEFT JOIN counterparties AS cp ON ft.counterparty_id = cp.id
 LEFT JOIN accounts AS a ON ft.account_id = a.id
@@ -203,7 +205,8 @@ type GetFrequentTxRow struct {
 	FrequentToAccountExpirationDate     sql.NullTime
 	FrequentToAccountCreatedAt          sql.NullTime
 	FrequentToAccountCurrencyID_2       sql.NullString
-	FrequentToAccountCurrencyEnum       sql.NullInt64
+	FrequentToAccountCurrencyString     sql.NullString
+	FrequentToAccountCurrencySymbol     sql.NullString
 	CategoryID                          sql.NullString
 	CategoryName                        sql.NullString
 	CategoryBudgetInEgp                 sql.NullFloat64
@@ -213,7 +216,8 @@ type GetFrequentTxRow struct {
 	GoalPrice                           sql.NullFloat64
 	GoalCurrencyID                      sql.NullString
 	GoalFulfilledAt                     sql.NullTime
-	GoalCurrencyEnum                    sql.NullInt64
+	GoalCurrencyString                  sql.NullString
+	GoalCurrencySymbol                  sql.NullString
 }
 
 func (q *Queries) GetFrequentTx(ctx context.Context, id string) (GetFrequentTxRow, error) {
@@ -252,7 +256,10 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) (GetFrequentTxRo
 		&i.Account.ExpirationDate,
 		&i.Account.CreatedAt,
 		&i.Currency.ID,
-		&i.Currency.Enum,
+		&i.Currency.String,
+		&i.Currency.Symbol,
+		&i.Currency.Kind,
+		&i.Currency.IbanPrefix,
 		&i.TransactionKind.ID,
 		&i.TransactionKind.Enum,
 		&i.TransactionKind.IncreaseBalance,
@@ -273,7 +280,8 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) (GetFrequentTxRo
 		&i.FrequentToAccountExpirationDate,
 		&i.FrequentToAccountCreatedAt,
 		&i.FrequentToAccountCurrencyID_2,
-		&i.FrequentToAccountCurrencyEnum,
+		&i.FrequentToAccountCurrencyString,
+		&i.FrequentToAccountCurrencySymbol,
 		&i.CategoryID,
 		&i.CategoryName,
 		&i.CategoryBudgetInEgp,
@@ -283,7 +291,8 @@ func (q *Queries) GetFrequentTx(ctx context.Context, id string) (GetFrequentTxRo
 		&i.GoalPrice,
 		&i.GoalCurrencyID,
 		&i.GoalFulfilledAt,
-		&i.GoalCurrencyEnum,
+		&i.GoalCurrencyString,
+		&i.GoalCurrencySymbol,
 	)
 	return i, err
 }
@@ -292,7 +301,7 @@ const getFrequentTxWTxs = `-- name: GetFrequentTxWTxs :many
 SELECT
     ft.id, ft.frequency_by, ft.frequency, ft.account_id, ft.amount, ft.kind_id, ft.category_id, ft.counterparty_id, ft.description, ft.to_account_id, ft.to_amount, ft.goal_id, ft.starts_at, ft.stops_at, ft.last_transaction_scheduled_to, ft.created_at,
     a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
-    c.id, c.enum,
+    c.id, c.string, c.symbol, c.kind, c.iban_prefix,
     k.id, k.enum, k.increase_balance,
     cp.name AS counterparty_name,
     ftta.id AS frequent_to_account_id,
@@ -311,7 +320,8 @@ SELECT
     ftta.expiration_date AS frequent_to_account_expiration_date,
     ftta.created_at AS frequent_to_account_created_at,
     fttc.id AS frequent_to_account_currency_id,
-    fttc.enum AS frequent_to_account_currency_enum,
+    fttc.string AS frequent_to_account_currency_string,
+    fttc.symbol AS frequent_to_account_currency_symbol,
     cat.id AS category_id,
     cat.name AS category_name,
     cat.budget_in_egp AS category_budget_in_egp,
@@ -321,7 +331,8 @@ SELECT
     g.price AS goal_price,
     g.currency_id AS goal_currency_id,
     g.fulfilled_at AS goal_fulfilled_at,
-    gc.enum AS goal_currency_enum,
+    gc.string AS goal_currency_string,
+    gc.symbol AS goal_currency_symbol,
     t.id AS transaction_id,
     t.account_id AS transaction_account_id,
     t.amount AS transaction_amount,
@@ -350,7 +361,8 @@ SELECT
     ta.exclude_from_balance AS transaction_account_exclude_from_balance,
     ta.expiration_date AS transaction_account_expiration_date,
     ta.created_at AS transaction_account_created_at,
-    tc.enum AS transaction_currency_enum,
+    tc.string AS transaction_currency_string,
+    tc.symbol AS transaction_currency_symbol,
     tcp.name AS transaction_counterparty_name,
     tta.id AS transaction_to_account_id,
     tta.name AS transaction_to_account_name,
@@ -367,7 +379,8 @@ SELECT
     tta.exclude_from_balance AS transaction_to_account_exclude_from_balance,
     tta.expiration_date AS transaction_to_account_expiration_date,
     tta.created_at AS transaction_to_account_created_at,
-    ttc.enum AS transaction_to_account_currency_enum,
+    ttc.string AS transaction_to_account_currency_string,
+    ttc.symbol AS transaction_to_account_currency_symbol,
     tcat.id AS transaction_category_id,
     tcat.name AS transaction_category_name,
     tcat.budget_in_egp AS transaction_category_budget_in_egp,
@@ -419,7 +432,8 @@ type GetFrequentTxWTxsRow struct {
 	FrequentToAccountExpirationDate        sql.NullTime
 	FrequentToAccountCreatedAt             sql.NullTime
 	FrequentToAccountCurrencyID_2          sql.NullString
-	FrequentToAccountCurrencyEnum          sql.NullInt64
+	FrequentToAccountCurrencyString        sql.NullString
+	FrequentToAccountCurrencySymbol        sql.NullString
 	CategoryID                             sql.NullString
 	CategoryName                           sql.NullString
 	CategoryBudgetInEgp                    sql.NullFloat64
@@ -429,7 +443,8 @@ type GetFrequentTxWTxsRow struct {
 	GoalPrice                              sql.NullFloat64
 	GoalCurrencyID                         sql.NullString
 	GoalFulfilledAt                        sql.NullTime
-	GoalCurrencyEnum                       sql.NullInt64
+	GoalCurrencyString                     sql.NullString
+	GoalCurrencySymbol                     sql.NullString
 	TransactionID                          sql.NullString
 	TransactionAccountID                   sql.NullString
 	TransactionAmount                      sql.NullFloat64
@@ -458,7 +473,8 @@ type GetFrequentTxWTxsRow struct {
 	TransactionAccountExcludeFromBalance   sql.NullBool
 	TransactionAccountExpirationDate       sql.NullTime
 	TransactionAccountCreatedAt            sql.NullTime
-	TransactionCurrencyEnum                sql.NullInt64
+	TransactionCurrencyString              sql.NullString
+	TransactionCurrencySymbol              sql.NullString
 	TransactionCounterpartyName            sql.NullString
 	TransactionToAccountID_2               sql.NullString
 	TransactionToAccountName               sql.NullString
@@ -475,7 +491,8 @@ type GetFrequentTxWTxsRow struct {
 	TransactionToAccountExcludeFromBalance sql.NullBool
 	TransactionToAccountExpirationDate     sql.NullTime
 	TransactionToAccountCreatedAt          sql.NullTime
-	TransactionToAccountCurrencyEnum       sql.NullInt64
+	TransactionToAccountCurrencyString     sql.NullString
+	TransactionToAccountCurrencySymbol     sql.NullString
 	TransactionCategoryID_2                sql.NullString
 	TransactionCategoryName                sql.NullString
 	TransactionCategoryBudgetInEgp         sql.NullFloat64
@@ -527,7 +544,10 @@ func (q *Queries) GetFrequentTxWTxs(ctx context.Context, id string) ([]GetFreque
 			&i.Account.ExpirationDate,
 			&i.Account.CreatedAt,
 			&i.Currency.ID,
-			&i.Currency.Enum,
+			&i.Currency.String,
+			&i.Currency.Symbol,
+			&i.Currency.Kind,
+			&i.Currency.IbanPrefix,
 			&i.TransactionKind.ID,
 			&i.TransactionKind.Enum,
 			&i.TransactionKind.IncreaseBalance,
@@ -548,7 +568,8 @@ func (q *Queries) GetFrequentTxWTxs(ctx context.Context, id string) ([]GetFreque
 			&i.FrequentToAccountExpirationDate,
 			&i.FrequentToAccountCreatedAt,
 			&i.FrequentToAccountCurrencyID_2,
-			&i.FrequentToAccountCurrencyEnum,
+			&i.FrequentToAccountCurrencyString,
+			&i.FrequentToAccountCurrencySymbol,
 			&i.CategoryID,
 			&i.CategoryName,
 			&i.CategoryBudgetInEgp,
@@ -558,7 +579,8 @@ func (q *Queries) GetFrequentTxWTxs(ctx context.Context, id string) ([]GetFreque
 			&i.GoalPrice,
 			&i.GoalCurrencyID,
 			&i.GoalFulfilledAt,
-			&i.GoalCurrencyEnum,
+			&i.GoalCurrencyString,
+			&i.GoalCurrencySymbol,
 			&i.TransactionID,
 			&i.TransactionAccountID,
 			&i.TransactionAmount,
@@ -587,7 +609,8 @@ func (q *Queries) GetFrequentTxWTxs(ctx context.Context, id string) ([]GetFreque
 			&i.TransactionAccountExcludeFromBalance,
 			&i.TransactionAccountExpirationDate,
 			&i.TransactionAccountCreatedAt,
-			&i.TransactionCurrencyEnum,
+			&i.TransactionCurrencyString,
+			&i.TransactionCurrencySymbol,
 			&i.TransactionCounterpartyName,
 			&i.TransactionToAccountID_2,
 			&i.TransactionToAccountName,
@@ -604,7 +627,8 @@ func (q *Queries) GetFrequentTxWTxs(ctx context.Context, id string) ([]GetFreque
 			&i.TransactionToAccountExcludeFromBalance,
 			&i.TransactionToAccountExpirationDate,
 			&i.TransactionToAccountCreatedAt,
-			&i.TransactionToAccountCurrencyEnum,
+			&i.TransactionToAccountCurrencyString,
+			&i.TransactionToAccountCurrencySymbol,
 			&i.TransactionCategoryID_2,
 			&i.TransactionCategoryName,
 			&i.TransactionCategoryBudgetInEgp,
@@ -630,7 +654,7 @@ const getFrequentTxs = `-- name: GetFrequentTxs :many
 SELECT
     ft.id, ft.frequency_by, ft.frequency, ft.account_id, ft.amount, ft.kind_id, ft.category_id, ft.counterparty_id, ft.description, ft.to_account_id, ft.to_amount, ft.goal_id, ft.starts_at, ft.stops_at, ft.last_transaction_scheduled_to, ft.created_at,
     a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
-    c.id, c.enum,
+    c.id, c.string, c.symbol, c.kind, c.iban_prefix,
     k.id, k.enum, k.increase_balance,
     cp.name AS counterparty_name,
     ftta.id AS frequent_to_account_id,
@@ -649,7 +673,8 @@ SELECT
     ftta.expiration_date AS frequent_to_account_expiration_date,
     ftta.created_at AS frequent_to_account_created_at,
     fttc.id AS frequent_to_account_currency_id,
-    fttc.enum AS frequent_to_account_currency_enum,
+    fttc.string AS frequent_to_account_currency_string,
+    fttc.symbol AS frequent_to_account_currency_symbol,
     cat.id AS category_id,
     cat.name AS category_name,
     cat.budget_in_egp AS category_budget_in_egp,
@@ -659,7 +684,8 @@ SELECT
     g.price AS goal_price,
     g.currency_id AS goal_currency_id,
     g.fulfilled_at AS goal_fulfilled_at,
-    gc.enum AS goal_currency_enum
+    gc.string AS goal_currency_string,
+    gc.symbol AS goal_currency_symbol
 FROM frequent_txs AS ft
 LEFT JOIN counterparties AS cp ON ft.counterparty_id = cp.id
 LEFT JOIN accounts AS a ON ft.account_id = a.id
@@ -694,7 +720,8 @@ type GetFrequentTxsRow struct {
 	FrequentToAccountExpirationDate     sql.NullTime
 	FrequentToAccountCreatedAt          sql.NullTime
 	FrequentToAccountCurrencyID_2       sql.NullString
-	FrequentToAccountCurrencyEnum       sql.NullInt64
+	FrequentToAccountCurrencyString     sql.NullString
+	FrequentToAccountCurrencySymbol     sql.NullString
 	CategoryID                          sql.NullString
 	CategoryName                        sql.NullString
 	CategoryBudgetInEgp                 sql.NullFloat64
@@ -704,7 +731,8 @@ type GetFrequentTxsRow struct {
 	GoalPrice                           sql.NullFloat64
 	GoalCurrencyID                      sql.NullString
 	GoalFulfilledAt                     sql.NullTime
-	GoalCurrencyEnum                    sql.NullInt64
+	GoalCurrencyString                  sql.NullString
+	GoalCurrencySymbol                  sql.NullString
 }
 
 func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, error) {
@@ -749,7 +777,10 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 			&i.Account.ExpirationDate,
 			&i.Account.CreatedAt,
 			&i.Currency.ID,
-			&i.Currency.Enum,
+			&i.Currency.String,
+			&i.Currency.Symbol,
+			&i.Currency.Kind,
+			&i.Currency.IbanPrefix,
 			&i.TransactionKind.ID,
 			&i.TransactionKind.Enum,
 			&i.TransactionKind.IncreaseBalance,
@@ -770,7 +801,8 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 			&i.FrequentToAccountExpirationDate,
 			&i.FrequentToAccountCreatedAt,
 			&i.FrequentToAccountCurrencyID_2,
-			&i.FrequentToAccountCurrencyEnum,
+			&i.FrequentToAccountCurrencyString,
+			&i.FrequentToAccountCurrencySymbol,
 			&i.CategoryID,
 			&i.CategoryName,
 			&i.CategoryBudgetInEgp,
@@ -780,7 +812,8 @@ func (q *Queries) GetFrequentTxs(ctx context.Context) ([]GetFrequentTxsRow, erro
 			&i.GoalPrice,
 			&i.GoalCurrencyID,
 			&i.GoalFulfilledAt,
-			&i.GoalCurrencyEnum,
+			&i.GoalCurrencyString,
+			&i.GoalCurrencySymbol,
 		); err != nil {
 			return nil, err
 		}
@@ -799,7 +832,7 @@ const getFrequentTxsWTxs = `-- name: GetFrequentTxsWTxs :many
 SELECT
     ft.id, ft.frequency_by, ft.frequency, ft.account_id, ft.amount, ft.kind_id, ft.category_id, ft.counterparty_id, ft.description, ft.to_account_id, ft.to_amount, ft.goal_id, ft.starts_at, ft.stops_at, ft.last_transaction_scheduled_to, ft.created_at,
     a.id, a.name, a.kind_id, a.amount, a.currency_id, a.counterparty_id, a.card_number, a.card_limit, a.name_on_card, a.iban, a.note, a.is_archived, a.exclude_from_balance, a.expiration_date, a.created_at,
-    c.id, c.enum,
+    c.id, c.string, c.symbol, c.kind, c.iban_prefix,
     k.id, k.enum, k.increase_balance,
     cp.name AS counterparty_name,
     ftta.id AS frequent_to_account_id,
@@ -818,7 +851,8 @@ SELECT
     ftta.expiration_date AS frequent_to_account_expiration_date,
     ftta.created_at AS frequent_to_account_created_at,
     fttc.id AS frequent_to_account_currency_id,
-    fttc.enum AS frequent_to_account_currency_enum,
+    fttc.string AS frequent_to_account_currency_string,
+    fttc.symbol AS frequent_to_account_currency_symbol,
     cat.id AS category_id,
     cat.name AS category_name,
     cat.budget_in_egp AS category_budget_in_egp,
@@ -828,7 +862,8 @@ SELECT
     g.price AS goal_price,
     g.currency_id AS goal_currency_id,
     g.fulfilled_at AS goal_fulfilled_at,
-    gc.enum AS goal_currency_enum,
+    gc.string AS goal_currency_string,
+    gc.symbol AS goal_currency_symbol,
     t.id AS transaction_id,
     t.account_id AS transaction_account_id,
     t.amount AS transaction_amount,
@@ -857,7 +892,8 @@ SELECT
     ta.exclude_from_balance AS transaction_account_exclude_from_balance,
     ta.expiration_date AS transaction_account_expiration_date,
     ta.created_at AS transaction_account_created_at,
-    tc.enum AS transaction_currency_enum,
+    tc.string AS transaction_currency_string,
+    tc.symbol AS transaction_currency_symbol,
     tcp.name AS transaction_counterparty_name,
     tta.id AS transaction_to_account_id,
     tta.name AS transaction_to_account_name,
@@ -874,7 +910,8 @@ SELECT
     tta.exclude_from_balance AS transaction_to_account_exclude_from_balance,
     tta.expiration_date AS transaction_to_account_expiration_date,
     tta.created_at AS transaction_to_account_created_at,
-    ttc.enum AS transaction_to_account_currency_enum,
+    ttc.string AS transaction_to_account_currency_string,
+    ttc.symbol AS transaction_to_account_currency_symbol,
     tcat.id AS transaction_category_id,
     tcat.name AS transaction_category_name,
     tcat.budget_in_egp AS transaction_category_budget_in_egp,
@@ -925,7 +962,8 @@ type GetFrequentTxsWTxsRow struct {
 	FrequentToAccountExpirationDate        sql.NullTime
 	FrequentToAccountCreatedAt             sql.NullTime
 	FrequentToAccountCurrencyID_2          sql.NullString
-	FrequentToAccountCurrencyEnum          sql.NullInt64
+	FrequentToAccountCurrencyString        sql.NullString
+	FrequentToAccountCurrencySymbol        sql.NullString
 	CategoryID                             sql.NullString
 	CategoryName                           sql.NullString
 	CategoryBudgetInEgp                    sql.NullFloat64
@@ -935,7 +973,8 @@ type GetFrequentTxsWTxsRow struct {
 	GoalPrice                              sql.NullFloat64
 	GoalCurrencyID                         sql.NullString
 	GoalFulfilledAt                        sql.NullTime
-	GoalCurrencyEnum                       sql.NullInt64
+	GoalCurrencyString                     sql.NullString
+	GoalCurrencySymbol                     sql.NullString
 	TransactionID                          sql.NullString
 	TransactionAccountID                   sql.NullString
 	TransactionAmount                      sql.NullFloat64
@@ -964,7 +1003,8 @@ type GetFrequentTxsWTxsRow struct {
 	TransactionAccountExcludeFromBalance   sql.NullBool
 	TransactionAccountExpirationDate       sql.NullTime
 	TransactionAccountCreatedAt            sql.NullTime
-	TransactionCurrencyEnum                sql.NullInt64
+	TransactionCurrencyString              sql.NullString
+	TransactionCurrencySymbol              sql.NullString
 	TransactionCounterpartyName            sql.NullString
 	TransactionToAccountID_2               sql.NullString
 	TransactionToAccountName               sql.NullString
@@ -981,7 +1021,8 @@ type GetFrequentTxsWTxsRow struct {
 	TransactionToAccountExcludeFromBalance sql.NullBool
 	TransactionToAccountExpirationDate     sql.NullTime
 	TransactionToAccountCreatedAt          sql.NullTime
-	TransactionToAccountCurrencyEnum       sql.NullInt64
+	TransactionToAccountCurrencyString     sql.NullString
+	TransactionToAccountCurrencySymbol     sql.NullString
 	TransactionCategoryID_2                sql.NullString
 	TransactionCategoryName                sql.NullString
 	TransactionCategoryBudgetInEgp         sql.NullFloat64
@@ -1033,7 +1074,10 @@ func (q *Queries) GetFrequentTxsWTxs(ctx context.Context) ([]GetFrequentTxsWTxsR
 			&i.Account.ExpirationDate,
 			&i.Account.CreatedAt,
 			&i.Currency.ID,
-			&i.Currency.Enum,
+			&i.Currency.String,
+			&i.Currency.Symbol,
+			&i.Currency.Kind,
+			&i.Currency.IbanPrefix,
 			&i.TransactionKind.ID,
 			&i.TransactionKind.Enum,
 			&i.TransactionKind.IncreaseBalance,
@@ -1054,7 +1098,8 @@ func (q *Queries) GetFrequentTxsWTxs(ctx context.Context) ([]GetFrequentTxsWTxsR
 			&i.FrequentToAccountExpirationDate,
 			&i.FrequentToAccountCreatedAt,
 			&i.FrequentToAccountCurrencyID_2,
-			&i.FrequentToAccountCurrencyEnum,
+			&i.FrequentToAccountCurrencyString,
+			&i.FrequentToAccountCurrencySymbol,
 			&i.CategoryID,
 			&i.CategoryName,
 			&i.CategoryBudgetInEgp,
@@ -1064,7 +1109,8 @@ func (q *Queries) GetFrequentTxsWTxs(ctx context.Context) ([]GetFrequentTxsWTxsR
 			&i.GoalPrice,
 			&i.GoalCurrencyID,
 			&i.GoalFulfilledAt,
-			&i.GoalCurrencyEnum,
+			&i.GoalCurrencyString,
+			&i.GoalCurrencySymbol,
 			&i.TransactionID,
 			&i.TransactionAccountID,
 			&i.TransactionAmount,
@@ -1093,7 +1139,8 @@ func (q *Queries) GetFrequentTxsWTxs(ctx context.Context) ([]GetFrequentTxsWTxsR
 			&i.TransactionAccountExcludeFromBalance,
 			&i.TransactionAccountExpirationDate,
 			&i.TransactionAccountCreatedAt,
-			&i.TransactionCurrencyEnum,
+			&i.TransactionCurrencyString,
+			&i.TransactionCurrencySymbol,
 			&i.TransactionCounterpartyName,
 			&i.TransactionToAccountID_2,
 			&i.TransactionToAccountName,
@@ -1110,7 +1157,8 @@ func (q *Queries) GetFrequentTxsWTxs(ctx context.Context) ([]GetFrequentTxsWTxsR
 			&i.TransactionToAccountExcludeFromBalance,
 			&i.TransactionToAccountExpirationDate,
 			&i.TransactionToAccountCreatedAt,
-			&i.TransactionToAccountCurrencyEnum,
+			&i.TransactionToAccountCurrencyString,
+			&i.TransactionToAccountCurrencySymbol,
 			&i.TransactionCategoryID_2,
 			&i.TransactionCategoryName,
 			&i.TransactionCategoryBudgetInEgp,

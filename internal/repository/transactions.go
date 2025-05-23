@@ -272,7 +272,7 @@ func dbTransactionToTransaction(
 
 	if gl != nil {
 		tx.Goal = dbGoalToGoal(gl, glCur)
-		tx.GoalPercentage = tx.Percentage(tx.Goal.Price, tx.Goal.Currency.Enum)
+		tx.GoalPercentage = tx.Percentage(tx.Goal.Price, tx.Goal.Currency.String)
 	} else if dbTx.GoalID.Valid {
 		tx.Goal = &models.Goal{ID: dbTx.GoalID.String}
 	}
@@ -299,7 +299,11 @@ func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTran
 			FulfilledAt: _dbTx.GoalFulfilledAt,
 		}
 		if _dbTx.GoalCurrencyID.Valid {
-			glCur = &queries.Currency{ID: _dbTx.GoalCurrencyID.String, Enum: _dbTx.GoalCurrencyEnum.Int64}
+			glCur = &queries.Currency{
+				ID:     _dbTx.GoalCurrencyID.String,
+				String: _dbTx.GoalCurrencyString.String,
+				Symbol: _dbTx.GoalCurrencySymbol.String,
+			}
 		}
 	}
 
@@ -325,8 +329,9 @@ func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTran
 		}
 		if _dbTx.ToAccountCurrencyID.Valid {
 			toAccCurr = &queries.Currency{
-				ID:   toAcc.CurrencyID,
-				Enum: _dbTx.ToAccountCurrencyEnum.Int64,
+				ID:     toAcc.CurrencyID,
+				String: _dbTx.ToAccountCurrencyString.String,
+				Symbol: _dbTx.ToAccountCurrencySymbol.String,
 			}
 		}
 

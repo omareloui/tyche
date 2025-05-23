@@ -242,8 +242,9 @@ func dbFrequentTxRowFrequentTx(dbFtx queries.GetFrequentTxRow) *models.FrequentT
 		}
 		if dbFtx.FrequentToAccountCurrencyID.Valid {
 			toAccCurr = &queries.Currency{
-				ID:   toAcc.CurrencyID,
-				Enum: dbFtx.FrequentToAccountCurrencyEnum.Int64,
+				ID:     toAcc.CurrencyID,
+				String: dbFtx.FrequentToAccountCurrencyString.String,
+				Symbol: dbFtx.FrequentToAccountCurrencySymbol.String,
 			}
 		}
 	}
@@ -275,7 +276,11 @@ func dbFrequentTxRowFrequentTx(dbFtx queries.GetFrequentTxRow) *models.FrequentT
 			FulfilledAt: dbFtx.GoalFulfilledAt,
 		}
 		if dbFtx.GoalCurrencyID.Valid {
-			glCur = &queries.Currency{ID: dbFtx.GoalCurrencyID.String, Enum: dbFtx.GoalCurrencyEnum.Int64}
+			glCur = &queries.Currency{
+				ID:     dbFtx.GoalCurrencyID.String,
+				String: dbFtx.GoalCurrencyString.String,
+				Symbol: dbFtx.GoalCurrencySymbol.String,
+			}
 		}
 	}
 
@@ -314,8 +319,9 @@ func dbFrequentTxsWTxsRowToFrequentTxs[T queries.GetFrequentTxWTxsRow | queries.
 				}
 				if dbFt.FrequentToAccountCurrencyID.Valid {
 					toAccCurr = &queries.Currency{
-						ID:   toAcc.CurrencyID,
-						Enum: dbFt.FrequentToAccountCurrencyEnum.Int64,
+						ID:     toAcc.CurrencyID,
+						String: dbFt.FrequentToAccountCurrencyString.String,
+						Symbol: dbFt.FrequentToAccountCurrencySymbol.String,
 					}
 				}
 			}
@@ -347,7 +353,11 @@ func dbFrequentTxsWTxsRowToFrequentTxs[T queries.GetFrequentTxWTxsRow | queries.
 					FulfilledAt: dbFt.GoalFulfilledAt,
 				}
 				if dbFt.GoalCurrencyID.Valid {
-					glCur = &queries.Currency{ID: dbFt.GoalCurrencyID.String, Enum: dbFt.GoalCurrencyEnum.Int64}
+					glCur = &queries.Currency{
+						ID:     dbFt.GoalCurrencyID.String,
+						String: dbFt.GoalCurrencyString.String,
+						Symbol: dbFt.GoalCurrencySymbol.String,
+					}
 				}
 			}
 
@@ -420,8 +430,9 @@ func dbFrequentTxsWTxsRowToFrequentTxs[T queries.GetFrequentTxWTxsRow | queries.
 			}
 			if dbFt.TransactionAccountCurrencyID.Valid {
 				accCurr = &queries.Currency{
-					ID:   acc.CurrencyID,
-					Enum: dbFt.TransactionCurrencyEnum.Int64,
+					ID:     acc.CurrencyID,
+					String: dbFt.TransactionCurrencyString.String,
+					Symbol: dbFt.TransactionCurrencySymbol.String,
 				}
 			}
 		}
@@ -448,8 +459,9 @@ func dbFrequentTxsWTxsRowToFrequentTxs[T queries.GetFrequentTxWTxsRow | queries.
 			}
 			if dbFt.TransactionToAccountCurrencyID.Valid {
 				toAccCurr = &queries.Currency{
-					ID:   toAcc.CurrencyID,
-					Enum: dbFt.TransactionToAccountCurrencyEnum.Int64,
+					ID:     toAcc.CurrencyID,
+					String: dbFt.TransactionToAccountCurrencyString.String,
+					Symbol: dbFt.TransactionToAccountCurrencySymbol.String,
 				}
 			}
 		}

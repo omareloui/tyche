@@ -19,11 +19,10 @@ func formatNum[T nu](num T) string {
 	return p.Sprintf("%v", number.Decimal(num))
 }
 
-func formatAmount(amount float64, curE CurrencyEnum) string {
+func formatAmount(amount float64, curSymbol string) string {
 	strBuilder := new(strings.Builder)
-	s := curE.Symbol()
-	if s != "" {
-		strBuilder.WriteString(s)
+	if curSymbol != "" {
+		strBuilder.WriteString(curSymbol)
 		strBuilder.WriteString(" ")
 	}
 	strBuilder.WriteString(formatNum(amount))

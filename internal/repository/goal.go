@@ -193,15 +193,16 @@ func dbGoalRowsToGoals[T queries.GetGoalsRow | queries.GetGoalRow | queries.GetU
 		}
 
 		accCurr := queries.Currency{
-			ID:   acc.CurrencyID,
-			Enum: dbGl.AccountCurrencyEnum.Int64,
+			ID:     acc.CurrencyID,
+			String: dbGl.AccountCurrencyString.String,
+			Symbol: dbGl.AccountCurrencySymbol.String,
 		}
 
 		tx := dbTransactionToTransaction(
 			&_tx, nil, &acc,
 			&accCurr, nil, nil, nil, nil,
 			&dbGl.Goal, &dbGl.Currency)
-		tx.GoalPercentage = tx.Percentage(gls[glIdx].Price, gls[glIdx].Currency.Enum)
+		tx.GoalPercentage = tx.Percentage(gls[glIdx].Price, gls[glIdx].Currency.String)
 		gls[glIdx].Transactions = append(gls[glIdx].Transactions, *tx)
 	}
 

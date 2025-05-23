@@ -144,12 +144,11 @@ WHERE id = sqlc.arg(id);
 -- name: GetBalances :many
 SELECT
     a.currency_id,
-    c.enum AS currency_enum,
+    sqlc.embed(c),
     TOTAL(a.amount) AS balance
 FROM accounts AS a
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 WHERE
     a.is_archived IS FALSE
     AND a.exclude_from_balance IS FALSE
-GROUP BY a.currency_id
-ORDER BY c.enum;
+GROUP BY a.currency_id ORDER BY c.string;

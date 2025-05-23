@@ -50,8 +50,8 @@ SELECT
     ta.exclude_from_balance AS to_account_exclude_from_balance,
     ta.expiration_date AS to_account_expiration_date,
     ta.created_at AS to_account_created_at,
-    tc.id AS to_account_currency_id,
-    tc.enum AS to_account_currency_enum,
+    tc.string AS to_account_currency_string,
+    tc.symbol AS to_account_currency_symbol,
     cat.id AS category_id,
     cat.name AS category_name,
     cat.budget_in_egp AS category_budget_in_egp,
@@ -61,7 +61,8 @@ SELECT
     g.price AS goal_price,
     g.currency_id AS goal_currency_id,
     g.fulfilled_at AS goal_fulfilled_at,
-    gc.enum AS goal_currency_enum
+    gc.string AS goal_currency_string,
+    gc.symbol AS goal_currency_symbol
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
@@ -96,8 +97,8 @@ SELECT
     ta.exclude_from_balance AS to_account_exclude_from_balance,
     ta.expiration_date AS to_account_expiration_date,
     ta.created_at AS to_account_created_at,
-    tc.id AS to_account_currency_id,
-    tc.enum AS to_account_currency_enum,
+    tc.string AS to_account_currency_string,
+    tc.symbol AS to_account_currency_symbol,
     cat.id AS category_id,
     cat.name AS category_name,
     cat.budget_in_egp AS category_budget_in_egp,
@@ -107,7 +108,8 @@ SELECT
     g.price AS goal_price,
     g.currency_id AS goal_currency_id,
     g.fulfilled_at AS goal_fulfilled_at,
-    gc.enum AS goal_currency_enum
+    gc.string AS goal_currency_string,
+    gc.symbol AS goal_currency_symbol
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id

@@ -47,8 +47,11 @@ type Counterparty struct {
 }
 
 type Currency struct {
-	ID   string
-	Enum int64
+	ID         string
+	String     string
+	Symbol     string
+	Kind       string
+	IbanPrefix sql.NullString
 }
 
 type FrequentTx struct {

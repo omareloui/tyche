@@ -671,7 +671,7 @@ func (h Handler) parseTransactionAmountsAndKindFD(r *http.Request, accs []models
 			strings.HasPrefix(trigger, "account_id") {
 			fxRate := 1.0
 			if acc != nil && toAcc != nil {
-				fxRate, _ = fxrate.GetFxRate(acc.Currency.Enum.String(), toAcc.Currency.Enum.String())
+				fxRate, _ = fxrate.GetFxRate(acc.Currency.String, toAcc.Currency.String)
 			}
 			amt, _ := parseFloatIfExists(fd.AccountIFD.Amount.Value)
 			toAmt = strconv.FormatFloat(amt/fxRate, 'f', 2, 64)

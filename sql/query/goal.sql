@@ -45,7 +45,8 @@ SELECT
     a.expiration_date AS account_expiration_date,
     a.created_at AS account_created_at,
     ac.id AS account_currency_id,
-    ac.enum AS account_currency_enum
+    ac.string AS account_currency_string,
+    ac.symbol AS account_currency_symbol
 FROM goals AS gl
 LEFT JOIN currencies AS c ON c.id = gl.currency_id
 LEFT JOIN transactions AS t ON t.goal_id = gl.id
@@ -87,7 +88,8 @@ SELECT
     a.expiration_date AS account_expiration_date,
     a.created_at AS account_created_at,
     ac.id AS account_currency_id,
-    ac.enum AS account_currency_enum
+    ac.string AS account_currency_string,
+    ac.symbol AS account_currency_symbol
 FROM goals AS gl
 LEFT JOIN currencies AS c ON c.id = gl.currency_id
 LEFT JOIN transactions AS t ON t.goal_id = gl.id
@@ -130,7 +132,8 @@ SELECT
     a.expiration_date AS account_expiration_date,
     a.created_at AS account_created_at,
     ac.id AS account_currency_id,
-    ac.enum AS account_currency_enum
+    ac.string AS account_currency_string,
+    ac.symbol AS account_currency_symbol
 FROM goals AS gl
 LEFT JOIN currencies AS c ON c.id = gl.currency_id
 LEFT JOIN transactions AS t ON t.goal_id = gl.id

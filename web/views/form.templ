@@ -369,7 +369,7 @@ func join(prefix, suffix string, del ...string) string {
 func currenciesToMap(curs []models.Currency) map[string]string {
 	m := make(map[string]string, len(curs))
 	for _, c := range curs {
-		m[c.ID] = c.Enum.String()
+		m[c.ID] = c.String
 	}
 	return m
 }
@@ -427,9 +427,9 @@ func getCurSymbolByAccount(accs []models.Account, accId string) string {
 		return a.ID == accId
 	})
 	if acc == nil {
-		return models.GetDefaultCurrency().Symbol()
+		return models.GetDefaultCurrency().Symbol
 	}
-	return acc.Currency.Enum.Symbol()
+	return acc.Currency.Symbol
 }
 
 func getCurSymbolByCurrency(curs []models.Currency, curId string) string {
@@ -437,9 +437,9 @@ func getCurSymbolByCurrency(curs []models.Currency, curId string) string {
 		return c.ID == curId
 	})
 	if cur == nil {
-		return models.GetDefaultCurrency().Symbol()
+		return models.GetDefaultCurrency().Symbol
 	}
-	return cur.Enum.Symbol()
+	return cur.Symbol
 }
 
 func getCurIbanPrefixByCurrency(curs []models.Currency, curId string) string {
@@ -447,9 +447,9 @@ func getCurIbanPrefixByCurrency(curs []models.Currency, curId string) string {
 		return c.ID == curId
 	})
 	if cur == nil {
-		return models.GetDefaultCurrency().IbanPrefix()
+		return models.GetDefaultCurrency().IbanPrefix
 	}
-	return cur.Enum.IbanPrefix()
+	return cur.IbanPrefix
 }
 
 func getId(id string) string {
@@ -457,5 +457,4 @@ func getId(id string) string {
 		return "0"
 	}
 	return id
-
 }

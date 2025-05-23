@@ -322,8 +322,9 @@ func dbBalancesToBalances(dbBs []queries.GetBalancesRow) []models.Balance {
 		b[i] = models.Balance{
 			Amount: dbB.Balance,
 			Currency: models.Currency{
-				ID:   dbB.CurrencyID,
-				Enum: models.CurrencyEnum(dbB.CurrencyEnum.Int64),
+				ID:     dbB.CurrencyID,
+				String: dbB.Currency.String,
+				Symbol: dbB.Currency.Symbol,
 			},
 		}
 	}

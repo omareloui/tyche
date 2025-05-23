@@ -67,7 +67,7 @@ func (q *Queries) FulfillGoal(ctx context.Context, id string) error {
 const getGoal = `-- name: GetGoal :many
 SELECT
     gl.id, gl.name, gl.price, gl.currency_id, gl.fulfilled_at, gl.created_at,
-    c.id, c.enum,
+    c.id, c.string, c.symbol, c.kind, c.iban_prefix,
     t.id AS transaction_id,
     t.account_id AS transaction_account_id,
     t.amount AS transaction_amount,
@@ -97,7 +97,8 @@ SELECT
     a.expiration_date AS account_expiration_date,
     a.created_at AS account_created_at,
     ac.id AS account_currency_id,
-    ac.enum AS account_currency_enum
+    ac.string AS account_currency_string,
+    ac.symbol AS account_currency_symbol
 FROM goals AS gl
 LEFT JOIN currencies AS c ON c.id = gl.currency_id
 LEFT JOIN transactions AS t ON t.goal_id = gl.id
@@ -138,7 +139,8 @@ type GetGoalRow struct {
 	AccountExpirationDate     sql.NullTime
 	AccountCreatedAt          sql.NullTime
 	AccountCurrencyID_2       sql.NullString
-	AccountCurrencyEnum       sql.NullInt64
+	AccountCurrencyString     sql.NullString
+	AccountCurrencySymbol     sql.NullString
 }
 
 func (q *Queries) GetGoal(ctx context.Context, id string) ([]GetGoalRow, error) {
@@ -158,7 +160,10 @@ func (q *Queries) GetGoal(ctx context.Context, id string) ([]GetGoalRow, error) 
 			&i.Goal.FulfilledAt,
 			&i.Goal.CreatedAt,
 			&i.Currency.ID,
-			&i.Currency.Enum,
+			&i.Currency.String,
+			&i.Currency.Symbol,
+			&i.Currency.Kind,
+			&i.Currency.IbanPrefix,
 			&i.TransactionID,
 			&i.TransactionAccountID,
 			&i.TransactionAmount,
@@ -188,7 +193,8 @@ func (q *Queries) GetGoal(ctx context.Context, id string) ([]GetGoalRow, error) 
 			&i.AccountExpirationDate,
 			&i.AccountCreatedAt,
 			&i.AccountCurrencyID_2,
-			&i.AccountCurrencyEnum,
+			&i.AccountCurrencyString,
+			&i.AccountCurrencySymbol,
 		); err != nil {
 			return nil, err
 		}
@@ -206,7 +212,7 @@ func (q *Queries) GetGoal(ctx context.Context, id string) ([]GetGoalRow, error) 
 const getGoals = `-- name: GetGoals :many
 SELECT
     gl.id, gl.name, gl.price, gl.currency_id, gl.fulfilled_at, gl.created_at,
-    c.id, c.enum,
+    c.id, c.string, c.symbol, c.kind, c.iban_prefix,
     t.id AS transaction_id,
     t.account_id AS transaction_account_id,
     t.amount AS transaction_amount,
@@ -236,7 +242,8 @@ SELECT
     a.expiration_date AS account_expiration_date,
     a.created_at AS account_created_at,
     ac.id AS account_currency_id,
-    ac.enum AS account_currency_enum
+    ac.string AS account_currency_string,
+    ac.symbol AS account_currency_symbol
 FROM goals AS gl
 LEFT JOIN currencies AS c ON c.id = gl.currency_id
 LEFT JOIN transactions AS t ON t.goal_id = gl.id
@@ -277,7 +284,8 @@ type GetGoalsRow struct {
 	AccountExpirationDate     sql.NullTime
 	AccountCreatedAt          sql.NullTime
 	AccountCurrencyID_2       sql.NullString
-	AccountCurrencyEnum       sql.NullInt64
+	AccountCurrencyString     sql.NullString
+	AccountCurrencySymbol     sql.NullString
 }
 
 func (q *Queries) GetGoals(ctx context.Context) ([]GetGoalsRow, error) {
@@ -297,7 +305,10 @@ func (q *Queries) GetGoals(ctx context.Context) ([]GetGoalsRow, error) {
 			&i.Goal.FulfilledAt,
 			&i.Goal.CreatedAt,
 			&i.Currency.ID,
-			&i.Currency.Enum,
+			&i.Currency.String,
+			&i.Currency.Symbol,
+			&i.Currency.Kind,
+			&i.Currency.IbanPrefix,
 			&i.TransactionID,
 			&i.TransactionAccountID,
 			&i.TransactionAmount,
@@ -327,7 +338,8 @@ func (q *Queries) GetGoals(ctx context.Context) ([]GetGoalsRow, error) {
 			&i.AccountExpirationDate,
 			&i.AccountCreatedAt,
 			&i.AccountCurrencyID_2,
-			&i.AccountCurrencyEnum,
+			&i.AccountCurrencyString,
+			&i.AccountCurrencySymbol,
 		); err != nil {
 			return nil, err
 		}
@@ -345,7 +357,7 @@ func (q *Queries) GetGoals(ctx context.Context) ([]GetGoalsRow, error) {
 const getUnfulfilledGoals = `-- name: GetUnfulfilledGoals :many
 SELECT
     gl.id, gl.name, gl.price, gl.currency_id, gl.fulfilled_at, gl.created_at,
-    c.id, c.enum,
+    c.id, c.string, c.symbol, c.kind, c.iban_prefix,
     t.id AS transaction_id,
     t.account_id AS transaction_account_id,
     t.amount AS transaction_amount,
@@ -375,7 +387,8 @@ SELECT
     a.expiration_date AS account_expiration_date,
     a.created_at AS account_created_at,
     ac.id AS account_currency_id,
-    ac.enum AS account_currency_enum
+    ac.string AS account_currency_string,
+    ac.symbol AS account_currency_symbol
 FROM goals AS gl
 LEFT JOIN currencies AS c ON c.id = gl.currency_id
 LEFT JOIN transactions AS t ON t.goal_id = gl.id
@@ -417,7 +430,8 @@ type GetUnfulfilledGoalsRow struct {
 	AccountExpirationDate     sql.NullTime
 	AccountCreatedAt          sql.NullTime
 	AccountCurrencyID_2       sql.NullString
-	AccountCurrencyEnum       sql.NullInt64
+	AccountCurrencyString     sql.NullString
+	AccountCurrencySymbol     sql.NullString
 }
 
 func (q *Queries) GetUnfulfilledGoals(ctx context.Context) ([]GetUnfulfilledGoalsRow, error) {
@@ -437,7 +451,10 @@ func (q *Queries) GetUnfulfilledGoals(ctx context.Context) ([]GetUnfulfilledGoal
 			&i.Goal.FulfilledAt,
 			&i.Goal.CreatedAt,
 			&i.Currency.ID,
-			&i.Currency.Enum,
+			&i.Currency.String,
+			&i.Currency.Symbol,
+			&i.Currency.Kind,
+			&i.Currency.IbanPrefix,
 			&i.TransactionID,
 			&i.TransactionAccountID,
 			&i.TransactionAmount,
@@ -467,7 +484,8 @@ func (q *Queries) GetUnfulfilledGoals(ctx context.Context) ([]GetUnfulfilledGoal
 			&i.AccountExpirationDate,
 			&i.AccountCreatedAt,
 			&i.AccountCurrencyID_2,
-			&i.AccountCurrencyEnum,
+			&i.AccountCurrencyString,
+			&i.AccountCurrencySymbol,
 		); err != nil {
 			return nil, err
 		}
