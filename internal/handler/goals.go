@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
@@ -74,11 +75,6 @@ func (h Handler) CreateGoal(w http.ResponseWriter, r *http.Request) (templ.Compo
 	gl.ID = idgen.New()
 	gl.CreatedAt = time.Now()
 
-	if err = h.sani.SanitizeStruct(gl); err != nil {
-		l.Error("sanitizing goal", zap.Error(err))
-		return nil, err
-	}
-
 	curs, err := h.repo.GetAllCurrencies(r.Context())
 	if err != nil {
 		l.Error("fetching currencies", zap.Error(err))
@@ -86,10 +82,16 @@ func (h Handler) CreateGoal(w http.ResponseWriter, r *http.Request) (templ.Compo
 	}
 	l.Debug("fetched balances")
 
-	if valerr := h.valid.Validate(gl); valerr != nil {
-		l.Error("validating goal", zap.Any("errors", valerr.Errors))
-		fd := h.mapGlToFD(gl, valerr)
-		return views.CreateGoalForm(fd, curs), nil
+	shownCurs := slicesutils.Filter(curs, func(cur models.Currency) bool { return cur.IsShown })
+
+	if err := gl.SanitizeAndValidate(h.sani, h.valid); err != nil {
+		var valerr errs.ValidationError
+		if errors.As(err, &valerr) {
+			l.Error("create goal validation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
+			return views.CreateGoalForm(h.mapGlToFD(gl, &valerr), shownCurs), nil
+		}
+		l.Error("sanitizing goal", zap.Error(err))
+		return nil, err
 	}
 
 	if err = h.repo.CreateGoal(r.Context(), gl); err != nil {
@@ -103,8 +105,6 @@ func (h Handler) CreateGoal(w http.ResponseWriter, r *http.Request) (templ.Compo
 		return nil, err
 	}
 	l.Debug("rendered goal")
-
-	shownCurs := slicesutils.Filter(curs, func(cur models.Currency) bool { return cur.IsShown })
 
 	return views.CreateGoalForm(h.mapGlToFD(dfltGoal(curs), &errs.ValidationError{}), shownCurs), nil
 }
@@ -227,22 +227,24 @@ func (h Handler) EditGoal(w http.ResponseWriter, r *http.Request) (templ.Compone
 
 	gl.ID = id
 
-	if err = h.sani.SanitizeStruct(gl); err != nil {
-		l.Error("sanitizing goal", zap.Error(err))
+	curs, err := h.repo.GetAllCurrencies(r.Context())
+	if err != nil {
+		l.Error("fetching currencies for updating goal", zap.Error(err))
 		return nil, err
 	}
+	shownCurs := slicesutils.Filter(curs, func(cur models.Currency) bool { return cur.IsShown })
 
-	if valerr := h.valid.Validate(gl); valerr != nil {
-		curs, err := h.repo.GetCurrencies(r.Context())
-		if err != nil {
-			l.Error("fetching currencies", zap.Error(err))
-			return nil, err
+	gl.Currency = *slicesutils.Find(curs, func(cur models.Currency) bool { return cur.ID == gl.Currency.ID })
+
+	if err := gl.SanitizeAndValidate(h.sani, h.valid); err != nil {
+		var valerr errs.ValidationError
+		if errors.As(err, &valerr) {
+			l.Error("update goal validation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
+			fd := h.mapGlToFD(gl, &valerr)
+			return views.EditGoal(id, fd, shownCurs), nil
 		}
-		l.Debug("fetched balances")
-
-		l.Error("validating goal", zap.Any("errors", valerr.Errors))
-		fd := h.mapGlToFD(gl, valerr)
-		return views.EditGoal(id, fd, curs), nil
+		l.Error("sanitizing goal", zap.Error(err))
+		return nil, err
 	}
 
 	if err = h.repo.UpdateGoal(r.Context(), gl); err != nil {
