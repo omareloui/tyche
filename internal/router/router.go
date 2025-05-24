@@ -83,6 +83,7 @@ func New(h *handler.Handler) Router {
 
 	mux.Handle("GET /oauth", handlePub(h.OAuth))
 	mux.Handle("GET /oauth/cb", handlePub(h.OAuthCB))
+	mux.Handle("GET /oauth/refresh-tokens", handlePub(h.RefreshTokens))
 	mux.Handle("GET /signout", handle(h.Signout))
 
 	static(mux, []string{"styles", "js", "images"}, "./web/public")

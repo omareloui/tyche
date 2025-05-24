@@ -8,6 +8,7 @@ import (
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/middleware"
+	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/queries"
 	"go.uber.org/zap"
 )
@@ -38,14 +39,28 @@ func (r *Repository) transact(ctx context.Context, txFunc func(*queries.Queries)
 }
 
 func (r *Repository) dbFromCtx(ctx context.Context) (*sql.DB, *queries.Queries, error) {
-	ctxValue := ctx.Value(middleware.AccessClaimsCtxKey{})
+	var oauthId string
+	var oauthProvider models.OAuthProvider
 
-	if ctxValue == nil {
-		return nil, nil, fmt.Errorf("no access claims in the context")
+	accessCtxValue := ctx.Value(middleware.AccessClaimsCtxKey{})
+	if accessCtxValue != nil {
+		claims := accessCtxValue.(*jwt.AccessClaims)
+		oauthId = claims.OAuthID
+		oauthProvider = claims.OAuthProvider
 	}
 
-	claims := ctxValue.(*jwt.AccessClaims)
-	db, q, err := r.tm.GetTenant(claims.OAuthProvider, claims.OAuthID)
+	refreshCtxValue := ctx.Value(middleware.RefreshClaimsCtxKey{})
+	if refreshCtxValue != nil {
+		claims := refreshCtxValue.(*jwt.RefreshClaims)
+		oauthId = claims.OAuthID
+		oauthProvider = claims.OAuthProvider
+	}
+
+	if oauthId == "" {
+		return nil, nil, fmt.Errorf("no access nor refresh claims in the context to get the tenant")
+	}
+
+	db, q, err := r.tm.GetTenant(oauthProvider, oauthId)
 	if err != nil {
 		l := logger.FromCtx(ctx)
 		l.Error("getting db from context", zap.Error(err))

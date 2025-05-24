@@ -16,9 +16,7 @@ const (
 	refreshToken
 
 	refreshExpiration = time.Hour * 24 * 30
-	// TODO: update on prod
-	accessExpiration = time.Hour * 24 * 30
-	// accessExpiration  = time.Minute * 15
+	accessExpiration  = time.Minute * 15
 )
 
 type tokenDetails struct {
@@ -37,18 +35,22 @@ type ClaimsPair struct {
 }
 
 type RefreshClaims struct {
-	ID string
-}
-
-type AccessClaims struct {
 	ID            string
 	OAuthID       string
 	OAuthProvider models.OAuthProvider
-	Email         string
-	Name          string
-	FirstName     string
-	LastName      string
-	Picture       string
+}
+
+type AccessClaims struct {
+	ID              string
+	OAuthID         string
+	OAuthProvider   models.OAuthProvider
+	Email           string
+	Name            string
+	FirstName       string
+	LastName        string
+	Picture         string
+	DefaultCurrency models.Currency
+	DefaultAccount  *models.Account
 }
 
 var (
@@ -74,15 +76,38 @@ func ParseAccessClaims(token string) (*AccessClaims, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	var acc *models.Account
+	var cur models.Currency
+
+	if defaultAccountId, ok := (*claims)["default_account_id"]; ok {
+		acc = &models.Account{
+			ID:   defaultAccountId.(string),
+			Name: (*claims)["default_account_name"].(string),
+		}
+	}
+
+	if defaultCurrId, ok := (*claims)["default_currency_id"]; ok {
+		cur.ID = defaultCurrId.(string)
+		cur.String = (*claims)["default_currency_string"].(string)
+		cur.Symbol = (*claims)["default_currency_symbol"].(string)
+		cur.IbanPrefix = (*claims)["default_currency_iban_prefix"].(string)
+		cur.Kind = models.CurrencyKind((*claims)["default_currency_kind"].(string))
+		cur.IsShown = (*claims)["default_currency_is_shown"].(bool)
+		cur.IsDefault = true
+	}
+
 	return &AccessClaims{
-		ID:            (*claims)["id"].(string),
-		OAuthID:       (*claims)["oauth_id"].(string),
-		OAuthProvider: models.OAuthProvider((*claims)["oauth_provider"].(float64)),
-		Name:          (*claims)["name"].(string),
-		Email:         (*claims)["email"].(string),
-		FirstName:     (*claims)["first_name"].(string),
-		LastName:      (*claims)["last_name"].(string),
-		Picture:       (*claims)["picture"].(string),
+		ID:              (*claims)["id"].(string),
+		OAuthID:         (*claims)["oauth_id"].(string),
+		OAuthProvider:   models.OAuthProvider((*claims)["oauth_provider"].(float64)),
+		Name:            (*claims)["name"].(string),
+		Email:           (*claims)["email"].(string),
+		FirstName:       (*claims)["first_name"].(string),
+		LastName:        (*claims)["last_name"].(string),
+		Picture:         (*claims)["picture"].(string),
+		DefaultCurrency: cur,
+		DefaultAccount:  acc,
 	}, nil
 }
 
@@ -91,7 +116,11 @@ func ParseRefreshClaims(token string) (*RefreshClaims, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &RefreshClaims{ID: (*claims)["id"].(string)}, nil
+	return &RefreshClaims{
+		ID:            (*claims)["id"].(string),
+		OAuthID:       (*claims)["oauth_id"].(string),
+		OAuthProvider: models.OAuthProvider((*claims)["oauth_provider"].(float64)),
+	}, nil
 }
 
 func parse(tokenStr string) (*jwt.MapClaims, error) {
@@ -127,6 +156,9 @@ func newToken(kind TokenType, usr *models.User) (string, time.Time, error) {
 		claims = &jwt.MapClaims{
 			"id": usr.ID,
 
+			"oauth_id":       usr.OAuthID,
+			"oauth_provider": uint64(usr.OAuthProvider),
+
 			"iat": now.Unix(),
 			"exp": exp.Unix(),
 		}
@@ -144,8 +176,20 @@ func newToken(kind TokenType, usr *models.User) (string, time.Time, error) {
 			"last_name":  usr.LastName,
 			"picture":    usr.Picture,
 
+			"default_currency_id":          usr.DefaultCurrency.ID,
+			"default_currency_string":      usr.DefaultCurrency.String,
+			"default_currency_symbol":      usr.DefaultCurrency.Symbol,
+			"default_currency_kind":        usr.DefaultCurrency.Kind,
+			"default_currency_iban_prefix": usr.DefaultCurrency.IbanPrefix,
+			"default_currency_is_shown":    usr.DefaultCurrency.IsShown,
+
 			"iat": now.Unix(),
 			"exp": exp.Unix(),
+		}
+
+		if usr.DefaultAccount != nil {
+			(*claims)["default_account_id"] = usr.DefaultAccount.ID
+			(*claims)["default_account_name"] = usr.DefaultAccount.Name
 		}
 	}
 

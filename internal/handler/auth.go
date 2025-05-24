@@ -111,6 +111,56 @@ func (h *Handler) OAuthCB(w http.ResponseWriter, r *http.Request) (templ.Compone
 	return nil, nil
 }
 
+func (h *Handler) RefreshTokens(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	// refreshCookie, err := r.Cookie("refresh_token")
+	// if errors.Is(err, http.ErrNoCookie) {
+	// 	return nil, jwt.ErrExpiredToken
+	// }
+
+	l := logger.FromCtx(r.Context())
+
+	// if err != nil {
+	// 	l.Error("refreshing token, can't parse the token", zap.Error(err))
+	// 	return nil, err
+	// }
+
+	claims := r.Context().Value(middleware.RefreshClaimsCtxKey{})
+	if claims == nil {
+		l.Error("can't find the refresh token to refresh the tokens")
+		return nil, jwt.ErrExpiredToken
+	}
+	_claims := claims.(*jwt.RefreshClaims)
+
+	l.Debug("refreshing tokens for user", zap.String("id", _claims.ID), zap.String("oauth_id", _claims.OAuthID))
+
+	usr, err := h.repo.GetUserByOAuthID(r.Context(), _claims.OAuthID)
+	if err != nil {
+		l.Error("refreshing token, can't get the user to refresh the token", zap.String("oauth_id", _claims.OAuthID), zap.Error(err))
+		return nil, err
+	}
+
+	access, refresh, err := generateJWTCookies(usr)
+	if err != nil {
+		l.Error("error generating jwt cookies", zap.Error(err), zap.Any("user", usr))
+		return nil, err
+	}
+
+	http.SetCookie(w, access)
+	http.SetCookie(w, refresh)
+
+	queries := r.URL.Query()
+
+	next := queries.Get("next")
+
+	if next == "" {
+		next = "/"
+	}
+
+	http.Redirect(w, r, next, http.StatusTemporaryRedirect)
+
+	return nil, nil
+}
+
 func (h *Handler) Signout(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	unsetCookie(w, refreshTokenCookieName)
 	unsetCookie(w, accessTokenCookieName)
