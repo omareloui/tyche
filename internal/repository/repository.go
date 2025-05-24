@@ -79,6 +79,7 @@ func (tm *TenantManager) GetTenant(provider models.OAuthProvider, oauthID string
 
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
+	_, _ = db.Exec("PRAGMA foreign_keys = ON;")
 
 	tenant := &TenantDB{
 		db:         db,
