@@ -45,6 +45,7 @@ type User struct {
 	LastName        string   `validate:"required,min=2"`
 	Picture         string   `validate:"required,url"`
 	DefaultCurrency Currency `validate:"required"`
+	DefaultAccount  *Account `validate:"required"`
 	StartOfPeriod   uint8    `validate:"required,min=1,max=31"`
 	SeededAt        time.Time
 	CreatedAt       time.Time

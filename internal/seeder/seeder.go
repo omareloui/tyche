@@ -91,19 +91,24 @@ func (s *Seeder) accounts(ctx context.Context, wg *sync.WaitGroup, q *queries.Qu
 		return
 	}
 
-	// TODO: only get it if `GetDefaultCurrency` returns entry without an id?
 	currencies, err := q.GetAllCurrencies(ctx)
 	if err != nil {
 		l.Error("error seeding accounts, could't get currencies", zap.Error(err))
 		return
 	}
-	curr := slicesutils.Find(currencies,
-		func(c queries.GetAllCurrenciesRow) bool {
-			return c.Currency.String == models.GetDefaultCurrency().String
-		})
+
+	cur, err := q.GetDefaultCurrency(ctx)
+	if err != nil {
+		if _cur := slicesutils.Find(currencies,
+			func(c queries.GetAllCurrenciesRow) bool {
+				return c.Currency.String == models.GetDefaultCurrency().String
+			}); _cur != nil {
+			cur = queries.GetDefaultCurrencyRow(*_cur)
+		}
+	}
 
 	seed := []queries.CreateAccountParams{
-		{ID: idgen.New(), Name: "Cash", KindID: cashKnd.AccountKind.ID, CurrencyID: curr.Currency.ID},
+		{ID: idgen.New(), Name: "Cash", KindID: cashKnd.AccountKind.ID, CurrencyID: cur.Currency.ID},
 	}
 
 	seedFn(ctx, q.GetAccounts, seed, q.CreateAccount,

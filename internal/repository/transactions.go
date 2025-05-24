@@ -245,7 +245,7 @@ func dbTransactionToTransaction(
 	}
 
 	if acc != nil {
-		tx.Account = *dbAccountToAccount(acc, 0, cur, nil, sql.NullString{}, false)
+		tx.Account = *dbAccountToAccount(acc, 0, cur, nil, nil, false)
 	}
 
 	if knd != nil {
@@ -253,7 +253,7 @@ func dbTransactionToTransaction(
 	}
 
 	if toAcc != nil {
-		tx.ToAccount = dbAccountToAccount(toAcc, 0, toCur, nil, sql.NullString{}, false)
+		tx.ToAccount = dbAccountToAccount(toAcc, 0, toCur, nil, nil, false)
 	} else if dbTx.ToAccountID.Valid {
 		tx.ToAccount = &models.Account{ID: dbTx.ToAccountID.String}
 	}

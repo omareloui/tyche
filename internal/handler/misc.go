@@ -33,12 +33,18 @@ func (h Handler) AmountInputsWithCurrency(w http.ResponseWriter, r *http.Request
 		return nil, errs.ErrInvalidID
 	}
 
+	claims := getClaims(r.Context())
+
 	fd := &views.AmountFD{
 		Amount:     views.FDInput{Value: r.FormValue("amount")},
 		CurrencyID: views.FDInput{Value: currency.ID},
 	}
 
-	return views.AmountInputsWithCurrency(fd, r.FormValue("id"), curs), nil
+	if fd.CurrencyID.Value == "" {
+		fd.CurrencyID.Value = claims.DefaultCurrency.ID
+	}
+
+	return views.AmountInputsWithCurrency(fd, r.FormValue("id"), curs, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) AmountInputsWithAccount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -66,7 +72,8 @@ func (h Handler) AmountInputsWithAccount(w http.ResponseWriter, r *http.Request)
 		AccountID: views.FDInput{Value: acc.ID},
 	}
 
-	return views.AmountInputsWithAccount(fd, r.FormValue("id"), accs), nil
+	claims := getClaims(r.Context())
+	return views.AmountInputsWithAccount(fd, r.FormValue("id"), accs, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) TxInputs(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -78,7 +85,8 @@ func (h Handler) TxInputs(w http.ResponseWriter, r *http.Request) (templ.Compone
 	if err != nil {
 		return nil, err
 	}
-	return views.TransactionAmountsAndKindFormBody(fd, r.PathValue("id"), knds, cats, accs, cps, gls), nil
+	claims := getClaims(r.Context())
+	return views.TransactionAmountsAndKindFormBody(fd, r.PathValue("id"), knds, cats, accs, cps, gls, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) TxInputsSwitch(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -101,5 +109,6 @@ func (h Handler) TxInputsSwitch(w http.ResponseWriter, r *http.Request) (templ.C
 		fd.AccountIFD.AccountID.Value = toAccId
 	}
 
-	return views.TransactionAmountsAndKindFormBody(fd, r.PathValue("id"), knds, cats, accs, cps, gls), nil
+	claims := getClaims(r.Context())
+	return views.TransactionAmountsAndKindFormBody(fd, r.PathValue("id"), knds, cats, accs, cps, gls, &claims.DefaultCurrency), nil
 }

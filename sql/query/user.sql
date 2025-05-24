@@ -1,10 +1,26 @@
 -- name: GetUserByOAuthID :one
 SELECT
     sqlc.embed(user),
-    sqlc.embed(currencies)
+    sqlc.embed(currencies),
+    accounts.id AS account_id,
+    accounts.name AS account_name,
+    accounts.kind_id AS account_kind_id,
+    accounts.amount AS account_amount,
+    accounts.currency_id AS account_currency_id,
+    accounts.counterparty_id AS account_counterparty_id,
+    accounts.card_number AS account_card_number,
+    accounts.card_limit AS account_card_limit,
+    accounts.name_on_card AS account_name_on_card,
+    accounts.iban AS account_iban,
+    accounts.note AS account_note,
+    accounts.is_archived AS account_is_archived,
+    accounts.exclude_from_balance AS account_exclude_from_balance,
+    accounts.expiration_date AS account_expiration_date,
+    accounts.created_at AS account_created_at
 FROM user
 LEFT JOIN currencies ON user.default_currency_id = currencies.id
-WHERE oauth_id = sqlc.arg(oauth_id) LIMIT 1;
+LEFT JOIN accounts ON user.default_account_id = accounts.id
+WHERE user.oauth_id = sqlc.arg(oauth_id) LIMIT 1;
 
 
 -- name: UpdateSeededAt :exec

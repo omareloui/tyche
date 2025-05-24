@@ -45,7 +45,8 @@ func (h Handler) Categories(w http.ResponseWriter, r *http.Request) (templ.Compo
 		return nil, err
 	}
 
-	return views.Categories(getClaims(r), b, h.mapCategoryToFD(dfltCategory(knds), &errs.ValidationError{}), knds, cats, currs), nil
+	claims := getClaims(r.Context())
+	return views.Categories(claims, b, h.mapCategoryToFD(dfltCategory(knds, &claims.DefaultCurrency), &errs.ValidationError{}), knds, cats, currs), nil
 }
 
 func (h Handler) Category(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -90,11 +91,13 @@ func (h Handler) CreateCategory(w http.ResponseWriter, r *http.Request) (templ.C
 		return nil, err
 	}
 
+	claims := getClaims(r.Context())
+
 	if err := cat.SanitizeAndValidate(h.sani, h.valid); err != nil {
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("create category validation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-			return views.CreateCategoryForm(h.mapCategoryToFD(cat, &valerr), knds, currs), nil
+			return views.CreateCategoryForm(h.mapCategoryToFD(cat, &valerr), knds, currs, &claims.DefaultCurrency), nil
 		}
 		l.Error("sanitizing category", zap.Error(err))
 		return nil, err
@@ -112,7 +115,7 @@ func (h Handler) CreateCategory(w http.ResponseWriter, r *http.Request) (templ.C
 	}
 	l.Debug("rendered category oob")
 
-	return views.CreateCategoryForm(h.mapCategoryToFD(dfltCategory(knds), &errs.ValidationError{}), knds, currs), nil
+	return views.CreateCategoryForm(h.mapCategoryToFD(dfltCategory(knds, &claims.DefaultCurrency), &errs.ValidationError{}), knds, currs, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) GetEditCategory(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -143,7 +146,14 @@ func (h Handler) GetEditCategory(w http.ResponseWriter, r *http.Request) (templ.
 		return nil, err
 	}
 
-	return views.EditCategory(h.mapCategoryToFD(cat, &errs.ValidationError{}), id, knds, currs), nil
+	claims := getClaims(r.Context())
+
+	fd := h.mapCategoryToFD(cat, &errs.ValidationError{})
+	if fd.BudgetAmountFD.CurrencyID.Value == "" {
+		fd.BudgetAmountFD.CurrencyID.Value = claims.DefaultCurrency.ID
+	}
+
+	return views.EditCategory(fd, id, knds, currs, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) EditCategory(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -173,11 +183,13 @@ func (h Handler) EditCategory(w http.ResponseWriter, r *http.Request) (templ.Com
 		return nil, err
 	}
 
+	claims := getClaims(r.Context())
+
 	if err := cat.SanitizeAndValidate(h.sani, h.valid); err != nil {
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("update category validation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-			return views.EditCategory(h.mapCategoryToFD(cat, &valerr), id, knds, currs), nil
+			return views.EditCategory(h.mapCategoryToFD(cat, &valerr), id, knds, currs, &claims.DefaultCurrency), nil
 		}
 		l.Error("sanitizing category", zap.Error(err))
 		return nil, err
@@ -248,7 +260,7 @@ func (h Handler) mapFDToCategory(r *http.Request) (*models.Category, error) {
 	}, nil
 }
 
-func dfltCategory(knds []models.TransactionKind) *models.Category {
+func dfltCategory(knds []models.TransactionKind, defaultCur *models.Currency) *models.Category {
 	dfltKindIdx := slices.IndexFunc(knds, func(knd models.TransactionKind) bool { return knd.Enum == models.ExpenseTxKind })
 
 	if dfltKindIdx == -1 {
@@ -258,7 +270,8 @@ func dfltCategory(knds []models.TransactionKind) *models.Category {
 	}
 
 	return &models.Category{
-		Kind: models.TransactionKind{ID: knds[dfltKindIdx].ID},
+		BudgetCurrency: defaultCur,
+		Kind:           models.TransactionKind{ID: knds[dfltKindIdx].ID},
 	}
 }
 

@@ -29,8 +29,7 @@ func (c *Currency) FxRate(toCurrency string) float64 {
 }
 
 func GetDefaultCurrency() *Currency {
-	// TODO: get the currency from the db first if it doesn't exist then
-	//       get the currency according to the ip addr of the user
+	// TODO: get the currency according to the ip addr of the user
 	return &Currency{
 		String:     "USD",
 		Symbol:     "US$",

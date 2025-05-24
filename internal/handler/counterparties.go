@@ -29,7 +29,7 @@ func (h Handler) Counterparties(w http.ResponseWriter, r *http.Request) (templ.C
 	}
 	l.Debug("fetched counter parties")
 
-	return views.Counterparties(getClaims(r), b, h.mapCounterpartyToFD(dfltCounterparty(), &errs.ValidationError{}), cp), nil
+	return views.Counterparties(getClaims(r.Context()), b, h.mapCounterpartyToFD(dfltCounterparty(), &errs.ValidationError{}), cp), nil
 }
 
 func (h Handler) Counterparty(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

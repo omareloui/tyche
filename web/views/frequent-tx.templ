@@ -58,8 +58,8 @@ templ ftxFormBody(
 	id string, fd *FrequentTxFD,
 	accs []models.Account, knds []models.TransactionKind,
 	cats []models.Category, cps []models.Counterparty,
-	gls []models.Goal) {
-	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs, cps, gls)
+	gls []models.Goal, defaultCur *models.Currency) {
+	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs, cps, gls, defaultCur)
 	@input("Description", "text", "description", "Enter a description", id, fd.Description)
 	@frequencyFormBody(id, &fd.FrequencyFD)
 }
@@ -74,10 +74,10 @@ templ EditFrequentTx(
 	ftx *models.FrequentTx, fd *FrequentTxFD,
 	accs []models.Account, knds []models.TransactionKind,
 	cats []models.Category, cps []models.Counterparty,
-	gls []models.Goal) {
+	gls []models.Goal, defaultCur *models.Currency) {
 	@form("put", fmt.Sprintf("/frequent-tx/%s", ftx.ID), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { ftx.ID }</p>
-		@ftxFormBody(ftx.ID, fd, accs, knds, cats, cps, gls)
+		@ftxFormBody(ftx.ID, fd, accs, knds, cats, cps, gls, defaultCur)
 		@editFormButtons(fmt.Sprintf("/frequent-tx/%s", ftx.ID))
 	}
 }

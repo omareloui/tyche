@@ -26,7 +26,7 @@ func (h Handler) Currencies(w http.ResponseWriter, r *http.Request) (templ.Compo
 	}
 	l.Debug("fetched currencies")
 
-	return views.Currencies(getClaims(r), b, currs), nil
+	return views.Currencies(getClaims(r.Context()), b, currs), nil
 }
 
 func (h Handler) Currency(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -44,7 +44,8 @@ func (h Handler) Currency(w http.ResponseWriter, r *http.Request) (templ.Compone
 	}
 	l.Info("fetched currency", zap.Any("currency", cur))
 
-	return views.Currency(cur), nil
+	claims := getClaims(r.Context())
+	return views.Currency(cur, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) ChangeIsShownForCurrency(isShown bool) func(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -69,7 +70,8 @@ func (h Handler) ChangeIsShownForCurrency(isShown bool) func(w http.ResponseWrit
 		}
 		l.Debug("fetched currency", zap.Any("currency", cur))
 
-		return views.Currency(cur), nil
+		claims := getClaims(r.Context())
+		return views.Currency(cur, &claims.DefaultCurrency), nil
 	}
 }
 
@@ -81,12 +83,20 @@ func (h Handler) SetDefaultCurrency(w http.ResponseWriter, r *http.Request) (tem
 
 	l := logger.FromCtx(r.Context())
 
+	if err := h.repo.SetCurrencyIsShown(r.Context(), id, true); err != nil {
+		l.Error("ensure currency shown to set as default", zap.Error(err))
+		return nil, err
+	}
+	l.Info("ensured currency is shown to set as default", zap.String("currency_id", id))
+
 	if err := h.repo.SetDefaultCurrency(r.Context(), id); err != nil {
 		l.Error("error setting default currency", zap.String("currency_id", id), zap.Error(err))
 		return nil, err
 	}
+	l.Info("set default currency", zap.String("currency_id", id))
 
 	hxRespondWithRefresh(w)
+	unsetCookie(w, accessTokenCookieName)
 
 	return nil, nil
 }

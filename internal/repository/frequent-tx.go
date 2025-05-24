@@ -515,13 +515,13 @@ func dbFrequentTxToFrequentTx(
 	}
 
 	if acc != nil {
-		ft.Account = *dbAccountToAccount(acc, 0, cur, nil, sql.NullString{}, false)
+		ft.Account = *dbAccountToAccount(acc, 0, cur, nil, nil, false)
 	} else if dbFtx.ToAccountID.Valid {
 		ft.ToAccount = &models.Account{ID: dbFtx.ToAccountID.String}
 	}
 
 	if toAcc != nil {
-		ft.ToAccount = dbAccountToAccount(toAcc, 0, toCur, nil, sql.NullString{}, false)
+		ft.ToAccount = dbAccountToAccount(toAcc, 0, toCur, nil, nil, false)
 	} else if dbFtx.ToAccountID.Valid {
 		ft.ToAccount = &models.Account{ID: dbFtx.ToAccountID.String}
 	}

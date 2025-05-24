@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -14,8 +15,8 @@ import (
 
 var nonDigitRegexp *regexp.Regexp = regexp.MustCompile(`[^0-9\.]`)
 
-func getClaims(r *http.Request) *jwt.AccessClaims {
-	v := r.Context().Value(middleware.AccessClaimsCtxKey{})
+func getClaims(ctx context.Context) *jwt.AccessClaims {
+	v := ctx.Value(middleware.AccessClaimsCtxKey{})
 	if v == nil {
 		return nil
 	}

@@ -11,7 +11,7 @@ import (
 type HandlerMethod func(w http.ResponseWriter, r *http.Request) (templ.Component, error)
 
 func (h Handler) HomePage(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	claims := getClaims(r)
+	claims := getClaims(r.Context())
 
 	if claims == nil {
 		return views.HomePage(claims, []models.Balance{}), nil

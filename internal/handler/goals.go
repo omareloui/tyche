@@ -8,6 +8,7 @@ import (
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/errs"
 	"github.com/omareloui/tyche/internal/idgen"
+	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/slicesutils"
@@ -25,7 +26,7 @@ func (h Handler) Goals(w http.ResponseWriter, r *http.Request) (templ.Component,
 	}
 	l.Debug("fetched balances")
 
-	curs, err := h.repo.GetAllCurrencies(r.Context())
+	curs, err := h.repo.GetCurrencies(r.Context())
 	if err != nil {
 		l.Error("fetching currencies", zap.Error(err))
 		return nil, err
@@ -39,9 +40,8 @@ func (h Handler) Goals(w http.ResponseWriter, r *http.Request) (templ.Component,
 	}
 	l.Info("fetched goals", zap.Int("count", len(gls)))
 
-	shownCurs := slicesutils.Filter(curs, func(cur models.Currency) bool { return cur.IsShown })
-
-	return views.Goals(getClaims(r), b, h.mapGlToFD(dfltGoal(curs), &errs.ValidationError{}), gls, shownCurs), nil
+	claims := getClaims(r.Context())
+	return views.Goals(claims, b, h.mapGlToFD(dfltGoal(claims), &errs.ValidationError{}), gls, curs), nil
 }
 
 func (h Handler) Goal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -84,11 +84,13 @@ func (h Handler) CreateGoal(w http.ResponseWriter, r *http.Request) (templ.Compo
 
 	shownCurs := slicesutils.Filter(curs, func(cur models.Currency) bool { return cur.IsShown })
 
+	claims := getClaims(r.Context())
+
 	if err := gl.SanitizeAndValidate(h.sani, h.valid); err != nil {
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("create goal validation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-			return views.CreateGoalForm(h.mapGlToFD(gl, &valerr), shownCurs), nil
+			return views.CreateGoalForm(h.mapGlToFD(gl, &valerr), shownCurs, &claims.DefaultCurrency), nil
 		}
 		l.Error("sanitizing goal", zap.Error(err))
 		return nil, err
@@ -106,7 +108,7 @@ func (h Handler) CreateGoal(w http.ResponseWriter, r *http.Request) (templ.Compo
 	}
 	l.Debug("rendered goal")
 
-	return views.CreateGoalForm(h.mapGlToFD(dfltGoal(curs), &errs.ValidationError{}), shownCurs), nil
+	return views.CreateGoalForm(h.mapGlToFD(dfltGoal(getClaims(r.Context())), &errs.ValidationError{}), shownCurs, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) GetEditGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -131,7 +133,8 @@ func (h Handler) GetEditGoal(w http.ResponseWriter, r *http.Request) (templ.Comp
 	}
 	l.Info("fetched goal")
 
-	return views.EditGoal(id, h.mapGlToFD(gl, &errs.ValidationError{}), curs), nil
+	claims := getClaims(r.Context())
+	return views.EditGoal(id, h.mapGlToFD(gl, &errs.ValidationError{}), curs, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) GetGoalProgressForm(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -150,8 +153,10 @@ func (h Handler) GetGoalProgressForm(w http.ResponseWriter, r *http.Request) (te
 		return nil, err
 	}
 
+	claims := getClaims(r.Context())
+
 	fd := h.mapTransactionToFD(defaultTransaction(accs, knds), &errs.ValidationError{}, knds)
-	return views.GoalProgressForm(gl, fd, accs, knds), nil
+	return views.GoalProgressForm(gl, fd, accs, knds, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) CreateGoalProgress(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -187,7 +192,8 @@ func (h Handler) CreateGoalProgress(w http.ResponseWriter, r *http.Request) (tem
 
 	fd, err := h.prepareCreatingTx(r, tx, accs, knds, cats, cps, gls)
 	if fd != nil {
-		return views.GoalProgressForm(gl, fd, accs, knds), nil
+		claims := getClaims(r.Context())
+		return views.GoalProgressForm(gl, fd, accs, knds, &claims.DefaultCurrency), nil
 	}
 	if err != nil {
 		return nil, err
@@ -240,8 +246,9 @@ func (h Handler) EditGoal(w http.ResponseWriter, r *http.Request) (templ.Compone
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("update goal validation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
+			claims := getClaims(r.Context())
 			fd := h.mapGlToFD(gl, &valerr)
-			return views.EditGoal(id, fd, shownCurs), nil
+			return views.EditGoal(id, fd, shownCurs, &claims.DefaultCurrency), nil
 		}
 		l.Error("sanitizing goal", zap.Error(err))
 		return nil, err
@@ -322,10 +329,8 @@ func (h Handler) mapFDToGoal(r *http.Request) (*models.Goal, error) {
 	}, nil
 }
 
-func dfltGoal(curs []models.Currency) *models.Goal {
+func dfltGoal(claims *jwt.AccessClaims) *models.Goal {
 	return &models.Goal{
-		Currency: *slicesutils.Find(curs, func(cur models.Currency) bool {
-			return cur.String == models.GetDefaultCurrency().String
-		}),
+		Currency: *&claims.DefaultCurrency,
 	}
 }

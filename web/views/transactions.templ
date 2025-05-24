@@ -40,27 +40,28 @@ templ Transactions(
 	@baseLayout(claims, "Transactions", balances, &layoutOpts{includeAlpine: true, includeAlpineCollapse: true, includeAlpineMask: true}) {
 		@container() {
 			@mainHeader("Transactions")
-			@CreateTransactionForm(fd, accounts, knds, cats, cps, gls)
+			@CreateTransactionForm(fd, accounts, knds, cats, cps, gls, &claims.DefaultCurrency)
 			@transactionsList(transactions)
 		}
 	}
 }
 
 templ CreateTransactionForm(
-	fd *TransactionFD,
-	accounts []models.Account, knds []models.TransactionKind,
-	cats []models.Category, cps []models.Counterparty,
-	gls []models.Goal) {
+	fd *TransactionFD, accounts []models.Account,
+	knds []models.TransactionKind, cats []models.Category,
+	cps []models.Counterparty, gls []models.Goal,
+	defaultCur *models.Currency) {
 	@creationForm("Create Transaction", "/transactions", "Create Transaction") {
-		@transactionFormBody(fd, "0", accounts, knds, cats, cps, gls)
+		@transactionFormBody(fd, "0", accounts, knds, cats, cps, gls, defaultCur)
 	}
 }
 
 templ transactionFormBody(
 	fd *TransactionFD, id string, accs []models.Account,
 	knds []models.TransactionKind, cats []models.Category,
-	cps []models.Counterparty, gls []models.Goal) {
-	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs, cps, gls)
+	cps []models.Counterparty, gls []models.Goal,
+	defaultCur *models.Currency) {
+	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs, cps, gls, defaultCur)
 	@input("Description", "text", "description", "Enter a description", id, fd.Description)
 	@dateInput("Date", "scheduled_to", id, fd.ScheduledTo)
 	if fd.FrequencyFD != nil {
@@ -78,10 +79,10 @@ templ EditTransaction(
 	tx *models.Transaction, fd *TransactionFD,
 	accounts []models.Account, knds []models.TransactionKind,
 	cats []models.Category, cps []models.Counterparty,
-	gls []models.Goal) {
+	gls []models.Goal, defaultCur *models.Currency) {
 	@form("put", fmt.Sprintf("/transactions/%s", tx.ID), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { tx.ID }</p>
-		@transactionFormBody(fd, tx.ID, accounts, knds, cats, cps, gls)
+		@transactionFormBody(fd, tx.ID, accounts, knds, cats, cps, gls, defaultCur)
 		@editFormButtons(fmt.Sprintf("/transactions/%s", tx.ID))
 	}
 }
@@ -145,7 +146,7 @@ templ TransactionAmountsAndKindFormBody(
 	fd *TransactionAmountsAndKindFD, id string,
 	knds []models.TransactionKind, cats []models.Category,
 	accs []models.Account, cps []models.Counterparty,
-	gls []models.Goal) {
+	gls []models.Goal, defaultCur *models.Currency) {
 	<div
 		class="contents"
 		hx-target="this"
@@ -157,7 +158,7 @@ templ TransactionAmountsAndKindFormBody(
 			"hx-trigger": "change",
 		})
 		<div class="grid grid-cols-3 gap-4">
-			@moneyInput("Amount", "amount", getCurSymbolByAccount(accs, fd.AccountIFD.AccountID.Value), id,
+			@moneyInput("Amount", "amount", getCurSymbolByAccount(accs, fd.AccountIFD.AccountID.Value, defaultCur), id,
 				fd.AccountIFD.Amount, "col-span-2", templ.Attributes{
 					"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
 					"hx-trigger": "keyup changed delay:200ms",
@@ -181,7 +182,7 @@ templ TransactionAmountsAndKindFormBody(
 			<button hx-post={ fmt.Sprintf("/tx-inputs/switch/%s", id) }>Switch</button>
 			<div class="grid grid-cols-3 gap-4">
 				@moneyInput("To Amount", "to_amount",
-					getCurSymbolByAccount(accs, fd.ToAccountIFD.AccountID.Value), id,
+					getCurSymbolByAccount(accs, fd.ToAccountIFD.AccountID.Value, defaultCur), id,
 					fd.ToAccountIFD.Amount, "col-span-2")
 				@selectToAccount("to_account_id", id, getTxCounterAccs(accs, knds, fd.KindID.Value, isSwitched(accs, fd.AccountIFD.AccountID.Value)),
 					fd.ToAccountIFD.AccountID, templ.Attributes{

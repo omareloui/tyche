@@ -50,7 +50,7 @@ func (h Handler) FrequentTxs(w http.ResponseWriter, r *http.Request) (templ.Comp
 	}
 	l.Info("fetched frequent transactions")
 
-	return views.FrequentTxs(getClaims(r), balances, ftxs), nil
+	return views.FrequentTxs(getClaims(r.Context()), balances, ftxs), nil
 }
 
 func (h Handler) FrequentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -91,9 +91,11 @@ func (h Handler) GetEditFrequentTx(w http.ResponseWriter, r *http.Request) (temp
 	}
 	l.Info("fetched frequent tx")
 
+	claims := getClaims(r.Context())
+
 	return views.EditFrequentTx(ftx,
 		h.mapFrequentTxToFD(ftx, &errs.ValidationError{}, knds),
-		accs, knds, cats, cps, gls), nil
+		accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) EditFrequentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -135,8 +137,9 @@ func (h Handler) EditFrequentTx(w http.ResponseWriter, r *http.Request) (templ.C
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("validating frequent transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
+			claims := getClaims(r.Context())
 			return views.EditFrequentTx(ftx, h.mapFrequentTxToFD(ftx, &valerr, knds),
-				accs, knds, cats, cps, gls), nil
+				accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
 		}
 		l.Error("sanitizing frequent transaction", zap.Error(err))
 		return nil, err

@@ -63,7 +63,7 @@ func (r *Repository) SetDefaultAccount(ctx context.Context, id string) error {
 	})
 }
 
-func dbUserToUser(dbU *queries.User, dfltCur *queries.Currency) *models.User {
+func dbUserToUser(dbU *queries.User, dfltCur *queries.Currency, dfltAcc *queries.Account) *models.User {
 	u := &models.User{
 		ID:            dbU.ID,
 		OAuthID:       dbU.OauthID,
@@ -85,9 +85,29 @@ func dbUserToUser(dbU *queries.User, dfltCur *queries.Currency) *models.User {
 		u.DefaultCurrency = *dbCurrencyToCurrency(dfltCur, true)
 	}
 
+	if dfltAcc != nil {
+		u.DefaultAccount = dbAccountToAccount(dfltAcc, 0, nil, nil, nil, true)
+	}
+
 	return u
 }
 
 func dbUserRowToUser(dbU queries.GetUserByOAuthIDRow) *models.User {
-	return dbUserToUser(&dbU.User, &dbU.Currency)
+	acc := queries.Account{
+		ID:                 dbU.AccountID.String,
+		Name:               dbU.AccountName.String,
+		KindID:             dbU.AccountKindID.String,
+		CurrencyID:         dbU.Currency.ID,
+		CounterpartyID:     dbU.AccountCounterpartyID,
+		CardNumber:         dbU.AccountCardNumber,
+		CardLimit:          dbU.AccountCardLimit.Float64,
+		NameOnCard:         dbU.AccountNameOnCard,
+		Iban:               dbU.AccountIban,
+		Note:               dbU.AccountNote,
+		IsArchived:         dbU.AccountIsArchived.Bool,
+		ExcludeFromBalance: dbU.AccountExcludeFromBalance.Bool,
+		ExpirationDate:     dbU.AccountExpirationDate,
+		CreatedAt:          dbU.AccountCreatedAt.Time,
+	}
+	return dbUserToUser(&dbU.User, &dbU.Currency, &acc)
 }

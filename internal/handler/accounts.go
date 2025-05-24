@@ -8,6 +8,7 @@ import (
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/errs"
 	"github.com/omareloui/tyche/internal/idgen"
+	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/slicesutils"
@@ -24,7 +25,7 @@ func (h *Handler) Accounts(w http.ResponseWriter, r *http.Request) (templ.Compon
 		return nil, err
 	}
 
-	curs, shownCurs, knds, cps, err := h.getAccDeps(r.Context())
+	_, shownCurs, knds, cps, err := h.getAccDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -36,8 +37,9 @@ func (h *Handler) Accounts(w http.ResponseWriter, r *http.Request) (templ.Compon
 	}
 	l.Info("fetched accounts", zap.Int("accounts_length", len(accs)))
 
-	fd := h.mapAccToFD(defaultAccount(curs, knds), &errs.ValidationError{}, knds)
-	return views.Accounts(getClaims(r), balances, fd, knds, shownCurs, accs, cps), nil
+	claims := getClaims(r.Context())
+	fd := h.mapAccToFD(defaultAccount(claims, knds), &errs.ValidationError{}, knds)
+	return views.Accounts(claims, balances, fd, knds, shownCurs, accs, cps), nil
 }
 
 func (h *Handler) Account(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -87,11 +89,13 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 		a.Name = a.Counterparty.Name
 	}
 
+	claims := getClaims(r.Context())
+
 	if err := a.SanitizeAndValidate(h.sani, h.valid); err != nil {
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("validating account", zap.Any("account", a), zap.Any("errors", valerr.Errors))
-			return views.CreateAccountForm(h.mapAccToFD(a, &valerr, knds), knds, shownCurs, cps), nil
+			return views.CreateAccountForm(h.mapAccToFD(a, &valerr, knds), knds, shownCurs, cps, &claims.DefaultCurrency), nil
 		}
 		l.Error("sanitizing account", zap.Error(err))
 		return nil, err
@@ -103,7 +107,7 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 	var valerr *errs.ValidationError
 	if err != nil && errors.As(err, &valerr) {
 		l.Error("duplication error", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-		return views.CreateAccountForm(h.mapAccToFD(a, valerr, knds), knds, shownCurs, cps), nil
+		return views.CreateAccountForm(h.mapAccToFD(a, valerr, knds), knds, shownCurs, cps, &claims.DefaultCurrency), nil
 	} else if err != nil {
 		l.Error("creating account", zap.Error(err), zap.Any("account", a))
 		return nil, err
@@ -120,8 +124,8 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 		return nil, err
 	}
 
-	fd := h.mapAccToFD(defaultAccount(curs, knds), &errs.ValidationError{}, knds)
-	return views.CreateAccountForm(fd, knds, shownCurs, cps), nil
+	fd := h.mapAccToFD(defaultAccount(claims, knds), &errs.ValidationError{}, knds)
+	return views.CreateAccountForm(fd, knds, shownCurs, cps, &claims.DefaultCurrency), nil
 }
 
 func (h *Handler) GetEditAccount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -143,8 +147,9 @@ func (h *Handler) GetEditAccount(w http.ResponseWriter, r *http.Request) (templ.
 		return nil, err
 	}
 
+	claims := getClaims(r.Context())
 	fd := h.mapAccToFD(a, &errs.ValidationError{}, knds)
-	return views.EditAccount(id, fd, knds, shownCurs, cps), nil
+	return views.EditAccount(id, fd, knds, shownCurs, cps, &claims.DefaultCurrency), nil
 }
 
 func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -181,11 +186,13 @@ func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Com
 		a.Name = a.Counterparty.Name
 	}
 
+	claims := getClaims(r.Context())
+
 	if err := a.SanitizeAndValidate(h.sani, h.valid); err != nil {
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("validating account", zap.Any("errors", valerr.Errors))
-			return views.EditAccount(id, h.mapAccToFD(a, &valerr, knds), knds, shownCurs, cps), nil
+			return views.EditAccount(id, h.mapAccToFD(a, &valerr, knds), knds, shownCurs, cps, &claims.DefaultCurrency), nil
 		}
 		l.Error("sanitizing account", zap.Error(err))
 		return nil, err
@@ -197,7 +204,7 @@ func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Com
 	var valerr *errs.ValidationError
 	if err != nil && errors.As(err, &valerr) {
 		l.Error("duplication error", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-		return views.EditAccount(id, h.mapAccToFD(a, valerr, knds), knds, shownCurs, cps), nil
+		return views.EditAccount(id, h.mapAccToFD(a, valerr, knds), knds, shownCurs, cps, &claims.DefaultCurrency), nil
 	} else if err != nil {
 		l.Error("updating account", zap.Error(err), zap.Any("account", a))
 		return nil, err
@@ -266,8 +273,9 @@ func (h Handler) AccountInputs(w http.ResponseWriter, r *http.Request) (templ.Co
 		id = "0"
 	}
 
+	claims := getClaims(r.Context())
 	fd := h.mapAccToFD(acc, &errs.ValidationError{}, knds)
-	return views.AccountInputs(id, &fd.AccountPartialFD, knds, shownCurs, cps), nil
+	return views.AccountInputs(id, &fd.AccountPartialFD, knds, shownCurs, cps, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) getAccDeps(ctx context.Context) ([]models.Currency, []models.Currency, []models.AccountKind, []models.Counterparty, error) {
@@ -371,11 +379,9 @@ func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, kn
 	return fd
 }
 
-func defaultAccount(curs []models.Currency, ak []models.AccountKind) *models.Account {
+func defaultAccount(claims *jwt.AccessClaims, ak []models.AccountKind) *models.Account {
 	return &models.Account{
-		Currency: *slicesutils.Find(curs, func(cur models.Currency) bool {
-			return cur.String == models.GetDefaultCurrency().String
-		}),
+		Currency:           claims.DefaultCurrency,
 		Kind:               *slicesutils.Find(ak, func(k models.AccountKind) bool { return k.Enum == models.DfltAccKind }),
 		IsArchive:          false,
 		ExcludeFromBalance: false,

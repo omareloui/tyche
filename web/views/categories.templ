@@ -23,30 +23,30 @@ templ Categories(
 	@baseLayout(claims, "Categories", balances, &layoutOpts{includeAlpine: true, includeAlpineCollapse: true}) {
 		@container() {
 			@mainHeader("Categories")
-			@CreateCategoryForm(fd, knds, curs)
+			@CreateCategoryForm(fd, knds, curs, &claims.DefaultCurrency)
 			@categoriesList(categories)
 		}
 	}
 }
 
-templ CreateCategoryForm(fd *CategoryFD, knds []models.TransactionKind, curs []models.Currency) {
+templ CreateCategoryForm(fd *CategoryFD, knds []models.TransactionKind, curs []models.Currency, defaultCur *models.Currency) {
 	@creationForm("Create Category", "/categories", "Create Category") {
-		@categoryFormBody(fd, "", knds, curs)
+		@categoryFormBody(fd, "", knds, curs, defaultCur)
 	}
 }
 
-templ EditCategory(fd *CategoryFD, id string, knds []models.TransactionKind, curs []models.Currency) {
+templ EditCategory(fd *CategoryFD, id string, knds []models.TransactionKind, curs []models.Currency, defaultCur *models.Currency) {
 	@form("put", fmt.Sprintf("/categories/%s", id), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { id }</p>
-		@categoryFormBody(fd, id, knds, curs)
+		@categoryFormBody(fd, id, knds, curs, defaultCur)
 		@editFormButtons(fmt.Sprintf("/categories/%s", id))
 	}
 }
 
-templ categoryFormBody(fd *CategoryFD, id string, knds []models.TransactionKind, curs []models.Currency) {
+templ categoryFormBody(fd *CategoryFD, id string, knds []models.TransactionKind, curs []models.Currency, defaultCur *models.Currency) {
 	@input("Name", "text", "name", "Enter category name", id, fd.Name)
 	@selectTxKind("kind_id", id, knds, fd.KindID)
-	@AmountInputsWithCurrency(fd.BudgetAmountFD, id, curs)
+	@AmountInputsWithCurrency(fd.BudgetAmountFD, id, curs, defaultCur)
 }
 
 templ categoriesList(categories []models.Category) {

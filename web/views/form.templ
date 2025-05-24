@@ -74,9 +74,9 @@ templ creationForm(title, postTo, submitStr string, close ...bool) {
 	</div>
 }
 
-templ AmountInputsWithCurrency(fd *AmountFD, id string, curs []models.Currency) {
+templ AmountInputsWithCurrency(fd *AmountFD, id string, curs []models.Currency, defaultCur *models.Currency) {
 	<div hx-target="this" class="grid grid-cols-3 gap-4">
-		@moneyInput("Amount", "amount", getCurSymbolByCurrency(curs, fd.CurrencyID.Value), id,
+		@moneyInput("Amount", "amount", getCurSymbolByCurrency(curs, fd.CurrencyID.Value, defaultCur), id,
 			fd.Amount, "col-span-2")
 		@selectInput("Currency", "currency_id", "Select a Currency", id, currenciesToMap(curs), fd.CurrencyID,
 			false, templ.Attributes{
@@ -88,9 +88,9 @@ templ AmountInputsWithCurrency(fd *AmountFD, id string, curs []models.Currency) 
 	</div>
 }
 
-templ AmountInputsWithAccount(fd *AccountIFD, id string, accs []models.Account) {
+templ AmountInputsWithAccount(fd *AccountIFD, id string, accs []models.Account, defaultCur *models.Currency) {
 	<div hx-target="this" class="grid grid-cols-3 gap-4">
-		@moneyInput("Amount", "amount", getCurSymbolByAccount(accs, fd.AccountID.Value), id,
+		@moneyInput("Amount", "amount", getCurSymbolByAccount(accs, fd.AccountID.Value, defaultCur), id,
 			fd.Amount, "col-span-2")
 		@selectAccount("account_id", id, accs, fd.AccountID,
 			templ.Attributes{
@@ -422,22 +422,28 @@ func glsToMap(gls []models.Goal) map[string]string {
 	return m
 }
 
-func getCurSymbolByAccount(accs []models.Account, accId string) string {
+func getCurSymbolByAccount(accs []models.Account, accId string, defaultCur *models.Currency) string {
+	var symbol string
 	acc := slicesutils.Find(accs, func(a models.Account) bool {
 		return a.ID == accId
 	})
-	if acc == nil {
-		return models.GetDefaultCurrency().Symbol
+	if acc != nil {
+		symbol = acc.Currency.Symbol
+	} else {
+		symbol = defaultCur.Symbol
 	}
-	return acc.Currency.Symbol
+	return symbol
 }
 
-func getCurSymbolByCurrency(curs []models.Currency, curId string) string {
+func getCurSymbolByCurrency(curs []models.Currency, curId string, defaultCur *models.Currency) string {
 	cur := slicesutils.Find(curs, func(c models.Currency) bool {
 		return c.ID == curId
 	})
 	if cur == nil {
-		return models.GetDefaultCurrency().Symbol
+		cur = defaultCur
+	}
+	if cur == nil {
+		cur = slicesutils.Find(curs, func(c models.Currency) bool { return c.IsDefault })
 	}
 	return cur.Symbol
 }
@@ -447,7 +453,7 @@ func getCurIbanPrefixByCurrency(curs []models.Currency, curId string) string {
 		return c.ID == curId
 	})
 	if cur == nil {
-		return models.GetDefaultCurrency().IbanPrefix
+		cur = slicesutils.Find(curs, func(c models.Currency) bool { return c.IsDefault })
 	}
 	return cur.IbanPrefix
 }

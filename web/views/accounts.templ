@@ -36,34 +36,34 @@ templ Accounts(
 	@baseLayout(claims, "Accounts", balances, &layoutOpts{includeAlpine: true, includeAlpineCollapse: true}) {
 		@container() {
 			@mainHeader("Accounts")
-			@CreateAccountForm(fd, aknds, curs, cps)
+			@CreateAccountForm(fd, aknds, curs, cps, &claims.DefaultCurrency)
 			@accountsList(accounts)
 		}
 	}
 }
 
-templ CreateAccountForm(fd *AccountFD, aknds []models.AccountKind, curs []models.Currency, cps []models.Counterparty) {
+templ CreateAccountForm(fd *AccountFD, aknds []models.AccountKind, curs []models.Currency, cps []models.Counterparty, defaultCur *models.Currency) {
 	@creationForm("Create Account", "/accounts", "Create Account") {
-		@accountFormBody("0", fd, aknds, curs, cps)
+		@accountFormBody("0", fd, aknds, curs, cps, defaultCur)
 	}
 }
 
-templ EditAccount(id string, fd *AccountFD, aknds []models.AccountKind, curs []models.Currency, cps []models.Counterparty) {
+templ EditAccount(id string, fd *AccountFD, aknds []models.AccountKind, curs []models.Currency, cps []models.Counterparty, defaultCur *models.Currency) {
 	@form("put", fmt.Sprintf("/accounts/%s", id), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { id }</p>
-		@accountFormBody(id, fd, aknds, curs, cps)
+		@accountFormBody(id, fd, aknds, curs, cps, defaultCur)
 		@editFormButtons(fmt.Sprintf("/accounts/%s", id))
 	}
 }
 
-templ accountFormBody(id string, fd *AccountFD, aknds []models.AccountKind, curs []models.Currency, cps []models.Counterparty) {
-	@AccountInputs(id, &fd.AccountPartialFD, aknds, curs, cps)
+templ accountFormBody(id string, fd *AccountFD, aknds []models.AccountKind, curs []models.Currency, cps []models.Counterparty, defaultCur *models.Currency) {
+	@AccountInputs(id, &fd.AccountPartialFD, aknds, curs, cps, defaultCur)
 	@input("Note", "text", "note", "Enter note", id, fd.Note)
 	@checkbox("Is Archive", "is_archive", id, fd.IsArchive)
 	@checkbox("Exclude From Balance", "exclude_from_balance", id, fd.ExcludeFromBalance)
 }
 
-templ AccountInputs(id string, fd *AccountPartialFD, aknds []models.AccountKind, curs []models.Currency, cps []models.Counterparty) {
+templ AccountInputs(id string, fd *AccountPartialFD, aknds []models.AccountKind, curs []models.Currency, cps []models.Counterparty, defaultCur *models.Currency) {
 	<div
 		class="contents"
 		hx-target="this"
@@ -90,7 +90,7 @@ templ AccountInputs(id string, fd *AccountPartialFD, aknds []models.AccountKind,
 			@input("Name on card", "text", "name_on_card", "John Doe", id, *fd.NameOnCard)
 		}
 		if fd.CardLimit != nil {
-			@moneyInput("Card Limit", "card_limit", getCurSymbolByCurrency(curs, fd.CurrencyID.Value), id, *fd.CardLimit, "")
+			@moneyInput("Card Limit", "card_limit", getCurSymbolByCurrency(curs, fd.CurrencyID.Value, defaultCur), id, *fd.CardLimit, "")
 		}
 		if fd.ExpirationDate != nil {
 			@dateInput("Expiration Date", "expiration_date", id, *fd.ExpirationDate)

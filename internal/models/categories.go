@@ -26,13 +26,7 @@ type createCategory struct {
 }
 
 func (cat *Category) ViewBudgetAmount() string {
-	var cur string
-	if cat.BudgetCurrency == nil {
-		cur = GetDefaultCurrency().String
-	} else {
-		cur = cat.BudgetCurrency.String
-	}
-	return formatAmount(cat.BudgetAmount, cur)
+	return formatAmount(cat.BudgetAmount, cat.BudgetCurrency.String)
 }
 
 func (cat *Category) toValidate() *createCategory {

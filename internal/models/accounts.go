@@ -109,13 +109,11 @@ func (b *Balance) ViewAmount() string {
 	return formatAmount(b.Amount, b.Currency.Symbol)
 }
 
-func (b *Balance) ViewAmountInDefaultCurrency() string {
-	cur := GetDefaultCurrency()
+func (b *Balance) ViewAmountWithCurrency(cur *Currency) string {
 	return formatAmount(b.Currency.FxRate(cur.String)*b.Amount,
 		cur.Symbol)
 }
 
-func (b *Balance) AmountInDefaultCurrency() float64 {
-	cur := GetDefaultCurrency()
+func (b *Balance) AmountWithCurrency(cur *Currency) float64 {
 	return b.Currency.FxRate(cur.String) * b.Amount
 }

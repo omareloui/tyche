@@ -69,15 +69,46 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 const getUserByOAuthID = `-- name: GetUserByOAuthID :one
 SELECT
     user.id, user.oauth_id, user.oauth_provider, user.email, user.verified_email, user.first_name, user.last_name, user.picture, user.default_currency_id, user.default_account_id, user.start_of_period, user.seeded_at, user.created_at,
-    currencies.id, currencies.string, currencies.symbol, currencies.kind, currencies.iban_prefix, currencies.is_shown
+    currencies.id, currencies.string, currencies.symbol, currencies.kind, currencies.iban_prefix, currencies.is_shown,
+    accounts.id AS account_id,
+    accounts.name AS account_name,
+    accounts.kind_id AS account_kind_id,
+    accounts.amount AS account_amount,
+    accounts.currency_id AS account_currency_id,
+    accounts.counterparty_id AS account_counterparty_id,
+    accounts.card_number AS account_card_number,
+    accounts.card_limit AS account_card_limit,
+    accounts.name_on_card AS account_name_on_card,
+    accounts.iban AS account_iban,
+    accounts.note AS account_note,
+    accounts.is_archived AS account_is_archived,
+    accounts.exclude_from_balance AS account_exclude_from_balance,
+    accounts.expiration_date AS account_expiration_date,
+    accounts.created_at AS account_created_at
 FROM user
 LEFT JOIN currencies ON user.default_currency_id = currencies.id
-WHERE oauth_id = ?1 LIMIT 1
+LEFT JOIN accounts ON user.default_account_id = accounts.id
+WHERE user.oauth_id = ?1 LIMIT 1
 `
 
 type GetUserByOAuthIDRow struct {
-	User     User
-	Currency Currency
+	User                      User
+	Currency                  Currency
+	AccountID                 sql.NullString
+	AccountName               sql.NullString
+	AccountKindID             sql.NullString
+	AccountAmount             sql.NullFloat64
+	AccountCurrencyID         sql.NullString
+	AccountCounterpartyID     sql.NullString
+	AccountCardNumber         sql.NullString
+	AccountCardLimit          sql.NullFloat64
+	AccountNameOnCard         sql.NullString
+	AccountIban               sql.NullString
+	AccountNote               sql.NullString
+	AccountIsArchived         sql.NullBool
+	AccountExcludeFromBalance sql.NullBool
+	AccountExpirationDate     sql.NullTime
+	AccountCreatedAt          sql.NullTime
 }
 
 func (q *Queries) GetUserByOAuthID(ctx context.Context, oauthID string) (GetUserByOAuthIDRow, error) {
@@ -103,6 +134,21 @@ func (q *Queries) GetUserByOAuthID(ctx context.Context, oauthID string) (GetUser
 		&i.Currency.Kind,
 		&i.Currency.IbanPrefix,
 		&i.Currency.IsShown,
+		&i.AccountID,
+		&i.AccountName,
+		&i.AccountKindID,
+		&i.AccountAmount,
+		&i.AccountCurrencyID,
+		&i.AccountCounterpartyID,
+		&i.AccountCardNumber,
+		&i.AccountCardLimit,
+		&i.AccountNameOnCard,
+		&i.AccountIban,
+		&i.AccountNote,
+		&i.AccountIsArchived,
+		&i.AccountExcludeFromBalance,
+		&i.AccountExpirationDate,
+		&i.AccountCreatedAt,
 	)
 	return i, err
 }

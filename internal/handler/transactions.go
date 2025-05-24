@@ -45,7 +45,7 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 	}
 	l.Debug("fetched balances")
 
-	return views.Transactions(getClaims(r), balances, txs, fd, accs, knds, cats, cps, gls), nil
+	return views.Transactions(getClaims(r.Context()), balances, txs, fd, accs, knds, cats, cps, gls), nil
 }
 
 func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -67,9 +67,11 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		return nil, err
 	}
 
+	claims := getClaims(r.Context())
+
 	fd, err := h.prepareTx(r, tx, accs, knds, cats, cps, gls)
 	if fd != nil {
-		return views.CreateTransactionForm(fd, accs, knds, cats, cps, gls), nil
+		return views.CreateTransactionForm(fd, accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
 	}
 	if err != nil {
 		return nil, err
@@ -95,7 +97,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 				l.Error("validating frequent transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
 				fd := h.mapTransactionToFD(tx, &valerr, knds)
 				fd.FrequencyFD = h.parseFrequencyFD(r, &valerr)
-				return views.CreateTransactionForm(fd, accs, knds, cats, cps, gls), nil
+				return views.CreateTransactionForm(fd, accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
 			}
 			l.Error("sanitizing frequent transaction", zap.Error(err))
 			return nil, err
@@ -131,7 +133,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 	}
 
 	fd = h.mapTransactionToFD(defaultTransaction(accs, knds), new(errs.ValidationError), knds)
-	return views.CreateTransactionForm(fd, accs, knds, cats, cps, gls), nil
+	return views.CreateTransactionForm(fd, accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) Transaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -176,7 +178,8 @@ func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (tem
 	fd := h.mapTransactionToFD(tx, new(errs.ValidationError), knds)
 	fd.FrequencyFD = nil
 
-	return views.EditTransaction(tx, fd, accs, knds, cats, cps, gls), nil
+	claims := getClaims(r.Context())
+	return views.EditTransaction(tx, fd, accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -199,7 +202,8 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 	}
 	fd, err := h.prepareTx(r, tx, accs, knds, cats, cps, gls)
 	if fd != nil {
-		return views.EditTransaction(tx, fd, accs, knds, cats, cps, gls), nil
+		claims := getClaims(r.Context())
+		return views.EditTransaction(tx, fd, accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
 	}
 	if err != nil {
 		return nil, err
