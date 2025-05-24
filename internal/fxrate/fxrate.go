@@ -8,8 +8,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/omareloui/tyche/internal/config"
+	"github.com/omareloui/tyche/internal/logger"
+	"go.uber.org/zap"
 )
 
 type rate struct {
@@ -23,7 +30,56 @@ type fxRates map[string]rate
 
 var rates fxRates = make(fxRates)
 
+func init() {
+	cacheDir := config.GetCacheDir()
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		logger.Get().Error("failed to create cache directory", zap.Error(err))
+	}
+}
+
+func loadFromCache(currency string) (*rate, error) {
+	cacheDir := config.GetCacheDir()
+	filePath := filepath.Join(cacheDir, fmt.Sprintf("%s.cache", currency))
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var cachedRate rate
+	if err := json.Unmarshal(data, &cachedRate); err != nil {
+		return nil, err
+	}
+
+	return &cachedRate, nil
+}
+
+func saveToCache(currency string, r *rate) error {
+	cacheDir := config.GetCacheDir()
+	filePath := filepath.Join(cacheDir, fmt.Sprintf("%s.cache", currency))
+	data, err := json.Marshal(r)
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(filePath, data, 0o644)
+}
+
 func fetchFXRates(currency string) error {
+	l := logger.Get()
+
+	cachedRate, err := loadFromCache(currency)
+	if err != nil {
+		l.Warn("failed to load from cache", zap.String("currency", currency), zap.Error(err))
+	} else if cachedRate != nil {
+		mu.Lock()
+		rates[currency] = *cachedRate
+		mu.Unlock()
+		return nil
+	}
+
 	url := fmt.Sprintf("https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/%s.min.json", currency)
 	resp, err := http.Get(url)
 	if err != nil {
@@ -46,12 +102,18 @@ func fetchFXRates(currency string) error {
 		_rates[k] = float64(v.(float64))
 	}
 
-	mu.Lock()
-	defer mu.Unlock()
-	rates[currency] = rate{
+	newRate := rate{
 		Date:  parsed["date"].(string),
 		Rates: _rates,
 	}
+
+	if err := saveToCache(currency, &newRate); err != nil {
+		l.Warn("failed to save to cache", zap.String("currency", currency), zap.Error(err))
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	rates[currency] = newRate
 
 	return nil
 }
@@ -69,9 +131,14 @@ func GetFxRate(from, to string) (float64, error) {
 	mu.RUnlock()
 
 	if !ok {
+		now := time.Now()
+
 		if err := fetchFXRates(from); err != nil {
 			return 0, err
 		}
+
+		l := logger.Get()
+		l.Debug("fetched fx rates", zap.Duration("took", time.Since(now)))
 
 		mu.RLock()
 		r = rates[from]

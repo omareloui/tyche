@@ -24,6 +24,14 @@ func getEnvironmentInt(key string) int {
 	return parsedInt
 }
 
+func getEnvironmentValueWithDefault(key string, dflt string) string {
+	v := os.Getenv(key)
+	if v == "" {
+		return dflt
+	}
+	return v
+}
+
 func getEnvironmentIntWithDefault(key string, dflt int) int {
 	v := os.Getenv(key)
 	i := dflt

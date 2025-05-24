@@ -17,3 +17,5 @@ bin
 vendor
 
 node_modules
+
+.cache

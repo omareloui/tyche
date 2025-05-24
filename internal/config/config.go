@@ -34,3 +34,7 @@ func GetGoogleOAuthClientID() string {
 func GetGoogleOAuthClientSecret() string {
 	return getEnvironmentValue("GOOGLE_CLIENT_SECRET")
 }
+
+func GetCacheDir() string {
+	return getEnvironmentValueWithDefault("CACHE_DIR", ".cache")
+}
