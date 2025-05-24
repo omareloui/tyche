@@ -31,10 +31,11 @@ func (gl *Goal) ViewAmount() string {
 }
 
 func (gl *Goal) Remaining() float64 {
-	sum := float64(0)
+	var sum float64
+
 	for _, tx := range gl.Transactions {
 		if !tx.FulfilledAt.IsZero() {
-			sum += tx.Amount * tx.Account.Currency.FxRate(gl.Currency.Symbol)
+			sum += tx.Amount * tx.Account.Currency.FxRate(gl.Currency.String)
 		}
 	}
 	rem := gl.Price - sum
