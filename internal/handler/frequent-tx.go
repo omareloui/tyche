@@ -25,7 +25,7 @@ func (h Handler) FrequencyForm(w http.ResponseWriter, r *http.Request) (templ.Co
 	fd := h.parseFrequencyFD(r, &errs.ValidationError{})
 
 	if fd.FrequentBy.Value == "" {
-		fd.FrequentBy.Value = fmt.Sprintf("%d", models.FreqbyMonth)
+		fd.FrequentBy.Value = fmt.Sprintf("%d", models.RecurrentUnitMonth)
 		fd.Frequency.Value = "1"
 	}
 
@@ -204,23 +204,23 @@ func (h Handler) DeleteFrequentTx(w http.ResponseWriter, r *http.Request) (templ
 	return nil, nil
 }
 
-func generateNextScheduledTransactions(ftx *models.FrequentTx, count int) []models.Transaction {
+func generateNextScheduledTransactions(ftx *models.RecurrentTx, count int) []models.Transaction {
 	txs := []models.Transaction{}
 	now := time.Now()
 
 	for range count {
 		var nextOn time.Time
 
-		switch ftx.FrequencyBy {
-		case models.FreqByDay:
-			nextOn = ftx.LastTransactionScheduledTo.AddDate(0, 0, int(ftx.Frequency))
-		case models.FreqbyMonth:
-			nextOn = ftx.LastTransactionScheduledTo.AddDate(0, int(ftx.Frequency), 0)
+		switch ftx.Unit {
+		case models.RecurrentUnitDay:
+			nextOn = ftx.LastTransactionScheduledTo.AddDate(0, 0, int(ftx.Every))
+		case models.RecurrentUnitMonth:
+			nextOn = ftx.LastTransactionScheduledTo.AddDate(0, int(ftx.Every), 0)
 			if d := nextOn.Day(); d != ftx.LastTransactionScheduledTo.Day() {
 				nextOn = nextOn.AddDate(0, 0, -d)
 			}
-		case models.FreqByYear:
-			nextOn = ftx.LastTransactionScheduledTo.AddDate(int(ftx.Frequency), 0, 0)
+		case models.RecurrentUnitYear:
+			nextOn = ftx.LastTransactionScheduledTo.AddDate(int(ftx.Every), 0, 0)
 			if d := nextOn.Day(); d != ftx.LastTransactionScheduledTo.Day() {
 				nextOn = nextOn.AddDate(0, 0, -d)
 			}
@@ -250,7 +250,7 @@ func generateNextScheduledTransactions(ftx *models.FrequentTx, count int) []mode
 	return txs
 }
 
-func (h Handler) mapFDToFrequentTx(r *http.Request) (*models.FrequentTx, error) {
+func (h Handler) mapFDToFrequentTx(r *http.Request) (*models.RecurrentTx, error) {
 	amount, err := parseFloatIfExists(r.FormValue("amount"))
 	if err != nil {
 		return nil, err
@@ -300,11 +300,11 @@ func (h Handler) mapFDToFrequentTx(r *http.Request) (*models.FrequentTx, error) 
 		gl = &models.Goal{ID: glId}
 	}
 
-	return &models.FrequentTx{
+	return &models.RecurrentTx{
 		Account:      models.Account{ID: r.FormValue("account_id")},
 		Amount:       amount,
-		Frequency:    uint(freq),
-		FrequencyBy:  models.FrequencyBy(freqBy),
+		Every:        uint(freq),
+		Unit:         models.RecurrentUnit(freqBy),
 		StopsAt:      stopsOn,
 		Transactions: []models.Transaction{},
 		Description:  r.FormValue("description"),
@@ -317,12 +317,12 @@ func (h Handler) mapFDToFrequentTx(r *http.Request) (*models.FrequentTx, error) 
 	}, nil
 }
 
-func (h Handler) mapFrequentTxToFD(ftx *models.FrequentTx, valerr *errs.ValidationError, knds []models.TransactionKind) *views.FrequentTxFD {
+func (h Handler) mapFrequentTxToFD(ftx *models.RecurrentTx, valerr *errs.ValidationError, knds []models.TransactionKind) *views.FrequentTxFD {
 	fd := &views.FrequentTxFD{
 		FrequencyFD: views.FrequencyFD{
 			IsFrequent: views.FDInput{Value: "on"},
-			FrequentBy: views.FDInput{Value: formatIntIfNonZero(int(ftx.FrequencyBy)), Error: valerr.Errors.MsgFor("FrequentBy")},
-			Frequency:  views.FDInput{Value: formatIntIfNonZero(int(ftx.Frequency)), Error: valerr.Errors.MsgFor("Frequency")},
+			FrequentBy: views.FDInput{Value: formatIntIfNonZero(int(ftx.Unit)), Error: valerr.Errors.MsgFor("FrequentBy")},
+			Frequency:  views.FDInput{Value: formatIntIfNonZero(int(ftx.Every)), Error: valerr.Errors.MsgFor("Frequency")},
 			StopsOn:    views.FDInput{Value: formatDateOnlyIfNonZero(ftx.StopsAt), Error: valerr.Errors.MsgFor("StopsOn")},
 		},
 		TransactionAmountsAndKindFD: views.TransactionAmountsAndKindFD{

@@ -77,7 +77,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		return nil, err
 	}
 
-	var ftx *models.FrequentTx
+	var ftx *models.RecurrentTx
 	var scheduledTxs []models.Transaction
 
 	if r.FormValue("is_frequent") != "" {
@@ -484,7 +484,7 @@ func defaultTransaction(accs []models.Account, knds []models.TransactionKind) *m
 	return tx
 }
 
-func (h Handler) mapFDToTransactionFrequency(r *http.Request, parsedTx *models.Transaction) (*models.FrequentTx, error) {
+func (h Handler) mapFDToTransactionFrequency(r *http.Request, parsedTx *models.Transaction) (*models.RecurrentTx, error) {
 	frequency, err := parseIntIfExists(r.FormValue("frequency"))
 	if err != nil {
 		return nil, err
@@ -500,7 +500,7 @@ func (h Handler) mapFDToTransactionFrequency(r *http.Request, parsedTx *models.T
 		return nil, err
 	}
 
-	return &models.FrequentTx{
+	return &models.RecurrentTx{
 		Account:      parsedTx.Account,
 		Amount:       parsedTx.Amount,
 		Kind:         parsedTx.Kind,
@@ -510,8 +510,8 @@ func (h Handler) mapFDToTransactionFrequency(r *http.Request, parsedTx *models.T
 		ToAccount:    parsedTx.ToAccount,
 		ToAmount:     parsedTx.ToAmount,
 		Goal:         parsedTx.Goal,
-		FrequencyBy:  models.FrequencyBy(frequencyBy),
-		Frequency:    uint(frequency),
+		Unit:         models.RecurrentUnit(frequencyBy),
+		Every:        uint(frequency),
 		StartsAt:     parsedTx.ScheduledTo,
 		StopsAt:      stopsOn,
 	}, nil
