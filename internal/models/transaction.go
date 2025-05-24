@@ -20,12 +20,13 @@ type Transaction struct {
 	Description    string
 	Goal           *Goal
 	GoalPercentage float64
+	RecurrentTx    *RecurrentTx
 	ScheduledTo    time.Time
 	FulfilledAt    time.Time
 	CreatedAt      time.Time
 }
 
-type commonFieldsForTxAndFtx struct {
+type commonFieldsForTxAndRtx struct {
 	ID             string  `validate:"required,ulid"`
 	AccountID      string  `validate:"required,ulid"`
 	Amount         float64 `validate:"required"`
@@ -40,7 +41,7 @@ type commonFieldsForTxAndFtx struct {
 }
 
 type createTransaction struct {
-	commonFieldsForTxAndFtx
+	commonFieldsForTxAndRtx
 	ScheduledTo time.Time `validate:"required"`
 }
 
@@ -72,7 +73,7 @@ func (t *Transaction) toValidate() *createTransaction {
 	}
 
 	return &createTransaction{
-		commonFieldsForTxAndFtx: commonFieldsForTxAndFtx{
+		commonFieldsForTxAndRtx: commonFieldsForTxAndRtx{
 			ID:             t.ID,
 			AccountID:      t.Account.ID,
 			Amount:         t.Amount,

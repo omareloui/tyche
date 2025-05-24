@@ -10,17 +10,17 @@ import (
 	"go.uber.org/zap"
 )
 
-func (r *Repository) CreateTransaction(ctx context.Context, tx *models.Transaction, ftx *models.FrequentTx, scheduledTxs []models.Transaction) error {
+func (r *Repository) CreateTransaction(ctx context.Context, tx *models.Transaction, rt *models.RecurrentTx, scheduledTxs []models.Transaction) error {
 	return r.transact(ctx, func(qtx *queries.Queries) error {
 		if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, tx); err != nil {
 			return err
 		}
 
-		if ftx != nil {
-			if err := r.createFrequentTxWithTxn(qtx, ctx, ftx); err != nil {
+		if rt != nil {
+			if err := r.createFrequentTxWithTxn(qtx, ctx, rt); err != nil {
 				return err
 			}
-			if err := r.createFrequentTxTransactionWithTxn(ctx, qtx, ftx.ID, tx.ID); err != nil {
+			if err := r.createFrequentTxTransactionWithTxn(ctx, qtx, rt.ID, tx.ID); err != nil {
 				return err
 			}
 		}
@@ -29,7 +29,7 @@ func (r *Repository) CreateTransaction(ctx context.Context, tx *models.Transacti
 			if err := r.createTransactionWithTxn(ctx, qtx, &stx); err != nil {
 				return err
 			}
-			if err := r.createFrequentTxTransactionWithTxn(ctx, qtx, ftx.ID, stx.ID); err != nil {
+			if err := r.createFrequentTxTransactionWithTxn(ctx, qtx, rt.ID, stx.ID); err != nil {
 				return err
 			}
 		}
