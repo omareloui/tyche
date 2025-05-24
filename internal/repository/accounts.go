@@ -141,18 +141,6 @@ func (r *Repository) UpdateAccount(ctx context.Context, a *models.Account) error
 	return nil
 }
 
-func (r *Repository) SetDefaultAccountExpect(ctx context.Context, id string) error {
-	return r.transact(ctx, func(qtx *queries.Queries) error {
-		l := logger.FromCtx(ctx)
-		err := qtx.SetDefaultAccount(ctx, sql.NullString{String: id, Valid: true})
-		if err != nil {
-			l.Error("setting default account", zap.String("account_id", id), zap.Error(err))
-			return err
-		}
-		return nil
-	})
-}
-
 func (r *Repository) DeleteAccount(ctx context.Context, id string) error {
 	l := logger.FromCtx(ctx)
 
@@ -281,7 +269,7 @@ func dbAccountToAccount(dbAcc *queries.Account, actualAmount float64, cur *queri
 		Kind:     models.AccountKind{ID: dbAcc.KindID},
 	}
 	if cur != nil {
-		acc.Currency = *dbCurrencyToCurrency(cur)
+		acc.Currency = *dbCurrencyToCurrency(cur, false)
 	}
 
 	if dbAcc.CounterpartyID.Valid {

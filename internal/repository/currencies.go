@@ -46,7 +46,7 @@ func (r *Repository) GetCurrency(ctx context.Context, id string) (*models.Curren
 	if err != nil {
 		return nil, err
 	}
-	return dbCurrencyToCurrency(&dbCurrency.Currency), nil
+	return dbCurrencyToCurrency(&dbCurrency.Currency, dbCurrency.IsDefault.(int64) != 0), nil
 }
 
 func (r *Repository) GetCurrencyByString(ctx context.Context, cur string) (*models.Currency, error) {
@@ -59,7 +59,20 @@ func (r *Repository) GetCurrencyByString(ctx context.Context, cur string) (*mode
 	if err != nil {
 		return nil, err
 	}
-	return dbCurrencyToCurrency(&dbCurrency.Currency), nil
+	return dbCurrencyToCurrency(&dbCurrency.Currency, dbCurrency.IsDefault.(int64) != 0), nil
+}
+
+func (r *Repository) GetDefaultCurrency(ctx context.Context) (*models.Currency, error) {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	dbCurrency, err := q.GetDefaultCurrency(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return dbCurrencyToCurrency(&dbCurrency.Currency, dbCurrency.IsDefault.(int64) != 0), nil
 }
 
 func (r *Repository) createCurrency(ctx context.Context, curr models.Currency) error {
@@ -106,7 +119,24 @@ func (r *Repository) SetCurrencyIsShown(ctx context.Context, currId string, isSh
 	return nil
 }
 
-func dbCurrencyToCurrency(dbCurr *queries.Currency) *models.Currency {
+func (r *Repository) SetDefaultCurrency(ctx context.Context, currId string) error {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+
+	l := logger.FromCtx(ctx)
+
+	if err := q.SetDefaultCurrency(ctx, currId); err != nil {
+		l.Error("error setting default currency", zap.String("currId", currId), zap.Error(err))
+		return err
+	}
+
+	l.Debug("set default currency", zap.String("currId", currId))
+	return nil
+}
+
+func dbCurrencyToCurrency(dbCurr *queries.Currency, isDefault bool) *models.Currency {
 	return &models.Currency{
 		ID:         dbCurr.ID,
 		String:     dbCurr.String,
@@ -114,6 +144,7 @@ func dbCurrencyToCurrency(dbCurr *queries.Currency) *models.Currency {
 		Kind:       models.CurrencyKind(dbCurr.Kind),
 		IbanPrefix: dbCurr.IbanPrefix.String,
 		IsShown:    dbCurr.IsShown,
+		IsDefault:  isDefault,
 	}
 }
 
@@ -121,7 +152,7 @@ func dbCurrenciesRowToCurrencies[T queries.GetAllCurrenciesRow | queries.GetCurr
 	currencies := make([]models.Currency, len(dbCurrency))
 	for i, cur := range dbCurrency {
 		_cur := queries.GetCurrenciesRow(cur)
-		currencies[i] = *dbCurrencyToCurrency(&_cur.Currency)
+		currencies[i] = *dbCurrencyToCurrency(&_cur.Currency, _cur.IsDefault.(int64) != 0)
 	}
 	return currencies
 }

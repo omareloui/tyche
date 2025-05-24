@@ -26,9 +26,12 @@ func renderToBody(w http.ResponseWriter, r *http.Request, template templ.Compone
 	return template.Render(r.Context(), w)
 }
 
-func hxRespondWithRedirect(w http.ResponseWriter, path string) error {
+func hxRespondWithRedirect(w http.ResponseWriter, path string) {
 	w.Header().Set("HX-Location", path)
-	return nil
+}
+
+func hxRespondWithRefresh(w http.ResponseWriter) {
+	w.Header().Set("HX-Refresh", "true")
 }
 
 func parseIntIfExists(str string) (int, error) {

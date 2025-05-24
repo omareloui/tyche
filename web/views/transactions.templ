@@ -37,7 +37,7 @@ templ Transactions(
 	fd *TransactionFD, accounts []models.Account,
 	knds []models.TransactionKind, cats []models.Category,
 	cps []models.Counterparty, gls []models.Goal) {
-	@baseLayout(claims, "Transactions", balances, &layoutOpts{includeAlpine: true, includeAlpineCollapse: true}) {
+	@baseLayout(claims, "Transactions", balances, &layoutOpts{includeAlpine: true, includeAlpineCollapse: true, includeAlpineMask: true}) {
 		@container() {
 			@mainHeader("Transactions")
 			@CreateTransactionForm(fd, accounts, knds, cats, cps, gls)

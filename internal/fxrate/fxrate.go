@@ -138,7 +138,7 @@ func GetFxRate(from, to string) (float64, error) {
 		}
 
 		l := logger.Get()
-		l.Debug("fetched fx rates", zap.Duration("took", time.Since(now)))
+		l.Debug("retrieved fx rates", zap.Duration("took", time.Since(now)), zap.String("currency", from))
 
 		mu.RLock()
 		r = rates[from]

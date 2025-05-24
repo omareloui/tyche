@@ -52,12 +52,16 @@ func (q *Queries) CreateCurrency(ctx context.Context, arg CreateCurrencyParams) 
 
 const getAllCurrencies = `-- name: GetAllCurrencies :many
 SELECT
-    currencies.id, currencies.string, currencies.symbol, currencies.kind, currencies.iban_prefix, currencies.is_shown
-FROM currencies
+    c.id, c.string, c.symbol, c.kind, c.iban_prefix, c.is_shown,
+    (u.id IS NOT NULL) AS is_default
+FROM currencies AS c
+LEFT JOIN user AS u ON c.id = u.default_currency_id
+ORDER BY is_default DESC, c.id
 `
 
 type GetAllCurrenciesRow struct {
-	Currency Currency
+	Currency  Currency
+	IsDefault interface{}
 }
 
 func (q *Queries) GetAllCurrencies(ctx context.Context) ([]GetAllCurrenciesRow, error) {
@@ -76,6 +80,7 @@ func (q *Queries) GetAllCurrencies(ctx context.Context) ([]GetAllCurrenciesRow, 
 			&i.Currency.Kind,
 			&i.Currency.IbanPrefix,
 			&i.Currency.IsShown,
+			&i.IsDefault,
 		); err != nil {
 			return nil, err
 		}
@@ -92,13 +97,17 @@ func (q *Queries) GetAllCurrencies(ctx context.Context) ([]GetAllCurrenciesRow, 
 
 const getCurrencies = `-- name: GetCurrencies :many
 SELECT
-    currencies.id, currencies.string, currencies.symbol, currencies.kind, currencies.iban_prefix, currencies.is_shown
-FROM currencies
-WHERE currencies.is_shown = TRUE
+    c.id, c.string, c.symbol, c.kind, c.iban_prefix, c.is_shown,
+    (u.id IS NOT NULL) AS is_default
+FROM currencies AS c
+LEFT JOIN user AS u ON c.id = u.default_currency_id
+WHERE c.is_shown = TRUE
+ORDER BY is_default DESC, c.id
 `
 
 type GetCurrenciesRow struct {
-	Currency Currency
+	Currency  Currency
+	IsDefault interface{}
 }
 
 func (q *Queries) GetCurrencies(ctx context.Context) ([]GetCurrenciesRow, error) {
@@ -117,6 +126,7 @@ func (q *Queries) GetCurrencies(ctx context.Context) ([]GetCurrenciesRow, error)
 			&i.Currency.Kind,
 			&i.Currency.IbanPrefix,
 			&i.Currency.IsShown,
+			&i.IsDefault,
 		); err != nil {
 			return nil, err
 		}
@@ -133,13 +143,17 @@ func (q *Queries) GetCurrencies(ctx context.Context) ([]GetCurrenciesRow, error)
 
 const getCurrency = `-- name: GetCurrency :one
 SELECT
-    currencies.id, currencies.string, currencies.symbol, currencies.kind, currencies.iban_prefix, currencies.is_shown
-FROM currencies
-WHERE id = ?1 LIMIT 1
+    c.id, c.string, c.symbol, c.kind, c.iban_prefix, c.is_shown,
+    (u.id IS NOT NULL) AS is_default
+FROM currencies AS c
+LEFT JOIN user AS u ON c.id = u.default_currency_id
+WHERE c.id = ?1
+LIMIT 1
 `
 
 type GetCurrencyRow struct {
-	Currency Currency
+	Currency  Currency
+	IsDefault interface{}
 }
 
 func (q *Queries) GetCurrency(ctx context.Context, id string) (GetCurrencyRow, error) {
@@ -152,19 +166,24 @@ func (q *Queries) GetCurrency(ctx context.Context, id string) (GetCurrencyRow, e
 		&i.Currency.Kind,
 		&i.Currency.IbanPrefix,
 		&i.Currency.IsShown,
+		&i.IsDefault,
 	)
 	return i, err
 }
 
 const getCurrencyByString = `-- name: GetCurrencyByString :one
 SELECT
-    currencies.id, currencies.string, currencies.symbol, currencies.kind, currencies.iban_prefix, currencies.is_shown
-FROM currencies
-WHERE string = ?1 LIMIT 1
+    c.id, c.string, c.symbol, c.kind, c.iban_prefix, c.is_shown,
+    (u.id IS NOT NULL) AS is_default
+FROM currencies AS c
+LEFT JOIN user AS u ON c.id = u.default_currency_id
+WHERE c.string = ?1
+LIMIT 1
 `
 
 type GetCurrencyByStringRow struct {
-	Currency Currency
+	Currency  Currency
+	IsDefault interface{}
 }
 
 func (q *Queries) GetCurrencyByString(ctx context.Context, string string) (GetCurrencyByStringRow, error) {
@@ -177,6 +196,37 @@ func (q *Queries) GetCurrencyByString(ctx context.Context, string string) (GetCu
 		&i.Currency.Kind,
 		&i.Currency.IbanPrefix,
 		&i.Currency.IsShown,
+		&i.IsDefault,
+	)
+	return i, err
+}
+
+const getDefaultCurrency = `-- name: GetDefaultCurrency :one
+SELECT
+    c.id, c.string, c.symbol, c.kind, c.iban_prefix, c.is_shown,
+    (u.id IS NOT NULL) AS is_default
+FROM currencies AS c
+LEFT JOIN user AS u ON c.id = u.default_currency_id
+WHERE u.id IS NOT NULL
+LIMIT 1
+`
+
+type GetDefaultCurrencyRow struct {
+	Currency  Currency
+	IsDefault interface{}
+}
+
+func (q *Queries) GetDefaultCurrency(ctx context.Context) (GetDefaultCurrencyRow, error) {
+	row := q.db.QueryRowContext(ctx, getDefaultCurrency)
+	var i GetDefaultCurrencyRow
+	err := row.Scan(
+		&i.Currency.ID,
+		&i.Currency.String,
+		&i.Currency.Symbol,
+		&i.Currency.Kind,
+		&i.Currency.IbanPrefix,
+		&i.Currency.IsShown,
+		&i.IsDefault,
 	)
 	return i, err
 }

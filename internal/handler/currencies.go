@@ -72,3 +72,21 @@ func (h Handler) ChangeIsShownForCurrency(isShown bool) func(w http.ResponseWrit
 		return views.Currency(cur), nil
 	}
 }
+
+func (h Handler) SetDefaultCurrency(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+
+	if err := h.repo.SetDefaultCurrency(r.Context(), id); err != nil {
+		l.Error("error setting default currency", zap.String("currency_id", id), zap.Error(err))
+		return nil, err
+	}
+
+	hxRespondWithRefresh(w)
+
+	return nil, nil
+}

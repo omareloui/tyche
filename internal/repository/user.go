@@ -51,6 +51,18 @@ func (r *Repository) CreateUser(ctx context.Context, usr *models.User) error {
 	})
 }
 
+func (r *Repository) SetDefaultAccount(ctx context.Context, id string) error {
+	return r.transact(ctx, func(qtx *queries.Queries) error {
+		l := logger.FromCtx(ctx)
+		err := qtx.SetDefaultAccount(ctx, sql.NullString{String: id, Valid: true})
+		if err != nil {
+			l.Error("setting default account", zap.String("account_id", id), zap.Error(err))
+			return err
+		}
+		return nil
+	})
+}
+
 func dbUserToUser(dbU *queries.User, dfltCur *queries.Currency) *models.User {
 	u := &models.User{
 		ID:            dbU.ID,
@@ -70,7 +82,7 @@ func dbUserToUser(dbU *queries.User, dfltCur *queries.Currency) *models.User {
 	}
 
 	if dfltCur != nil {
-		u.DefaultCurrency = *dbCurrencyToCurrency(dfltCur)
+		u.DefaultCurrency = *dbCurrencyToCurrency(dfltCur, true)
 	}
 
 	return u

@@ -1,26 +1,48 @@
 -- name: GetCurrency :one
 SELECT
-    sqlc.embed(currencies)
-FROM currencies
-WHERE id = sqlc.arg(id) LIMIT 1;
+    sqlc.embed(c),
+    (u.id IS NOT NULL) AS is_default
+FROM currencies AS c
+LEFT JOIN user AS u ON c.id = u.default_currency_id
+WHERE c.id = sqlc.arg(id)
+LIMIT 1;
+
+-- name: GetDefaultCurrency :one
+SELECT
+    sqlc.embed(c),
+    (u.id IS NOT NULL) AS is_default
+FROM currencies AS c
+LEFT JOIN user AS u ON c.id = u.default_currency_id
+WHERE u.id IS NOT NULL
+LIMIT 1;
+
 
 -- name: GetCurrencyByString :one
 SELECT
-    sqlc.embed(currencies)
-FROM currencies
-WHERE string = sqlc.arg(string) LIMIT 1;
+    sqlc.embed(c),
+    (u.id IS NOT NULL) AS is_default
+FROM currencies AS c
+LEFT JOIN user AS u ON c.id = u.default_currency_id
+WHERE c.string = sqlc.arg(string)
+LIMIT 1;
 
 -- name: GetCurrencies :many
 SELECT
-    sqlc.embed(currencies)
-FROM currencies
-WHERE currencies.is_shown = TRUE;
+    sqlc.embed(c),
+    (u.id IS NOT NULL) AS is_default
+FROM currencies AS c
+LEFT JOIN user AS u ON c.id = u.default_currency_id
+WHERE c.is_shown = TRUE
+ORDER BY is_default DESC, c.id;
 
 
 -- name: GetAllCurrencies :many
 SELECT
-    sqlc.embed(currencies)
-FROM currencies;
+    sqlc.embed(c),
+    (u.id IS NOT NULL) AS is_default
+FROM currencies AS c
+LEFT JOIN user AS u ON c.id = u.default_currency_id
+ORDER BY is_default DESC, c.id;
 
 
 -- name: CreateCurrency :exec

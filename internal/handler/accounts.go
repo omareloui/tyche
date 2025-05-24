@@ -236,7 +236,7 @@ func (h *Handler) SetDefaultAccount(w http.ResponseWriter, r *http.Request) (tem
 		return nil, errs.ErrInvalidID
 	}
 	l := logger.FromCtx(r.Context())
-	if err := h.repo.SetDefaultAccountExpect(r.Context(), id); err != nil {
+	if err := h.repo.SetDefaultAccount(r.Context(), id); err != nil {
 		l.Error("Setting as default", zap.Error(err))
 		return nil, err
 	}

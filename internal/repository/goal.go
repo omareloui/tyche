@@ -137,7 +137,7 @@ func dbGoalToGoal(dbGl *queries.Goal, cur *queries.Currency) *models.Goal {
 	}
 
 	if cur != nil {
-		gl.Currency = *dbCurrencyToCurrency(cur)
+		gl.Currency = *dbCurrencyToCurrency(cur, false)
 	}
 
 	return &gl
