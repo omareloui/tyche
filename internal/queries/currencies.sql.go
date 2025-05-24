@@ -56,7 +56,7 @@ SELECT
     (u.id IS NOT NULL) AS is_default
 FROM currencies AS c
 LEFT JOIN user AS u ON c.id = u.default_currency_id
-ORDER BY is_default DESC, c.id
+ORDER BY is_default DESC, is_shown DESC, c.id
 `
 
 type GetAllCurrenciesRow struct {
