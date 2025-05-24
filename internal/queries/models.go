@@ -56,10 +56,19 @@ type Currency struct {
 	IsShown    bool
 }
 
-type FrequentTx struct {
+type Goal struct {
+	ID          string
+	Name        string
+	Price       float64
+	CurrencyID  string
+	FulfilledAt sql.NullTime
+	CreatedAt   time.Time
+}
+
+type RecurrentTx struct {
 	ID                         string
-	FrequencyBy                int64
-	Frequency                  int64
+	Every                      int64
+	Unit                       int64
 	AccountID                  string
 	Amount                     float64
 	KindID                     string
@@ -75,18 +84,69 @@ type FrequentTx struct {
 	CreatedAt                  time.Time
 }
 
-type FrequentTxsTransaction struct {
-	TransactionID string
-	FrequencyID   string
-}
-
-type Goal struct {
-	ID          string
-	Name        string
-	Price       float64
-	CurrencyID  string
-	FulfilledAt sql.NullTime
-	CreatedAt   time.Time
+type RecurrentTxsDetail struct {
+	RecurrentTxID                         string
+	RecurrentTxEvery                      int64
+	RecurrentTxUnit                       int64
+	RecurrentTxAccountID                  string
+	RecurrentTxAmount                     float64
+	RecurrentTxKindID                     string
+	RecurrentTxCategoryID                 sql.NullString
+	RecurrentTxCounterpartyID             sql.NullString
+	RecurrentTxDescription                sql.NullString
+	RecurrentTxToAccountID                sql.NullString
+	RecurrentTxToAmount                   sql.NullFloat64
+	RecurrentTxGoalID                     sql.NullString
+	RecurrentTxStartsAt                   time.Time
+	RecurrentTxStopsAt                    sql.NullTime
+	RecurrentTxLastTransactionScheduledTo time.Time
+	RecurrentTxCreatedAt                  time.Time
+	AccountName                           sql.NullString
+	AccountKindID                         sql.NullString
+	AccountAmount                         sql.NullFloat64
+	AccountCurrencyID                     sql.NullString
+	AccountCounterpartyID                 sql.NullString
+	AccountCardNumber                     sql.NullString
+	AccountCardLimit                      sql.NullFloat64
+	AccountNameOnCard                     sql.NullString
+	AccountIban                           sql.NullString
+	AccountNote                           sql.NullString
+	AccountIsArchived                     sql.NullBool
+	AccountExcludeFromBalance             sql.NullBool
+	AccountExpirationDate                 sql.NullTime
+	AccountCreatedAt                      sql.NullTime
+	AccountCurrencyString                 sql.NullString
+	AccountCurrencySymbol                 sql.NullString
+	KindEnum                              sql.NullInt64
+	KindIncreaseBalance                   sql.NullBool
+	CounterpartyName                      sql.NullString
+	ToAccountName                         sql.NullString
+	ToAccountKindID                       sql.NullString
+	ToAccountAmount                       sql.NullFloat64
+	ToAccountCurrencyID                   sql.NullString
+	ToAccountCounterpartyID               sql.NullString
+	ToAccountCardNumber                   sql.NullString
+	ToAccountCardLimit                    sql.NullFloat64
+	ToAccountNameOnCard                   sql.NullString
+	ToAccountIban                         sql.NullString
+	ToAccountNote                         sql.NullString
+	ToAccountIsArchived                   sql.NullBool
+	ToAccountExcludeFromBalance           sql.NullBool
+	ToAccountExpirationDate               sql.NullTime
+	ToAccountCreatedAt                    sql.NullTime
+	ToAccountCurrencyString               sql.NullString
+	ToAccountCurrencySymbol               sql.NullString
+	CategoryName                          sql.NullString
+	CategoryBudgetAmount                  sql.NullFloat64
+	CategoryBudgetCurrencyID              sql.NullString
+	CategoryKindID                        sql.NullString
+	CategoryCreatedAt                     sql.NullTime
+	GoalName                              sql.NullString
+	GoalPrice                             sql.NullFloat64
+	GoalCurrencyID                        sql.NullString
+	GoalFulfilledAt                       sql.NullTime
+	GoalCurrencyString                    sql.NullString
+	GoalCurrencySymbol                    sql.NullString
 }
 
 type Transaction struct {
@@ -100,6 +160,7 @@ type Transaction struct {
 	ToAccountID    sql.NullString
 	ToAmount       sql.NullFloat64
 	GoalID         sql.NullString
+	RecurrentID    sql.NullString
 	FulfilledAt    sql.NullTime
 	ScheduledTo    time.Time
 	CreatedAt      time.Time
