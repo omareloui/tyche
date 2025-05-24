@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"strings"
 
+	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/logger"
+	"github.com/omareloui/tyche/internal/middleware"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/queries"
 	"go.uber.org/zap"
@@ -245,7 +247,25 @@ func (r *Repository) GetBalances(ctx context.Context) ([]models.Balance, error) 
 		l.Error("querying balances", zap.Error(err))
 		return nil, err
 	}
-	return dbBalancesToBalances(dbBalances), nil
+
+	balances := dbBalancesToBalances(dbBalances)
+
+	var claims *jwt.AccessClaims
+	if v := ctx.Value(middleware.AccessClaimsCtxKey{}); v != nil {
+		claims = v.(*jwt.AccessClaims)
+	}
+
+	if claims == nil {
+		return balances, nil
+	}
+
+	var sum float64
+	for _, b := range balances {
+		res := b.AmountWithCurrency(&claims.DefaultCurrency)
+		sum += res
+	}
+
+	return []models.Balance{{Amount: sum, Currency: claims.DefaultCurrency}}, nil
 }
 
 func dbAccountToAccount(dbAcc *queries.Account, actualAmount float64, cur *queries.Currency, k *queries.AccountKind, cpName *sql.NullString, isDefault bool) *models.Account {

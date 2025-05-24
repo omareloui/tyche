@@ -57,7 +57,7 @@ func (a *Account) ViewCardLimit() string {
 
 func (a *Account) MaskIban() string {
 	rs := []rune(a.Iban)
-	for i := 0; i < len(rs)-4; i++ {
+	for i := range len(rs) - 4 {
 		rs[i] = '*'
 	}
 	return string(rs)
@@ -65,7 +65,7 @@ func (a *Account) MaskIban() string {
 
 func (a *Account) MaskCardNumber() string {
 	rs := []rune(a.CardNumber)
-	for i := 0; i < len(rs)-4; i++ {
+	for i := range len(rs) - 4 {
 		rs[i] = '*'
 	}
 	return string(rs)
@@ -110,8 +110,7 @@ func (b *Balance) ViewAmount() string {
 }
 
 func (b *Balance) ViewAmountWithCurrency(cur *Currency) string {
-	return formatAmount(b.Currency.FxRate(cur.String)*b.Amount,
-		cur.Symbol)
+	return formatAmount(b.Currency.FxRate(cur.String)*b.Amount, cur.Symbol)
 }
 
 func (b *Balance) AmountWithCurrency(cur *Currency) float64 {
