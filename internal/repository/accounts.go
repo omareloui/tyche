@@ -268,7 +268,11 @@ func (r *Repository) GetBalances(ctx context.Context) ([]models.Balance, error) 
 	return []models.Balance{{Amount: sum, Currency: claims.DefaultCurrency}}, nil
 }
 
-func dbAccountToAccount(dbAcc *queries.Account, actualAmount float64, cur *queries.Currency, k *queries.AccountKind, cpName *sql.NullString, isDefault bool) *models.Account {
+func dbAccountToAccount(
+	dbAcc *queries.Account, actualAmount float64,
+	cur *queries.Currency, k *queries.AccountKind,
+	cpName *sql.NullString, isDefault bool,
+) *models.Account {
 	acc := &models.Account{
 		ID:                 dbAcc.ID,
 		Name:               dbAcc.Name,
@@ -294,7 +298,7 @@ func dbAccountToAccount(dbAcc *queries.Account, actualAmount float64, cur *queri
 
 	if dbAcc.CounterpartyID.Valid {
 		acc.Counterparty = &models.Counterparty{ID: dbAcc.CounterpartyID.String}
-		if cpName.Valid {
+		if cpName != nil && cpName.Valid {
 			acc.Counterparty.Name = cpName.String
 		}
 	}

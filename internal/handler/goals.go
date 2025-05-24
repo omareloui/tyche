@@ -8,7 +8,6 @@ import (
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/errs"
 	"github.com/omareloui/tyche/internal/idgen"
-	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/slicesutils"
@@ -41,7 +40,7 @@ func (h Handler) Goals(w http.ResponseWriter, r *http.Request) (templ.Component,
 	l.Info("fetched goals", zap.Int("count", len(gls)))
 
 	claims := getClaims(r.Context())
-	return views.Goals(claims, b, h.mapGlToFD(dfltGoal(claims), &errs.ValidationError{}), gls, curs), nil
+	return views.Goals(claims, b, h.mapGlToFD(dfltGoal(&claims.DefaultCurrency), &errs.ValidationError{}), gls, curs), nil
 }
 
 func (h Handler) Goal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -108,7 +107,7 @@ func (h Handler) CreateGoal(w http.ResponseWriter, r *http.Request) (templ.Compo
 	}
 	l.Debug("rendered goal")
 
-	return views.CreateGoalForm(h.mapGlToFD(dfltGoal(getClaims(r.Context())), &errs.ValidationError{}), shownCurs, &claims.DefaultCurrency), nil
+	return views.CreateGoalForm(h.mapGlToFD(dfltGoal(&claims.DefaultCurrency), &errs.ValidationError{}), shownCurs, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) GetEditGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -329,8 +328,6 @@ func (h Handler) mapFDToGoal(r *http.Request) (*models.Goal, error) {
 	}, nil
 }
 
-func dfltGoal(claims *jwt.AccessClaims) *models.Goal {
-	return &models.Goal{
-		Currency: *&claims.DefaultCurrency,
-	}
+func dfltGoal(dfltCur *models.Currency) *models.Goal {
+	return &models.Goal{Currency: *dfltCur}
 }
