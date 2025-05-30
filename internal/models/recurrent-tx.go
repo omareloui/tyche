@@ -61,8 +61,12 @@ type createRecurrentTx struct {
 	LastTransactionScheduledTo time.Time `validate:"required"`
 }
 
-func (rt *RecurrentTx) ViewFrequency() string {
-	return fmt.Sprintf("Each %d %s", rt.Every, rt.Unit)
+func (rt *RecurrentTx) ViewRecurrence() string {
+	extraS := ""
+	if rt.Every != 1 {
+		extraS = "s"
+	}
+	return fmt.Sprintf("Each %d %s%s", rt.Every, rt.Unit, extraS)
 }
 
 func (rt *RecurrentTx) ViewAmount() string {
@@ -98,7 +102,6 @@ func (rt *RecurrentTx) toValidate() *createRecurrentTx {
 			AccountID:      rt.Account.ID,
 			Amount:         rt.Amount,
 			KindID:         rt.Kind.ID,
-			Kind:           rt.Kind.Enum,
 			CategoryID:     catId,
 			CounterpartyID: cpId,
 			ToAccountID:    toAccId,

@@ -143,7 +143,7 @@ func (r *Repository) UpdateRecurrentTx(ctx context.Context, rt *models.Recurrent
 		l.Debug("updated recurrent tx", zap.Any("recurrent tx", rt))
 
 		for _, stx := range scheduledTxs {
-			if err := r.createTransactionWithTxn(ctx, qtx, &stx); err != nil {
+			if err := r.createTransactionWithTxn(qtx, ctx, &stx); err != nil {
 				return err
 			}
 		}
@@ -181,7 +181,7 @@ func (r *Repository) GenerateScheduledTransactions(ctx context.Context, rt *mode
 			return err
 		}
 		for _, stx := range scheduledTxs {
-			if err := r.createTransactionWithTxn(ctx, qtx, &stx); err != nil {
+			if err := r.createTransactionWithTxn(qtx, ctx, &stx); err != nil {
 				return err
 			}
 		}

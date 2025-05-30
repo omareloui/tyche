@@ -10,6 +10,7 @@ INSERT INTO transactions (
     to_account_id,
     to_amount,
     goal_id,
+    recurrent_id,
     scheduled_to,
     fulfilled_at
 )
@@ -24,6 +25,7 @@ VALUES (
     sqlc.arg(to_account_id),
     IIF(sqlc.narg(to_amount) > 0.0, ROUND(sqlc.narg(to_amount), 2), NULL),
     sqlc.arg(goal_id),
+    sqlc.arg(recurrent_id),
     sqlc.arg(scheduled_to),
     sqlc.arg(fulfilled_at)
 );
