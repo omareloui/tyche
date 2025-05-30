@@ -172,7 +172,7 @@ func (h Handler) CreateGoalProgress(w http.ResponseWriter, r *http.Request) (tem
 		return nil, err
 	}
 
-	tx, err := h.mapFDToTransaction(r)
+	tx, err := h.mapFDToTransaction(r, r.FormValue("is_recurrent") != "")
 	if err != nil {
 		l.Error("mapping from data to transaction for goal", zap.Any("tx", tx), zap.Any("goal", gl), zap.Error(err))
 		return nil, err

@@ -51,7 +51,7 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	l := logger.FromCtx(r.Context())
 
-	tx, err := h.mapFDToTransaction(r)
+	tx, err := h.mapFDToTransaction(r, r.FormValue("is_recurrent") != "")
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +180,7 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 
 	l := logger.FromCtx(r.Context())
 
-	tx, err := h.mapFDToTransaction(r)
+	tx, err := h.mapFDToTransaction(r, r.FormValue("is_recurrent") != "")
 	if err != nil {
 		return nil, err
 	}
@@ -400,7 +400,7 @@ func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationE
 	return fd
 }
 
-func (h Handler) mapFDToTransaction(r *http.Request) (*models.Transaction, error) {
+func (h Handler) mapFDToTransaction(r *http.Request, isRecurrent bool) (*models.Transaction, error) {
 	amount, err := parseFloatIfExists(r.FormValue("amount"))
 	if err != nil {
 		return nil, err
@@ -455,7 +455,7 @@ func (h Handler) mapFDToTransaction(r *http.Request) (*models.Transaction, error
 		ScheduledTo:  scheduledTo,
 	}
 
-	if r.FormValue("is_recurrent") != "" {
+	if isRecurrent {
 		tx.RecurrentTx, err = h.mapFDAndTxToRecurrentTx(r, tx)
 		l := logger.FromCtx(r.Context())
 		if err != nil {

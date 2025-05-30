@@ -66,7 +66,7 @@ func (rt *RecurrentTx) ViewRecurrence() string {
 	if rt.Every != 1 {
 		extraS = "s"
 	}
-	return fmt.Sprintf("Each %d %s%s", rt.Every, rt.Unit, extraS)
+	return fmt.Sprintf("Every %d %s%s", rt.Every, rt.Unit, extraS)
 }
 
 func (rt *RecurrentTx) ViewAmount() string {

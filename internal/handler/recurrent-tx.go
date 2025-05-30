@@ -105,7 +105,7 @@ func (h Handler) EditRecurrentTx(w http.ResponseWriter, r *http.Request) (templ.
 	}
 
 	l := logger.FromCtx(r.Context())
-	tx, err := h.mapFDToTransaction(r)
+	tx, err := h.mapFDToTransaction(r, true)
 	if err != nil {
 		l.Error("parsing formdata", zap.Error(err))
 		return nil, err
