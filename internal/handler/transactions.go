@@ -77,36 +77,26 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		return nil, err
 	}
 
-	var ftx *models.RecurrentTx
 	var scheduledTxs []models.Transaction
 
-	if r.FormValue("is_frequent") != "" {
-		ftx, err = h.mapFDToTransactionFrequency(r, tx)
-		if err != nil {
-			l.Error("parsing frequent transaction", zap.Error(err), zap.Any("frequent tx", ftx))
-			return nil, err
-		}
-		l.Debug("parsed frequent transaction")
+	if tx.RecurrentTx != nil {
+		tx.RecurrentTx.ID = idgen.New()
+		tx.RecurrentTx.LastTransactionScheduledTo = time.Now()
 
-		ftx.ID = idgen.New()
-		ftx.LastTransactionScheduledTo = time.Now()
-
-		if err := ftx.SanitizeAndValidate(h.sani, h.valid); err != nil {
+		if err := tx.RecurrentTx.SanitizeAndValidate(h.sani, h.valid); err != nil {
 			var valerr errs.ValidationError
 			if errors.As(err, &valerr) {
-				l.Error("validating frequent transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-				fd := h.mapTransactionToFD(tx, &valerr, knds)
-				fd.FrequencyFD = h.parseFrequencyFD(r, &valerr)
-				return views.CreateTransactionForm(fd, accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
+				l.Error("validating recurrent transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
+				return views.CreateTransactionForm(h.mapTransactionToFD(tx, &valerr, knds), accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
 			}
-			l.Error("sanitizing frequent transaction", zap.Error(err))
+			l.Error("sanitizing recurrent transaction", zap.Error(err))
 			return nil, err
 		}
 
-		scheduledTxs = generateNextScheduledTransactions(ftx, generateNextScheduledTransactionsCount)
+		scheduledTxs = generateNextScheduledTransactions(tx.RecurrentTx, generateNextScheduledTransactionsCount)
 	}
 
-	if err := h.repo.CreateTransaction(r.Context(), tx, ftx, scheduledTxs); err != nil {
+	if err := h.repo.CreateTransaction(r.Context(), tx, tx.RecurrentTx, scheduledTxs); err != nil {
 		l.Error("creating transaction", zap.Error(err))
 		return nil, err
 	}
@@ -176,7 +166,7 @@ func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (tem
 	}
 
 	fd := h.mapTransactionToFD(tx, new(errs.ValidationError), knds)
-	fd.FrequencyFD = nil
+	fd.RecurrenceFD = nil
 
 	claims := getClaims(r.Context())
 	return views.EditTransaction(tx, fd, accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
@@ -359,9 +349,9 @@ func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationE
 			},
 			KindID: views.FDInput{Value: t.Kind.ID, Error: err.Errors.MsgFor("KindID")},
 		},
-		Description: views.FDInput{Value: t.Description, Error: err.Errors.MsgFor("Description")},
-		ScheduledTo: views.FDInput{Value: formatDateOnlyIfNonZero(t.ScheduledTo), Error: err.Errors.MsgFor("ScheduledTo")},
-		FrequencyFD: &views.FrequencyFD{},
+		Description:  views.FDInput{Value: t.Description, Error: err.Errors.MsgFor("Description")},
+		ScheduledTo:  views.FDInput{Value: formatDateOnlyIfNonZero(t.ScheduledTo), Error: err.Errors.MsgFor("ScheduledTo")},
+		RecurrenceFD: &views.RecurrenceFD{},
 	}
 
 	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == t.Kind.ID })
@@ -396,6 +386,15 @@ func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationE
 		fd.GoalID = &views.FDInput{Value: t.Goal.ID, Error: err.Errors.MsgFor("GoalID")}
 	} else if hasGoal {
 		fd.GoalID = &views.FDInput{Error: err.Errors.MsgFor("GoalID")}
+	}
+
+	if t.RecurrentTx != nil {
+		fd.RecurrenceFD = &views.RecurrenceFD{
+			IsRecurrent: views.FDInput{Value: "on"},
+			Unit:        views.FDInput{Value: formatIntIfNonZero(int(t.RecurrentTx.Unit)), Error: err.Errors.MsgFor("Unit")},
+			Every:       views.FDInput{Value: formatIntIfNonZero(int(t.RecurrentTx.Every)), Error: err.Errors.MsgFor("Every")},
+			StopsOn:     views.FDInput{Value: formatDateOnlyIfNonZero(t.RecurrentTx.StopsAt), Error: err.Errors.MsgFor("StopsOn")},
+		}
 	}
 
 	return fd
@@ -441,7 +440,9 @@ func (h Handler) mapFDToTransaction(r *http.Request) (*models.Transaction, error
 		gl = &models.Goal{ID: glId}
 	}
 
-	return &models.Transaction{
+	var rt *models.RecurrentTx
+
+	tx := &models.Transaction{
 		Account:      models.Account{ID: r.FormValue("account_id")},
 		Amount:       amount,
 		Kind:         models.TransactionKind{ID: kndId},
@@ -452,7 +453,19 @@ func (h Handler) mapFDToTransaction(r *http.Request) (*models.Transaction, error
 		Goal:         gl,
 		Description:  r.FormValue("description"),
 		ScheduledTo:  scheduledTo,
-	}, nil
+	}
+
+	if r.FormValue("is_recurrent") != "" {
+		tx.RecurrentTx, err = h.mapFDAndTxToRecurrentTx(r, tx)
+		l := logger.FromCtx(r.Context())
+		if err != nil {
+			l.Error("parsing recurrent transaction", zap.Error(err), zap.Any("recurrent tx", rt))
+			return nil, err
+		}
+		l.Debug("parsed recurrent transaction")
+	}
+
+	return tx, nil
 }
 
 func defaultTransaction(accs []models.Account, knds []models.TransactionKind) *models.Transaction {
@@ -484,13 +497,13 @@ func defaultTransaction(accs []models.Account, knds []models.TransactionKind) *m
 	return tx
 }
 
-func (h Handler) mapFDToTransactionFrequency(r *http.Request, parsedTx *models.Transaction) (*models.RecurrentTx, error) {
-	frequency, err := parseIntIfExists(r.FormValue("frequency"))
+func (h Handler) mapFDAndTxToRecurrentTx(r *http.Request, tx *models.Transaction) (*models.RecurrentTx, error) {
+	every, err := parseIntIfExists(r.FormValue("every"))
 	if err != nil {
 		return nil, err
 	}
 
-	frequencyBy, err := parseIntIfExists(r.FormValue("frequent_by"))
+	unit, err := parseIntIfExists(r.FormValue("unit"))
 	if err != nil {
 		return nil, err
 	}
@@ -501,18 +514,18 @@ func (h Handler) mapFDToTransactionFrequency(r *http.Request, parsedTx *models.T
 	}
 
 	return &models.RecurrentTx{
-		Account:      parsedTx.Account,
-		Amount:       parsedTx.Amount,
-		Kind:         parsedTx.Kind,
-		Category:     parsedTx.Category,
-		Counterparty: parsedTx.Counterparty,
-		Description:  parsedTx.Description,
-		ToAccount:    parsedTx.ToAccount,
-		ToAmount:     parsedTx.ToAmount,
-		Goal:         parsedTx.Goal,
-		Unit:         models.RecurrentUnit(frequencyBy),
-		Every:        uint(frequency),
-		StartsAt:     parsedTx.ScheduledTo,
+		Account:      tx.Account,
+		Amount:       tx.Amount,
+		Kind:         tx.Kind,
+		Category:     tx.Category,
+		Counterparty: tx.Counterparty,
+		Description:  tx.Description,
+		ToAccount:    tx.ToAccount,
+		ToAmount:     tx.ToAmount,
+		Goal:         tx.Goal,
+		Unit:         models.RecurrentUnit(unit),
+		Every:        uint(every),
+		StartsAt:     tx.ScheduledTo,
 		StopsAt:      stopsOn,
 	}, nil
 }
@@ -529,9 +542,7 @@ func (h Handler) prepareTx(r *http.Request, tx *models.Transaction,
 		valerr := &errs.ValidationError{Errors: errs.ValidationErrors{}}
 		valerr.Errors["KindID"] = errs.ValidationField{Tag: "required"}
 		l.Error("tx kind doesn't exist")
-		fd := h.mapTransactionToFD(tx, valerr, knds)
-		fd.FrequencyFD = h.parseFrequencyFD(r, valerr)
-		return fd, nil
+		return h.mapTransactionToFD(tx, valerr, knds), nil
 	}
 	tx.Kind = *k
 
@@ -540,9 +551,7 @@ func (h Handler) prepareTx(r *http.Request, tx *models.Transaction,
 		valerr := &errs.ValidationError{Errors: errs.ValidationErrors{}}
 		valerr.Errors["AccountID"] = errs.ValidationField{Tag: "required"}
 		l.Error("account doesn't exist")
-		fd := h.mapTransactionToFD(tx, valerr, knds)
-		fd.FrequencyFD = h.parseFrequencyFD(r, valerr)
-		return fd, nil
+		return h.mapTransactionToFD(tx, valerr, knds), nil
 	}
 	tx.Account = *a
 
@@ -561,9 +570,7 @@ func (h Handler) prepareTx(r *http.Request, tx *models.Transaction,
 			valerr := &errs.ValidationError{Errors: errs.ValidationErrors{}}
 			valerr.Errors["GoalID"] = errs.ValidationField{Tag: "required"}
 			l.Error("goal kind doesn't exist")
-			fd := h.mapTransactionToFD(tx, valerr, knds)
-			fd.FrequencyFD = h.parseFrequencyFD(r, valerr)
-			return fd, nil
+			return h.mapTransactionToFD(tx, valerr, knds), nil
 		}
 		tx.Goal = gl
 	}
@@ -572,8 +579,7 @@ func (h Handler) prepareTx(r *http.Request, tx *models.Transaction,
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("validating transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-			fd := h.mapTransactionToFD(tx, &valerr, knds)
-			return fd, nil
+			return h.mapTransactionToFD(tx, &valerr, knds), nil
 		}
 		l.Error("sanitizing transaction", zap.Error(err))
 		return nil, err

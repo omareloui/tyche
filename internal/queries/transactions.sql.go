@@ -23,6 +23,7 @@ INSERT INTO transactions (
     to_account_id,
     to_amount,
     goal_id,
+    recurrent_id,
     scheduled_to,
     fulfilled_at
 )
@@ -38,7 +39,8 @@ VALUES (
     IIF(?9 > 0.0, ROUND(?9, 2), NULL),
     ?10,
     ?11,
-    ?12
+    ?12,
+    ?13
 )
 `
 
@@ -53,6 +55,7 @@ type CreateTransactionParams struct {
 	ToAccountID    sql.NullString
 	ToAmount       interface{}
 	GoalID         sql.NullString
+	RecurrentID    sql.NullString
 	ScheduledTo    time.Time
 	FulfilledAt    sql.NullTime
 }
@@ -69,6 +72,7 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 		arg.ToAccountID,
 		arg.ToAmount,
 		arg.GoalID,
+		arg.RecurrentID,
 		arg.ScheduledTo,
 		arg.FulfilledAt,
 	)

@@ -12,24 +12,18 @@ import (
 
 func (r *Repository) CreateTransaction(ctx context.Context, tx *models.Transaction, rt *models.RecurrentTx, scheduledTxs []models.Transaction) error {
 	return r.transact(ctx, func(qtx *queries.Queries) error {
+		if rt != nil {
+			if err := r.createRecurrentTxWithTxn(qtx, ctx, rt); err != nil {
+				return err
+			}
+		}
+
 		if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, tx); err != nil {
 			return err
 		}
 
-		if rt != nil {
-			if err := r.createFrequentTxWithTxn(qtx, ctx, rt); err != nil {
-				return err
-			}
-			if err := r.createFrequentTxTransactionWithTxn(ctx, qtx, rt.ID, tx.ID); err != nil {
-				return err
-			}
-		}
-
 		for _, stx := range scheduledTxs {
-			if err := r.createTransactionWithTxn(ctx, qtx, &stx); err != nil {
-				return err
-			}
-			if err := r.createFrequentTxTransactionWithTxn(ctx, qtx, rt.ID, stx.ID); err != nil {
+			if err := r.createTransactionWithTxn(qtx, ctx, &stx); err != nil {
 				return err
 			}
 		}
@@ -38,10 +32,10 @@ func (r *Repository) CreateTransaction(ctx context.Context, tx *models.Transacti
 	})
 }
 
-func (r *Repository) createTransactionWithTxn(ctx context.Context, qtx *queries.Queries, tx *models.Transaction) error {
+func (r *Repository) createTransactionWithTxn(qtx *queries.Queries, ctx context.Context, tx *models.Transaction) error {
 	l := logger.FromCtx(ctx)
 
-	var catId, cpId, toAccId, goalId sql.NullString
+	var catId, cpId, toAccId, goalId, recurrentId sql.NullString
 
 	if tx.Category != nil {
 		catId.Valid = tx.Category.ID != ""
@@ -55,9 +49,9 @@ func (r *Repository) createTransactionWithTxn(ctx context.Context, qtx *queries.
 		toAccId.Valid = tx.ToAccount.ID != ""
 		toAccId.String = tx.ToAccount.ID
 	}
-	if tx.Goal != nil {
-		goalId.Valid = tx.Goal.ID != ""
-		goalId.String = tx.Goal.ID
+	if tx.RecurrentTx != nil {
+		recurrentId.Valid = tx.RecurrentTx.ID != ""
+		recurrentId.String = tx.RecurrentTx.ID
 	}
 
 	if err := qtx.CreateTransaction(ctx, queries.CreateTransactionParams{
@@ -71,6 +65,7 @@ func (r *Repository) createTransactionWithTxn(ctx context.Context, qtx *queries.
 		ToAccountID:    toAccId,
 		ToAmount:       sql.NullFloat64{Float64: tx.ToAmount, Valid: tx.ToAmount != 0},
 		GoalID:         goalId,
+		RecurrentID:    recurrentId,
 		ScheduledTo:    tx.ScheduledTo,
 		FulfilledAt:    sql.NullTime{Time: tx.FulfilledAt, Valid: !tx.FulfilledAt.IsZero()},
 	}); err != nil {
@@ -83,7 +78,7 @@ func (r *Repository) createTransactionWithTxn(ctx context.Context, qtx *queries.
 
 func (r *Repository) createTransactionAndApplyToAccountIfNeededWithTxn(ctx context.Context, qtx *queries.Queries, tx *models.Transaction) error {
 	l := logger.FromCtx(ctx)
-	if err := r.createTransactionWithTxn(ctx, qtx, tx); err != nil {
+	if err := r.createTransactionWithTxn(qtx, ctx, tx); err != nil {
 		return err
 	}
 

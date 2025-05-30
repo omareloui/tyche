@@ -11,9 +11,9 @@ import (
 
 type TransactionFD struct {
 	TransactionAmountsAndKindFD
-	FrequencyFD *FrequencyFD
-	ScheduledTo FDInput
-	Description FDInput
+	RecurrenceFD *RecurrenceFD
+	ScheduledTo  FDInput
+	Description  FDInput
 }
 
 type TransactionAmountsAndKindFD struct {
@@ -64,8 +64,8 @@ templ transactionFormBody(
 	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs, cps, gls, defaultCur)
 	@input("Description", "text", "description", "Enter a description", id, fd.Description)
 	@dateInput("Date", "scheduled_to", id, fd.ScheduledTo)
-	if fd.FrequencyFD != nil {
-		@FrequencyFormBody(id, fd.FrequencyFD)
+	if fd.RecurrenceFD != nil {
+		@RecurrenceFormBody(id, fd.RecurrenceFD)
 	}
 }
 

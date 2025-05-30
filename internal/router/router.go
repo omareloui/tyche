@@ -41,15 +41,15 @@ func New(h *handler.Handler) Router {
 	mux.Handle("PUT /transactions/{id}/fulfill", handle(h.FulfillTransaction))
 	mux.Handle("DELETE /transactions/{id}", handle(h.DeleteTransaction))
 
-	mux.Handle("POST /frequency-form/", handle(h.FrequencyForm))
-	mux.Handle("POST /frequency-form/{id}", handle(h.FrequencyForm))
+	mux.Handle("POST /recurrence-form/", handle(h.RecurrenceForm))
+	mux.Handle("POST /recurrence-form/{id}", handle(h.RecurrenceForm))
 
-	mux.Handle("GET /frequent-tx", handle(h.FrequentTxs))
-	mux.Handle("GET /frequent-tx/{id}", handle(h.FrequentTx))
-	mux.Handle("GET /frequent-tx/{id}/edit", handle(h.GetEditFrequentTx))
-	mux.Handle("PUT /frequent-tx/{id}", handle(h.EditFrequentTx))
-	mux.Handle("POST /frequent-tx/{id}/generate-txs", handle(h.GenerateTransactions))
-	mux.Handle("DELETE /frequent-tx/{id}", handle(h.DeleteFrequentTx))
+	mux.Handle("GET /recurrent-tx", handle(h.RecurrentTxs))
+	mux.Handle("GET /recurrent-tx/{id}", handle(h.RecurrentTx))
+	mux.Handle("GET /recurrent-tx/{id}/edit", handle(h.GetEditRecurrentTx))
+	mux.Handle("PUT /recurrent-tx/{id}", handle(h.EditRecurrentTx))
+	mux.Handle("POST /recurrent-tx/{id}/generate-txs", handle(h.GenerateTransactions))
+	mux.Handle("DELETE /recurrent-tx/{id}", handle(h.DeleteRecurrentTx))
 
 	mux.Handle("GET /goals", handle(h.Goals))
 	mux.Handle("POST /goals", handle(h.CreateGoal))
