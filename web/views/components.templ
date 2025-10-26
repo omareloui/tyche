@@ -25,7 +25,7 @@ templ navlink(href templ.SafeURL, attrs ...templ.Attributes) {
 		if attrs != nil {
 			{ attrs[0]... }
 		}
-	>{ string(href) }</a>
+	>{ href }</a>
 }
 
 templ list(id string) {

@@ -11,6 +11,18 @@ Make sure you have `data` and `logs` directories
 mkdir data logs
 ```
 
+Create you `.env` file
+
+```bash
+cp .env.example .env
+```
+
+Install node dev dependencies
+
+```bash
+npm install
+```
+
 To start the application on development mode run
 
 ```bash

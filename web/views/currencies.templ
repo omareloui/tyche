@@ -1,0 +1,57 @@
+package views
+
+import (
+	"fmt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/jwt"
+)
+
+templ Currencies(claims *jwt.AccessClaims, balances []models.Balance, currencies []models.Currency) {
+	@baseLayout(claims, "Currencies", balances, nil) {
+		@container() {
+			@mainHeader("Currencies")
+			@currenciesList(currencies, &claims.DefaultCurrency)
+		}
+	}
+}
+
+templ currenciesList(currencies []models.Currency, defaultCur *models.Currency) {
+	@list("currencies-list") {
+		for _, cur := range currencies {
+			@Currency(&cur, defaultCur)
+		}
+	}
+}
+
+templ Currency(cur *models.Currency, defaultCur *models.Currency) {
+	<div hx-target="this" class="entry-container">
+		<p>ID: { cur.ID }</p>
+		<p>String: { cur.String }</p>
+		<p>Symbol: { cur.Symbol }</p>
+		<p>Kind: { string(cur.Kind) }</p>
+		if cur.IbanPrefix != "" {
+			<p>IBAN Prefix: { cur.IbanPrefix }</p>
+		}
+		<p>Is Shown: { formatBool(cur.IsShown) }</p>
+		if defaultCur != nil && cur.ID == defaultCur.ID {
+			<p class="font-bold text-green-600">Default Currency</p>
+		}
+		<div class="flex gap-4">
+			if cur.IsShown {
+				@saveButton("Hide", fmt.Sprintf("/currencies/%s/hide", cur.ID))
+			} else {
+				@saveButton("Show", fmt.Sprintf("/currencies/%s/show", cur.ID))
+			}
+			if defaultCur == nil || cur.ID != defaultCur.ID {
+				@saveButton("Set as Default", fmt.Sprintf("/currencies/%s/set-default", cur.ID))
+			}
+		</div>
+	</div>
+}
+
+func formatBool(b bool) string {
+	if b {
+		return "Yes"
+	}
+	return "No"
+}

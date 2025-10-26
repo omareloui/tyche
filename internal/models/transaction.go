@@ -56,19 +56,19 @@ func (t *Transaction) ViewToAmount() string {
 }
 
 func (t *Transaction) toValidate() *createTransaction {
-	var catId, toAccId, cpId, glId string
+	var catID, toAccID, cpID, glID string
 
 	if cat := t.Category; cat != nil {
-		catId = cat.ID
+		catID = cat.ID
 	}
 	if cp := t.Counterparty; cp != nil {
-		cpId = cp.ID
+		cpID = cp.ID
 	}
 	if toAcc := t.ToAccount; toAcc != nil {
-		toAccId = toAcc.ID
+		toAccID = toAcc.ID
 	}
 	if gl := t.Goal; gl != nil {
-		glId = gl.ID
+		glID = gl.ID
 	}
 
 	return &createTransaction{
@@ -77,12 +77,12 @@ func (t *Transaction) toValidate() *createTransaction {
 			AccountID:      t.Account.ID,
 			Amount:         t.Amount,
 			KindID:         t.Kind.ID,
-			CategoryID:     catId,
-			CounterpartyID: cpId,
-			ToAccountID:    toAccId,
+			CategoryID:     catID,
+			CounterpartyID: cpID,
+			ToAccountID:    toAccID,
 			ToAmount:       t.ToAmount,
 			Description:    t.Description,
-			GoalID:         glId,
+			GoalID:         glID,
 		},
 		ScheduledTo: t.ScheduledTo,
 	}

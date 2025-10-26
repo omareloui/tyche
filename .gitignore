@@ -7,8 +7,7 @@ logs
 internal/db
 
 # Templ
-web/views
-!web/views/*.templ
+web/views/*_templ.go
 
 # Tailwind
 web/public/styles/main.css

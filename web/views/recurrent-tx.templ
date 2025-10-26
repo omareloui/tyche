@@ -1,0 +1,130 @@
+package views
+
+import (
+	"fmt"
+	"time"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/jwt"
+)
+
+type RecurrenceFD struct {
+	IsRecurrent FDInput
+	Unit        FDInput
+	Every       FDInput
+	StopsOn     FDInput
+}
+
+templ RecurrenceFormBody(id string, fd *RecurrenceFD) {
+	<div data-recurrence-form class="grid gap-2">
+		@checkbox("Is Recurrent", "is_recurrent", id, fd.IsRecurrent,
+			templ.Attributes{
+				"hx-post":    fmt.Sprintf("/recurrence-form/%s", id),
+				"hx-trigger": "change",
+				"hx-target":  "closest [data-recurrence-form]",
+				"hx-swap":    "outerHTML",
+				"hx-sync":    "closest form:abort",
+			})
+		if fd.IsRecurrent.Value != "" {
+			@recurrenceFormBody(id, fd)
+		}
+	</div>
+}
+
+type RecurrentTxFD struct {
+	RecurrenceFD
+	TransactionAmountsAndKindFD
+	Description FDInput
+}
+
+templ RecurrentTxs(claims *jwt.AccessClaims, balances []models.Balance, rtxs []models.RecurrentTx) {
+	@baseLayout(claims, "Recurrent Transactions", balances, &layoutOpts{includeAlpine: true, includeAlpineCollapse: true}) {
+		@container() {
+			@mainHeader("Recurrent Transactions")
+			@rtxsList(rtxs)
+		}
+	}
+}
+
+templ rtxFormBody(
+	id string, fd *RecurrentTxFD,
+	accs []models.Account, knds []models.TransactionKind,
+	cats []models.Category, cps []models.Counterparty,
+	gls []models.Goal, defaultCur *models.Currency) {
+	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs, cps, gls, defaultCur)
+	@input("Description", "text", "description", "Enter a description", id, fd.Description)
+	@recurrenceFormBody(id, &fd.RecurrenceFD)
+}
+
+templ recurrenceFormBody(id string, fd *RecurrenceFD) {
+	<div class="grid grid-cols-3 gap-4">
+		@input("Every", "number", "every", "Recurrent every...", id, fd.Every)
+		@selectInput("Unit", "unit", "How recurrent", id, models.RecurrentUnitOptions(), fd.Unit, false)
+		@dateInput("Stops on", "stops_on", id, fd.StopsOn)
+	</div>
+}
+
+templ RecurrentTransactionOOB(rtx *models.RecurrentTx) {
+	<div id="tx-list" hx-swap-oob="afterbegin">
+		@RecurrentTx(rtx)
+	</div>
+}
+
+templ EditRecurrentTx(
+	rtx *models.RecurrentTx, fd *RecurrentTxFD,
+	accs []models.Account, knds []models.TransactionKind,
+	cats []models.Category, cps []models.Counterparty,
+	gls []models.Goal, defaultCur *models.Currency) {
+	@form("put", fmt.Sprintf("/recurrent-tx/%s", rtx.ID), templ.Attributes{"hx-target": "this"}) {
+		<p>ID: { rtx.ID }</p>
+		@rtxFormBody(rtx.ID, fd, accs, knds, cats, cps, gls, defaultCur)
+		@editFormButtons(fmt.Sprintf("/recurrent-tx/%s", rtx.ID))
+	}
+}
+
+templ rtxsList(recurrentTx []models.RecurrentTx) {
+	@list("tx-list") {
+		for _, rt := range recurrentTx {
+			@RecurrentTx(&rt)
+		}
+	}
+}
+
+templ RecurrentTx(rtx *models.RecurrentTx) {
+	<div hx-target="this" class="entry-container">
+		<p>ID: { rtx.ID }</p>
+		<p>Account: { rtx.Account.Name }</p>
+		<p>Amount: { rtx.ViewAmount() }</p>
+		if rtx.ToAccount != nil {
+			<p>To Account: { rtx.ToAccount.Name }</p>
+			<p>To Amount: { rtx.ViewToAmount() }</p>
+		}
+		<p>Kind: { rtx.Kind.Enum.String() }</p>
+		if rtx.Description != "" {
+			<p>Description: { rtx.Description }</p>
+		}
+		if rtx.Category != nil {
+			<p>Category ID: { rtx.Category.ID }</p>
+			<p>Category Name: { rtx.Category.Name }</p>
+		}
+		if rtx.Counterparty != nil {
+			<p>Counterparty ID: { rtx.Counterparty.ID }</p>
+			<p>Counterparty Name: { rtx.Counterparty.Name }</p>
+		}
+		if rtx.Goal != nil {
+			<p>Goal ID: { rtx.Goal.ID }</p>
+			<p>Goal Name: { rtx.Goal.Name }</p>
+		}
+		<p>Recurrence: { rtx.ViewRecurrence() }</p>
+		<p>Starts At: { rtx.StartsAt.Format(time.RFC1123Z) }</p>
+		if !rtx.StopsAt.IsZero() {
+			<p>Stops At: { rtx.StopsAt.Format(time.RFC1123Z) }</p>
+		}
+		<p>Last Transaction Scheduled To: { rtx.LastTransactionScheduledTo.Format(time.RFC1123Z) }</p>
+		<p>Created At: { rtx.CreatedAt.Format(time.RFC1123Z) }</p>
+		<div class="flex gap-4">
+			@postButton("Generate Transactions", fmt.Sprintf("/recurrent-tx/%s/generate-txs", rtx.ID))
+			@editButton(fmt.Sprintf("/recurrent-tx/%s/edit", rtx.ID))
+			@deleteButton(fmt.Sprintf("/recurrent-tx/%s", rtx.ID))
+		</div>
+	</div>
+}
