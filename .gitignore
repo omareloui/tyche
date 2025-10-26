@@ -12,6 +12,9 @@ web/views/*_templ.go
 # Tailwind
 web/public/styles/main.css
 
+# Generated SQL
+internal/queries
+
 bin
 vendor
 
