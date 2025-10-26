@@ -35,23 +35,27 @@ func (r *Repository) CreateTransaction(ctx context.Context, tx *models.Transacti
 func (r *Repository) createTransactionWithTxn(qtx *queries.Queries, ctx context.Context, tx *models.Transaction) error {
 	l := logger.FromCtx(ctx)
 
-	var catId, cpId, toAccId, goalId, recurrentId sql.NullString
+	var catID, cpID, toAccID, goalID, recurrentID sql.NullString
 
 	if tx.Category != nil {
-		catId.Valid = tx.Category.ID != ""
-		catId.String = tx.Category.ID
+		catID.Valid = tx.Category.ID != ""
+		catID.String = tx.Category.ID
 	}
 	if tx.Counterparty != nil {
-		cpId.Valid = tx.Counterparty.ID != ""
-		cpId.String = tx.Counterparty.ID
+		cpID.Valid = tx.Counterparty.ID != ""
+		cpID.String = tx.Counterparty.ID
 	}
 	if tx.ToAccount != nil {
-		toAccId.Valid = tx.ToAccount.ID != ""
-		toAccId.String = tx.ToAccount.ID
+		toAccID.Valid = tx.ToAccount.ID != ""
+		toAccID.String = tx.ToAccount.ID
+	}
+	if tx.Goal != nil {
+		goalID.Valid = tx.Goal.ID != ""
+		goalID.String = tx.Goal.ID
 	}
 	if tx.RecurrentTx != nil {
-		recurrentId.Valid = tx.RecurrentTx.ID != ""
-		recurrentId.String = tx.RecurrentTx.ID
+		recurrentID.Valid = tx.RecurrentTx.ID != ""
+		recurrentID.String = tx.RecurrentTx.ID
 	}
 
 	if err := qtx.CreateTransaction(ctx, queries.CreateTransactionParams{
@@ -59,13 +63,13 @@ func (r *Repository) createTransactionWithTxn(qtx *queries.Queries, ctx context.
 		AccountID:      tx.Account.ID,
 		Amount:         tx.Amount,
 		KindID:         tx.Kind.ID,
-		CategoryID:     catId,
-		CounterpartyID: cpId,
+		CategoryID:     catID,
+		CounterpartyID: cpID,
 		Description:    sql.NullString{String: tx.Description, Valid: tx.Description != ""},
-		ToAccountID:    toAccId,
+		ToAccountID:    toAccID,
 		ToAmount:       sql.NullFloat64{Float64: tx.ToAmount, Valid: tx.ToAmount != 0},
-		GoalID:         goalId,
-		RecurrentID:    recurrentId,
+		GoalID:         goalID,
+		RecurrentID:    recurrentID,
 		ScheduledTo:    tx.ScheduledTo,
 		FulfilledAt:    sql.NullTime{Time: tx.FulfilledAt, Valid: !tx.FulfilledAt.IsZero()},
 	}); err != nil {
@@ -156,23 +160,23 @@ func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transa
 	return r.transact(ctx, func(qtx *queries.Queries) error {
 		l := logger.FromCtx(ctx)
 
-		var catId, cpId, toAccId, goalId sql.NullString
+		var catID, cpID, toAccID, goalID sql.NullString
 
 		if tx.Category != nil {
-			catId.Valid = tx.Category.ID != ""
-			catId.String = tx.Category.ID
+			catID.Valid = tx.Category.ID != ""
+			catID.String = tx.Category.ID
 		}
 		if tx.Counterparty != nil {
-			cpId.Valid = tx.Counterparty.ID != ""
-			cpId.String = tx.Counterparty.ID
+			cpID.Valid = tx.Counterparty.ID != ""
+			cpID.String = tx.Counterparty.ID
 		}
 		if tx.ToAccount != nil {
-			toAccId.Valid = tx.ToAccount.ID != ""
-			toAccId.String = tx.ToAccount.ID
+			toAccID.Valid = tx.ToAccount.ID != ""
+			toAccID.String = tx.ToAccount.ID
 		}
 		if tx.Goal != nil {
-			goalId.Valid = tx.Goal.ID != ""
-			goalId.String = tx.Goal.ID
+			goalID.Valid = tx.Goal.ID != ""
+			goalID.String = tx.Goal.ID
 		}
 
 		if err := qtx.UpdateTransaction(ctx, queries.UpdateTransactionParams{
@@ -180,11 +184,11 @@ func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transa
 			AccountID:      tx.Account.ID,
 			Amount:         tx.Amount,
 			KindID:         tx.Kind.ID,
-			CategoryID:     catId,
-			CounterpartyID: cpId,
-			ToAccountID:    toAccId,
+			CategoryID:     catID,
+			CounterpartyID: cpID,
+			ToAccountID:    toAccID,
 			ToAmount:       sql.NullFloat64{Float64: tx.ToAmount, Valid: tx.ToAmount != 0},
-			GoalID:         goalId,
+			GoalID:         goalID,
 			Description:    sql.NullString{String: tx.Description, Valid: tx.Description != ""},
 			ScheduledTo:    tx.ScheduledTo,
 		}); err != nil {
