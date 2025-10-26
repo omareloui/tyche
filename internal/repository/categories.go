@@ -48,6 +48,7 @@ func (r *Repository) UpdateCategory(ctx context.Context, cat *models.Category) e
 	return q.UpdateCategory(ctx, queries.UpdateCategoryParams{
 		ID:               cat.ID,
 		Name:             cat.Name,
+		Color:            cat.Color,
 		KindID:           cat.Kind.ID,
 		BudgetAmount:     sql.NullFloat64{Float64: cat.BudgetAmount, Valid: cat.BudgetAmount != 0},
 		BudgetCurrencyID: sql.NullString{String: curId, Valid: curId != ""},
@@ -68,6 +69,7 @@ func (r *Repository) CreateCategory(ctx context.Context, cat *models.Category) e
 	return q.CreateCategory(ctx, queries.CreateCategoryParams{
 		ID:               cat.ID,
 		Name:             cat.Name,
+		Color:            cat.Color,
 		KindID:           cat.Kind.ID,
 		BudgetAmount:     sql.NullFloat64{Float64: cat.BudgetAmount, Valid: cat.BudgetAmount != 0},
 		BudgetCurrencyID: sql.NullString{String: curId, Valid: curId != ""},
@@ -85,8 +87,9 @@ func (r *Repository) DeleteCategory(ctx context.Context, id string) error {
 
 func dbCategoryToCategory(dbCat *queries.Category, kind *queries.TransactionKind, cur *queries.Currency) *models.Category {
 	cat := &models.Category{
-		ID:   dbCat.ID,
-		Name: dbCat.Name,
+		ID:    dbCat.ID,
+		Name:  dbCat.Name,
+		Color: dbCat.Color,
 		Kind: models.TransactionKind{
 			ID: dbCat.KindID,
 		},

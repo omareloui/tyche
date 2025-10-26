@@ -78,6 +78,10 @@ func (h Handler) CreateCategory(w http.ResponseWriter, r *http.Request) (templ.C
 	cat.ID = idgen.New()
 	cat.CreatedAt = time.Now()
 
+	if cat.Color == "" {
+		cat.Color = models.GetRandomCategoryColor()
+	}
+
 	knds, err := h.repo.GetTransactionKinds(r.Context())
 	if err != nil {
 		l.Error("fetching transaction kinds", zap.Error(err))
@@ -229,6 +233,7 @@ func (h Handler) mapCategoryToFD(cat *models.Category, err *errs.ValidationError
 	}
 	return &views.CategoryFD{
 		Name:   views.FDInput{Value: cat.Name, Error: err.Errors.MsgFor("Name")},
+		Color:  views.FDInput{Value: cat.Color, Error: err.Errors.MsgFor("Color")},
 		KindID: views.FDInput{Value: cat.Kind.ID, Error: err.Errors.MsgFor("Kind.ID")},
 		BudgetAmountFD: &views.AmountFD{
 			Amount:     views.FDInput{Value: formatFloatIfNonZero(cat.BudgetAmount), Error: err.Errors.MsgFor("BudgetAmount")},
@@ -254,6 +259,7 @@ func (h Handler) mapFDToCategory(r *http.Request) (*models.Category, error) {
 
 	return &models.Category{
 		Name:           r.FormValue("name"),
+		Color:          r.FormValue("color"),
 		Kind:           models.TransactionKind{ID: r.FormValue("kind_id")},
 		BudgetAmount:   budget,
 		BudgetCurrency: cur,

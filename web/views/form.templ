@@ -270,6 +270,10 @@ templ selectGoal(name, id string, gls []models.Goal, data FDInput, inputAttrs ..
 	@selectInput("Goal", name, "Select Goal", id, glsToMap(gls), data, true, inputAttrs...)
 }
 
+templ selectColor(name, id string, colors map[string]string, data FDInput, inputAttrs ...templ.Attributes) {
+	@selectInput("Color", name, "Select Color", id, colors, data, false, inputAttrs...)
+}
+
 templ checkbox(label, name, id string, data FDInput, attrs ...templ.Attributes) {
 	<div>
 		<input

@@ -112,17 +112,7 @@ func (h *Handler) OAuthCB(w http.ResponseWriter, r *http.Request) (templ.Compone
 }
 
 func (h *Handler) RefreshTokens(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	// refreshCookie, err := r.Cookie("refresh_token")
-	// if errors.Is(err, http.ErrNoCookie) {
-	// 	return nil, jwt.ErrExpiredToken
-	// }
-
 	l := logger.FromCtx(r.Context())
-
-	// if err != nil {
-	// 	l.Error("refreshing token, can't parse the token", zap.Error(err))
-	// 	return nil, err
-	// }
 
 	claims := r.Context().Value(middleware.RefreshClaimsCtxKey{})
 	if claims == nil {

@@ -114,6 +114,7 @@ CREATE TABLE categories (
     budget_amount FLOAT,
     budget_currency_id VARCHAR,
     kind_id VARCHAR NOT NULL,
+    color VARCHAR NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id) ON DELETE CASCADE,
     FOREIGN KEY (budget_currency_id) REFERENCES currencies (id) ON DELETE CASCADE

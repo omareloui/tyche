@@ -26,6 +26,7 @@ WHERE c.id = sqlc.arg(id);
 INSERT INTO categories (
     id,
     name,
+    color,
     kind_id,
     budget_amount,
     budget_currency_id
@@ -33,6 +34,7 @@ INSERT INTO categories (
 VALUES (
     sqlc.arg(id),
     sqlc.arg(name),
+    sqlc.arg(color),
     sqlc.arg(kind_id),
     sqlc.arg(budget_amount),
     sqlc.arg(budget_currency_id)
@@ -42,6 +44,7 @@ VALUES (
 UPDATE categories
 SET
     name = sqlc.arg(name),
+    color = sqlc.arg(color),
     kind_id = sqlc.arg(kind_id),
     budget_amount = sqlc.arg(budget_amount),
     budget_currency_id = sqlc.arg(budget_currency_id)

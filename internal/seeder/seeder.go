@@ -148,9 +148,9 @@ func (s *Seeder) categories(ctx context.Context, wg *sync.WaitGroup, q *queries.
 	expensiveId := expensiveKnd.TransactionKind.ID
 
 	seed := []queries.CreateCategoryParams{
-		{ID: idgen.New(), Name: "Salary", KindID: incomeId},
-		{ID: idgen.New(), Name: "Groceries", KindID: expensiveId},
-		{ID: idgen.New(), Name: "Transportation", KindID: expensiveId},
+		{ID: idgen.New(), Name: "Salary", Color: models.GetRandomCategoryColor(), KindID: incomeId},
+		{ID: idgen.New(), Name: "Groceries", Color: models.GetRandomCategoryColor(), KindID: expensiveId},
+		{ID: idgen.New(), Name: "Transportation", Color: models.GetRandomCategoryColor(), KindID: expensiveId},
 	}
 
 	seedFn(ctx, q.GetCategories, seed, q.CreateCategory,
