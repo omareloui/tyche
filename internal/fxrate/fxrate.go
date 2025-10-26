@@ -53,6 +53,14 @@ func loadFromCache(currency string) (*rate, error) {
 		return nil, err
 	}
 
+	today := time.Now().Format(time.DateOnly)
+	if cachedRate.Date != today {
+		if err := os.Remove(filePath); err != nil {
+			logger.Get().Warn("failed to remove stale cache", zap.String("currency", currency), zap.Error(err))
+		}
+		return nil, nil
+	}
+
 	return &cachedRate, nil
 }
 
