@@ -63,9 +63,9 @@ templ Navbar(claims *jwt.AccessClaims, balances []models.Balance) {
 
 templ Navlinks(links []string) {
 	<nav>
-		<ul class="flex gap-4 justify-center py-12">
+		<ul class="flex gap-4 justify-center pb-12 pt-6 text-xl">
 			for _, link := range links {
-				<li class="text-blue-500 focus:ring focus:ring-blue-300 focus:outline-none">
+				<li class="focus:ring focus:ring-blue-300 focus:outline-none">
 					<a href={ link }>{ link }</a>
 				</li>
 			}
