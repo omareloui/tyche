@@ -138,7 +138,7 @@ func Navbar(claims *jwt.AccessClaims, balances []models.Balance) templ.Component
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = Navlinks([]string{"/accounts", "/categories", "/transacsions", "/recurrent-tx", "/goals", "/counterparties", "/currenries"}).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = Navlinks([]string{"/accounts", "/categories", "/transactions", "/recurrent-tx", "/goals", "/counterparties", "/currencies"}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
