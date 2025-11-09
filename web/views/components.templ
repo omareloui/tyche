@@ -18,16 +18,6 @@ templ link(href templ.SafeURL, text string) {
 	</a>
 }
 
-templ navlink(href templ.SafeURL, attrs ...templ.Attributes) {
-	<a
-		href={ href }
-		class="text-sm font-bold text-blue-500 rounded-sm focus:ring focus:ring-blue-300 focus:outline-none"
-		if attrs != nil {
-			{ attrs[0]... }
-		}
-	>{ href }</a>
-}
-
 templ list(id string) {
 	<div id={ id } class="grid gap-4 no-entries">
 		{ children... }

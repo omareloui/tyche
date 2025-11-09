@@ -33,7 +33,7 @@ templ form(action, path string, attrs ...templ.Attributes) {
 templ creationForm(title, postTo, submitStr string, close ...bool) {
 	<div
 		x-data={ fmt.Sprintf("{open: %v, toggle() {this.open = !this.open}}", close == nil || !close[0]) }
-		class="px-6 py-3 mb-6 bg-gray-100 rounded-lg"
+		class="px-6 py-3 mb-6 bg-zinc-800 rounded-lg"
 		hx-target="this"
 	>
 		<div

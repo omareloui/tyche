@@ -1,0 +1,62 @@
+package layouts
+
+import "github.com/omareloui/tyche/internal/models"
+import "github.com/omareloui/tyche/internal/jwt"
+import "github.com/omareloui/tyche/web/views/components"
+
+type Opts struct {
+	IncludeDatePicker     bool
+	IncludeAlpine         bool
+	IncludeAlpineMask     bool
+	IncludeAlpineCollapse bool
+}
+
+templ Main(
+	claims *jwt.AccessClaims,
+	pageTitle string, balances []models.Balance,
+	opts *Opts,
+) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ pageTitle }</title>
+			<link rel="stylesheet" href="/fonts/BioRhymeExpanded/BioRhymeExpanded.css"/>
+			<link rel="stylesheet" href="/fonts/Afacad/Afacad.css"/>
+			<link rel="icon" type="image/x-svg" href="/images/favicon.svg"/>
+			<link rel="stylesheet" href="/styles/main.css"/>
+			<script src="/js/vendor/htmx.lib.js"></script>
+			if opts != nil && opts.IncludeDatePicker {
+				<script src="/js/vendor/litepicker.lib.js"></script>
+				<script defer src="/js/datepickers.js"></script>
+			}
+			<script defer src="/js/main.js"></script>
+			if opts != nil && opts.IncludeAlpineMask {
+				<script defer src="/js/vendor/alpine.mask.lib.js"></script>
+			}
+			if opts != nil && opts.IncludeAlpineCollapse {
+				<script defer src="/js/vendor/alpine.collapse.lib.js"></script>
+			}
+			if opts != nil && opts.IncludeAlpine {
+				<script defer src="/js/vendor/alpine.lib.js"></script>
+			}
+		</head>
+		<body class="font-(family-name:--font-afacad) text-lg bg-zinc-950 text-white">
+			@components.Navbar(claims, balances)
+			<div class="pb-5">
+				{ children... }
+			</div>
+			<script>
+				document.body.addEventListener("htmx:beforeSwap", function (ev) {
+					const status = ev.detail.xhr.status;
+					const statusesToShowResponseOn = [401, 403, 409, 422];
+					if (statusesToShowResponseOn.includes(status)) {
+						ev.detail.shouldSwap = true;
+						ev.detail.isError = false;
+					}
+				});
+			</script>
+		</body>
+	</html>
+}

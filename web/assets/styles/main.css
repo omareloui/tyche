@@ -2,13 +2,25 @@
 
 @tailwind variants;
 
+:root {
+  color-scheme: dark;
+}
+
+.drag-none {
+  -webkit-user-drag: none;
+  -khtml-user-drag: none;
+  -moz-user-drag: none;
+  -o-user-drag: none;
+  user-select: none;
+}
+
 .no-entries:empty:before {
   content: "No entries yet!";
   @apply text-gray-400 italic;
 }
 
 .entry-container {
-  @apply py-5 px-8 bg-gray-50 rounded-lg;
+  @apply py-5 px-8 bg-zinc-700 rounded-lg;
 }
 
 .entry-container.stale {
@@ -17,7 +29,7 @@
 
 /* ============ FORM ============ */
 .input-label {
-  @apply mb-1 block text-sm font-medium text-gray-900;
+  @apply mb-1 block text-sm font-medium text-white;
 }
 
 .input-field {

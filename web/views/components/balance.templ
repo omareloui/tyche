@@ -1,0 +1,26 @@
+package components
+
+import "github.com/omareloui/tyche/internal/models"
+
+templ NavbarBalance(balances []models.Balance) {
+	<div id="balance" class="flex gap-6 items-start text-sm">
+		@Balance(balances)
+	</div>
+}
+
+templ Balance(balances []models.Balance) {
+	for _, b := range balances {
+		<div
+			class="font-(family-name:--font-biorhyme-expanded)"
+			if b.Amount < 0 {
+				class="text-red-500"
+			}
+		>
+			{ b.ViewAmount() }
+			// TODO: get the default currency here
+			// if b.Currency.Enum != models.CurrencyEgp {
+			// 	<i class="text-gray-400">[{ b.ViewEgpAmount() }]</i>
+			// }
+		</div>
+	}
+}

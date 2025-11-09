@@ -86,7 +86,11 @@ func New(h *handler.Handler) Router {
 	mux.Handle("GET /oauth/refresh-tokens", handlePub(h.RefreshTokens))
 	mux.Handle("GET /signout", handle(h.Signout))
 
-	static(mux, []string{"styles", "js", "images"}, "./web/public")
+	static(mux, []string{
+		"styles", "js", "images",
+		"fonts", "icons",
+	}, "./web/public")
+
 	mux.Handle("/", handle(h.NotFound))
 
 	return mux

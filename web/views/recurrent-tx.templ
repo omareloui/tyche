@@ -5,6 +5,7 @@ import (
 	"time"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/web/views/layouts"
 )
 
 type RecurrenceFD struct {
@@ -37,7 +38,7 @@ type RecurrentTxFD struct {
 }
 
 templ RecurrentTxs(claims *jwt.AccessClaims, balances []models.Balance, rtxs []models.RecurrentTx) {
-	@baseLayout(claims, "Recurrent Transactions", balances, &layoutOpts{includeAlpine: true, includeAlpineCollapse: true}) {
+	@layouts.Main(claims, "Recurrent Transactions", balances, &layouts.Opts{IncludeAlpine: true, IncludeAlpineCollapse: true}) {
 		@container() {
 			@mainHeader("Recurrent Transactions")
 			@rtxsList(rtxs)

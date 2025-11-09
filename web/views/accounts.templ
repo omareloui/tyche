@@ -6,6 +6,7 @@ import (
 
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/web/views/layouts"
 )
 
 type AccountFD struct {
@@ -33,7 +34,7 @@ templ Accounts(
 	fd *AccountFD, aknds []models.AccountKind,
 	curs []models.Currency, accounts []models.Account,
 	cps []models.Counterparty) {
-	@baseLayout(claims, "Accounts", balances, &layoutOpts{includeAlpine: true, includeAlpineCollapse: true}) {
+	@layouts.Main(claims, "Accounts", balances, &layouts.Opts{IncludeAlpine: true, IncludeAlpineCollapse: true}) {
 		@container() {
 			@mainHeader("Accounts")
 			@CreateAccountForm(fd, aknds, curs, cps, &claims.DefaultCurrency)

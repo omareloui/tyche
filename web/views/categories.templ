@@ -5,6 +5,7 @@ import (
 
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/web/views/layouts"
 )
 
 type CategoryFD struct {
@@ -21,7 +22,7 @@ templ Categories(
 	knds []models.TransactionKind,
 	categories []models.Category,
 	curs []models.Currency) {
-	@baseLayout(claims, "Categories", balances, &layoutOpts{includeAlpine: true, includeAlpineCollapse: true}) {
+	@layouts.Main(claims, "Categories", balances, &layouts.Opts{IncludeAlpine: true, IncludeAlpineCollapse: true}) {
 		@container() {
 			@mainHeader("Categories")
 			@CreateCategoryForm(fd, knds, curs, &claims.DefaultCurrency)

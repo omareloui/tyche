@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/web/views/layouts"
 )
 
 templ Currencies(claims *jwt.AccessClaims, balances []models.Balance, currencies []models.Currency) {
-	@baseLayout(claims, "Currencies", balances, nil) {
+	@layouts.Main(claims, "Currencies", balances, nil) {
 		@container() {
 			@mainHeader("Currencies")
 			@currenciesList(currencies, &claims.DefaultCurrency)

@@ -6,6 +6,7 @@ import (
 
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/web/views/layouts"
 )
 
 type GoalFD struct {
@@ -18,7 +19,7 @@ templ Goals(
 	balances []models.Balance,
 	fd *GoalFD, goals []models.Goal,
 	curs []models.Currency) {
-	@baseLayout(claims, "Goals", balances, &layoutOpts{includeAlpine: true, includeAlpineCollapse: true}) {
+	@layouts.Main(claims, "Goals", balances, &layouts.Opts{IncludeAlpine: true, IncludeAlpineCollapse: true}) {
 		@container() {
 			@mainHeader("Goals")
 			@CreateGoalForm(fd, curs, &claims.DefaultCurrency)

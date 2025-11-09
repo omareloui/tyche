@@ -6,6 +6,7 @@ import (
 
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/web/views/layouts"
 )
 
 type CounterpartyFD struct {
@@ -17,7 +18,7 @@ templ Counterparties(
 	balances []models.Balance,
 	fd *CounterpartyFD,
 	counterparties []models.Counterparty) {
-	@baseLayout(claims, "Counterparties", balances, &layoutOpts{includeAlpine: true, includeAlpineCollapse: true}) {
+	@layouts.Main(claims, "Counterparties", balances, &layouts.Opts{IncludeAlpine: true, IncludeAlpineCollapse: true}) {
 		@container() {
 			@mainHeader("Counterparties")
 			@CreateCounterpartyForm(fd)

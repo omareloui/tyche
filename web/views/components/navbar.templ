@@ -1,0 +1,74 @@
+package components
+
+import (
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"fmt"
+)
+
+templ Navbar(claims *jwt.AccessClaims, balances []models.Balance) {
+	@Container() {
+		<header class="flex items-center justify-between py-5">
+			<div class="navbar-right">
+				<div class="font-(family-name:--font-biorhyme-expanded) font-bold text-3xl">
+					<a href="/">tyche</a>
+				</div>
+			</div>
+			<div class="navbar-right flex items-center justify-between gap-6">
+				if claims != nil {
+					if len(balances) > 0 {
+						<div>
+							@Balance(balances)
+						</div>
+					}
+					<div class="select-none">
+						<img class="w-6 h-6" src="/icons/settings.svg" alt="Settings" aria-label="Settings"/>
+					</div>
+					<div class="select-none">
+						<img class="w-6 h-6" src="/icons/search.svg" alt="Search" aria-label="Search"/>
+					</div>
+					<div class="select-none">
+						<a href="/signout">
+							<img class="w-6 h-6" src="/icons/logout.svg" alt="Logout" aria-label="Logout"/>
+						</a>
+					</div>
+					<div class="select-none">
+						<img
+							src={ claims.Picture }
+							class="rounded-md w-14 h-14 object-cover text-xs"
+							alt=""
+							onerror="this.onerror=null;
+            this.nextElementSibling.classList.add('flex');
+            this.nextElementSibling.classList.remove('hidden');
+            this.classList.add('hidden')"
+						/>
+						<div
+							class="hidden w-12 h-12 rounded-md items-center justify-center"
+							style={ fmt.Sprintf("background: %s;", models.CategoryColorToHex(models.GetRandomCategoryColor())) }
+						>
+							{ string(claims.FirstName[0]) }
+							{ string(claims.LastName[0]) }
+						</div>
+					</div>
+				} else {
+					<a href="/oauth" hx-disabled="true" class="font-(family-name:--font-biorhyme-expanded) text-base">
+						Sign in
+					</a>
+				}
+			</div>
+		</header>
+	}
+	@Navlinks([]string{"/accounts", "/categories", "/transacsions", "/recurrent-tx", "/goals", "/counterparties", "/currenries"})
+}
+
+templ Navlinks(links []string) {
+	<nav>
+		<ul class="flex gap-4 justify-center py-12">
+			for _, link := range links {
+				<li class="text-blue-500 focus:ring focus:ring-blue-300 focus:outline-none">
+					<a href={ link }>{ link }</a>
+				</li>
+			}
+		</ul>
+	</nav>
+}

@@ -1,31 +1,10 @@
 package views
 
 import "github.com/omareloui/tyche/internal/models"
-
-templ Balance(balances []models.Balance) {
-	<div id="balance" class="flex gap-6 items-start text-sm">
-		@balance(balances)
-	</div>
-}
+import "github.com/omareloui/tyche/web/views/components"
 
 templ BalanceOOB(balances []models.Balance) {
 	<div id="balance" hx-swap-oob="innerHTML">
-		@balance(balances)
+		@components.Balance(balances)
 	</div>
-}
-
-templ balance(balances []models.Balance) {
-	for _, b := range balances {
-		<div
-			if b.Amount < 0 {
-				class="text-red-500"
-			}
-		>
-			{ b.ViewAmount() }
-			// TODO: get the default currency here
-			// if b.Currency.Enum != models.CurrencyEgp {
-			// 	<i class="text-gray-400">[{ b.ViewEgpAmount() }]</i>
-			// }
-		</div>
-	}
 }
