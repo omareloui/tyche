@@ -2,14 +2,8 @@ package views
 
 import "fmt"
 
-templ container() {
-	<div class="lg:max-w-screen-lg md:max-w-screen-md px-5 mx-auto max-w-full">
-		{ children... }
-	</div>
-}
-
 templ mainHeader(text string) {
-	<h1 class="text-3xl font-bold mb-3 text-center">{ text }</h1>
+	<h1 class="text-3xl font-bold mb-6 font-(family-name:--font-biorhyme-expanded)">{ text }</h1>
 }
 
 templ link(href templ.SafeURL, text string) {

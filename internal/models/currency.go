@@ -13,6 +13,13 @@ const (
 	CurrencyKindPreciousMetal CurrencyKind = "PreciousMetal"
 )
 
+func (ck CurrencyKind) String() string {
+	if ck == CurrencyKindPreciousMetal {
+		return "Precious Metal"
+	}
+	return string(ck)
+}
+
 type Currency struct {
 	ID         string       `validate:"required"`
 	String     string       `validate:"required,max=5"`

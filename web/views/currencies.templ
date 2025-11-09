@@ -5,11 +5,13 @@ import (
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/web/views/layouts"
+	"github.com/omareloui/tyche/web/views/components"
+	"strings"
 )
 
 templ Currencies(claims *jwt.AccessClaims, balances []models.Balance, currencies []models.Currency) {
 	@layouts.Main(claims, "Currencies", balances, nil) {
-		@container() {
+		@components.Container() {
 			@mainHeader("Currencies")
 			@currenciesList(currencies, &claims.DefaultCurrency)
 		}
@@ -17,42 +19,51 @@ templ Currencies(claims *jwt.AccessClaims, balances []models.Balance, currencies
 }
 
 templ currenciesList(currencies []models.Currency, defaultCur *models.Currency) {
-	@list("currencies-list") {
+	<div id="currencies-list" class="grid md:grid-cols-3 grid-cols-2 gap-4 no-entries">
 		for _, cur := range currencies {
 			@Currency(&cur, defaultCur)
 		}
-	}
-}
-
-templ Currency(cur *models.Currency, defaultCur *models.Currency) {
-	<div hx-target="this" class="entry-container">
-		<p>ID: { cur.ID }</p>
-		<p>String: { cur.String }</p>
-		<p>Symbol: { cur.Symbol }</p>
-		<p>Kind: { string(cur.Kind) }</p>
-		if cur.IbanPrefix != "" {
-			<p>IBAN Prefix: { cur.IbanPrefix }</p>
-		}
-		<p>Is Shown: { formatBool(cur.IsShown) }</p>
-		if defaultCur != nil && cur.ID == defaultCur.ID {
-			<p class="font-bold text-green-600">Default Currency</p>
-		}
-		<div class="flex gap-4">
-			if cur.IsShown {
-				@saveButton("Hide", fmt.Sprintf("/currencies/%s/hide", cur.ID))
-			} else {
-				@saveButton("Show", fmt.Sprintf("/currencies/%s/show", cur.ID))
-			}
-			if defaultCur == nil || cur.ID != defaultCur.ID {
-				@saveButton("Set as Default", fmt.Sprintf("/currencies/%s/set-default", cur.ID))
-			}
-		</div>
 	</div>
 }
 
-func formatBool(b bool) string {
-	if b {
-		return "Yes"
-	}
-	return "No"
+templ Currency(cur *models.Currency, defaultCur *models.Currency) {
+	<div hx-target="this" class="entry-container flex justify-between gap-8">
+		<div class="flex place-items-center text-xl">
+			<img
+				src={ fmt.Sprintf("/icons/currency-kind-%s.svg", strings.ToLower(string(cur.Kind))) }
+				alt={ cur.Kind.String() }
+				class="w-6 h-6 mr-4"
+			/>
+			<p class="mr-2">{ cur.String }</p>
+			<p class="text-zinc-400">{ cur.Symbol }</p>
+		</div>
+		<div class="flex text-xl place-items-center">
+			if cur.IsShown {
+				<a
+					hx-put={ fmt.Sprintf("/currencies/%s/hide", cur.ID) }
+					hx-swap="outerHTML"
+					class="cursor-pointer inline-block w-6 h-6"
+				>
+					<img src="/icons/show.svg" class="w-6 h-6"/>
+				</a>
+			} else {
+				<a
+					hx-put={ fmt.Sprintf("/currencies/%s/show", cur.ID) }
+					hx-swap="outerHTML"
+					class="cursor-pointer inline-block w-6 h-6"
+				>
+					<img src="/icons/hide.svg" class="w-6 h-6"/>
+				</a>
+			}
+		</div>
+		// TODO:
+		// if defaultCur != nil && cur.ID == defaultCur.ID {
+		// 	<p class="font-bold text-green-600">Default Currency</p>
+		// }
+		// <div class="flex gap-4">
+		// 	if defaultCur == nil || cur.ID != defaultCur.ID {
+		// 		@saveButton("Set as Default", fmt.Sprintf("/currencies/%s/set-default", cur.ID))
+		// 	}
+		// </div>
+	</div>
 }

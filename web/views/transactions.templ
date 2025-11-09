@@ -8,6 +8,7 @@ import (
 	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/web/views/layouts"
+	"github.com/omareloui/tyche/web/views/components"
 )
 
 type TransactionFD struct {
@@ -39,7 +40,7 @@ templ Transactions(
 	knds []models.TransactionKind, cats []models.Category,
 	cps []models.Counterparty, gls []models.Goal) {
 	@layouts.Main(claims, "Transactions", balances, &layouts.Opts{IncludeAlpine: true, IncludeAlpineCollapse: true, IncludeAlpineMask: true}) {
-		@container() {
+		@components.Container() {
 			@mainHeader("Transactions")
 			@CreateTransactionForm(fd, accounts, knds, cats, cps, gls, &claims.DefaultCurrency)
 			@transactionsList(transactions)

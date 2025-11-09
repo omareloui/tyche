@@ -9,6 +9,7 @@ templ NavbarBalance(balances []models.Balance) {
 }
 
 templ Balance(balances []models.Balance) {
+	// TODO: show only in default curreny
 	for _, b := range balances {
 		<div
 			class="font-(family-name:--font-biorhyme-expanded)"
