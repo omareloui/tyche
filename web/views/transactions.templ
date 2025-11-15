@@ -101,9 +101,9 @@ templ Transaction(tx *models.Transaction) {
 	<div
 		hx-target="this"
 		if tx.FulfilledAt.IsZero() {
-			class="entry-container"
-		} else {
 			class="entry-container stale"
+		} else {
+			class="entry-container"
 		}
 	>
 		<p>ID: { tx.ID }</p>

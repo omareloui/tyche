@@ -24,7 +24,7 @@
 }
 
 .entry-container.stale {
-  @apply bg-gray-200;
+  @apply bg-gray-400;
 }
 
 /* ============ FORM ============ */
