@@ -74,7 +74,7 @@ type createCategory struct {
 }
 
 func (cat *Category) ViewBudgetAmount() string {
-	return formatAmount(cat.BudgetAmount, cat.BudgetCurrency.String)
+	return FormatAmount(cat.BudgetAmount, cat.BudgetCurrency.String)
 }
 
 func (cat *Category) toValidate() *createCategory {

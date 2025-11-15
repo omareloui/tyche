@@ -12,9 +12,9 @@ templ Balance(balances []models.Balance) {
 	// TODO: show only in default curreny
 	for _, b := range balances {
 		<div
-			class="font-(family-name:--font-biorhyme-expanded)"
-			if b.Amount < 0 {
-				class="text-red-500"
+			class={
+				"font-(family-name:--font-biorhyme-expanded)",
+				templ.KV("text-red-500", b.Amount < 0),
 			}
 		>
 			{ b.ViewAmount() }

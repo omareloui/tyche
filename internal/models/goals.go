@@ -27,7 +27,7 @@ type createGoal struct {
 }
 
 func (gl *Goal) ViewAmount() string {
-	return formatAmount(gl.Price, gl.Currency.Symbol)
+	return FormatAmount(gl.Price, gl.Currency.Symbol)
 }
 
 func (gl *Goal) Remaining() float64 {
@@ -46,7 +46,7 @@ func (gl *Goal) Remaining() float64 {
 }
 
 func (gl *Goal) ViewRemaining() string {
-	return formatAmount(gl.Remaining(), gl.Currency.Symbol)
+	return FormatAmount(gl.Remaining(), gl.Currency.Symbol)
 }
 
 func (gl *Goal) Plan(numberOfMonths int) float64 {

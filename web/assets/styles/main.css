@@ -20,11 +20,11 @@
 }
 
 .entry-container {
-  @apply py-5 px-8 bg-zinc-700 rounded-lg;
+  @apply py-5 px-8 bg-zinc-700/20 rounded-lg;
 }
 
 .entry-container.stale {
-  @apply bg-gray-400;
+  @apply bg-gray-400/20;
 }
 
 /* ============ FORM ============ */

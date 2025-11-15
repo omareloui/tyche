@@ -10,7 +10,9 @@ import (
 )
 
 templ Currencies(claims *jwt.AccessClaims, balances []models.Balance, currencies []models.Currency) {
-	@layouts.Main(claims, "Currencies", balances, nil) {
+	@layouts.Main(claims, "Currencies", balances, &layouts.Opts{
+		IncludeAlpine: true,
+	}) {
 		@components.Container() {
 			@mainHeader("Currencies")
 			@currenciesList(currencies, &claims.DefaultCurrency)
@@ -27,43 +29,80 @@ templ currenciesList(currencies []models.Currency, defaultCur *models.Currency) 
 }
 
 templ Currency(cur *models.Currency, defaultCur *models.Currency) {
-	<div hx-target="this" class="entry-container flex justify-between gap-8">
-		<div class="flex place-items-center text-xl">
-			<img
-				src={ fmt.Sprintf("/icons/currency-kind-%s.svg", strings.ToLower(string(cur.Kind))) }
-				alt={ cur.Kind.String() }
-				class="w-6 h-6 mr-4"
-			/>
-			<p class="mr-2">{ cur.String }</p>
-			<p class="text-zinc-400">{ cur.Symbol }</p>
-		</div>
-		<div class="flex text-xl place-items-center">
-			if cur.IsShown {
-				<a
-					hx-put={ fmt.Sprintf("/currencies/%s/hide", cur.ID) }
-					hx-swap="outerHTML"
-					class="cursor-pointer inline-block w-6 h-6"
+	<div hx-target="this" class="relative" x-data="{openMenu: false}">
+		if defaultCur != nil {
+			if cur.ID != defaultCur.ID {
+				<div
+					x-show="openMenu"
+					@click.away="openMenu = false"
+					x-transition
+					class="absolute z-1 -top-8 right-8 bg-zinc-400/20 py-2 px-4 rounded backdrop-blur-sm"
 				>
-					<img src="/icons/show.svg" class="w-6 h-6"/>
-				</a>
+					<ul>
+						<li>
+							<a
+								hx-put={ fmt.Sprintf("/currencies/%s/set-default", cur.ID) }
+								hx-swap="outerHTML"
+								class="cursor-pointer"
+							>
+								Set as Default
+							</a>
+						</li>
+					</ul>
+				</div>
 			} else {
-				<a
-					hx-put={ fmt.Sprintf("/currencies/%s/show", cur.ID) }
-					hx-swap="outerHTML"
-					class="cursor-pointer inline-block w-6 h-6"
-				>
-					<img src="/icons/hide.svg" class="w-6 h-6"/>
-				</a>
+				<div class="absolute -z-1 top-0 left-0 w-6 h-full bg-green-600 text-xs rounded-lg"></div>
 			}
+		}
+		<div
+			class={
+				"entry-container flex flex-col justify-between place gap-4",
+				templ.KV("backdrop-blur-xl", defaultCur != nil && cur.ID == defaultCur.ID),
+			}
+		>
+			<div class="flex justify-between gap-8">
+				<div class="flex place-items-center text-xl">
+					<img
+						src={ fmt.Sprintf("/icons/currency-kind-%s.svg", strings.ToLower(string(cur.Kind))) }
+						alt={ cur.Kind.String() }
+						class="w-6 h-6 mr-4"
+					/>
+					<p class="mr-2">{ cur.String }</p>
+					<p class="text-zinc-400">{ cur.Symbol }</p>
+				</div>
+				if defaultCur != nil && cur.ID != defaultCur.ID {
+					<div class="flex text-xl place-items-center gap-4">
+						if cur.IsShown {
+							<a
+								hx-put={ fmt.Sprintf("/currencies/%s/hide", cur.ID) }
+								hx-swap="outerHTML"
+								class="cursor-pointer inline-block w-6 h-6"
+							>
+								<img src="/icons/show.svg" class="w-6 h-6"/>
+							</a>
+						} else {
+							<a
+								hx-put={ fmt.Sprintf("/currencies/%s/show", cur.ID) }
+								hx-swap="outerHTML"
+								class="cursor-pointer inline-block w-6 h-6"
+							>
+								<img src="/icons/hide.svg" class="w-6 h-6"/>
+							</a>
+						}
+						<button
+							@click="openMenu = !openMenu"
+							class="cursor-pointer inline-block w-6 h-6"
+						>
+							<img src="/icons/dots-menu.svg" class="w-6 h-6"/>
+						</button>
+					</div>
+				}
+			</div>
+			<hr class="border-2 border-t border-zinc-800 w-3/4 self-center"/>
+			<div class="flex gap-2 place-items-center place-content-center">
+				<img src="/icons/fx-rate.svg" class="w-4 h-4"/>
+				<p class="text-zinc-400">{ models.FormatAmount(cur.FxRate(defaultCur.String), defaultCur.Symbol) }</p>
+			</div>
 		</div>
-		// TODO:
-		// if defaultCur != nil && cur.ID == defaultCur.ID {
-		// 	<p class="font-bold text-green-600">Default Currency</p>
-		// }
-		// <div class="flex gap-4">
-		// 	if defaultCur == nil || cur.ID != defaultCur.ID {
-		// 		@saveButton("Set as Default", fmt.Sprintf("/currencies/%s/set-default", cur.ID))
-		// 	}
-		// </div>
 	</div>
 }

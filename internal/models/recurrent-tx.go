@@ -70,14 +70,14 @@ func (rt *RecurrentTx) ViewRecurrence() string {
 }
 
 func (rt *RecurrentTx) ViewAmount() string {
-	return formatAmount(rt.Amount, rt.Account.Currency.Symbol)
+	return FormatAmount(rt.Amount, rt.Account.Currency.Symbol)
 }
 
 func (rt *RecurrentTx) ViewToAmount() string {
 	if rt.ToAccount == nil {
 		return ""
 	}
-	return formatAmount(rt.ToAmount, rt.ToAccount.Currency.Symbol)
+	return FormatAmount(rt.ToAmount, rt.ToAccount.Currency.Symbol)
 }
 
 func (rt *RecurrentTx) toValidate() *createRecurrentTx {

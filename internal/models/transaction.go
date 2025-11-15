@@ -45,14 +45,14 @@ type createTransaction struct {
 }
 
 func (t *Transaction) ViewAmount() string {
-	return formatAmount(t.Amount, t.Account.Currency.Symbol)
+	return FormatAmount(t.Amount, t.Account.Currency.Symbol)
 }
 
 func (t *Transaction) ViewToAmount() string {
 	if t.ToAccount == nil {
 		return ""
 	}
-	return formatAmount(t.ToAmount, t.ToAccount.Currency.Symbol)
+	return FormatAmount(t.ToAmount, t.ToAccount.Currency.Symbol)
 }
 
 func (t *Transaction) toValidate() *createTransaction {

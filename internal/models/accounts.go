@@ -44,15 +44,15 @@ type createAccount struct {
 }
 
 func (a *Account) ViewAmount() string {
-	return formatAmount(a.Amount, a.Currency.Symbol)
+	return FormatAmount(a.Amount, a.Currency.Symbol)
 }
 
 func (a *Account) ViewActualAmount() string {
-	return formatAmount(a.ActualAmount, a.Currency.Symbol)
+	return FormatAmount(a.ActualAmount, a.Currency.Symbol)
 }
 
 func (a *Account) ViewCardLimit() string {
-	return formatAmount(a.CardLimit, a.Currency.Symbol)
+	return FormatAmount(a.CardLimit, a.Currency.Symbol)
 }
 
 func (a *Account) MaskIban() string {
@@ -106,11 +106,11 @@ type Balance struct {
 }
 
 func (b *Balance) ViewAmount() string {
-	return formatAmount(b.Amount, b.Currency.Symbol)
+	return FormatAmount(b.Amount, b.Currency.Symbol)
 }
 
 func (b *Balance) ViewAmountWithCurrency(cur *Currency) string {
-	return formatAmount(b.Currency.FxRate(cur.String)*b.Amount, cur.Symbol)
+	return FormatAmount(b.Currency.FxRate(cur.String)*b.Amount, cur.Symbol)
 }
 
 func (b *Balance) AmountWithCurrency(cur *Currency) float64 {
