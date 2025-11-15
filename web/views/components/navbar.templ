@@ -18,7 +18,7 @@ templ Navbar(claims *jwt.AccessClaims, balances []models.Balance) {
 				if claims != nil {
 					if len(balances) > 0 {
 						<div>
-							@Balance(balances)
+							@NavbarBalance(balances)
 						</div>
 					}
 					<div class="select-none">
@@ -35,7 +35,7 @@ templ Navbar(claims *jwt.AccessClaims, balances []models.Balance) {
 					<div class="select-none">
 						<img
 							src={ claims.Picture }
-							class="rounded-md w-14 h-14 object-cover text-xs"
+							class="rounded-md w-12 h-12 object-cover text-xs"
 							alt=""
 							onerror="this.onerror=null;
             this.nextElementSibling.classList.add('flex');
@@ -58,7 +58,9 @@ templ Navbar(claims *jwt.AccessClaims, balances []models.Balance) {
 			</div>
 		</header>
 	}
-	@Navlinks([]string{"/accounts", "/categories", "/transactions", "/recurrent-tx", "/goals", "/counterparties", "/currencies"})
+	if claims != nil {
+		@Navlinks([]string{"/accounts", "/categories", "/transactions", "/recurrent-tx", "/goals", "/counterparties", "/currencies"})
+	}
 }
 
 templ Navlinks(links []string) {
