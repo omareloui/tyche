@@ -16,7 +16,7 @@
 
 .no-entries:empty:before {
   content: "No entries yet!";
-  @apply text-gray-400 italic;
+  @apply text-zinc-400 italic;
 }
 
 .entry-container {
@@ -24,7 +24,7 @@
 }
 
 .entry-container.stale {
-  @apply bg-gray-400/20;
+  @apply bg-zinc-400/20;
 }
 
 /* ============ FORM ============ */
@@ -33,7 +33,7 @@
 }
 
 .input-field {
-  @apply bg-gray-50 border-2 border-gray-300 text-gray-900 text-sm rounded-lg focus:border-blue-300 block w-full p-2.5 focus:outline-none h-11;
+  @apply bg-zinc-50 border-2 border-zinc-300 text-zinc-900 text-sm rounded-lg focus:border-blue-300 block w-full p-2.5 focus:outline-none h-11;
 }
 
 textarea.input-field {

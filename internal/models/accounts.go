@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/omareloui/tyche/internal/errs"
+	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/sanitizer"
 	"github.com/omareloui/tyche/internal/valid"
 )
@@ -44,15 +45,15 @@ type createAccount struct {
 }
 
 func (a *Account) ViewAmount() string {
-	return FormatAmount(a.Amount, a.Currency.Symbol)
+	return formatters.FormatAmount(a.Amount, a.Currency.Symbol)
 }
 
 func (a *Account) ViewActualAmount() string {
-	return FormatAmount(a.ActualAmount, a.Currency.Symbol)
+	return formatters.FormatAmount(a.ActualAmount, a.Currency.Symbol)
 }
 
 func (a *Account) ViewCardLimit() string {
-	return FormatAmount(a.CardLimit, a.Currency.Symbol)
+	return formatters.FormatAmount(a.CardLimit, a.Currency.Symbol)
 }
 
 func (a *Account) MaskIban() string {
@@ -106,11 +107,11 @@ type Balance struct {
 }
 
 func (b *Balance) ViewAmount() string {
-	return FormatAmount(b.Amount, b.Currency.Symbol)
+	return formatters.FormatAmount(b.Amount, b.Currency.Symbol)
 }
 
 func (b *Balance) ViewAmountWithCurrency(cur *Currency) string {
-	return FormatAmount(b.Currency.FxRate(cur.String)*b.Amount, cur.Symbol)
+	return formatters.FormatAmount(b.Currency.FxRate(cur.String)*b.Amount, cur.Symbol)
 }
 
 func (b *Balance) AmountWithCurrency(cur *Currency) float64 {

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/omareloui/tyche/internal/errs"
+	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/numsutils"
 	"github.com/omareloui/tyche/internal/sanitizer"
 	"github.com/omareloui/tyche/internal/valid"
@@ -27,10 +28,10 @@ type createGoal struct {
 }
 
 func (gl *Goal) ViewAmount() string {
-	return FormatAmount(gl.Price, gl.Currency.Symbol)
+	return formatters.FormatAmount(gl.Price, gl.Currency.Symbol)
 }
 
-func (gl *Goal) Remaining() float64 {
+func (gl *Goal) Progress() float64 {
 	var sum float64
 
 	for _, tx := range gl.Transactions {
@@ -38,15 +39,24 @@ func (gl *Goal) Remaining() float64 {
 			sum += tx.Amount * tx.Account.Currency.FxRate(gl.Currency.String)
 		}
 	}
-	rem := gl.Price - sum
-	if rem < 0 {
-		return 0
-	}
-	return rem
+
+	return sum
+}
+
+func (gl *Goal) ProgressPercentage() float64 {
+	return gl.Progress() / gl.Price * 100
+}
+
+func (gl *Goal) Remaining() float64 {
+	return gl.Price - gl.Progress()
 }
 
 func (gl *Goal) ViewRemaining() string {
-	return FormatAmount(gl.Remaining(), gl.Currency.Symbol)
+	return formatters.FormatAmount(gl.Remaining(), gl.Currency.Symbol)
+}
+
+func (gl *Goal) ViewProgress() string {
+	return formatters.FormatAmount(gl.Progress(), gl.Currency.Symbol)
 }
 
 func (gl *Goal) Plan(numberOfMonths int) float64 {

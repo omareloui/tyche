@@ -270,7 +270,7 @@ func (h Handler) FulfillGoal(w http.ResponseWriter, r *http.Request) (templ.Comp
 	if err := h.repo.FulfillGoal(r.Context(), id); err != nil {
 		return nil, err
 	}
-	return nil, nil
+	return h.Goal(w, r)
 }
 
 func (h Handler) UnfulfillGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -281,7 +281,7 @@ func (h Handler) UnfulfillGoal(w http.ResponseWriter, r *http.Request) (templ.Co
 	if err := h.repo.UnfulfillGoal(r.Context(), id); err != nil {
 		return nil, err
 	}
-	return nil, nil
+	return h.Goal(w, r)
 }
 
 func (h Handler) DeleteGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

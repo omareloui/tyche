@@ -1,4 +1,4 @@
-package models
+package formatters
 
 import (
 	"strings"
@@ -15,7 +15,7 @@ type nu interface {
 		~float64 | ~float32
 }
 
-func formatNum[T nu](num T) string {
+func FormatNum[T nu](num T) string {
 	return p.Sprintf("%v", number.Decimal(num, number.MaxFractionDigits(2)))
 }
 
@@ -25,6 +25,6 @@ func FormatAmount(amount float64, curSymbol string) string {
 		strBuilder.WriteString(curSymbol)
 		strBuilder.WriteString(" ")
 	}
-	strBuilder.WriteString(formatNum(amount))
+	strBuilder.WriteString(FormatNum(amount))
 	return strBuilder.String()
 }

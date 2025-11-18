@@ -1,0 +1,31 @@
+package components
+
+import "strings"
+
+templ EntryMenuAnchorItem(label string, action string, url string, extraClasses ...string) {
+	<a
+		class={ "block transition-transform hover:translate-x-0.5",
+     strings.Join(extraClasses, " ") }
+		{ "hx-" + action }={ url }
+		hx-swap="outerHTML"
+	>
+		{ label }
+	</a>
+}
+
+templ EntryMenu(showKey string, entries []templ.Component) {
+	<div
+		x-show={ showKey }
+		@click.away={ showKey + " = false" }
+		x-transition
+		class="absolute z-1 -top-8 right-8 bg-zinc-400/20 rounded backdrop-blur-sm"
+	>
+		<ul class="py-2 min-w-28">
+			for _, entry := range entries {
+				<li class="transition-colors hover:bg-zinc-500/20 px-4 cursor-pointer">
+					@entry
+				</li>
+			}
+		</ul>
+	</div>
+}

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/omareloui/tyche/internal/errs"
+	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/sanitizer"
 	"github.com/omareloui/tyche/internal/valid"
 )
@@ -74,7 +75,7 @@ type createCategory struct {
 }
 
 func (cat *Category) ViewBudgetAmount() string {
-	return FormatAmount(cat.BudgetAmount, cat.BudgetCurrency.String)
+	return formatters.FormatAmount(cat.BudgetAmount, cat.BudgetCurrency.String)
 }
 
 func (cat *Category) toValidate() *createCategory {

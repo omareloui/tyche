@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/omareloui/tyche/internal/errs"
+	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/sanitizer"
 	"github.com/omareloui/tyche/internal/valid"
 )
@@ -45,14 +46,14 @@ type createTransaction struct {
 }
 
 func (t *Transaction) ViewAmount() string {
-	return FormatAmount(t.Amount, t.Account.Currency.Symbol)
+	return formatters.FormatAmount(t.Amount, t.Account.Currency.Symbol)
 }
 
 func (t *Transaction) ViewToAmount() string {
 	if t.ToAccount == nil {
 		return ""
 	}
-	return FormatAmount(t.ToAmount, t.ToAccount.Currency.Symbol)
+	return formatters.FormatAmount(t.ToAmount, t.ToAccount.Currency.Symbol)
 }
 
 func (t *Transaction) toValidate() *createTransaction {

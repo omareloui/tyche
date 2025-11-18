@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/omareloui/tyche/internal/errs"
+	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/sanitizer"
 	"github.com/omareloui/tyche/internal/valid"
 )
@@ -70,14 +71,14 @@ func (rt *RecurrentTx) ViewRecurrence() string {
 }
 
 func (rt *RecurrentTx) ViewAmount() string {
-	return FormatAmount(rt.Amount, rt.Account.Currency.Symbol)
+	return formatters.FormatAmount(rt.Amount, rt.Account.Currency.Symbol)
 }
 
 func (rt *RecurrentTx) ViewToAmount() string {
 	if rt.ToAccount == nil {
 		return ""
 	}
-	return FormatAmount(rt.ToAmount, rt.ToAccount.Currency.Symbol)
+	return formatters.FormatAmount(rt.ToAmount, rt.ToAccount.Currency.Symbol)
 }
 
 func (rt *RecurrentTx) toValidate() *createRecurrentTx {

@@ -7,6 +7,7 @@ import (
 	"github.com/omareloui/tyche/web/views/layouts"
 	"github.com/omareloui/tyche/web/views/components"
 	"strings"
+	"github.com/omareloui/tyche/internal/formatters"
 )
 
 templ Currencies(claims *jwt.AccessClaims, balances []models.Balance, currencies []models.Currency) {
@@ -101,7 +102,7 @@ templ Currency(cur *models.Currency, defaultCur *models.Currency) {
 			<hr class="border-2 border-t border-zinc-800 w-3/4 self-center"/>
 			<div class="flex gap-2 place-items-center place-content-center">
 				<img src="/icons/fx-rate.svg" class="w-4 h-4"/>
-				<p class="text-zinc-400">{ models.FormatAmount(cur.FxRate(defaultCur.String), defaultCur.Symbol) }</p>
+				<p class="text-zinc-400">{ formatters.FormatAmount(cur.FxRate(defaultCur.String), defaultCur.Symbol) }</p>
 			</div>
 		</div>
 	</div>
