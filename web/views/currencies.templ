@@ -33,24 +33,9 @@ templ Currency(cur *models.Currency, defaultCur *models.Currency) {
 	<div hx-target="this" class="relative" x-data="{openMenu: false}">
 		if defaultCur != nil {
 			if cur.ID != defaultCur.ID {
-				<div
-					x-show="openMenu"
-					@click.away="openMenu = false"
-					x-transition
-					class="absolute z-1 -top-8 right-8 bg-zinc-400/20 py-2 px-4 rounded backdrop-blur-sm"
-				>
-					<ul>
-						<li>
-							<a
-								hx-put={ fmt.Sprintf("/currencies/%s/set-default", cur.ID) }
-								hx-swap="outerHTML"
-								class="cursor-pointer"
-							>
-								Set as Default
-							</a>
-						</li>
-					</ul>
-				</div>
+				@components.EntryMenu("openMenu", []templ.Component{
+					components.EntryMenuAnchorItem("Set as Default", "put", fmt.Sprintf("/currencies/%s/set-default", cur.ID)),
+				})
 			} else {
 				<div class="absolute -z-1 top-0 left-0 w-6 h-full bg-green-600 text-xs rounded-lg"></div>
 			}
