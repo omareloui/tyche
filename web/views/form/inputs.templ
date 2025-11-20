@@ -116,8 +116,8 @@ templ input(name, id, kind string, attrs templ.Attributes, data FDInput) {
 
 templ Input(label, kind, name, placeholder, id string, data FDInput, inputAttrs templ.Attributes, wrapperAttrs templ.Attributes) {
 	<div
-		if inputAttrs != nil {
-			{ inputAttrs... }
+		if wrapperAttrs != nil {
+			{ wrapperAttrs... }
 		}
 	>
 		@inputLabel(name, id, label)
