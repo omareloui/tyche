@@ -1,0 +1,136 @@
+package form
+
+import (
+	"fmt"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+templ TextInput(label, name, placeholder, id string, data FDInput, inputAttrs templ.Attributes, wrapperAttrs templ.Attributes) {
+	@Input(label, "text", name, placeholder, id, data, inputAttrs, wrapperAttrs)
+}
+
+templ NumberInput(label, name, placeholder, id string, data FDInput, inputAttrs templ.Attributes, wrapperAttrs templ.Attributes) {
+	@Input(label, "number", name, placeholder, id, data, joinAttrs(templ.Attributes{
+		"typemodel":    "decimal",
+		"autocomplete": "off",
+	}, inputAttrs), wrapperAttrs)
+}
+
+templ MoneyInput(label, name, currencySymbol, id string, data FDInput, inputAttrs templ.Attributes, wrapperAttrs templ.Attributes) {
+	@TextInput(label, name, fmt.Sprintf("%s 1,000.00", currencySymbol), id, data, joinAttrs(templ.Attributes{
+		"autocomplete":   "off",
+		"x-mask:dynamic": fmt.Sprintf("'%s ' + $money($input, '.', ',')", currencySymbol),
+	}, inputAttrs), wrapperAttrs)
+}
+
+templ CreditCardInput(label, name, id string, data FDInput, inputAttrs templ.Attributes, wrapperAttrs templ.Attributes) {
+	@TextInput(label, name, "0000 0000 0000 0000", id, data, joinAttrs(templ.Attributes{
+		"autocomplete":   "off",
+		"x-mask:dynamic": "$input.startsWith('34') || $input.startsWith('37') ? '9999 999999 99999' : '9999 9999 9999 9999'",
+	}, inputAttrs), wrapperAttrs)
+}
+
+templ IBANInput(label, name, id string, ibanPrefix string, data FDInput, inputAttrs templ.Attributes, wrapperAttrs templ.Attributes) {
+	@TextInput(label, name, fmt.Sprintf("%s00 0000 0000 0000 0000 0000 0000 0", ibanPrefix), id, data, joinAttrs(templ.Attributes{
+		"autocomplete": "off",
+		"x-mask":       fmt.Sprintf("%s99 9999 9999 9999 9999 9999 9999 9", ibanPrefix),
+	}, inputAttrs), wrapperAttrs)
+}
+
+templ DateInput(label, name, id string, data FDInput, inputAttrs templ.Attributes, wrapperAttrs templ.Attributes) {
+	@Input(label, "date", name, "yyyy-mm-dd", id, data, joinAttrs(templ.Attributes{
+		"data-datepicker?": "",
+		"autocomplete":     "off",
+		"x-mask":           "9999-99-99",
+	}, inputAttrs), wrapperAttrs)
+}
+
+templ SelectInput(label, name, placeholder, id string,
+	options map[string]string, data FDInput, nullable bool,
+	inputAttrs templ.Attributes, wrapperAttrs templ.Attributes) {
+	<div
+		if wrapperAttrs != nil {
+			{ wrapperAttrs... }
+		}
+	>
+		@inputLabel(name, id, label)
+		<select
+			id={ join(name, id) }
+			name={ name }
+			class="input-field"
+			if inputAttrs != nil {
+				{ inputAttrs... }
+			}
+		>
+			<option
+				value=""
+				disabled
+				if !nullable || data.Value != "" {
+					selected
+				}
+			>{ placeholder }</option>
+			if nullable {
+				<option value="" selected>&lt;nil&gt;</option>
+			}
+			for k, v := range options {
+				<option
+					value={ k }
+					if k == data.Value {
+						selected
+					}
+				>{ v }</option>
+			}
+		</select>
+		@errorMessage(data.Error)
+	</div>
+}
+
+templ Checkbox(label, name, id string, data FDInput, inputAttrs templ.Attributes, wrapperAttrs templ.Attributes) {
+	<div
+		if wrapperAttrs != nil {
+			wrapperAttrs
+		}
+	>
+		@input(name, id, "checkbox", joinAttrs(inputAttrs, templ.Attributes{"checked?": data.Value}), data)
+		@inputLabel(name, id, label)
+		@errorMessage(data.Error)
+	</div>
+}
+
+templ inputLabel(name, id, label string) {
+	<label for={ join(name, id) } class="cursor-pointer">{ label }</label>
+}
+
+templ input(name, id, kind string, attrs templ.Attributes, data FDInput) {
+	<input
+		if attrs != nil {
+			{ attrs... }
+		}
+		id={ join(name, id) }
+		type={ kind }
+		name={ name }
+		value={ data.Value }
+		class="input-field"
+	/>
+}
+
+templ Input(label, kind, name, placeholder, id string, data FDInput, inputAttrs templ.Attributes, wrapperAttrs templ.Attributes) {
+	<div
+		if inputAttrs != nil {
+			{ inputAttrs... }
+		}
+	>
+		@inputLabel(name, id, label)
+		@input(name, id, kind, joinAttrs(inputAttrs, templ.Attributes{"placeholder": placeholder}), data)
+		@errorMessage(data.Error)
+	</div>
+}
+
+templ errorMessage(message string) {
+	if message != "" {
+		<div class="form-error-message">
+			@icons.Error("18px")
+			<span>{ message }</span>
+		</div>
+	}
+}

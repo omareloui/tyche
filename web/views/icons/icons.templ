@@ -1,0 +1,29 @@
+package icons
+
+templ Error(size string, attrs ...*templ.Attributes) {
+	@squareIcon(size, appendToAttrs([]*templ.Attributes{&templ.Attributes{"class": "fill-red-400"}}, attrs)...) {
+		<path d="M0 0h24v24H0z" fill="none"></path>
+		<path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm-1-7v2h2v-2h-2zm0-8v6h2V7h-2z"></path>
+	}
+}
+
+templ squareIcon(size string, attrs ...*templ.Attributes) {
+	<svg
+		width={ size }
+		height={ size }
+		viewBox="0 0 24 24"
+		if attrs != nil {
+			{ *attrs[0]... }
+		}
+	>
+		{ children... }
+	</svg>
+}
+
+func appendToAttrs(attrs1 []*templ.Attributes, attrs2 []*templ.Attributes) []*templ.Attributes {
+	for _, attr1 := range attrs1 {
+		attrs2 = append(attrs2, attr1)
+	}
+
+	return attrs2
+}

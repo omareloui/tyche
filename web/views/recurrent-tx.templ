@@ -7,25 +7,26 @@ import (
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/web/views/layouts"
 	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
 )
 
 type RecurrenceFD struct {
-	IsRecurrent FDInput
-	Unit        FDInput
-	Every       FDInput
-	StopsOn     FDInput
+	IsRecurrent form.FDInput
+	Unit        form.FDInput
+	Every       form.FDInput
+	StopsOn     form.FDInput
 }
 
 templ RecurrenceFormBody(id string, fd *RecurrenceFD) {
 	<div data-recurrence-form class="grid gap-2">
-		@checkbox("Is Recurrent", "is_recurrent", id, fd.IsRecurrent,
+		@form.Checkbox("Is Recurrent", "is_recurrent", id, fd.IsRecurrent,
 			templ.Attributes{
 				"hx-post":    fmt.Sprintf("/recurrence-form/%s", id),
 				"hx-trigger": "change",
 				"hx-target":  "closest [data-recurrence-form]",
 				"hx-swap":    "outerHTML",
 				"hx-sync":    "closest form:abort",
-			})
+			}, nil)
 		if fd.IsRecurrent.Value != "" {
 			@recurrenceFormBody(id, fd)
 		}
@@ -35,13 +36,13 @@ templ RecurrenceFormBody(id string, fd *RecurrenceFD) {
 type RecurrentTxFD struct {
 	RecurrenceFD
 	TransactionAmountsAndKindFD
-	Description FDInput
+	Description form.FDInput
 }
 
 templ RecurrentTxs(claims *jwt.AccessClaims, balances []models.Balance, rtxs []models.RecurrentTx) {
 	@layouts.Main(claims, "Recurrent Transactions", balances, &layouts.Opts{IncludeAlpine: true, IncludeAlpineCollapse: true}) {
 		@components.Container() {
-			@mainHeader("Recurrent Transactions")
+			@components.MainHeader("Recurrent Transactions")
 			@rtxsList(rtxs)
 		}
 	}
@@ -53,15 +54,15 @@ templ rtxFormBody(
 	cats []models.Category, cps []models.Counterparty,
 	gls []models.Goal, defaultCur *models.Currency) {
 	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs, cps, gls, defaultCur)
-	@input("Description", "text", "description", "Enter a description", id, fd.Description)
+	@form.TextInput("Description", "description", "Enter a description", id, fd.Description, nil, nil)
 	@recurrenceFormBody(id, &fd.RecurrenceFD)
 }
 
 templ recurrenceFormBody(id string, fd *RecurrenceFD) {
 	<div class="grid grid-cols-3 gap-4">
-		@input("Every", "number", "every", "Recurrent every...", id, fd.Every)
-		@selectInput("Unit", "unit", "How recurrent", id, models.RecurrentUnitOptions(), fd.Unit, false)
-		@dateInput("Stops on", "stops_on", id, fd.StopsOn)
+		@form.NumberInput("Every", "every", "Recurrent every...", id, fd.Every, nil, nil)
+		@form.SelectInput("Unit", "unit", "How recurrent", id, models.RecurrentUnitOptions(), fd.Unit, false, nil, nil)
+		@form.DateInput("Stops on", "stops_on", id, fd.StopsOn, nil, nil)
 	</div>
 }
 
@@ -76,15 +77,15 @@ templ EditRecurrentTx(
 	accs []models.Account, knds []models.TransactionKind,
 	cats []models.Category, cps []models.Counterparty,
 	gls []models.Goal, defaultCur *models.Currency) {
-	@form("put", fmt.Sprintf("/recurrent-tx/%s", rtx.ID), templ.Attributes{"hx-target": "this"}) {
+	@form.Form("put", fmt.Sprintf("/recurrent-tx/%s", rtx.ID), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { rtx.ID }</p>
 		@rtxFormBody(rtx.ID, fd, accs, knds, cats, cps, gls, defaultCur)
-		@editFormButtons(fmt.Sprintf("/recurrent-tx/%s", rtx.ID))
+		@form.EditFormButtons(fmt.Sprintf("/recurrent-tx/%s", rtx.ID))
 	}
 }
 
 templ rtxsList(recurrentTx []models.RecurrentTx) {
-	@list("tx-list") {
+	@components.List("tx-list") {
 		for _, rt := range recurrentTx {
 			@RecurrentTx(&rt)
 		}
@@ -124,9 +125,9 @@ templ RecurrentTx(rtx *models.RecurrentTx) {
 		<p>Last Transaction Scheduled To: { rtx.LastTransactionScheduledTo.Format(time.RFC1123Z) }</p>
 		<p>Created At: { rtx.CreatedAt.Format(time.RFC1123Z) }</p>
 		<div class="flex gap-4">
-			@postButton("Generate Transactions", fmt.Sprintf("/recurrent-tx/%s/generate-txs", rtx.ID))
-			@editButton(fmt.Sprintf("/recurrent-tx/%s/edit", rtx.ID))
-			@deleteButton(fmt.Sprintf("/recurrent-tx/%s", rtx.ID))
+			@form.PostButton("Generate Transactions", fmt.Sprintf("/recurrent-tx/%s/generate-txs", rtx.ID))
+			@form.EditButton(fmt.Sprintf("/recurrent-tx/%s/edit", rtx.ID))
+			@form.DeleteButton(fmt.Sprintf("/recurrent-tx/%s", rtx.ID))
 		</div>
 	</div>
 }

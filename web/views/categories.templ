@@ -7,13 +7,14 @@ import (
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/web/views/layouts"
 	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
 )
 
 type CategoryFD struct {
-	Name           FDInput
-	Color          FDInput
-	KindID         FDInput
-	BudgetAmountFD *AmountFD
+	Name           form.FDInput
+	Color          form.FDInput
+	KindID         form.FDInput
+	BudgetAmountFD *form.AmountFD
 }
 
 templ Categories(
@@ -25,7 +26,7 @@ templ Categories(
 	curs []models.Currency) {
 	@layouts.Main(claims, "Categories", balances, &layouts.Opts{IncludeAlpine: true, IncludeAlpineCollapse: true}) {
 		@components.Container() {
-			@mainHeader("Categories")
+			@components.MainHeader("Categories")
 			@CreateCategoryForm(fd, knds, curs, &claims.DefaultCurrency)
 			@categoriesList(categories)
 		}
@@ -33,28 +34,28 @@ templ Categories(
 }
 
 templ CreateCategoryForm(fd *CategoryFD, knds []models.TransactionKind, curs []models.Currency, defaultCur *models.Currency) {
-	@creationForm("Create Category", "/categories", "Create Category") {
+	@form.CreateForm("Create Category", "/categories", "Create Category") {
 		@categoryFormBody(fd, "", knds, curs, defaultCur)
 	}
 }
 
 templ EditCategory(fd *CategoryFD, id string, knds []models.TransactionKind, curs []models.Currency, defaultCur *models.Currency) {
-	@form("put", fmt.Sprintf("/categories/%s", id), templ.Attributes{"hx-target": "this"}) {
+	@form.Form("put", fmt.Sprintf("/categories/%s", id), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { id }</p>
 		@categoryFormBody(fd, id, knds, curs, defaultCur)
-		@editFormButtons(fmt.Sprintf("/categories/%s", id))
+		@form.EditFormButtons(fmt.Sprintf("/categories/%s", id))
 	}
 }
 
 templ categoryFormBody(fd *CategoryFD, id string, knds []models.TransactionKind, curs []models.Currency, defaultCur *models.Currency) {
-	@input("Name", "text", "name", "Enter category name", id, fd.Name)
-	@selectColor("color", id, models.CategoryColorOptions(), fd.Color)
-	@selectTxKind("kind_id", id, knds, fd.KindID)
-	@AmountInputsWithCurrency(fd.BudgetAmountFD, id, curs, defaultCur)
+	@form.TextInput("Name", "name", "Enter category name", id, fd.Name, nil, nil)
+	@form.SelectColor("color", id, models.CategoryColorOptions(), fd.Color, nil)
+	@form.SelectTxKind("kind_id", id, knds, fd.KindID, nil)
+	@form.AmountInputsWithCurrency(fd.BudgetAmountFD, id, curs, defaultCur)
 }
 
 templ categoriesList(categories []models.Category) {
-	@list("categories-list") {
+	@components.List("categories-list") {
 		for _, cat := range categories {
 			@Category(&cat)
 		}
@@ -79,8 +80,8 @@ templ Category(cat *models.Category) {
 			</p>
 		}
 		<div class="flex gap-4">
-			@editButton(fmt.Sprintf("/categories/%s/edit", cat.ID))
-			@deleteButton(fmt.Sprintf("/categories/%s", cat.ID))
+			@form.EditButton(fmt.Sprintf("/categories/%s/edit", cat.ID))
+			@form.DeleteButton(fmt.Sprintf("/categories/%s", cat.ID))
 		</div>
 	</div>
 }

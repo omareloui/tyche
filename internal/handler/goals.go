@@ -12,6 +12,7 @@ import (
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views"
+	"github.com/omareloui/tyche/web/views/form"
 	"go.uber.org/zap"
 )
 
@@ -303,10 +304,10 @@ func (h Handler) DeleteGoal(w http.ResponseWriter, r *http.Request) (templ.Compo
 
 func (h Handler) mapGlToFD(gl *models.Goal, err *errs.ValidationError) *views.GoalFD {
 	return &views.GoalFD{
-		Name: views.FDInput{Value: gl.Name, Error: err.Errors.MsgFor("Name")},
-		AmountFD: &views.AmountFD{
-			Amount:     views.FDInput{Value: formatFloatIfNonZero(gl.Price), Error: err.Errors.MsgFor("Price")},
-			CurrencyID: views.FDInput{Value: gl.Currency.ID, Error: err.Errors.MsgFor("Currency.ID")},
+		Name: form.FDInput{Value: gl.Name, Error: err.Errors.MsgFor("Name")},
+		AmountFD: &form.AmountFD{
+			Amount:     form.FDInput{Value: formatFloatIfNonZero(gl.Price), Error: err.Errors.MsgFor("Price")},
+			CurrencyID: form.FDInput{Value: gl.Currency.ID, Error: err.Errors.MsgFor("Currency.ID")},
 		},
 	}
 }

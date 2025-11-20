@@ -1,0 +1,44 @@
+package form
+
+import (
+	"strings"
+)
+
+type FDInput struct {
+	Value string `json:"value"`
+	Error string `json:"error"`
+}
+
+type AccountIFD struct {
+	Amount    FDInput
+	AccountID FDInput
+}
+
+type AmountFD struct {
+	Amount     FDInput
+	CurrencyID FDInput
+}
+
+func joinAttrs(attrs ...templ.Attributes) templ.Attributes {
+	if len(attrs) == 0 {
+		return templ.Attributes{}
+	}
+
+	newAttrs := make(templ.Attributes)
+
+	for _, attr := range attrs[1:] {
+		for k, v := range attr {
+			newAttrs[k] = v
+		}
+	}
+
+	return newAttrs
+}
+
+func join(prefix, suffix string) string {
+	del := "-"
+	if suffix == "" {
+		return prefix
+	}
+	return strings.Join([]string{prefix, suffix}, del)
+}

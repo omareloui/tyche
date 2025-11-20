@@ -8,10 +8,11 @@ import (
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/web/views/layouts"
 	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
 )
 
 type CounterpartyFD struct {
-	Name FDInput
+	Name form.FDInput
 }
 
 templ Counterparties(
@@ -21,7 +22,7 @@ templ Counterparties(
 	counterparties []models.Counterparty) {
 	@layouts.Main(claims, "Counterparties", balances, &layouts.Opts{IncludeAlpine: true, IncludeAlpineCollapse: true}) {
 		@components.Container() {
-			@mainHeader("Counterparties")
+			@components.MainHeader("Counterparties")
 			@CreateCounterpartyForm(fd)
 			@counterpartiesList(counterparties)
 		}
@@ -29,25 +30,25 @@ templ Counterparties(
 }
 
 templ CreateCounterpartyForm(fd *CounterpartyFD) {
-	@creationForm("Create Counterparty", "/counterparties", "Create Counterparty") {
+	@form.CreateForm("Create Counterparty", "/counterparties", "Create Counterparty") {
 		@counterpartyFormBody("", fd)
 	}
 }
 
 templ EditCounterparty(id string, fd *CounterpartyFD) {
-	@form("put", fmt.Sprintf("/counterparties/%s", id), templ.Attributes{"hx-target": "this"}) {
+	@form.Form("put", fmt.Sprintf("/counterparties/%s", id), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { id }</p>
 		@counterpartyFormBody(id, fd)
-		@editFormButtons(fmt.Sprintf("/counterparties/%s", id))
+		@form.EditFormButtons(fmt.Sprintf("/counterparties/%s", id))
 	}
 }
 
 templ counterpartyFormBody(id string, fd *CounterpartyFD) {
-	@input("Name", "text", "name", "Enter the name", id, fd.Name)
+	@form.TextInput("Name", "name", "Enter the name", id, fd.Name, nil, nil)
 }
 
 templ counterpartiesList(counterparties []models.Counterparty) {
-	@list("counterparties-list") {
+	@components.List("counterparties-list") {
 		for _, per := range counterparties {
 			@Counterparty(&per)
 		}
@@ -60,8 +61,8 @@ templ Counterparty(per *models.Counterparty) {
 		<p>Name: { per.Name }</p>
 		<p>CreatedAt: { per.CreatedAt.Format(time.RFC1123Z) }</p>
 		<div class="flex gap-4">
-			@editButton(fmt.Sprintf("/counterparties/%s/edit", per.ID))
-			@deleteButton(fmt.Sprintf("/counterparties/%s", per.ID))
+			@form.EditButton(fmt.Sprintf("/counterparties/%s/edit", per.ID))
+			@form.DeleteButton(fmt.Sprintf("/counterparties/%s", per.ID))
 		</div>
 	</div>
 }

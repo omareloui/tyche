@@ -8,7 +8,7 @@ import "github.com/omareloui/tyche/web/views/components"
 templ HomePage(claims *jwt.AccessClaims, balances []models.Balance) {
 	@layouts.Main(claims, "Homepage", balances, nil) {
 		@components.Container() {
-			@mainHeader("Tyche: Fortune Builder")
+			@components.MainHeader("Tyche: Fortune Builder")
 		}
 	}
 }

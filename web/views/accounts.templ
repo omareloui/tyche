@@ -8,25 +8,26 @@ import (
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/web/views/layouts"
 	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
 )
 
 type AccountFD struct {
 	AccountPartialFD   AccountPartialFD
-	Note               FDInput
-	IsArchive          FDInput
-	ExcludeFromBalance FDInput
+	Note               form.FDInput
+	IsArchive          form.FDInput
+	ExcludeFromBalance form.FDInput
 }
 
 type AccountPartialFD struct {
-	Name           *FDInput
-	KindID         FDInput
-	CurrencyID     FDInput
-	Iban           *FDInput
-	CardNumber     *FDInput
-	CounterpartyID *FDInput
-	CardLimit      *FDInput
-	NameOnCard     *FDInput
-	ExpirationDate *FDInput
+	Name           *form.FDInput
+	KindID         form.FDInput
+	CurrencyID     form.FDInput
+	Iban           *form.FDInput
+	CardNumber     *form.FDInput
+	CounterpartyID *form.FDInput
+	CardLimit      *form.FDInput
+	NameOnCard     *form.FDInput
+	ExpirationDate *form.FDInput
 }
 
 templ Accounts(
@@ -37,7 +38,7 @@ templ Accounts(
 	cps []models.Counterparty) {
 	@layouts.Main(claims, "Accounts", balances, &layouts.Opts{IncludeAlpine: true, IncludeAlpineCollapse: true}) {
 		@components.Container() {
-			@mainHeader("Accounts")
+			@components.MainHeader("Accounts")
 			@CreateAccountForm(fd, aknds, curs, cps, &claims.DefaultCurrency)
 			@accountsList(accounts)
 		}
@@ -45,24 +46,24 @@ templ Accounts(
 }
 
 templ CreateAccountForm(fd *AccountFD, aknds []models.AccountKind, curs []models.Currency, cps []models.Counterparty, defaultCur *models.Currency) {
-	@creationForm("Create Account", "/accounts", "Create Account") {
+	@form.CreateForm("Create Account", "/accounts", "Create Account") {
 		@accountFormBody("0", fd, aknds, curs, cps, defaultCur)
 	}
 }
 
 templ EditAccount(id string, fd *AccountFD, aknds []models.AccountKind, curs []models.Currency, cps []models.Counterparty, defaultCur *models.Currency) {
-	@form("put", fmt.Sprintf("/accounts/%s", id), templ.Attributes{"hx-target": "this"}) {
+	@form.Form("put", fmt.Sprintf("/accounts/%s", id), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { id }</p>
 		@accountFormBody(id, fd, aknds, curs, cps, defaultCur)
-		@editFormButtons(fmt.Sprintf("/accounts/%s", id))
+		@form.EditFormButtons(fmt.Sprintf("/accounts/%s", id))
 	}
 }
 
 templ accountFormBody(id string, fd *AccountFD, aknds []models.AccountKind, curs []models.Currency, cps []models.Counterparty, defaultCur *models.Currency) {
 	@AccountInputs(id, &fd.AccountPartialFD, aknds, curs, cps, defaultCur)
-	@input("Note", "text", "note", "Enter note", id, fd.Note)
-	@checkbox("Is Archive", "is_archive", id, fd.IsArchive)
-	@checkbox("Exclude From Balance", "exclude_from_balance", id, fd.ExcludeFromBalance)
+	@form.TextInput("Note", "note", "Enter note", id, fd.Note, nil, nil)
+	@form.Checkbox("Is Archive", "is_archive", id, fd.IsArchive, nil, nil)
+	@form.Checkbox("Exclude From Balance", "exclude_from_balance", id, fd.ExcludeFromBalance, nil, nil)
 }
 
 templ AccountInputs(id string, fd *AccountPartialFD, aknds []models.AccountKind, curs []models.Currency, cps []models.Counterparty, defaultCur *models.Currency) {
@@ -72,39 +73,39 @@ templ AccountInputs(id string, fd *AccountPartialFD, aknds []models.AccountKind,
 		hx-swap="outerHTML"
 		hx-sync="closest form:abort"
 	>
-		@selectAccKind("kind_id", id, aknds, fd.KindID, templ.Attributes{
+		@form.SelectAccKind("kind_id", id, aknds, fd.KindID, templ.Attributes{
 			"hx-post": fmt.Sprintf("/accounts-inputs/%s", id),
 		})
-		@selectCurrency("currency_id", id, curs, fd.CurrencyID,
+		@form.SelectCurrency("currency_id", id, curs, fd.CurrencyID,
 			templ.Attributes{
 				"hx-post": fmt.Sprintf("/accounts-inputs/%s", id),
 			})
 		if fd.Name != nil {
-			@input("Name", "text", "name", "Enter account name", id, *fd.Name)
+			@form.TextInput("Name", "name", "Enter account name", id, *fd.Name, nil, nil)
 		}
 		if fd.Iban != nil {
-			@ibanInput("IBAN", "iban", id, getCurIbanPrefixByCurrency(curs, fd.CurrencyID.Value), *fd.Iban)
+			@form.IBANInput("IBAN", "iban", id, form.GetCurOrDefault(curs, fd.CurrencyID.Value, nil).IbanPrefix, *fd.Iban, nil, nil)
 		}
 		if fd.CardNumber != nil {
-			@creditCardInput("Card Number", "card_number", id, *fd.CardNumber)
+			@form.CreditCardInput("Card Number", "card_number", id, *fd.CardNumber, nil, nil)
 		}
 		if fd.NameOnCard != nil {
-			@input("Name on card", "text", "name_on_card", "John Doe", id, *fd.NameOnCard)
+			@form.TextInput("Name on card", "name_on_card", "John Doe", id, *fd.NameOnCard, nil, nil)
 		}
 		if fd.CardLimit != nil {
-			@moneyInput("Card Limit", "card_limit", getCurSymbolByCurrency(curs, fd.CurrencyID.Value, defaultCur), id, *fd.CardLimit, "")
+			@form.MoneyInput("Card Limit", "card_limit", form.GetCurOrDefault(curs, fd.CurrencyID.Value, defaultCur).Symbol, id, *fd.CardLimit, nil, nil)
 		}
 		if fd.ExpirationDate != nil {
-			@dateInput("Expiration Date", "expiration_date", id, *fd.ExpirationDate)
+			@form.DateInput("Expiration Date", "expiration_date", id, *fd.ExpirationDate, nil, nil)
 		}
 		if fd.CounterpartyID != nil {
-			@selectCounterparty("counterparty_id", id, cps, *fd.CounterpartyID, false)
+			@form.SelectCounterparty("counterparty_id", id, cps, *fd.CounterpartyID, false, nil)
 		}
 	</div>
 }
 
 templ accountsList(accounts []models.Account) {
-	@list("accounts-list") {
+	@components.List("accounts-list") {
 		for _, a := range accounts {
 			@Account(&a)
 		}
@@ -169,8 +170,8 @@ templ Account(a *models.Account) {
 					hx-sync="closest button:abort"
 				>Set as Default</button>
 			}
-			@editButton(fmt.Sprintf("/accounts/%s/edit", a.ID))
-			@deleteButton(fmt.Sprintf("/accounts/%s", a.ID))
+			@form.EditButton(fmt.Sprintf("/accounts/%s/edit", a.ID))
+			@form.DeleteButton(fmt.Sprintf("/accounts/%s", a.ID))
 		</div>
 	</div>
 }

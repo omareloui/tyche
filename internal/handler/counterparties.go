@@ -10,6 +10,7 @@ import (
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/web/views"
+	"github.com/omareloui/tyche/web/views/form"
 	"go.uber.org/zap"
 )
 
@@ -157,7 +158,7 @@ func (h Handler) DeleteCounterparty(w http.ResponseWriter, r *http.Request) (tem
 
 func (h Handler) mapCounterpartyToFD(cp *models.Counterparty, err *errs.ValidationError) *views.CounterpartyFD {
 	return &views.CounterpartyFD{
-		Name: views.FDInput{Value: cp.Name, Error: err.Errors.MsgFor("Name")},
+		Name: form.FDInput{Value: cp.Name, Error: err.Errors.MsgFor("Name")},
 	}
 }
 

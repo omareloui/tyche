@@ -9,27 +9,23 @@ import (
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/web/views/layouts"
 	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
 )
 
 type TransactionFD struct {
 	TransactionAmountsAndKindFD
 	RecurrenceFD *RecurrenceFD
-	ScheduledTo  FDInput
-	Description  FDInput
+	ScheduledTo  form.FDInput
+	Description  form.FDInput
 }
 
 type TransactionAmountsAndKindFD struct {
-	AccountIFD     AccountIFD
-	KindID         FDInput
-	CategoryID     *FDInput
-	CounterpartyID *FDInput
-	ToAccountIFD   *AccountIFD
-	GoalID         *FDInput
-}
-
-type AccountIFD struct {
-	Amount    FDInput
-	AccountID FDInput
+	AccountIFD     form.AccountIFD
+	KindID         form.FDInput
+	CategoryID     *form.FDInput
+	CounterpartyID *form.FDInput
+	ToAccountIFD   *form.AccountIFD
+	GoalID         *form.FDInput
 }
 
 templ Transactions(
@@ -41,7 +37,7 @@ templ Transactions(
 	cps []models.Counterparty, gls []models.Goal) {
 	@layouts.Main(claims, "Transactions", balances, &layouts.Opts{IncludeAlpine: true, IncludeAlpineCollapse: true, IncludeAlpineMask: true}) {
 		@components.Container() {
-			@mainHeader("Transactions")
+			@components.MainHeader("Transactions")
 			@CreateTransactionForm(fd, accounts, knds, cats, cps, gls, &claims.DefaultCurrency)
 			@transactionsList(transactions)
 		}
@@ -53,7 +49,7 @@ templ CreateTransactionForm(
 	knds []models.TransactionKind, cats []models.Category,
 	cps []models.Counterparty, gls []models.Goal,
 	defaultCur *models.Currency) {
-	@creationForm("Create Transaction", "/transactions", "Create Transaction") {
+	@form.CreateForm("Create Transaction", "/transactions", "Create Transaction") {
 		@transactionFormBody(fd, "0", accounts, knds, cats, cps, gls, defaultCur)
 	}
 }
@@ -64,8 +60,8 @@ templ transactionFormBody(
 	cps []models.Counterparty, gls []models.Goal,
 	defaultCur *models.Currency) {
 	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs, cps, gls, defaultCur)
-	@input("Description", "text", "description", "Enter a description", id, fd.Description)
-	@dateInput("Date", "scheduled_to", id, fd.ScheduledTo)
+	@form.TextInput("Description", "description", "Enter a description", id, fd.Description, nil, nil)
+	@form.DateInput("Date", "scheduled_to", id, fd.ScheduledTo, nil, nil)
 	if fd.RecurrenceFD != nil {
 		@RecurrenceFormBody(id, fd.RecurrenceFD)
 	}
@@ -82,15 +78,15 @@ templ EditTransaction(
 	accounts []models.Account, knds []models.TransactionKind,
 	cats []models.Category, cps []models.Counterparty,
 	gls []models.Goal, defaultCur *models.Currency) {
-	@form("put", fmt.Sprintf("/transactions/%s", tx.ID), templ.Attributes{"hx-target": "this"}) {
+	@form.Form("put", fmt.Sprintf("/transactions/%s", tx.ID), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { tx.ID }</p>
 		@transactionFormBody(fd, tx.ID, accounts, knds, cats, cps, gls, defaultCur)
-		@editFormButtons(fmt.Sprintf("/transactions/%s", tx.ID))
+		@form.EditFormButtons(fmt.Sprintf("/transactions/%s", tx.ID))
 	}
 }
 
 templ transactionsList(transactions []models.Transaction) {
-	@list("tx-list") {
+	@components.List("tx-list") {
 		for _, t := range transactions {
 			@Transaction(&t)
 		}
@@ -136,10 +132,10 @@ templ Transaction(tx *models.Transaction) {
 		<p>Created At: { tx.CreatedAt.Format(time.RFC1123Z) }</p>
 		<div class="flex gap-4">
 			if tx.FulfilledAt.IsZero() {
-				@saveButton("Fulfill", fmt.Sprintf("/transactions/%s/fulfill", tx.ID))
+				@form.SaveButton("Fulfill", fmt.Sprintf("/transactions/%s/fulfill", tx.ID))
 			}
-			@editButton(fmt.Sprintf("/transactions/%s/edit", tx.ID))
-			@deleteButton(fmt.Sprintf("/transactions/%s", tx.ID))
+			@form.EditButton(fmt.Sprintf("/transactions/%s/edit", tx.ID))
+			@form.DeleteButton(fmt.Sprintf("/transactions/%s", tx.ID))
 		</div>
 	</div>
 }
@@ -155,38 +151,38 @@ templ TransactionAmountsAndKindFormBody(
 		hx-swap="outerHTML"
 		hx-sync="closest form:abort"
 	>
-		@selectTxKind("kind_id", id, getTxKindsForAccounts(accs, knds), fd.KindID, templ.Attributes{
+		@form.SelectTxKind("kind_id", id, getTxKindsForAccounts(accs, knds), fd.KindID, templ.Attributes{
 			"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
 			"hx-trigger": "change",
 		})
 		<div class="grid grid-cols-3 gap-4">
-			@moneyInput("Amount", "amount", getCurSymbolByAccount(accs, fd.AccountIFD.AccountID.Value, defaultCur), id,
-				fd.AccountIFD.Amount, "col-span-2", templ.Attributes{
+			@form.MoneyInput("Amount", "amount", form.GetAccoutSym(accs, fd.AccountIFD.AccountID.Value, defaultCur), id,
+				fd.AccountIFD.Amount, templ.Attributes{
 					"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
 					"hx-trigger": "keyup changed delay:200ms",
-				})
-			@selectAccount("account_id", id, getTxAccs(accs, knds, fd.KindID.Value, isSwitched(accs, fd.AccountIFD.AccountID.Value)), fd.AccountIFD.AccountID,
+				}, templ.Attributes{"class": "col-span-2"})
+			@form.SelectAccount("account_id", id, getTxAccs(accs, knds, fd.KindID.Value, isSwitched(accs, fd.AccountIFD.AccountID.Value)), fd.AccountIFD.AccountID,
 				templ.Attributes{
 					"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
 					"hx-trigger": "change",
 				})
 		</div>
 		if fd.CategoryID != nil {
-			@selectTxCat("category_id", id, getCategoriesOfKinds(cats, fd.KindID.Value), *fd.CategoryID)
+			@form.SelectTxCat("category_id", id, getCategoriesOfKinds(cats, fd.KindID.Value), *fd.CategoryID, nil)
 		}
 		if fd.CounterpartyID != nil {
-			@selectCounterparty("counterparty_id", id, cps, *fd.CounterpartyID, true)
+			@form.SelectCounterparty("counterparty_id", id, cps, *fd.CounterpartyID, true, nil)
 		}
 		if fd.GoalID != nil {
-			@selectGoal("goal_id", id, gls, *fd.GoalID)
+			@form.SelectGoal("goal_id", id, gls, *fd.GoalID, nil)
 		}
 		if fd.ToAccountIFD != nil {
 			<button hx-post={ fmt.Sprintf("/tx-inputs/switch/%s", id) }>Switch</button>
 			<div class="grid grid-cols-3 gap-4">
-				@moneyInput("To Amount", "to_amount",
-					getCurSymbolByAccount(accs, fd.ToAccountIFD.AccountID.Value, defaultCur), id,
-					fd.ToAccountIFD.Amount, "col-span-2")
-				@selectToAccount("to_account_id", id, getTxCounterAccs(accs, knds, fd.KindID.Value, isSwitched(accs, fd.AccountIFD.AccountID.Value)),
+				@form.MoneyInput("To Amount", "to_amount",
+					form.GetAccoutSym(accs, fd.ToAccountIFD.AccountID.Value, defaultCur), id,
+					fd.ToAccountIFD.Amount, nil, templ.Attributes{"class": "col-span-2"})
+				@form.SelectToAccount("to_account_id", id, getTxCounterAccs(accs, knds, fd.KindID.Value, isSwitched(accs, fd.AccountIFD.AccountID.Value)),
 					fd.ToAccountIFD.AccountID, templ.Attributes{
 						"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
 						"hx-trigger": "change",

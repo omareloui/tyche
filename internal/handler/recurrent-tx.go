@@ -13,6 +13,7 @@ import (
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views"
+	"github.com/omareloui/tyche/web/views/form"
 	"go.uber.org/zap"
 )
 
@@ -256,19 +257,19 @@ func generateNextScheduledTransactions(rt *models.RecurrentTx, count int) []mode
 func (h Handler) mapRecurrentTxToFD(rt *models.RecurrentTx, valerr *errs.ValidationError, knds []models.TransactionKind) *views.RecurrentTxFD {
 	fd := &views.RecurrentTxFD{
 		RecurrenceFD: views.RecurrenceFD{
-			IsRecurrent: views.FDInput{Value: "on"},
-			Unit:        views.FDInput{Value: formatIntIfNonZero(int(rt.Unit)), Error: valerr.Errors.MsgFor("Unit")},
-			Every:       views.FDInput{Value: formatIntIfNonZero(int(rt.Every)), Error: valerr.Errors.MsgFor("Every")},
-			StopsOn:     views.FDInput{Value: formatDateOnlyIfNonZero(rt.StopsAt), Error: valerr.Errors.MsgFor("StopsOn")},
+			IsRecurrent: form.FDInput{Value: "on"},
+			Unit:        form.FDInput{Value: formatIntIfNonZero(int(rt.Unit)), Error: valerr.Errors.MsgFor("Unit")},
+			Every:       form.FDInput{Value: formatIntIfNonZero(int(rt.Every)), Error: valerr.Errors.MsgFor("Every")},
+			StopsOn:     form.FDInput{Value: formatDateOnlyIfNonZero(rt.StopsAt), Error: valerr.Errors.MsgFor("StopsOn")},
 		},
 		TransactionAmountsAndKindFD: views.TransactionAmountsAndKindFD{
-			AccountIFD: views.AccountIFD{
-				AccountID: views.FDInput{Value: rt.Account.ID, Error: valerr.Errors.MsgFor("AccountID")},
-				Amount:    views.FDInput{Value: formatFloatIfNonZero(rt.Amount), Error: valerr.Errors.MsgFor("Amount")},
+			AccountIFD: form.AccountIFD{
+				AccountID: form.FDInput{Value: rt.Account.ID, Error: valerr.Errors.MsgFor("AccountID")},
+				Amount:    form.FDInput{Value: formatFloatIfNonZero(rt.Amount), Error: valerr.Errors.MsgFor("Amount")},
 			},
-			KindID: views.FDInput{Value: rt.Kind.ID, Error: valerr.Errors.MsgFor("KindID")},
+			KindID: form.FDInput{Value: rt.Kind.ID, Error: valerr.Errors.MsgFor("KindID")},
 		},
-		Description: views.FDInput{Value: rt.Description, Error: valerr.Errors.MsgFor("Description")},
+		Description: form.FDInput{Value: rt.Description, Error: valerr.Errors.MsgFor("Description")},
 	}
 
 	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == rt.Kind.ID })
@@ -276,33 +277,33 @@ func (h Handler) mapRecurrentTxToFD(rt *models.RecurrentTx, valerr *errs.Validat
 	hasGoal := knd.Enum == models.ExpenseTxKind
 
 	if rt.Category != nil {
-		fd.CategoryID = &views.FDInput{Value: rt.Category.ID, Error: valerr.Errors.MsgFor("CategoryID")}
+		fd.CategoryID = &form.FDInput{Value: rt.Category.ID, Error: valerr.Errors.MsgFor("CategoryID")}
 	} else if !hasToAccount {
-		fd.CategoryID = &views.FDInput{}
+		fd.CategoryID = &form.FDInput{}
 	}
 
 	if rt.Counterparty != nil {
-		fd.CounterpartyID = &views.FDInput{Value: rt.Counterparty.ID, Error: valerr.Errors.MsgFor("CounterpartyID")}
+		fd.CounterpartyID = &form.FDInput{Value: rt.Counterparty.ID, Error: valerr.Errors.MsgFor("CounterpartyID")}
 	} else if !hasToAccount {
-		fd.CounterpartyID = &views.FDInput{}
+		fd.CounterpartyID = &form.FDInput{}
 	}
 
 	if rt.ToAccount != nil {
-		fd.ToAccountIFD = &views.AccountIFD{
-			Amount:    views.FDInput{Value: formatFloatIfNonZero(rt.ToAmount), Error: valerr.Errors.MsgFor("ToAmount")},
-			AccountID: views.FDInput{Value: rt.ToAccount.ID, Error: valerr.Errors.MsgFor("ToAccountID")},
+		fd.ToAccountIFD = &form.AccountIFD{
+			Amount:    form.FDInput{Value: formatFloatIfNonZero(rt.ToAmount), Error: valerr.Errors.MsgFor("ToAmount")},
+			AccountID: form.FDInput{Value: rt.ToAccount.ID, Error: valerr.Errors.MsgFor("ToAccountID")},
 		}
 	} else if hasToAccount {
-		fd.ToAccountIFD = &views.AccountIFD{
-			Amount:    views.FDInput{Error: valerr.Errors.MsgFor("ToAmount")},
-			AccountID: views.FDInput{Error: valerr.Errors.MsgFor("ToAccountID")},
+		fd.ToAccountIFD = &form.AccountIFD{
+			Amount:    form.FDInput{Error: valerr.Errors.MsgFor("ToAmount")},
+			AccountID: form.FDInput{Error: valerr.Errors.MsgFor("ToAccountID")},
 		}
 	}
 
 	if rt.Goal != nil {
-		fd.GoalID = &views.FDInput{Value: rt.Goal.ID, Error: valerr.Errors.MsgFor("GoalID")}
+		fd.GoalID = &form.FDInput{Value: rt.Goal.ID, Error: valerr.Errors.MsgFor("GoalID")}
 	} else if hasGoal {
-		fd.GoalID = &views.FDInput{Error: valerr.Errors.MsgFor("GoalID")}
+		fd.GoalID = &form.FDInput{Error: valerr.Errors.MsgFor("GoalID")}
 	}
 
 	return fd
@@ -310,9 +311,9 @@ func (h Handler) mapRecurrentTxToFD(rt *models.RecurrentTx, valerr *errs.Validat
 
 func (h Handler) parseRecurrenceFD(r *http.Request, err *errs.ValidationError) *views.RecurrenceFD {
 	return &views.RecurrenceFD{
-		IsRecurrent: views.FDInput{Value: r.FormValue("is_recurrent"), Error: err.Errors.MsgFor("IsRecurrent")},
-		Every:       views.FDInput{Value: r.FormValue("every"), Error: err.Errors.MsgFor("RecurrentBy")},
-		Unit:        views.FDInput{Value: r.FormValue("unit"), Error: err.Errors.MsgFor("Recurrence")},
-		StopsOn:     views.FDInput{Value: r.FormValue("stops_on"), Error: err.Errors.MsgFor("StopsOn")},
+		IsRecurrent: form.FDInput{Value: r.FormValue("is_recurrent"), Error: err.Errors.MsgFor("IsRecurrent")},
+		Every:       form.FDInput{Value: r.FormValue("every"), Error: err.Errors.MsgFor("RecurrentBy")},
+		Unit:        form.FDInput{Value: r.FormValue("unit"), Error: err.Errors.MsgFor("Recurrence")},
+		StopsOn:     form.FDInput{Value: r.FormValue("stops_on"), Error: err.Errors.MsgFor("StopsOn")},
 	}
 }

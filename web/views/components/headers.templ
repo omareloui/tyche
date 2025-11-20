@@ -1,0 +1,14 @@
+package components
+
+templ MainHeader(text string) {
+	<h1 class="text-3xl font-bold mb-6 font-(family-name:--font-biorhyme-expanded)">{ text }</h1>
+}
+
+templ HeaderWithAddButton(text string, onClick string) {
+	<div class="flex justify-between">
+		@MainHeader("Goals")
+		<button class="cursor-pointer transition-transform hover:scale-120" @click={ onClick }>
+			<img src="/icons/add.svg" class="h-8 object-cover"/>
+		</button>
+	</div>
+}

@@ -13,6 +13,7 @@ import (
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views"
+	"github.com/omareloui/tyche/web/views/form"
 	"go.uber.org/zap"
 )
 
@@ -232,12 +233,12 @@ func (h Handler) mapCategoryToFD(cat *models.Category, err *errs.ValidationError
 		budgetCurrId = cat.BudgetCurrency.ID
 	}
 	return &views.CategoryFD{
-		Name:   views.FDInput{Value: cat.Name, Error: err.Errors.MsgFor("Name")},
-		Color:  views.FDInput{Value: cat.Color, Error: err.Errors.MsgFor("Color")},
-		KindID: views.FDInput{Value: cat.Kind.ID, Error: err.Errors.MsgFor("Kind.ID")},
-		BudgetAmountFD: &views.AmountFD{
-			Amount:     views.FDInput{Value: formatFloatIfNonZero(cat.BudgetAmount), Error: err.Errors.MsgFor("BudgetAmount")},
-			CurrencyID: views.FDInput{Value: budgetCurrId, Error: err.Errors.MsgFor("BudgetCurrency.ID")},
+		Name:   form.FDInput{Value: cat.Name, Error: err.Errors.MsgFor("Name")},
+		Color:  form.FDInput{Value: cat.Color, Error: err.Errors.MsgFor("Color")},
+		KindID: form.FDInput{Value: cat.Kind.ID, Error: err.Errors.MsgFor("Kind.ID")},
+		BudgetAmountFD: &form.AmountFD{
+			Amount:     form.FDInput{Value: formatFloatIfNonZero(cat.BudgetAmount), Error: err.Errors.MsgFor("BudgetAmount")},
+			CurrencyID: form.FDInput{Value: budgetCurrId, Error: err.Errors.MsgFor("BudgetCurrency.ID")},
 		},
 	}
 }

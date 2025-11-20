@@ -9,6 +9,7 @@ import (
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views"
+	"github.com/omareloui/tyche/web/views/form"
 )
 
 func (h Handler) AmountInputsWithCurrency(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -35,16 +36,16 @@ func (h Handler) AmountInputsWithCurrency(w http.ResponseWriter, r *http.Request
 
 	claims := getClaims(r.Context())
 
-	fd := &views.AmountFD{
-		Amount:     views.FDInput{Value: r.FormValue("amount")},
-		CurrencyID: views.FDInput{Value: currency.ID},
+	fd := &form.AmountFD{
+		Amount:     form.FDInput{Value: r.FormValue("amount")},
+		CurrencyID: form.FDInput{Value: currency.ID},
 	}
 
 	if fd.CurrencyID.Value == "" {
 		fd.CurrencyID.Value = claims.DefaultCurrency.ID
 	}
 
-	return views.AmountInputsWithCurrency(fd, r.FormValue("id"), curs, &claims.DefaultCurrency), nil
+	return form.AmountInputsWithCurrency(fd, r.FormValue("id"), curs, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) AmountInputsWithAccount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -67,13 +68,13 @@ func (h Handler) AmountInputsWithAccount(w http.ResponseWriter, r *http.Request)
 		return nil, errs.ErrInvalidID
 	}
 
-	fd := &views.AccountIFD{
-		Amount:    views.FDInput{Value: r.FormValue("amount")},
-		AccountID: views.FDInput{Value: acc.ID},
+	fd := &form.AccountIFD{
+		Amount:    form.FDInput{Value: r.FormValue("amount")},
+		AccountID: form.FDInput{Value: acc.ID},
 	}
 
 	claims := getClaims(r.Context())
-	return views.AmountInputsWithAccount(fd, r.FormValue("id"), accs, &claims.DefaultCurrency), nil
+	return form.AmountInputsWithAccount(fd, r.FormValue("id"), accs, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) TxInputs(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

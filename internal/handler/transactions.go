@@ -17,6 +17,7 @@ import (
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views"
+	"github.com/omareloui/tyche/web/views/form"
 	"go.uber.org/zap"
 )
 
@@ -343,14 +344,14 @@ func (h Handler) getTxDeps(ctx context.Context) ([]models.Account, []models.Tran
 func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationError, knds []models.TransactionKind) *views.TransactionFD {
 	fd := &views.TransactionFD{
 		TransactionAmountsAndKindFD: views.TransactionAmountsAndKindFD{
-			AccountIFD: views.AccountIFD{
-				Amount:    views.FDInput{Value: formatFloatIfNonZero(t.Amount), Error: err.Errors.MsgFor("Amount")},
-				AccountID: views.FDInput{Value: t.Account.ID, Error: err.Errors.MsgFor("AccountID")},
+			AccountIFD: form.AccountIFD{
+				Amount:    form.FDInput{Value: formatFloatIfNonZero(t.Amount), Error: err.Errors.MsgFor("Amount")},
+				AccountID: form.FDInput{Value: t.Account.ID, Error: err.Errors.MsgFor("AccountID")},
 			},
-			KindID: views.FDInput{Value: t.Kind.ID, Error: err.Errors.MsgFor("KindID")},
+			KindID: form.FDInput{Value: t.Kind.ID, Error: err.Errors.MsgFor("KindID")},
 		},
-		Description:  views.FDInput{Value: t.Description, Error: err.Errors.MsgFor("Description")},
-		ScheduledTo:  views.FDInput{Value: formatDateOnlyIfNonZero(t.ScheduledTo), Error: err.Errors.MsgFor("ScheduledTo")},
+		Description:  form.FDInput{Value: t.Description, Error: err.Errors.MsgFor("Description")},
+		ScheduledTo:  form.FDInput{Value: formatDateOnlyIfNonZero(t.ScheduledTo), Error: err.Errors.MsgFor("ScheduledTo")},
 		RecurrenceFD: &views.RecurrenceFD{},
 	}
 
@@ -359,41 +360,41 @@ func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationE
 	hasGoal := knd.Enum == models.ExpenseTxKind
 
 	if t.Category != nil {
-		fd.CategoryID = &views.FDInput{Value: t.Category.ID, Error: err.Errors.MsgFor("CategoryID")}
+		fd.CategoryID = &form.FDInput{Value: t.Category.ID, Error: err.Errors.MsgFor("CategoryID")}
 	} else if !hasToAccount {
-		fd.CategoryID = &views.FDInput{}
+		fd.CategoryID = &form.FDInput{}
 	}
 
 	if t.Counterparty != nil {
-		fd.CounterpartyID = &views.FDInput{Value: t.Counterparty.ID, Error: err.Errors.MsgFor("CounterpartyID")}
+		fd.CounterpartyID = &form.FDInput{Value: t.Counterparty.ID, Error: err.Errors.MsgFor("CounterpartyID")}
 	} else if !hasToAccount {
-		fd.CounterpartyID = &views.FDInput{}
+		fd.CounterpartyID = &form.FDInput{}
 	}
 
 	if t.ToAccount != nil {
-		fd.ToAccountIFD = &views.AccountIFD{
-			Amount:    views.FDInput{Value: formatFloatIfNonZero(t.ToAmount), Error: err.Errors.MsgFor("ToAmount")},
-			AccountID: views.FDInput{Value: t.ToAccount.ID, Error: err.Errors.MsgFor("ToAccountID")},
+		fd.ToAccountIFD = &form.AccountIFD{
+			Amount:    form.FDInput{Value: formatFloatIfNonZero(t.ToAmount), Error: err.Errors.MsgFor("ToAmount")},
+			AccountID: form.FDInput{Value: t.ToAccount.ID, Error: err.Errors.MsgFor("ToAccountID")},
 		}
 	} else if hasToAccount {
-		fd.ToAccountIFD = &views.AccountIFD{
-			Amount:    views.FDInput{Error: err.Errors.MsgFor("ToAmount")},
-			AccountID: views.FDInput{Error: err.Errors.MsgFor("ToAccountID")},
+		fd.ToAccountIFD = &form.AccountIFD{
+			Amount:    form.FDInput{Error: err.Errors.MsgFor("ToAmount")},
+			AccountID: form.FDInput{Error: err.Errors.MsgFor("ToAccountID")},
 		}
 	}
 
 	if t.Goal != nil {
-		fd.GoalID = &views.FDInput{Value: t.Goal.ID, Error: err.Errors.MsgFor("GoalID")}
+		fd.GoalID = &form.FDInput{Value: t.Goal.ID, Error: err.Errors.MsgFor("GoalID")}
 	} else if hasGoal {
-		fd.GoalID = &views.FDInput{Error: err.Errors.MsgFor("GoalID")}
+		fd.GoalID = &form.FDInput{Error: err.Errors.MsgFor("GoalID")}
 	}
 
 	if t.RecurrentTx != nil {
 		fd.RecurrenceFD = &views.RecurrenceFD{
-			IsRecurrent: views.FDInput{Value: "on"},
-			Unit:        views.FDInput{Value: formatIntIfNonZero(int(t.RecurrentTx.Unit)), Error: err.Errors.MsgFor("Unit")},
-			Every:       views.FDInput{Value: formatIntIfNonZero(int(t.RecurrentTx.Every)), Error: err.Errors.MsgFor("Every")},
-			StopsOn:     views.FDInput{Value: formatDateOnlyIfNonZero(t.RecurrentTx.StopsAt), Error: err.Errors.MsgFor("StopsOn")},
+			IsRecurrent: form.FDInput{Value: "on"},
+			Unit:        form.FDInput{Value: formatIntIfNonZero(int(t.RecurrentTx.Unit)), Error: err.Errors.MsgFor("Unit")},
+			Every:       form.FDInput{Value: formatIntIfNonZero(int(t.RecurrentTx.Every)), Error: err.Errors.MsgFor("Every")},
+			StopsOn:     form.FDInput{Value: formatDateOnlyIfNonZero(t.RecurrentTx.StopsAt), Error: err.Errors.MsgFor("StopsOn")},
 		}
 	}
 
@@ -616,18 +617,18 @@ func (h Handler) parseTransactionAmountsAndKindFD(r *http.Request, accs []models
 	}
 
 	fd := &views.TransactionAmountsAndKindFD{
-		AccountIFD: views.AccountIFD{
-			Amount:    views.FDInput{Value: r.FormValue("amount")},
-			AccountID: views.FDInput{Value: accId},
+		AccountIFD: form.AccountIFD{
+			Amount:    form.FDInput{Value: r.FormValue("amount")},
+			AccountID: form.FDInput{Value: accId},
 		},
-		KindID: views.FDInput{Value: kndId},
+		KindID: form.FDInput{Value: kndId},
 	}
 
 	trigger := r.Header.Get("Hx-Trigger")
 
 	if knd.Enum == models.ExpenseTxKind {
 		gl := r.FormValue("goal_id")
-		fd.GoalID = &views.FDInput{Value: gl}
+		fd.GoalID = &form.FDInput{Value: gl}
 	}
 
 	if knd.Enum == models.TransferTxKind || knd.Enum == models.DebtTxKind {
@@ -687,13 +688,13 @@ func (h Handler) parseTransactionAmountsAndKindFD(r *http.Request, accs []models
 			toAmt = strconv.FormatFloat(amt/fxRate, 'f', 2, 64)
 		}
 
-		fd.ToAccountIFD = &views.AccountIFD{
-			Amount:    views.FDInput{Value: toAmt},
-			AccountID: views.FDInput{Value: toAccId},
+		fd.ToAccountIFD = &form.AccountIFD{
+			Amount:    form.FDInput{Value: toAmt},
+			AccountID: form.FDInput{Value: toAccId},
 		}
 	} else {
-		fd.CategoryID = &views.FDInput{Value: r.FormValue("category_id")}
-		fd.CounterpartyID = &views.FDInput{Value: r.FormValue("counterparty_id")}
+		fd.CategoryID = &form.FDInput{Value: r.FormValue("category_id")}
+		fd.CounterpartyID = &form.FDInput{Value: r.FormValue("counterparty_id")}
 	}
 
 	return fd, nil

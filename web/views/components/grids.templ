@@ -1,0 +1,19 @@
+package components
+
+templ List(id string) {
+	<div id={ id } class="grid gap-4 no-entries">
+		{ children... }
+	</div>
+}
+
+templ Grid3Col(id string) {
+	<div id={ id } class="grid lg:grid-cols-3 grid-cols-2 gap-4 no-entries">
+		{ children... }
+	</div>
+}
+
+templ Grid2Col(id string) {
+	<div id={ id } class="grid grid-cols-2 gap-4 no-entries">
+		{ children... }
+	</div>
+}

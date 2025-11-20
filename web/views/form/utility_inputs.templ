@@ -1,0 +1,109 @@
+package form
+
+import (
+	"fmt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/slicesutils"
+	"github.com/omareloui/tyche/internal/structutils"
+)
+
+templ AmountInputsWithCurrency(fd *AmountFD, id string, curs []models.Currency, defaultCur *models.Currency) {
+	<div hx-target="this" class="grid grid-cols-3 gap-4">
+		@MoneyInput("Amount", "amount", GetCurOrDefault(curs, fd.CurrencyID.Value, defaultCur).Symbol, id,
+			fd.Amount, nil, templ.Attributes{"class": "col-span-2"})
+		@SelectInput("Currency", "currency_id", "Select a Currency", id, idStructsToMap(curs, "String"), fd.CurrencyID,
+			false, templ.Attributes{
+				"hx-post":    fmt.Sprintf("/amount-inputs-with-currency/%s", getId(id)),
+				"hx-trigger": "change",
+				"hx-swap":    "outerHTML",
+				"hx-sync":    "closest form:abort",
+			}, nil)
+	</div>
+}
+
+templ AmountInputsWithAccount(fd *AccountIFD, id string, accs []models.Account, defaultCur *models.Currency) {
+	<div hx-target="this" class="grid grid-cols-3 gap-4">
+		@MoneyInput("Amount", "amount", GetAccoutSym(accs, fd.AccountID.Value, defaultCur), id,
+			fd.Amount, nil, templ.Attributes{"class": "col-span-2"})
+		@SelectAccount("account_id", id, accs, fd.AccountID,
+			templ.Attributes{
+				"hx-post":    fmt.Sprintf("/amount-inputs-with-amounts/%s", getId(id)),
+				"hx-trigger": "change",
+				"hx-swap":    "outerHTML",
+				"hx-sync":    "closest form:abort",
+			})
+	</div>
+}
+
+templ SelectAccKind(name, id string, aknds []models.AccountKind, data FDInput, inputAttrs templ.Attributes) {
+	@SelectInput("Account Kind", name, "Select Account Kind", id, idStructsToMap(aknds, "Enum"), data, false, inputAttrs, nil)
+}
+
+templ SelectAccount(name, id string, accs []models.Account, data FDInput, inputAttrs templ.Attributes) {
+	@SelectInput("Account", name, "Select Account", id, idStructsToMap(accs, "Name"), data, false, inputAttrs, nil)
+}
+
+templ SelectToAccount(name, id string, accs []models.Account, data FDInput, inputAttrs templ.Attributes) {
+	@SelectInput("To Account", name, "Select Account", id, idStructsToMap(accs, "Name"), data, false, inputAttrs, nil)
+}
+
+templ SelectCurrency(name, id string, curs []models.Currency, data FDInput, inputAttrs templ.Attributes) {
+	@SelectInput("Currency", name, "Select Currency", id, idStructsToMap(curs, "String"), data, false, inputAttrs, nil)
+}
+
+templ SelectTxKind(name, id string, knds []models.TransactionKind, data FDInput, inputAttrs templ.Attributes) {
+	@SelectInput("Transaction Kind", name, "Select Kind", id, idStructsToMap(knds, "Enum"), data, false, inputAttrs, nil)
+}
+
+templ SelectCounterparty(name, id string, cps []models.Counterparty, data FDInput, nullable bool, inputAttrs templ.Attributes) {
+	@SelectInput("Counterparty", name, "Select Counterparty", id, idStructsToMap(cps, "Name"), data, nullable, inputAttrs, nil)
+}
+
+templ SelectTxCat(name, id string, cats []models.Category, data FDInput, inputAttrs templ.Attributes) {
+	@SelectInput("Category", name, "Select Category", id, idStructsToMap(cats, "Name"), data, true, inputAttrs, nil)
+}
+
+templ SelectGoal(name, id string, gls []models.Goal, data FDInput, inputAttrs templ.Attributes) {
+	@SelectInput("Goal", name, "Select Goal", id, idStructsToMap(gls, "Name"), data, true, inputAttrs, nil)
+}
+
+templ SelectColor(name, id string, colors map[string]string, data FDInput, inputAttrs templ.Attributes) {
+	@SelectInput("Color", name, "Select Color", id, colors, data, false, inputAttrs, nil)
+}
+
+func getId(id string) string {
+	if id == "" {
+		return "0"
+	}
+	return id
+}
+
+func GetCurOrDefault(curs []models.Currency, curID string, dflt *models.Currency) *models.Currency {
+	cur := slicesutils.Find(curs, func(c models.Currency) bool {
+		return c.ID == curID
+	})
+	if dflt != nil {
+		return dflt
+	}
+	if cur == nil {
+		cur = slicesutils.Find(curs, func(c models.Currency) bool { return c.IsDefault })
+	}
+	return cur
+}
+
+func GetAccoutSym(accs []models.Account, accId string, defaultCur *models.Currency) string {
+	var symbol string
+	acc := slicesutils.Find(accs, func(a models.Account) bool {
+		return a.ID == accId
+	})
+	if acc != nil {
+		symbol = acc.Currency.Symbol
+	} else {
+		symbol = defaultCur.Symbol
+	}
+	return symbol
+}
+
+func idStructsToMap[T any](structs []T, val string) map[string]string {
+	return structutils.StructsToMap(structs, "ID", val)
+}

@@ -13,6 +13,7 @@ import (
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views"
+	"github.com/omareloui/tyche/web/views/form"
 	"go.uber.org/zap"
 )
 
@@ -331,29 +332,29 @@ func (h *Handler) mapFDToAcc(r *http.Request) (*models.Account, error) {
 func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, knds []models.AccountKind) *views.AccountFD {
 	knd := slicesutils.Find(knds, func(a models.AccountKind) bool { return a.ID == acc.Kind.ID })
 
-	var name, cc, iban, cpId, noc, exp, limit *views.FDInput
+	var name, cc, iban, cpId, noc, exp, limit *form.FDInput
 
 	if knd.Enum == models.AccKindBankAcc ||
 		knd.Enum == models.AccKindCreditCard {
-		cc = &views.FDInput{Value: acc.CardNumber, Error: errs.Errors.MsgFor("CardNumber")}
-		noc = &views.FDInput{Value: acc.NameOnCard, Error: errs.Errors.MsgFor("NameOnCard")}
+		cc = &form.FDInput{Value: acc.CardNumber, Error: errs.Errors.MsgFor("CardNumber")}
+		noc = &form.FDInput{Value: acc.NameOnCard, Error: errs.Errors.MsgFor("NameOnCard")}
 	}
 
 	if knd.Enum == models.AccKindCreditCard {
-		limit = &views.FDInput{Value: formatFloatIfNonZero(acc.CardLimit), Error: errs.Errors.MsgFor("CardLimit")}
-		exp = &views.FDInput{Value: formatDateOnlyIfNonZero(acc.ExpirationDate), Error: errs.Errors.MsgFor("ExpirationDate")}
+		limit = &form.FDInput{Value: formatFloatIfNonZero(acc.CardLimit), Error: errs.Errors.MsgFor("CardLimit")}
+		exp = &form.FDInput{Value: formatDateOnlyIfNonZero(acc.ExpirationDate), Error: errs.Errors.MsgFor("ExpirationDate")}
 	}
 
 	if knd.Enum == models.AccKindBankAcc {
-		iban = &views.FDInput{Value: acc.Iban, Error: errs.Errors.MsgFor("Iban")}
+		iban = &form.FDInput{Value: acc.Iban, Error: errs.Errors.MsgFor("Iban")}
 	}
 
 	if knd.Enum != models.AccKindDebt {
-		name = &views.FDInput{Value: acc.Name, Error: errs.Errors.MsgFor("Name")}
+		name = &form.FDInput{Value: acc.Name, Error: errs.Errors.MsgFor("Name")}
 	}
 
 	if knd.Enum == models.AccKindDebt {
-		cpId = &views.FDInput{Error: errs.Errors.MsgFor("CounterpartyID")}
+		cpId = &form.FDInput{Error: errs.Errors.MsgFor("CounterpartyID")}
 		if acc.Counterparty != nil {
 			cpId.Value = acc.Counterparty.ID
 		}
@@ -362,8 +363,8 @@ func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, kn
 	fd := &views.AccountFD{
 		AccountPartialFD: views.AccountPartialFD{
 			Name:           name,
-			KindID:         views.FDInput{Value: acc.Kind.ID, Error: errs.Errors.MsgFor("KindID")},
-			CurrencyID:     views.FDInput{Value: acc.Currency.ID, Error: errs.Errors.MsgFor("CurrencyID")},
+			KindID:         form.FDInput{Value: acc.Kind.ID, Error: errs.Errors.MsgFor("KindID")},
+			CurrencyID:     form.FDInput{Value: acc.Currency.ID, Error: errs.Errors.MsgFor("CurrencyID")},
 			Iban:           iban,
 			CardNumber:     cc,
 			CounterpartyID: cpId,
@@ -371,9 +372,9 @@ func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, kn
 			CardLimit:      limit,
 			ExpirationDate: exp,
 		},
-		Note:               views.FDInput{Value: acc.Note, Error: errs.Errors.MsgFor("Note")},
-		IsArchive:          views.FDInput{Value: formatBooleanIfNonZero(acc.IsArchive), Error: errs.Errors.MsgFor("IsArchive")},
-		ExcludeFromBalance: views.FDInput{Value: formatBooleanIfNonZero(acc.ExcludeFromBalance), Error: errs.Errors.MsgFor("IsArchive")},
+		Note:               form.FDInput{Value: acc.Note, Error: errs.Errors.MsgFor("Note")},
+		IsArchive:          form.FDInput{Value: formatBooleanIfNonZero(acc.IsArchive), Error: errs.Errors.MsgFor("IsArchive")},
+		ExcludeFromBalance: form.FDInput{Value: formatBooleanIfNonZero(acc.ExcludeFromBalance), Error: errs.Errors.MsgFor("IsArchive")},
 	}
 
 	return fd
