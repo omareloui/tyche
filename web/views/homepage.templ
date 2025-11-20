@@ -3,12 +3,7 @@ package views
 import "github.com/omareloui/tyche/internal/models"
 import "github.com/omareloui/tyche/internal/jwt"
 import "github.com/omareloui/tyche/web/views/layouts"
-import "github.com/omareloui/tyche/web/views/components"
 
 templ HomePage(claims *jwt.AccessClaims, balances []models.Balance) {
-	@layouts.Main(claims, "Homepage", balances, nil) {
-		@components.Container() {
-			@components.MainHeader("Tyche: Fortune Builder")
-		}
-	}
+	@layouts.WithTitle(claims, "Tyche: Fortune Builder", balances)
 }

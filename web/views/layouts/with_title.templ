@@ -1,0 +1,15 @@
+package layouts
+
+import "github.com/omareloui/tyche/internal/jwt"
+import "github.com/omareloui/tyche/internal/models"
+import "github.com/omareloui/tyche/web/views/components"
+
+templ WithTitle(claims *jwt.AccessClaims, pageTitle string, balances []models.Balance, opts ...optFunc) {
+	{{ opts = append(opts, WithAlpine()) }}
+	@Main(claims, pageTitle, balances, opts...) {
+		@components.Container() {
+			@components.MainHeader(pageTitle)
+			{ children... }
+		}
+	}
+}

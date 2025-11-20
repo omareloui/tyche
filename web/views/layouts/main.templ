@@ -4,41 +4,43 @@ import "github.com/omareloui/tyche/internal/models"
 import "github.com/omareloui/tyche/internal/jwt"
 import "github.com/omareloui/tyche/web/views/components"
 
-type Opts struct {
-	IncludeDatePicker     bool
-	IncludeAlpine         bool
-	IncludeAlpineMask     bool
-	IncludeAlpineCollapse bool
+type opts struct {
+	includeDatePicker     bool
+	includeAlpine         bool
+	includeAlpineMask     bool
+	includeAlpineCollapse bool
 }
 
+type optFunc func(o *opts)
+
 templ Main(
-	claims *jwt.AccessClaims,
-	pageTitle string, balances []models.Balance,
-	opts *Opts,
+	claims *jwt.AccessClaims, pageTitle string,
+	balances []models.Balance, options ...optFunc,
 ) {
+	{{ o := getOptions(options) }}
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-			<title>{ pageTitle }</title>
+			<title>{ pageTitle } | tyche</title>
 			<link rel="stylesheet" href="/fonts/BioRhymeExpanded/BioRhymeExpanded.css"/>
 			<link rel="stylesheet" href="/fonts/Afacad/Afacad.css"/>
 			<link rel="icon" type="image/x-svg" href="/images/favicon.svg"/>
 			<link rel="stylesheet" href="/styles/main.css"/>
 			<script src="/js/vendor/htmx.lib.js"></script>
-			if opts != nil && opts.IncludeDatePicker {
+			if  o.includeDatePicker {
 				<script src="/js/vendor/litepicker.lib.js"></script>
 				<script defer src="/js/datepickers.js"></script>
 			}
 			<script defer src="/js/main.js"></script>
-			if opts != nil && opts.IncludeAlpineMask {
+			if o.includeAlpineMask {
 				<script defer src="/js/vendor/alpine.mask.lib.js"></script>
 			}
-			if opts != nil && opts.IncludeAlpineCollapse {
+			if o.includeAlpineCollapse {
 				<script defer src="/js/vendor/alpine.collapse.lib.js"></script>
 			}
-			if opts != nil && opts.IncludeAlpine {
+			if o.includeAlpine {
 				<script defer src="/js/vendor/alpine.lib.js"></script>
 			}
 		</head>
@@ -59,4 +61,36 @@ templ Main(
 			</script>
 		</body>
 	</html>
+}
+
+func WithAlpine() optFunc {
+	return func(o *opts) {
+		o.includeAlpine = true
+	}
+}
+
+func WithAlpineMask() optFunc {
+	return func(o *opts) {
+		o.includeAlpineMask = true
+	}
+}
+
+func AlpineCollapse() optFunc {
+	return func(o *opts) {
+		o.includeAlpineCollapse = true
+	}
+}
+
+func WithDatePicker() optFunc {
+	return func(o *opts) {
+		o.includeDatePicker = true
+	}
+}
+
+func getOptions(options []optFunc) *opts {
+	o := new(opts)
+	for _, fun := range options {
+		fun(o)
+	}
+	return o
 }

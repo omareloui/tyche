@@ -26,7 +26,7 @@ templ Categories(
 	curs []models.Currency) {
 	@layouts.WithCreateForm(claims, "Categories", balances,
 		CreateCategoryForm(fd, knds, curs, &claims.DefaultCurrency),
-		&layouts.Opts{IncludeAlpine: true, IncludeAlpineMask: true}) {
+		layouts.WithAlpineMask()) {
 		@categoriesList(categories)
 	}
 }

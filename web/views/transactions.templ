@@ -37,7 +37,7 @@ templ Transactions(
 	cps []models.Counterparty, gls []models.Goal) {
 	@layouts.WithCreateForm(claims, "Transactions", balances,
 		CreateTransactionForm(fd, accounts, knds, cats, cps, gls, &claims.DefaultCurrency),
-		&layouts.Opts{IncludeAlpine: true, IncludeAlpineCollapse: true, IncludeAlpineMask: true, IncludeDatePicker: true}) {
+		layouts.WithDatePicker(), layouts.WithAlpineMask()) {
 		@transactionsList(transactions)
 	}
 }

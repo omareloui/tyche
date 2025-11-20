@@ -20,9 +20,7 @@ templ Counterparties(
 	balances []models.Balance,
 	fd *CounterpartyFD,
 	counterparties []models.Counterparty) {
-	@layouts.WithCreateForm(claims, "Counterparties",
-		balances, CreateCounterpartyForm(fd),
-		&layouts.Opts{IncludeAlpine: true, IncludeAlpineCollapse: true}) {
+	@layouts.WithCreateForm(claims, "Counterparties", balances, CreateCounterpartyForm(fd)) {
 		@counterpartiesList(counterparties)
 	}
 }

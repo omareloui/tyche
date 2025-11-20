@@ -17,6 +17,12 @@ type RecurrenceFD struct {
 	StopsOn     form.FDInput
 }
 
+templ RecurrentTxs(claims *jwt.AccessClaims, balances []models.Balance, rtxs []models.RecurrentTx) {
+	@layouts.WithTitle(claims, "Recurrent Transactions", balances) {
+		@rtxsList(rtxs)
+	}
+}
+
 templ RecurrenceFormBody(id string, fd *RecurrenceFD) {
 	<div data-recurrence-form class="grid gap-2">
 		@form.Checkbox("Is Recurrent", "is_recurrent", id, fd.IsRecurrent,
@@ -37,15 +43,6 @@ type RecurrentTxFD struct {
 	RecurrenceFD
 	TransactionAmountsAndKindFD
 	Description form.FDInput
-}
-
-templ RecurrentTxs(claims *jwt.AccessClaims, balances []models.Balance, rtxs []models.RecurrentTx) {
-	@layouts.Main(claims, "Recurrent Transactions", balances, &layouts.Opts{IncludeAlpine: true, IncludeAlpineCollapse: true}) {
-		@components.Container() {
-			@components.MainHeader("Recurrent Transactions")
-			@rtxsList(rtxs)
-		}
-	}
 }
 
 templ rtxFormBody(

@@ -11,13 +11,8 @@ import (
 )
 
 templ Currencies(claims *jwt.AccessClaims, balances []models.Balance, currencies []models.Currency) {
-	@layouts.Main(claims, "Currencies", balances, &layouts.Opts{
-		IncludeAlpine: true,
-	}) {
-		@components.Container() {
-			@components.MainHeader("Currencies")
-			@currenciesList(currencies, &claims.DefaultCurrency)
-		}
+	@layouts.WithTitle(claims, "Currencies", balances) {
+		@currenciesList(currencies, &claims.DefaultCurrency)
 	}
 }
 

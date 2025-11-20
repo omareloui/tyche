@@ -38,7 +38,7 @@ templ Accounts(
 	cps []models.Counterparty) {
 	@layouts.WithCreateForm(claims, "Accounts", balances,
 		CreateAccountForm(fd, aknds, curs, cps, &claims.DefaultCurrency),
-		&layouts.Opts{IncludeAlpine: true, IncludeAlpineMask: true}) {
+		layouts.WithAlpineMask()) {
 		@accountsList(accounts)
 	}
 }
