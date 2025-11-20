@@ -5,8 +5,8 @@ templ MainHeader(text string) {
 }
 
 templ HeaderWithAddButton(text string, onClick string) {
-	<div class="flex justify-between">
-		@MainHeader("Goals")
+	<div class="flex justify-between align-middle mb-6">
+		<h1 class="text-3xl font-bold font-(family-name:--font-biorhyme-expanded)">{ text }</h1>
 		<button class="cursor-pointer transition-transform hover:scale-120" @click={ onClick }>
 			<img src="/icons/add.svg" class="h-8 object-cover"/>
 		</button>
