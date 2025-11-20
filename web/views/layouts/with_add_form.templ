@@ -1,0 +1,22 @@
+package layouts
+
+import "github.com/omareloui/tyche/internal/jwt"
+import "github.com/omareloui/tyche/internal/models"
+import "github.com/omareloui/tyche/web/views/components"
+
+templ WithCreateForm(
+	claims *jwt.AccessClaims, pageTitle string, balances []models.Balance,
+	form templ.Component, opts *Opts,
+) {
+	@Main(claims, pageTitle, balances, opts) {
+		<div x-data="{openCreateForm: false}" @keyup.escape.document="openCreateForm=false">
+			@components.Container() {
+				@components.HeaderWithAddButton(pageTitle, "openCreateForm=true")
+				{ children... }
+			}
+			<div x-show="openCreateForm" @click.away="openCreateForm=false">
+				@form
+			</div>
+		</div>
+	}
+}

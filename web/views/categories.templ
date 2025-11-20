@@ -24,12 +24,10 @@ templ Categories(
 	knds []models.TransactionKind,
 	categories []models.Category,
 	curs []models.Currency) {
-	@layouts.Main(claims, "Categories", balances, &layouts.Opts{IncludeAlpine: true, IncludeAlpineCollapse: true}) {
-		@components.Container() {
-			@components.MainHeader("Categories")
-			@CreateCategoryForm(fd, knds, curs, &claims.DefaultCurrency)
-			@categoriesList(categories)
-		}
+	@layouts.WithCreateForm(claims, "Categories", balances,
+		CreateCategoryForm(fd, knds, curs, &claims.DefaultCurrency),
+		&layouts.Opts{IncludeAlpine: true, IncludeAlpineMask: true}) {
+		@categoriesList(categories)
 	}
 }
 
@@ -55,7 +53,7 @@ templ categoryFormBody(fd *CategoryFD, id string, knds []models.TransactionKind,
 }
 
 templ categoriesList(categories []models.Category) {
-	@components.List("categories-list") {
+	@components.Grid2Col("categories-list") {
 		for _, cat := range categories {
 			@Category(&cat)
 		}

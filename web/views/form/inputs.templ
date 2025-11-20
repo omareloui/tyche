@@ -38,10 +38,10 @@ templ IBANInput(label, name, id string, ibanPrefix string, data FDInput, inputAt
 }
 
 templ DateInput(label, name, id string, data FDInput, inputAttrs templ.Attributes, wrapperAttrs templ.Attributes) {
-	@Input(label, "date", name, "yyyy-mm-dd", id, data, joinAttrs(templ.Attributes{
-		"data-datepicker?": "",
-		"autocomplete":     "off",
-		"x-mask":           "9999-99-99",
+	@TextInput(label, name, "yyyy-mm-dd", id, data, joinAttrs(templ.Attributes{
+		"autocomplete":    "off",
+		"x-mask":          "9999-99-99",
+		"data-datepicker": true,
 	}, inputAttrs), wrapperAttrs)
 }
 
@@ -88,7 +88,7 @@ templ SelectInput(label, name, placeholder, id string,
 templ Checkbox(label, name, id string, data FDInput, inputAttrs templ.Attributes, wrapperAttrs templ.Attributes) {
 	<div
 		if wrapperAttrs != nil {
-			wrapperAttrs
+			{ wrapperAttrs... }
 		}
 	>
 		@input(name, id, "checkbox", joinAttrs(inputAttrs, templ.Attributes{"checked?": data.Value}), data)

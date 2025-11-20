@@ -20,12 +20,10 @@ templ Counterparties(
 	balances []models.Balance,
 	fd *CounterpartyFD,
 	counterparties []models.Counterparty) {
-	@layouts.Main(claims, "Counterparties", balances, &layouts.Opts{IncludeAlpine: true, IncludeAlpineCollapse: true}) {
-		@components.Container() {
-			@components.MainHeader("Counterparties")
-			@CreateCounterpartyForm(fd)
-			@counterpartiesList(counterparties)
-		}
+	@layouts.WithCreateForm(claims, "Counterparties",
+		balances, CreateCounterpartyForm(fd),
+		&layouts.Opts{IncludeAlpine: true, IncludeAlpineCollapse: true}) {
+		@counterpartiesList(counterparties)
 	}
 }
 
@@ -48,7 +46,7 @@ templ counterpartyFormBody(id string, fd *CounterpartyFD) {
 }
 
 templ counterpartiesList(counterparties []models.Counterparty) {
-	@components.List("counterparties-list") {
+	@components.Grid2Col("counterparties-list") {
 		for _, per := range counterparties {
 			@Counterparty(&per)
 		}

@@ -22,38 +22,17 @@ templ Goals(
 	balances []models.Balance,
 	fd *GoalFD, goals []models.Goal,
 	curs []models.Currency) {
-	@layouts.Main(claims, "Goals", balances, &layouts.Opts{IncludeAlpine: true, IncludeAlpineCollapse: true}) {
-		<div x-data="{openForm: false}" @keyup.escape.document="openForm=false">
-			@components.Container() {
-				@components.HeaderWithAddButton("Goals", "openForm = true")
-				@goalsList(goals)
-			}
-			<div x-show="openForm" @click.away="openForm=false">
-				@CreateGoalForm(fd, curs, &claims.DefaultCurrency)
-			</div>
-		</div>
+	@layouts.WithCreateForm(claims, "Goals", balances,
+		CreateGoalForm(fd, curs, &claims.DefaultCurrency),
+		&layouts.Opts{IncludeAlpine: true, IncludeDatePicker: true, IncludeAlpineMask: true}) {
+		@goalsList(goals)
 	}
 }
 
 templ CreateGoalForm(fd *GoalFD, curs []models.Currency, defaultCur *models.Currency) {
-	<div hx-target="this" @click.self="openForm=false" class="absolute inset-0 w-[100vw] h-[100vh] bg-zinc-700/10 backdrop-blur-lg grid place-items-center">
-		<div>
-			<h2 class="text-2xl font-bold font-(family-name:--font-biorhyme-expanded) text-center mb-4">Create Goal</h2>
-			<form
-				hx-post="/goals"
-				class="grid gap-2 rounded-2xl bg-zinc-900 py-6 px-8"
-				hx-swap="outerHTML"
-			>
-				@goalFormBody("", fd, curs, defaultCur)
-				<button
-					type="submit"
-					class="text-white bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-lg w-full sm:w-auto px-5 py-2.5 text-center"
-				>
-					Create Goal
-				</button>
-			</form>
-		</div>
-	</div>
+	@form.CreateForm("Create Goal", "/goals", "Create Goal") {
+		@goalFormBody("", fd, curs, defaultCur)
+	}
 }
 
 templ EditGoal(id string, fd *GoalFD, curs []models.Currency, defaultCur *models.Currency) {

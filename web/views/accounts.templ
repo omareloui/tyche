@@ -36,12 +36,10 @@ templ Accounts(
 	fd *AccountFD, aknds []models.AccountKind,
 	curs []models.Currency, accounts []models.Account,
 	cps []models.Counterparty) {
-	@layouts.Main(claims, "Accounts", balances, &layouts.Opts{IncludeAlpine: true, IncludeAlpineCollapse: true}) {
-		@components.Container() {
-			@components.MainHeader("Accounts")
-			@CreateAccountForm(fd, aknds, curs, cps, &claims.DefaultCurrency)
-			@accountsList(accounts)
-		}
+	@layouts.WithCreateForm(claims, "Accounts", balances,
+		CreateAccountForm(fd, aknds, curs, cps, &claims.DefaultCurrency),
+		&layouts.Opts{IncludeAlpine: true, IncludeAlpineMask: true}) {
+		@accountsList(accounts)
 	}
 }
 
@@ -105,7 +103,7 @@ templ AccountInputs(id string, fd *AccountPartialFD, aknds []models.AccountKind,
 }
 
 templ accountsList(accounts []models.Account) {
-	@components.List("accounts-list") {
+	@components.Grid2Col("accounts-list") {
 		for _, a := range accounts {
 			@Account(&a)
 		}

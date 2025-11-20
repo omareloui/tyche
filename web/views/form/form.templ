@@ -8,53 +8,26 @@ templ Form(action, path string, attrs ...templ.Attributes) {
 		if attrs != nil {
 			{ attrs[0]... }
 		}
-		class="grid gap-2 entry-container"
+		class="grid gap-2 rounded-2xl bg-zinc-900 py-6 px-8"
 		hx-swap="outerHTML"
 	>
 		{ children... }
 	</form>
 }
 
-templ CreateForm(title, postTo, submitStr string, close ...bool) {
-	<div
-		x-data={ fmt.Sprintf("{open: %v, toggle() {this.open = !this.open}}", close == nil || !close[0]) }
-		class="px-6 py-3 mb-6 bg-zinc-800 rounded-lg"
-		hx-target="this"
-	>
-		<div
-			class="flex flex-column justify-between items-center"
-			@click="toggle"
-		>
-			<h2 class="text-xl font-bold">{ title }</h2>
-			<button
-				x-show="!open"
-				class="form-visibility-button bg-gray-300"
-				aria-label="expand form"
-				type="button"
-			>
-				OPEN
-			</button>
-			<button
-				x-show="open"
-				class="form-visibility-button bg-red-500 text-white"
-				aria-label="collapse form"
-				type="button"
-			>
-				CLOSE
-			</button>
+templ CreateForm(title, postTo, submitStr string) {
+	<div hx-target="this" @click.self="openCreateForm=false" class="absolute inset-0 w-[100vw] h-[100vh] bg-zinc-700/10 backdrop-blur-lg grid place-items-center">
+		<div>
+			<h2 class="text-2xl font-bold font-(family-name:--font-biorhyme-expanded) text-center mb-4">{ title }</h2>
+			@Form("post", postTo) {
+				{ children... }
+				<button
+					type="submit"
+					class="text-white bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-lg w-full sm:w-auto px-5 py-2.5 text-center"
+				>
+					Create Goal
+				</button>
+			}
 		</div>
-		@Form("post", postTo, templ.Attributes{
-			"x-show":                    "open",
-			"x-collapse.duration.300ms": true,
-			"class":                     "grid gap-2 entry-container mt-2",
-		}) {
-			{ children... }
-			<button
-				type="submit"
-				class="text-white bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-lg w-full sm:w-auto px-5 py-2.5 text-center"
-			>
-				{ submitStr }
-			</button>
-		}
 	</div>
 }

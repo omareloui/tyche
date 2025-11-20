@@ -26,7 +26,7 @@ func joinAttrs(attrs ...templ.Attributes) templ.Attributes {
 
 	newAttrs := make(templ.Attributes)
 
-	for _, attr := range attrs[1:] {
+	for _, attr := range attrs {
 		for k, v := range attr {
 			newAttrs[k] = v
 		}
