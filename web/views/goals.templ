@@ -101,6 +101,9 @@ templ GoalProgressForm(gl *models.Goal, fd *TransactionFD, accounts []models.Acc
 		@form.AmountInputsWithAccount(&fd.AccountIFD, gl.ID, accounts, defaultCur)
 		@form.DateInput("Date", "scheduled_to", gl.ID, fd.ScheduledTo, nil, nil)
 		@form.EditFormButtons(fmt.Sprintf("/goals/%s", gl.ID))
+		<script>
+			loadDatePickers();
+		</script>
 	}
 }
 
