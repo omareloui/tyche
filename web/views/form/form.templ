@@ -16,7 +16,7 @@ templ Form(action, path string, attrs ...templ.Attributes) {
 }
 
 templ CreateForm(title, postTo, submitStr string) {
-	<div hx-target="this" @click.self="openCreateForm=false" class="absolute inset-0 w-[100vw] h-[100vh] bg-zinc-700/10 backdrop-blur-lg grid place-items-center">
+	<div hx-target="this" @click.self="openCreateForm=false" class="fixed inset-0 w-[100vw] h-[100vh] bg-zinc-700/10 backdrop-blur-lg grid place-items-center">
 		<div>
 			<h2 class="text-2xl font-bold font-(family-name:--font-biorhyme-expanded) text-center mb-4">{ title }</h2>
 			@Form("post", postTo) {

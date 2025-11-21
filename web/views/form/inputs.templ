@@ -91,7 +91,18 @@ templ Checkbox(label, name, id string, data FDInput, inputAttrs templ.Attributes
 			{ wrapperAttrs... }
 		}
 	>
-		@input(name, id, "checkbox", joinAttrs(inputAttrs, templ.Attributes{"checked?": data.Value}), data)
+		<input
+			id={ join(name, id) }
+			type="checkbox"
+			name={ name }
+			class="mr-2"
+			if data.Value != "" {
+				checked
+			}
+			if inputAttrs != nil {
+				{ inputAttrs... }
+			}
+		/>
 		@inputLabel(name, id, label)
 		@errorMessage(data.Error)
 	</div>
