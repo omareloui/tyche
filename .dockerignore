@@ -1,6 +1,5 @@
 node_modules
 .env*
 build
-logs
 tmp
-
+web/views/**/*_templ.go

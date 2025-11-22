@@ -1,8 +1,8 @@
-FROM golang:1.23-bullseye AS build
+FROM golang:1.24-bullseye AS build
 
 WORKDIR /usr/src/
 
-RUN go install github.com/a-h/templ/cmd/templ@v0.2.771 && \
+RUN go install github.com/a-h/templ/cmd/templ@v0.3.943 && \
   go install github.com/pressly/goose/v3/cmd/goose@latest && \
   go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 
@@ -35,12 +35,10 @@ COPY package* .
 
 RUN --mount=type=cache,target=/root/.npm npm ci
 
-COPY web/assets web/assets
-COPY web/views/*.templ web/views
+COPY web/ web/
 COPY internal/config/.tailwind.config.js internal/config/.tailwind.config.js
-COPY Makefile Makefile
 
-RUN make css
+RUN npm run css
 
 ###
 FROM scratch AS final
@@ -50,12 +48,18 @@ WORKDIR /app
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /etc/passwd /etc/passwd
 
-COPY --from=build /usr/src/bin/tyche ./bin/tyche
+COPY --from=build /usr/src/bin/tyche bin/tyche
 
-COPY --from=css /app/web/public/styles ./web/public/styles
-COPY ./web/public/js ./web/public/js
+COPY --from=css /app/web/public/styles web/public/styles
+
+COPY ./web/public/js web/public/js
+COPY ./web/public/fonts web/public/fonts
+COPY ./web/public/icons web/public/icons
 
 COPY ./data data
+COPY ./.cache .cache
+COPY ./sql sql
+COPY ./logs logs
 
 USER nonroot
 
