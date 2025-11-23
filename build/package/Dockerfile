@@ -24,7 +24,8 @@ RUN make templ sqlgen && \
   -ldflags="-linkmode external -extldflags -static" \
   -tags netgo \
   -o /usr/src/bin/tyche \
-  ./cmd/tyche
+  ./cmd/tyche && \
+  mkdir .cache data logs
 
 ###
 FROM node:23-bullseye AS css
@@ -49,17 +50,18 @@ COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certifica
 COPY --from=build /etc/passwd /etc/passwd
 
 COPY --from=build /usr/src/bin/tyche bin/tyche
+COPY --from=build /usr/src/sql sql
+
+COPY --from=build --chown=nonroot:nonroot /usr/src/.cache .cache
+COPY --from=build --chown=nonroot:nonroot /usr/src/data data
+COPY --from=build --chown=nonroot:nonroot /usr/src/logs logs
 
 COPY --from=css /app/web/public/styles web/public/styles
 
-COPY ./web/public/js web/public/js
-COPY ./web/public/fonts web/public/fonts
-COPY ./web/public/icons web/public/icons
-
-COPY ./data data
-COPY ./.cache .cache
-COPY ./sql sql
-COPY ./logs logs
+COPY --from=build /usr/src/web/public/favicons web/public/favicons
+COPY --from=build /usr/src/web/public/js web/public/js
+COPY --from=build /usr/src/web/public/fonts web/public/fonts
+COPY --from=build /usr/src/web/public/icons web/public/icons
 
 USER nonroot
 
