@@ -88,7 +88,7 @@ func New(h *handler.Handler) Router {
 
 	static(mux, []string{
 		"styles", "js", "images",
-		"fonts", "icons",
+		"fonts", "icons", "favicons",
 	}, "./web/public")
 
 	mux.Handle("/", handle(h.NotFound))
