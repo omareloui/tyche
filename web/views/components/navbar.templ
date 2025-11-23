@@ -51,7 +51,7 @@ templ Navbar(claims *jwt.AccessClaims, balances []models.Balance) {
 						</div>
 					</div>
 				} else {
-					<a href="/oauth" hx-disabled="true" class="font-(family-name:--font-biorhyme-expanded) text-base">
+					<a href="/oauth" hx-boost="false" hx-disabled="true" class="font-(family-name:--font-biorhyme-expanded) text-base">
 						Sign in
 					</a>
 				}
