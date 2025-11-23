@@ -18,6 +18,8 @@ func New(h *handler.Handler) Router {
 
 	mux.Handle("GET /{$}", handlePub(h.HomePage))
 
+	mux.Handle("GET /health", handlePubJSON(h.Health))
+
 	mux.Handle("GET /accounts", handle(h.Accounts))
 	mux.Handle("POST /accounts", handle(h.CreateAccount))
 	mux.Handle("GET /accounts/{id}", handle(h.Account))
@@ -106,6 +108,20 @@ func static(mux *http.ServeMux, paths []string, fspath string) {
 func handle(h handler.HandlerMethod, appendMiddlewares ...(func(http.Handler) http.Handler)) http.Handler {
 	appendMiddlewares = append(appendMiddlewares, middleware.Protected)
 	return handlePub(h, appendMiddlewares...)
+}
+
+func handlePubJSON(h handler.HandlerJSONMethod, appendMiddlewares ...(func(http.Handler) http.Handler)) http.Handler {
+	var handler http.Handler = route_handler.JSONRouteHandler(h)
+
+	for i := len(appendMiddlewares) - 1; i >= 0; i-- {
+		handler = appendMiddlewares[i](handler)
+	}
+
+	handler = middleware.Auth(handler)
+	handler = middleware.RequestLogger(handler)
+	handler = middleware.CorrelationID(handler)
+
+	return handler
 }
 
 func handlePub(h handler.HandlerMethod, appendMiddlewares ...(func(http.Handler) http.Handler)) http.Handler {

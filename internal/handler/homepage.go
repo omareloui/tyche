@@ -8,8 +8,6 @@ import (
 	"github.com/omareloui/tyche/web/views"
 )
 
-type HandlerMethod func(w http.ResponseWriter, r *http.Request) (templ.Component, error)
-
 func (h Handler) HomePage(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	claims := getClaims(r.Context())
 
