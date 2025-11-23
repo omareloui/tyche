@@ -14,6 +14,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Debug
+        run: |
+          cat <<EOF
+            Deploying to ECS... ${{ vars.AWS_REGION }} ::: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          EOF
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
