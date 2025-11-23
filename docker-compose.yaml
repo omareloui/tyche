@@ -1,6 +1,7 @@
 ---
 services:
   tyche:
+    image: tyche
     container_name: tyche
     build:
       context: .
@@ -16,7 +17,6 @@ services:
     volumes:
       - ./data:/usr/src/data
       - ./logs:/usr/src/logs
-      - ./sql:/usr/src/sql
       - ./.cache:/usr/src/.cache
 
   tyche-dev:
