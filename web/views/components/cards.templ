@@ -3,6 +3,7 @@ package components
 type cardOpts struct {
 	title     string
 	menuItems []templ.Component
+	isStale   bool
 }
 
 type cardOptsFunc func(o *cardOpts)
@@ -20,7 +21,13 @@ templ EntryCard(opts ...cardOptsFunc) {
 		if len(o.menuItems) > 0 {
 			@EntryMenu("openMenu", o.menuItems)
 		}
-		<div class="px-8 py-6 bg-zinc-700/20 rounded-3xl">
+		<div
+			class={
+				"px-8 py-6 rounded-3xl",
+				templ.KV("bg-zinc-700/20 ", !o.isStale),
+				templ.KV("bg-zinc-400/20", o.isStale),
+			}
+		>
 			if len(o.menuItems) > 0 && o.title != "" {
 				<div class="flex justify-between gap-8">
 					<p class="text-2xl mb-2">{ o.title }</p>
@@ -51,6 +58,12 @@ templ EntryCard(opts ...cardOptsFunc) {
 func WithCardMenu(items []templ.Component) cardOptsFunc {
 	return func(o *cardOpts) {
 		o.menuItems = items
+	}
+}
+
+func WithCardStale(stale bool) cardOptsFunc {
+	return func(o *cardOpts) {
+		o.isStale = stale
 	}
 }
 

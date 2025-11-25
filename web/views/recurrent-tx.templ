@@ -90,7 +90,14 @@ templ rtxsList(recurrentTx []models.RecurrentTx) {
 }
 
 templ RecurrentTx(rtx *models.RecurrentTx) {
-	<div hx-target="this" class="entry-container">
+	@components.EntryCard(
+		components.WithCardTitle(rtx.ID),
+		components.WithCardMenu([]templ.Component{
+			components.EntryMenuAnchorItem("Generate Transactions", "post", fmt.Sprintf("/recurrent-tx/%s/generate-txs", rtx.ID)),
+			components.EntryMenuAnchorItem("Edit", "put", fmt.Sprintf("/recurrent-tx/%s/edit", rtx.ID)),
+			components.EntryMenuDeleteItem(fmt.Sprintf("/recurrent-tx/%s", rtx.ID)),
+		}),
+	) {
 		<p>ID: { rtx.ID }</p>
 		<p>Account: { rtx.Account.Name }</p>
 		<p>Amount: { rtx.ViewAmount() }</p>
@@ -121,10 +128,5 @@ templ RecurrentTx(rtx *models.RecurrentTx) {
 		}
 		<p>Last Transaction Scheduled To: { rtx.LastTransactionScheduledTo.Format(time.RFC1123Z) }</p>
 		<p>Created At: { rtx.CreatedAt.Format(time.RFC1123Z) }</p>
-		<div class="flex gap-4">
-			@form.PostButton("Generate Transactions", fmt.Sprintf("/recurrent-tx/%s/generate-txs", rtx.ID))
-			@form.EditButton(fmt.Sprintf("/recurrent-tx/%s/edit", rtx.ID))
-			@form.DeleteButton(fmt.Sprintf("/recurrent-tx/%s", rtx.ID))
-		</div>
-	</div>
+	}
 }

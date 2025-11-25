@@ -108,7 +108,7 @@ func getGoalMenuItems(gl *models.Goal) []templ.Component {
 
 	menuItems = append(menuItems,
 		components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/goals/%s/edit", gl.ID)),
-		components.EntryMenuAnchorItem("Delete", "delete", fmt.Sprintf("/goals/%s", gl.ID), "text-red-400"),
+		components.EntryMenuDeleteItem(fmt.Sprintf("/goals/%s", gl.ID)),
 	)
 
 	return menuItems

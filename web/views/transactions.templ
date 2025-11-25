@@ -92,15 +92,11 @@ templ transactionsList(transactions []models.Transaction) {
 }
 
 templ Transaction(tx *models.Transaction) {
-	<div
-		hx-target="this"
-		if tx.FulfilledAt.IsZero() {
-			class="entry-container stale"
-		} else {
-			class="entry-container"
-		}
-	>
-		<p>ID: { tx.ID }</p>
+	@components.EntryCard(
+		components.WithCardTitle(tx.ID),
+		components.WithCardMenu(getTransactionMenuItems(tx)),
+		components.WithCardStale(tx.FulfilledAt.IsZero()),
+	) {
 		<p>Account: { tx.Account.Name }</p>
 		<p>Amount: { tx.ViewAmount() }</p>
 		if tx.ToAccount != nil {
@@ -128,14 +124,7 @@ templ Transaction(tx *models.Transaction) {
 			<p>Fulfilled At: { tx.FulfilledAt.Format(time.RFC1123Z) }</p>
 		}
 		<p>Created At: { tx.CreatedAt.Format(time.RFC1123Z) }</p>
-		<div class="flex gap-4">
-			if tx.FulfilledAt.IsZero() {
-				@form.SaveButton("Fulfill", fmt.Sprintf("/transactions/%s/fulfill", tx.ID))
-			}
-			@form.EditButton(fmt.Sprintf("/transactions/%s/edit", tx.ID))
-			@form.DeleteButton(fmt.Sprintf("/transactions/%s", tx.ID))
-		</div>
-	</div>
+	}
 }
 
 templ TransactionAmountsAndKindFormBody(
@@ -235,4 +224,20 @@ func getCategoriesOfKinds(cats []models.Category, kndId string) []models.Categor
 		}
 	}
 	return kndsCats
+}
+
+func getTransactionMenuItems(tx *models.Transaction) []templ.Component {
+	items := []templ.Component{}
+
+	if tx.FulfilledAt.IsZero() {
+		items = append(items,
+			components.EntryMenuAnchorItem("Fulfill", "put", fmt.Sprintf("/transactions/%s/fulfill", tx.ID)))
+	}
+
+	items = append(items,
+		components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/transactions/%s/edit", tx.ID)),
+		components.EntryMenuDeleteItem(fmt.Sprintf("/transactions/%s", tx.ID)),
+	)
+
+	return items
 }

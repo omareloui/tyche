@@ -111,14 +111,21 @@ templ accountsList(accounts []models.Account) {
 }
 
 templ Account(a *models.Account) {
-	<div hx-target="this" class="entry-container">
+	@components.EntryCard(components.WithCardTitle(a.Name), components.WithCardMenu(getAccountMenuItems(a))) {
 		<p>ID: { a.ID }</p>
 		if a.IsDefault {
 			<p class="text-green-500">DEFAULT</p>
 		}
-		<p>Name: { a.Name }</p>
-		<p>Amount: { a.ViewAmount() } </p>
-		<p>Actual Amount: { a.ViewActualAmount() } </p>
+		<p>
+			Amount: <span
+	class={ templ.KV("text-red-400", a.Amount < 0) }
+>{ a.ViewAmount() }</span>
+		</p>
+		<p>
+			Actual Amount: <span
+	class={ templ.KV("text-red-400", a.ActualAmount < 0) }
+>{ a.ViewActualAmount() }</span>
+		</p>
 		<p>Kind: { a.Kind.Enum.String() } </p>
 		if a.Iban != "" {
 			<p>IBAN: { a.MaskIban() } </p>
@@ -158,24 +165,26 @@ templ Account(a *models.Account) {
 				false
 			}
 		</p>
-		<div class="flex gap-4">
-			if !a.IsDefault {
-				<button
-					class="px-5 py-2.5 my-2 text-white bg-green-500 hover:bg-green-600 focus:outline-none focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm sm:w-auto text-center"
-					hx-target="this"
-					hx-swap="outerHTML"
-					hx-put={ fmt.Sprintf("/accounts/%s/default", a.ID) }
-					hx-sync="closest button:abort"
-				>Set as Default</button>
-			}
-			@form.EditButton(fmt.Sprintf("/accounts/%s/edit", a.ID))
-			@form.DeleteButton(fmt.Sprintf("/accounts/%s", a.ID))
-		</div>
-	</div>
+	}
 }
 
 templ AccountOOB(a *models.Account) {
 	<div id="accounts-list" hx-swap-oob="afterbegin">
 		@Account(a)
 	</div>
+}
+
+func getAccountMenuItems(a *models.Account) []templ.Component {
+	items := []templ.Component{
+		components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/accounts/%s/edit", a.ID)),
+	}
+
+	if !a.IsDefault {
+		items = append(items,
+			components.EntryMenuAnchorItem("Set as Default", "put", fmt.Sprintf("/accounts/%s/default", a.ID)))
+	}
+
+	items = append(items, components.EntryMenuDeleteItem(fmt.Sprintf("/accounts/%s", a.ID)))
+
+	return items
 }

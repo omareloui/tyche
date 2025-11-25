@@ -2,15 +2,35 @@ package components
 
 import "strings"
 
-templ EntryMenuAnchorItem(label string, action string, url string, extraClasses ...string) {
+type entryMenuItemOpts struct {
+	classes        []string
+	confirmMessage string
+}
+
+type entryMenuItemOptsFunc func(o *entryMenuItemOpts)
+
+templ EntryMenuAnchorItem(label string, action string, url string, opts ...entryMenuItemOptsFunc) {
+	{{ o := getEntryMenuItemOptions(opts) }}
 	<a
-		class={ "block transition-transform hover:translate-x-0.5",
-     strings.Join(extraClasses, " ") }
+		class={
+			"block transition-transform hover:translate-x-0.5",
+			strings.Join(o.classes, " "),
+		}
 		{ "hx-" + action }={ url }
 		hx-swap="outerHTML"
+		if o.confirmMessage != "" {
+			hx-confirm={ o.confirmMessage }
+		}
 	>
 		{ label }
 	</a>
+}
+
+templ EntryMenuDeleteItem(url string, opts ...entryMenuItemOptsFunc) {
+	@EntryMenuAnchorItem("Delete", "delete", url,
+		WithEntryMenuItemConfirmMessage("Are you sure you want to delete this entry?"),
+		WithEntryMenuItemClasses("text-red-400"),
+	)
 }
 
 templ EntryMenu(showKey string, entries []templ.Component) {
@@ -28,4 +48,24 @@ templ EntryMenu(showKey string, entries []templ.Component) {
 			}
 		</ul>
 	</div>
+}
+
+func WithEntryMenuItemClasses(classes ...string) entryMenuItemOptsFunc {
+	return func(o *entryMenuItemOpts) {
+		o.classes = classes
+	}
+}
+
+func WithEntryMenuItemConfirmMessage(message string) entryMenuItemOptsFunc {
+	return func(o *entryMenuItemOpts) {
+		o.confirmMessage = message
+	}
+}
+
+func getEntryMenuItemOptions(options []entryMenuItemOptsFunc) *entryMenuItemOpts {
+	o := new(entryMenuItemOpts)
+	for _, fun := range options {
+		fun(o)
+	}
+	return o
 }

@@ -45,26 +45,26 @@ templ counterpartyFormBody(id string, fd *CounterpartyFD) {
 
 templ counterpartiesList(counterparties []models.Counterparty) {
 	@components.Grid2ColOnSMUp("counterparties-list") {
-		for _, per := range counterparties {
-			@Counterparty(&per)
+		for _, cp := range counterparties {
+			@Counterparty(&cp)
 		}
 	}
 }
 
-templ Counterparty(per *models.Counterparty) {
-	<div hx-target="this" hx-swap="outerHTML" class="entry-container">
-		<p>ID: { per.ID }</p>
-		<p>Name: { per.Name }</p>
-		<p>CreatedAt: { per.CreatedAt.Format(time.RFC1123Z) }</p>
-		<div class="flex gap-4">
-			@form.EditButton(fmt.Sprintf("/counterparties/%s/edit", per.ID))
-			@form.DeleteButton(fmt.Sprintf("/counterparties/%s", per.ID))
-		</div>
-	</div>
+templ Counterparty(cp *models.Counterparty) {
+	@components.EntryCard(components.WithCardTitle(cp.Name),
+		components.WithCardMenu([]templ.Component{
+			components.EntryMenuAnchorItem("Edit", "put", fmt.Sprintf("/counterparties/%s/edit", cp.ID)),
+			components.EntryMenuDeleteItem(fmt.Sprintf("/counterparties/%s", cp.ID)),
+		}),
+	) {
+		<p>ID: { cp.ID }</p>
+		<p>CreatedAt: { cp.CreatedAt.Format(time.RFC1123Z) }</p>
+	}
 }
 
-templ CounterpartyOOB(per *models.Counterparty) {
+templ CounterpartyOOB(cp *models.Counterparty) {
 	<div id="counterparties-list" hx-swap-oob="afterbegin">
-		@Counterparty(per)
+		@Counterparty(cp)
 	</div>
 }

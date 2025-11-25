@@ -61,7 +61,10 @@ templ categoriesList(categories []models.Category) {
 }
 
 templ Category(cat *models.Category) {
-	<div hx-target="this" class="entry-container">
+	@components.EntryCard(components.WithCardTitle(cat.Name), components.WithCardMenu([]templ.Component{
+		components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/categories/%s/edit", cat.ID)),
+		components.EntryMenuDeleteItem(fmt.Sprintf("/categories/%s", cat.ID)),
+	})) {
 		<p>ID: { cat.ID }</p>
 		<p class="flex items-center gap-2">
 			<span>Name:</span>
@@ -77,11 +80,7 @@ templ Category(cat *models.Category) {
 				Budget: { cat.ViewBudgetAmount() }
 			</p>
 		}
-		<div class="flex gap-4">
-			@form.EditButton(fmt.Sprintf("/categories/%s/edit", cat.ID))
-			@form.DeleteButton(fmt.Sprintf("/categories/%s", cat.ID))
-		</div>
-	</div>
+	}
 }
 
 templ CategoryOOB(cat *models.Category) {
