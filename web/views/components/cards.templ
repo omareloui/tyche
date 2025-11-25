@@ -1,0 +1,69 @@
+package components
+
+type cardOpts struct {
+	title     string
+	menuItems []templ.Component
+}
+
+type cardOptsFunc func(o *cardOpts)
+
+templ EntryCard(opts ...cardOptsFunc) {
+	{{ o := getCardsOptions(opts) }}
+	<div
+		hx-target="this"
+		hx-swap="outerHTML"
+		class="relative"
+		if len(o.menuItems) > 0 {
+			x-data="{openMenu: false}"
+		}
+	>
+		if len(o.menuItems) > 0 {
+			@EntryMenu("openMenu", o.menuItems)
+		}
+		<div class="px-8 py-6 bg-zinc-700/20 rounded-3xl">
+			if len(o.menuItems) > 0 && o.title != "" {
+				<div class="flex justify-between gap-8">
+					<p class="text-2xl mb-2">{ o.title }</p>
+					<button
+						@click="openMenu = !openMenu"
+						class="cursor-pointer inline-block w-6 h-6"
+					>
+						<img src="/icons/dots-menu.svg" class="w-6 h-6"/>
+					</button>
+				</div>
+			} else if o.title != "" {
+				<p class="text-2xl mb-2">{ o.title }</p>
+			} else if len(o.menuItems) > 0 {
+				<div class="flex justify-end gap-8">
+					<button
+						@click="openMenu = !openMenu"
+						class="cursor-pointer inline-block w-6 h-6"
+					>
+						<img src="/icons/dots-menu.svg" class="w-6 h-6"/>
+					</button>
+				</div>
+			}
+			{ children... }
+		</div>
+	</div>
+}
+
+func WithCardMenu(items []templ.Component) cardOptsFunc {
+	return func(o *cardOpts) {
+		o.menuItems = items
+	}
+}
+
+func WithCardTitle(title string) cardOptsFunc {
+	return func(o *cardOpts) {
+		o.title = title
+	}
+}
+
+func getCardsOptions(options []cardOptsFunc) *cardOpts {
+	o := new(cardOpts)
+	for _, fun := range options {
+		fun(o)
+	}
+	return o
+}

@@ -2,14 +2,14 @@ package views
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/web/views/layouts"
 	"github.com/omareloui/tyche/web/views/components"
-	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/internal/formatters"
+	"time"
 )
 
 type GoalFD struct {
@@ -57,42 +57,30 @@ templ goalsList(goals []models.Goal) {
 }
 
 templ Goal(gl *models.Goal) {
-	<div hx-target="this" hx-swap="outerHTML" class="relative" x-data="{openMenu: false}">
-		@components.EntryMenu("openMenu", getGoalMenuItems(gl))
-		<div class="px-8 py-6 bg-zinc-700/20 rounded-3xl">
-			<div class="flex justify-between gap-8">
-				<p class="text-2xl mb-2">{ gl.Name }</p>
-				<button
-					@click="openMenu = !openMenu"
-					class="cursor-pointer inline-block w-6 h-6"
-				>
-					<img src="/icons/dots-menu.svg" class="w-6 h-6"/>
-				</button>
-			</div>
-			<div class="flex justify-between gap-2 items-center mb-4">
-				<p class="bg-black px-4 py-2 rounded-full w-fit font-extrabold font-(family-name:--font-biorhyme-expanded) text-sm md:block hidden">{ formatters.FormatNum(gl.ProgressPercentage()) }%</p>
-				<p class="font-(family-name:--font-biorhyme-expanded) md:text-xs text-[0.7rem] text-zinc-400 ">
-					{ gl.ViewProgress() }/{ gl.ViewAmount() }
-				</p>
-			</div>
-			<div class="relative h-4">
-				<span class="absolute top-0 left-0 h-full w-full bg-zinc-200 rounded-full"></span>
-				<span
-					style={ fmt.Sprintf("width: min(%2.f%%, 100%%);", gl.ProgressPercentage()) }
-					class={
-						"absolute top-0 left-0 h-full rounded-full",
-						templ.KV("bg-green-500 ", gl.ProgressPercentage() >= 100 || !gl.FulfilledAt.IsZero()),
-						templ.KV("bg-black ", gl.ProgressPercentage() < 100 && gl.FulfilledAt.IsZero()),
-					}
-				></span>
-			</div>
-			if !gl.FulfilledAt.IsZero() {
-				<time class="text-sm text-zinc-500 block mt-1 text-right">
-					{ gl.FulfilledAt.Format(time.RFC822) }
-				</time>
-			}
+	@components.EntryCard(components.WithCardTitle(gl.Name), components.WithCardMenu(getGoalMenuItems(gl))) {
+		<div class="flex justify-between gap-2 items-center mb-4">
+			<p class="bg-black px-4 py-2 rounded-full w-fit font-extrabold font-(family-name:--font-biorhyme-expanded) text-sm md:block hidden">{ formatters.FormatNum(gl.ProgressPercentage()) }%</p>
+			<p class="font-(family-name:--font-biorhyme-expanded) md:text-xs text-[0.7rem] text-zinc-400 ">
+				{ gl.ViewProgress() }/{ gl.ViewAmount() }
+			</p>
 		</div>
-	</div>
+		<div class="relative h-4">
+			<span class="absolute top-0 left-0 h-full w-full bg-zinc-200 rounded-full"></span>
+			<span
+				style={ fmt.Sprintf("width: min(%2.f%%, 100%%);", gl.ProgressPercentage()) }
+				class={
+					"absolute top-0 left-0 h-full rounded-full",
+					templ.KV("bg-green-500 ", gl.ProgressPercentage() >= 100 || !gl.FulfilledAt.IsZero()),
+					templ.KV("bg-black ", gl.ProgressPercentage() < 100 && gl.FulfilledAt.IsZero()),
+				}
+			></span>
+		</div>
+		if !gl.FulfilledAt.IsZero() {
+			<time class="text-sm text-zinc-500 block mt-1 text-right">
+				{ gl.FulfilledAt.Format(time.RFC822) }
+			</time>
+		}
+	}
 }
 
 templ GoalProgressForm(gl *models.Goal, fd *TransactionFD, accounts []models.Account, kinds []models.TransactionKind, defaultCur *models.Currency) {
