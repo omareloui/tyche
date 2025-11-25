@@ -66,14 +66,7 @@ templ Goal(gl *models.Goal) {
 		</div>
 		<div class="relative h-4">
 			<span class="absolute top-0 left-0 h-full w-full bg-zinc-200 rounded-full"></span>
-			<span
-				style={ fmt.Sprintf("width: min(%2.f%%, 100%%);", gl.ProgressPercentage()) }
-				class={
-					"absolute top-0 left-0 h-full rounded-full",
-					templ.KV("bg-green-500 ", gl.ProgressPercentage() >= 100 || !gl.FulfilledAt.IsZero()),
-					templ.KV("bg-black ", gl.ProgressPercentage() < 100 && gl.FulfilledAt.IsZero()),
-				}
-			></span>
+			@components.ProgressBar(gl.ProgressPercentage(), components.WithProgressBarSuccessStatus(gl.ProgressPercentage() >= 100 || !gl.FulfilledAt.IsZero()))
 		</div>
 		if !gl.FulfilledAt.IsZero() {
 			<time class="text-sm text-zinc-500 block mt-1 text-right">

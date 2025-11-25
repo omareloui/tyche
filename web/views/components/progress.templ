@@ -1,0 +1,45 @@
+package components
+
+import "fmt"
+
+type progressBarOpts struct {
+	success bool
+	failure bool
+}
+
+type progressBarOptsFunc func(o *progressBarOpts)
+
+templ ProgressBar(percentage float64, opts ...progressBarOptsFunc) {
+	{{ o := getProgressBarsOptions(opts) }}
+	<div class="relative h-4">
+		<span class="absolute top-0 left-0 h-full w-full bg-zinc-200 rounded-full"></span>
+		<span
+			style={ fmt.Sprintf("width: min(%2.f%%, 100%%);", percentage) }
+			class={
+				"absolute top-0 left-0 h-full rounded-full bg-black",
+				templ.KV("bg-red-400", o.failure),
+				templ.KV("bg-green-500", o.success),
+			}
+		></span>
+	</div>
+}
+
+func WithProgressBarSuccessStatus(success bool) progressBarOptsFunc {
+	return func(o *progressBarOpts) {
+		o.success = success
+	}
+}
+
+func WithProgressBarFailureStatus(failure bool) progressBarOptsFunc {
+	return func(o *progressBarOpts) {
+		o.failure = failure
+	}
+}
+
+func getProgressBarsOptions(options []progressBarOptsFunc) *progressBarOpts {
+	o := new(progressBarOpts)
+	for _, fun := range options {
+		fun(o)
+	}
+	return o
+}
