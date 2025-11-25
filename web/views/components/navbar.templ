@@ -10,7 +10,7 @@ templ Navbar(claims *jwt.AccessClaims, balances []models.Balance) {
 	@Container() {
 		<header hx-boost="true" class="flex items-center justify-between py-5">
 			<div class="navbar-right">
-				<div class="font-(family-name:--font-biorhyme-expanded) font-bold text-3xl">
+				<div class="font-(family-name:--font-biorhyme-expanded) font-bold sm:text-3xl">
 					<a href="/">tyche</a>
 				</div>
 			</div>
@@ -21,18 +21,18 @@ templ Navbar(claims *jwt.AccessClaims, balances []models.Balance) {
 							@NavbarBalance(balances)
 						</div>
 					}
-					<div class="select-none">
-						<img class="w-6 h-6" src="/icons/settings.svg" alt="Settings" aria-label="Settings"/>
-					</div>
-					<div class="select-none">
-						<img class="w-6 h-6" src="/icons/search.svg" alt="Search" aria-label="Search"/>
-					</div>
+					// <div class="select-none">
+					// 	<img class="w-6 h-6" src="/icons/settings.svg" alt="Settings" aria-label="Settings"/>
+					// </div>
+					// <div class="select-none">
+					// 	<img class="w-6 h-6" src="/icons/search.svg" alt="Search" aria-label="Search"/>
+					// </div>
 					<div class="select-none">
 						<a href="/signout">
 							<img class="w-6 h-6" src="/icons/logout.svg" alt="Logout" aria-label="Logout"/>
 						</a>
 					</div>
-					<div class="select-none">
+					<div class="select-none hidden sm:block">
 						<img
 							src={ claims.Picture }
 							class="rounded-md w-12 h-12 object-cover text-xs"
@@ -65,7 +65,7 @@ templ Navbar(claims *jwt.AccessClaims, balances []models.Balance) {
 
 templ Navlinks(links []string) {
 	<nav hx-boost="true">
-		<ul class="flex gap-4 justify-center pb-12 pt-6 text-xl">
+		<ul class="flex flex-wrap gap-4 justify-center mx-6 pb-12 pt-6 text-xl">
 			for _, link := range links {
 				<li class="focus:ring focus:ring-blue-300 focus:outline-none">
 					<a href={ link }>{ link }</a>
