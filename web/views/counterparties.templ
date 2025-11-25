@@ -44,7 +44,7 @@ templ counterpartyFormBody(id string, fd *CounterpartyFD) {
 }
 
 templ counterpartiesList(counterparties []models.Counterparty) {
-	@components.Grid2Col("counterparties-list") {
+	@components.Grid2ColOnSMUp("counterparties-list") {
 		for _, per := range counterparties {
 			@Counterparty(&per)
 		}

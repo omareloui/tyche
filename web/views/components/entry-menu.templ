@@ -18,7 +18,7 @@ templ EntryMenu(showKey string, entries []templ.Component) {
 		x-show={ showKey }
 		@click.away={ showKey + " = false" }
 		x-transition
-		class="absolute z-1 -top-8 right-8 bg-zinc-400/20 rounded backdrop-blur-sm"
+		class="absolute z-1 -top-8 right-8 bg-zinc-400/20 rounded-lg backdrop-blur-sm"
 	>
 		<ul class="py-2 min-w-28">
 			for _, entry := range entries {

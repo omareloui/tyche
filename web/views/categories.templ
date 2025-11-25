@@ -53,7 +53,7 @@ templ categoryFormBody(fd *CategoryFD, id string, knds []models.TransactionKind,
 }
 
 templ categoriesList(categories []models.Category) {
-	@components.Grid2Col("categories-list") {
+	@components.Grid2ColOnSMUp("categories-list") {
 		for _, cat := range categories {
 			@Category(&cat)
 		}

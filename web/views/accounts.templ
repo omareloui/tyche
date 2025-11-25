@@ -103,7 +103,7 @@ templ AccountInputs(id string, fd *AccountPartialFD, aknds []models.AccountKind,
 }
 
 templ accountsList(accounts []models.Account) {
-	@components.Grid2Col("accounts-list") {
+	@components.Grid2ColOnSMUp("accounts-list") {
 		for _, a := range accounts {
 			@Account(&a)
 		}

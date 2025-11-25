@@ -12,8 +12,8 @@ templ Grid3Col(id string) {
 	</div>
 }
 
-templ Grid2Col(id string) {
-	<div id={ id } class="grid grid-cols-2 gap-4 no-entries">
+templ Grid2ColOnSMUp(id string) {
+	<div id={ id } class="grid sm:grid-cols-2 gap-4 no-entries">
 		{ children... }
 	</div>
 }
