@@ -34,3 +34,7 @@ func GetGoogleOAuthClientSecret() string {
 func GetCacheDir() string {
 	return getEnvironmentValueWithDefault("CACHE_DIR", ".cache")
 }
+
+func GetCacheExpiryInDays() int {
+	return getEnvironmentIntWithDefault("FX_RATE_CACHE_EXPIRY_IN_DAYS", 1)
+}

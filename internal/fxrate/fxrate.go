@@ -38,26 +38,37 @@ func init() {
 }
 
 func loadFromCache(currency string) (*rate, error) {
+	l := logger.Get()
+
 	cacheDir := config.GetCacheDir()
 	filePath := filepath.Join(cacheDir, fmt.Sprintf("%s.cache", currency))
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
+			l.Debug("cache file didn't exist")
 			return nil, nil
 		}
+		l.Warn("unknown error on retrieving the cache file", zap.Error(err))
 		return nil, err
 	}
 
 	var cachedRate rate
 	if err := json.Unmarshal(data, &cachedRate); err != nil {
+		l.Error("error while unmarshaling JSON fx rate cache file", zap.Error(err))
 		return nil, err
 	}
 
-	today := time.Now().Format(time.DateOnly)
-	// TODO: make cache duration configurable
-	if cachedRate.Date != today {
+	cacheDate, err := time.Parse(time.DateOnly, cachedRate.Date)
+	if err != nil {
+		l.Error("error while parsing fx rate cache date", zap.Error(err))
+		return nil, err
+	}
+
+	expiresAt := cacheDate.Add(time.Hour * 24 * time.Duration(config.GetCacheExpiryInDays()))
+	if time.Now().After(expiresAt) {
+		l.Debug("expired cache removing the file...", zap.Time("cached_date", cacheDate))
 		if err := os.Remove(filePath); err != nil {
-			logger.Get().Warn("failed to remove stale cache", zap.String("currency", currency), zap.Error(err))
+			l.Warn("failed to remove stale cache", zap.String("currency", currency), zap.Error(err))
 		}
 		return nil, nil
 	}
