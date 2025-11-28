@@ -3,11 +3,21 @@
 @tailwind variants;
 
 :root {
+  --navbar-height: 150px;
+
   color-scheme: dark;
 }
 
 [x-cloak] {
   display: none !important;
+}
+
+body {
+  padding-top: calc(var(--navbar-height) - 40px);
+}
+
+header {
+  height: var(--navbar-height);
 }
 
 .drag-none {

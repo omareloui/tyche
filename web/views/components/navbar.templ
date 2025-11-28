@@ -7,57 +7,59 @@ import (
 )
 
 templ Navbar(claims *jwt.AccessClaims, balances []models.Balance) {
-	@Container() {
-		<header hx-boost="true" class="flex items-center justify-between py-5">
-			<div class="navbar-right">
-				<div class="font-(family-name:--font-biorhyme-expanded) font-bold sm:text-3xl">
-					<a href="/">tyche</a>
-				</div>
-			</div>
-			<div class="navbar-right flex items-center justify-between gap-6">
-				if claims != nil {
-					if len(balances) > 0 {
-						<div>
-							@NavbarBalance(balances)
-						</div>
-					}
-					// <div class="select-none">
-					// 	<img class="w-6 h-6" src="/icons/settings.svg" alt="Settings" aria-label="Settings"/>
-					// </div>
-					// <div class="select-none">
-					// 	<img class="w-6 h-6" src="/icons/search.svg" alt="Search" aria-label="Search"/>
-					// </div>
-					<div class="select-none">
-						<a href="/signout">
-							<img class="w-6 h-6" src="/icons/logout.svg" alt="Logout" aria-label="Logout"/>
-						</a>
+	<header class="fixed top-0 left-0 w-full z-50 bg-linear-to-b from-40% from-zinc-950 to-zinc-950/0 pointer-events-none">
+		@Container() {
+			<div hx-boost="true" class="flex items-center justify-between py-5">
+				<div class="pointer-events-auto">
+					<div class="font-(family-name:--font-biorhyme-expanded) font-bold sm:text-3xl">
+						<a href="/">tyche</a>
 					</div>
-					<div class="select-none hidden sm:block">
-						<img
-							src={ claims.Picture }
-							class="rounded-md w-12 h-12 object-cover text-xs"
-							alt=""
-							onerror="this.onerror=null;
+				</div>
+				<div class="flex items-center justify-between gap-6 pointer-events-auto">
+					if claims != nil {
+						if len(balances) > 0 {
+							<div>
+								@NavbarBalance(balances)
+							</div>
+						}
+						// <div class="select-none">
+						// 	<img class="w-6 h-6" src="/icons/settings.svg" alt="Settings" aria-label="Settings"/>
+						// </div>
+						// <div class="select-none">
+						// 	<img class="w-6 h-6" src="/icons/search.svg" alt="Search" aria-label="Search"/>
+						// </div>
+						<div class="select-none">
+							<a href="/signout">
+								<img class="w-6 h-6" src="/icons/logout.svg" alt="Logout" aria-label="Logout"/>
+							</a>
+						</div>
+						<div class="select-none hidden sm:block">
+							<img
+								src={ claims.Picture }
+								class="rounded-md w-12 h-12 object-cover text-xs"
+								alt=""
+								onerror="this.onerror=null;
             this.nextElementSibling.classList.add('flex');
             this.nextElementSibling.classList.remove('hidden');
             this.classList.add('hidden')"
-						/>
-						<div
-							class="hidden w-12 h-12 rounded-md items-center justify-center"
-							style={ fmt.Sprintf("background: %s;", models.CategoryColorToHex(models.GetRandomCategoryColor())) }
-						>
-							{ string(claims.FirstName[0]) }
-							{ string(claims.LastName[0]) }
+							/>
+							<div
+								class="hidden w-12 h-12 rounded-md items-center justify-center"
+								style={ fmt.Sprintf("background: %s;", models.CategoryColorToHex(models.GetRandomCategoryColor())) }
+							>
+								{ string(claims.FirstName[0]) }
+								{ string(claims.LastName[0]) }
+							</div>
 						</div>
-					</div>
-				} else {
-					<a href="/oauth" hx-boost="false" hx-disabled="true" class="font-(family-name:--font-biorhyme-expanded) text-base">
-						Sign in
-					</a>
-				}
+					} else {
+						<a href="/oauth" hx-boost="false" hx-disabled="true" class="font-(family-name:--font-biorhyme-expanded) text-base">
+							Sign in
+						</a>
+					}
+				</div>
 			</div>
-		</header>
-	}
+		}
+	</header>
 	if claims != nil {
 		@Navlinks([]string{"/accounts", "/categories", "/transactions", "/recurrent-tx", "/goals", "/counterparties", "/currencies"})
 	}
