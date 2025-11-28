@@ -82,7 +82,7 @@ templ AccountInputs(id string, fd *AccountPartialFD, aknds []models.AccountKind,
 			@form.TextInput("Name", "name", "Enter account name", id, *fd.Name, nil, nil)
 		}
 		if fd.Iban != nil {
-			@form.IBANInput("IBAN", "iban", id, form.GetCurOrDefault(curs, fd.CurrencyID.Value, nil).IbanPrefix, *fd.Iban, nil, nil)
+			@form.IBANInput("IBAN", "iban", id, form.GetCurOrDefaultIbanPrefix(curs, fd.CurrencyID.Value, nil), *fd.Iban, nil, nil)
 		}
 		if fd.CardNumber != nil {
 			@form.CreditCardInput("Card Number", "card_number", id, *fd.CardNumber, nil, nil)
@@ -91,7 +91,7 @@ templ AccountInputs(id string, fd *AccountPartialFD, aknds []models.AccountKind,
 			@form.TextInput("Name on card", "name_on_card", "John Doe", id, *fd.NameOnCard, nil, nil)
 		}
 		if fd.CardLimit != nil {
-			@form.MoneyInput("Card Limit", "card_limit", form.GetCurOrDefault(curs, fd.CurrencyID.Value, defaultCur).Symbol, id, *fd.CardLimit, nil, nil)
+			@form.MoneyInput("Card Limit", "card_limit", form.GetCurOrDefaultSym(curs, fd.CurrencyID.Value, defaultCur), id, *fd.CardLimit, nil, nil)
 		}
 		if fd.ExpirationDate != nil {
 			@form.DateInput("Expiration Date", "expiration_date", id, *fd.ExpirationDate, nil, nil)

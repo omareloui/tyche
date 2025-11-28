@@ -9,7 +9,7 @@ import (
 
 templ AmountInputsWithCurrency(fd *AmountFD, id string, curs []models.Currency, defaultCur *models.Currency) {
 	<div hx-target="this" class="grid grid-cols-3 gap-4">
-		@MoneyInput("Amount", "amount", GetCurOrDefault(curs, fd.CurrencyID.Value, defaultCur).Symbol, id,
+		@MoneyInput("Amount", "amount", GetCurOrDefaultSym(curs, fd.CurrencyID.Value, defaultCur), id,
 			fd.Amount, nil, templ.Attributes{"class": "col-span-2"})
 		@SelectInput("Currency", "currency_id", "Select a Currency", id, idStructsToMap(curs, "String"), fd.CurrencyID,
 			false, templ.Attributes{
@@ -89,6 +89,22 @@ func GetCurOrDefault(curs []models.Currency, curID string, dflt *models.Currency
 		cur = slicesutils.Find(curs, func(c models.Currency) bool { return c.IsDefault })
 	}
 	return cur
+}
+
+func GetCurOrDefaultIbanPrefix(curs []models.Currency, curID string, dflt *models.Currency) string {
+	cur := GetCurOrDefault(curs, curID, dflt)
+	if cur == nil {
+		return ""
+	}
+	return cur.IbanPrefix
+}
+
+func GetCurOrDefaultSym(curs []models.Currency, curID string, dflt *models.Currency) string {
+	cur := GetCurOrDefault(curs, curID, dflt)
+	if cur == nil {
+		return ""
+	}
+	return cur.Symbol
 }
 
 func GetAccoutSym(accs []models.Account, accId string, defaultCur *models.Currency) string {

@@ -330,9 +330,18 @@ func (h *Handler) mapFDToAcc(r *http.Request) (*models.Account, error) {
 }
 
 func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, knds []models.AccountKind) *views.AccountFD {
-	knd := slicesutils.Find(knds, func(a models.AccountKind) bool { return a.ID == acc.Kind.ID })
+	var knd *models.AccountKind
 
-	var name, cc, iban, cpId, noc, exp, limit *form.FDInput
+	if acc == nil {
+		knd = slicesutils.Find(knds, func(k models.AccountKind) bool { return k.ID == acc.Kind.ID })
+		acc = &models.Account{
+			Kind: *knd,
+		}
+	} else {
+		knd = slicesutils.Find(knds, func(k models.AccountKind) bool { return k.Enum == models.DfltAccKind })
+	}
+
+	var name, cc, iban, cpID, noc, exp, limit *form.FDInput
 
 	if knd.Enum == models.AccKindBankAcc ||
 		knd.Enum == models.AccKindCreditCard {
@@ -354,9 +363,9 @@ func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, kn
 	}
 
 	if knd.Enum == models.AccKindDebt {
-		cpId = &form.FDInput{Error: errs.Errors.MsgFor("CounterpartyID")}
+		cpID = &form.FDInput{Error: errs.Errors.MsgFor("CounterpartyID")}
 		if acc.Counterparty != nil {
-			cpId.Value = acc.Counterparty.ID
+			cpID.Value = acc.Counterparty.ID
 		}
 	}
 
@@ -367,7 +376,7 @@ func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, kn
 			CurrencyID:     form.FDInput{Value: acc.Currency.ID, Error: errs.Errors.MsgFor("CurrencyID")},
 			Iban:           iban,
 			CardNumber:     cc,
-			CounterpartyID: cpId,
+			CounterpartyID: cpID,
 			NameOnCard:     noc,
 			CardLimit:      limit,
 			ExpirationDate: exp,
