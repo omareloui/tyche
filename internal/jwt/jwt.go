@@ -80,15 +80,15 @@ func ParseAccessClaims(token string) (*AccessClaims, error) {
 	var acc *models.Account
 	var cur models.Currency
 
-	if defaultAccountId, ok := (*claims)["default_account_id"]; ok {
+	if defaultAccountID, ok := (*claims)["default_account_id"]; ok {
 		acc = &models.Account{
-			ID:   defaultAccountId.(string),
+			ID:   defaultAccountID.(string),
 			Name: (*claims)["default_account_name"].(string),
 		}
 	}
 
-	if defaultCurrId, ok := (*claims)["default_currency_id"]; ok {
-		cur.ID = defaultCurrId.(string)
+	if defaultCurrID, ok := (*claims)["default_currency_id"]; ok {
+		cur.ID = defaultCurrID.(string)
 		cur.String = (*claims)["default_currency_string"].(string)
 		cur.Symbol = (*claims)["default_currency_symbol"].(string)
 		cur.IbanPrefix = (*claims)["default_currency_iban_prefix"].(string)

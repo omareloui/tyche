@@ -93,7 +93,7 @@ func New(h *handler.Handler) Router {
 		"fonts", "icons", "favicons",
 	}, "./web/public")
 
-	mux.Handle("/", handle(h.NotFound))
+	mux.Handle("/", handlePub(h.NotFound))
 
 	return mux
 }

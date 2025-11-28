@@ -71,13 +71,13 @@ func errorResponse(l *zap.Logger, w http.ResponseWriter, err error) {
 		httperr = resperr.New(http.StatusInternalServerError, err.Error())
 	}
 
-	l.Error("server error",
+	l.Warn("server error",
 		zap.Error(httperr),
 		zap.String("message", httperr.Message),
 		zap.Int("status_code", httperr.Code),
 	)
 
-	http.Error(w, httperr.Error(), httperr.Code)
+	http.Error(w, httperr.Message, httperr.Code)
 }
 
 func prepareResponse(w http.ResponseWriter, code int) {

@@ -10,6 +10,7 @@ import (
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/resperr"
+	"github.com/omareloui/tyche/internal/slicesutils"
 	"go.uber.org/zap"
 )
 
@@ -18,8 +19,23 @@ type (
 	RefreshClaimsCtxKey struct{}
 )
 
+var RoutesToExcludeAuthMiddleware = []string{
+	"/health", "/favicons", "/fonts", "/icons", "/js", "/styles",
+}
+
 func Auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		currPath := r.URL.Path
+
+		shouldIgnore := slicesutils.Contains(RoutesToExcludeAuthMiddleware, func(r string) bool {
+			return strings.HasPrefix(currPath, r)
+		})
+
+		if shouldIgnore {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		var claims *jwt.AccessClaims
 
 		accessCookie, err := r.Cookie("access_token")
@@ -36,7 +52,6 @@ func Auth(next http.Handler) http.Handler {
 			return
 		}
 
-		currPath := r.URL.Path
 		isRefreshTokenRoute := strings.Contains(currPath, "oauth/refresh-tokens")
 		refreshCookie, err := r.Cookie("refresh_token")
 		if err != nil {

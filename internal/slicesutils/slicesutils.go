@@ -41,3 +41,7 @@ func FilterNewItems[T any, K comparable](
 
 	return result
 }
+
+func Contains[S ~[]E, E any](s S, fun func(E) bool) bool {
+	return Find(s, fun) != nil
+}
