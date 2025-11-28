@@ -6,6 +6,10 @@
   color-scheme: dark;
 }
 
+[x-cloak] {
+  display: none !important;
+}
+
 .drag-none {
   -webkit-user-drag: none;
   -khtml-user-drag: none;

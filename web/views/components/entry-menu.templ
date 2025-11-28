@@ -35,6 +35,7 @@ templ EntryMenuDeleteItem(url string, opts ...entryMenuItemOptsFunc) {
 
 templ EntryMenu(showKey string, entries []templ.Component) {
 	<div
+		x-cloak
 		x-show={ showKey }
 		@click.away={ showKey + " = false" }
 		x-transition

@@ -15,7 +15,7 @@ templ WithCreateForm(
 				@components.HeaderWithAddButton(pageTitle, "openCreateForm=true")
 				{ children... }
 			}
-			<div x-show="openCreateForm" @click.away="openCreateForm=false">
+			<div x-cloak x-show="openCreateForm" @click.away="openCreateForm=false">
 				@form
 			</div>
 		</div>
