@@ -1,19 +1,19 @@
 package components
 
 templ List(id string) {
-	<div id={ id } class="grid gap-4 no-entries">
+	<div id={ id } class="grid gap-4 overflow-x-auto no-entries">
 		{ children... }
 	</div>
 }
 
 templ Grid3Col(id string) {
-	<div id={ id } class="grid lg:grid-cols-3 sm:grid-cols-2 gap-4 no-entries">
+	<div id={ id } class="grid lg:grid-cols-3 sm:grid-cols-2 gap-4 overflow-x-auto no-entries">
 		{ children... }
 	</div>
 }
 
 templ Grid2ColOnSMUp(id string) {
-	<div id={ id } class="grid sm:grid-cols-2 gap-4 no-entries">
+	<div id={ id } class="grid sm:grid-cols-2 gap-4 overflow-x-auto no-entries">
 		{ children... }
 	</div>
 }
