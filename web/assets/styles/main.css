@@ -53,5 +53,5 @@ textarea.input-field {
 }
 
 .form-error-message {
-  @apply flex gap-1 text-red-400 mt-1 ml-2 items-center text-sm;
+  @apply flex gap-1 text-red-500 mt-1 ml-2 items-center text-sm;
 }

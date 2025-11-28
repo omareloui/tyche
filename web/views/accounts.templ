@@ -118,12 +118,12 @@ templ Account(a *models.Account) {
 		}
 		<p>
 			Amount: <span
-	class={ templ.KV("text-red-400", a.Amount < 0) }
+	class={ templ.KV("text-red-500", a.Amount < 0) }
 >{ a.ViewAmount() }</span>
 		</p>
 		<p>
 			Actual Amount: <span
-	class={ templ.KV("text-red-400", a.ActualAmount < 0) }
+	class={ templ.KV("text-red-500", a.ActualAmount < 0) }
 >{ a.ViewActualAmount() }</span>
 		</p>
 		<p>Kind: { a.Kind.Enum.String() } </p>

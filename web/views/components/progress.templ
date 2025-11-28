@@ -17,7 +17,7 @@ templ ProgressBar(percentage float64, opts ...progressBarOptsFunc) {
 			style={ fmt.Sprintf("width: min(%2.f%%, 100%%);", percentage) }
 			class={
 				"absolute top-0 left-0 h-full rounded-full bg-black",
-				templ.KV("bg-red-400", o.failure),
+				templ.KV("bg-red-500", o.failure),
 				templ.KV("bg-green-500", o.success),
 			}
 		></span>
