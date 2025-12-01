@@ -3,7 +3,7 @@ INSERT INTO transactions (
     id,
     account_id,
     amount,
-    kind_id,
+    kind,
     category_id,
     counterparty_id,
     description,
@@ -18,7 +18,7 @@ VALUES (
     sqlc.arg(id),
     sqlc.arg(account_id),
     ROUND(sqlc.arg(amount), 2),
-    sqlc.arg(kind_id),
+    sqlc.arg(kind),
     sqlc.arg(category_id),
     sqlc.arg(counterparty_id),
     sqlc.arg(description),
@@ -35,7 +35,6 @@ SELECT
     sqlc.embed(t),
     sqlc.embed(a),
     sqlc.embed(c),
-    sqlc.embed(k),
     cp.name AS counterparty_name,
     ta.id AS to_account_id,
     ta.name AS to_account_name,
@@ -58,7 +57,7 @@ SELECT
     cat.name AS category_name,
     cat.budget_amount AS category_budget_amount,
     cat.budget_currency_id AS category_budget_currency_id,
-    cat.kind_id AS category_kind_id,
+    cat.kinds AS category_kinds,
     cat.created_at AS category_created_at,
     g.name AS goal_name,
     g.price AS goal_price,
@@ -72,7 +71,6 @@ LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
 LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
-LEFT JOIN transaction_kinds AS k ON t.kind_id = k.id
 LEFT JOIN categories AS cat ON t.category_id = cat.id
 LEFT JOIN goals AS g ON t.goal_id = g.id
 LEFT JOIN currencies AS gc ON g.currency_id = gc.id
@@ -83,7 +81,6 @@ SELECT
     sqlc.embed(t),
     sqlc.embed(a),
     sqlc.embed(c),
-    sqlc.embed(k),
     cp.name AS counterparty_name,
     ta.id AS to_account_id,
     ta.name AS to_account_name,
@@ -106,7 +103,7 @@ SELECT
     cat.name AS category_name,
     cat.budget_amount AS category_budget_amount,
     cat.budget_currency_id AS category_budget_currency_id,
-    cat.kind_id AS category_kind_id,
+    cat.kinds AS category_kinds,
     cat.created_at AS category_created_at,
     g.name AS goal_name,
     g.price AS goal_price,
@@ -120,7 +117,6 @@ LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
 LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
-LEFT JOIN transaction_kinds AS k ON t.kind_id = k.id
 LEFT JOIN categories AS cat ON t.category_id = cat.id
 LEFT JOIN goals AS g ON t.goal_id = g.id
 LEFT JOIN currencies AS gc ON g.currency_id = gc.id
@@ -131,7 +127,7 @@ UPDATE transactions
 SET
     account_id = sqlc.arg(account_id),
     amount = ROUND(sqlc.arg(amount), 2),
-    kind_id = sqlc.arg(kind_id),
+    kind = sqlc.arg(kind),
     category_id = sqlc.arg(category_id),
     counterparty_id = sqlc.arg(counterparty_id),
     description = sqlc.arg(description),

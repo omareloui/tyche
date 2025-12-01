@@ -155,7 +155,7 @@ func (h Handler) GetGoalProgressForm(w http.ResponseWriter, r *http.Request) (te
 
 	claims := getClaims(r.Context())
 
-	fd := h.mapTransactionToFD(defaultTransaction(accs, knds), &errs.ValidationError{}, knds)
+	fd := h.mapTransactionToFD(defaultTransaction(accs), &errs.ValidationError{})
 	return views.GoalProgressForm(gl, fd, accs, knds, &claims.DefaultCurrency), nil
 }
 
@@ -183,11 +183,6 @@ func (h Handler) CreateGoalProgress(w http.ResponseWriter, r *http.Request) (tem
 	accs, knds, cats, cps, gls, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
-	}
-
-	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.Enum == models.ExpenseTxKind })
-	if knd != nil {
-		tx.Kind = *knd
 	}
 
 	fd, err := h.prepareCreatingTx(r, tx, accs, knds, cats, cps, gls)

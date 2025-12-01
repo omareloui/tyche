@@ -162,7 +162,7 @@ func dbGoalRowsToGoals[T queries.GetGoalsRow | queries.GetGoalRow | queries.GetU
 			ID:             dbGl.TransactionID.String,
 			AccountID:      dbGl.TransactionAccountID.String,
 			Amount:         dbGl.TransactionAmount.Float64,
-			KindID:         dbGl.TransactionKindID.String,
+			Kind:           dbGl.TransactionKind.Int64,
 			CategoryID:     dbGl.TransactionCategoryID,
 			CounterpartyID: dbGl.TransactionCounterpartyID,
 			Description:    dbGl.TransactionDescription,
@@ -199,7 +199,7 @@ func dbGoalRowsToGoals[T queries.GetGoalsRow | queries.GetGoalRow | queries.GetU
 		}
 
 		tx := dbTransactionToTransaction(
-			&_tx, nil, &acc,
+			&_tx, &acc,
 			&accCurr, nil, nil, nil, nil,
 			&dbGl.Goal, &dbGl.Currency)
 		tx.GoalPercentage = tx.Percentage(gls[glIdx].Price, gls[glIdx].Currency.String)

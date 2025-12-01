@@ -61,17 +61,17 @@ type Category struct {
 	Color          string    `validate:"required"`
 	BudgetAmount   float64   `validate:"required_with=BudgetCurrency"`
 	BudgetCurrency *Currency `validate:"required_with=BudgetAmount"`
-	Kind           TransactionKind
+	Kinds          []TxKind  `validate:"required,dive,required"`
 	CreatedAt      time.Time
 }
 
 type createCategory struct {
-	ID               string  `validate:"required"`
-	Name             string  `validate:"required" conform:"trim,title"`
-	Color            string  `validate:"required"`
-	BudgetAmount     float64 `validate:"required_with=BudgetCurrency"`
-	BudgetCurrencyID string  `validate:"required_with=BudgetAmount"`
-	KindID           string  `validate:"required"`
+	ID               string   `validate:"required"`
+	Name             string   `validate:"required" conform:"trim,title"`
+	Color            string   `validate:"required"`
+	BudgetAmount     float64  `validate:"required_with=BudgetCurrency"`
+	BudgetCurrencyID string   `validate:"required_with=BudgetAmount"`
+	Kinds            []TxKind `validate:"required,min=1,dive,required"`
 }
 
 func (cat *Category) ViewBudgetAmount() string {
@@ -79,9 +79,9 @@ func (cat *Category) ViewBudgetAmount() string {
 }
 
 func (cat *Category) toValidate() *createCategory {
-	var currId string
+	var currID string
 	if cat.BudgetCurrency != nil {
-		currId = cat.BudgetCurrency.ID
+		currID = cat.BudgetCurrency.ID
 	}
 
 	return &createCategory{
@@ -89,8 +89,8 @@ func (cat *Category) toValidate() *createCategory {
 		Name:             cat.Name,
 		Color:            cat.Color,
 		BudgetAmount:     cat.BudgetAmount,
-		KindID:           cat.Kind.ID,
-		BudgetCurrencyID: currId,
+		Kinds:            cat.Kinds,
+		BudgetCurrencyID: currID,
 	}
 }
 

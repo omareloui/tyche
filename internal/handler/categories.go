@@ -3,7 +3,6 @@ package handler
 import (
 	"errors"
 	"net/http"
-	"slices"
 	"time"
 
 	"github.com/a-h/templ"
@@ -33,12 +32,7 @@ func (h Handler) Categories(w http.ResponseWriter, r *http.Request) (templ.Compo
 	}
 	l.Debug("fetched categories")
 
-	knds, err := h.repo.GetTransactionKinds(r.Context())
-	if err != nil {
-		l.Error("fetching transaction kinds", zap.Error(err))
-		return nil, err
-	}
-	knds = getAllowedKindsForCategories(knds)
+	knds := getAllowedKindsForCategories()
 
 	currs, err := h.repo.GetCurrencies(r.Context())
 	if err != nil {
@@ -47,7 +41,7 @@ func (h Handler) Categories(w http.ResponseWriter, r *http.Request) (templ.Compo
 	}
 
 	claims := getClaims(r.Context())
-	return views.Categories(claims, b, h.mapCategoryToFD(dfltCategory(knds, &claims.DefaultCurrency), &errs.ValidationError{}), knds, cats, currs), nil
+	return views.Categories(claims, b, h.mapCategoryToFD(dfltCategory(&claims.DefaultCurrency), &errs.ValidationError{}), knds, cats, currs), nil
 }
 
 func (h Handler) Category(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -83,12 +77,7 @@ func (h Handler) CreateCategory(w http.ResponseWriter, r *http.Request) (templ.C
 		cat.Color = models.GetRandomCategoryColor()
 	}
 
-	knds, err := h.repo.GetTransactionKinds(r.Context())
-	if err != nil {
-		l.Error("fetching transaction kinds", zap.Error(err))
-		return nil, err
-	}
-	knds = getAllowedKindsForCategories(knds)
+	knds := getAllowedKindsForCategories()
 
 	currs, err := h.repo.GetCurrencies(r.Context())
 	if err != nil {
@@ -120,7 +109,7 @@ func (h Handler) CreateCategory(w http.ResponseWriter, r *http.Request) (templ.C
 	}
 	l.Debug("rendered category oob")
 
-	return views.CreateCategoryForm(h.mapCategoryToFD(dfltCategory(knds, &claims.DefaultCurrency), &errs.ValidationError{}), knds, currs, &claims.DefaultCurrency), nil
+	return views.CreateCategoryForm(h.mapCategoryToFD(dfltCategory(&claims.DefaultCurrency), &errs.ValidationError{}), knds, currs, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) GetEditCategory(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -138,12 +127,7 @@ func (h Handler) GetEditCategory(w http.ResponseWriter, r *http.Request) (templ.
 	}
 	l.Info("fetched category", zap.Any("category", cat))
 
-	knds, err := h.repo.GetTransactionKinds(r.Context())
-	if err != nil {
-		l.Error("fetching transaction kinds", zap.Error(err))
-		return nil, err
-	}
-	knds = getAllowedKindsForCategories(knds)
+	knds := getAllowedKindsForCategories()
 
 	currs, err := h.repo.GetCurrencies(r.Context())
 	if err != nil {
@@ -176,12 +160,7 @@ func (h Handler) EditCategory(w http.ResponseWriter, r *http.Request) (templ.Com
 	}
 	cat.ID = id
 
-	knds, err := h.repo.GetTransactionKinds(r.Context())
-	if err != nil {
-		l.Error("fetching transaction kinds", zap.Error(err))
-		return nil, err
-	}
-	knds = getAllowedKindsForCategories(knds)
+	knds := getAllowedKindsForCategories()
 	currs, err := h.repo.GetCurrencies(r.Context())
 	if err != nil {
 		l.Error("fetching currencies", zap.Error(err))
@@ -233,9 +212,9 @@ func (h Handler) mapCategoryToFD(cat *models.Category, err *errs.ValidationError
 		budgetCurrId = cat.BudgetCurrency.ID
 	}
 	return &views.CategoryFD{
-		Name:   form.FDInput{Value: cat.Name, Error: err.Errors.MsgFor("Name")},
-		Color:  form.FDInput{Value: cat.Color, Error: err.Errors.MsgFor("Color")},
-		KindID: form.FDInput{Value: cat.Kind.ID, Error: err.Errors.MsgFor("Kind.ID")},
+		Name:  form.FDInput{Value: cat.Name, Error: err.Errors.MsgFor("Name")},
+		Color: form.FDInput{Value: cat.Color, Error: err.Errors.MsgFor("Color")},
+		// KindID: form.FDInput{Value: cat.Kind.ID, Error: err.Errors.MsgFor("Kind.ID")},
 		BudgetAmountFD: &form.AmountFD{
 			Amount:     form.FDInput{Value: formatFloatIfNonZero(cat.BudgetAmount), Error: err.Errors.MsgFor("BudgetAmount")},
 			CurrencyID: form.FDInput{Value: budgetCurrId, Error: err.Errors.MsgFor("BudgetCurrency.ID")},
@@ -259,31 +238,24 @@ func (h Handler) mapFDToCategory(r *http.Request) (*models.Category, error) {
 	}
 
 	return &models.Category{
-		Name:           r.FormValue("name"),
-		Color:          r.FormValue("color"),
-		Kind:           models.TransactionKind{ID: r.FormValue("kind_id")},
+		Name:  r.FormValue("name"),
+		Color: r.FormValue("color"),
+		// FIXME: add the kinds
+		Kinds:          []models.TxKind{},
 		BudgetAmount:   budget,
 		BudgetCurrency: cur,
 	}, nil
 }
 
-func dfltCategory(knds []models.TransactionKind, defaultCur *models.Currency) *models.Category {
-	dfltKindIdx := slices.IndexFunc(knds, func(knd models.TransactionKind) bool { return knd.Enum == models.ExpenseTxKind })
-
-	if dfltKindIdx == -1 {
-		return &models.Category{
-			Kind: models.TransactionKind{},
-		}
-	}
-
+func dfltCategory(defaultCur *models.Currency) *models.Category {
 	return &models.Category{
 		BudgetCurrency: defaultCur,
-		Kind:           models.TransactionKind{ID: knds[dfltKindIdx].ID},
+		Kinds:          []models.TxKind{models.ExpenseTxKind},
 	}
 }
 
-func getAllowedKindsForCategories(knds []models.TransactionKind) []models.TransactionKind {
-	return slicesutils.Filter(knds, func(k models.TransactionKind) bool {
-		return k.Enum != models.TransferTxKind && k.Enum != models.DebtTxKind
+func getAllowedKindsForCategories() []models.TxKind {
+	return slicesutils.Filter(models.GetTxKinds(), func(k models.TxKind) bool {
+		return k != models.TransferTxKind && k != models.DebtTxKind
 	})
 }

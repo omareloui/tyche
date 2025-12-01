@@ -51,8 +51,8 @@ templ SelectCurrency(name, id string, curs []models.Currency, data FDInput, inpu
 	@SelectInput("Currency", name, "Select Currency", id, idStructsToMap(curs, "String"), data, false, inputAttrs, nil)
 }
 
-templ SelectTxKind(name, id string, knds []models.TransactionKind, data FDInput, inputAttrs templ.Attributes) {
-	@SelectInput("Transaction Kind", name, "Select Kind", id, idStructsToMap(knds, "Enum"), data, false, inputAttrs, nil)
+templ SelectTxKind(name, id string, knds []models.TxKind, data FDInput, inputAttrs templ.Attributes) {
+	@SelectInput("Transaction Kind", name, "Select Kind", id, mapFromStringerSlice(knds), data, false, inputAttrs, nil)
 }
 
 templ SelectCounterparty(name, id string, cps []models.Counterparty, data FDInput, nullable bool, inputAttrs templ.Attributes) {
@@ -122,4 +122,13 @@ func GetAccoutSym(accs []models.Account, accId string, defaultCur *models.Curren
 
 func idStructsToMap[T any](structs []T, val string) map[string]string {
 	return structutils.StructsToMap(structs, "ID", val)
+}
+
+func mapFromStringerSlice[T fmt.Stringer](s []T) map[string]string {
+	m := make(map[string]string, len(s))
+	for _, e := range s {
+		str := e.String()
+		m[str] = str
+	}
+	return m
 }

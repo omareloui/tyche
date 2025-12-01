@@ -162,7 +162,7 @@ func (r *Repository) DeleteAccount(ctx context.Context, id string) error {
 func (r *Repository) applyTxToAccountWithTxn(qtx *queries.Queries, ctx context.Context, tx *models.Transaction) error {
 	l := logger.FromCtx(ctx)
 
-	if tx.Kind.Enum == models.TransferTxKind || tx.Kind.Enum == models.DebtTxKind {
+	if tx.Kind == models.TransferTxKind || tx.Kind == models.DebtTxKind {
 		if err := r.removeFromAccountWithTxn(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {
 			l.Error("applying transfer: remove from account", zap.Error(err), zap.Any("transaction", tx))
 			return err
@@ -175,7 +175,7 @@ func (r *Repository) applyTxToAccountWithTxn(qtx *queries.Queries, ctx context.C
 		l.Debug("applied transfer: add to account")
 	} else {
 		upBalance := r.removeFromAccountWithTxn
-		if tx.Kind.IncreaseBalance {
+		if tx.Kind == models.IncomeTxKind {
 			upBalance = r.addToAccountWithTxn
 		}
 		if err := upBalance(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {
@@ -189,7 +189,7 @@ func (r *Repository) applyTxToAccountWithTxn(qtx *queries.Queries, ctx context.C
 
 func (r *Repository) undoTxToAccountWithTxn(qtx *queries.Queries, ctx context.Context, tx *models.Transaction) error {
 	l := logger.FromCtx(ctx)
-	if tx.Kind.Enum == models.TransferTxKind {
+	if tx.Kind == models.TransferTxKind {
 		if err := r.addToAccountWithTxn(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {
 			l.Error("undoing transfer: remove from account", zap.Error(err), zap.Any("transaction", tx))
 			return err
@@ -202,7 +202,7 @@ func (r *Repository) undoTxToAccountWithTxn(qtx *queries.Queries, ctx context.Co
 		l.Debug("undone transfer: add to account")
 	} else {
 		upBalance := r.addToAccountWithTxn
-		if tx.Kind.IncreaseBalance {
+		if tx.Kind == models.IncomeTxKind {
 			upBalance = r.removeFromAccountWithTxn
 		}
 		if err := upBalance(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {

@@ -99,7 +99,7 @@ func (r *Repository) createCurrency(ctx context.Context, curr models.Currency) e
 	return nil
 }
 
-func (r *Repository) SetCurrencyIsShown(ctx context.Context, currId string, isShown bool) error {
+func (r *Repository) SetCurrencyIsShown(ctx context.Context, currID string, isShown bool) error {
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
 		return err
@@ -108,18 +108,18 @@ func (r *Repository) SetCurrencyIsShown(ctx context.Context, currId string, isSh
 	l := logger.FromCtx(ctx)
 
 	if err := q.SetCurrencyShown(ctx, queries.SetCurrencyShownParams{
-		ID:      currId,
+		ID:      currID,
 		IsShown: isShown,
 	}); err != nil {
-		l.Error("error setting IsShown for currency", zap.String("currId", currId), zap.Bool("is_shown", isShown), zap.Error(err))
+		l.Error("error setting IsShown for currency", zap.String("currID", currID), zap.Bool("is_shown", isShown), zap.Error(err))
 		return err
 	}
 
-	l.Debug("set currency shown", zap.String("currId", currId), zap.Bool("is_shown", isShown))
+	l.Debug("set currency shown", zap.String("currID", currID), zap.Bool("is_shown", isShown))
 	return nil
 }
 
-func (r *Repository) SetDefaultCurrency(ctx context.Context, currId string) error {
+func (r *Repository) SetDefaultCurrency(ctx context.Context, currID string) error {
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
 		return err
@@ -127,12 +127,12 @@ func (r *Repository) SetDefaultCurrency(ctx context.Context, currId string) erro
 
 	l := logger.FromCtx(ctx)
 
-	if err := q.SetDefaultCurrency(ctx, currId); err != nil {
-		l.Error("error setting default currency", zap.String("currId", currId), zap.Error(err))
+	if err := q.SetDefaultCurrency(ctx, currID); err != nil {
+		l.Error("error setting default currency", zap.String("currID", currID), zap.Error(err))
 		return err
 	}
 
-	l.Debug("set default currency", zap.String("currId", currId))
+	l.Debug("set default currency", zap.String("currID", currID))
 	return nil
 }
 

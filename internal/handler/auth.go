@@ -124,9 +124,10 @@ func (h *Handler) RefreshTokens(w http.ResponseWriter, r *http.Request) (templ.C
 	l.Debug("refreshing tokens for user", zap.String("id", _claims.ID), zap.String("oauth_id", _claims.OAuthID))
 
 	usr, err := h.repo.GetUserByOAuthID(r.Context(), _claims.OAuthID)
-	if err != nil {
-		l.Error("refreshing token, can't get the user to refresh the token", zap.String("oauth_id", _claims.OAuthID), zap.Error(err))
-		return nil, err
+	if err != nil || usr == nil {
+		l.Error("refreshing token. can't get the user to refresh the token.", zap.String("oauth_id", _claims.OAuthID), zap.Error(err))
+		l.Info("signing out.")
+		return h.Signout(w, r)
 	}
 
 	access, refresh, err := generateJWTCookies(usr)

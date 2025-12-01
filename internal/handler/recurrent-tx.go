@@ -11,7 +11,6 @@ import (
 	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
-	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views"
 	"github.com/omareloui/tyche/web/views/form"
 	"go.uber.org/zap"
@@ -119,13 +118,6 @@ func (h Handler) EditRecurrentTx(w http.ResponseWriter, r *http.Request) (templ.
 	accs, knds, cats, cps, gls, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
-	}
-
-	if knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == rt.Kind.ID }); knd != nil {
-		rt.Kind = *knd
-	} else {
-		l.Error("mapping kind id to recurrent transaction")
-		return nil, errs.ErrInvalidID
 	}
 
 	oldFtx, err := h.repo.GetRecurrentTx(r.Context(), id)
@@ -254,7 +246,7 @@ func generateNextScheduledTransactions(rt *models.RecurrentTx, count int) []mode
 	return txs
 }
 
-func (h Handler) mapRecurrentTxToFD(rt *models.RecurrentTx, valerr *errs.ValidationError, knds []models.TransactionKind) *views.RecurrentTxFD {
+func (h Handler) mapRecurrentTxToFD(rt *models.RecurrentTx, valerr *errs.ValidationError, knds []models.TxKind) *views.RecurrentTxFD {
 	fd := &views.RecurrentTxFD{
 		RecurrenceFD: views.RecurrenceFD{
 			IsRecurrent: form.FDInput{Value: "on"},
@@ -267,14 +259,13 @@ func (h Handler) mapRecurrentTxToFD(rt *models.RecurrentTx, valerr *errs.Validat
 				AccountID: form.FDInput{Value: rt.Account.ID, Error: valerr.Errors.MsgFor("AccountID")},
 				Amount:    form.FDInput{Value: formatFloatIfNonZero(rt.Amount), Error: valerr.Errors.MsgFor("Amount")},
 			},
-			KindID: form.FDInput{Value: rt.Kind.ID, Error: valerr.Errors.MsgFor("KindID")},
+			Kind: form.FDInput{Value: rt.Kind.String(), Error: valerr.Errors.MsgFor("Kind")},
 		},
 		Description: form.FDInput{Value: rt.Description, Error: valerr.Errors.MsgFor("Description")},
 	}
 
-	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == rt.Kind.ID })
-	hasToAccount := knd.Enum == models.DebtTxKind || knd.Enum == models.TransferTxKind
-	hasGoal := knd.Enum == models.ExpenseTxKind
+	hasToAccount := rt.Kind == models.DebtTxKind || rt.Kind == models.TransferTxKind
+	hasGoal := rt.Kind == models.ExpenseTxKind
 
 	if rt.Category != nil {
 		fd.CategoryID = &form.FDInput{Value: rt.Category.ID, Error: valerr.Errors.MsgFor("CategoryID")}

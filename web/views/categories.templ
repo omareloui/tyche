@@ -13,7 +13,7 @@ import (
 type CategoryFD struct {
 	Name           form.FDInput
 	Color          form.FDInput
-	KindID         form.FDInput
+	Kind           form.FDInput
 	BudgetAmountFD *form.AmountFD
 }
 
@@ -21,7 +21,7 @@ templ Categories(
 	claims *jwt.AccessClaims,
 	balances []models.Balance,
 	fd *CategoryFD,
-	knds []models.TransactionKind,
+	knds []models.TxKind,
 	categories []models.Category,
 	curs []models.Currency) {
 	@layouts.WithCreateForm(claims, "Categories", balances,
@@ -31,13 +31,13 @@ templ Categories(
 	}
 }
 
-templ CreateCategoryForm(fd *CategoryFD, knds []models.TransactionKind, curs []models.Currency, defaultCur *models.Currency) {
+templ CreateCategoryForm(fd *CategoryFD, knds []models.TxKind, curs []models.Currency, defaultCur *models.Currency) {
 	@form.CreateForm("Create Category", "/categories", "Create Category") {
 		@categoryFormBody(fd, "", knds, curs, defaultCur)
 	}
 }
 
-templ EditCategory(fd *CategoryFD, id string, knds []models.TransactionKind, curs []models.Currency, defaultCur *models.Currency) {
+templ EditCategory(fd *CategoryFD, id string, knds []models.TxKind, curs []models.Currency, defaultCur *models.Currency) {
 	@form.Form("put", fmt.Sprintf("/categories/%s", id), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { id }</p>
 		@categoryFormBody(fd, id, knds, curs, defaultCur)
@@ -45,10 +45,10 @@ templ EditCategory(fd *CategoryFD, id string, knds []models.TransactionKind, cur
 	}
 }
 
-templ categoryFormBody(fd *CategoryFD, id string, knds []models.TransactionKind, curs []models.Currency, defaultCur *models.Currency) {
+templ categoryFormBody(fd *CategoryFD, id string, knds []models.TxKind, curs []models.Currency, defaultCur *models.Currency) {
 	@form.TextInput("Name", "name", "Enter category name", id, fd.Name, nil, nil)
 	@form.SelectColor("color", id, models.CategoryColorOptions(), fd.Color, nil)
-	@form.SelectTxKind("kind_id", id, knds, fd.KindID, nil)
+	@form.SelectTxKind("kind", id, knds, fd.Kind, nil)
 	@form.AmountInputsWithCurrency(fd.BudgetAmountFD, id, curs, defaultCur)
 }
 
@@ -71,10 +71,12 @@ templ Category(cat *models.Category) {
 			<span class="inline-block w-3 h-3 rounded-full" style={ fmt.Sprintf("background-color: %s", models.CategoryColorToHex(cat.Color)) }></span>
 			<span>{ cat.Name }</span>
 		</p>
-		<p>Kind ID: { cat.Kind.ID }</p>
-		if cat.Kind.Enum != models.NilTxKind {
-			<p>Kind: { cat.Kind.Enum.String() }</p>
-		}
+		<p>
+			Kinds: 
+			for _, kind := range cat.Kinds {
+				{ kind }
+			}
+		</p>
 		if cat.BudgetCurrency != nil && cat.BudgetAmount > 0 {
 			<p>
 				Budget: { cat.ViewBudgetAmount() }

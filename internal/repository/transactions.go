@@ -62,7 +62,7 @@ func (r *Repository) createTransactionWithTxn(qtx *queries.Queries, ctx context.
 		ID:             tx.ID,
 		AccountID:      tx.Account.ID,
 		Amount:         tx.Amount,
-		KindID:         tx.Kind.ID,
+		Kind:           int64(tx.Kind),
 		CategoryID:     catID,
 		CounterpartyID: cpID,
 		Description:    sql.NullString{String: tx.Description, Valid: tx.Description != ""},
@@ -183,7 +183,7 @@ func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transa
 			ID:             tx.ID,
 			AccountID:      tx.Account.ID,
 			Amount:         tx.Amount,
-			KindID:         tx.Kind.ID,
+			Kind:           int64(tx.Kind),
 			CategoryID:     catID,
 			CounterpartyID: cpID,
 			ToAccountID:    toAccID,
@@ -228,7 +228,7 @@ func (r *Repository) FulfillTransaction(ctx context.Context, tx *models.Transact
 }
 
 func dbTransactionToTransaction(
-	dbTx *queries.Transaction, knd *queries.TransactionKind, acc *queries.Account,
+	dbTx *queries.Transaction, acc *queries.Account,
 	cur *queries.Currency, toAcc *queries.Account, toCur *queries.Currency,
 	cat *queries.Category, cp *queries.Counterparty, gl *queries.Goal,
 	glCur *queries.Currency,
@@ -236,6 +236,7 @@ func dbTransactionToTransaction(
 	tx := models.Transaction{
 		ID:          dbTx.ID,
 		Amount:      dbTx.Amount,
+		Kind:        models.TxKind(dbTx.Kind),
 		Description: dbTx.Description.String,
 		ToAmount:    dbTx.ToAmount.Float64,
 		FulfilledAt: dbTx.FulfilledAt.Time,
@@ -247,10 +248,6 @@ func dbTransactionToTransaction(
 		tx.Account = *dbAccountToAccount(acc, 0, cur, nil, nil, false)
 	}
 
-	if knd != nil {
-		tx.Kind = *dbTransactionKindToTransactionKind(knd)
-	}
-
 	if toAcc != nil {
 		tx.ToAccount = dbAccountToAccount(toAcc, 0, toCur, nil, nil, false)
 	} else if dbTx.ToAccountID.Valid {
@@ -258,7 +255,7 @@ func dbTransactionToTransaction(
 	}
 
 	if cat != nil {
-		tx.Category = dbCategoryToCategory(cat, knd, nil)
+		tx.Category = dbCategoryToCategory(cat, nil)
 	} else if dbTx.CategoryID.Valid {
 		tx.Category = &models.Category{ID: dbTx.CategoryID.String}
 	}
@@ -343,13 +340,13 @@ func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTran
 			Name:             _dbTx.CategoryName.String,
 			BudgetAmount:     _dbTx.CategoryBudgetAmount,
 			BudgetCurrencyID: _dbTx.CategoryBudgetCurrencyID,
-			KindID:           _dbTx.CategoryKindID.String,
+			Kinds:            _dbTx.CategoryKinds,
 			CreatedAt:        _dbTx.CategoryCreatedAt.Time,
 		}
 	}
 
 	return dbTransactionToTransaction(
-		&_dbTx.Transaction, &_dbTx.TransactionKind, &_dbTx.Account,
+		&_dbTx.Transaction, &_dbTx.Account,
 		&_dbTx.Currency, toAcc, toAccCurr,
 		cat, cp, gl, glCur)
 }

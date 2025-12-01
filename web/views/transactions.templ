@@ -21,7 +21,7 @@ type TransactionFD struct {
 
 type TransactionAmountsAndKindFD struct {
 	AccountIFD     form.AccountIFD
-	KindID         form.FDInput
+	Kind           form.FDInput
 	CategoryID     *form.FDInput
 	CounterpartyID *form.FDInput
 	ToAccountIFD   *form.AccountIFD
@@ -33,7 +33,7 @@ templ Transactions(
 	balances []models.Balance,
 	transactions []models.Transaction,
 	fd *TransactionFD, accounts []models.Account,
-	knds []models.TransactionKind, cats []models.Category,
+	knds []models.TxKind, cats []models.Category,
 	cps []models.Counterparty, gls []models.Goal) {
 	@layouts.WithCreateForm(claims, "Transactions", balances,
 		CreateTransactionForm(fd, accounts, knds, cats, cps, gls, &claims.DefaultCurrency),
@@ -44,7 +44,7 @@ templ Transactions(
 
 templ CreateTransactionForm(
 	fd *TransactionFD, accounts []models.Account,
-	knds []models.TransactionKind, cats []models.Category,
+	knds []models.TxKind, cats []models.Category,
 	cps []models.Counterparty, gls []models.Goal,
 	defaultCur *models.Currency) {
 	@form.CreateForm("Create Transaction", "/transactions", "Create Transaction") {
@@ -54,7 +54,7 @@ templ CreateTransactionForm(
 
 templ transactionFormBody(
 	fd *TransactionFD, id string, accs []models.Account,
-	knds []models.TransactionKind, cats []models.Category,
+	knds []models.TxKind, cats []models.Category,
 	cps []models.Counterparty, gls []models.Goal,
 	defaultCur *models.Currency) {
 	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs, cps, gls, defaultCur)
@@ -73,7 +73,7 @@ templ TransactionOOB(tx *models.Transaction) {
 
 templ EditTransaction(
 	tx *models.Transaction, fd *TransactionFD,
-	accounts []models.Account, knds []models.TransactionKind,
+	accounts []models.Account, knds []models.TxKind,
 	cats []models.Category, cps []models.Counterparty,
 	gls []models.Goal, defaultCur *models.Currency) {
 	@form.Form("put", fmt.Sprintf("/transactions/%s", tx.ID), templ.Attributes{"hx-target": "this"}) {
@@ -103,7 +103,7 @@ templ Transaction(tx *models.Transaction) {
 			<p>To Account: { tx.ToAccount.Name }</p>
 			<p>To Amount: { tx.ViewToAmount() }</p>
 		}
-		<p>Kind: { tx.Kind.Enum.String() }</p>
+		<p>Kind: { tx.Kind.String() }</p>
 		if tx.Category != nil {
 			<p>Category ID: { tx.Category.ID }</p>
 			<p>Category Name: { tx.Category.Name }</p>
@@ -129,7 +129,7 @@ templ Transaction(tx *models.Transaction) {
 
 templ TransactionAmountsAndKindFormBody(
 	fd *TransactionAmountsAndKindFD, id string,
-	knds []models.TransactionKind, cats []models.Category,
+	knds []models.TxKind, cats []models.Category,
 	accs []models.Account, cps []models.Counterparty,
 	gls []models.Goal, defaultCur *models.Currency) {
 	<div
@@ -138,7 +138,7 @@ templ TransactionAmountsAndKindFormBody(
 		hx-swap="outerHTML"
 		hx-sync="closest form:abort"
 	>
-		@form.SelectTxKind("kind_id", id, getTxKindsForAccounts(accs, knds), fd.KindID, templ.Attributes{
+		@form.SelectTxKind("kind", id, getTxKindsForAccounts(accs, knds), fd.Kind, templ.Attributes{
 			"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
 			"hx-trigger": "change",
 		})
@@ -148,14 +148,14 @@ templ TransactionAmountsAndKindFormBody(
 					"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
 					"hx-trigger": "keyup changed delay:200ms",
 				}, templ.Attributes{"class": "col-span-2"})
-			@form.SelectAccount("account_id", id, getTxAccs(accs, knds, fd.KindID.Value, isSwitched(accs, fd.AccountIFD.AccountID.Value)), fd.AccountIFD.AccountID,
+			@form.SelectAccount("account_id", id, getTxAccs(accs, models.GetTxKindFromString(fd.Kind.Value), isSwitched(accs, fd.AccountIFD.AccountID.Value)), fd.AccountIFD.AccountID,
 				templ.Attributes{
 					"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
 					"hx-trigger": "change",
 				})
 		</div>
 		if fd.CategoryID != nil {
-			@form.SelectTxCat("category_id", id, getCategoriesOfKinds(cats, fd.KindID.Value), *fd.CategoryID, nil)
+			@form.SelectTxCat("category_id", id, getCategoriesOfKinds(cats, models.GetTxKindFromString(fd.Kind.Value)), *fd.CategoryID, nil)
 		}
 		if fd.CounterpartyID != nil {
 			@form.SelectCounterparty("counterparty_id", id, cps, *fd.CounterpartyID, true, nil)
@@ -169,7 +169,7 @@ templ TransactionAmountsAndKindFormBody(
 				@form.MoneyInput("To Amount", "to_amount",
 					form.GetAccoutSym(accs, fd.ToAccountIFD.AccountID.Value, defaultCur), id,
 					fd.ToAccountIFD.Amount, nil, templ.Attributes{"class": "col-span-2"})
-				@form.SelectToAccount("to_account_id", id, getTxCounterAccs(accs, knds, fd.KindID.Value, isSwitched(accs, fd.AccountIFD.AccountID.Value)),
+				@form.SelectToAccount("to_account_id", id, getTxCounterAccs(accs, models.GetTxKindFromString(fd.Kind.Value), isSwitched(accs, fd.AccountIFD.AccountID.Value)),
 					fd.ToAccountIFD.AccountID, templ.Attributes{
 						"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
 						"hx-trigger": "change",
@@ -179,32 +179,28 @@ templ TransactionAmountsAndKindFormBody(
 	</div>
 }
 
-func getTxKindsForAccounts(accs []models.Account, knds []models.TransactionKind) []models.TransactionKind {
+func getTxKindsForAccounts(accs []models.Account, knds []models.TxKind) []models.TxKind {
 	nknds := knds
 	notDebt := slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum != models.AccKindDebt })
 	if len(notDebt) < 2 {
-		nknds = slicesutils.Filter(nknds, func(k models.TransactionKind) bool { return k.Enum != models.TransferTxKind })
+		nknds = slicesutils.Filter(nknds, func(k models.TxKind) bool { return k != models.TransferTxKind })
 	}
 	if len(notDebt) == len(accs) {
-		nknds = slicesutils.Filter(nknds, func(k models.TransactionKind) bool { return k.Enum != models.DebtTxKind })
+		nknds = slicesutils.Filter(nknds, func(k models.TxKind) bool { return k != models.DebtTxKind })
 	}
 	return nknds
 }
 
-func getTxAccs(accs []models.Account, knds []models.TransactionKind, kndId string, isSwitched bool) []models.Account {
-	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == kndId })
-
-	if knd.Enum == models.DebtTxKind && isSwitched {
+func getTxAccs(accs []models.Account, txKind models.TxKind, isSwitched bool) []models.Account {
+	if txKind == models.DebtTxKind && isSwitched {
 		return slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum == models.AccKindDebt })
 	}
 
 	return slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum != models.AccKindDebt })
 }
 
-func getTxCounterAccs(accs []models.Account, knds []models.TransactionKind, kndId string, isSwitched bool) []models.Account {
-	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == kndId })
-
-	if knd.Enum != models.DebtTxKind || isSwitched {
+func getTxCounterAccs(accs []models.Account, txKind models.TxKind, isSwitched bool) []models.Account {
+	if txKind != models.DebtTxKind || isSwitched {
 		return slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum != models.AccKindDebt })
 	}
 
@@ -216,11 +212,13 @@ func isSwitched(accs []models.Account, accId string) bool {
 	return acc != nil && acc.Kind.Enum == models.AccKindDebt
 }
 
-func getCategoriesOfKinds(cats []models.Category, kndId string) []models.Category {
+func getCategoriesOfKinds(cats []models.Category, txKind models.TxKind) []models.Category {
 	kndsCats := []models.Category{}
 	for _, cat := range cats {
-		if cat.Kind.ID == kndId {
-			kndsCats = append(kndsCats, cat)
+		for _, kind := range cat.Kinds {
+			if kind == txKind {
+				kndsCats = append(kndsCats, cat)
+			}
 		}
 	}
 	return kndsCats

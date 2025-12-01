@@ -38,7 +38,7 @@ type RecurrentTx struct {
 
 	Account      Account
 	Amount       float64
-	Kind         TransactionKind
+	Kind         TxKind
 	Description  string
 	ToAmount     float64
 	ToAccount    *Account
@@ -102,7 +102,7 @@ func (rt *RecurrentTx) toValidate() *createRecurrentTx {
 			ID:             rt.ID,
 			AccountID:      rt.Account.ID,
 			Amount:         rt.Amount,
-			KindID:         rt.Kind.ID,
+			Kind:           uint8(rt.Kind),
 			CategoryID:     catId,
 			CounterpartyID: cpId,
 			ToAccountID:    toAccId,

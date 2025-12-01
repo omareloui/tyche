@@ -2,7 +2,7 @@ package seeder
 
 import (
 	"context"
-	"database/sql"
+	"encoding/json"
 	"slices"
 	"sync"
 
@@ -40,8 +40,7 @@ func (s *Seeder) Seed(ctx context.Context, q *queries.Queries, oauthID string) {
 
 	go s.currencies(ctx, wg, q)
 	go s.accountKinds(ctx, wg, q)
-	go s.txKinds(ctx, wg, q)
-	wg.Add(3)
+	wg.Add(2)
 
 	wg.Wait()
 
@@ -119,43 +118,30 @@ func (s *Seeder) accounts(ctx context.Context, wg *sync.WaitGroup, q *queries.Qu
 func (s *Seeder) categories(ctx context.Context, wg *sync.WaitGroup, q *queries.Queries) {
 	defer wg.Done()
 
-	l := logger.FromCtx(ctx)
+	expensesKind := []models.TxKind{models.ExpenseTxKind}
+	incomeKind := []models.TxKind{models.IncomeTxKind}
 
-	kinds, err := q.GetTransactionKinds(ctx)
+	expensesRaw, err := json.Marshal(expensesKind)
 	if err != nil {
-		l.Error("error seeding categories, could't get kinds", zap.Error(err))
+		logger.Get().Error("error while marshaling tx kind while seeding", zap.Error(err))
 		return
 	}
 
-	incomeKnd := slicesutils.Find(kinds, func(k queries.GetTransactionKindsRow) bool {
-		return k.TransactionKind.Enum == int64(models.IncomeTxKind)
-	})
-	if incomeKnd == nil {
-		l := logger.FromCtx(ctx)
-		l.Error("Couldn't find kind", zap.String("kind", models.IncomeTxKind.String()), zap.Error(err))
+	incomeRaw, err := json.Marshal(incomeKind)
+	if err != nil {
+		logger.Get().Error("error while marshaling tx kind while seeding", zap.Error(err))
 		return
 	}
-	incomeId := incomeKnd.TransactionKind.ID
-
-	expensiveKnd := slicesutils.Find(kinds, func(k queries.GetTransactionKindsRow) bool {
-		return k.TransactionKind.Enum == int64(models.ExpenseTxKind)
-	})
-	if expensiveKnd == nil {
-		l := logger.FromCtx(ctx)
-		l.Error("Couldn't find kind", zap.String("kind", models.ExpenseTxKind.String()), zap.Error(err))
-		return
-	}
-	expensiveId := expensiveKnd.TransactionKind.ID
 
 	seed := []queries.CreateCategoryParams{
-		{ID: idgen.New(), Name: "Salary", Color: models.GetRandomCategoryColor(), KindID: incomeId},
-		{ID: idgen.New(), Name: "Groceries", Color: models.GetRandomCategoryColor(), KindID: expensiveId},
-		{ID: idgen.New(), Name: "Transportation", Color: models.GetRandomCategoryColor(), KindID: expensiveId},
+		{ID: idgen.New(), Name: "Salary", Color: models.GetRandomCategoryColor(), Kinds: incomeRaw},
+		{ID: idgen.New(), Name: "Groceries", Color: models.GetRandomCategoryColor(), Kinds: expensesRaw},
+		{ID: idgen.New(), Name: "Transportation", Color: models.GetRandomCategoryColor(), Kinds: expensesRaw},
 	}
 
 	seedFn(ctx, q.GetCategories, seed, q.CreateCategory,
-		func(s queries.CreateCategoryParams) string { return s.Name + s.KindID },
-		func(e queries.GetCategoriesRow) string { return e.Category.Name + e.TransactionKind.ID })
+		func(s queries.CreateCategoryParams) string { return s.Name },
+		func(e queries.GetCategoriesRow) string { return e.Category.Name })
 }
 
 func (s *Seeder) currencies(ctx context.Context, wg *sync.WaitGroup, q *queries.Queries) {
@@ -164,21 +150,6 @@ func (s *Seeder) currencies(ctx context.Context, wg *sync.WaitGroup, q *queries.
 	seedFn(ctx, q.GetAllCurrencies, currSeed, q.CreateCurrency,
 		func(s queries.CreateCurrencyParams) string { return s.String },
 		func(e queries.GetAllCurrenciesRow) string { return e.Currency.String })
-}
-
-func (s *Seeder) txKinds(ctx context.Context, wg *sync.WaitGroup, q *queries.Queries) {
-	defer wg.Done()
-
-	seed := []queries.CreateTransactionKindParams{
-		{ID: idgen.New(), Enum: int64(models.ExpenseTxKind), IncreaseBalance: sql.NullBool{Bool: false, Valid: true}},
-		{ID: idgen.New(), Enum: int64(models.IncomeTxKind), IncreaseBalance: sql.NullBool{Bool: true, Valid: true}},
-		{ID: idgen.New(), Enum: int64(models.TransferTxKind), IncreaseBalance: sql.NullBool{Valid: false}},
-		{ID: idgen.New(), Enum: int64(models.DebtTxKind), IncreaseBalance: sql.NullBool{Valid: false}},
-	}
-
-	seedFn(ctx, q.GetTransactionKinds, seed, q.CreateTransactionKind,
-		func(s queries.CreateTransactionKindParams) int64 { return s.Enum },
-		func(e queries.GetTransactionKindsRow) int64 { return e.TransactionKind.Enum })
 }
 
 func (s *Seeder) accountKinds(ctx context.Context, wg *sync.WaitGroup, q *queries.Queries) {

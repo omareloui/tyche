@@ -25,11 +25,6 @@ CREATE TABLE currencies (
     iban_prefix VARCHAR,
     is_shown BOOLEAN NOT NULL DEFAULT FALSE
 );
-CREATE TABLE transaction_kinds (
-    id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
-    enum INT UNIQUE NOT NULL,
-    increase_balance BOOLEAN
-);
 CREATE TABLE account_kinds (
     id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
     enum INT UNIQUE NOT NULL
@@ -58,7 +53,7 @@ CREATE TABLE transactions (
     id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
     account_id VARCHAR NOT NULL,
     amount FLOAT DEFAULT 0 NOT NULL,
-    kind_id VARCHAR NOT NULL,
+    kind INT NOT NULL,
     category_id VARCHAR,
     counterparty_id VARCHAR,
     description VARCHAR,
@@ -72,7 +67,6 @@ CREATE TABLE transactions (
     FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE,
     FOREIGN KEY (to_account_id) REFERENCES accounts (id) ON DELETE CASCADE,
     FOREIGN KEY (counterparty_id) REFERENCES counterparties (id) ON DELETE SET NULL,
-    FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id),
     FOREIGN KEY (recurrent_id) REFERENCES recurrent_txs (id) ON DELETE SET NULL,
     FOREIGN KEY (goal_id) REFERENCES goals (id) ON DELETE SET NULL
 );
@@ -82,7 +76,7 @@ CREATE TABLE recurrent_txs (
     unit INT NOT NULL,
     account_id VARCHAR NOT NULL,
     amount FLOAT DEFAULT 0 NOT NULL,
-    kind_id VARCHAR NOT NULL,
+    kind INT NOT NULL,
     category_id VARCHAR,
     counterparty_id VARCHAR,
     description VARCHAR,
@@ -96,7 +90,6 @@ CREATE TABLE recurrent_txs (
     FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE,
     FOREIGN KEY (to_account_id) REFERENCES accounts (id) ON DELETE CASCADE,
     FOREIGN KEY (counterparty_id) REFERENCES counterparties (id) ON DELETE SET NULL,
-    FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id),
     FOREIGN KEY (goal_id) REFERENCES goals (id) ON DELETE SET NULL
 );
 CREATE TABLE goals (
@@ -113,10 +106,9 @@ CREATE TABLE categories (
     name VARCHAR UNIQUE NOT NULL,
     budget_amount FLOAT,
     budget_currency_id VARCHAR,
-    kind_id VARCHAR NOT NULL,
+    kinds JSON NOT NULL,
     color VARCHAR NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (kind_id) REFERENCES transaction_kinds (id) ON DELETE CASCADE,
     FOREIGN KEY (budget_currency_id) REFERENCES currencies (id) ON DELETE CASCADE
 );
 CREATE TABLE counterparties (
@@ -136,7 +128,7 @@ SELECT
     rt.unit AS recurrent_tx_unit,
     rt.account_id AS recurrent_tx_account_id,
     rt.amount AS recurrent_tx_amount,
-    rt.kind_id AS recurrent_tx_kind_id,
+    rt.kind AS recurrent_tx_kind,
     rt.category_id AS recurrent_tx_category_id,
     rt.counterparty_id AS recurrent_tx_counterparty_id,
     rt.description AS recurrent_tx_description,
@@ -168,10 +160,6 @@ SELECT
     c.string AS account_currency_string,
     c.symbol AS account_currency_symbol,
 
-    -- Kind
-    k.enum AS kind_enum,
-    k.increase_balance AS kind_increase_balance,
-
     -- Counterparty
     cp.name AS counterparty_name,
 
@@ -199,7 +187,7 @@ SELECT
     cat.name AS category_name,
     cat.budget_amount AS category_budget_amount,
     cat.budget_currency_id AS category_budget_currency_id,
-    cat.kind_id AS category_kind_id,
+    cat.kinds AS category_kinds,
     cat.created_at AS category_created_at,
 
     -- Goal
@@ -216,7 +204,6 @@ LEFT JOIN accounts AS a ON rt.account_id = a.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN accounts AS ta ON rt.to_account_id = ta.id
 LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
-LEFT JOIN transaction_kinds AS k ON rt.kind_id = k.id
 LEFT JOIN categories AS cat ON rt.category_id = cat.id
 LEFT JOIN goals AS g ON rt.goal_id = g.id
 LEFT JOIN currencies AS gc ON g.currency_id = gc.id;
@@ -226,7 +213,6 @@ LEFT JOIN currencies AS gc ON g.currency_id = gc.id;
 -- +goose StatementBegin
 DROP TABLE user;
 DROP TABLE currencies;
-DROP TABLE transaction_kinds;
 DROP TABLE transactions;
 DROP TABLE recurrent_txs;
 DROP TABLE goals;

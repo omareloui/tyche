@@ -38,7 +38,7 @@ func (r *Repository) createRecurrentTxWithTxn(qtx *queries.Queries, ctx context.
 		Unit:                       int64(rt.Unit),
 		Every:                      int64(rt.Every),
 		Amount:                     rt.Amount,
-		KindID:                     rt.Kind.ID,
+		Kind:                       int64(rt.Kind),
 		CategoryID:                 catId,
 		CounterpartyID:             cpId,
 		Description:                sql.NullString{String: rt.Description, Valid: rt.Description != ""},
@@ -125,7 +125,7 @@ func (r *Repository) UpdateRecurrentTx(ctx context.Context, rt *models.Recurrent
 			ID:                         rt.ID,
 			AccountID:                  rt.Account.ID,
 			Amount:                     rt.Amount,
-			KindID:                     rt.Kind.ID,
+			Kind:                       int64(rt.Kind),
 			CategoryID:                 catId,
 			CounterpartyID:             cpId,
 			Unit:                       int64(rt.Unit),
@@ -207,11 +207,7 @@ func dbRecurrentTxDetailsToRecurrentTx(dbRtx queries.RecurrentTxsDetail) *models
 		Description: dbRtx.RecurrentTxDescription.String,
 		CreatedAt:   dbRtx.RecurrentTxCreatedAt,
 
-		Kind: models.TransactionKind{
-			ID:              dbRtx.RecurrentTxKindID,
-			Enum:            models.TxKind(dbRtx.KindEnum.Int64),
-			IncreaseBalance: dbRtx.KindIncreaseBalance.Bool,
-		},
+		Kind: models.TxKind(dbRtx.RecurrentTxKind),
 
 		ToAmount:                   dbRtx.RecurrentTxToAmount.Float64,
 		Every:                      uint(dbRtx.RecurrentTxEvery),
@@ -289,11 +285,12 @@ func dbRecurrentTxDetailsToRecurrentTx(dbRtx queries.RecurrentTxsDetail) *models
 	}
 
 	if dbRtx.RecurrentTxCategoryID.Valid {
+		kinds, _ := unmarshalTxKinds(dbRtx.CategoryKinds)
 		rt.Category = &models.Category{
 			ID:           dbRtx.RecurrentTxCategoryID.String,
 			Name:         dbRtx.CategoryName.String,
 			BudgetAmount: dbRtx.CategoryBudgetAmount.Float64,
-			Kind:         models.TransactionKind{ID: dbRtx.CategoryKindID.String},
+			Kinds:        kinds,
 			CreatedAt:    dbRtx.CategoryCreatedAt.Time,
 		}
 		if dbRtx.CategoryBudgetCurrencyID.Valid {

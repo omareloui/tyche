@@ -47,7 +47,7 @@ type RecurrentTxFD struct {
 
 templ rtxFormBody(
 	id string, fd *RecurrentTxFD,
-	accs []models.Account, knds []models.TransactionKind,
+	accs []models.Account, knds []models.TxKind,
 	cats []models.Category, cps []models.Counterparty,
 	gls []models.Goal, defaultCur *models.Currency) {
 	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs, cps, gls, defaultCur)
@@ -71,7 +71,7 @@ templ RecurrentTransactionOOB(rtx *models.RecurrentTx) {
 
 templ EditRecurrentTx(
 	rtx *models.RecurrentTx, fd *RecurrentTxFD,
-	accs []models.Account, knds []models.TransactionKind,
+	accs []models.Account, knds []models.TxKind,
 	cats []models.Category, cps []models.Counterparty,
 	gls []models.Goal, defaultCur *models.Currency) {
 	@form.Form("put", fmt.Sprintf("/recurrent-tx/%s", rtx.ID), templ.Attributes{"hx-target": "this"}) {
@@ -105,7 +105,7 @@ templ RecurrentTx(rtx *models.RecurrentTx) {
 			<p>To Account: { rtx.ToAccount.Name }</p>
 			<p>To Amount: { rtx.ViewToAmount() }</p>
 		}
-		<p>Kind: { rtx.Kind.Enum.String() }</p>
+		<p>Kind: { rtx.Kind.String() }</p>
 		if rtx.Description != "" {
 			<p>Description: { rtx.Description }</p>
 		}

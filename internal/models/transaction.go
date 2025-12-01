@@ -13,7 +13,7 @@ type Transaction struct {
 	ID             string
 	Account        Account
 	Amount         float64
-	Kind           TransactionKind
+	Kind           TxKind
 	Category       *Category
 	ToAccount      *Account
 	Counterparty   *Counterparty
@@ -31,7 +31,7 @@ type commonFieldsForTxAndRtx struct {
 	ID             string  `validate:"required,ulid"`
 	AccountID      string  `validate:"required,ulid"`
 	Amount         float64 `validate:"required"`
-	KindID         string  `validate:"required,ulid"`
+	Kind           uint8   `validate:"required"`
 	CategoryID     string  `validate:"excluded_if=Kind 3,excluded_if=Kind 4,omitempty,ulid"`
 	CounterpartyID string  `validate:"excluded_if=Kind 3,excluded_if=Kind 4,omitempty,ulid"`
 	ToAccountID    string  `validate:"required_if=Kind 3,required_if=Kind 4,omitempty,ulid"`
@@ -77,7 +77,7 @@ func (t *Transaction) toValidate() *createTransaction {
 			ID:             t.ID,
 			AccountID:      t.Account.ID,
 			Amount:         t.Amount,
-			KindID:         t.Kind.ID,
+			Kind:           uint8(t.Kind),
 			CategoryID:     catID,
 			CounterpartyID: cpID,
 			ToAccountID:    toAccID,

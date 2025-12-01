@@ -76,7 +76,7 @@ templ Goal(gl *models.Goal) {
 	}
 }
 
-templ GoalProgressForm(gl *models.Goal, fd *TransactionFD, accounts []models.Account, kinds []models.TransactionKind, defaultCur *models.Currency) {
+templ GoalProgressForm(gl *models.Goal, fd *TransactionFD, accounts []models.Account, kinds []models.TxKind, defaultCur *models.Currency) {
 	@form.Form("post", fmt.Sprintf("/goals/%s/progress", gl.ID), templ.Attributes{"hx-target": "this"}) {
 		<h2 class="text-xl font-bold">{ gl.Name } <i class="text-gray-400 font-regular">({ gl.ViewAmount() })</i></h2>
 		@form.AmountInputsWithAccount(&fd.AccountIFD, gl.ID, accounts, defaultCur)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -29,7 +28,7 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 		return nil, err
 	}
 
-	fd := h.mapTransactionToFD(defaultTransaction(accs, knds), new(errs.ValidationError), knds)
+	fd := h.mapTransactionToFD(defaultTransaction(accs), new(errs.ValidationError))
 
 	txs, err := h.repo.GetTransactions(r.Context())
 	if err != nil {
@@ -88,7 +87,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 			var valerr errs.ValidationError
 			if errors.As(err, &valerr) {
 				l.Error("validating recurrent transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-				return views.CreateTransactionForm(h.mapTransactionToFD(tx, &valerr, knds), accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
+				return views.CreateTransactionForm(h.mapTransactionToFD(tx, &valerr), accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
 			}
 			l.Error("sanitizing recurrent transaction", zap.Error(err))
 			return nil, err
@@ -123,7 +122,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		}
 	}
 
-	fd = h.mapTransactionToFD(defaultTransaction(accs, knds), new(errs.ValidationError), knds)
+	fd = h.mapTransactionToFD(defaultTransaction(accs), new(errs.ValidationError))
 	return views.CreateTransactionForm(fd, accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
 }
 
@@ -166,7 +165,7 @@ func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (tem
 		return nil, err
 	}
 
-	fd := h.mapTransactionToFD(tx, new(errs.ValidationError), knds)
+	fd := h.mapTransactionToFD(tx, new(errs.ValidationError))
 	fd.RecurrenceFD = nil
 
 	claims := getClaims(r.Context())
@@ -215,14 +214,6 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 		return nil, err
 	}
 	l.Info("updated transaction")
-
-	txKind, err := h.repo.GetTransactionKind(r.Context(), tx.Kind.ID)
-	if err != nil {
-		l.Error("fetching txKind", zap.Error(err))
-		return nil, err
-	}
-
-	tx.Kind = *txKind
 
 	if !oldTx.FulfilledAt.IsZero() {
 		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
@@ -309,16 +300,11 @@ func (h Handler) getAndRenderBalancesOOB(w http.ResponseWriter, r *http.Request)
 	return nil
 }
 
-func (h Handler) getTxDeps(ctx context.Context) ([]models.Account, []models.TransactionKind, []models.Category, []models.Counterparty, []models.Goal, error) {
+func (h Handler) getTxDeps(ctx context.Context) ([]models.Account, []models.TxKind, []models.Category, []models.Counterparty, []models.Goal, error) {
 	l := logger.FromCtx(ctx)
 	accs, err := h.repo.GetAccounts(ctx)
 	if err != nil {
 		l.Error("error fetching accounts for dx deps", zap.Error(err))
-		return nil, nil, nil, nil, nil, err
-	}
-	knds, err := h.repo.GetTransactionKinds(ctx)
-	if err != nil {
-		l.Error("error fetching transaction kinds for dx deps", zap.Error(err))
 		return nil, nil, nil, nil, nil, err
 	}
 	cats, err := h.repo.GetCategories(ctx)
@@ -338,26 +324,25 @@ func (h Handler) getTxDeps(ctx context.Context) ([]models.Account, []models.Tran
 		return nil, nil, nil, nil, nil, err
 	}
 	l.Debug("fetched transactions dependencies")
-	return accs, knds, cats, cps, gls, nil
+	return accs, models.GetTxKinds(), cats, cps, gls, nil
 }
 
-func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationError, knds []models.TransactionKind) *views.TransactionFD {
+func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationError) *views.TransactionFD {
 	fd := &views.TransactionFD{
 		TransactionAmountsAndKindFD: views.TransactionAmountsAndKindFD{
 			AccountIFD: form.AccountIFD{
 				Amount:    form.FDInput{Value: formatFloatIfNonZero(t.Amount), Error: err.Errors.MsgFor("Amount")},
 				AccountID: form.FDInput{Value: t.Account.ID, Error: err.Errors.MsgFor("AccountID")},
 			},
-			KindID: form.FDInput{Value: t.Kind.ID, Error: err.Errors.MsgFor("KindID")},
+			Kind: form.FDInput{Value: t.Kind.String(), Error: err.Errors.MsgFor("Kind")},
 		},
 		Description:  form.FDInput{Value: t.Description, Error: err.Errors.MsgFor("Description")},
 		ScheduledTo:  form.FDInput{Value: formatDateOnlyIfNonZero(t.ScheduledTo), Error: err.Errors.MsgFor("ScheduledTo")},
 		RecurrenceFD: &views.RecurrenceFD{},
 	}
 
-	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == t.Kind.ID })
-	hasToAccount := knd.Enum == models.DebtTxKind || knd.Enum == models.TransferTxKind
-	hasGoal := knd.Enum == models.ExpenseTxKind
+	hasToAccount := t.Kind == models.DebtTxKind || t.Kind == models.TransferTxKind
+	hasGoal := t.Kind == models.ExpenseTxKind
 
 	if t.Category != nil {
 		fd.CategoryID = &form.FDInput{Value: t.Category.ID, Error: err.Errors.MsgFor("CategoryID")}
@@ -417,11 +402,11 @@ func (h Handler) mapFDToTransaction(r *http.Request, isRecurrent bool) (*models.
 		return nil, err
 	}
 
-	kndId := r.FormValue("kind_id")
+	knd := models.GetTxKindFromString(r.FormValue("kind"))
 
 	var cat *models.Category
 	if catId := r.FormValue("category_id"); catId != "" {
-		cat = &models.Category{ID: catId, Kind: models.TransactionKind{ID: kndId}}
+		cat = &models.Category{ID: catId, Kinds: []models.TxKind{knd}}
 	}
 
 	var cp *models.Counterparty
@@ -446,7 +431,7 @@ func (h Handler) mapFDToTransaction(r *http.Request, isRecurrent bool) (*models.
 	tx := &models.Transaction{
 		Account:      models.Account{ID: r.FormValue("account_id")},
 		Amount:       amount,
-		Kind:         models.TransactionKind{ID: kndId},
+		Kind:         knd,
 		Category:     cat,
 		Counterparty: cp,
 		ToAccount:    toAcc,
@@ -469,9 +454,7 @@ func (h Handler) mapFDToTransaction(r *http.Request, isRecurrent bool) (*models.
 	return tx, nil
 }
 
-func defaultTransaction(accs []models.Account, knds []models.TransactionKind) *models.Transaction {
-	dfltKindIdx := slices.IndexFunc(knds, func(knd models.TransactionKind) bool { return knd.Enum == models.ExpenseTxKind })
-
+func defaultTransaction(accs []models.Account) *models.Transaction {
 	dfltAcc := models.Account{}
 	if len(accs) > 0 {
 		_dfltAcc := slicesutils.Find(accs, func(a models.Account) bool { return a.IsDefault })
@@ -482,17 +465,14 @@ func defaultTransaction(accs []models.Account, knds []models.TransactionKind) *m
 		}
 	}
 
-	knd := knds[dfltKindIdx]
+	knd := models.ExpenseTxKind
 
 	tx := &models.Transaction{
 		Amount:      0,
 		Account:     dfltAcc,
 		Kind:        knd,
 		ScheduledTo: time.Now(),
-	}
-
-	if knd.Enum == models.ExpenseTxKind {
-		tx.Category = &models.Category{}
+		Category:    &models.Category{},
 	}
 
 	return tx
@@ -532,33 +512,31 @@ func (h Handler) mapFDAndTxToRecurrentTx(r *http.Request, tx *models.Transaction
 }
 
 func (h Handler) prepareTx(r *http.Request, tx *models.Transaction,
-	accs []models.Account, knds []models.TransactionKind,
+	accs []models.Account, knds []models.TxKind,
 	cats []models.Category, cps []models.Counterparty,
 	gls []models.Goal,
 ) (*views.TransactionFD, error) {
 	l := logger.FromCtx(r.Context())
 
-	k := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == tx.Kind.ID })
-	if k == nil {
+	if tx.Kind == models.NilTxKind {
 		valerr := &errs.ValidationError{Errors: errs.ValidationErrors{}}
-		valerr.Errors["KindID"] = errs.ValidationField{Tag: "required"}
-		l.Error("tx kind doesn't exist")
-		return h.mapTransactionToFD(tx, valerr, knds), nil
+		valerr.Errors["Kind"] = errs.ValidationField{Tag: "required"}
+		l.Error("invalid tx kind")
+		return h.mapTransactionToFD(tx, valerr), nil
 	}
-	tx.Kind = *k
 
 	a := slicesutils.Find(accs, func(ac models.Account) bool { return ac.ID == tx.Account.ID })
 	if a == nil {
 		valerr := &errs.ValidationError{Errors: errs.ValidationErrors{}}
 		valerr.Errors["AccountID"] = errs.ValidationField{Tag: "required"}
 		l.Error("account doesn't exist")
-		return h.mapTransactionToFD(tx, valerr, knds), nil
+		return h.mapTransactionToFD(tx, valerr), nil
 	}
 	tx.Account = *a
 
 	if c := slicesutils.Find(cats, func(c models.Category) bool { return tx.Category != nil && c.ID == tx.Category.ID }); c != nil {
 		tx.Category = c
-		tx.Category.Kind = tx.Kind
+		tx.Category.Kinds = []models.TxKind{tx.Kind}
 	}
 
 	if cp := slicesutils.Find(cps, func(c models.Counterparty) bool { return tx.Counterparty != nil && c.ID == tx.Counterparty.ID }); cp != nil {
@@ -571,7 +549,7 @@ func (h Handler) prepareTx(r *http.Request, tx *models.Transaction,
 			valerr := &errs.ValidationError{Errors: errs.ValidationErrors{}}
 			valerr.Errors["GoalID"] = errs.ValidationField{Tag: "required"}
 			l.Error("goal kind doesn't exist")
-			return h.mapTransactionToFD(tx, valerr, knds), nil
+			return h.mapTransactionToFD(tx, valerr), nil
 		}
 		tx.Goal = gl
 	}
@@ -580,7 +558,7 @@ func (h Handler) prepareTx(r *http.Request, tx *models.Transaction,
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("validating transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-			return h.mapTransactionToFD(tx, &valerr, knds), nil
+			return h.mapTransactionToFD(tx, &valerr), nil
 		}
 		l.Error("sanitizing transaction", zap.Error(err))
 		return nil, err
@@ -589,7 +567,7 @@ func (h Handler) prepareTx(r *http.Request, tx *models.Transaction,
 }
 
 func (h Handler) prepareCreatingTx(r *http.Request, tx *models.Transaction,
-	accs []models.Account, knds []models.TransactionKind,
+	accs []models.Account, knds []models.TxKind,
 	cats []models.Category, cps []models.Counterparty,
 	gls []models.Goal,
 ) (*views.TransactionFD, error) {
@@ -604,38 +582,32 @@ func (h Handler) prepareCreatingTx(r *http.Request, tx *models.Transaction,
 	return h.prepareTx(r, tx, accs, knds, cats, cps, gls)
 }
 
-func (h Handler) parseTransactionAmountsAndKindFD(r *http.Request, accs []models.Account, knds []models.TransactionKind) (*views.TransactionAmountsAndKindFD, error) {
-	l := logger.FromCtx(r.Context())
-
+func (h Handler) parseTransactionAmountsAndKindFD(r *http.Request, accs []models.Account, knds []models.TxKind) (*views.TransactionAmountsAndKindFD, error) {
 	accId := r.FormValue("account_id")
-	kndId := r.FormValue("kind_id")
-
-	knd := slicesutils.Find(knds, func(k models.TransactionKind) bool { return k.ID == kndId })
-	if knd == nil {
-		l.Error("finding transaction kind to create TransactionAmountsAndKindFD")
-		return nil, errs.ErrInvalidID
-	}
+	kindString := r.FormValue("kind")
 
 	fd := &views.TransactionAmountsAndKindFD{
 		AccountIFD: form.AccountIFD{
 			Amount:    form.FDInput{Value: r.FormValue("amount")},
 			AccountID: form.FDInput{Value: accId},
 		},
-		KindID: form.FDInput{Value: kndId},
+		Kind: form.FDInput{Value: kindString},
 	}
 
 	trigger := r.Header.Get("Hx-Trigger")
 
-	if knd.Enum == models.ExpenseTxKind {
-		gl := r.FormValue("goal_id")
+	kind := models.GetTxKindFromString(kindString)
+
+	gl := r.FormValue("goal_id")
+	if gl != "" {
 		fd.GoalID = &form.FDInput{Value: gl}
 	}
 
-	if knd.Enum == models.TransferTxKind || knd.Enum == models.DebtTxKind {
+	if kind == models.TransferTxKind || kind == models.DebtTxKind {
 		toAccId := r.FormValue("to_account_id")
 		toAmt := r.FormValue("to_amount")
 
-		isDebtTx := knd.Enum == models.DebtTxKind
+		isDebtTx := kind == models.DebtTxKind
 
 		acc := slicesutils.Find(accs, func(a models.Account) bool { return a.ID == accId })
 		toAcc := slicesutils.Find(accs, func(a models.Account) bool { return a.ID == toAccId })
