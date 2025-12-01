@@ -46,7 +46,11 @@ func (v ValidationField) String() string {
 	case "gte":
 		return fmt.Sprintf("Value is low (at least %s is required)", v.Param)
 	case "min":
-		return fmt.Sprintf("Value is too short (at least %s elements)", v.Param)
+		var pluralS string
+		if v.Param != "1" {
+			pluralS = "s"
+		}
+		return fmt.Sprintf("Value is too short (at least %s element%s)", v.Param, pluralS)
 	case "max":
 		return fmt.Sprintf("Value is too log (maximum %s elements)", v.Param)
 	case "eqfield":

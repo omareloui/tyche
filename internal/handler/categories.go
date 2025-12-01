@@ -2,7 +2,6 @@ package handler
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -217,10 +216,11 @@ func (h Handler) mapCategoryToFD(cat *models.Category, kinds []models.TxKind, er
 	for _, kind := range kinds {
 		for _, catKind := range cat.Kinds {
 			if catKind == kind {
-				knds[kind] = form.FDInput{Value: catKind.String(), Error: err.Errors.MsgFor(fmt.Sprintf("Kind[%d]", kind))}
-			} else if _, ok := knds[kind]; !ok {
-				knds[kind] = form.FDInput{}
+				knds[kind] = form.FDInput{Value: catKind.String(), Error: err.Errors.MsgFor("Kinds")}
 			}
+		}
+		if _, ok := knds[kind]; !ok {
+			knds[kind] = form.FDInput{Error: err.Errors.MsgFor("Kinds")}
 		}
 	}
 
