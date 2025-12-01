@@ -4,9 +4,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/omareloui/tyche/internal/errs"
 	"github.com/omareloui/tyche/internal/formatters"
-	"github.com/omareloui/tyche/internal/sanitizer"
 	"github.com/omareloui/tyche/internal/valid"
 )
 
@@ -61,7 +59,7 @@ type Category struct {
 	Color          string    `validate:"required"`
 	BudgetAmount   float64   `validate:"required_with=BudgetCurrency"`
 	BudgetCurrency *Currency `validate:"required_with=BudgetAmount"`
-	Kinds          []TxKind  `validate:"required,dive,required"`
+	Kinds          []TxKind  `validate:"required,min=1,dive,required"`
 	CreatedAt      time.Time
 }
 
@@ -84,7 +82,7 @@ func (cat *Category) toValidate() *createCategory {
 		currID = cat.BudgetCurrency.ID
 	}
 
-	return &createCategory{
+	createCat := createCategory{
 		ID:               cat.ID,
 		Name:             cat.Name,
 		Color:            cat.Color,
@@ -92,13 +90,11 @@ func (cat *Category) toValidate() *createCategory {
 		Kinds:            cat.Kinds,
 		BudgetCurrencyID: currID,
 	}
+	return &createCat
 }
 
-func (cat *Category) SanitizeAndValidate(sani *sanitizer.Sanitizer, valid *valid.Validator) error {
+func (cat *Category) Validate(valid *valid.Validator) error {
 	catToValidate := cat.toValidate()
-	if err := sani.SanitizeStruct(catToValidate); err != nil {
-		return errs.ErrSanitizer
-	}
 	if valerr := valid.Validate(catToValidate); valerr != nil {
 		return *valerr
 	}

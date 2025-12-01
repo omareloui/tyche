@@ -55,6 +55,28 @@ templ SelectTxKind(name, id string, knds []models.TxKind, data FDInput, inputAtt
 	@SelectInput("Transaction Kind", name, "Select Kind", id, mapFromStringerSlice(knds), data, false, inputAttrs, nil)
 }
 
+templ SelectTxKinds(knds []models.TxKind, data TxKindFDInputs) {
+	<div class="flex flex-wrap gap-4 justify-center">
+		for kind, d  := range data {
+			{{ id := fmt.Sprintf("kind%s", kind.String()) }}
+			<div>
+				<input
+					id={ join("kind", id) }
+					type="checkbox"
+					name="kind"
+					class="mr-2"
+					value={ kind.String() }
+					if d.Value != "" {
+						checked
+					}
+				/>
+				@inputLabel("kind", id, kind.String())
+				@errorMessage(d.Error)
+			</div>
+		}
+	</div>
+}
+
 templ SelectCounterparty(name, id string, cps []models.Counterparty, data FDInput, nullable bool, inputAttrs templ.Attributes) {
 	@SelectInput("Counterparty", name, "Select Counterparty", id, idStructsToMap(cps, "Name"), data, nullable, inputAttrs, nil)
 }

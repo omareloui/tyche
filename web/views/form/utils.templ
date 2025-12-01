@@ -2,12 +2,15 @@ package form
 
 import (
 	"strings"
+	"github.com/omareloui/tyche/internal/models"
 )
 
 type FDInput struct {
 	Value string `json:"value"`
 	Error string `json:"error"`
 }
+
+type TxKindFDInputs map[models.TxKind]FDInput
 
 type AccountIFD struct {
 	Amount    FDInput

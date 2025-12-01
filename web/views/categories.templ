@@ -13,7 +13,7 @@ import (
 type CategoryFD struct {
 	Name           form.FDInput
 	Color          form.FDInput
-	Kind           form.FDInput
+	Kinds          form.TxKindFDInputs
 	BudgetAmountFD *form.AmountFD
 }
 
@@ -48,7 +48,7 @@ templ EditCategory(fd *CategoryFD, id string, knds []models.TxKind, curs []model
 templ categoryFormBody(fd *CategoryFD, id string, knds []models.TxKind, curs []models.Currency, defaultCur *models.Currency) {
 	@form.TextInput("Name", "name", "Enter category name", id, fd.Name, nil, nil)
 	@form.SelectColor("color", id, models.CategoryColorOptions(), fd.Color, nil)
-	@form.SelectTxKind("kind", id, knds, fd.Kind, nil)
+	@form.SelectTxKinds(knds, fd.Kinds)
 	@form.AmountInputsWithCurrency(fd.BudgetAmountFD, id, curs, defaultCur)
 }
 
@@ -65,7 +65,6 @@ templ Category(cat *models.Category) {
 		components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/categories/%s/edit", cat.ID)),
 		components.EntryMenuDeleteItem(fmt.Sprintf("/categories/%s", cat.ID)),
 	})) {
-		<p>ID: { cat.ID }</p>
 		<p class="flex items-center gap-2">
 			<span>Name:</span>
 			<span class="inline-block w-3 h-3 rounded-full" style={ fmt.Sprintf("background-color: %s", models.CategoryColorToHex(cat.Color)) }></span>
@@ -73,7 +72,10 @@ templ Category(cat *models.Category) {
 		</p>
 		<p>
 			Kinds: 
-			for _, kind := range cat.Kinds {
+			for i, kind := range cat.Kinds {
+				if i != 0 {
+					,
+				}
 				{ kind }
 			}
 		</p>

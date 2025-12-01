@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -41,7 +42,7 @@ func (h Handler) Categories(w http.ResponseWriter, r *http.Request) (templ.Compo
 	}
 
 	claims := getClaims(r.Context())
-	return views.Categories(claims, b, h.mapCategoryToFD(dfltCategory(&claims.DefaultCurrency), &errs.ValidationError{}), knds, cats, currs), nil
+	return views.Categories(claims, b, h.mapCategoryToFD(dfltCategory(&claims.DefaultCurrency, knds), knds, &errs.ValidationError{}), knds, cats, currs), nil
 }
 
 func (h Handler) Category(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -77,8 +78,6 @@ func (h Handler) CreateCategory(w http.ResponseWriter, r *http.Request) (templ.C
 		cat.Color = models.GetRandomCategoryColor()
 	}
 
-	knds := getAllowedKindsForCategories()
-
 	currs, err := h.repo.GetCurrencies(r.Context())
 	if err != nil {
 		l.Error("fetching currencies", zap.Error(err))
@@ -87,11 +86,12 @@ func (h Handler) CreateCategory(w http.ResponseWriter, r *http.Request) (templ.C
 
 	claims := getClaims(r.Context())
 
-	if err := cat.SanitizeAndValidate(h.sani, h.valid); err != nil {
+	knds := getAllowedKindsForCategories()
+	if err := cat.Validate(h.valid); err != nil {
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("create category validation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-			return views.CreateCategoryForm(h.mapCategoryToFD(cat, &valerr), knds, currs, &claims.DefaultCurrency), nil
+			return views.CreateCategoryForm(h.mapCategoryToFD(cat, knds, &valerr), knds, currs, &claims.DefaultCurrency), nil
 		}
 		l.Error("sanitizing category", zap.Error(err))
 		return nil, err
@@ -109,7 +109,7 @@ func (h Handler) CreateCategory(w http.ResponseWriter, r *http.Request) (templ.C
 	}
 	l.Debug("rendered category oob")
 
-	return views.CreateCategoryForm(h.mapCategoryToFD(dfltCategory(&claims.DefaultCurrency), &errs.ValidationError{}), knds, currs, &claims.DefaultCurrency), nil
+	return views.CreateCategoryForm(h.mapCategoryToFD(dfltCategory(&claims.DefaultCurrency, knds), knds, &errs.ValidationError{}), knds, currs, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) GetEditCategory(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -137,7 +137,7 @@ func (h Handler) GetEditCategory(w http.ResponseWriter, r *http.Request) (templ.
 
 	claims := getClaims(r.Context())
 
-	fd := h.mapCategoryToFD(cat, &errs.ValidationError{})
+	fd := h.mapCategoryToFD(cat, knds, &errs.ValidationError{})
 	if fd.BudgetAmountFD.CurrencyID.Value == "" {
 		fd.BudgetAmountFD.CurrencyID.Value = claims.DefaultCurrency.ID
 	}
@@ -160,7 +160,6 @@ func (h Handler) EditCategory(w http.ResponseWriter, r *http.Request) (templ.Com
 	}
 	cat.ID = id
 
-	knds := getAllowedKindsForCategories()
 	currs, err := h.repo.GetCurrencies(r.Context())
 	if err != nil {
 		l.Error("fetching currencies", zap.Error(err))
@@ -169,11 +168,12 @@ func (h Handler) EditCategory(w http.ResponseWriter, r *http.Request) (templ.Com
 
 	claims := getClaims(r.Context())
 
-	if err := cat.SanitizeAndValidate(h.sani, h.valid); err != nil {
+	if err := cat.Validate(h.valid); err != nil {
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
+			knds := getAllowedKindsForCategories()
 			l.Error("update category validation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-			return views.EditCategory(h.mapCategoryToFD(cat, &valerr), id, knds, currs, &claims.DefaultCurrency), nil
+			return views.EditCategory(h.mapCategoryToFD(cat, knds, &valerr), id, knds, currs, &claims.DefaultCurrency), nil
 		}
 		l.Error("sanitizing category", zap.Error(err))
 		return nil, err
@@ -206,56 +206,82 @@ func (h Handler) DeleteCategory(w http.ResponseWriter, r *http.Request) (templ.C
 	return nil, nil
 }
 
-func (h Handler) mapCategoryToFD(cat *models.Category, err *errs.ValidationError) *views.CategoryFD {
-	var budgetCurrId string
+func (h Handler) mapCategoryToFD(cat *models.Category, kinds []models.TxKind, err *errs.ValidationError) *views.CategoryFD {
+	var budgetCurrID string
 	if cat.BudgetCurrency != nil {
-		budgetCurrId = cat.BudgetCurrency.ID
+		budgetCurrID = cat.BudgetCurrency.ID
 	}
+
+	knds := make(form.TxKindFDInputs, len(cat.Kinds))
+
+	for _, kind := range kinds {
+		for _, catKind := range cat.Kinds {
+			if catKind == kind {
+				knds[kind] = form.FDInput{Value: catKind.String(), Error: err.Errors.MsgFor(fmt.Sprintf("Kind[%d]", kind))}
+			} else if _, ok := knds[kind]; !ok {
+				knds[kind] = form.FDInput{}
+			}
+		}
+	}
+
 	return &views.CategoryFD{
 		Name:  form.FDInput{Value: cat.Name, Error: err.Errors.MsgFor("Name")},
 		Color: form.FDInput{Value: cat.Color, Error: err.Errors.MsgFor("Color")},
-		// KindID: form.FDInput{Value: cat.Kind.ID, Error: err.Errors.MsgFor("Kind.ID")},
+		Kinds: knds,
 		BudgetAmountFD: &form.AmountFD{
 			Amount:     form.FDInput{Value: formatFloatIfNonZero(cat.BudgetAmount), Error: err.Errors.MsgFor("BudgetAmount")},
-			CurrencyID: form.FDInput{Value: budgetCurrId, Error: err.Errors.MsgFor("BudgetCurrency.ID")},
+			CurrencyID: form.FDInput{Value: budgetCurrID, Error: err.Errors.MsgFor("BudgetCurrency.ID")},
 		},
 	}
 }
 
 func (h Handler) mapFDToCategory(r *http.Request) (*models.Category, error) {
+	l := logger.FromCtx(r.Context())
+	l.Debug("parsing the category body")
+
 	budget, err := parseFloatIfExists(r.FormValue("amount"))
 	if err != nil {
 		return nil, err
 	}
 
-	currId := r.FormValue("currency_id")
+	currID := r.FormValue("currency_id")
 
 	var cur *models.Currency
-	if currId != "" {
+	if currID != "" {
 		cur = &models.Currency{
-			ID: currId,
+			ID: currID,
+		}
+	}
+
+	formKinds := r.Form["kind"]
+	kinds := []models.TxKind{}
+
+	for _, kind := range formKinds {
+		txKind := models.GetTxKindFromString(kind)
+		if txKind != models.NilTxKind {
+			kinds = append(kinds, txKind)
 		}
 	}
 
 	return &models.Category{
-		Name:  r.FormValue("name"),
-		Color: r.FormValue("color"),
-		// FIXME: add the kinds
-		Kinds:          []models.TxKind{},
+		Name:           r.FormValue("name"),
+		Color:          r.FormValue("color"),
+		Kinds:          kinds,
 		BudgetAmount:   budget,
 		BudgetCurrency: cur,
 	}, nil
 }
 
-func dfltCategory(defaultCur *models.Currency) *models.Category {
+func dfltCategory(defaultCur *models.Currency, knds []models.TxKind) *models.Category {
+	kinds := make([]models.TxKind, len(knds))
 	return &models.Category{
 		BudgetCurrency: defaultCur,
-		Kinds:          []models.TxKind{models.ExpenseTxKind},
+		Kinds:          kinds,
 	}
 }
 
 func getAllowedKindsForCategories() []models.TxKind {
 	return slicesutils.Filter(models.GetTxKinds(), func(k models.TxKind) bool {
-		return k != models.TransferTxKind && k != models.DebtTxKind
+		return k != models.NilTxKind && k != models.TransferTxKind && k != models.DebtTxKind
 	})
 }
