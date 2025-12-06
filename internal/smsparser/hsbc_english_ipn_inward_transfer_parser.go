@@ -1,0 +1,65 @@
+package smsparser
+
+import (
+	"errors"
+	"strings"
+	"time"
+
+	"github.com/omareloui/tyche/internal/models"
+)
+
+type HSBCEnglishIPNInwardTransferParser struct{}
+
+func (p *HSBCEnglishIPNInwardTransferParser) CanParse(sms string) bool {
+	return strings.HasPrefix(sms, "Your HSBC Account ********") &&
+		strings.Contains(sms, "was credited with IPN inward transfer for")
+}
+
+func (p *HSBCEnglishIPNInwardTransferParser) Parse(sms string) (*SMS, error) {
+	if !p.CanParse(sms) {
+		return nil, ErrCantParse
+	}
+
+	var err error
+	result := &SMS{Bank: HSBC, TxKind: models.IncomeTxKind}
+
+	parts := strings.Fields(sms)
+	partsLen := len(parts)
+
+	if partsLen < 3 {
+		return nil, errors.New("invalid HSBC English IPN Outward Transfer message")
+	}
+
+	i := 3
+
+	result.AccountID = parts[i][8:]
+	i += 8
+
+	result.Currency = parts[i]
+	i++
+	result.Amount, err = amountStrToFloat(parts[i])
+	if err != nil {
+		return nil, err
+	}
+	i += 2
+
+	timestamp, err := time.Parse("02-01-2006 15:04", parts[i]+" "+parts[i+1])
+	if err == nil {
+		result.Timestamp = timestamp
+	}
+	i += 3
+
+	result.Counterparty = parts[i]
+	i++
+	if parts[i] != "with" {
+		for ; i < partsLen && parts[i] != "with"; i++ {
+			result.Counterparty += " " + parts[i]
+		}
+	}
+
+	i += 2
+
+	result.Ref = strings.TrimRight(parts[i], ".")
+
+	return result, nil
+}
