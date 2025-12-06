@@ -24,6 +24,9 @@ func (p *HSBCEnglishSalaryParser) Parse(sms string) (*SMS, error) {
 
 	parts := strings.Fields(sms)
 
+	// From HSBC: 10NOV25 Salary to 444-555***-666 USD 8,000+ Your available balance is USD 18,000
+	// 0    1     2       3      4  5              6   7      8    9         10      11 12  13
+
 	i := 2
 
 	timestamp, err := time.Parse("02Jan06", parts[i])

@@ -25,6 +25,9 @@ func (p *HSBCEnglishDebitCardPurchaseParser) Parse(sms string) (*SMS, error) {
 	parts := strings.Fields(sms)
 	partsLen := len(parts)
 
+	// From HSBC: 26AUG25 PAYPRO-*SHOP FOR GOODS Purchase from 123-456***-789 USD 220.00- Your available balance is USD 4,554.36
+	// 0    1     2       3            4   5     6        7    8              9   10      11   12        13      14 15  16
+
 	i := 2
 
 	timestamp, err := time.Parse("02Jan06", parts[i])

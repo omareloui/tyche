@@ -25,6 +25,8 @@ func (p *HSBCEnglishIPNInwardTransferParser) Parse(sms string) (*SMS, error) {
 	parts := strings.Fields(sms)
 	partsLen := len(parts)
 
+	// Your HSBC Account ********7890 was credited with IPN inward transfer for USD 2,300.00 on 10-03-2025 16:45 from MICHAEL JAMES BROWN with reference ref999. For further details, please contact HSBC call centre
+	// 0    1    2       3            4   5        6    7   8      9        10  11  12       13 14         15    16   17      18    19    20   21        22
 	i := 3
 
 	result.AccountID = parts[i][8:]
