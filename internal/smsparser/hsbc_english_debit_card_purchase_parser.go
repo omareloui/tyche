@@ -16,6 +16,11 @@ func (p *HSBCEnglishDebitCardPurchaseParser) CanParse(sms string) bool {
 }
 
 func (p *HSBCEnglishDebitCardPurchaseParser) Parse(sms string) (*SMS, error) {
+	if !p.CanParse(sms) {
+		return nil, ErrCantParse
+	}
+
+	var err error
 	result := &SMS{Bank: HSBC, TxKind: models.ExpenseTxKind}
 
 	parts := strings.Fields(sms)
@@ -45,12 +50,19 @@ func (p *HSBCEnglishDebitCardPurchaseParser) Parse(sms string) (*SMS, error) {
 
 	result.Currency = parts[i]
 	i++
-	result.Amount = amountStrToFloat(parts[i])
+	result.Amount, err = amountStrToFloat(parts[i])
+	if err != nil {
+		return nil, err
+	}
+
 	i += 5
 
 	result.AvailableBalanceCurrency = parts[i]
 	i++
-	result.AvailableBalance = amountStrToFloat(parts[i])
+	result.AvailableBalance, err = amountStrToFloat(parts[i])
+	if err != nil {
+		return nil, err
+	}
 
 	return result, nil
 }

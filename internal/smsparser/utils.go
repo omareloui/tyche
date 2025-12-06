@@ -5,8 +5,8 @@ import (
 	"strings"
 )
 
-func amountStrToFloat(amt string) float64 {
+func amountStrToFloat(amt string) (float64, error) {
 	amt = strings.TrimRight(strings.ReplaceAll(strings.TrimSpace(amt), ",", ""), "-")
-	res, _ := strconv.ParseFloat(amt, 64)
-	return res
+	res, err := strconv.ParseFloat(amt, 64)
+	return res, err
 }

@@ -7,6 +7,8 @@ import (
 	"github.com/omareloui/tyche/internal/models"
 )
 
+var ErrCantParse = errors.New("can't parse this text")
+
 type Bank uint16
 
 const (
