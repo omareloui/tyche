@@ -1,14 +1,15 @@
-package smsparser
+package smsparser_test
 
 import (
 	"testing"
 	"time"
 
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/smsparser"
 )
 
 func TestHSBCEnglishIPNInwardTransferParser_CanParse(t *testing.T) {
-	parser := &HSBCEnglishIPNInwardTransferParser{}
+	parser := &smsparser.HSBCEnglishIPNInwardTransferParser{}
 
 	tests := []struct {
 		name     string
@@ -63,19 +64,19 @@ func TestHSBCEnglishIPNInwardTransferParser_CanParse(t *testing.T) {
 }
 
 func TestHSBCEnglishIPNInwardTransferParser_Parse(t *testing.T) {
-	parser := &HSBCEnglishIPNInwardTransferParser{}
+	parser := &smsparser.HSBCEnglishIPNInwardTransferParser{}
 
 	tests := []struct {
 		name    string
 		sms     string
-		want    *SMS
+		want    *smsparser.SMS
 		wantErr bool
 	}{
 		{
 			name: "valid SMS with two-word sender name",
 			sms:  "Your HSBC Account ********1234 was credited with IPN inward transfer for USD 500.00 on 31-08-2025 18:31 from JOHN DOE with reference abc123xyz. For further details, please contact HSBC call centre",
-			want: &SMS{
-				Bank:         HSBC,
+			want: &smsparser.SMS{
+				Bank:         smsparser.HSBC,
 				TxKind:       models.IncomeTxKind,
 				AccountID:    "1234",
 				Currency:     "USD",
@@ -89,8 +90,8 @@ func TestHSBCEnglishIPNInwardTransferParser_Parse(t *testing.T) {
 		{
 			name: "valid SMS with four-word sender name",
 			sms:  "Your HSBC Account ********5678 was credited with IPN inward transfer for EUR 1200.50 on 15-12-2024 14:22 from JANE MARIE LOUISE SMITH with reference ref456def. For further details, please contact HSBC call centre",
-			want: &SMS{
-				Bank:         HSBC,
+			want: &smsparser.SMS{
+				Bank:         smsparser.HSBC,
 				TxKind:       models.IncomeTxKind,
 				AccountID:    "5678",
 				Currency:     "EUR",
@@ -104,8 +105,8 @@ func TestHSBCEnglishIPNInwardTransferParser_Parse(t *testing.T) {
 		{
 			name: "valid SMS with single-word sender name",
 			sms:  "Your HSBC Account ********9012 was credited with IPN inward transfer for GBP 750.25 on 01-01-2025 09:15 from COMPANY with reference xyz789abc. For further details, please contact HSBC call centre",
-			want: &SMS{
-				Bank:         HSBC,
+			want: &smsparser.SMS{
+				Bank:         smsparser.HSBC,
 				TxKind:       models.IncomeTxKind,
 				AccountID:    "9012",
 				Currency:     "GBP",
@@ -119,8 +120,8 @@ func TestHSBCEnglishIPNInwardTransferParser_Parse(t *testing.T) {
 		{
 			name: "valid SMS with large amount and comma",
 			sms:  "Your HSBC Account ********3456 was credited with IPN inward transfer for USD 15,500.75 on 20-06-2025 12:00 from ROBERT WILLIAM ANDERSON with reference longref123. For further details, please contact HSBC call centre",
-			want: &SMS{
-				Bank:         HSBC,
+			want: &smsparser.SMS{
+				Bank:         smsparser.HSBC,
 				TxKind:       models.IncomeTxKind,
 				AccountID:    "3456",
 				Currency:     "USD",
@@ -134,8 +135,8 @@ func TestHSBCEnglishIPNInwardTransferParser_Parse(t *testing.T) {
 		{
 			name: "valid SMS with three-word sender name",
 			sms:  "Your HSBC Account ********7890 was credited with IPN inward transfer for USD 2,300.00 on 10-03-2025 16:45 from MICHAEL JAMES BROWN with reference ref999. For further details, please contact HSBC call centre",
-			want: &SMS{
-				Bank:         HSBC,
+			want: &smsparser.SMS{
+				Bank:         smsparser.HSBC,
 				TxKind:       models.IncomeTxKind,
 				AccountID:    "7890",
 				Currency:     "USD",
@@ -225,7 +226,7 @@ func TestHSBCEnglishIPNInwardTransferParser_Parse(t *testing.T) {
 }
 
 func TestHSBCEnglishIPNInwardTransferParser_Parse_Errors(t *testing.T) {
-	parser := &HSBCEnglishIPNInwardTransferParser{}
+	parser := &smsparser.HSBCEnglishIPNInwardTransferParser{}
 
 	tests := []struct {
 		name    string

@@ -1,14 +1,15 @@
-package smsparser
+package smsparser_test
 
 import (
 	"testing"
 	"time"
 
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/smsparser"
 )
 
 func TestHSBCEnglishIPNOutwardTransferParser_CanParse(t *testing.T) {
-	parser := &HSBCEnglishIPNOutwardTransferParser{}
+	parser := &smsparser.HSBCEnglishIPNOutwardTransferParser{}
 
 	tests := []struct {
 		name     string
@@ -58,19 +59,19 @@ func TestHSBCEnglishIPNOutwardTransferParser_CanParse(t *testing.T) {
 }
 
 func TestHSBCEnglishIPNOutwardTransferParser_Parse(t *testing.T) {
-	parser := &HSBCEnglishIPNOutwardTransferParser{}
+	parser := &smsparser.HSBCEnglishIPNOutwardTransferParser{}
 
 	tests := []struct {
 		name    string
 		sms     string
-		want    *SMS
+		want    *smsparser.SMS
 		wantErr bool
 	}{
 		{
 			name: "valid SMS with full name counterparty",
 			sms:  "Your HSBC Account ********1234 was debited with IPN outward transfer for EGP 67,020.00 on 27-07-2025 12:54 to JOHN DOE SMITH with reference 199b2b61. For further details, please contact HSBC call centre",
-			want: &SMS{
-				Bank:         HSBC,
+			want: &smsparser.SMS{
+				Bank:         smsparser.HSBC,
 				TxKind:       models.ExpenseTxKind,
 				AccountID:    "1234",
 				Currency:     "EGP",
@@ -84,8 +85,8 @@ func TestHSBCEnglishIPNOutwardTransferParser_Parse(t *testing.T) {
 		{
 			name: "valid SMS with numeric counterparty",
 			sms:  "Your HSBC Account ********5678 was debited with IPN outward transfer for EGP 6,731.73 on 29-07-2025 21:24 to 7967 with reference 4f38876c. For further details, please contact HSBC call centre",
-			want: &SMS{
-				Bank:         HSBC,
+			want: &smsparser.SMS{
+				Bank:         smsparser.HSBC,
 				TxKind:       models.ExpenseTxKind,
 				AccountID:    "5678",
 				Currency:     "EGP",
@@ -99,8 +100,8 @@ func TestHSBCEnglishIPNOutwardTransferParser_Parse(t *testing.T) {
 		{
 			name: "valid SMS with lowercase counterparty",
 			sms:  "Your HSBC Account ********9012 was debited with IPN outward transfer for EGP 5,005.00 on 02-08-2025 18:55 to jane smith williams with reference ff9d07c7. For further details, please contact HSBC call centre",
-			want: &SMS{
-				Bank:         HSBC,
+			want: &smsparser.SMS{
+				Bank:         smsparser.HSBC,
 				TxKind:       models.ExpenseTxKind,
 				AccountID:    "9012",
 				Currency:     "EGP",
@@ -114,8 +115,8 @@ func TestHSBCEnglishIPNOutwardTransferParser_Parse(t *testing.T) {
 		{
 			name: "valid SMS with small amount",
 			sms:  "Your HSBC Account ********3456 was debited with IPN outward transfer for EGP 200.50 on 12-08-2025 18:32 to 7773 with reference 8eb5c74f. For further details, please contact HSBC call centre",
-			want: &SMS{
-				Bank:         HSBC,
+			want: &smsparser.SMS{
+				Bank:         smsparser.HSBC,
 				TxKind:       models.ExpenseTxKind,
 				AccountID:    "3456",
 				Currency:     "EGP",
@@ -129,8 +130,8 @@ func TestHSBCEnglishIPNOutwardTransferParser_Parse(t *testing.T) {
 		{
 			name: "valid SMS with large amount",
 			sms:  "Your HSBC Account ********7890 was debited with IPN outward transfer for EGP 17,247.23 on 24-09-2025 01:37 to ALICE JOHNSON BROWN with reference b8b97336. For further details, please contact HSBC call centre",
-			want: &SMS{
-				Bank:         HSBC,
+			want: &smsparser.SMS{
+				Bank:         smsparser.HSBC,
 				TxKind:       models.ExpenseTxKind,
 				AccountID:    "7890",
 				Currency:     "EGP",
@@ -144,8 +145,8 @@ func TestHSBCEnglishIPNOutwardTransferParser_Parse(t *testing.T) {
 		{
 			name: "valid SMS with different account",
 			sms:  "Your HSBC Account ********2468 was debited with IPN outward transfer for EGP 1,001.00 on 14-09-2025 17:31 to 8821 with reference f204be32. For further details, please contact HSBC call centre",
-			want: &SMS{
-				Bank:         HSBC,
+			want: &smsparser.SMS{
+				Bank:         smsparser.HSBC,
 				TxKind:       models.ExpenseTxKind,
 				AccountID:    "2468",
 				Currency:     "EGP",
@@ -159,8 +160,8 @@ func TestHSBCEnglishIPNOutwardTransferParser_Parse(t *testing.T) {
 		{
 			name: "valid SMS with mixed case name",
 			sms:  "Your HSBC Account ********1357 was debited with IPN outward transfer for EGP 3,303.30 on 02-11-2025 14:48 to ROBERT TAYLOR DAVIS with reference b97d731c. For further details, please contact HSBC call centre",
-			want: &SMS{
-				Bank:         HSBC,
+			want: &smsparser.SMS{
+				Bank:         smsparser.HSBC,
 				TxKind:       models.ExpenseTxKind,
 				AccountID:    "1357",
 				Currency:     "EGP",

@@ -1,14 +1,15 @@
-package smsparser
+package smsparser_test
 
 import (
 	"testing"
 	"time"
 
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/smsparser"
 )
 
 func TestHSBCEnglishCreditCardPurchaseParser_CanParse(t *testing.T) {
-	parser := &HSBCEnglishCreditCardPurchaseParser{}
+	parser := &smsparser.HSBCEnglishCreditCardPurchaseParser{}
 
 	tests := []struct {
 		name     string
@@ -53,19 +54,19 @@ func TestHSBCEnglishCreditCardPurchaseParser_CanParse(t *testing.T) {
 }
 
 func TestHSBCEnglishCreditCardPurchaseParser_Parse(t *testing.T) {
-	parser := &HSBCEnglishCreditCardPurchaseParser{}
+	parser := &smsparser.HSBCEnglishCreditCardPurchaseParser{}
 
 	tests := []struct {
 		name    string
 		sms     string
-		want    *SMS
+		want    *smsparser.SMS
 		wantErr bool
 	}{
 		{
 			name: "valid SMS with single word counterparty",
 			sms:  "Your Credit Card ending with *** 1234 has been used for USD 30.00 on 31/10/2025 at RETAILER. Your available limit is USD 5000.00",
-			want: &SMS{
-				Bank:                     HSBC,
+			want: &smsparser.SMS{
+				Bank:                     smsparser.HSBC,
 				TxKind:                   models.ExpenseTxKind,
 				AccountID:                "1234",
 				Currency:                 "USD",
@@ -80,8 +81,8 @@ func TestHSBCEnglishCreditCardPurchaseParser_Parse(t *testing.T) {
 		{
 			name: "valid SMS with multi-word counterparty",
 			sms:  "Your Credit Card ending with *** 1234 has been used for USD 30.00 on 31/10/2025 at PAYMENT PROCESSOR. Your available limit is USD 5000.00",
-			want: &SMS{
-				Bank:                     HSBC,
+			want: &smsparser.SMS{
+				Bank:                     smsparser.HSBC,
 				TxKind:                   models.ExpenseTxKind,
 				AccountID:                "1234",
 				Currency:                 "USD",
@@ -96,8 +97,8 @@ func TestHSBCEnglishCreditCardPurchaseParser_Parse(t *testing.T) {
 		{
 			name: "valid SMS with different currencies",
 			sms:  "Your Credit Card ending with *** 5678 has been used for EUR 120.50 on 15/12/2024 at COFFEE SHOP. Your available limit is USD 8000.00",
-			want: &SMS{
-				Bank:                     HSBC,
+			want: &smsparser.SMS{
+				Bank:                     smsparser.HSBC,
 				TxKind:                   models.ExpenseTxKind,
 				AccountID:                "5678",
 				Currency:                 "EUR",
@@ -112,8 +113,8 @@ func TestHSBCEnglishCreditCardPurchaseParser_Parse(t *testing.T) {
 		{
 			name: "valid SMS with large amount",
 			sms:  "Your Credit Card ending with *** 9012 has been used for USD 1500.75 on 01/01/2025 at ELECTRONICS STORE. Your available limit is USD 12000.50",
-			want: &SMS{
-				Bank:                     HSBC,
+			want: &smsparser.SMS{
+				Bank:                     smsparser.HSBC,
 				TxKind:                   models.ExpenseTxKind,
 				AccountID:                "9012",
 				Currency:                 "USD",

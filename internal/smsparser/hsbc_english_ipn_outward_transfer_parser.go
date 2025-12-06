@@ -1,7 +1,6 @@
 package smsparser
 
 import (
-	"errors"
 	"strings"
 	"time"
 
@@ -25,10 +24,6 @@ func (p *HSBCEnglishIPNOutwardTransferParser) Parse(sms string) (*SMS, error) {
 
 	parts := strings.Fields(sms)
 	partsLen := len(parts)
-
-	if partsLen < 3 {
-		return nil, errors.New("invalid HSBC English IPN Outward Transfer message")
-	}
 
 	i := 3
 
