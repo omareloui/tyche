@@ -150,8 +150,9 @@ func marshalTxKinds(kinds []models.TxKind) ([]byte, error) {
 
 func unmarshalTxKinds(dbKinds []byte) ([]models.TxKind, error) {
 	if dbKinds == nil {
-		return nil, nil
+		return []models.TxKind{}, nil
 	}
+
 	kinds := []models.TxKind{}
 	err := json.Unmarshal(dbKinds, &kinds)
 	if err != nil {

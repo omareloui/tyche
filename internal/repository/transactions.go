@@ -340,7 +340,6 @@ func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTran
 			Name:             _dbTx.CategoryName.String,
 			BudgetAmount:     _dbTx.CategoryBudgetAmount,
 			BudgetCurrencyID: _dbTx.CategoryBudgetCurrencyID,
-			Kinds:            _dbTx.CategoryKinds,
 			CreatedAt:        _dbTx.CategoryCreatedAt.Time,
 		}
 	}
