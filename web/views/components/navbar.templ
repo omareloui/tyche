@@ -7,7 +7,7 @@ import (
 )
 
 templ Navbar(claims *jwt.AccessClaims, balances []models.Balance) {
-	<header class="fixed top-0 left-0 w-full z-50 bg-linear-to-b from-40% from-zinc-950 to-zinc-950/0 pointer-events-none">
+	<header class="navbar fixed top-0 left-0 w-full z-50 bg-linear-to-b from-40% from-zinc-950 to-zinc-950/0 pointer-events-none">
 		@Container() {
 			<div hx-boost="true" class="flex items-center justify-between py-5">
 				<div class="pointer-events-auto">

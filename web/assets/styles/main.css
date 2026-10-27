@@ -16,7 +16,7 @@ body {
   padding-top: calc(var(--navbar-height) - 40px);
 }
 
-header {
+.navbar {
   height: var(--navbar-height);
 }
 
