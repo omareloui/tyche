@@ -28,6 +28,16 @@ func TestAAIBEnglishCreditCardPurchaseParser(t *testing.T) {
 			expectedCurrency:             "EGP",
 			expectedAvailableBalanceCurr: "",
 		},
+		{
+			name:                         "Space thousands separator",
+			sms:                          "Your credit card **1432 was debited by 21 500.00EGP at AMAZON. Available limit is 1 284.40. To install it up to 60 months, call 19555. T&Cs apply.",
+			expectedCounterparty:         "AMAZON",
+			expectedAmount:               21500.00,
+			expectedAvailableBalance:     1284.40,
+			expectedAccountID:            "1432",
+			expectedCurrency:             "EGP",
+			expectedAvailableBalanceCurr: "",
+		},
 	}
 
 	parser := &smsparser.AAIBEnglishCreditCardPurchaseParser{}
@@ -150,6 +160,11 @@ func TestAAIBEnglishCreditCardPurchaseParser_Parse_Errors(t *testing.T) {
 		{
 			name:    "Invalid format",
 			sms:     "Your credit card",
+			wantErr: true,
+		},
+		{
+			name:    "Truncated after the amount",
+			sms:     "Your credit card **1432 was debited by 2",
 			wantErr: true,
 		},
 		{

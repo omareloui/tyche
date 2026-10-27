@@ -66,7 +66,7 @@ func (r *Registry) ParseAny(sms string) (*SMS, error) {
 	for _, bank := range banksOrder {
 		for _, parser := range r.parsers[bank] {
 			if parser.CanParse(sms) {
-				return parser.Parse(sms)
+				return safeParse(parser, sms)
 			}
 		}
 	}

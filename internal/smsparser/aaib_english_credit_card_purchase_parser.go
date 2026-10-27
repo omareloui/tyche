@@ -1,6 +1,7 @@
 package smsparser
 
 import (
+	"regexp"
 	"strings"
 	"time"
 
@@ -8,6 +9,9 @@ import (
 )
 
 type AAIBEnglishCreditCardPurchaseParser struct{}
+
+var aaibCCPurchaseRe = regexp.MustCompile(
+	`^Your credit card \*\*(\d+) was debited by (\d[\d ,]*(?:\.\d+)?)([A-Z]{3}) at (.+?)\. Available limit is (\d[\d ,]*(?:\.\d+)?)`)
 
 func (p *AAIBEnglishCreditCardPurchaseParser) CanParse(sms string) bool {
 	return strings.HasPrefix(sms, "Your credit card") &&
@@ -19,41 +23,24 @@ func (p *AAIBEnglishCreditCardPurchaseParser) Parse(sms string) (*SMS, error) {
 		return nil, ErrCantParse
 	}
 
+	// Amounts may use a space as the thousands separator:
+	// Your credit card **1432 was debited by 2 111.00EGP at PAYMOBS*Sympl. Available limit is 1 284.40. To install it up to 60 months, call 19555. T&Cs apply.
+	m := aaibCCPurchaseRe.FindStringSubmatch(sms)
+	if m == nil {
+		return nil, ErrCantParse
+	}
+
 	var err error
-	result := &SMS{Bank: AAIB, TxKind: models.ExpenseTxKind}
+	result := &SMS{Bank: AAIB, TxKind: models.ExpenseTxKind, AccountID: m[1], Currency: m[3]}
 
-	parts := strings.Fields(sms)
-
-	// Your credit card **1432 was debited by 229.00EGP at Vodafone Top Up APP. Available limit is 32.70.
-	// 0    1      2    3      4   5       6  7         8  9        10  11 12   13        14    15 16
-
-	i := 3
-
-	result.AccountID = parts[i][2:]
-
-	i = 7
-
-	result.Currency = parts[i][len(parts[i])-3:]
-	result.Amount, err = amountStrToFloat(parts[i][:len(parts[i])-3])
+	result.Amount, err = amountStrToFloat(m[2])
 	if err != nil {
 		return nil, err
 	}
 
-	i = 9
+	result.Counterparty = strings.TrimSpace(m[4])
 
-	result.Counterparty = parts[i]
-	if !strings.HasSuffix(result.Counterparty, ".") {
-		i++
-		for ; i < len(parts) && !strings.HasSuffix(parts[i], "."); i++ {
-			result.Counterparty += " " + parts[i]
-		}
-		result.Counterparty += " " + parts[i]
-	}
-	result.Counterparty = strings.TrimRight(result.Counterparty, ".")
-
-	i += 4
-
-	result.AvailableBalance, err = amountStrToFloat(parts[i])
+	result.AvailableBalance, err = amountStrToFloat(m[5])
 	if err != nil {
 		return nil, err
 	}

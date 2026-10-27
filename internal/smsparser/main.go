@@ -2,6 +2,7 @@ package smsparser
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/omareloui/tyche/internal/models"
@@ -71,9 +72,20 @@ func (r *Registry) Parse(bank Bank, sms string) (*SMS, error) {
 
 	for _, parser := range parsers {
 		if parser.CanParse(sms) {
-			return parser.Parse(sms)
+			return safeParse(parser, sms)
 		}
 	}
 
 	return nil, errors.New("no suitable parser found for SMS format")
+}
+
+// safeParse turns a parser panic on an unexpected SMS format into an error,
+// so one odd message can't take the server down.
+func safeParse(parser Parser, sms string) (res *SMS, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			res, err = nil, fmt.Errorf("%w: parser panicked: %v", ErrCantParse, p)
+		}
+	}()
+	return parser.Parse(sms)
 }
