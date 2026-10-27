@@ -12,12 +12,17 @@ func (h Handler) HomePage(w http.ResponseWriter, r *http.Request) (templ.Compone
 	claims := getClaims(r.Context())
 
 	if claims == nil {
-		return views.HomePage(claims, []models.Balance{}), nil
+		return views.HomePage(claims, []models.Balance{}, nil), nil
 	}
 
 	balances, err := h.repo.GetBalances(r.Context())
 	if err != nil {
 		return nil, err
 	}
-	return views.HomePage(claims, balances), nil
+
+	merchantSpending, err := h.repo.GetMerchantSpending(r.Context(), "")
+	if err != nil {
+		return nil, err
+	}
+	return views.HomePage(claims, balances, merchantSpending), nil
 }

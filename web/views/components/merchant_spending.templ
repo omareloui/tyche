@@ -1,0 +1,133 @@
+package components
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/omareloui/tyche/internal/formatters"
+	"github.com/omareloui/tyche/internal/models"
+)
+
+// MerchantSpendingChart is a lollipop chart of a month's expenses per merchant,
+// most expensive first, scrolling horizontally when they don't fit.
+templ MerchantSpendingChart(ms *models.MerchantSpending) {
+	<section id="merchant-spending" class="bg-zinc-900 rounded-4xl px-6 py-5 shadow-md">
+		<div class="flex items-center justify-between gap-4 pb-4 mb-2 border-b border-zinc-500">
+			<h2 class="text-xl font-bold">
+				Expenses by Merchant
+				if ms.Currency.Symbol != "" {
+					<span class="text-sm font-normal text-zinc-400">({ ms.Currency.Symbol })</span>
+				}
+			</h2>
+			<div class="flex items-center gap-1 rounded-full bg-zinc-800 px-2 py-1 shrink-0">
+				@monthNavButton(ms.Prev, "Previous month", "M3.828 7l4.95 4.95-1.414 1.414L1 7 7.364.636 8.778 2.05z")
+				<span class="min-w-12 text-center">{ monthLabel(ms.Month) }</span>
+				@monthNavButton(ms.Next, "Next month", "M6.172 7L1.222 2.05 2.636.636 9 7l-6.364 6.364-1.414-1.414z")
+			</div>
+		</div>
+		if len(ms.Items) == 0 {
+			<p class="h-56 grid place-items-center text-zinc-400">No merchant spending this month</p>
+		} else {
+			<div class="flex">
+				<div class="relative w-10 h-56 mt-4 shrink-0 text-xs text-zinc-100">
+					for _, tick := range ms.Ticks() {
+						<span class="absolute right-2 translate-y-1/2" style={ bottomPct(ms.Pct(tick)) }>
+							{ compactNum(tick) }
+						</span>
+					}
+					<span class="absolute right-2 bottom-0 translate-y-1/2">0</span>
+				</div>
+				<div class="grow overflow-x-auto overflow-y-hidden">
+					<div class="relative min-w-full w-max pt-4">
+						<div class="absolute inset-x-0 top-4 h-56 pointer-events-none">
+							for _, tick := range ms.Ticks() {
+								<div class="absolute inset-x-0 border-t-[1.5px] border-dashed border-zinc-800" style={ bottomPct(ms.Pct(tick)) }></div>
+							}
+							<div class="absolute inset-x-0 bottom-0 border-t-[1.5px] border-zinc-800"></div>
+						</div>
+						<div class="relative flex justify-around gap-2 px-2">
+							for _, it := range ms.Items {
+								@merchantSpendColumn(ms, it)
+							}
+						</div>
+					</div>
+				</div>
+			</div>
+		}
+	</section>
+}
+
+templ merchantSpendColumn(ms *models.MerchantSpending, it models.MerchantSpend) {
+	<div tabindex="0" class="group flex flex-col items-center w-14 outline-none">
+		<div class="h-56 flex items-end">
+			<div class="relative w-2 rounded-[3px] bg-zinc-600" style={ heightPct(ms.Pct(it.Amount)) }>
+				<span
+					class="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 border-zinc-900 transition-transform group-hover:scale-125 group-focus:scale-125"
+					style={ dotStyle(it.Counterparty.Color) }
+				></span>
+			</div>
+		</div>
+		// Tall enough to hold the tooltip, as the scroll area clips overflow.
+		<div class="relative mt-3 h-20">
+			@CounterpartyIcon(it.Counterparty.Name, it.Counterparty.Icon, it.Counterparty.Color, "w-7 h-7 text-sm")
+			<div class="absolute top-8 left-1/2 -translate-x-1/2 hidden group-hover:block group-focus:block z-10">
+				<div class="mx-auto w-0 h-0 border-x-[5px] border-x-transparent border-b-[5px] border-b-zinc-700"></div>
+				<div class="whitespace-nowrap rounded-md bg-zinc-700 px-2 py-0.5 text-sm text-center leading-tight">
+					<div>{ it.Counterparty.Name }</div>
+					<div class="text-zinc-300">{ formatters.FormatAmount(it.Amount, ms.Currency.Symbol) }</div>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+templ monthNavButton(month, label, path string) {
+	<button
+		type="button"
+		aria-label={ label }
+		title={ label }
+		class="p-1.5 rounded-full enabled:cursor-pointer enabled:hover:bg-zinc-700 disabled:opacity-30"
+		if month == "" {
+			disabled
+		} else {
+			hx-get={ "/merchant-spending?month=" + month }
+			hx-target="#merchant-spending"
+			hx-swap="outerHTML"
+		}
+	>
+		<svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor" aria-hidden="true">
+			<path d={ path }></path>
+		</svg>
+	</button>
+}
+
+func monthLabel(month time.Time) string {
+	if month.Year() == time.Now().Year() {
+		return month.Format("Jan")
+	}
+	return month.Format("Jan 2006")
+}
+
+// compactNum shortens axis labels, e.g. 2500 to 2.5k.
+func compactNum(n float64) string {
+	switch {
+	case n >= 1e6:
+		return formatters.FormatNum(n/1e6) + "M"
+	case n >= 1e3:
+		return formatters.FormatNum(n/1e3) + "k"
+	}
+	return formatters.FormatNum(n)
+}
+
+func bottomPct(pct float64) templ.SafeCSS {
+	return templ.SafeCSS(fmt.Sprintf("bottom:%.2f%%;", pct))
+}
+
+func heightPct(pct float64) templ.SafeCSS {
+	return templ.SafeCSS(fmt.Sprintf("height:%.2f%%;", pct))
+}
+
+func dotStyle(color string) templ.SafeCSS {
+	fill := brandFill(color)
+	return templ.SafeCSS(fmt.Sprintf("background-color:%s;", fill))
+}

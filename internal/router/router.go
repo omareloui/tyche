@@ -19,6 +19,8 @@ func New(h *handler.Handler) Router {
 
 	mux.Handle("GET /{$}", handlePub(h.HomePage))
 
+	mux.Handle("GET /merchant-spending", handle(h.MerchantSpending))
+
 	mux.Handle("GET /health", handlePubJSON(h.Health))
 
 	mux.Handle("GET /accounts", handle(h.Accounts))

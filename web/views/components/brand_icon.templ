@@ -39,17 +39,22 @@ templ CounterpartyIcon(name, icon, color, class string) {
 }
 
 func brandIconStyle(icon, color string) templ.SafeCSS {
-	fill := hexColor(color)
-	// The theme is dark only, so near-black brands would be invisible.
-	if brandicons.IsDark(color) {
-		fill = "#E4E4E7" // zinc-200
-	}
+	fill := brandFill(color)
 	// Slugs are [a-z0-9], validated against the simple-icons index.
 	url := fmt.Sprintf("url(/brand-icons/%s.svg)", icon)
 	return templ.SafeCSS(fmt.Sprintf(
 		"background-color:%s;-webkit-mask:%s center/contain no-repeat;mask:%s center/contain no-repeat;",
 		fill, url, url,
 	))
+}
+
+// brandFill is the color's hex, lightened for near-black brands since the
+// theme is dark only and they would be invisible.
+func brandFill(color string) string {
+	if brandicons.IsDark(color) {
+		return "#E4E4E7" // zinc-200
+	}
+	return hexColor(color)
 }
 
 func placeholderStyle(color string) templ.SafeCSS {
