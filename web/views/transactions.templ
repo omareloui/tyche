@@ -146,6 +146,8 @@ templ Transaction(tx *models.Transaction) {
 			>
 				if v.counterparty != nil {
 					@components.CounterpartyIcon(v.counterparty.Name, v.counterparty.Icon, v.counterparty.Color, "w-7 h-7")
+				} else if tx.Kind == models.DebtTxKind {
+					@icons.Debt("24")
 				} else {
 					@icons.Tag("24")
 				}
