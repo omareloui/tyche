@@ -20,7 +20,7 @@ func (p *CIBEnglishCreditCardPurchaseParser) Parse(sms string) (*SMS, error) {
 	}
 
 	var err error
-	result := &SMS{Bank: CIB, TxKind: models.ExpenseTxKind}
+	result := &SMS{Bank: CIB, TxKind: models.ExpenseTxKind, AutoCreateCounterparty: true}
 
 	parts := strings.Fields(sms)
 

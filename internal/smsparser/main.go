@@ -7,7 +7,12 @@ import (
 	"github.com/omareloui/tyche/internal/models"
 )
 
-var ErrCantParse = errors.New("can't parse this text")
+var (
+	ErrCantParse = errors.New("can't parse this text")
+	// ErrNotTransaction is returned for known messages that aren't
+	// transactions, like statements and reminders.
+	ErrNotTransaction = errors.New("not a transaction")
+)
 
 type Bank uint16
 
@@ -17,19 +22,23 @@ const (
 	CIB
 	AAIB
 	QNB
+	ArabBank
 )
 
 type SMS struct {
-	Bank                     Bank
-	Amount                   float64
-	ToAmount                 float64
-	AccountID                string
-	ToAccountID              string
-	TxKind                   models.TxKind
-	Currency                 string
-	ToCurrency               string
-	Ref                      string
-	Counterparty             string
+	Bank         Bank
+	Amount       float64
+	ToAmount     float64
+	AccountID    string
+	ToAccountID  string
+	TxKind       models.TxKind
+	Currency     string
+	ToCurrency   string
+	Ref          string
+	Counterparty string
+	// AutoCreateCounterparty creates Counterparty on ingest if no existing
+	// counterparty (or alias) matches it.
+	AutoCreateCounterparty   bool
 	AvailableBalance         float64
 	AvailableBalanceCurrency string
 	Timestamp                time.Time

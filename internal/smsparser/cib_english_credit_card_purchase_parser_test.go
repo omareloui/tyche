@@ -58,6 +58,10 @@ func TestCIBEnglishCreditCardPurchaseParser(t *testing.T) {
 				t.Errorf("Counterparty = %q, want %q", result.Counterparty, tt.expectedCounterparty)
 			}
 
+			if !result.AutoCreateCounterparty {
+				t.Error("AutoCreateCounterparty = false, want true")
+			}
+
 			if result.Amount != tt.expectedAmount {
 				t.Errorf("Amount = %v, want %v", result.Amount, tt.expectedAmount)
 			}
