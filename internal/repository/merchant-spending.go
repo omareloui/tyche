@@ -15,8 +15,8 @@ import (
 
 const monthLayout = "2006-01"
 
-// GetMerchantSpending returns the merchant expenses of month (YYYY-MM), or of
-// the latest month with spending when month is empty.
+// GetMerchantSpending returns the merchant expenses, net of refunds, of month
+// (YYYY-MM), or of the latest month with spending when month is empty.
 func (r *Repository) GetMerchantSpending(ctx context.Context, month string) (*models.MerchantSpending, error) {
 	l := logger.FromCtx(ctx)
 
@@ -87,6 +87,10 @@ func (r *Repository) GetMerchantSpending(ctx context.Context, month string) (*mo
 		})
 	}
 
+	// Drop merchants whose refunds cover their expenses.
+	ms.Items = slices.DeleteFunc(ms.Items, func(it models.MerchantSpend) bool {
+		return it.Amount <= 0
+	})
 	slices.SortStableFunc(ms.Items, func(a, b models.MerchantSpend) int {
 		return cmp.Compare(b.Amount, a.Amount)
 	})
