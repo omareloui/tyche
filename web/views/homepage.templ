@@ -8,9 +8,7 @@ import "github.com/omareloui/tyche/web/views/components"
 templ HomePage(claims *jwt.AccessClaims, balances []models.Balance, merchantSpending *models.MerchantSpending) {
 	@layouts.WithTitle(claims, "Tyche: Fortune Builder", balances) {
 		if merchantSpending != nil {
-			<div class="max-w-md">
-				@components.MerchantSpendingChart(merchantSpending)
-			</div>
+			@components.MerchantSpendingChart(merchantSpending)
 		}
 	}
 }
