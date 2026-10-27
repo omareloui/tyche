@@ -70,12 +70,70 @@ func (r *Repository) UpdateCounterparty(ctx context.Context, it *models.Counterp
 		return err
 	}
 
-	aliases, err := marshalAliases(it.Aliases)
+	params, err := updateCounterpartyParams(it)
 	if err != nil {
 		return err
 	}
+	return q.UpdateCounterparty(ctx, params)
+}
 
-	return q.UpdateCounterparty(ctx, queries.UpdateCounterpartyParams{
+// MergeCounterparties moves everything referencing the from counterparty to
+// the into one, adds its name and aliases to the into aliases, then deletes it.
+func (r *Repository) MergeCounterparties(ctx context.Context, fromID, intoID string) (*models.Counterparty, error) {
+	var into *models.Counterparty
+	err := r.transact(ctx, func(qtx *queries.Queries) error {
+		dbFrom, err := qtx.GetCounterparty(ctx, fromID)
+		if err != nil {
+			return err
+		}
+		dbInto, err := qtx.GetCounterparty(ctx, intoID)
+		if err != nil {
+			return err
+		}
+		into = dbCounterpartyRowToCounterparty(queries.GetCounterpartiesRow(dbInto))
+		into.Absorb(dbCounterpartyRowToCounterparty(queries.GetCounterpartiesRow(dbFrom)))
+
+		// Detect the icon if not yet detected, as the absorbed aliases may match.
+		if into.IsMerchant && !dbInto.Counterparty.Icon.Valid {
+			icons := brandicons.Default()
+			into.Icon = icons.Detect(into.Name, into.Aliases)
+			into.Color = icons.ColorFor(into.Icon, into.Color)
+		}
+
+		params, err := updateCounterpartyParams(into)
+		if err != nil {
+			return err
+		}
+		if err := qtx.UpdateCounterparty(ctx, params); err != nil {
+			return err
+		}
+
+		from := sql.NullString{String: fromID, Valid: true}
+		to := sql.NullString{String: intoID, Valid: true}
+		if err := qtx.ReassignTransactionsCounterparty(ctx, queries.ReassignTransactionsCounterpartyParams{ToID: to, FromID: from}); err != nil {
+			return err
+		}
+		if err := qtx.ReassignRecurrentTxsCounterparty(ctx, queries.ReassignRecurrentTxsCounterpartyParams{ToID: to, FromID: from}); err != nil {
+			return err
+		}
+		if err := qtx.ReassignAccountsCounterparty(ctx, queries.ReassignAccountsCounterpartyParams{ToID: to, FromID: from}); err != nil {
+			return err
+		}
+
+		return qtx.DeleteCounterparty(ctx, fromID)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return into, nil
+}
+
+func updateCounterpartyParams(it *models.Counterparty) (queries.UpdateCounterpartyParams, error) {
+	aliases, err := marshalAliases(it.Aliases)
+	if err != nil {
+		return queries.UpdateCounterpartyParams{}, err
+	}
+	return queries.UpdateCounterpartyParams{
 		ID:                it.ID,
 		Name:              it.Name,
 		Aliases:           aliases,
@@ -83,7 +141,7 @@ func (r *Repository) UpdateCounterparty(ctx context.Context, it *models.Counterp
 		Color:             sql.NullString{String: it.Color, Valid: it.Color != ""},
 		IsMerchant:        it.IsMerchant,
 		DefaultCategoryID: defaultCategoryID(it),
-	})
+	}, nil
 }
 
 func (r *Repository) CreateCounterparty(ctx context.Context, it *models.Counterparty) error {

@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/a-h/templ"
@@ -218,6 +219,71 @@ func (h Handler) DeleteCounterparty(w http.ResponseWriter, r *http.Request) (tem
 	l.Info("deleted counterparty")
 
 	return nil, nil
+}
+
+func (h Handler) GetMergeCounterparty(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+
+	from, cps, err := h.counterpartyAndMergeTargets(r, id)
+	if err != nil {
+		l.Error("fetching counterparties to merge", zap.Error(err))
+		return nil, err
+	}
+
+	return views.MergeCounterparty(from, &views.MergeCounterpartyFD{}, cps), nil
+}
+
+func (h Handler) MergeCounterparty(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+
+	from, cps, err := h.counterpartyAndMergeTargets(r, id)
+	if err != nil {
+		l.Error("fetching counterparties to merge", zap.Error(err))
+		return nil, err
+	}
+
+	intoID := r.FormValue("into_id")
+	if !slices.ContainsFunc(cps, func(cp models.Counterparty) bool { return cp.ID == intoID }) {
+		fd := &views.MergeCounterpartyFD{IntoID: form.FDInput{Value: intoID, Error: "Select a counterparty to merge into"}}
+		return views.MergeCounterparty(from, fd, cps), nil
+	}
+
+	into, err := h.repo.MergeCounterparties(r.Context(), id, intoID)
+	if err != nil {
+		l.Error("merging counterparties", zap.Error(err), zap.String("from", id), zap.String("into", intoID))
+		return nil, err
+	}
+	l.Info("merged counterparties", zap.String("from", id), zap.String("into", intoID))
+
+	// Drop the merged counterparty's card, and update the one merged into.
+	w.Header().Set("HX-Retarget", "#"+views.CounterpartyWrapperID(id))
+	w.Header().Set("HX-Reswap", "outerHTML")
+	return views.CounterpartyReplaceOOB(into), nil
+}
+
+// counterpartyAndMergeTargets returns the counterparty and the others it can
+// be merged into.
+func (h Handler) counterpartyAndMergeTargets(r *http.Request, id string) (*models.Counterparty, []models.Counterparty, error) {
+	from, err := h.repo.GetCounterparty(r.Context(), id)
+	if err != nil {
+		return nil, nil, err
+	}
+	cps, err := h.repo.GetCounterparties(r.Context())
+	if err != nil {
+		return nil, nil, err
+	}
+	cps = slices.DeleteFunc(cps, func(cp models.Counterparty) bool { return cp.ID == id })
+	return from, cps, nil
 }
 
 func (h Handler) mapCounterpartyToFD(cp *models.Counterparty, err *errs.ValidationError) *views.CounterpartyFD {

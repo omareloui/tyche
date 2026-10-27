@@ -1,6 +1,8 @@
 package models
 
 import (
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/omareloui/tyche/internal/errs"
@@ -31,6 +33,28 @@ func (cp *Counterparty) DefaultCategoryFor(kind TxKind) *Category {
 		return nil
 	}
 	return &Category{ID: cp.DefaultCategory.ID, Kinds: []TxKind{kind}}
+}
+
+// Absorb adds the other counterparty's name and aliases to the aliases,
+// skipping blanks and case-insensitive duplicates, and takes its default
+// category if this merchant has none.
+func (cp *Counterparty) Absorb(other *Counterparty) {
+	seen := map[string]bool{strings.ToLower(strings.TrimSpace(cp.Name)): true}
+	aliases := []string{}
+	for _, a := range slices.Concat(cp.Aliases, []string{other.Name}, other.Aliases) {
+		a = strings.TrimSpace(a)
+		key := strings.ToLower(a)
+		if a == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		aliases = append(aliases, a)
+	}
+	cp.Aliases = aliases
+
+	if cp.IsMerchant && cp.DefaultCategory == nil {
+		cp.DefaultCategory = other.DefaultCategory
+	}
 }
 
 func (cp *Counterparty) SanitizeAndValidate(sani *sanitizer.Sanitizer, valid *valid.Validator) error {

@@ -12,6 +12,10 @@ import (
 	"github.com/omareloui/tyche/web/views/form"
 )
 
+type MergeCounterpartyFD struct {
+	IntoID form.FDInput
+}
+
 type CounterpartyFD struct {
 	Name              form.FDInput
 	Aliases           form.FDInput
@@ -45,6 +49,19 @@ templ EditCounterparty(id string, fd *CounterpartyFD, cats []models.Category) {
 	}
 }
 
+templ MergeCounterparty(from *models.Counterparty, fd *MergeCounterpartyFD, cps []models.Counterparty) {
+	@form.Form("post", fmt.Sprintf("/counterparties/%s/merge", from.ID), templ.Attributes{
+		"hx-target":     "this",
+		"hx-disinherit": "hx-confirm",
+		"hx-confirm":    fmt.Sprintf("Merge %q into the selected counterparty? %q will be deleted.", from.Name, from.Name),
+	}) {
+		<p>Merge { from.Name } into another counterparty.</p>
+		<p>Its transactions, recurrent transactions and accounts move to the selected counterparty, and its name and aliases become the selected counterparty's aliases.</p>
+		@form.SelectCounterparty("into_id", from.ID, cps, fd.IntoID, false, nil)
+		@form.FormButtons("Merge", fmt.Sprintf("/counterparties/%s", from.ID))
+	}
+}
+
 templ counterpartyFormBody(id string, fd *CounterpartyFD, cats []models.Category) {
 	@form.TextInput("Name", "name", "Enter the name", id, fd.Name, nil, nil)
 	@form.TextInput("SMS Aliases", "aliases", "Comma separated, as in bank SMS, e.g. UBER *TRIP, UBER BV", id, fd.Aliases, nil, nil)
@@ -64,7 +81,7 @@ templ counterpartyFormBody(id string, fd *CounterpartyFD, cats []models.Category
 templ counterpartiesList(counterparties []models.Counterparty) {
 	@components.Grid2ColOnSMUp("counterparties-list") {
 		for _, cp := range counterparties {
-			@Counterparty(&cp)
+			@counterpartyWrapper(&cp)
 		}
 	}
 }
@@ -74,6 +91,7 @@ templ Counterparty(cp *models.Counterparty) {
 		components.WithCardIcon(components.CounterpartyIcon(cp.Name, cp.Icon, cp.Color, "w-8 h-8")),
 		components.WithCardMenu([]templ.Component{
 			components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/counterparties/%s/edit", cp.ID)),
+			components.EntryMenuAnchorItem("Merge into…", "get", fmt.Sprintf("/counterparties/%s/merge", cp.ID)),
 			components.EntryMenuDeleteItem(fmt.Sprintf("/counterparties/%s", cp.ID)),
 		}),
 	) {
@@ -96,6 +114,24 @@ templ Counterparty(cp *models.Counterparty) {
 
 templ CounterpartyOOB(cp *models.Counterparty) {
 	<div id="counterparties-list" hx-swap-oob="afterbegin">
+		@counterpartyWrapper(cp)
+	</div>
+}
+
+// counterpartyWrapper gives the card a stable target, as edit and merge forms
+// replace the card itself.
+templ counterpartyWrapper(cp *models.Counterparty) {
+	<div id={ CounterpartyWrapperID(cp.ID) } class="contents">
 		@Counterparty(cp)
 	</div>
+}
+
+templ CounterpartyReplaceOOB(cp *models.Counterparty) {
+	<div id={ CounterpartyWrapperID(cp.ID) } class="contents" hx-swap-oob="innerHTML">
+		@Counterparty(cp)
+	</div>
+}
+
+func CounterpartyWrapperID(id string) string {
+	return "counterparty-" + id
 }

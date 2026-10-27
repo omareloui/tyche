@@ -59,3 +59,18 @@ WHERE id = sqlc.arg(id);
 -- name: DeleteCounterparty :exec
 DELETE FROM counterparties
 WHERE id = sqlc.arg(id);
+
+-- name: ReassignTransactionsCounterparty :exec
+UPDATE transactions
+SET counterparty_id = sqlc.arg(to_id)
+WHERE counterparty_id = sqlc.arg(from_id);
+
+-- name: ReassignRecurrentTxsCounterparty :exec
+UPDATE recurrent_txs
+SET counterparty_id = sqlc.arg(to_id)
+WHERE counterparty_id = sqlc.arg(from_id);
+
+-- name: ReassignAccountsCounterparty :exec
+UPDATE accounts
+SET counterparty_id = sqlc.arg(to_id)
+WHERE counterparty_id = sqlc.arg(from_id);
