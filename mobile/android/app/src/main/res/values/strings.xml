@@ -17,5 +17,6 @@
     <string name="senders_selected">Bank senders: %1$s</string>
     <string name="senders_none">none selected</string>
     <string name="import_past">Import last 30 days of SMS</string>
+    <string name="import_all">Import all SMS</string>
     <string name="sync_now">Sync now</string>
 </resources>

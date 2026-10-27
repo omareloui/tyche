@@ -72,6 +72,12 @@
                 android:text="@string/import_past" />
 
             <Button
+                android:id="@+id/import_all"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/import_all" />
+
+            <Button
                 android:id="@+id/sign_out"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

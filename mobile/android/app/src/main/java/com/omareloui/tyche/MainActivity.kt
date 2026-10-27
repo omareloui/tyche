@@ -48,7 +48,10 @@ class MainActivity : AppCompatActivity() {
             UploadWorker.enqueue(this)
             toast("Syncing")
         }
-        findViewById<Button>(R.id.import_past).setOnClickListener { importPast() }
+        findViewById<Button>(R.id.import_past).setOnClickListener {
+            importSince(System.currentTimeMillis() - TimeUnit.DAYS.toMillis(IMPORT_DAYS))
+        }
+        findViewById<Button>(R.id.import_all).setOnClickListener { importSince(0) }
         findViewById<Button>(R.id.choose_senders).setOnClickListener {
             startActivity(Intent(this, SendersActivity::class.java))
         }
@@ -124,14 +127,13 @@ class MainActivity : AppCompatActivity() {
         render()
     }
 
-    private fun importPast() {
+    private fun importSince(sinceMillis: Long) {
         if (!hasPermission(Manifest.permission.READ_SMS)) {
             askForSmsPermissions()
             return
         }
         lifecycleScope.launch {
-            val since = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(IMPORT_DAYS)
-            val count = withContext(Dispatchers.IO) { SmsImporter.importSince(this@MainActivity, since) }
+            val count = withContext(Dispatchers.IO) { SmsImporter.importSince(this@MainActivity, sinceMillis) }
             toast("Queued $count SMS")
             render()
         }
