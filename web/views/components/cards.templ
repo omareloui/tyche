@@ -2,6 +2,7 @@ package components
 
 type cardOpts struct {
 	title     string
+	icon      templ.Component
 	menuItems []templ.Component
 	isStale   bool
 }
@@ -30,7 +31,7 @@ templ EntryCard(opts ...cardOptsFunc) {
 		>
 			if len(o.menuItems) > 0 && o.title != "" {
 				<div class="flex justify-between gap-8">
-					<p class="text-2xl mb-2">{ o.title }</p>
+					@cardTitle(o)
 					<button
 						@click="openMenu = !openMenu"
 						class="cursor-pointer inline-block w-6 h-6"
@@ -39,7 +40,7 @@ templ EntryCard(opts ...cardOptsFunc) {
 					</button>
 				</div>
 			} else if o.title != "" {
-				<p class="text-2xl mb-2">{ o.title }</p>
+				@cardTitle(o)
 			} else if len(o.menuItems) > 0 {
 				<div class="flex justify-end gap-8">
 					<button
@@ -53,6 +54,23 @@ templ EntryCard(opts ...cardOptsFunc) {
 			{ children... }
 		</div>
 	</div>
+}
+
+templ cardTitle(o *cardOpts) {
+	if o.icon != nil {
+		<div class="flex items-center gap-3 mb-2 min-w-0">
+			@o.icon
+			<p class="text-2xl truncate">{ o.title }</p>
+		</div>
+	} else {
+		<p class="text-2xl mb-2">{ o.title }</p>
+	}
+}
+
+func WithCardIcon(icon templ.Component) cardOptsFunc {
+	return func(o *cardOpts) {
+		o.icon = icon
+	}
 }
 
 func WithCardMenu(items []templ.Component) cardOptsFunc {

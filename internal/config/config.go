@@ -38,3 +38,11 @@ func GetCacheDir() string {
 func GetCacheExpiryInDays() int {
 	return getEnvironmentIntWithDefault("FX_RATE_CACHE_EXPIRY_IN_DAYS", 1)
 }
+
+func GetExtraBrandIconsDir() string {
+	return getEnvironmentValueWithDefault("EXTRA_BRAND_ICONS_DIR", "./web/brand-icons")
+}
+
+func GetSimpleIconsDir() string {
+	return getEnvironmentValueWithDefault("SIMPLE_ICONS_DIR", "./third_party/simple-icons")
+}

@@ -1,0 +1,73 @@
+package components
+
+import (
+	"fmt"
+	"strings"
+	"unicode"
+	"unicode/utf8"
+
+	"github.com/omareloui/tyche/internal/brandicons"
+)
+
+// CounterpartyIcon renders the simple-icons logo tinted with the stored
+// color, or a circle with the name's first letter on that color.
+templ CounterpartyIcon(name, icon, color, class string) {
+	if icon != "" {
+		<span
+			role="img"
+			aria-label={ name }
+			title={ name }
+			class={ "inline-block shrink-0", class }
+			style={ brandIconStyle(icon, color) }
+		></span>
+	} else {
+		<span
+			role="img"
+			aria-label={ name }
+			title={ name }
+			class={
+				"grid place-items-center shrink-0 rounded-full font-semibold select-none",
+				templ.KV("text-white", !brandicons.IsLight(color)),
+				templ.KV("text-zinc-900", brandicons.IsLight(color)),
+				class,
+			}
+			style={ placeholderStyle(color) }
+		>
+			{ initial(name) }
+		</span>
+	}
+}
+
+func brandIconStyle(icon, color string) templ.SafeCSS {
+	fill := hexColor(color)
+	// The theme is dark only, so near-black brands would be invisible.
+	if brandicons.IsDark(color) {
+		fill = "#E4E4E7" // zinc-200
+	}
+	// Slugs are [a-z0-9], validated against the simple-icons index.
+	url := fmt.Sprintf("url(/brand-icons/%s.svg)", icon)
+	return templ.SafeCSS(fmt.Sprintf(
+		"background-color:%s;-webkit-mask:%s center/contain no-repeat;mask:%s center/contain no-repeat;",
+		fill, url, url,
+	))
+}
+
+func placeholderStyle(color string) templ.SafeCSS {
+	return templ.SafeCSS("background-color:" + hexColor(color) + ";")
+}
+
+// hexColor only lets through 6 digit hexes, defaulting to zinc-600.
+func hexColor(color string) string {
+	if len(color) != 6 || strings.Trim(strings.ToLower(color), "0123456789abcdef") != "" {
+		return "#52525B"
+	}
+	return "#" + color
+}
+
+func initial(name string) string {
+	r, _ := utf8.DecodeRuneInString(strings.TrimSpace(name))
+	if r == utf8.RuneError {
+		return "?"
+	}
+	return string(unicode.ToUpper(r))
+}

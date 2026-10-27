@@ -1,0 +1,84 @@
+[
+	{
+		"title": "Amazon",
+		"hex": "FF9900",
+		"source": "https://cdn.jsdelivr.net/npm/simple-icons@14/icons/amazon.svg"
+	},
+	{
+		"title": "Amazon Music",
+		"hex": "46C3D0",
+		"source": "https://cdn.jsdelivr.net/npm/simple-icons@14/icons/amazonmusic.svg"
+	},
+	{
+		"title": "Amazon Pay",
+		"hex": "FF9900",
+		"source": "https://cdn.jsdelivr.net/npm/simple-icons@14/icons/amazonpay.svg"
+	},
+	{
+		"title": "Amazon Prime",
+		"hex": "00A8E1",
+		"source": "https://cdn.jsdelivr.net/npm/simple-icons@14/icons/amazonprime.svg"
+	},
+	{
+		"title": "Breadfast",
+		"hex": "AA0082",
+		"source": "https://www.breadfast.com/wp-content/themes/breadfast/website/images/bf-menu-logo.svg"
+	},
+	{
+		"title": "DiDi",
+		"hex": "FF6400",
+		"source": "https://commons.wikimedia.org/wiki/File:DiDi_Logo.svg",
+		"aliases": {
+			"aka": [
+				"DiDi Chuxing",
+				"Didi Mobility"
+			]
+		}
+	},
+	{
+		"title": "Disney",
+		"hex": "113CCF",
+		"source": "https://api.iconify.design/thesvg-color/disney.svg"
+	},
+	{
+		"title": "Disney+",
+		"hex": "0063E5",
+		"source": "https://api.iconify.design/cbi/disney-plus.svg",
+		"aliases": {
+			"aka": [
+				"Disney Plus"
+			]
+		}
+	},
+	{
+		"title": "Microsoft",
+		"hex": "5E5E5E",
+		"source": "https://cdn.jsdelivr.net/npm/simple-icons@12/icons/microsoft.svg"
+	},
+	{
+		"title": "Prime Video",
+		"hex": "1F2E3E",
+		"source": "https://cdn.jsdelivr.net/npm/simple-icons@14/icons/primevideo.svg"
+	},
+	{
+		"title": "Seoudi",
+		"hex": "00572D",
+		"source": "https://www.seoudisupermarket.com/_nuxt/c47ef65d11c7f8e31cac9baee901dcc7.svg#i-logo",
+		"aliases": {
+			"aka": [
+				"Seoudi Market",
+				"Seoudi Supermarket"
+			]
+		}
+	},
+	{
+		"title": "Talabat",
+		"hex": "FF5A00",
+		"source": "https://commons.wikimedia.org/wiki/File:Talabat_logo.svg"
+	},
+	{
+		"title": "Temu",
+		"hex": "FB7701",
+		"source": "https://commons.wikimedia.org/wiki/File:Temu_logo.svg"
+	}
+]

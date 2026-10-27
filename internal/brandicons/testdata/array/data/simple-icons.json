@@ -1,0 +1,11 @@
+[
+	{ "title": "Uber", "hex": "000000" },
+	{ "title": "Acme", "hex": "ABCDEF" },
+	{ "title": "Netflix", "hex": "e50914", "aliases": { "aka": ["Netflix Inc"] } },
+	{ "title": "Booking.com", "hex": "003580" },
+	{ "title": "Société Générale", "hex": "E9041E", "aliases": { "loc": { "ar-EG": "سوسيتيه", "fr-FR": "SocGen" } } },
+	{ "title": "C++", "hex": "00599C" },
+	{ "title": "Vodafone", "hex": "E60000", "aliases": { "dup": [{ "title": "Vodafone Cash" }] } },
+	{ "title": "/e/", "hex": "000000" },
+	{ "title": "Missing Icon", "hex": "FFFFFF" }
+]

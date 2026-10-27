@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/a-h/templ"
+	"github.com/omareloui/tyche/internal/brandicons"
 	"github.com/omareloui/tyche/internal/errs"
 	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/logger"
@@ -72,6 +73,13 @@ func (h Handler) CreateCounterparty(w http.ResponseWriter, r *http.Request) (tem
 		return nil, err
 	}
 
+	if cp.Icon == "" {
+		cp.Icon = brandicons.Default().Detect(cp.Name, cp.Aliases)
+	} else if valerr := validateCounterpartyIcon(cp); valerr != nil {
+		return views.CreateCounterpartyForm(h.mapCounterpartyToFD(cp, valerr)), nil
+	}
+	cp.Color = brandicons.Default().ColorFor(cp.Icon, "")
+
 	if err := h.repo.CreateCounterparty(r.Context(), cp); err != nil {
 		l.Error("creating counterparty", zap.Error(err))
 		return nil, err
@@ -130,6 +138,17 @@ func (h Handler) EditCounterparty(w http.ResponseWriter, r *http.Request) (templ
 		return nil, err
 	}
 
+	if valerr := validateCounterpartyIcon(cp); valerr != nil {
+		return views.EditCounterparty(id, h.mapCounterpartyToFD(cp, valerr)), nil
+	}
+
+	prev, err := h.repo.GetCounterparty(r.Context(), id)
+	if err != nil {
+		l.Error("fetching counterparty", zap.Error(err))
+		return nil, err
+	}
+	cp.Color = brandicons.Default().ColorFor(cp.Icon, prev.Color)
+
 	l.Debug("update counterparty", zap.Any("counterparty", cp))
 
 	if err := h.repo.UpdateCounterparty(r.Context(), cp); err != nil {
@@ -161,6 +180,7 @@ func (h Handler) mapCounterpartyToFD(cp *models.Counterparty, err *errs.Validati
 	return &views.CounterpartyFD{
 		Name:    form.FDInput{Value: cp.Name, Error: err.Errors.MsgFor("Name")},
 		Aliases: form.FDInput{Value: strings.Join(cp.Aliases, ", "), Error: err.Errors.MsgFor("Aliases")},
+		Icon:    form.FDInput{Value: cp.Icon, Error: err.Errors.MsgFor("Icon")},
 	}
 }
 
@@ -168,7 +188,20 @@ func (h Handler) mapFDToCounterparty(r *http.Request) (*models.Counterparty, err
 	return &models.Counterparty{
 		Name:    r.FormValue("name"),
 		Aliases: parseAliases(r.FormValue("aliases")),
+		Icon:    r.FormValue("icon"),
 	}, nil
+}
+
+// validateCounterpartyIcon expects a sanitized counterparty, where a blank
+// icon means no icon.
+func validateCounterpartyIcon(cp *models.Counterparty) *errs.ValidationError {
+	if cp.Icon == "" {
+		return nil
+	}
+	if _, ok := brandicons.Default().Get(cp.Icon); !ok {
+		return &errs.ValidationError{Errors: errs.ValidationErrors{"Icon": {Tag: "brand_icon"}}}
+	}
+	return nil
 }
 
 // parseAliases splits a comma separated list, dropping blanks and

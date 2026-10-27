@@ -25,6 +25,8 @@ COPY internal internal
 COPY web web
 COPY sql sql
 COPY sqlc.yaml sqlc.yaml
+COPY third_party/simple-icons/icons third_party/simple-icons/icons
+COPY third_party/simple-icons/data/simple-icons.json third_party/simple-icons/data/simple-icons.json
 COPY Makefile Makefile
 
 COPY data data

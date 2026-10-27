@@ -17,6 +17,12 @@ Create you `.env` file
 cp .env.example .env
 ```
 
+Fetch the [simple-icons](https://github.com/simple-icons/simple-icons) submodule (brand icons for counterparties)
+
+```bash
+git submodule update --init --depth 1
+```
+
 Install node dev dependencies
 
 ```bash

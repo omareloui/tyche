@@ -2,8 +2,10 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 
+	"github.com/omareloui/tyche/internal/brandicons"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/queries"
@@ -24,6 +26,24 @@ func (r *Repository) GetCounterparties(ctx context.Context) ([]models.Counterpar
 		return nil, err
 	}
 	l.Debug("fetched counter parties")
+
+	// Backfill counterparties created before icon detection.
+	icons := brandicons.Default()
+	for i, cp := range dbCp {
+		dbIt := &dbCp[i].Counterparty
+		if dbIt.Icon.Valid && dbIt.Color.Valid {
+			continue
+		}
+		if !dbIt.Icon.Valid {
+			aliases, _ := unmarshalAliases(dbIt.Aliases)
+			dbIt.Icon = sql.NullString{String: icons.Detect(dbIt.Name, aliases), Valid: true}
+		}
+		dbIt.Color = sql.NullString{String: icons.ColorFor(dbIt.Icon.String, dbIt.Color.String), Valid: true}
+		if err := q.SetCounterpartyAppearance(ctx, queries.SetCounterpartyAppearanceParams{ID: cp.Counterparty.ID, Icon: dbIt.Icon, Color: dbIt.Color}); err != nil {
+			l.Error("backfilling counterparty icon", zap.Error(err), zap.String("id", cp.Counterparty.ID))
+		}
+	}
+
 	return dbCounterpartiesRowToCounterparties(dbCp), nil
 }
 
@@ -55,6 +75,8 @@ func (r *Repository) UpdateCounterparty(ctx context.Context, it *models.Counterp
 		ID:      it.ID,
 		Name:    it.Name,
 		Aliases: aliases,
+		Icon:    sql.NullString{String: it.Icon, Valid: true},
+		Color:   sql.NullString{String: it.Color, Valid: it.Color != ""},
 	})
 }
 
@@ -73,6 +95,8 @@ func (r *Repository) CreateCounterparty(ctx context.Context, it *models.Counterp
 		ID:      it.ID,
 		Name:    it.Name,
 		Aliases: aliases,
+		Icon:    sql.NullString{String: it.Icon, Valid: true},
+		Color:   sql.NullString{String: it.Color, Valid: it.Color != ""},
 	})
 }
 
@@ -91,6 +115,8 @@ func dbCounterpartyToCounterparty(dbP *queries.Counterparty) *models.Counterpart
 		ID:        dbP.ID,
 		Name:      dbP.Name,
 		Aliases:   aliases,
+		Icon:      dbP.Icon.String,
+		Color:     dbP.Color.String,
 		CreatedAt: dbP.CreatedAt,
 	}
 }

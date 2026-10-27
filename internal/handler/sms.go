@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/a-h/templ"
+	"github.com/omareloui/tyche/internal/brandicons"
 	"github.com/omareloui/tyche/internal/errs"
 	"github.com/omareloui/tyche/internal/fxrate"
 	"github.com/omareloui/tyche/internal/idgen"
@@ -167,6 +168,8 @@ func (h *Handler) processSMS(ctx context.Context, sctx *smsContext, msg *models.
 			msg.Status, msg.Error = models.SMSStatusFailed, "invalid counterparty"
 			return nil
 		}
+		newCp.Icon = brandicons.Default().Detect(newCp.Name, newCp.Aliases)
+		newCp.Color = brandicons.Default().ColorFor(newCp.Icon, "")
 	} else {
 		newCp = nil
 	}

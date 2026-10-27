@@ -2,12 +2,16 @@
 INSERT INTO counterparties (
     id,
     name,
-    aliases
+    aliases,
+    icon,
+    color
 )
 VALUES (
     sqlc.arg(id),
     sqlc.arg(name),
-    sqlc.arg(aliases)
+    sqlc.arg(aliases),
+    sqlc.arg(icon),
+    sqlc.arg(color)
 );
 
 -- name: GetCounterparties :many
@@ -26,7 +30,16 @@ WHERE id = sqlc.arg(id);
 UPDATE counterparties
 SET
     name = sqlc.arg(name),
-    aliases = sqlc.arg(aliases)
+    aliases = sqlc.arg(aliases),
+    icon = sqlc.arg(icon),
+    color = sqlc.arg(color)
+WHERE id = sqlc.arg(id);
+
+-- name: SetCounterpartyAppearance :exec
+UPDATE counterparties
+SET
+    icon = sqlc.arg(icon),
+    color = sqlc.arg(color)
 WHERE id = sqlc.arg(id);
 
 -- name: DeleteCounterparty :exec

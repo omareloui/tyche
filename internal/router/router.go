@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/omareloui/tyche/internal/brandicons"
 	"github.com/omareloui/tyche/internal/handler"
 	"github.com/omareloui/tyche/internal/middleware"
 	"github.com/omareloui/tyche/internal/route_handler"
@@ -103,6 +104,9 @@ func New(h *handler.Handler) Router {
 		"styles", "js", "images",
 		"fonts", "icons", "favicons",
 	}, "./web/public")
+
+	brandIcons := http.StripPrefix("/brand-icons/", http.FileServerFS(brandicons.IconsFS()))
+	mux.Handle("GET /brand-icons/{path...}", middleware.CorrelationID(middleware.RequestLogger(brandIcons)))
 
 	mux.Handle("/", handlePub(h.NotFound))
 

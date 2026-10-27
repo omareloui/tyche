@@ -1,0 +1,15 @@
+[
+	{
+		"title": "Amazon",
+		"hex": "FF9900",
+		"aliases": {
+			"aka": [
+				"Amazon Marketplace"
+			]
+		}
+	},
+	{
+		"title": "Acme",
+		"hex": "123456"
+	}
+]

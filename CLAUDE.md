@@ -27,6 +27,9 @@ cp .env.example .env
 # Create required directories
 mkdir data logs
 
+# Fetch simple-icons submodule (brand icons)
+git submodule update --init --depth 1
+
 # Install node dependencies (for Tailwind)
 npm install
 ```
@@ -132,6 +135,7 @@ The app uses a **per-user database model** where each authenticated user gets th
   - `fxrate/` - Exchange rate fetching with file cache (`CACHE_DIR`)
   - `smsparser/` - Parses bank SMS (HSBC, CIB, AAIB) into transaction data; `Default()` registry with all parsers
   - `smsingest/` - Builds transactions from parsed SMS (account matching via `accounts.sms_ref` / card / iban suffix, fx conversion)
+  - `brandicons/` - Indexes the simple-icons submodule (`third_party/simple-icons`) plus local extras in `web/brand-icons/` (brands simple-icons lacks or forbids, takes precedence) to detect counterparty icons from name/aliases; both served at `/brand-icons/`
   - `idgen/` - ULID generation
   - `formatters/`, `numsutils/`, `slicesutils/`, `structutils/` - Helpers
 - `mobile/android/` - Kotlin app forwarding bank SMS to `POST /api/sms` (see its README)
@@ -192,7 +196,7 @@ Core entities and their relationships:
   - Tracks last_transaction_scheduled_to to avoid duplicates
 - **Categories** - Transaction categories with optional budgets, a color, and `kinds` (JSON list of tx kinds the category applies to)
 - **Goals** - Savings goals with target amount and currency
-- **Counterparties** - People/companies involved in transactions
+- **Counterparties** - People/companies involved in transactions; optional `aliases` (SMS merchant names) and `icon` (simple-icons slug, auto-detected on create, `''` = no icon, NULL = not yet detected) and `color` (icon's brand hex, else random placeholder color for the first-letter avatar); NULLs backfilled on list
 - **Currencies** - Seeded currency list (string, symbol, kind, is_shown); exchange rates fetched live by `internal/fxrate` (fawazahmed0 currency-api), not stored in DB
 
 ## Important Notes

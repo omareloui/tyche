@@ -71,6 +71,8 @@ func (v ValidationField) String() string {
 		return "This field is in use, try another one"
 	case "credit_card":
 		return "This field has to be a valid card number"
+	case "brand_icon":
+		return "Unknown icon, use a slug from simpleicons.org or leave it empty"
 	default:
 		msg := fmt.Sprintf(`Failed on "%s" tag`, v.Tag)
 		if v.Param != "" {

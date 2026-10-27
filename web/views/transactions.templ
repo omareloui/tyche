@@ -144,7 +144,11 @@ templ Transaction(tx *models.Transaction) {
 					templ.KV("text-emerald-400", v.isIncoming),
 				}
 			>
-				@icons.Tag("24")
+				if v.counterparty != nil {
+					@components.CounterpartyIcon(v.counterparty.Name, v.counterparty.Icon, v.counterparty.Color, "w-7 h-7")
+				} else {
+					@icons.Tag("24")
+				}
 			</div>
 			<div class="flex-1 min-w-0">
 				<p class="text-lg truncate">{ v.title }</p>
@@ -345,13 +349,14 @@ func formatTxDay(day time.Time) string {
 }
 
 type txView struct {
-	title      string
-	subtitle   string
-	time       string
-	account    string
-	amount     string
-	isIncoming bool
-	isStale    bool
+	counterparty *models.Counterparty
+	title        string
+	subtitle     string
+	time         string
+	account      string
+	amount       string
+	isIncoming   bool
+	isStale      bool
 }
 
 func newTxView(tx *models.Transaction) txView {
@@ -404,6 +409,7 @@ func newTxView(tx *models.Transaction) txView {
 		v.title = tx.Category.Name
 	}
 	if tx.Counterparty != nil {
+		v.counterparty = tx.Counterparty
 		if v.title == "" {
 			v.title = tx.Counterparty.Name
 		} else {
