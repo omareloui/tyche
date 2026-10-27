@@ -13,14 +13,14 @@ import (
 	"go.uber.org/zap"
 )
 
-func (r *Repository) transact(ctx context.Context, txFunc func(*queries.Queries) error) error {
+func (r *Repository) transact(ctx context.Context, txFunc func(*queries.Queries) error) (err error) {
 	db, queries, err := r.dbFromCtx(ctx)
 	if err != nil {
 		return err
 	}
 	txn, err := db.Begin()
 	if err != nil {
-		return nil
+		return err
 	}
 	defer func() {
 		if p := recover(); p != nil {
