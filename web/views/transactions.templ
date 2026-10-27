@@ -167,7 +167,17 @@ templ Transaction(tx *models.Transaction) {
 			</div>
 			<div class="flex items-center gap-3 text-zinc-500">
 				if tx.NeedsReview {
-					<span title="Added from SMS, needs review" class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+					<button
+						hx-put={ fmt.Sprintf("/transactions/%s/reviewed", tx.ID) }
+						title="Added from SMS, needs review. Click to mark reviewed"
+						class="cursor-pointer text-amber-400 transition-colors hover:text-amber-300"
+					>
+						@icons.Message("22")
+					</button>
+				} else if tx.FromSMS {
+					<span title="Added from SMS">
+						@icons.Message("22")
+					</span>
 				}
 				if tx.Kind == models.TransferTxKind {
 					<span title="Transfer">

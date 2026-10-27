@@ -67,7 +67,10 @@ SELECT
     g.currency_id AS goal_currency_id,
     g.fulfilled_at AS goal_fulfilled_at,
     gc.string AS goal_currency_string,
-    gc.symbol AS goal_currency_symbol
+    gc.symbol AS goal_currency_symbol,
+    CAST(EXISTS (
+        SELECT 1 FROM sms_messages AS sm WHERE sm.transaction_id = t.id
+    ) AS BOOLEAN) AS from_sms
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
@@ -114,7 +117,10 @@ SELECT
     g.currency_id AS goal_currency_id,
     g.fulfilled_at AS goal_fulfilled_at,
     gc.string AS goal_currency_string,
-    gc.symbol AS goal_currency_symbol
+    gc.symbol AS goal_currency_symbol,
+    CAST(EXISTS (
+        SELECT 1 FROM sms_messages AS sm WHERE sm.transaction_id = t.id
+    ) AS BOOLEAN) AS from_sms
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id

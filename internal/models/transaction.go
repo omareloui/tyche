@@ -25,6 +25,7 @@ type Transaction struct {
 	ScheduledTo    time.Time
 	FulfilledAt    time.Time
 	NeedsReview    bool
+	FromSMS        bool
 	CreatedAt      time.Time
 }
 

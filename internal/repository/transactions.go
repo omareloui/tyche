@@ -361,8 +361,10 @@ func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTran
 		}
 	}
 
-	return dbTransactionToTransaction(
+	tx := dbTransactionToTransaction(
 		&_dbTx.Transaction, &_dbTx.Account,
 		&_dbTx.Currency, toAcc, toAccCurr,
 		cat, cp, gl, glCur)
+	tx.FromSMS = _dbTx.FromSms
+	return tx
 }
