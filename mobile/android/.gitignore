@@ -1,0 +1,40 @@
+# Gradle / Kotlin
+.gradle/
+build/
+.kotlin/
+
+# Local config (sdk.dir, signing secrets)
+local.properties
+keystore.properties
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Native builds
+.externalNativeBuild/
+.cxx/
+
+# Build outputs
+*.apk
+*.aab
+*.ap_
+*.dex
+output-metadata.json
+
+# Signing keys
+*.jks
+*.keystore
+
+# Android Studio captures / profiling
+captures/
+*.hprof
+
+# Nix / direnv
+result
+result-*
+.direnv/
+
+# OS
+.DS_Store
