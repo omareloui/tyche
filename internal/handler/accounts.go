@@ -334,13 +334,14 @@ func (h *Handler) mapFDToAcc(r *http.Request) (*models.Account, error) {
 func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, knds []models.AccountKind) *views.AccountFD {
 	var knd *models.AccountKind
 
-	if acc == nil {
+	if acc != nil {
 		knd = slicesutils.Find(knds, func(k models.AccountKind) bool { return k.ID == acc.Kind.ID })
-		acc = &models.Account{
-			Kind: *knd,
-		}
-	} else {
+	}
+	if knd == nil {
 		knd = slicesutils.Find(knds, func(k models.AccountKind) bool { return k.Enum == models.DfltAccKind })
+	}
+	if acc == nil {
+		acc = &models.Account{Kind: *knd}
 	}
 
 	var name, cc, iban, cpID, noc, exp, limit *form.FDInput
