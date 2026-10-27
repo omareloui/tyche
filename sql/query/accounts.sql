@@ -31,7 +31,7 @@ WITH gls_amts AS (
     FROM goals AS gl
     LEFT JOIN transactions AS t ON gl.id = t.goal_id
     WHERE gl.fulfilled_at IS NULL
-    GROUP BY t.amount
+    GROUP BY t.account_id
 )
 SELECT
     sqlc.embed(a),
@@ -57,7 +57,7 @@ WITH gls_amts AS (
     FROM goals AS gl
     LEFT JOIN transactions AS t ON gl.id = t.goal_id
     WHERE gl.fulfilled_at IS NULL
-    GROUP BY t.amount
+    GROUP BY t.account_id
 )
 SELECT
     sqlc.embed(a),
