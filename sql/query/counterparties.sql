@@ -18,7 +18,7 @@ VALUES (
 SELECT
     sqlc.embed(counterparties)
 FROM counterparties
-ORDER BY created_at DESC;
+ORDER BY name COLLATE NOCASE;
 
 -- name: GetCounterparty :one
 SELECT

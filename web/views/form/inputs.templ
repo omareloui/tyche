@@ -2,6 +2,9 @@ package form
 
 import (
 	"fmt"
+	"maps"
+	"slices"
+	"strings"
 	"github.com/omareloui/tyche/web/views/icons"
 )
 
@@ -72,17 +75,27 @@ templ SelectInput(label, name, placeholder, id string,
 			if nullable {
 				<option value="" selected>&lt;nil&gt;</option>
 			}
-			for k, v := range options {
+			for _, k := range sortedOptionKeys(options) {
 				<option
 					value={ k }
 					if k == data.Value {
 						selected
 					}
-				>{ v }</option>
+				>{ options[k] }</option>
 			}
 		</select>
 		@errorMessage(data.Error)
 	</div>
+}
+
+// sortedOptionKeys orders the options by label, case-insensitively.
+func sortedOptionKeys(options map[string]string) []string {
+	return slices.SortedFunc(maps.Keys(options), func(a, b string) int {
+		if c := strings.Compare(strings.ToLower(options[a]), strings.ToLower(options[b])); c != 0 {
+			return c
+		}
+		return strings.Compare(a, b)
+	})
 }
 
 templ Checkbox(label, name, id string, data FDInput, inputAttrs templ.Attributes, wrapperAttrs templ.Attributes) {
