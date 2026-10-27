@@ -16,12 +16,7 @@ type JSONRouteHandler func(w http.ResponseWriter, r *http.Request) ([]byte, erro
 
 func (fn RouteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	l := logger.FromCtx(r.Context())
-	defer func() {
-		if p := recover(); p != nil {
-			l.Fatal("panicked", zap.Any("message", p))
-			panic(p)
-		}
-	}()
+	defer recoverPanic(l, w)
 
 	comp, err := fn(w, r)
 	if err != nil {
@@ -42,12 +37,7 @@ func (fn RouteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (fn JSONRouteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	l := logger.FromCtx(r.Context())
-	defer func() {
-		if p := recover(); p != nil {
-			l.Fatal("panicked", zap.Any("message", p))
-			panic(p)
-		}
-	}()
+	defer recoverPanic(l, w)
 
 	res, err := fn(w, r)
 	if err != nil {
@@ -62,6 +52,15 @@ func (fn JSONRouteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		l.Error("writing the json response", zap.Error(err))
 		errorResponse(l, w, err)
 		return
+	}
+}
+
+// recoverPanic logs a handler panic and responds with a 500 instead of
+// crashing the server.
+func recoverPanic(l *zap.Logger, w http.ResponseWriter) {
+	if p := recover(); p != nil {
+		l.Error("panicked", zap.Any("message", p), zap.Stack("stack"))
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}
 }
 
