@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:id="@+id/status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
+            android:textSize="16sp" />
+
+        <LinearLayout
+            android:id="@+id/signed_out"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/server_url" />
+
+            <EditText
+                android:id="@+id/server_url"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/server_url_hint"
+                android:importantForAutofill="no"
+                android:inputType="textUri" />
+
+            <Button
+                android:id="@+id/sign_in"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/sign_in" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/signed_in"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/senders"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <Button
+                android:id="@+id/choose_senders"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/choose_senders" />
+
+            <Button
+                android:id="@+id/sync_now"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/sync_now" />
+
+            <Button
+                android:id="@+id/import_past"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/import_past" />
+
+            <Button
+                android:id="@+id/sign_out"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:text="@string/sign_out" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

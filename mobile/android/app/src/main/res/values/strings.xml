@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Tyche</string>
+    <string name="server_url">Tyche URL</string>
+    <string name="server_url_hint">https://tyche.example.com</string>
+    <string name="sign_in">Sign in with Google</string>
+    <string name="sign_out">Sign out</string>
+    <string name="senders_title">Bank senders</string>
+    <string name="senders_hint">Select who sends your bank SMS. Only their messages are sent to Tyche.</string>
+    <string name="choose_senders">Choose bank senders</string>
+    <string name="save_senders">Save</string>
+    <plurals name="sender_summary">
+        <item quantity="one">%1$d message%2$s</item>
+        <item quantity="other">%1$d messages%2$s</item>
+    </plurals>
+    <string name="sender_supported">, supported by Tyche</string>
+    <string name="senders_selected">Bank senders: %1$s</string>
+    <string name="senders_none">none selected</string>
+    <string name="import_past">Import last 30 days of SMS</string>
+    <string name="sync_now">Sync now</string>
+</resources>
