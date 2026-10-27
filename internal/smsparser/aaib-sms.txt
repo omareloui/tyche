@@ -1,0 +1,45 @@
+// declined transacions (ignore)
+Your transaction on credit card **1432 for 20.00 USD at CLAUDE.AI SUBSCRIPTION was declined due to Insufficient balance. Your available limit is 261.7.
+Your transaction on credit card **1432 for 65.00 EGP at Uber was declined due to Insufficient balance. Your available limit is 32.7.
+Your transaction on credit card **1432 for 189.99 EGP at Google Telegram was declined due to Insufficient balance. Your available limit is 22.7.
+Your transaction on credit card **1432 for 65.00 EGP at Uber was declined due to Insufficient balance. Your available limit is 22.7.
+Your transaction on credit card **1432 for 65.00 EGP at Uber was declined due to Insufficient balance. Your available limit is 7.7.
+Your transaction on credit card **1432 for 189.99 EGP at GOOGLE*TELEGRAM was declined due to Insufficient balance. Your available limit is 7.7.
+Your transaction on credit card **1432 for 189.99 EGP at Google Telegram was declined due to Insufficient balance. Your available limit is 7.7.
+Your transaction on credit card **1432 for 189.99 EGP at Google Telegram was declined due to Insufficient balance. Your available limit is 7.4.
+Your transaction on credit card **1432 for 65.00 EGP at Uber was declined due to Insufficient balance. Your available limit is 7.4.
+Your transaction on credit card **1432 for 189.99 EGP at GOOGLE*TELEGRAM was declined due to Insufficient balance. Your available limit is 7.4.
+
+###########
+
+// purchase with credit card
+Your credit card **1432 was debited by 229.00EGP at Vodafone Top Up APP. Available limit is 32.70.
+Your credit card **1432 was debited by 10.00EGP at Google YouTube. Available limit is 22.70.
+Your credit card **1432 was debited by 189.99EGP at Google Telegram. Available limit is 4 076.41.
+Your credit card **1432 was debited by 65.00EGP at Uber. Available limit is 2 810.72.
+Your credit card **1432 was debited by 4.96USD at AWS EMEA. Available limit is 2 562.03.
+Your credit card **1432 was debited by 69.99EGP at Spotify. Available limit is 4 426.88.
+Your credit card **1432 was debited by 87.99EGP at Google YouTubePremium. Available limit is 4 338.89.
+Your credit card **1432 was debited by 240.00EGP at Netflix.com. Available limit is 4 098.89.
+Your credit card **1432 was debited by 186.00EGP at Vodafone Top Up APP. Available limit is 3 912.89.
+Your credit card **1432 was debited by 29.00EGP at Vodafone Top Up APP. Available limit is 3 883.89.
+Your credit card **1432 was debited by 8.00EGP at Vodafone Top Up APP. Available limit is 3 875.89.
+Your credit card **1432 was debited by 20.00USD at CLAUDE.AI SUBSCRIPTION. Available limit is 2 895.49.
+
+###########
+
+// debit ipn inward transfer
+You have received a transfer reference #d79cc49b with EGP 4000 from OMAR HUSSEIN MOHAMED MAHMOUD ELWY through IPN on 29/11/2025 at 12:42. For inquiries, call 19555.
+You have received a transfer reference #65bb5bc4 with EGP 2000 from OMAR HUSSEIN MOHAMED MAHMOUD ELWY through IPN on 04/12/2025 at 10:01. For inquiries, call 19555.
+
+###########
+
+// send for debit to credit card (transfer from debit to credit) (affecets debit account)
+Credit Card Payment of EGP 4259 has been debited from your account 1001-01 through AAIB Mobile, to your credit card ends with 1432
+Credit Card Payment of EGP 1934.84 has been debited from your account 1001-01 through AAIB Mobile, to your credit card ends with 1432
+
+###########
+
+// send to credit card (transfer from debit to credit) (affects credit card)
+Dear Valued customer, your AAIB card **1432 has been credited with 4 259.00EGP on cairo your available balance is 4 266.40.
+Dear Valued customer, your AAIB card **1432 has been credited with 1 934.84EGP on cairo your available balance is 4 496.87.
