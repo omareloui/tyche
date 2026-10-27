@@ -8,7 +8,7 @@ Tyche is a personal finance management application built with Go and HTMX. It's 
 
 ## Tech Stack
 
-- **Backend**: Go (1.24.3) with standard library `net/http`
+- **Backend**: Go (1.25) with standard library `net/http`
 - **Frontend**: HTMX with Alpine.js, Tailwind CSS 4.0
 - **Templates**: Templ (type-safe Go templates compiled to Go code)
 - **Database**: SQLite (one database per user)
@@ -90,11 +90,11 @@ make docker-prod
 
 The app uses a **per-user database model** where each authenticated user gets their own SQLite database file:
 
-- Databases stored in `./data/` directory with naming: `{oauth_provider}_{oauth_id}.sqlite`
+- Databases stored in `./data/` directory with naming: `{provider_prefix}_{oauth_id}.sqlite` (prefix from `OAuthProvider.Prefix()`, e.g. `GL` for Google)
 - `TenantManager` (`internal/repository/repository.go:33`) handles connection pooling with:
   - Lazy database creation on first access
   - Automatic migrations via Goose when database is accessed
-  - Auto-seeding (currencies, transaction kinds, account kinds)
+  - Auto-seeding via `internal/seeder/` (currencies, account kinds, default accounts, default categories)
   - Idle connection cleanup (30 min timeout)
   - Thread-safe connection management
 
@@ -126,12 +126,19 @@ The app uses a **per-user database model** where each authenticated user gets th
   - `config/` - Config parsing and Air/Tailwind configs
   - `logger/` - Zap logger setup
   - `errs/` - Error handling and validation errors
+  - `resperr/` - HTTP response errors
+  - `route_handler/` - Adapts handler methods (templ/JSON) to `http.Handler`
+  - `seeder/` - Per-tenant DB seed data
+  - `fxrate/` - Exchange rate fetching with file cache (`CACHE_DIR`)
+  - `smsparser/` - Parses bank SMS (HSBC, CIB, AAIB) into transaction data
+  - `idgen/` - ULID generation
+  - `formatters/`, `numsutils/`, `slicesutils/`, `structutils/` - Helpers
 - `sql/`
   - `schema/` - Goose migrations
   - `query/` - SQL queries for sqlc (one file per resource)
 - `web/`
-  - `views/` - Templ templates (generate `*_templ.go` files)
-  - `public/` - Static assets (CSS, JS, images)
+  - `views/` - Templ templates (generate `*_templ.go` files); subdirs `components/`, `form/`, `icons/`, `layouts/`
+  - `public/` - Static assets (CSS, JS, images); vendored HTMX/Alpine/Chartist/Litepicker in `public/js/vendor/`
   - `assets/styles/` - Source Tailwind CSS
 
 ### Key Patterns
@@ -141,18 +148,17 @@ The app uses a **per-user database model** where each authenticated user gets th
 2. Validates using struct tags (`validate:"required,ulid"`)
 3. Returns typed validation errors
 
-**Handler Pattern**: Handlers receive `*Handler` with repo, validator, sanitizer:
+**Handler Pattern**: Handlers are methods on `*Handler` (repo, validator, sanitizer) and return a templ component; `route_handler` renders it. Repository methods take `ctx` and resolve the tenant DB themselves from JWT claims in context (`dbFromCtx` in `internal/repository/utils.go`):
 ```go
-func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) error {
-    // Get user claims from context
-    claims := jwt.GetClaimsFromCtx(r.Context())
-
-    // Get tenant DB
-    _, queries, err := h.repo.GetTenant(claims.Provider, claims.OAuthID)
-
-    // Parse, validate, execute query, render templ view
+func (h *Handler) Accounts(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+    balances, err := h.repo.GetBalances(r.Context())
+    if err != nil {
+        return nil, err
+    }
+    // Parse, validate, call repo, return templ view
 }
 ```
+JSON endpoints use `HandlerJSONMethod` via `handlePubJSON()`.
 
 **Database Queries**: Use sqlc-generated code in `internal/queries/`:
 - Write SQL in `sql/query/*.sql` with sqlc annotations
@@ -163,6 +169,7 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) error {
 - Write in `web/views/*.templ`
 - Run `make templ` to generate `*_templ.go` files
 - Import and call like Go functions
+- The `templ` CLI is a Go tool (`tool` directive in `go.mod`), run via `go tool templ`, so CLI and runtime library share one version. Don't use a globally installed `templ`: a version mismatch causes build errors like `undefined: templ.ResolveAttributeValue`. Upgrade with `go get -tool github.com/a-h/templ/cmd/templ@<ver>`
 
 ## Financial Domain Model
 
@@ -170,8 +177,8 @@ Core entities and their relationships:
 
 - **User** - OAuth authenticated user, has default currency and account
 - **Accounts** - User's financial accounts (bank, cash, credit card, etc.)
-  - Has account kind (enum), currency, optional counterparty
-  - Credit cards have: card_number, card_limit, expiration_date
+  - Has account kind (`account_kinds` table wrapping an enum), currency, optional counterparty, archived / exclude-from-balance flags
+  - Cards have: card_number, card_limit, name_on_card, expiration_date; optional iban
 - **Transactions** - Financial transactions (income, expense, transfer)
   - Has kind (income/expense/transfer), amount, scheduled date, optional fulfilled date
   - Can be linked to category, counterparty, goal, recurrent transaction
@@ -179,10 +186,10 @@ Core entities and their relationships:
 - **Recurrent Transactions** - Templates for recurring transactions
   - Has frequency (every N units: day/week/month/year)
   - Tracks last_transaction_scheduled_to to avoid duplicates
-- **Categories** - Transaction categories with optional budgets
+- **Categories** - Transaction categories with optional budgets, a color, and `kinds` (JSON list of tx kinds the category applies to)
 - **Goals** - Savings goals with target amount and currency
 - **Counterparties** - People/companies involved in transactions
-- **Currencies** - Supported currencies with exchange rate data
+- **Currencies** - Seeded currency list (string, symbol, kind, is_shown); exchange rates fetched live by `internal/fxrate` (fawazahmed0 currency-api), not stored in DB
 
 ## Important Notes
 

@@ -23,10 +23,10 @@ migrate-create:
 	@fi
 
 templ:
-	@templ generate --path web/views
+	@go tool templ generate --path web/views
 
 templ-dev:
-	@templ generate --path web/views --watch
+	@go tool templ generate --path web/views --watch
 
 css:
 	@npm run css

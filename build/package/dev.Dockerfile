@@ -1,4 +1,4 @@
-FROM golang:1.24-bullseye
+FROM golang:1.25-bookworm
 
 # To bash the bash commands work
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -9,7 +9,6 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash -  && \
   apt-get -y --no-install-recommends install nodejs && \
   \
   go install github.com/air-verse/air@latest && \
-  go install github.com/a-h/templ/cmd/templ@v0.3.943 && \
   go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest && \
   go install github.com/pressly/goose/v3/cmd/goose@latest
 

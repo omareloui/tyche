@@ -1,9 +1,8 @@
-FROM golang:1.24-bullseye AS build
+FROM golang:1.25-bookworm AS build
 
 WORKDIR /usr/src/
 
-RUN go install github.com/a-h/templ/cmd/templ@v0.3.943 && \
-  go install github.com/pressly/goose/v3/cmd/goose@latest && \
+RUN go install github.com/pressly/goose/v3/cmd/goose@latest && \
   go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 
 RUN useradd -u 1001 nonroot
