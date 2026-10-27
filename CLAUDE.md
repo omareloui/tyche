@@ -196,7 +196,7 @@ Core entities and their relationships:
   - Tracks last_transaction_scheduled_to to avoid duplicates
 - **Categories** - Transaction categories with optional budgets, a color, and `kinds` (JSON list of tx kinds the category applies to)
 - **Goals** - Savings goals with target amount and currency
-- **Counterparties** - People/companies involved in transactions; optional `aliases` (SMS merchant names) and `icon` (simple-icons slug, auto-detected on create, `''` = no icon, NULL = not yet detected) and `color` (icon's brand hex, else random placeholder color for the first-letter avatar); NULLs backfilled on list
+- **Counterparties** - People/companies involved in transactions; `is_merchant` flag (SMS-created ones are merchants; `default_category_id` and `icon` are merchant-only, cleared otherwise); optional `default_category_id` (applied to new transactions — form, recurrent, SMS — with no category, if the category allows the tx kind); optional `aliases` (SMS merchant names) and `icon` (simple-icons slug, auto-detected for merchants only, `''` = no icon, NULL = not yet detected) and `color` (icon's brand hex, else random placeholder color for the first-letter avatar); NULLs backfilled on list
 - **Currencies** - Seeded currency list (string, symbol, kind, is_shown); exchange rates fetched live by `internal/fxrate` (fawazahmed0 currency-api), not stored in DB
 
 ## Important Notes

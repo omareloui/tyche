@@ -89,6 +89,10 @@ templ SelectTxCat(name, id string, cats []models.Category, data FDInput, inputAt
 	@SelectInput("Category", name, "Select Category", id, idStructsToMap(cats, "Name"), data, true, inputAttrs, nil)
 }
 
+templ SelectDefaultTxCat(name, id string, cats []models.Category, data FDInput, inputAttrs templ.Attributes) {
+	@SelectInput("Default Category", name, "No Default Category", id, idStructsToMap(cats, "Name"), data, true, inputAttrs, nil)
+}
+
 templ SelectGoal(name, id string, gls []models.Goal, data FDInput, inputAttrs templ.Attributes) {
 	@SelectInput("Goal", name, "Select Goal", id, idStructsToMap(gls, "Name"), data, true, inputAttrs, nil)
 }

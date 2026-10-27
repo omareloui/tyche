@@ -2,6 +2,7 @@ package models
 
 import (
 	"math/rand"
+	"slices"
 	"time"
 
 	"github.com/omareloui/tyche/internal/formatters"
@@ -70,6 +71,10 @@ type createCategory struct {
 	BudgetAmount     float64  `validate:"required_with=BudgetCurrency"`
 	BudgetCurrencyID string   `validate:"required_with=BudgetAmount"`
 	Kinds            []TxKind `validate:"required,min=1,dive,required"`
+}
+
+func (cat *Category) HasKind(kind TxKind) bool {
+	return slices.Contains(cat.Kinds, kind)
 }
 
 func (cat *Category) ViewBudgetAmount() string {

@@ -193,6 +193,37 @@ func TestBuildTransaction(t *testing.T) {
 	}
 }
 
+func TestBuildTransactionDefaultCategory(t *testing.T) {
+	transport := &models.Category{ID: "cat-transport", Name: "Transport", Kinds: []models.TxKind{models.ExpenseTxKind}}
+	cps := []models.Counterparty{{ID: "cp-uber", Name: "Ride Service A", DefaultCategory: transport}}
+
+	tests := []struct {
+		name    string
+		kind    models.TxKind
+		wantCat string
+	}{
+		{name: "matching kind", kind: models.ExpenseTxKind, wantCat: "cat-transport"},
+		{name: "other kind", kind: models.IncomeTxKind, wantCat: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sms := smsparser.SMS{TxKind: tt.kind, AccountID: "123-456***-789", Currency: "EGP", Amount: 100, Counterparty: "Ride Service A"}
+			tx, err := smsingest.BuildTransaction(&sms, accounts, cps, receivedAt, fx)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			var cat string
+			if tx.Category != nil {
+				cat = tx.Category.ID
+			}
+			if cat != tt.wantCat {
+				t.Errorf("category = %q, want %q", cat, tt.wantCat)
+			}
+		})
+	}
+}
+
 func TestHash(t *testing.T) {
 	a := smsingest.Hash("HSBC", "body", receivedAt)
 	if a != smsingest.Hash(" HSBC", "body\n", receivedAt) {

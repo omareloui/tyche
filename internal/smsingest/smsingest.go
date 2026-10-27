@@ -106,6 +106,7 @@ func BuildTransaction(
 		}
 	} else if cp := matchCounterparty(sms.Counterparty, counterparties); cp != nil {
 		tx.Counterparty = cp
+		tx.Category = cp.DefaultCategoryFor(kind)
 	} else if name := strings.TrimSpace(sms.Counterparty); name != "" && sms.AutoCreateCounterparty {
 		// no ID, the caller creates it
 		tx.Counterparty = &models.Counterparty{Name: name}

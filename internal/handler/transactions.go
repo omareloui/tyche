@@ -67,6 +67,8 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		return nil, err
 	}
 
+	applyCounterpartyDefaultCategory(tx, cps)
+
 	claims := getClaims(r.Context())
 
 	fd, err := h.prepareTx(r, tx, accs, knds, cats, cps, gls)
@@ -529,6 +531,19 @@ func (h Handler) mapFDAndTxToRecurrentTx(r *http.Request, tx *models.Transaction
 		StartsAt:     tx.ScheduledTo,
 		StopsAt:      stopsOn,
 	}, nil
+}
+
+// applyCounterpartyDefaultCategory sets the counterparty's default category on
+// a transaction without a category.
+func applyCounterpartyDefaultCategory(tx *models.Transaction, cps []models.Counterparty) {
+	if tx.Category != nil || tx.Counterparty == nil {
+		return
+	}
+	cp := slicesutils.Find(cps, func(c models.Counterparty) bool { return c.ID == tx.Counterparty.ID })
+	tx.Category = cp.DefaultCategoryFor(tx.Kind)
+	if tx.RecurrentTx != nil && tx.RecurrentTx.Category == nil {
+		tx.RecurrentTx.Category = tx.Category
+	}
 }
 
 func (h Handler) prepareTx(r *http.Request, tx *models.Transaction,

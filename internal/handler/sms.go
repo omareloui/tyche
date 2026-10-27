@@ -168,6 +168,8 @@ func (h *Handler) processSMS(ctx context.Context, sctx *smsContext, msg *models.
 			msg.Status, msg.Error = models.SMSStatusFailed, "invalid counterparty"
 			return nil
 		}
+		// only card purchases auto-create counterparties
+		newCp.IsMerchant = true
 		newCp.Icon = brandicons.Default().Detect(newCp.Name, newCp.Aliases)
 		newCp.Color = brandicons.Default().ColorFor(newCp.Icon, "")
 	} else {

@@ -35,8 +35,12 @@ func (r *Repository) GetCounterparties(ctx context.Context) ([]models.Counterpar
 			continue
 		}
 		if !dbIt.Icon.Valid {
-			aliases, _ := unmarshalAliases(dbIt.Aliases)
-			dbIt.Icon = sql.NullString{String: icons.Detect(dbIt.Name, aliases), Valid: true}
+			icon := ""
+			if dbIt.IsMerchant {
+				aliases, _ := unmarshalAliases(dbIt.Aliases)
+				icon = icons.Detect(dbIt.Name, aliases)
+			}
+			dbIt.Icon = sql.NullString{String: icon, Valid: true}
 		}
 		dbIt.Color = sql.NullString{String: icons.ColorFor(dbIt.Icon.String, dbIt.Color.String), Valid: true}
 		if err := q.SetCounterpartyAppearance(ctx, queries.SetCounterpartyAppearanceParams{ID: cp.Counterparty.ID, Icon: dbIt.Icon, Color: dbIt.Color}); err != nil {
@@ -57,7 +61,7 @@ func (r *Repository) GetCounterparty(ctx context.Context, id string) (*models.Co
 	if err != nil {
 		return nil, err
 	}
-	return dbCounterpartyToCounterparty(&dbP.Counterparty), nil
+	return dbCounterpartyRowToCounterparty(queries.GetCounterpartiesRow(dbP)), nil
 }
 
 func (r *Repository) UpdateCounterparty(ctx context.Context, it *models.Counterparty) error {
@@ -72,11 +76,13 @@ func (r *Repository) UpdateCounterparty(ctx context.Context, it *models.Counterp
 	}
 
 	return q.UpdateCounterparty(ctx, queries.UpdateCounterpartyParams{
-		ID:      it.ID,
-		Name:    it.Name,
-		Aliases: aliases,
-		Icon:    sql.NullString{String: it.Icon, Valid: true},
-		Color:   sql.NullString{String: it.Color, Valid: it.Color != ""},
+		ID:                it.ID,
+		Name:              it.Name,
+		Aliases:           aliases,
+		Icon:              sql.NullString{String: it.Icon, Valid: true},
+		Color:             sql.NullString{String: it.Color, Valid: it.Color != ""},
+		IsMerchant:        it.IsMerchant,
+		DefaultCategoryID: defaultCategoryID(it),
 	})
 }
 
@@ -92,11 +98,13 @@ func (r *Repository) CreateCounterparty(ctx context.Context, it *models.Counterp
 	}
 
 	return q.CreateCounterparty(ctx, queries.CreateCounterpartyParams{
-		ID:      it.ID,
-		Name:    it.Name,
-		Aliases: aliases,
-		Icon:    sql.NullString{String: it.Icon, Valid: true},
-		Color:   sql.NullString{String: it.Color, Valid: it.Color != ""},
+		ID:                it.ID,
+		Name:              it.Name,
+		Aliases:           aliases,
+		Icon:              sql.NullString{String: it.Icon, Valid: true},
+		Color:             sql.NullString{String: it.Color, Valid: it.Color != ""},
+		IsMerchant:        it.IsMerchant,
+		DefaultCategoryID: defaultCategoryID(it),
 	})
 }
 
@@ -112,13 +120,35 @@ func (r *Repository) DeleteCounterparty(ctx context.Context, id string) error {
 func dbCounterpartyToCounterparty(dbP *queries.Counterparty) *models.Counterparty {
 	aliases, _ := unmarshalAliases(dbP.Aliases)
 	return &models.Counterparty{
-		ID:        dbP.ID,
-		Name:      dbP.Name,
-		Aliases:   aliases,
-		Icon:      dbP.Icon.String,
-		Color:     dbP.Color.String,
-		CreatedAt: dbP.CreatedAt,
+		ID:         dbP.ID,
+		Name:       dbP.Name,
+		Aliases:    aliases,
+		Icon:       dbP.Icon.String,
+		Color:      dbP.Color.String,
+		IsMerchant: dbP.IsMerchant,
+		CreatedAt:  dbP.CreatedAt,
 	}
+}
+
+func dbCounterpartyRowToCounterparty(dbP queries.GetCounterpartiesRow) *models.Counterparty {
+	cp := dbCounterpartyToCounterparty(&dbP.Counterparty)
+	if dbP.Counterparty.DefaultCategoryID.Valid {
+		kinds, _ := unmarshalTxKinds(dbP.DefaultCategoryKinds)
+		cp.DefaultCategory = &models.Category{
+			ID:    dbP.Counterparty.DefaultCategoryID.String,
+			Name:  dbP.DefaultCategoryName.String,
+			Color: dbP.DefaultCategoryColor.String,
+			Kinds: kinds,
+		}
+	}
+	return cp
+}
+
+func defaultCategoryID(cp *models.Counterparty) sql.NullString {
+	if cp.DefaultCategory == nil || cp.DefaultCategory.ID == "" {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: cp.DefaultCategory.ID, Valid: true}
 }
 
 func marshalAliases(aliases []string) ([]byte, error) {
@@ -149,7 +179,7 @@ func unmarshalAliases(dbAliases []byte) ([]string, error) {
 func dbCounterpartiesRowToCounterparties(dbCps []queries.GetCounterpartiesRow) []models.Counterparty {
 	cps := make([]models.Counterparty, len(dbCps))
 	for i, cp := range dbCps {
-		cps[i] = *dbCounterpartyToCounterparty(&cp.Counterparty)
+		cps[i] = *dbCounterpartyRowToCounterparty(cp)
 	}
 	return cps
 }

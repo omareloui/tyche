@@ -13,43 +13,52 @@ import (
 )
 
 type CounterpartyFD struct {
-	Name    form.FDInput
-	Aliases form.FDInput
-	Icon    form.FDInput
+	Name              form.FDInput
+	Aliases           form.FDInput
+	Icon              form.FDInput
+	IsMerchant        form.FDInput
+	DefaultCategoryID form.FDInput
 }
 
 templ Counterparties(
 	claims *jwt.AccessClaims,
 	balances []models.Balance,
 	fd *CounterpartyFD,
-	counterparties []models.Counterparty) {
-	@layouts.WithCreateForm(claims, "Counterparties", balances, CreateCounterpartyForm(fd)) {
+	counterparties []models.Counterparty,
+	cats []models.Category) {
+	@layouts.WithCreateForm(claims, "Counterparties", balances, CreateCounterpartyForm(fd, cats)) {
 		@counterpartiesList(counterparties)
 	}
 }
 
-templ CreateCounterpartyForm(fd *CounterpartyFD) {
+templ CreateCounterpartyForm(fd *CounterpartyFD, cats []models.Category) {
 	@form.CreateForm("Create Counterparty", "/counterparties", "Create Counterparty") {
-		@counterpartyFormBody("", fd)
+		@counterpartyFormBody("", fd, cats)
 	}
 }
 
-templ EditCounterparty(id string, fd *CounterpartyFD) {
+templ EditCounterparty(id string, fd *CounterpartyFD, cats []models.Category) {
 	@form.Form("put", fmt.Sprintf("/counterparties/%s", id), templ.Attributes{"hx-target": "this"}) {
 		<p>ID: { id }</p>
-		@counterpartyFormBody(id, fd)
+		@counterpartyFormBody(id, fd, cats)
 		@form.EditFormButtons(fmt.Sprintf("/counterparties/%s", id))
 	}
 }
 
-templ counterpartyFormBody(id string, fd *CounterpartyFD) {
+templ counterpartyFormBody(id string, fd *CounterpartyFD, cats []models.Category) {
 	@form.TextInput("Name", "name", "Enter the name", id, fd.Name, nil, nil)
 	@form.TextInput("SMS Aliases", "aliases", "Comma separated, as in bank SMS, e.g. UBER *TRIP, UBER BV", id, fd.Aliases, nil, nil)
-	if id == "" {
-		@form.TextInput("Icon", "icon", "Leave empty to auto-detect, or a simpleicons.org slug", id, fd.Icon, nil, nil)
-	} else {
-		@form.TextInput("Icon", "icon", "A simpleicons.org slug, empty for no icon", id, fd.Icon, nil, nil)
-	}
+	<div class="contents" x-data={ fmt.Sprintf("{isMerchant: %t}", fd.IsMerchant.Value != "") }>
+		@form.Checkbox("Merchant", "is_merchant", id, fd.IsMerchant, templ.Attributes{"x-model": "isMerchant"}, nil)
+		<div class="contents" x-show="isMerchant" x-cloak?={ fd.IsMerchant.Value == "" }>
+			@form.SelectDefaultTxCat("default_category_id", id, cats, fd.DefaultCategoryID, nil)
+			if id == "" {
+				@form.TextInput("Icon", "icon", "Leave empty to auto-detect, or a simpleicons.org slug", id, fd.Icon, nil, nil)
+			} else {
+				@form.TextInput("Icon", "icon", "A simpleicons.org slug, empty for no icon", id, fd.Icon, nil, nil)
+			}
+		</div>
+	</div>
 }
 
 templ counterpartiesList(counterparties []models.Counterparty) {
@@ -69,6 +78,12 @@ templ Counterparty(cp *models.Counterparty) {
 		}),
 	) {
 		<p>ID: { cp.ID }</p>
+		if cp.IsMerchant {
+			<p>Merchant</p>
+		}
+		if cp.DefaultCategory != nil {
+			<p>Default category: { cp.DefaultCategory.Name }</p>
+		}
 		if len(cp.Aliases) > 0 {
 			<p>Aliases: { strings.Join(cp.Aliases, ", ") }</p>
 		}

@@ -11,6 +11,7 @@ import (
 	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views"
 	"github.com/omareloui/tyche/web/views/form"
 	"go.uber.org/zap"
@@ -32,7 +33,13 @@ func (h Handler) Counterparties(w http.ResponseWriter, r *http.Request) (templ.C
 	}
 	l.Debug("fetched counter parties")
 
-	return views.Counterparties(getClaims(r.Context()), b, h.mapCounterpartyToFD(dfltCounterparty(), &errs.ValidationError{}), cp), nil
+	cats, err := h.repo.GetCategories(r.Context())
+	if err != nil {
+		l.Error("fetching categories", zap.Error(err))
+		return nil, err
+	}
+
+	return views.Counterparties(getClaims(r.Context()), b, h.mapCounterpartyToFD(dfltCounterparty(), &errs.ValidationError{}), cp, cats), nil
 }
 
 func (h Handler) Counterparty(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -63,20 +70,34 @@ func (h Handler) CreateCounterparty(w http.ResponseWriter, r *http.Request) (tem
 	}
 	cp.ID = idgen.New()
 
+	cats, err := h.repo.GetCategories(r.Context())
+	if err != nil {
+		l.Error("fetching categories", zap.Error(err))
+		return nil, err
+	}
+
 	if err := cp.SanitizeAndValidate(h.sani, h.valid); err != nil {
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("validating counterparty", zap.Error(err), zap.Any("errors", valerr.Errors))
-			return views.CreateCounterpartyForm(h.mapCounterpartyToFD(cp, &valerr)), nil
+			return views.CreateCounterpartyForm(h.mapCounterpartyToFD(cp, &valerr), cats), nil
 		}
 		l.Error("sanitizing counterparty", zap.Error(err))
 		return nil, err
 	}
 
+	clearNonMerchantFields(cp)
+
+	if valerr := resolveCounterpartyDefaultCategory(cp, cats); valerr != nil {
+		return views.CreateCounterpartyForm(h.mapCounterpartyToFD(cp, valerr), cats), nil
+	}
+
 	if cp.Icon == "" {
-		cp.Icon = brandicons.Default().Detect(cp.Name, cp.Aliases)
+		if cp.IsMerchant {
+			cp.Icon = brandicons.Default().Detect(cp.Name, cp.Aliases)
+		}
 	} else if valerr := validateCounterpartyIcon(cp); valerr != nil {
-		return views.CreateCounterpartyForm(h.mapCounterpartyToFD(cp, valerr)), nil
+		return views.CreateCounterpartyForm(h.mapCounterpartyToFD(cp, valerr), cats), nil
 	}
 	cp.Color = brandicons.Default().ColorFor(cp.Icon, "")
 
@@ -92,7 +113,7 @@ func (h Handler) CreateCounterparty(w http.ResponseWriter, r *http.Request) (tem
 	}
 	l.Debug("rendered counterparty oob")
 
-	return views.CreateCounterpartyForm(h.mapCounterpartyToFD(dfltCounterparty(), &errs.ValidationError{})), nil
+	return views.CreateCounterpartyForm(h.mapCounterpartyToFD(dfltCounterparty(), &errs.ValidationError{}), cats), nil
 }
 
 func (h Handler) GetEditCounterparty(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -110,7 +131,13 @@ func (h Handler) GetEditCounterparty(w http.ResponseWriter, r *http.Request) (te
 	}
 	l.Info("fetched counterparty", zap.Any("counterparty", cp))
 
-	return views.EditCounterparty(id, h.mapCounterpartyToFD(cp, &errs.ValidationError{})), nil
+	cats, err := h.repo.GetCategories(r.Context())
+	if err != nil {
+		l.Error("fetching categories", zap.Error(err))
+		return nil, err
+	}
+
+	return views.EditCounterparty(id, h.mapCounterpartyToFD(cp, &errs.ValidationError{}), cats), nil
 }
 
 func (h Handler) EditCounterparty(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -128,24 +155,41 @@ func (h Handler) EditCounterparty(w http.ResponseWriter, r *http.Request) (templ
 	}
 	cp.ID = id
 
+	cats, err := h.repo.GetCategories(r.Context())
+	if err != nil {
+		l.Error("fetching categories", zap.Error(err))
+		return nil, err
+	}
+
 	if err := cp.SanitizeAndValidate(h.sani, h.valid); err != nil {
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("validating counterparty", zap.Error(err), zap.Any("errors", valerr.Errors))
-			return views.EditCounterparty(id, h.mapCounterpartyToFD(cp, &valerr)), nil
+			return views.EditCounterparty(id, h.mapCounterpartyToFD(cp, &valerr), cats), nil
 		}
 		l.Error("sanitizing counterparty", zap.Error(err))
 		return nil, err
 	}
 
+	clearNonMerchantFields(cp)
+
+	if valerr := resolveCounterpartyDefaultCategory(cp, cats); valerr != nil {
+		return views.EditCounterparty(id, h.mapCounterpartyToFD(cp, valerr), cats), nil
+	}
+
 	if valerr := validateCounterpartyIcon(cp); valerr != nil {
-		return views.EditCounterparty(id, h.mapCounterpartyToFD(cp, valerr)), nil
+		return views.EditCounterparty(id, h.mapCounterpartyToFD(cp, valerr), cats), nil
 	}
 
 	prev, err := h.repo.GetCounterparty(r.Context(), id)
 	if err != nil {
 		l.Error("fetching counterparty", zap.Error(err))
 		return nil, err
+	}
+
+	// Detect the icon of a counterparty just marked as a merchant.
+	if cp.Icon == "" && cp.IsMerchant && !prev.IsMerchant {
+		cp.Icon = brandicons.Default().Detect(cp.Name, cp.Aliases)
 	}
 	cp.Color = brandicons.Default().ColorFor(cp.Icon, prev.Color)
 
@@ -177,19 +221,55 @@ func (h Handler) DeleteCounterparty(w http.ResponseWriter, r *http.Request) (tem
 }
 
 func (h Handler) mapCounterpartyToFD(cp *models.Counterparty, err *errs.ValidationError) *views.CounterpartyFD {
+	var defaultCategoryID string
+	if cp.DefaultCategory != nil {
+		defaultCategoryID = cp.DefaultCategory.ID
+	}
 	return &views.CounterpartyFD{
-		Name:    form.FDInput{Value: cp.Name, Error: err.Errors.MsgFor("Name")},
-		Aliases: form.FDInput{Value: strings.Join(cp.Aliases, ", "), Error: err.Errors.MsgFor("Aliases")},
-		Icon:    form.FDInput{Value: cp.Icon, Error: err.Errors.MsgFor("Icon")},
+		Name:              form.FDInput{Value: cp.Name, Error: err.Errors.MsgFor("Name")},
+		Aliases:           form.FDInput{Value: strings.Join(cp.Aliases, ", "), Error: err.Errors.MsgFor("Aliases")},
+		Icon:              form.FDInput{Value: cp.Icon, Error: err.Errors.MsgFor("Icon")},
+		IsMerchant:        form.FDInput{Value: formatBooleanIfNonZero(cp.IsMerchant), Error: err.Errors.MsgFor("IsMerchant")},
+		DefaultCategoryID: form.FDInput{Value: defaultCategoryID, Error: err.Errors.MsgFor("DefaultCategoryID")},
 	}
 }
 
 func (h Handler) mapFDToCounterparty(r *http.Request) (*models.Counterparty, error) {
+	var defaultCategory *models.Category
+	if catID := r.FormValue("default_category_id"); catID != "" {
+		defaultCategory = &models.Category{ID: catID}
+	}
 	return &models.Counterparty{
-		Name:    r.FormValue("name"),
-		Aliases: parseAliases(r.FormValue("aliases")),
-		Icon:    r.FormValue("icon"),
+		Name:            r.FormValue("name"),
+		Aliases:         parseAliases(r.FormValue("aliases")),
+		Icon:            r.FormValue("icon"),
+		IsMerchant:      parseBoolean(r.FormValue("is_merchant")),
+		DefaultCategory: defaultCategory,
 	}, nil
+}
+
+// clearNonMerchantFields drops the merchant only fields, as hidden form inputs
+// are still submitted.
+func clearNonMerchantFields(cp *models.Counterparty) {
+	if cp.IsMerchant {
+		return
+	}
+	cp.Icon = ""
+	cp.DefaultCategory = nil
+}
+
+// resolveCounterpartyDefaultCategory replaces the default category with the
+// full one from the list, erroring if it doesn't exist.
+func resolveCounterpartyDefaultCategory(cp *models.Counterparty, cats []models.Category) *errs.ValidationError {
+	if cp.DefaultCategory == nil {
+		return nil
+	}
+	cat := slicesutils.Find(cats, func(c models.Category) bool { return c.ID == cp.DefaultCategory.ID })
+	if cat == nil {
+		return &errs.ValidationError{Errors: errs.ValidationErrors{"DefaultCategoryID": {Tag: "required"}}}
+	}
+	cp.DefaultCategory = cat
+	return nil
 }
 
 // validateCounterpartyIcon expects a sanitized counterparty, where a blank
@@ -222,5 +302,5 @@ func parseAliases(s string) []string {
 }
 
 func dfltCounterparty() *models.Counterparty {
-	return &models.Counterparty{}
+	return &models.Counterparty{IsMerchant: true}
 }

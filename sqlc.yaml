@@ -13,3 +13,7 @@ sql:
             go_type:
               import: github.com/omareloui/tyche/internal/dbtypes
               type: JSON
+          - column: categories.kinds
+            go_type:
+              import: github.com/omareloui/tyche/internal/dbtypes
+              type: JSON

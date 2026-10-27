@@ -4,27 +4,39 @@ INSERT INTO counterparties (
     name,
     aliases,
     icon,
-    color
+    color,
+    is_merchant,
+    default_category_id
 )
 VALUES (
     sqlc.arg(id),
     sqlc.arg(name),
     sqlc.arg(aliases),
     sqlc.arg(icon),
-    sqlc.arg(color)
+    sqlc.arg(color),
+    sqlc.arg(is_merchant),
+    sqlc.arg(default_category_id)
 );
 
 -- name: GetCounterparties :many
 SELECT
-    sqlc.embed(counterparties)
+    sqlc.embed(counterparties),
+    cat.name AS default_category_name,
+    cat.color AS default_category_color,
+    cat.kinds AS default_category_kinds
 FROM counterparties
-ORDER BY name COLLATE NOCASE;
+LEFT JOIN categories AS cat ON counterparties.default_category_id = cat.id
+ORDER BY counterparties.name COLLATE NOCASE;
 
 -- name: GetCounterparty :one
 SELECT
-    sqlc.embed(counterparties)
+    sqlc.embed(counterparties),
+    cat.name AS default_category_name,
+    cat.color AS default_category_color,
+    cat.kinds AS default_category_kinds
 FROM counterparties
-WHERE id = sqlc.arg(id);
+LEFT JOIN categories AS cat ON counterparties.default_category_id = cat.id
+WHERE counterparties.id = sqlc.arg(id);
 
 -- name: UpdateCounterparty :exec
 UPDATE counterparties
@@ -32,7 +44,9 @@ SET
     name = sqlc.arg(name),
     aliases = sqlc.arg(aliases),
     icon = sqlc.arg(icon),
-    color = sqlc.arg(color)
+    color = sqlc.arg(color),
+    is_merchant = sqlc.arg(is_merchant),
+    default_category_id = sqlc.arg(default_category_id)
 WHERE id = sqlc.arg(id);
 
 -- name: SetCounterpartyAppearance :exec
