@@ -21,6 +21,7 @@ type Account struct {
 	Kind               AccountKind
 	Counterparty       *Counterparty
 	Iban               string
+	SmsRef             string
 	CardNumber         string
 	CardLimit          float64
 	NameOnCard         string

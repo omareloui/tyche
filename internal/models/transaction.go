@@ -24,6 +24,7 @@ type Transaction struct {
 	RecurrentTx    *RecurrentTx
 	ScheduledTo    time.Time
 	FulfilledAt    time.Time
+	NeedsReview    bool
 	CreatedAt      time.Time
 }
 

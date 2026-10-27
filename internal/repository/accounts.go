@@ -36,6 +36,7 @@ func (r *Repository) CreateAccount(ctx context.Context, a *models.Account) error
 		NameOnCard:     sql.NullString{String: a.NameOnCard, Valid: a.NameOnCard != ""},
 		CounterpartyID: sql.NullString{String: cpId, Valid: cpId != ""},
 		Iban:           sql.NullString{String: a.Iban, Valid: a.Iban != ""},
+		SmsRef:         sql.NullString{String: a.SmsRef, Valid: a.SmsRef != ""},
 		CardNumber:     sql.NullString{String: a.CardNumber, Valid: a.CardNumber != ""},
 
 		Note:               sql.NullString{String: a.Note, Valid: a.Note != ""},
@@ -116,6 +117,7 @@ func (r *Repository) UpdateAccount(ctx context.Context, a *models.Account) error
 		CurrencyID:         a.Currency.ID,
 		CounterpartyID:     sql.NullString{String: cpId, Valid: cpId != ""},
 		Iban:               sql.NullString{String: a.Iban, Valid: a.Iban != ""},
+		SmsRef:             sql.NullString{String: a.SmsRef, Valid: a.SmsRef != ""},
 		CardNumber:         sql.NullString{String: a.CardNumber, Valid: a.CardNumber != ""},
 		NameOnCard:         sql.NullString{String: a.NameOnCard, Valid: a.NameOnCard != ""},
 		CardLimit:          a.CardLimit,
@@ -282,6 +284,7 @@ func dbAccountToAccount(
 		NameOnCard:         dbAcc.NameOnCard.String,
 		CardLimit:          dbAcc.CardLimit,
 		Iban:               dbAcc.Iban.String,
+		SmsRef:             dbAcc.SmsRef.String,
 		CardNumber:         dbAcc.CardNumber.String,
 		Note:               dbAcc.Note.String,
 		IsArchive:          dbAcc.IsArchived,

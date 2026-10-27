@@ -1,0 +1,106 @@
+package views
+
+import (
+	"fmt"
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+templ SMS(claims *jwt.AccessClaims, balances []models.Balance, msgs []models.SMSMessage, devices []models.Device) {
+	@layouts.WithTitle(claims, "SMS", balances) {
+		<section class="grid gap-4 mb-12">
+			<div class="flex justify-between items-center">
+				<h2 class="text-2xl">Needs attention</h2>
+				if len(msgs) > 0 {
+					<button
+						hx-post="/sms/retry"
+						hx-target="#sms-list"
+						hx-swap="outerHTML"
+						title="Retry all"
+						class="cursor-pointer transition-transform hover:scale-120"
+					>
+						@icons.Retry("32")
+					</button>
+				}
+			</div>
+			<p class="text-zinc-400">
+				Bank SMS that didn't become transactions. Set the account's SMS reference or add a parser then retry.
+			</p>
+			@SMSList(msgs)
+		</section>
+		<section class="grid gap-4">
+			<h2 class="text-2xl">Devices</h2>
+			@components.Grid2ColOnSMUp("devices-list") {
+				for _, d := range devices {
+					@Device(&d)
+				}
+			}
+		</section>
+	}
+}
+
+templ SMSList(msgs []models.SMSMessage) {
+	@components.Grid2ColOnSMUp("sms-list") {
+		for _, m := range msgs {
+			@SMSMessage(&m)
+		}
+	}
+}
+
+templ SMSMessage(m *models.SMSMessage) {
+	@components.EntryCard(
+		components.WithCardTitle(m.Sender),
+		components.WithCardMenu(getSMSMenuItems(m)),
+		components.WithCardStale(m.Status == models.SMSStatusParsed),
+	) {
+		<p class="text-zinc-400">{ m.ReceivedAt.Local().Format("Jan 2 2006, 3:04pm") }</p>
+		<p>
+			Status: <span class={ templ.KV("text-amber-400", m.Status != models.SMSStatusParsed) }>{ string(m.Status) }</span>
+		</p>
+		if m.Error != "" {
+			<p class="text-red-400">{ m.Error }</p>
+		}
+		<p class="whitespace-pre-wrap break-words" dir="auto">{ m.Body }</p>
+	}
+}
+
+templ Device(d *models.Device) {
+	@components.EntryCard(
+		components.WithCardTitle(d.Name),
+		components.WithCardMenu(getDeviceMenuItems(d)),
+		components.WithCardStale(d.IsRevoked()),
+	) {
+		<p>Added: { d.CreatedAt.Local().Format("Jan 2 2006") }</p>
+		if !d.LastSeenAt.IsZero() {
+			<p>Last seen: { d.LastSeenAt.Local().Format("Jan 2 2006, 3:04pm") }</p>
+		}
+		if d.IsRevoked() {
+			<p class="text-red-400">Revoked: { d.RevokedAt.Local().Format("Jan 2 2006") }</p>
+		}
+	}
+}
+
+func getSMSMenuItems(m *models.SMSMessage) []templ.Component {
+	if m.Status == models.SMSStatusParsed {
+		return nil
+	}
+	return []templ.Component{
+		components.EntryMenuAnchorItem("Retry", "post", fmt.Sprintf("/sms/%s/retry", m.ID)),
+		components.EntryMenuAnchorItem("Ignore", "put", fmt.Sprintf("/sms/%s/ignore", m.ID)),
+	}
+}
+
+func getDeviceMenuItems(d *models.Device) []templ.Component {
+	if d.IsRevoked() {
+		return nil
+	}
+	return []templ.Component{
+		components.EntryMenuAnchorItem("Revoke", "put", fmt.Sprintf("/devices/%s/revoke", d.ID),
+			components.WithEntryMenuItemConfirmMessage("The app on this device will be signed out. Continue?"),
+			components.WithEntryMenuItemClasses("text-red-500"),
+		),
+	}
+}

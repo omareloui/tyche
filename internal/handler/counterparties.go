@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/errs"
@@ -123,7 +124,7 @@ func (h Handler) EditCounterparty(w http.ResponseWriter, r *http.Request) (templ
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("validating counterparty", zap.Error(err), zap.Any("errors", valerr.Errors))
-			return views.CreateCounterpartyForm(h.mapCounterpartyToFD(cp, &valerr)), nil
+			return views.EditCounterparty(id, h.mapCounterpartyToFD(cp, &valerr)), nil
 		}
 		l.Error("sanitizing counterparty", zap.Error(err))
 		return nil, err
@@ -158,14 +159,33 @@ func (h Handler) DeleteCounterparty(w http.ResponseWriter, r *http.Request) (tem
 
 func (h Handler) mapCounterpartyToFD(cp *models.Counterparty, err *errs.ValidationError) *views.CounterpartyFD {
 	return &views.CounterpartyFD{
-		Name: form.FDInput{Value: cp.Name, Error: err.Errors.MsgFor("Name")},
+		Name:    form.FDInput{Value: cp.Name, Error: err.Errors.MsgFor("Name")},
+		Aliases: form.FDInput{Value: strings.Join(cp.Aliases, ", "), Error: err.Errors.MsgFor("Aliases")},
 	}
 }
 
 func (h Handler) mapFDToCounterparty(r *http.Request) (*models.Counterparty, error) {
 	return &models.Counterparty{
-		Name: r.FormValue("name"),
+		Name:    r.FormValue("name"),
+		Aliases: parseAliases(r.FormValue("aliases")),
 	}, nil
+}
+
+// parseAliases splits a comma separated list, dropping blanks and
+// case-insensitive duplicates.
+func parseAliases(s string) []string {
+	aliases := []string{}
+	seen := map[string]bool{}
+	for a := range strings.SplitSeq(s, ",") {
+		a = strings.TrimSpace(a)
+		key := strings.ToLower(a)
+		if a == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		aliases = append(aliases, a)
+	}
+	return aliases
 }
 
 func dfltCounterparty() *models.Counterparty {

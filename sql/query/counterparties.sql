@@ -1,11 +1,13 @@
 -- name: CreateCounterparty :exec
 INSERT INTO counterparties (
     id,
-    name
+    name,
+    aliases
 )
 VALUES (
     sqlc.arg(id),
-    sqlc.arg(name)
+    sqlc.arg(name),
+    sqlc.arg(aliases)
 );
 
 -- name: GetCounterparties :many
@@ -23,7 +25,8 @@ WHERE id = sqlc.arg(id);
 -- name: UpdateCounterparty :exec
 UPDATE counterparties
 SET
-    name = sqlc.arg(name)
+    name = sqlc.arg(name),
+    aliases = sqlc.arg(aliases)
 WHERE id = sqlc.arg(id);
 
 -- name: DeleteCounterparty :exec

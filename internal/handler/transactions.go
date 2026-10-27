@@ -102,19 +102,17 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 	}
 	l.Info("created transaction")
 
-	if err = renderToBody(w, r, views.TransactionOOB(tx)); err != nil {
-		l.Error("rendering transaction OOB")
+	// Re-render the whole list so new transactions land in their day group.
+	txs, err := h.repo.GetTransactions(r.Context())
+	if err != nil {
+		l.Error("fetch transactions from db", zap.Error(err))
 		return nil, err
 	}
-	l.Debug("rendered transaction OOB")
-
-	for _, scheduledTx := range scheduledTxs {
-		if err = renderToBody(w, r, views.TransactionOOB(&scheduledTx)); err != nil {
-			l.Error("rendering scheduled transaction OOB", zap.Error(err), zap.Any("tx", &scheduledTx))
-			return nil, err
-		}
-		l.Debug("rendered scheduled transaction OOB")
+	if err = renderToBody(w, r, views.TransactionsListOOB(txs)); err != nil {
+		l.Error("rendering transactions list OOB", zap.Error(err))
+		return nil, err
 	}
+	l.Debug("rendered transactions list OOB")
 
 	if !tx.FulfilledAt.IsZero() {
 		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
@@ -247,6 +245,28 @@ func (h Handler) FulfillTransaction(w http.ResponseWriter, r *http.Request) (tem
 	l.Info("fulfilled transaction")
 
 	if err := h.getAndRenderBalancesOOB(w, r); err != nil {
+		return nil, err
+	}
+
+	return views.Transaction(tx), nil
+}
+
+func (h Handler) MarkTransactionReviewed(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+
+	if err := h.repo.MarkTransactionReviewed(r.Context(), id); err != nil {
+		return nil, err
+	}
+	l.Info("marked transaction as reviewed")
+
+	tx, err := h.repo.GetTransaction(r.Context(), id)
+	if err != nil {
+		l.Error("fetching transaction", zap.Error(err))
 		return nil, err
 	}
 

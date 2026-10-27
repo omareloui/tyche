@@ -57,7 +57,20 @@ var (
 	ErrInvalidTokenMethod = errors.New("invalid token method")
 	ErrInvalidClaimsType  = errors.New("invalid claims type")
 	ErrExpiredToken       = errors.New("expired token")
+	ErrWrongTokenType     = errors.New("wrong token type")
 )
+
+const (
+	typClaim        = "typ"
+	deviceTokenType = "device"
+)
+
+type DeviceClaims struct {
+	DeviceID      string
+	UserID        string
+	OAuthID       string
+	OAuthProvider models.OAuthProvider
+}
 
 func NewPair(usr *models.User) (*TokenPair, error) {
 	refresh, refreshExp, err := newToken(refreshToken, usr)
@@ -75,6 +88,9 @@ func ParseAccessClaims(token string) (*AccessClaims, error) {
 	claims, err := parse(token)
 	if err != nil {
 		return nil, err
+	}
+	if _, ok := (*claims)[typClaim]; ok {
+		return nil, ErrWrongTokenType
 	}
 
 	var acc *models.Account
@@ -116,10 +132,52 @@ func ParseRefreshClaims(token string) (*RefreshClaims, error) {
 	if err != nil {
 		return nil, err
 	}
+	if _, ok := (*claims)[typClaim]; ok {
+		return nil, ErrWrongTokenType
+	}
 	return &RefreshClaims{
 		ID:            (*claims)["id"].(string),
 		OAuthID:       (*claims)["oauth_id"].(string),
 		OAuthProvider: models.OAuthProvider((*claims)["oauth_provider"].(float64)),
+	}, nil
+}
+
+// NewDeviceToken creates a non-expiring token for a mobile device. Revoking is
+// done by revoking the device in the user's database.
+func NewDeviceToken(usr *models.User, deviceID string) (string, error) {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		typClaim:         deviceTokenType,
+		"device_id":      deviceID,
+		"id":             usr.ID,
+		"oauth_id":       usr.OAuthID,
+		"oauth_provider": uint64(usr.OAuthProvider),
+		"iat":            time.Now().Unix(),
+	})
+	return token.SignedString(config.GetJWTSecret())
+}
+
+func ParseDeviceClaims(token string) (*DeviceClaims, error) {
+	claims, err := parse(token)
+	if err != nil {
+		return nil, err
+	}
+	if typ, _ := (*claims)[typClaim].(string); typ != deviceTokenType {
+		return nil, ErrWrongTokenType
+	}
+
+	deviceID, _ := (*claims)["device_id"].(string)
+	userID, _ := (*claims)["id"].(string)
+	oauthID, _ := (*claims)["oauth_id"].(string)
+	oauthProvider, ok := (*claims)["oauth_provider"].(float64)
+	if deviceID == "" || oauthID == "" || !ok {
+		return nil, ErrInvalidClaimsType
+	}
+
+	return &DeviceClaims{
+		DeviceID:      deviceID,
+		UserID:        userID,
+		OAuthID:       oauthID,
+		OAuthProvider: models.OAuthProvider(oauthProvider),
 	}, nil
 }
 

@@ -2,6 +2,7 @@ package views
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/omareloui/tyche/internal/models"
@@ -12,7 +13,8 @@ import (
 )
 
 type CounterpartyFD struct {
-	Name form.FDInput
+	Name    form.FDInput
+	Aliases form.FDInput
 }
 
 templ Counterparties(
@@ -41,6 +43,7 @@ templ EditCounterparty(id string, fd *CounterpartyFD) {
 
 templ counterpartyFormBody(id string, fd *CounterpartyFD) {
 	@form.TextInput("Name", "name", "Enter the name", id, fd.Name, nil, nil)
+	@form.TextInput("SMS Aliases", "aliases", "Comma separated, as in bank SMS, e.g. UBER *TRIP, UBER BV", id, fd.Aliases, nil, nil)
 }
 
 templ counterpartiesList(counterparties []models.Counterparty) {
@@ -54,11 +57,14 @@ templ counterpartiesList(counterparties []models.Counterparty) {
 templ Counterparty(cp *models.Counterparty) {
 	@components.EntryCard(components.WithCardTitle(cp.Name),
 		components.WithCardMenu([]templ.Component{
-			components.EntryMenuAnchorItem("Edit", "put", fmt.Sprintf("/counterparties/%s/edit", cp.ID)),
+			components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/counterparties/%s/edit", cp.ID)),
 			components.EntryMenuDeleteItem(fmt.Sprintf("/counterparties/%s", cp.ID)),
 		}),
 	) {
 		<p>ID: { cp.ID }</p>
+		if len(cp.Aliases) > 0 {
+			<p>Aliases: { strings.Join(cp.Aliases, ", ") }</p>
+		}
 		<p>CreatedAt: { cp.CreatedAt.Format(time.RFC1123Z) }</p>
 	}
 }

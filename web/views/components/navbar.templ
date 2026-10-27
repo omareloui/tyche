@@ -61,7 +61,7 @@ templ Navbar(claims *jwt.AccessClaims, balances []models.Balance) {
 		}
 	</header>
 	if claims != nil {
-		@Navlinks([]string{"/accounts", "/categories", "/transactions", "/recurrent-tx", "/goals", "/counterparties", "/currencies"})
+		@Navlinks([]string{"/accounts", "/categories", "/transactions", "/recurrent-tx", "/goals", "/counterparties", "/currencies", "/sms"})
 	}
 }
 

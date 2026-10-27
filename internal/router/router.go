@@ -41,6 +41,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("GET /transactions/{id}/edit", handle(h.GetEditTransaction))
 	mux.Handle("PUT /transactions/{id}", handle(h.EditTransaction))
 	mux.Handle("PUT /transactions/{id}/fulfill", handle(h.FulfillTransaction))
+	mux.Handle("PUT /transactions/{id}/reviewed", handle(h.MarkTransactionReviewed))
 	mux.Handle("DELETE /transactions/{id}", handle(h.DeleteTransaction))
 
 	mux.Handle("POST /recurrence-form/", handle(h.RecurrenceForm))
@@ -86,6 +87,16 @@ func New(h *handler.Handler) Router {
 	mux.Handle("GET /oauth", handlePub(h.OAuth))
 	mux.Handle("GET /oauth/cb", handlePub(h.OAuthCB))
 	mux.Handle("GET /oauth/refresh-tokens", handlePub(h.RefreshTokens))
+	mux.Handle("GET /oauth/mobile", handlePub(h.OAuthMobile))
+
+	mux.Handle("POST /api/mobile/token", handlePubJSON(h.MobileToken))
+	mux.Handle("POST /api/sms", handleDeviceJSON(h.IngestSMS, h.VerifyDevice))
+
+	mux.Handle("GET /sms", handle(h.SMSPage))
+	mux.Handle("POST /sms/retry", handle(h.RetryAllSMS))
+	mux.Handle("POST /sms/{id}/retry", handle(h.RetrySMS))
+	mux.Handle("PUT /sms/{id}/ignore", handle(h.IgnoreSMS))
+	mux.Handle("PUT /devices/{id}/revoke", handle(h.RevokeDevice))
 	mux.Handle("GET /signout", handle(h.Signout))
 
 	static(mux, []string{
@@ -118,6 +129,16 @@ func handlePubJSON(h handler.HandlerJSONMethod, appendMiddlewares ...(func(http.
 	}
 
 	handler = middleware.Auth(handler)
+	handler = middleware.RequestLogger(handler)
+	handler = middleware.CorrelationID(handler)
+
+	return handler
+}
+
+func handleDeviceJSON(h handler.HandlerJSONMethod, verify middleware.DeviceVerifier) http.Handler {
+	var handler http.Handler = route_handler.JSONRouteHandler(h)
+
+	handler = middleware.DeviceAuth(verify)(handler)
 	handler = middleware.RequestLogger(handler)
 	handler = middleware.CorrelationID(handler)
 

@@ -9,8 +9,9 @@ import (
 )
 
 type Counterparty struct {
-	ID        string `validate:"required"`
-	Name      string `validate:"required,not_blank" conform:"trim,title"`
+	ID        string   `validate:"required"`
+	Name      string   `validate:"required,not_blank" conform:"trim,title"`
+	Aliases   []string `validate:"dive,not_blank"`
 	CreatedAt time.Time
 }
 

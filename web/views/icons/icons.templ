@@ -27,3 +27,79 @@ func appendToAttrs(attrs1 []*templ.Attributes, attrs2 []*templ.Attributes) []*te
 
 	return attrs2
 }
+
+templ strokeIcon(size string, attrs ...*templ.Attributes) {
+	<svg
+		width={ size }
+		height={ size }
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="2"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+		if attrs != nil {
+			{ *attrs[0]... }
+		}
+	>
+		{ children... }
+	</svg>
+}
+
+// Repeat marks a transaction generated from a recurrent transaction.
+templ Repeat(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="M21 12a9 9 0 0 0-15.5-6.2L3 8"></path>
+		<path d="M3 3v5h5"></path>
+		<path d="M3 12a9 9 0 0 0 15.5 6.2L21 16"></path>
+		<path d="M21 21v-5h-5"></path>
+	}
+}
+
+// Target marks a transaction linked to a goal.
+templ Target(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<circle cx="12" cy="12" r="8"></circle>
+		<circle cx="12" cy="12" r="1.5"></circle>
+		<path d="M12 1v4M12 19v4M1 12h4M19 12h4"></path>
+	}
+}
+
+// Transfer marks a transfer between two accounts.
+templ Transfer(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="M20 7H4M8 3 4 7l4 4"></path>
+		<path d="M4 17h16M16 13l4 4-4 4"></path>
+	}
+}
+
+// Tag is the placeholder icon for a transaction until per-category icons exist.
+templ Tag(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z"></path>
+		<circle cx="7.5" cy="7.5" r="1"></circle>
+	}
+}
+
+// Card is the placeholder icon for an account until per-account icons exist.
+templ Card(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<rect x="2" y="5" width="20" height="14" rx="2"></rect>
+		<path d="M2 10h20"></path>
+	}
+}
+
+templ Search(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<circle cx="11" cy="11" r="8"></circle>
+		<path d="m21 21-4.3-4.3"></path>
+	}
+}
+
+// Retry re-processes failed entries.
+templ Retry(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+		<path d="M21 3v5h-5"></path>
+	}
+}

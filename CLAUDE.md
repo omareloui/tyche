@@ -130,9 +130,11 @@ The app uses a **per-user database model** where each authenticated user gets th
   - `route_handler/` - Adapts handler methods (templ/JSON) to `http.Handler`
   - `seeder/` - Per-tenant DB seed data
   - `fxrate/` - Exchange rate fetching with file cache (`CACHE_DIR`)
-  - `smsparser/` - Parses bank SMS (HSBC, CIB, AAIB) into transaction data
+  - `smsparser/` - Parses bank SMS (HSBC, CIB, AAIB) into transaction data; `Default()` registry with all parsers
+  - `smsingest/` - Builds transactions from parsed SMS (account matching via `accounts.sms_ref` / card / iban suffix, fx conversion)
   - `idgen/` - ULID generation
   - `formatters/`, `numsutils/`, `slicesutils/`, `structutils/` - Helpers
+- `mobile/android/` - Kotlin app forwarding bank SMS to `POST /api/sms` (see its README)
 - `sql/`
   - `schema/` - Goose migrations
   - `query/` - SQL queries for sqlc (one file per resource)
@@ -159,6 +161,8 @@ func (h *Handler) Accounts(w http.ResponseWriter, r *http.Request) (templ.Compon
 }
 ```
 JSON endpoints use `HandlerJSONMethod` via `handlePubJSON()`.
+
+**Mobile/SMS ingest**: the Android app signs in via `GET /oauth/mobile` (PKCE) → `tyche://auth?code=` → `POST /api/mobile/token`, getting a non-expiring device JWT (`jwt.NewDeviceToken`). `/api/*` device routes use `handleDeviceJSON()` + `middleware.DeviceAuth`, which checks the `devices` table (revocable from `/sms`) and sets `AccessClaims` so repos resolve the tenant as usual. Every received SMS is stored in `sms_messages` (dedup by hash); parsed ones create fulfilled transactions with `needs_review`, others can be retried from `/sms`.
 
 **Database Queries**: Use sqlc-generated code in `internal/queries/`:
 - Write SQL in `sql/query/*.sql` with sqlc annotations
@@ -194,7 +198,7 @@ Core entities and their relationships:
 ## Important Notes
 
 - **Never commit `.env` files or `data/*.sqlite` databases**
-- **All generated files** (`internal/queries/*.go`, `web/views/*_templ.go`) should be committed as they're part of the build
+- **Generated files** (`internal/queries/*.go`, `web/views/**/*_templ.go`, `web/public/styles/main.css`) are gitignored; never commit them. Regenerate with `make sqlgen`, `make templ`, `make css` before building
 - **Authentication** is OAuth-only (no username/password)
 - **HTMX convention**: Most handlers return HTML partials for HTMX, not full pages
 - **Validation tags** use go-playground/validator syntax (`validate:"required,ulid"`)

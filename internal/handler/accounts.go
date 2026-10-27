@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/errs"
@@ -321,6 +322,7 @@ func (h *Handler) mapFDToAcc(r *http.Request) (*models.Account, error) {
 		CardLimit:          cardLimit,
 		NameOnCard:         r.FormValue("name_on_card"),
 		Note:               r.FormValue("note"),
+		SmsRef:             strings.TrimSpace(r.FormValue("sms_ref")),
 		Currency:           models.Currency{ID: r.FormValue("currency_id")},
 		Counterparty:       cp,
 		IsArchive:          parseBoolean(r.FormValue("is_archive")),
@@ -382,6 +384,7 @@ func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, kn
 			ExpirationDate: exp,
 		},
 		Note:               form.FDInput{Value: acc.Note, Error: errs.Errors.MsgFor("Note")},
+		SmsRef:             form.FDInput{Value: acc.SmsRef, Error: errs.Errors.MsgFor("SmsRef")},
 		IsArchive:          form.FDInput{Value: formatBooleanIfNonZero(acc.IsArchive), Error: errs.Errors.MsgFor("IsArchive")},
 		ExcludeFromBalance: form.FDInput{Value: formatBooleanIfNonZero(acc.ExcludeFromBalance), Error: errs.Errors.MsgFor("IsArchive")},
 	}

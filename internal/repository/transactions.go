@@ -72,6 +72,7 @@ func (r *Repository) createTransactionWithTxn(qtx *queries.Queries, ctx context.
 		RecurrentID:    recurrentID,
 		ScheduledTo:    tx.ScheduledTo,
 		FulfilledAt:    sql.NullTime{Time: tx.FulfilledAt, Valid: !tx.FulfilledAt.IsZero()},
+		NeedsReview:    tx.NeedsReview,
 	}); err != nil {
 		l.Error("create transaction", zap.Error(err), zap.Any("transaction", tx))
 		return err
@@ -227,6 +228,21 @@ func (r *Repository) FulfillTransaction(ctx context.Context, tx *models.Transact
 	})
 }
 
+func (r *Repository) MarkTransactionReviewed(ctx context.Context, id string) error {
+	l := logger.FromCtx(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+
+	if err := q.MarkTransactionReviewed(ctx, id); err != nil {
+		l.Error("marking transaction as reviewed", zap.Error(err), zap.String("id", id))
+		return err
+	}
+	return nil
+}
+
 func dbTransactionToTransaction(
 	dbTx *queries.Transaction, acc *queries.Account,
 	cur *queries.Currency, toAcc *queries.Account, toCur *queries.Currency,
@@ -241,6 +257,7 @@ func dbTransactionToTransaction(
 		ToAmount:    dbTx.ToAmount.Float64,
 		FulfilledAt: dbTx.FulfilledAt.Time,
 		ScheduledTo: dbTx.ScheduledTo,
+		NeedsReview: dbTx.NeedsReview,
 		CreatedAt:   dbTx.CreatedAt,
 	}
 

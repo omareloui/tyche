@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/a-h/templ"
@@ -25,15 +26,12 @@ const (
 	refreshTokenCookieName = "refresh_token"
 )
 
-var (
-	oauthConf         *oauth2.Config
-	oauthStateStrings = make(map[string]struct{})
-)
+var oauthConf *oauth2.Config
 
 func (h *Handler) OAuth(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	l := logger.FromCtx(r.Context())
 	csrfId := idgen.New()
-	oauthStateStrings[csrfId] = struct{}{}
+	oauthStates.add(csrfId, nil)
 	url := getOAuth2Conf().AuthCodeURL(csrfId)
 	l.Debug("going to sign a user", zap.String("url", url), zap.String("csrfId", csrfId))
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
@@ -42,24 +40,61 @@ func (h *Handler) OAuth(w http.ResponseWriter, r *http.Request) (templ.Component
 
 func (h *Handler) OAuthCB(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	l := logger.FromCtx(r.Context())
-	conf := getOAuth2Conf()
 
 	state := r.FormValue("state")
-	if _, ok := oauthStateStrings[state]; !ok {
+	mobile, ok := oauthStates.pop(state)
+	if !ok {
 		err := fmt.Errorf("invalid oauth state, got '%s'", state)
 		l.Error("preventing CSRF", zap.Error(err))
 		return nil, err
 	}
-	delete(oauthStateStrings, state)
 
-	code := r.FormValue("code")
-	token, err := conf.Exchange(r.Context(), code)
+	usr, err := h.signInGoogleUser(r.Context(), r.FormValue("code"))
+	if err != nil {
+		return nil, err
+	}
+
+	if mobile != nil {
+		code, err := mobileCodes.add(usr, mobile)
+		if err != nil {
+			l.Error("generating mobile code", zap.Error(err))
+			return nil, err
+		}
+		l.Info("signed user from mobile", zap.String("oauth_id", usr.OAuthID))
+		http.Redirect(w, r, mobileRedirectURI+"?code="+url.QueryEscape(code), http.StatusTemporaryRedirect)
+		return nil, nil
+	}
+
+	l.Debug("generating cookies for the user", zap.Any("user", usr))
+
+	access, refresh, err := generateJWTCookies(usr)
+	if err != nil {
+		l.Error("error generating jwt cookies", zap.Error(err), zap.Any("user", usr))
+		return nil, err
+	}
+
+	http.SetCookie(w, access)
+	http.SetCookie(w, refresh)
+
+	l.Info("new user singed", zap.Any("user", usr))
+
+	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+	return nil, nil
+}
+
+// signInGoogleUser exchanges the oauth code and gets the user, creating them
+// if it's their first sign in.
+func (h *Handler) signInGoogleUser(ctx context.Context, code string) (*models.User, error) {
+	l := logger.FromCtx(ctx)
+	conf := getOAuth2Conf()
+
+	token, err := conf.Exchange(ctx, code)
 	if err != nil {
 		l.Error("code exchange failed", zap.Error(err))
 		return nil, err
 	}
 
-	client := conf.Client(r.Context(), token)
+	client := conf.Client(ctx, token)
 	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
 	if err != nil {
 		l.Error("getting user info", zap.Error(err))
@@ -74,7 +109,7 @@ func (h *Handler) OAuthCB(w http.ResponseWriter, r *http.Request) (templ.Compone
 	}
 	l.Debug("user info", zap.Any("user", _usr))
 
-	accessCtx := context.WithValue(r.Context(), middleware.AccessClaimsCtxKey{}, &jwt.AccessClaims{
+	accessCtx := context.WithValue(ctx, middleware.AccessClaimsCtxKey{}, &jwt.AccessClaims{
 		OAuthID:       _usr.OAuthID,
 		OAuthProvider: models.Google,
 	})
@@ -94,21 +129,7 @@ func (h *Handler) OAuthCB(w http.ResponseWriter, r *http.Request) (templ.Compone
 		usr = _usr
 	}
 
-	l.Debug("generating cookies for the user", zap.Any("user", _usr))
-
-	access, refresh, err := generateJWTCookies(usr)
-	if err != nil {
-		l.Error("error generating jwt cookies", zap.Error(err), zap.Any("user", usr))
-		return nil, err
-	}
-
-	http.SetCookie(w, access)
-	http.SetCookie(w, refresh)
-
-	l.Info("new user singed", zap.Any("user", usr))
-
-	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
-	return nil, nil
+	return usr, nil
 }
 
 func (h *Handler) RefreshTokens(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

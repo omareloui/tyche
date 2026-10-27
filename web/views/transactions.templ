@@ -2,14 +2,15 @@ package views
 
 import (
 	"fmt"
-	"time"
-	"strconv"
+	"github.com/omareloui/tyche/internal/formatters"
+	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/slicesutils"
-	"github.com/omareloui/tyche/internal/jwt"
-	"github.com/omareloui/tyche/web/views/layouts"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+	"time"
 )
 
 type TransactionFD struct {
@@ -65,9 +66,9 @@ templ transactionFormBody(
 	}
 }
 
-templ TransactionOOB(tx *models.Transaction) {
-	<div id="tx-list" hx-swap-oob="afterbegin">
-		@Transaction(tx)
+templ TransactionsListOOB(transactions []models.Transaction) {
+	<div id="tx-list" hx-swap-oob="outerHTML" class="grid gap-8 no-entries">
+		@transactionsDays(transactions)
 	</div>
 }
 
@@ -76,7 +77,8 @@ templ EditTransaction(
 	accounts []models.Account, knds []models.TxKind,
 	cats []models.Category, cps []models.Counterparty,
 	gls []models.Goal, defaultCur *models.Currency) {
-	@form.Form("put", fmt.Sprintf("/transactions/%s", tx.ID), templ.Attributes{"hx-target": "this"}) {
+	// data-tx keeps the day section visible while editing.
+	@form.Form("put", fmt.Sprintf("/transactions/%s", tx.ID), templ.Attributes{"hx-target": "this", "data-tx": true}) {
 		<p>ID: { tx.ID }</p>
 		@transactionFormBody(fd, tx.ID, accounts, knds, cats, cps, gls, defaultCur)
 		@form.EditFormButtons(fmt.Sprintf("/transactions/%s", tx.ID))
@@ -84,47 +86,117 @@ templ EditTransaction(
 }
 
 templ transactionsList(transactions []models.Transaction) {
-	@components.List("tx-list") {
-		for _, t := range transactions {
-			@Transaction(&t)
-		}
+	@txSearchBar()
+	<div id="tx-list" class="grid gap-8 no-entries">
+		@transactionsDays(transactions)
+	</div>
+}
+
+templ transactionsDays(transactions []models.Transaction) {
+	for _, day := range groupTxsByDay(transactions) {
+		// Hidden once all its transactions get deleted.
+		<section class="hidden has-[[data-tx]]:grid gap-3">
+			<h2 class="text-zinc-400">{ formatTxDay(day.Day) }</h2>
+			for _, t := range day.Txs {
+				@Transaction(&t)
+			}
+		</section>
 	}
 }
 
+// TODO: wire up search; mock for now.
+templ txSearchBar() {
+	<label
+		class="flex items-center gap-4 mb-8 px-5 py-3 rounded-2xl border-2 border-zinc-600 bg-zinc-800/40 focus-within:border-zinc-400 transition-colors"
+	>
+		@icons.Search("24", &templ.Attributes{"class": "text-zinc-500 shrink-0"})
+		<input
+			type="search"
+			placeholder="Search transactions"
+			class="flex-1 min-w-0 bg-transparent outline-none placeholder:text-zinc-500"
+		/>
+		<kbd class="hidden sm:grid place-items-center w-6 h-6 rounded border border-zinc-500 text-xs text-zinc-500">/</kbd>
+	</label>
+}
+
 templ Transaction(tx *models.Transaction) {
-	@components.EntryCard(
-		components.WithCardTitle(tx.ID),
-		components.WithCardMenu(getTransactionMenuItems(tx)),
-		components.WithCardStale(tx.FulfilledAt.IsZero()),
-	) {
-		<p>Account: { tx.Account.Name }</p>
-		<p>Amount: { tx.ViewAmount() }</p>
-		if tx.ToAccount != nil {
-			<p>To Account: { tx.ToAccount.Name }</p>
-			<p>To Amount: { tx.ViewToAmount() }</p>
-		}
-		<p>Kind: { tx.Kind.String() }</p>
-		if tx.Category != nil {
-			<p>Category ID: { tx.Category.ID }</p>
-			<p>Category Name: { tx.Category.Name }</p>
-		}
-		if tx.Counterparty != nil {
-			<p>Counterparty ID: { tx.Counterparty.ID }</p>
-			<p>Counterparty Name: { tx.Counterparty.Name }</p>
-		}
-		if tx.Description != "" {
-			<p>Description: { tx.Description }</p>
-		}
-		if tx.Goal != nil {
-			<p>Goal: { tx.Goal.Name }</p>
-			<p>Goal Percentage: { strconv.FormatFloat(tx.GoalPercentage * 100, 'f', 2, 64) }%</p>
-		}
-		<p>Scheduled To: { tx.ScheduledTo.Format(time.DateOnly) }</p>
-		if !tx.FulfilledAt.IsZero() {
-			<p>Fulfilled At: { tx.FulfilledAt.Format(time.RFC1123Z) }</p>
-		}
-		<p>Created At: { tx.CreatedAt.Format(time.RFC1123Z) }</p>
-	}
+	{{ v := newTxView(tx) }}
+	<div
+		data-tx
+		hx-target="this"
+		hx-swap="outerHTML"
+		class="relative"
+		x-data="{openMenu: false}"
+	>
+		@components.EntryMenu("openMenu", getTransactionMenuItems(tx))
+		<div
+			class={
+				"flex items-center gap-4 px-4 py-3 rounded-2xl",
+				templ.KV("bg-zinc-700/20", !v.isStale),
+				templ.KV("bg-zinc-400/20 opacity-70", v.isStale),
+			}
+		>
+			// TODO: per-category/kind icons.
+			<div
+				class={
+					"grid place-items-center shrink-0 w-12 h-12 rounded-xl bg-zinc-700/40",
+					templ.KV("text-violet-400", !v.isIncoming),
+					templ.KV("text-emerald-400", v.isIncoming),
+				}
+			>
+				@icons.Tag("24")
+			</div>
+			<div class="flex-1 min-w-0">
+				<p class="text-lg truncate">{ v.title }</p>
+				<p class="text-xs text-zinc-400 truncate">
+					if v.subtitle != "" {
+						<span class="text-sm">{ v.subtitle }</span>
+						<span>·</span>
+					}
+					<span>{ v.time }</span>
+				</p>
+			</div>
+			<div class="hidden md:flex flex-1 min-w-0 items-center gap-3">
+				// TODO: per-account icons.
+				@icons.Card("24", &templ.Attributes{"class": "shrink-0 text-zinc-300"})
+				<span class="truncate">{ v.account }</span>
+			</div>
+			<div class="flex items-center gap-3 text-zinc-500">
+				if tx.NeedsReview {
+					<span title="Added from SMS, needs review" class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+				}
+				if tx.Kind == models.TransferTxKind {
+					<span title="Transfer">
+						@icons.Transfer("22")
+					</span>
+				}
+				if tx.RecurrentTx != nil {
+					<span title="Recurrent">
+						@icons.Repeat("22")
+					</span>
+				}
+				if tx.Goal != nil {
+					<span title={ "Goal: " + tx.Goal.Name }>
+						@icons.Target("22")
+					</span>
+				}
+			</div>
+			<p
+				class={
+					"shrink-0 text-right tabular-nums font-semibold",
+					templ.KV("text-emerald-400", v.isIncoming),
+				}
+			>
+				{ v.amount }
+			</p>
+			<button
+				@click="openMenu = !openMenu"
+				class="cursor-pointer grid place-items-center shrink-0 w-6 h-6"
+			>
+				<img src="/icons/dots-menu.svg" class="h-5"/>
+			</button>
+		</div>
+	</div>
 }
 
 templ TransactionAmountsAndKindFormBody(
@@ -232,10 +304,121 @@ func getTransactionMenuItems(tx *models.Transaction) []templ.Component {
 			components.EntryMenuAnchorItem("Fulfill", "put", fmt.Sprintf("/transactions/%s/fulfill", tx.ID)))
 	}
 
+	if tx.NeedsReview {
+		items = append(items,
+			components.EntryMenuAnchorItem("Mark reviewed", "put", fmt.Sprintf("/transactions/%s/reviewed", tx.ID)))
+	}
+
 	items = append(items,
 		components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/transactions/%s/edit", tx.ID)),
 		components.EntryMenuDeleteItem(fmt.Sprintf("/transactions/%s", tx.ID)),
 	)
 
 	return items
+}
+
+type txDay struct {
+	Day time.Time
+	Txs []models.Transaction
+}
+
+// groupTxsByDay expects transactions already sorted by scheduled date.
+func groupTxsByDay(txs []models.Transaction) []txDay {
+	days := []txDay{}
+	for _, tx := range txs {
+		y, m, d := tx.ScheduledTo.Date()
+		day := time.Date(y, m, d, 0, 0, 0, 0, tx.ScheduledTo.Location())
+		if n := len(days); n > 0 && days[n-1].Day.Equal(day) {
+			days[n-1].Txs = append(days[n-1].Txs, tx)
+			continue
+		}
+		days = append(days, txDay{Day: day, Txs: []models.Transaction{tx}})
+	}
+	return days
+}
+
+func formatTxDay(day time.Time) string {
+	if day.Year() != time.Now().Year() {
+		return day.Format("January 2 2006, Monday")
+	}
+	return day.Format("January 2, Monday")
+}
+
+type txView struct {
+	title      string
+	subtitle   string
+	time       string
+	account    string
+	amount     string
+	isIncoming bool
+	isStale    bool
+}
+
+func newTxView(tx *models.Transaction) txView {
+	v := txView{
+		title:   tx.Description,
+		account: tx.Account.Name,
+		amount:  "-" + tx.ViewAmount(),
+		isStale: tx.FulfilledAt.IsZero(),
+		time:    "Scheduled",
+	}
+	if !v.isStale {
+		v.time = tx.FulfilledAt.Format("3:04pm")
+	}
+
+	switch tx.Kind {
+	case models.IncomeTxKind:
+		v.amount = "+" + tx.ViewAmount()
+		v.isIncoming = true
+	case models.TransferTxKind:
+		if tx.ToAccount != nil {
+			v.title = tx.Account.Name
+			v.account = tx.ToAccount.Name
+			v.amount = tx.ViewToAmount()
+			if tx.Account.Currency.ID != tx.ToAccount.Currency.ID {
+				v.subtitle = "-" + tx.ViewAmount()
+			} else if fee := tx.Amount - tx.ToAmount; fee > 0 {
+				v.subtitle = "Fees " + formatters.FormatAmount(fee, tx.Account.Currency.Symbol)
+			}
+		}
+		return v
+	case models.DebtTxKind:
+		if tx.ToAccount != nil {
+			// Borrowing: money comes from the debt account into a real one.
+			if tx.Account.Kind.Enum == models.AccKindDebt {
+				v.title = debtPartyName(&tx.Account)
+				v.account = tx.ToAccount.Name
+				v.amount = "+" + tx.ViewToAmount()
+				v.isIncoming = true
+			} else {
+				v.title = debtPartyName(tx.ToAccount)
+			}
+		}
+		if tx.Description != "" {
+			v.subtitle = tx.Description
+		}
+		return v
+	}
+
+	if v.title == "" && tx.Category != nil {
+		v.title = tx.Category.Name
+	}
+	if tx.Counterparty != nil {
+		if v.title == "" {
+			v.title = tx.Counterparty.Name
+		} else {
+			v.subtitle = tx.Counterparty.Name
+		}
+	}
+	if v.title == "" {
+		v.title = tx.Kind.String()
+	}
+	return v
+}
+
+func debtPartyName(acc *models.Account) string {
+	if acc.Counterparty != nil && acc.Counterparty.Name != "" {
+		return acc.Counterparty.Name
+	}
+	return acc.Name
 }

@@ -8,3 +8,8 @@ sql:
       go:
         package: queries
         out: internal/queries
+        overrides:
+          - column: counterparties.aliases
+            go_type:
+              import: github.com/omareloui/tyche/internal/dbtypes
+              type: JSON

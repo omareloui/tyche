@@ -94,7 +94,7 @@ templ RecurrentTx(rtx *models.RecurrentTx) {
 		components.WithCardTitle(rtx.ID),
 		components.WithCardMenu([]templ.Component{
 			components.EntryMenuAnchorItem("Generate Transactions", "post", fmt.Sprintf("/recurrent-tx/%s/generate-txs", rtx.ID)),
-			components.EntryMenuAnchorItem("Edit", "put", fmt.Sprintf("/recurrent-tx/%s/edit", rtx.ID)),
+			components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/recurrent-tx/%s/edit", rtx.ID)),
 			components.EntryMenuDeleteItem(fmt.Sprintf("/recurrent-tx/%s", rtx.ID)),
 		}),
 	) {

@@ -14,6 +14,7 @@ import (
 type AccountFD struct {
 	AccountPartialFD   AccountPartialFD
 	Note               form.FDInput
+	SmsRef             form.FDInput
 	IsArchive          form.FDInput
 	ExcludeFromBalance form.FDInput
 }
@@ -60,6 +61,7 @@ templ EditAccount(id string, fd *AccountFD, aknds []models.AccountKind, curs []m
 templ accountFormBody(id string, fd *AccountFD, aknds []models.AccountKind, curs []models.Currency, cps []models.Counterparty, defaultCur *models.Currency) {
 	@AccountInputs(id, &fd.AccountPartialFD, aknds, curs, cps, defaultCur)
 	@form.TextInput("Note", "note", "Enter note", id, fd.Note, nil, nil)
+	@form.TextInput("SMS Reference", "sms_ref", "As in bank SMS, e.g. 123-456***-789 or 1234", id, fd.SmsRef, nil, nil)
 	@form.Checkbox("Is Archive", "is_archive", id, fd.IsArchive, nil, nil)
 	@form.Checkbox("Exclude From Balance", "exclude_from_balance", id, fd.ExcludeFromBalance, nil, nil)
 }
@@ -136,6 +138,9 @@ templ Account(a *models.Account) {
 		}
 		if a.CardNumber != "" {
 			<p>Card Number: { a.MaskCardNumber() } </p>
+		}
+		if a.SmsRef != "" {
+			<p>SMS Reference: { a.SmsRef } </p>
 		}
 		if a.CardLimit != 0 {
 			<p>Card Limit: { a.ViewCardLimit() } </p>

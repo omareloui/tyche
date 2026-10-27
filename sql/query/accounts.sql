@@ -89,7 +89,8 @@ INSERT INTO accounts (
     note,
     exclude_from_balance,
     is_archived,
-    expiration_date
+    expiration_date,
+    sms_ref
 )
 VALUES (
     sqlc.arg(id),
@@ -105,7 +106,8 @@ VALUES (
     sqlc.arg(note),
     sqlc.arg(exclude_from_balance),
     sqlc.arg(is_archived),
-    sqlc.arg(expiration_date)
+    sqlc.arg(expiration_date),
+    sqlc.arg(sms_ref)
 );
 
 -- name: UpdateAccount :exec
@@ -122,7 +124,8 @@ SET
     note = sqlc.arg(note),
     is_archived = sqlc.arg(is_archived),
     exclude_from_balance = sqlc.arg(exclude_from_balance),
-    expiration_date = sqlc.arg(expiration_date)
+    expiration_date = sqlc.arg(expiration_date),
+    sms_ref = sqlc.arg(sms_ref)
 WHERE id = sqlc.arg(id);
 
 -- name: DeleteAccount :exec

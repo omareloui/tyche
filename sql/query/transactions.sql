@@ -12,7 +12,8 @@ INSERT INTO transactions (
     goal_id,
     recurrent_id,
     scheduled_to,
-    fulfilled_at
+    fulfilled_at,
+    needs_review
 )
 VALUES (
     sqlc.arg(id),
@@ -27,7 +28,8 @@ VALUES (
     sqlc.arg(goal_id),
     sqlc.arg(recurrent_id),
     sqlc.arg(scheduled_to),
-    sqlc.arg(fulfilled_at)
+    sqlc.arg(fulfilled_at),
+    sqlc.arg(needs_review)
 );
 
 -- name: GetTransactions :many
@@ -132,7 +134,8 @@ SET
     to_account_id = sqlc.narg(to_account_id),
     to_amount = ROUND(sqlc.narg(to_amount), 2),
     scheduled_to = sqlc.arg(scheduled_to),
-    goal_id = sqlc.arg(goal_id)
+    goal_id = sqlc.arg(goal_id),
+    needs_review = FALSE
 WHERE id = sqlc.arg(id);
 
 -- name: FulfillTransaction :exec
@@ -143,4 +146,10 @@ WHERE id = sqlc.arg(id);
 
 -- name: DeleteTransaction :exec
 DELETE FROM transactions
+WHERE id = sqlc.arg(id);
+
+-- name: MarkTransactionReviewed :exec
+UPDATE transactions
+SET
+    needs_review = FALSE
 WHERE id = sqlc.arg(id);
