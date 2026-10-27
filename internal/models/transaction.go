@@ -26,6 +26,7 @@ type Transaction struct {
 	FulfilledAt    time.Time
 	NeedsReview    bool
 	FromSMS        bool
+	SMSBody        string
 	CreatedAt      time.Time
 }
 

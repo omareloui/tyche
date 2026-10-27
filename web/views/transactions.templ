@@ -104,6 +104,19 @@ templ transactionsDays(transactions []models.Transaction) {
 	}
 }
 
+// txSMSPopup shows the SMS a transaction was created from on hovering its
+// parent group.
+templ txSMSPopup(body, hint string) {
+	<div class="absolute top-full right-0 z-20 pt-2 hidden group-hover:block group-focus-within:block">
+		<div class="w-72 max-w-[80vw] rounded-lg border border-white/10 bg-zinc-800/40 px-3 py-2 text-sm text-zinc-100 shadow-lg backdrop-blur-md">
+			<p class="whitespace-pre-wrap break-words">{ body }</p>
+			if hint != "" {
+				<p class="mt-2 text-xs text-amber-400">{ hint }</p>
+			}
+		</div>
+	</div>
+}
+
 // TODO: wire up search; mock for now.
 templ txSearchBar() {
 	<label
@@ -169,16 +182,20 @@ templ Transaction(tx *models.Transaction) {
 			</div>
 			<div class="flex items-center gap-3 text-zinc-500">
 				if tx.NeedsReview {
-					<button
-						hx-put={ fmt.Sprintf("/transactions/%s/reviewed", tx.ID) }
-						title="Added from SMS, needs review. Click to mark reviewed"
-						class="cursor-pointer text-amber-400 transition-colors hover:text-amber-300"
-					>
-						@icons.Message("22")
-					</button>
+					<span class="group relative flex">
+						<button
+							hx-put={ fmt.Sprintf("/transactions/%s/reviewed", tx.ID) }
+							aria-label="Added from SMS, needs review. Click to mark reviewed"
+							class="cursor-pointer text-amber-400 transition-colors hover:text-amber-300"
+						>
+							@icons.Message("22")
+						</button>
+						@txSMSPopup(tx.SMSBody, "Needs review. Click to mark reviewed")
+					</span>
 				} else if tx.FromSMS {
-					<span title="Added from SMS">
+					<span tabindex="0" aria-label="Added from SMS" class="group relative flex outline-none">
 						@icons.Message("22")
+						@txSMSPopup(tx.SMSBody, "")
 					</span>
 				}
 				if tx.Kind == models.TransferTxKind {

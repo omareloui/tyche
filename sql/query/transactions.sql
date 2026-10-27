@@ -68,9 +68,9 @@ SELECT
     g.fulfilled_at AS goal_fulfilled_at,
     gc.string AS goal_currency_string,
     gc.symbol AS goal_currency_symbol,
-    CAST(EXISTS (
-        SELECT 1 FROM sms_messages AS sm WHERE sm.transaction_id = t.id
-    ) AS BOOLEAN) AS from_sms
+    CAST(COALESCE((
+        SELECT sm.body FROM sms_messages AS sm WHERE sm.transaction_id = t.id LIMIT 1
+    ), '') AS TEXT) AS sms_body
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
@@ -118,9 +118,9 @@ SELECT
     g.fulfilled_at AS goal_fulfilled_at,
     gc.string AS goal_currency_string,
     gc.symbol AS goal_currency_symbol,
-    CAST(EXISTS (
-        SELECT 1 FROM sms_messages AS sm WHERE sm.transaction_id = t.id
-    ) AS BOOLEAN) AS from_sms
+    CAST(COALESCE((
+        SELECT sm.body FROM sms_messages AS sm WHERE sm.transaction_id = t.id LIMIT 1
+    ), '') AS TEXT) AS sms_body
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
