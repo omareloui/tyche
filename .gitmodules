@@ -1,0 +1,4 @@
+[submodule "third_party/simple-icons"]
+	path = third_party/simple-icons
+	url = https://github.com/omareloui/simple-icons.git
+	shallow = true
