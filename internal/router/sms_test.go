@@ -86,11 +86,14 @@ func TestIngestSMS(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	device := &models.Device{ID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZC", Name: "test"}
-	if err := repo.CreateDevice(ctx, device); err != nil {
+	device := &models.Device{
+		ID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZC", Name: "test",
+		InstallID: "install-1", TokenID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZD",
+	}
+	if err := repo.RegisterDevice(ctx, device); err != nil {
 		t.Fatal(err)
 	}
-	token, err := jwt.NewDeviceToken(usr, device.ID)
+	token, err := jwt.NewDeviceToken(usr, device.ID, device.TokenID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,6 +239,52 @@ func TestIngestSMS(t *testing.T) {
 			t.Fatal(err)
 		}
 		if res, _ := post(token, batch); res.StatusCode != http.StatusUnauthorized {
+			t.Errorf("got %d", res.StatusCode)
+		}
+	})
+
+	t.Run("signing in again from the same install reuses the device", func(t *testing.T) {
+		again := &models.Device{
+			ID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZE", Name: "renamed",
+			InstallID: device.InstallID, TokenID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZF",
+		}
+		if err := repo.RegisterDevice(ctx, again); err != nil {
+			t.Fatal(err)
+		}
+		if again.ID != device.ID {
+			t.Errorf("device id = %s, want %s", again.ID, device.ID)
+		}
+
+		devices, err := repo.GetDevices(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(devices) != 1 || devices[0].Name != "renamed" || devices[0].IsRevoked() {
+			t.Fatalf("unexpected devices %+v", devices)
+		}
+
+		newToken, err := jwt.NewDeviceToken(usr, again.ID, again.TokenID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res, _ := post(newToken, batch); res.StatusCode != http.StatusOK {
+			t.Errorf("new token got %d", res.StatusCode)
+		}
+		if res, _ := post(token, batch); res.StatusCode != http.StatusUnauthorized {
+			t.Errorf("old token got %d", res.StatusCode)
+		}
+	})
+
+	t.Run("accepts tokens of devices registered before token ids", func(t *testing.T) {
+		legacy := &models.Device{ID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZG", Name: "legacy"}
+		if err := repo.CreateDevice(ctx, legacy); err != nil {
+			t.Fatal(err)
+		}
+		legacyToken, err := jwt.NewDeviceToken(usr, legacy.ID, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res, _ := post(legacyToken, batch); res.StatusCode != http.StatusOK {
 			t.Errorf("got %d", res.StatusCode)
 		}
 	})

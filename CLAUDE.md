@@ -166,7 +166,7 @@ func (h *Handler) Accounts(w http.ResponseWriter, r *http.Request) (templ.Compon
 ```
 JSON endpoints use `HandlerJSONMethod` via `handlePubJSON()`.
 
-**Mobile/SMS ingest**: the Android app signs in via `GET /oauth/mobile` (PKCE) → `tyche://auth?code=` → `POST /api/mobile/token`, getting a non-expiring device JWT (`jwt.NewDeviceToken`). `/api/*` device routes use `handleDeviceJSON()` + `middleware.DeviceAuth`, which checks the `devices` table (revocable from `/sms`) and sets `AccessClaims` so repos resolve the tenant as usual. Every received SMS is stored in `sms_messages` (dedup by hash); parsed ones create fulfilled transactions with `needs_review`, others can be retried from `/sms`.
+**Mobile/SMS ingest**: the Android app signs in via `GET /oauth/mobile` (PKCE) → `tyche://auth?code=` → `POST /api/mobile/token`, getting a non-expiring device JWT (`jwt.NewDeviceToken`). `/api/*` device routes use `handleDeviceJSON()` + `middleware.DeviceAuth`, which checks the `devices` table (revocable from `/sms`; signing in again from the same app install, `install_id`, reuses the row and rotates its `token_id`, invalidating older tokens) and sets `AccessClaims` so repos resolve the tenant as usual. Every received SMS is stored in `sms_messages` (dedup by hash); parsed ones create fulfilled transactions with `needs_review`, others can be retried from `/sms`.
 
 **Database Queries**: Use sqlc-generated code in `internal/queries/`:
 - Write SQL in `sql/query/*.sql` with sqlc annotations

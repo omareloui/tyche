@@ -28,6 +28,7 @@ const (
 	oauthStateTTL      = 10 * time.Minute
 	mobileCodeTTL      = 2 * time.Minute
 	maxDeviceNameLen   = 64
+	maxInstallIDLen    = 64
 	defaultDeviceName  = "Android"
 	pkceChallengeLen   = 43 // base64url(sha256) without padding
 	mobileCodeEntropyB = 32
@@ -43,6 +44,7 @@ var (
 type mobileLogin struct {
 	challenge  string
 	deviceName string
+	installID  string
 }
 
 type oauthState struct {
@@ -138,10 +140,17 @@ func (h *Handler) OAuthMobile(w http.ResponseWriter, r *http.Request) (templ.Com
 		return nil, resperr.New(http.StatusBadRequest, "invalid challenge")
 	}
 
+	// Optional, older app versions don't send it.
+	installID := r.URL.Query().Get("install_id")
+	if installID != "" && !isInstallID(installID) {
+		return nil, resperr.New(http.StatusBadRequest, "invalid install id")
+	}
+
 	csrfId := idgen.New()
 	oauthStates.add(csrfId, &mobileLogin{
 		challenge:  challenge,
 		deviceName: deviceName(r.URL.Query().Get("device_name")),
+		installID:  installID,
 	})
 	l.Debug("going to sign a user from mobile", zap.String("csrfId", csrfId))
 	http.Redirect(w, r, getOAuth2Conf().AuthCodeURL(csrfId), http.StatusTemporaryRedirect)
@@ -178,12 +187,17 @@ func (h *Handler) MobileToken(w http.ResponseWriter, r *http.Request) ([]byte, e
 		OAuthProvider: code.usr.OAuthProvider,
 	})
 
-	device := &models.Device{ID: idgen.New(), Name: code.login.deviceName}
-	if err := h.repo.CreateDevice(ctx, device); err != nil {
+	device := &models.Device{
+		ID:        idgen.New(),
+		Name:      code.login.deviceName,
+		InstallID: code.login.installID,
+		TokenID:   idgen.New(),
+	}
+	if err := h.repo.RegisterDevice(ctx, device); err != nil {
 		return nil, err
 	}
 
-	token, err := jwt.NewDeviceToken(code.usr, device.ID)
+	token, err := jwt.NewDeviceToken(code.usr, device.ID, device.TokenID)
 	if err != nil {
 		l.Error("generating device token", zap.Error(err))
 		return nil, err
@@ -208,6 +222,18 @@ func verifyPKCE(verifier, challenge string) bool {
 	sum := sha256.Sum256([]byte(verifier))
 	got := base64.RawURLEncoding.EncodeToString(sum[:])
 	return subtle.ConstantTimeCompare([]byte(got), []byte(challenge)) == 1
+}
+
+func isInstallID(id string) bool {
+	if len(id) > maxInstallIDLen {
+		return false
+	}
+	for _, c := range id {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-') {
+			return false
+		}
+	}
+	return true
 }
 
 func deviceName(name string) string {

@@ -24,7 +24,9 @@ Not on the Play Store, SMS permissions are restricted there, so sideload it.
 1. Enter the Tyche URL and sign in. The app opens `/oauth/mobile` with a PKCE
    challenge in a Custom Tab, Tyche redirects to `tyche://auth?code=...` and the
    app exchanges the code + verifier at `/api/mobile/token` for a device token
-   (stored encrypted with a Keystore key).
+   (stored encrypted with a Keystore key). The app also sends a stable install
+   id, so signing in again reuses the same device on Tyche (and un-revokes it)
+   with a new token, the old one stops working.
 2. `SmsReceiver` queues SMS from the allowed senders (default HSBC, CIB, AAIB)
    in a local SQLite queue and `UploadWorker` uploads them when online.
 3. Unparsed or unmatched SMS show on Tyche's `/sms` page, where devices can be

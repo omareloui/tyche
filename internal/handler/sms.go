@@ -360,6 +360,6 @@ func (h *Handler) loadSMSContext(ctx context.Context) (*smsContext, error) {
 }
 
 // VerifyDevice is used by the device auth middleware.
-func (h *Handler) VerifyDevice(ctx context.Context, deviceID string) error {
-	return h.repo.VerifyDevice(ctx, deviceID)
+func (h *Handler) VerifyDevice(ctx context.Context, deviceID, tokenID string) error {
+	return h.repo.VerifyDevice(ctx, deviceID, tokenID)
 }

@@ -13,7 +13,7 @@ func TestDeviceToken(t *testing.T) {
 
 	usr := &models.User{ID: "user", OAuthID: "123", OAuthProvider: models.Google}
 
-	token, err := jwt.NewDeviceToken(usr, "device")
+	token, err := jwt.NewDeviceToken(usr, "device", "token")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -22,7 +22,7 @@ func TestDeviceToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if claims.DeviceID != "device" || claims.OAuthID != "123" || claims.OAuthProvider != models.Google || claims.UserID != "user" {
+	if claims.DeviceID != "device" || claims.TokenID != "token" || claims.OAuthID != "123" || claims.OAuthProvider != models.Google || claims.UserID != "user" {
 		t.Errorf("unexpected claims %+v", claims)
 	}
 

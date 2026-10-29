@@ -84,6 +84,7 @@ class MainActivity : AppCompatActivity() {
         val uri = Uri.parse("$url/oauth/mobile").buildUpon()
             .appendQueryParameter("challenge", Pkce.challenge(verifier))
             .appendQueryParameter("device_name", "${Build.MANUFACTURER} ${Build.MODEL}")
+            .appendQueryParameter("install_id", settings.installId)
             .build()
         CustomTabsIntent.Builder().build().launchUrl(this, uri)
     }

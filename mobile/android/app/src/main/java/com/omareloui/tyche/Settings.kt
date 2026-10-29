@@ -5,6 +5,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import java.security.KeyStore
+import java.util.UUID
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -21,6 +22,11 @@ class Settings(context: Context) {
     var senders: Set<String>
         get() = prefs.getString(KEY_SENDERS, null)?.let(::parseSenders) ?: DEFAULT_SENDERS
         set(value) = prefs.edit().putString(KEY_SENDERS, value.joinToString(",")).apply()
+
+    /** Stable id of this install, lets Tyche reuse the same device on signing in again. */
+    val installId: String
+        get() = prefs.getString(KEY_INSTALL_ID, null)
+            ?: UUID.randomUUID().toString().also { prefs.edit().putString(KEY_INSTALL_ID, it).apply() }
 
     /** PKCE verifier of the sign in in progress. */
     var pendingVerifier: String?
@@ -93,6 +99,7 @@ class Settings(context: Context) {
         private const val KEY_AUTH_ERROR = "auth_error"
         private const val KEY_LAST_SYNC = "last_sync"
         private const val KEY_TOKEN = "device_token"
+        private const val KEY_INSTALL_ID = "install_id"
 
         private const val KEYSTORE = "AndroidKeyStore"
         private const val KEY_ALIAS = "tyche_token_key"
