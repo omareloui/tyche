@@ -194,3 +194,44 @@ func SortComboOptions(opts []ComboOption) []ComboOption {
 func Options[T any](structs []T, val string) map[string]string {
 	return idStructsToMap(structs, val)
 }
+
+// TagsInput edits a comma separated list as removable chips. Behavior lives
+// in the "tagsInput" Alpine component (/js/tags-input.js).
+templ TagsInput(name, placeholder, id string, data FDInput) {
+	<div
+		x-data="tagsInput"
+		@click="$refs.draft.focus()"
+		class="input-field tags-field flex! flex-wrap items-center gap-1.5 h-auto! min-h-11 py-1.5 cursor-text"
+		if data.Error != "" {
+			aria-invalid="true"
+		}
+	>
+		<input type="hidden" x-ref="input" name={ name } value={ data.Value } :value="value"/>
+		<template x-for="(tag, i) in tags" :key="tag">
+			<span class="inline-flex items-center gap-1 h-7 pl-2.5 pr-1 rounded-lg bg-zinc-700/60 text-sm">
+				<span x-text="tag"></span>
+				<button
+					type="button"
+					@click.stop="remove(i)"
+					:aria-label="'Remove ' + tag"
+					class="grid place-items-center w-5 h-5 rounded text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-600 hover:text-white"
+				>
+					@icons.X("12")
+				</button>
+			</span>
+		</template>
+		<input
+			x-ref="draft"
+			id={ join(name, id) }
+			type="text"
+			x-model="draft"
+			@keydown.enter.prevent="add()"
+			@keydown.comma.prevent="add()"
+			@keydown.backspace="backspace()"
+			@blur="add()"
+			:placeholder={ fmt.Sprintf("tags.length ? '' : '%s'", placeholder) }
+			autocomplete="off"
+			class="flex-1 min-w-32 h-7 bg-transparent outline-none placeholder:text-zinc-500"
+		/>
+	</div>
+}

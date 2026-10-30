@@ -60,6 +60,7 @@ body {
 }
 
 .input-field:focus,
+.tags-field:focus-within,
 .combo-chip:focus,
 .combo-chip[aria-expanded="true"],
 .combo-field[aria-expanded="true"] {

@@ -3,13 +3,13 @@ package views
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/web/views/layouts"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
 )
 
 type MergeCounterpartyFD struct {
@@ -36,45 +36,98 @@ templ Counterparties(
 }
 
 templ CreateCounterpartyForm(fd *CounterpartyFD, cats []models.Category) {
-	@form.CreateForm("Create Counterparty", "/counterparties", "Create Counterparty") {
-		@counterpartyFormBody("", fd, cats)
+	@form.SheetForm("New counterparty", "/counterparties", "Add counterparty", "") {
+		@counterpartyFormBody("0", true, fd, cats)
 	}
 }
 
 templ EditCounterparty(id string, fd *CounterpartyFD, cats []models.Category) {
-	@form.Form("put", fmt.Sprintf("/counterparties/%s", id), templ.Attributes{"hx-target": "this"}) {
-		<p>ID: { id }</p>
-		@counterpartyFormBody(id, fd, cats)
-		@form.EditFormButtons(fmt.Sprintf("/counterparties/%s", id))
-	}
+	<form
+		hx-put={ string(templ.SafeURL(fmt.Sprintf("/counterparties/%s", id))) }
+		hx-target="this"
+		hx-swap="outerHTML"
+		class="grid gap-5 sm:col-span-2 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-5 sm:p-6"
+	>
+		<header class="flex items-baseline justify-between gap-4">
+			<h3 class="text-lg font-semibold">Edit counterparty</h3>
+			<span title="Counterparty ID" class="truncate font-mono text-xs text-zinc-500">{ id }</span>
+		</header>
+		@counterpartyFormBody(id, false, fd, cats)
+		@form.SheetFormButtons("Save changes", fmt.Sprintf("/counterparties/%s", id))
+	</form>
 }
 
 templ MergeCounterparty(from *models.Counterparty, fd *MergeCounterpartyFD, cps []models.Counterparty) {
-	@form.Form("post", fmt.Sprintf("/counterparties/%s/merge", from.ID), templ.Attributes{
-		"hx-target":     "this",
-		"hx-disinherit": "hx-confirm",
-		"hx-confirm":    fmt.Sprintf("Merge %q into the selected counterparty? %q will be deleted.", from.Name, from.Name),
-	}) {
-		<p>Merge { from.Name } into another counterparty.</p>
-		<p>Its transactions, recurrent transactions and accounts move to the selected counterparty, and its name and aliases become the selected counterparty's aliases.</p>
-		@form.SelectCounterparty("into_id", from.ID, cps, fd.IntoID, false, nil)
-		@form.FormButtons("Merge", fmt.Sprintf("/counterparties/%s", from.ID))
-	}
+	<form
+		hx-post={ string(templ.SafeURL(fmt.Sprintf("/counterparties/%s/merge", from.ID))) }
+		hx-target="this"
+		hx-swap="outerHTML"
+		hx-disinherit="hx-confirm"
+		hx-confirm={ fmt.Sprintf("Merge %q into the selected counterparty? %q will be deleted.", from.Name, from.Name) }
+		class="grid gap-5 sm:col-span-2 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-5 sm:p-6"
+	>
+		<header class="flex items-center gap-3 min-w-0">
+			@components.CounterpartyIcon(from.Name, from.Icon, from.Color, "w-8 h-8 text-sm")
+			<h3 class="text-lg font-semibold truncate">Merge { from.Name }</h3>
+		</header>
+		<p class="text-sm text-zinc-400">
+			Its transactions, recurrent transactions and accounts move to the counterparty you pick, and its name and aliases become that counterparty's aliases. { from.Name } is then deleted.
+		</p>
+		@form.Field("Merge into", "into_id", from.ID, icons.User("15"), fd.IntoID.Error) {
+			@form.Combobox(form.ComboboxProps{
+				Name: "into_id", ID: from.ID, Label: "Merge into", Placeholder: "Select Counterparty",
+				Options: counterpartyComboOptions(cps), Data: fd.IntoID, Searchable: true,
+			})
+		}
+		@form.SheetFormButtons("Merge", fmt.Sprintf("/counterparties/%s", from.ID))
+	</form>
 }
 
-templ counterpartyFormBody(id string, fd *CounterpartyFD, cats []models.Category) {
-	@form.TextInput("Name", "name", "Enter the name", id, fd.Name, nil, nil)
-	@form.TextInput("SMS Aliases", "aliases", "Comma separated, as in bank SMS, e.g. UBER *TRIP, UBER BV", id, fd.Aliases, nil, nil)
-	<div class="contents" x-data={ fmt.Sprintf("{isMerchant: %t}", fd.IsMerchant.Value != "") }>
-		@form.Checkbox("Merchant", "is_merchant", id, fd.IsMerchant, templ.Attributes{"x-model": "isMerchant"}, nil)
-		<div class="contents" x-show="isMerchant" x-cloak?={ fd.IsMerchant.Value == "" }>
-			@form.SelectDefaultTxCat("default_category_id", id, cats, fd.DefaultCategoryID, nil)
-			if id == "" {
-				@form.TextInput("Icon", "icon", "Leave empty to auto-detect, or a simpleicons.org slug", id, fd.Icon, nil, nil)
-			} else {
-				@form.TextInput("Icon", "icon", "A simpleicons.org slug, empty for no icon", id, fd.Icon, nil, nil)
+templ counterpartyFormBody(id string, isNew bool, fd *CounterpartyFD, cats []models.Category) {
+	@form.Field("Name", "name", id, icons.Pencil("15"), fd.Name.Error) {
+		@form.Control("text", "name", "e.g. Uber", id, fd.Name, nil)
+	}
+	@form.Field("SMS aliases", "aliases", id, icons.Message("15"), fd.Aliases.Error) {
+		@form.TagsInput("aliases", "Names as in bank SMS, e.g. UBER *TRIP", id, fd.Aliases)
+	}
+	<div
+		x-data={ fmt.Sprintf("{isMerchant: %t}", fd.IsMerchant.Value != "") }
+		class="grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-800/20 p-4"
+	>
+		@form.Toggle("Merchant", "is_merchant", id, icons.Tag("18"), fd.IsMerchant, templ.Attributes{"x-model": "isMerchant"})
+		<div x-show="isMerchant" x-cloak?={ fd.IsMerchant.Value == "" } class="grid gap-4">
+			@form.Field("Default category", "default_category_id", id, icons.Tag("15"), fd.DefaultCategoryID.Error) {
+				@form.Combobox(form.ComboboxProps{
+					Name: "default_category_id", ID: id, Label: "Default category", Placeholder: "Select Category",
+					Options: categoryComboOptions(cats), Data: fd.DefaultCategoryID, Nullable: true, Searchable: true,
+				})
 			}
+			@counterpartyIconField(id, isNew, fd.Icon)
 		</div>
+	</div>
+}
+
+// counterpartyIconField is the simple-icons slug input with a live preview.
+templ counterpartyIconField(id string, isNew bool, data form.FDInput) {
+	<div x-data="{slug: $el.dataset.slug}" data-slug={ data.Value }>
+		@form.Field("Icon", "icon", id, nil, data.Error) {
+			<div class="flex gap-3">
+				<div class="grid place-items-center shrink-0 w-11 h-11 rounded-xl border border-zinc-700 bg-zinc-800/60">
+					<span
+						x-show="slug.trim() !== ''"
+						class="w-6 h-6 bg-zinc-200"
+						:style="'-webkit-mask: url(/brand-icons/' + slug.trim().toLowerCase().replace(/[^a-z0-9]/g, '') + '.svg) center/contain no-repeat; mask: url(/brand-icons/' + slug.trim().toLowerCase().replace(/[^a-z0-9]/g, '') + '.svg) center/contain no-repeat'"
+					></span>
+				</div>
+				<div class="flex-1 min-w-0">
+					if isNew {
+						@form.Control("text", "icon", "Empty to auto-detect, or a simpleicons.org slug", id, data, templ.Attributes{"x-model": "slug", "autocomplete": "off"})
+					} else {
+						@form.Control("text", "icon", "A simpleicons.org slug, empty for no icon", id, data, templ.Attributes{"x-model": "slug", "autocomplete": "off"})
+					}
+				</div>
+			</div>
+		}
 	</div>
 }
 
@@ -87,29 +140,46 @@ templ counterpartiesList(counterparties []models.Counterparty) {
 }
 
 templ Counterparty(cp *models.Counterparty) {
-	@components.EntryCard(components.WithCardTitle(cp.Name),
-		components.WithCardIcon(components.CounterpartyIcon(cp.Name, cp.Icon, cp.Color, "w-8 h-8")),
-		components.WithCardMenu([]templ.Component{
+	<div hx-target="this" hx-swap="outerHTML" class="relative" x-data="{openMenu: false}">
+		@components.EntryMenu("openMenu", []templ.Component{
 			components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/counterparties/%s/edit", cp.ID)),
 			components.EntryMenuAnchorItem("Merge into…", "get", fmt.Sprintf("/counterparties/%s/merge", cp.ID)),
 			components.EntryMenuDeleteItem(fmt.Sprintf("/counterparties/%s", cp.ID)),
-		}),
-	) {
-		<p>ID: { cp.ID }</p>
-		if cp.IsMerchant {
-			<p>Merchant</p>
-		}
-		if cp.DefaultCategory != nil {
-			<p>Default category: { cp.DefaultCategory.Name }</p>
-		}
-		if len(cp.Aliases) > 0 {
-			<p>Aliases: { strings.Join(cp.Aliases, ", ") }</p>
-		}
-		if cp.Icon != "" {
-			<p>Icon: { cp.Icon }</p>
-		}
-		<p>CreatedAt: { cp.CreatedAt.Format(time.RFC1123Z) }</p>
-	}
+		})
+		<div class="flex items-center gap-4 h-full p-4 rounded-2xl bg-zinc-700/20">
+			<div class="grid place-items-center shrink-0 w-12 h-12 rounded-xl bg-zinc-700/40">
+				@components.CounterpartyIcon(cp.Name, cp.Icon, cp.Color, "w-7 h-7 text-sm")
+			</div>
+			<div class="flex-1 min-w-0">
+				<p class="text-lg truncate">{ cp.Name }</p>
+				if cp.IsMerchant || cp.DefaultCategory != nil {
+					<div class="flex flex-wrap items-center gap-1.5 mt-1">
+						if cp.IsMerchant {
+							<span class="px-2 py-0.5 rounded-full bg-zinc-800 text-xs text-zinc-400">Merchant</span>
+						}
+						if cp.DefaultCategory != nil {
+							<span title="Default category" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-zinc-800 text-xs text-zinc-300">
+								@categoryDot(cp.DefaultCategory.Color)
+								{ cp.DefaultCategory.Name }
+							</span>
+						}
+					</div>
+				}
+				if len(cp.Aliases) > 0 {
+					<p title={ strings.Join(cp.Aliases, ", ") } class="mt-1 text-xs text-zinc-500 truncate">
+						aka { strings.Join(cp.Aliases, ", ") }
+					</p>
+				}
+			</div>
+			<button
+				@click="openMenu = !openMenu"
+				aria-label="Counterparty actions"
+				class="cursor-pointer grid place-items-center shrink-0 w-6 h-6"
+			>
+				<img src="/icons/dots-menu.svg" class="h-5"/>
+			</button>
+		</div>
+	</div>
 }
 
 templ CounterpartyOOB(cp *models.Counterparty) {
