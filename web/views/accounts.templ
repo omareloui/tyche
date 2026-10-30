@@ -353,12 +353,12 @@ templ Account(a *models.Account) {
 				}
 				<p
 					class={
-						"text-2xl font-bold tabular-nums truncate font-(family-name:--font-biorhyme-expanded)",
+						"sensitive text-2xl font-bold tabular-nums truncate font-(family-name:--font-biorhyme-expanded)",
 						templ.KV("text-red-400", a.Amount < 0 && a.Kind.Enum != models.AccKindDebt),
 					}
 				>{ a.ViewAmount() }</p>
 				if a.ActualAmount != a.Amount {
-					<p title="Including money set aside for goals" class="text-sm text-zinc-500 tabular-nums">
+					<p title="Including money set aside for goals" class="sensitive text-sm text-zinc-500 tabular-nums">
 						{ a.ViewActualAmount() } with goals
 					</p>
 				}

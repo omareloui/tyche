@@ -1,78 +1,337 @@
 package components
 
 import (
-	"fmt"
+	"slices"
+	"strings"
+
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/reqpath"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+type navLink struct {
+	Href  string
+	Label string
+	Icon  func(size string, attrs ...*templ.Attributes) templ.Component
+}
+
+// primaryNav are always in sight, moreNav are behind "More". The phone's
+// bottom bar takes mobileNav and puts the rest under "More".
+var (
+	primaryNav = []navLink{
+		{"/", "Home", icons.Home},
+		{"/transactions", "Transactions", icons.ArrowUpDown},
+		{"/recurrent-tx", "Recurring", icons.Repeat},
+		{"/accounts", "Accounts", icons.Bank},
+		{"/goals", "Goals", icons.Target},
+	}
+	moreNav = []navLink{
+		{"/categories", "Categories", icons.Tag},
+		{"/counterparties", "Counterparties", icons.Users},
+		{"/currencies", "Currencies", icons.Coins},
+		{"/sms", "SMS", icons.Message},
+	}
+	mobileNav = []navLink{
+		{"/", "Home", icons.Home},
+		{"/transactions", "Activity", icons.ArrowUpDown},
+		{"/accounts", "Accounts", icons.Bank},
+		{"/goals", "Goals", icons.Target},
+	}
 )
 
 templ Navbar(claims *jwt.AccessClaims, balances []models.Balance) {
-	<header class="navbar fixed top-0 left-0 w-full z-50 bg-linear-to-b from-40% from-zinc-950 to-zinc-950/0 pointer-events-none">
+	{{ path := reqpath.From(ctx) }}
+	<header hx-boost="true" class="sticky top-0 z-50">
+		// The glass is a sibling layer, not the header itself: a backdrop
+		// filter on an ancestor would keep the dropdowns' own blur from
+		// reaching the page behind them.
+		<div aria-hidden="true" class="absolute inset-0 -z-10 border-b border-zinc-800/60 bg-zinc-950/75 backdrop-blur-xl"></div>
 		@Container() {
-			<div hx-boost="true" class="flex items-center justify-between py-5">
-				<div class="pointer-events-auto">
-					<div class="font-(family-name:--font-biorhyme-expanded) font-bold sm:text-3xl">
-						<a href="/">tyche</a>
-					</div>
-				</div>
-				<div class="flex items-center justify-between gap-6 pointer-events-auto">
-					if claims != nil {
-						if len(balances) > 0 {
-							<div>
-								@NavbarBalance(balances)
-							</div>
+			<div class="flex items-center gap-3 h-16">
+				<a href="/" class="shrink-0 mr-2 text-2xl font-bold font-(family-name:--font-biorhyme-expanded)">tyche</a>
+				if claims != nil {
+					<nav aria-label="Main" class="hidden md:flex items-center gap-1">
+						for _, l := range primaryNav {
+							@navPill(l, isActive(path, l.Href))
 						}
-						<div class="select-none">
-							<img class="w-6 h-6" src="/icons/settings.svg" alt="Settings" aria-label="Settings"/>
-						</div>
-						// <div class="select-none">
-						// 	<img class="w-6 h-6" src="/icons/search.svg" alt="Search" aria-label="Search"/>
-						// </div>
-						<div class="select-none">
-							<a href="/signout">
-								<img class="w-6 h-6" src="/icons/logout.svg" alt="Logout" aria-label="Logout"/>
-							</a>
-						</div>
-						<div class="select-none hidden sm:block">
-							<img
-								src={ claims.Picture }
-								class="rounded-md w-12 h-12 object-cover text-xs"
-								alt=""
-								onerror="this.onerror=null;
-            this.nextElementSibling.classList.add('flex');
-            this.nextElementSibling.classList.remove('hidden');
-            this.classList.add('hidden')"
-							/>
-							<div
-								class="hidden w-12 h-12 rounded-md items-center justify-center"
-								style={ fmt.Sprintf("background: %s;", models.CategoryColorToHex(models.GetRandomCategoryColor())) }
-							>
-								{ string(claims.FirstName[0]) }
-								{ string(claims.LastName[0]) }
-							</div>
-						</div>
-					} else {
-						<a href="/oauth" hx-boost="false" hx-disabled="true" class="font-(family-name:--font-biorhyme-expanded) text-base">
-							Sign in
-						</a>
-					}
-				</div>
+						@navMore(path)
+					</nav>
+					<div class="flex items-center gap-2 ml-auto">
+						if len(balances) > 0 {
+							@NavbarBalance(balances, &claims.DefaultCurrency, false)
+						}
+						@navUser(claims)
+					</div>
+				} else {
+					<a href="/oauth" hx-boost="false" class="ml-auto btn-ghost h-9! text-base">Sign in</a>
+				}
 			</div>
 		}
 	</header>
 	if claims != nil {
-		@Navlinks([]string{"/", "/accounts", "/categories", "/transactions", "/recurrent-tx", "/goals", "/counterparties", "/currencies", "/sms"})
+		@mobileTabBar(path)
 	}
 }
 
-templ Navlinks(links []string) {
-	<nav hx-boost="true">
-		<ul class="flex flex-wrap gap-4 justify-center mx-6 pb-12 pt-6 text-xl">
-			for _, link := range links {
-				<li class="focus:ring focus:ring-blue-300 focus:outline-none">
-					<a href={ link }>{ link }</a>
-				</li>
+// navPill is a top bar link; labels show from lg, icons alone before.
+templ navPill(l navLink, active bool) {
+	<a
+		href={ templ.SafeURL(l.Href) }
+		title={ l.Label }
+		if active {
+			aria-current="page"
+		}
+		class={
+			"inline-flex items-center gap-2 h-9 px-3 rounded-full text-[15px] whitespace-nowrap transition-colors",
+			templ.KV("bg-zinc-800 text-white", active),
+			templ.KV("text-zinc-400 hover:text-white hover:bg-zinc-800/50", !active),
+		}
+	>
+		@l.Icon("18")
+		<span class="hidden lg:inline">{ l.Label }</span>
+	</a>
+}
+
+templ navMore(path string) {
+	{{ active := activeIn(path, moreNav) }}
+	<div class="relative" x-data="{open: false}" @click.outside="open = false" @keydown.escape.window="open = false">
+		<button
+			type="button"
+			@click="open = !open"
+			:aria-expanded="open"
+			class={
+				"inline-flex items-center gap-2 h-9 px-3 rounded-full text-[15px] whitespace-nowrap cursor-pointer transition-colors",
+				templ.KV("bg-zinc-800 text-white", active != nil),
+				templ.KV("text-zinc-400 hover:text-white hover:bg-zinc-800/50", active == nil),
 			}
-		</ul>
+		>
+			@icons.Grid("18")
+			<span class="hidden lg:inline">More</span>
+			@icons.ChevronDown("14", &templ.Attributes{"class": "transition-transform", ":class": "open && 'rotate-180'"})
+		</button>
+		<div
+			x-cloak
+			x-show="open"
+			x-transition.scale.origin.top.left
+			class="absolute left-0 top-full mt-2 w-56"
+		>
+			@Popup("p-1.5 grid gap-0.5") {
+				for _, l := range moreNav {
+					@menuLink(l, isActive(path, l.Href))
+				}
+			}
+		</div>
+	</div>
+}
+
+templ menuLink(l navLink, active bool) {
+	<a
+		href={ templ.SafeURL(l.Href) }
+		if active {
+			aria-current="page"
+		}
+		class={
+			"flex items-center gap-3 h-10 px-3 rounded-md text-[15px] transition-colors",
+			templ.KV("bg-white/10 text-white", active),
+			templ.KV("text-zinc-300 hover:bg-white/5 hover:text-white", !active),
+		}
+	>
+		@l.Icon("18", &templ.Attributes{"class": "shrink-0 text-zinc-400"})
+		{ l.Label }
+	</a>
+}
+
+templ navUser(claims *jwt.AccessClaims) {
+	<div class="relative" x-data="{open: false}" @click.outside="open = false" @keydown.escape.window="open = false">
+		<button
+			type="button"
+			@click="open = !open"
+			:aria-expanded="open"
+			aria-label="Account"
+			class="block rounded-full cursor-pointer ring-1 ring-zinc-700 transition hover:ring-zinc-500"
+		>
+			@avatar(claims, "w-9 h-9 text-xs")
+		</button>
+		<div
+			x-cloak
+			x-show="open"
+			x-transition.scale.origin.top.right
+			class="absolute right-0 top-full mt-2 w-64"
+		>
+			@Popup("p-1.5") {
+				<div class="flex items-center gap-3 px-3 py-2.5">
+					@avatar(claims, "w-10 h-10 text-sm")
+					<div class="min-w-0">
+						<p class="truncate">{ claims.Name }</p>
+						<p class="text-sm text-zinc-400 truncate">{ claims.Email }</p>
+					</div>
+				</div>
+				<div class="my-1 h-px bg-white/10"></div>
+				<a
+					href="/signout"
+					hx-boost="false"
+					class="flex items-center gap-3 h-10 px-3 rounded-md text-[15px] text-red-400 transition-colors hover:bg-red-400/10"
+				>
+					@icons.LogOut("18")
+					Sign out
+				</a>
+			}
+		</div>
+	</div>
+}
+
+// avatar is the profile picture, or the initials when it fails to load.
+templ avatar(claims *jwt.AccessClaims, class string) {
+	<span class={ "relative grid place-items-center overflow-hidden rounded-full bg-violet-400/20 font-semibold text-violet-300", class }>
+		{ initials(claims) }
+		if claims.Picture != "" {
+			<img
+				src={ claims.Picture }
+				alt=""
+				referrerpolicy="no-referrer"
+				class="absolute inset-0 w-full h-full object-cover"
+				onerror="this.remove()"
+			/>
+		}
+	</span>
+}
+
+// mobileTabBar is the phone's bottom navigation, with the rest of the pages
+// in a sheet.
+templ mobileTabBar(path string) {
+	{{ moreActive := activeIn(path, sheetNav()) != nil }}
+	<nav
+		hx-boost="true"
+		aria-label="Main"
+		x-data="{more: false}"
+		@keydown.escape.window="more = false"
+		class="md:hidden"
+	>
+		<div
+			x-cloak
+			x-show="more"
+			x-transition.opacity
+			@click="more = false"
+			class="fixed inset-0 z-50 bg-zinc-950/70 backdrop-blur-sm"
+		></div>
+		<div
+			x-cloak
+			x-show="more"
+			x-transition:enter="transition ease-out duration-200"
+			x-transition:enter-start="translate-y-full"
+			x-transition:enter-end="translate-y-0"
+			x-transition:leave="transition ease-in duration-150"
+			x-transition:leave-start="translate-y-0"
+			x-transition:leave-end="translate-y-full"
+			class="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl bg-zinc-900 ring-1 ring-zinc-800 px-4 pt-3 pb-[calc(6rem+env(safe-area-inset-bottom))]"
+		>
+			<div class="mx-auto mb-3 h-1 w-10 rounded-full bg-zinc-700"></div>
+			<div class="grid grid-cols-3 gap-2">
+				for _, l := range sheetNav() {
+					@sheetLink(l, isActive(path, l.Href))
+				}
+				<a
+					href="/signout"
+					hx-boost="false"
+					class="grid justify-items-center gap-1.5 py-3 rounded-2xl text-sm text-red-400 bg-red-400/8"
+				>
+					@icons.LogOut("22")
+					Sign out
+				</a>
+			</div>
+		</div>
+		<div class="fixed inset-x-0 bottom-0 z-50 border-t border-zinc-800/60 bg-zinc-950/85 backdrop-blur-xl pb-[env(safe-area-inset-bottom)]">
+			<div class="grid grid-cols-5 h-16">
+				for _, l := range mobileNav {
+					@tab(l, isActive(path, l.Href))
+				}
+				<button
+					type="button"
+					@click="more = !more"
+					:aria-expanded="more"
+					class={
+						"grid place-content-center justify-items-center gap-0.5 text-[11px] cursor-pointer",
+						templ.KV("text-white", moreActive),
+						templ.KV("text-zinc-500", !moreActive),
+					}
+					:class="more && 'text-white!'"
+				>
+					@icons.Grid("22")
+					More
+				</button>
+			</div>
+		</div>
 	</nav>
+}
+
+templ tab(l navLink, active bool) {
+	<a
+		href={ templ.SafeURL(l.Href) }
+		if active {
+			aria-current="page"
+		}
+		class={
+			"relative grid place-content-center justify-items-center gap-0.5 text-[11px] transition-colors",
+			templ.KV("text-white", active),
+			templ.KV("text-zinc-500 hover:text-zinc-300", !active),
+		}
+	>
+		if active {
+			<span aria-hidden="true" class="absolute top-0 inset-x-1/4 h-0.5 rounded-full bg-violet-400"></span>
+		}
+		@l.Icon("22")
+		{ l.Label }
+	</a>
+}
+
+templ sheetLink(l navLink, active bool) {
+	<a
+		href={ templ.SafeURL(l.Href) }
+		class={
+			"grid justify-items-center gap-1.5 py-3 rounded-2xl text-sm text-center transition-colors",
+			templ.KV("bg-violet-400/15 text-violet-300", active),
+			templ.KV("bg-zinc-800/60 text-zinc-300", !active),
+		}
+	>
+		@l.Icon("22")
+		{ l.Label }
+	</a>
+}
+
+// isActive tells if href is the current page or one under it.
+func isActive(path, href string) bool {
+	if href == "/" {
+		return path == "/"
+	}
+	return path == href || strings.HasPrefix(path, href+"/")
+}
+
+func activeIn(path string, links []navLink) *navLink {
+	for _, l := range links {
+		if isActive(path, l.Href) {
+			return &l
+		}
+	}
+	return nil
+}
+
+// sheetNav are the pages in the phone's "More" sheet: what the bottom bar
+// lacks.
+func sheetNav() []navLink {
+	return slices.Concat([]navLink{primaryNav[2]}, moreNav)
+}
+
+func initials(claims *jwt.AccessClaims) string {
+	var b strings.Builder
+	for _, n := range []string{claims.FirstName, claims.LastName} {
+		for _, r := range n {
+			b.WriteRune(r)
+			break
+		}
+	}
+	if b.Len() == 0 {
+		return "?"
+	}
+	return strings.ToUpper(b.String())
 }

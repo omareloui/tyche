@@ -6,6 +6,7 @@ import (
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/logger"
+	"github.com/omareloui/tyche/internal/reqpath"
 	"github.com/omareloui/tyche/internal/resperr"
 	"go.uber.org/zap"
 )
@@ -27,7 +28,7 @@ func (fn RouteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	prepareResponse(w, 0)
 
 	if comp != nil {
-		if err := comp.Render(r.Context(), w); err != nil {
+		if err := comp.Render(reqpath.With(r.Context(), r.URL.Path), w); err != nil {
 			l.Error("rendering the component")
 			errorResponse(l, w, err)
 			return

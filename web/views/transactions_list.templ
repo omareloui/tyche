@@ -142,7 +142,7 @@ templ txUpcoming(l *txListView, def *models.Currency) {
 
 templ txMonthSection(m *txMonth, def *models.Currency) {
 	<section class="grid gap-5" x-show="!reviewOnly || $el.querySelector('[data-review]')">
-		<header class="sticky top-17 sm:top-22 z-10 -mx-2 px-2 py-2 bg-zinc-950/85 backdrop-blur-md">
+		<header class="sticky top-16 z-10 -mx-2 px-2 py-2 bg-zinc-950/85 backdrop-blur-md">
 			<div class="flex items-baseline justify-between gap-4">
 				<h2 class="text-xl font-bold font-(family-name:--font-biorhyme-expanded)">{ formatTxMonth(m.Month) }</h2>
 				@txFlowTotals(m.In, m.Out, def)

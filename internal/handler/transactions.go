@@ -454,7 +454,7 @@ func (h Handler) getAndRenderBalancesOOB(w http.ResponseWriter, r *http.Request)
 	}
 	l.Debug("fetched balances", zap.Any("balances", balances))
 
-	if err = renderToBody(w, r, views.BalanceOOB(balances)); err != nil {
+	if err = renderToBody(w, r, views.BalanceOOB(balances, &getClaims(r.Context()).DefaultCurrency)); err != nil {
 		l.Error("rendering balance OOB")
 		return err
 	}

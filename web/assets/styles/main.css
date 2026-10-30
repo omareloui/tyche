@@ -3,8 +3,6 @@
 @tailwind variants;
 
 :root {
-  --navbar-height: 150px;
-
   color-scheme: dark;
 }
 
@@ -12,12 +10,10 @@
   display: none !important;
 }
 
-body {
-  padding-top: calc(var(--navbar-height) - 40px);
-}
-
-.navbar {
-  height: var(--navbar-height);
+/* Amounts blurred by the navbar's eye toggle, e.g. in public. */
+[data-hide-amounts] .sensitive {
+  filter: blur(7px);
+  user-select: none;
 }
 
 .drag-none {

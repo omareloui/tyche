@@ -1,27 +1,133 @@
 package components
 
-import "github.com/omareloui/tyche/internal/models"
+import (
+	"fmt"
 
-templ NavbarBalance(balances []models.Balance) {
-	<div id="balance" class="flex gap-6 items-start text-sm">
-		@Balance(balances)
+	"github.com/omareloui/tyche/internal/formatters"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+// NavbarBalance is the total balance in the default currency, with a toggle
+// blurring amounts (.sensitive) and the per currency breakdown on click.
+templ NavbarBalance(balances []models.Balance, def *models.Currency, oob bool) {
+	{{ total, partial := totalBalance(balances, def) }}
+	<div
+		id="balance"
+		if oob {
+			hx-swap-oob="true"
+		}
+		class="relative flex items-center h-9 rounded-full bg-zinc-800/60 ring-1 ring-zinc-700/60"
+		x-data="{open: false, hidden: document.documentElement.hasAttribute('data-hide-amounts')}"
+		@click.outside="open = false"
+		@keydown.escape.window="open = false"
+	>
+		<button
+			type="button"
+			@click="open = !open"
+			:aria-expanded="open"
+			title="Total balance"
+			class="flex items-center gap-2 h-full pl-3 pr-1.5 rounded-l-full cursor-pointer"
+		>
+			@icons.Wallet("16", &templ.Attributes{"class": "hidden sm:block shrink-0 text-zinc-400"})
+			<span
+				class={
+					"sensitive whitespace-nowrap text-sm font-semibold tabular-nums font-(family-name:--font-biorhyme-expanded)",
+					templ.KV("text-red-400", total < 0),
+				}
+			>
+				if partial {
+					≈
+				}
+				{ formatters.FormatAmount(total, def.Symbol) }
+			</span>
+		</button>
+		<button
+			type="button"
+			@click="hidden = !hidden; document.documentElement.toggleAttribute('data-hide-amounts', hidden); try { localStorage.setItem('hideAmounts', hidden ? '1' : '0') } catch {}"
+			:aria-label="hidden ? 'Show amounts' : 'Hide amounts'"
+			:title="hidden ? 'Show amounts' : 'Hide amounts'"
+			class="grid place-items-center w-8 h-full pr-1 rounded-r-full text-zinc-500 cursor-pointer transition-colors hover:text-white"
+		>
+			<span x-show="!hidden">
+				@icons.Eye("16")
+			</span>
+			<span x-cloak x-show="hidden">
+				@icons.EyeOff("16")
+			</span>
+		</button>
+		<div
+			x-cloak
+			x-show="open"
+			x-transition.scale.origin.top.right
+			class="absolute right-0 top-full mt-2 w-72"
+		>
+			@Popup("p-4 grid gap-3") {
+				<div>
+					<p class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Total balance</p>
+					<p class={ "sensitive mt-0.5 text-2xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)", templ.KV("text-red-400", total < 0) }>
+						{ formatters.FormatAmount(total, def.Symbol) }
+					</p>
+					if partial {
+						<p class="text-xs text-amber-300">Some rates are unavailable, those currencies aren't counted.</p>
+					}
+				</div>
+				if len(balances) > 1 || (len(balances) == 1 && balances[0].Currency.String != def.String) {
+					<ul class="grid gap-1.5 pt-3 border-t border-white/10">
+						for _, b := range balances {
+							<li class="flex items-baseline justify-between gap-3 text-sm">
+								<span class="text-zinc-400">{ b.Currency.String }</span>
+								<span class="text-right tabular-nums">
+									<span class={ "sensitive", templ.KV("text-red-400", b.Amount < 0) }>{ b.ViewAmount() }</span>
+									if b.Currency.String != def.String {
+										<span class="sensitive block text-xs text-zinc-500">{ convertedBalance(&b, def) }</span>
+									}
+								</span>
+							</li>
+						}
+					</ul>
+				}
+				<a href="/accounts" class="text-sm text-violet-300 hover:underline">See accounts →</a>
+			}
+		</div>
 	</div>
 }
 
+// Balance lists the balance per currency.
 templ Balance(balances []models.Balance) {
-	// TODO: show only in default curreny
 	for _, b := range balances {
 		<div
 			class={
-				"font-(family-name:--font-biorhyme-expanded)",
+				"sensitive font-(family-name:--font-biorhyme-expanded)",
 				templ.KV("text-red-500", b.Amount < 0),
 			}
 		>
 			{ b.ViewAmount() }
-			// TODO: get the default currency here
-			// if b.Currency.Enum != models.CurrencyEgp {
-			// 	<i class="text-gray-400">[{ b.ViewEgpAmount() }]</i>
-			// }
 		</div>
 	}
+}
+
+// totalBalance sums the balances in def, partial when a rate is missing.
+func totalBalance(balances []models.Balance, def *models.Currency) (total float64, partial bool) {
+	for _, b := range balances {
+		if b.Currency.String == def.String {
+			total += b.Amount
+			continue
+		}
+		rate := b.Currency.FxRate(def.String)
+		if rate == 0 {
+			partial = true
+			continue
+		}
+		total += b.Amount * rate
+	}
+	return total, partial
+}
+
+func convertedBalance(b *models.Balance, def *models.Currency) string {
+	rate := b.Currency.FxRate(def.String)
+	if rate == 0 {
+		return "no rate"
+	}
+	return fmt.Sprintf("≈ %s", formatters.FormatAmount(b.Amount*rate, def.Symbol))
 }

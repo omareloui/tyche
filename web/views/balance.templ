@@ -3,8 +3,6 @@ package views
 import "github.com/omareloui/tyche/internal/models"
 import "github.com/omareloui/tyche/web/views/components"
 
-templ BalanceOOB(balances []models.Balance) {
-	<div id="balance" hx-swap-oob="innerHTML">
-		@components.Balance(balances)
-	</div>
+templ BalanceOOB(balances []models.Balance, def *models.Currency) {
+	@components.NavbarBalance(balances, def, true)
 }
