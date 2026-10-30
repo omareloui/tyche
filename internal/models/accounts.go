@@ -57,6 +57,12 @@ func (a *Account) ViewCardLimit() string {
 	return formatters.FormatAmount(a.CardLimit, a.Currency.Symbol)
 }
 
+// ViewAvailableCredit is a credit card's limit left, its balance being
+// negative when spending.
+func (a *Account) ViewAvailableCredit() string {
+	return formatters.FormatAmount(a.CardLimit+a.Amount, a.Currency.Symbol)
+}
+
 func (a *Account) MaskIban() string {
 	rs := []rune(a.Iban)
 	for i := range len(rs) - 4 {

@@ -138,6 +138,19 @@ input[type="number"] {
   --accent: var(--color-amber-400);
 }
 
+/* Account form accent follows the checked kind, matching the cards. */
+.acc-form:has(input[data-kind="bank"]:checked) {
+  --accent: var(--color-sky-400);
+}
+
+.acc-form:has(input[data-kind="cash"]:checked) {
+  --accent: var(--color-emerald-400);
+}
+
+.acc-form:has(input[data-kind="debt"]:checked) {
+  --accent: var(--color-amber-400);
+}
+
 .form-visibility-button {
   @apply rounded-full grid place-items-center;
 

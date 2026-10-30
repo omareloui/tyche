@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/errs"
@@ -171,6 +172,12 @@ func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Com
 
 	a.ID = id
 
+	prev, err := h.repo.GetAccount(r.Context(), id)
+	if err != nil {
+		l.Error("fetching account", zap.Error(err))
+		return nil, err
+	}
+
 	curs, shownCurs, knds, cps, err := h.getAccDeps(r.Context())
 	if err != nil {
 		return nil, err
@@ -213,11 +220,69 @@ func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Com
 	}
 	l.Info("updated account", zap.Any("account", a))
 
+	return h.renderUpdatedAccount(w, r, prev)
+}
+
+// renderUpdatedAccount responds with the refetched account (with its
+// balances) in place of prev's card, or moves it to its new section of the
+// list, e.g. when archived or its kind changed.
+func (h *Handler) renderUpdatedAccount(w http.ResponseWriter, r *http.Request, prev *models.Account) (templ.Component, error) {
+	l := logger.FromCtx(r.Context())
+
+	a, err := h.repo.GetAccount(r.Context(), prev.ID)
+	if err != nil {
+		l.Error("fetching updated account", zap.Error(err))
+		return nil, err
+	}
+
+	moved := views.AccountSectionChanged(prev, a)
+	if moved {
+		// Before anything is written, as headers go out with the body.
+		w.Header().Set("HX-Reswap", "none")
+	}
+
 	if err := h.getAndRenderBalancesOOB(w, r); err != nil {
 		return nil, err
 	}
 
-	return views.Account(a), nil
+	if !moved {
+		return views.Account(a), nil
+	}
+
+	if err := renderToBody(w, r, views.AccountDeleteOOB(a.ID)); err != nil {
+		l.Error("rendering account delete oob", zap.Error(err))
+		return nil, err
+	}
+	if err := renderToBody(w, r, views.AccountOOB(a)); err != nil {
+		l.Error("rendering account oob", zap.Error(err))
+		return nil, err
+	}
+	return nil, nil
+}
+
+// ToggleArchiveAccount archives the account, or unarchives an archived one.
+func (h *Handler) ToggleArchiveAccount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+	l := logger.FromCtx(r.Context())
+
+	a, err := h.repo.GetAccount(r.Context(), id)
+	if err != nil {
+		l.Error("fetching account", zap.Error(err))
+		return nil, err
+	}
+
+	prev := *a
+	a.IsArchive = !a.IsArchive
+	if err := h.repo.UpdateAccount(r.Context(), a); err != nil {
+		l.Error("toggling account archive", zap.Error(err))
+		return nil, err
+	}
+	l.Info("toggled account archive", zap.String("id", id), zap.Bool("is_archive", a.IsArchive))
+
+	return h.renderUpdatedAccount(w, r, &prev)
 }
 
 func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -245,12 +310,34 @@ func (h *Handler) SetDefaultAccount(w http.ResponseWriter, r *http.Request) (tem
 		return nil, errs.ErrInvalidID
 	}
 	l := logger.FromCtx(r.Context())
+
+	accs, err := h.repo.GetAccounts(r.Context())
+	if err != nil {
+		l.Error("fetching accounts", zap.Error(err))
+		return nil, err
+	}
+	prevDefault := slicesutils.Find(accs, func(a models.Account) bool { return a.IsDefault })
+
 	if err := h.repo.SetDefaultAccount(r.Context(), id); err != nil {
 		l.Error("Setting as default", zap.Error(err))
 		return nil, err
 	}
 	l.Info("Set as default", zap.String("id", id))
-	return nil, nil
+
+	if prevDefault != nil && prevDefault.ID != id {
+		prevDefault.IsDefault = false
+		if err := renderToBody(w, r, views.AccountReplaceOOB(prevDefault)); err != nil {
+			l.Error("rendering previous default account oob", zap.Error(err))
+			return nil, err
+		}
+	}
+
+	a, err := h.repo.GetAccount(r.Context(), id)
+	if err != nil {
+		l.Error("fetching account", zap.Error(err))
+		return nil, err
+	}
+	return views.Account(a), nil
 }
 
 func (h Handler) AccountInputs(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -270,7 +357,7 @@ func (h Handler) AccountInputs(w http.ResponseWriter, r *http.Request) (templ.Co
 	}
 	l.Debug("fetched account deps")
 
-	id := r.FormValue("id")
+	id := r.PathValue("id")
 	if id == "" {
 		id = "0"
 	}
@@ -312,7 +399,7 @@ func (h *Handler) mapFDToAcc(r *http.Request) (*models.Account, error) {
 	}
 
 	cardLimit, _ := parseFloatIfExists(r.FormValue("card_limit"))
-	expirationDate, _ := parseDateOnlyIfExists(r.FormValue("expiration_date"))
+	expirationDate := parseCardExpiry(r.FormValue("expiration_date"))
 
 	return &models.Account{
 		Name:               r.FormValue("name"),
@@ -354,7 +441,7 @@ func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, kn
 
 	if knd.Enum == models.AccKindCreditCard {
 		limit = &form.FDInput{Value: formatFloatIfNonZero(acc.CardLimit), Error: errs.Errors.MsgFor("CardLimit")}
-		exp = &form.FDInput{Value: formatDateOnlyIfNonZero(acc.ExpirationDate), Error: errs.Errors.MsgFor("ExpirationDate")}
+		exp = &form.FDInput{Value: formatCardExpiry(acc.ExpirationDate), Error: errs.Errors.MsgFor("ExpirationDate")}
 	}
 
 	if knd.Enum == models.AccKindBankAcc {
@@ -387,7 +474,7 @@ func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, kn
 		Note:               form.FDInput{Value: acc.Note, Error: errs.Errors.MsgFor("Note")},
 		SmsRef:             form.FDInput{Value: acc.SmsRef, Error: errs.Errors.MsgFor("SmsRef")},
 		IsArchive:          form.FDInput{Value: formatBooleanIfNonZero(acc.IsArchive), Error: errs.Errors.MsgFor("IsArchive")},
-		ExcludeFromBalance: form.FDInput{Value: formatBooleanIfNonZero(acc.ExcludeFromBalance), Error: errs.Errors.MsgFor("IsArchive")},
+		ExcludeFromBalance: form.FDInput{Value: formatBooleanIfNonZero(acc.ExcludeFromBalance), Error: errs.Errors.MsgFor("ExcludeFromBalance")},
 	}
 
 	return fd
@@ -400,4 +487,21 @@ func defaultAccount(claims *jwt.AccessClaims, ak []models.AccountKind) *models.A
 		IsArchive:          false,
 		ExcludeFromBalance: false,
 	}
+}
+
+// parseCardExpiry parses a card's "MM/YY" expiry (or a yyyy-mm-dd date) as
+// the first day of that month, zero if empty or invalid.
+func parseCardExpiry(str string) time.Time {
+	if t, err := time.Parse("01/06", strings.TrimSpace(str)); err == nil {
+		return t
+	}
+	t, _ := parseDateOnlyIfExists(str)
+	return t
+}
+
+func formatCardExpiry(date time.Time) string {
+	if date.IsZero() {
+		return ""
+	}
+	return date.Format("01/06")
 }

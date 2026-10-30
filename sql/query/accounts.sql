@@ -12,6 +12,8 @@ SELECT
     sqlc.embed(a),
     sqlc.embed(k),
     cp.name AS counterparty_name,
+    cp.icon AS counterparty_icon,
+    cp.color AS counterparty_color,
     sqlc.embed(c),
     (u.id IS NOT NULL) AS is_default,
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
@@ -37,6 +39,8 @@ SELECT
     sqlc.embed(a),
     sqlc.embed(k),
     cp.name AS counterparty_name,
+    cp.icon AS counterparty_icon,
+    cp.color AS counterparty_color,
     sqlc.embed(c),
     (u.id IS NOT NULL) AS is_default,
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
@@ -63,6 +67,8 @@ SELECT
     sqlc.embed(a),
     sqlc.embed(k),
     cp.name AS counterparty_name,
+    cp.icon AS counterparty_icon,
+    cp.color AS counterparty_color,
     sqlc.embed(c),
     (u.id IS NOT NULL) AS is_default,
     IFNULL(a.amount + gla.amount, a.amount) AS actual_amount

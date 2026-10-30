@@ -314,13 +314,18 @@ func dbAccountToAccount(
 
 func dbAccountRowToAccount[T queries.GetAccountRow | queries.GetAccountsRow](dbAcc *T) *models.Account {
 	_dbAcc := queries.GetAccountRow(*dbAcc)
-	return dbAccountToAccount(
+	acc := dbAccountToAccount(
 		&_dbAcc.Account,
 		_dbAcc.ActualAmount.(float64),
 		&_dbAcc.Currency,
 		&_dbAcc.AccountKind,
 		&_dbAcc.CounterpartyName,
 		_dbAcc.IsDefault.(int64) == 1)
+	if acc.Counterparty != nil {
+		acc.Counterparty.Icon = _dbAcc.CounterpartyIcon.String
+		acc.Counterparty.Color = _dbAcc.CounterpartyColor.String
+	}
+	return acc
 }
 
 func dbAccountsRowToAccounts(dbAccs []queries.GetAccountsRow) []models.Account {

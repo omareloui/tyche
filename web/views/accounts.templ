@@ -2,6 +2,8 @@ package views
 
 import (
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/omareloui/tyche/internal/models"
@@ -9,6 +11,7 @@ import (
 	"github.com/omareloui/tyche/web/views/layouts"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
 )
 
 type AccountFD struct {
@@ -45,138 +48,553 @@ templ Accounts(
 }
 
 templ CreateAccountForm(fd *AccountFD, aknds []models.AccountKind, curs []models.Currency, cps []models.Counterparty, defaultCur *models.Currency) {
-	@form.CreateForm("Create Account", "/accounts", "Create Account") {
+	@form.SheetForm("New account", "/accounts", "Add account", "acc-form") {
 		@accountFormBody("0", fd, aknds, curs, cps, defaultCur)
 	}
 }
 
 templ EditAccount(id string, fd *AccountFD, aknds []models.AccountKind, curs []models.Currency, cps []models.Counterparty, defaultCur *models.Currency) {
-	@form.Form("put", fmt.Sprintf("/accounts/%s", id), templ.Attributes{"hx-target": "this"}) {
-		<p>ID: { id }</p>
+	<form
+		hx-put={ string(templ.SafeURL(fmt.Sprintf("/accounts/%s", id))) }
+		hx-target="this"
+		hx-swap="outerHTML"
+		data-account
+		class="acc-form grid gap-5 sm:col-span-2 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-5 sm:p-6"
+	>
+		<header class="flex items-baseline justify-between gap-4">
+			<h3 class="text-lg font-semibold">Edit account</h3>
+			<span title="Account ID" class="truncate font-mono text-xs text-zinc-500">{ id }</span>
+		</header>
 		@accountFormBody(id, fd, aknds, curs, cps, defaultCur)
-		@form.EditFormButtons(fmt.Sprintf("/accounts/%s", id))
-	}
+		@form.SheetFormButtons("Save changes", fmt.Sprintf("/accounts/%s", id))
+	</form>
 }
 
 templ accountFormBody(id string, fd *AccountFD, aknds []models.AccountKind, curs []models.Currency, cps []models.Counterparty, defaultCur *models.Currency) {
 	@AccountInputs(id, &fd.AccountPartialFD, aknds, curs, cps, defaultCur)
-	@form.TextInput("Note", "note", "Enter note", id, fd.Note, nil, nil)
-	@form.TextInput("SMS Reference", "sms_ref", "As in bank SMS, e.g. 123-456***-789 or 1234", id, fd.SmsRef, nil, nil)
-	@form.Checkbox("Is Archive", "is_archive", id, fd.IsArchive, nil, nil)
-	@form.Checkbox("Exclude From Balance", "exclude_from_balance", id, fd.ExcludeFromBalance, nil, nil)
+	<div class="grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-800/20 p-4">
+		@form.Field("SMS reference", "sms_ref", id, icons.Message("15"), fd.SmsRef.Error) {
+			@form.Control("text", "sms_ref", "As in bank SMS, e.g. 123-456***-789 or 1234", id, fd.SmsRef, templ.Attributes{"autocomplete": "off"})
+		}
+		<p class="-mt-2 text-sm text-zinc-500">Bank SMS mentioning it (or the card / IBAN's last digits) land in this account.</p>
+	</div>
+	@form.Field("Note", "note", id, icons.Pencil("15"), fd.Note.Error) {
+		@form.Control("text", "note", "Anything to remember about it", id, fd.Note, nil)
+	}
+	<div class="grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-800/20 p-4">
+		<div>
+			@form.Toggle("Exclude from balance", "exclude_from_balance", id, icons.EyeOff("18"), fd.ExcludeFromBalance, nil)
+			<p class="mt-1 text-sm text-zinc-500">Its money doesn't count towards your total balance.</p>
+		</div>
+		<div>
+			@form.Toggle("Archived", "is_archive", id, icons.Archive("18"), fd.IsArchive, nil)
+			<p class="mt-1 text-sm text-zinc-500">Hidden from pickers, kept with its history.</p>
+		</div>
+	</div>
 }
 
 templ AccountInputs(id string, fd *AccountPartialFD, aknds []models.AccountKind, curs []models.Currency, cps []models.Counterparty, defaultCur *models.Currency) {
+	{{ kind := selectedAccKind(aknds, fd.KindID.Value) }}
+	{{ cur := fd.CurrencyID }}
+	if cur.Value == "" && defaultCur != nil {
+		{{ cur.Value = defaultCur.ID }}
+	}
+	{{ onChange := templ.Attributes{"hx-post": fmt.Sprintf("/accounts-inputs/%s", id), "hx-trigger": "change"} }}
 	<div
 		class="contents"
 		hx-target="this"
 		hx-swap="outerHTML"
 		hx-sync="closest form:abort"
+		x-data="{name: $el.dataset.name, num: $el.dataset.num, holder: $el.dataset.holder, exp: $el.dataset.exp}"
+		data-name={ fdValue(fd.Name) }
+		data-num={ fdValue(fd.CardNumber) }
+		data-holder={ fdValue(fd.NameOnCard) }
+		data-exp={ fdValue(fd.ExpirationDate) }
 	>
-		@form.SelectAccKind("kind_id", id, aknds, fd.KindID, templ.Attributes{
-			"hx-post": fmt.Sprintf("/accounts-inputs/%s", id),
-		})
-		@form.SelectCurrency("currency_id", id, curs, fd.CurrencyID,
-			templ.Attributes{
-				"hx-post": fmt.Sprintf("/accounts-inputs/%s", id),
-			})
-		if fd.Name != nil {
-			@form.TextInput("Name", "name", "Enter account name", id, *fd.Name, nil, nil)
+		@selectAccKind("kind_id", id, aknds, fd.KindID, onChange)
+		<div class="grid grid-cols-[1fr_9rem] gap-3">
+			if fd.Name != nil {
+				@form.Field("Name", "name", id, icons.Pencil("15"), fd.Name.Error) {
+					@form.Control("text", "name", accNamePlaceholder(kind), id, *fd.Name, templ.Attributes{"x-model": "name"})
+				}
+			}
+			if fd.CounterpartyID != nil {
+				@form.Field("Who", "counterparty_id", id, icons.User("15"), fd.CounterpartyID.Error) {
+					@form.Combobox(form.ComboboxProps{
+						Name: "counterparty_id", ID: id, Label: "Who", Placeholder: "Select person",
+						Options: counterpartyComboOptions(cps), Data: *fd.CounterpartyID, Searchable: true,
+						CreateURL: "/counterparties/quick?person",
+					})
+				}
+			}
+			@form.Field("Currency", "currency_id", id, icons.Coins("15"), cur.Error) {
+				@form.Combobox(form.ComboboxProps{
+					Name: "currency_id", ID: id, Label: "Currency", Placeholder: "Currency",
+					Options: form.CurrencyComboOptions(curs), Data: cur, Searchable: true,
+					InputAttrs: onChange,
+				})
+			}
+		</div>
+		if kind == models.AccKindDebt {
+			<p class="-mt-2 text-sm text-zinc-500">The account takes the person's name. A positive balance means they owe you.</p>
 		}
-		if fd.Iban != nil {
-			@form.IBANInput("IBAN", "iban", id, form.GetCurOrDefaultIbanPrefix(curs, fd.CurrencyID.Value, nil), *fd.Iban, nil, nil)
-		}
-		if fd.CardNumber != nil {
-			@form.CreditCardInput("Card Number", "card_number", id, *fd.CardNumber, nil, nil)
-		}
-		if fd.NameOnCard != nil {
-			@form.TextInput("Name on card", "name_on_card", "John Doe", id, *fd.NameOnCard, nil, nil)
-		}
-		if fd.CardLimit != nil {
-			@form.MoneyInput("Card Limit", "card_limit", form.GetCurOrDefaultSym(curs, fd.CurrencyID.Value, defaultCur), id, *fd.CardLimit, nil, nil)
-		}
-		if fd.ExpirationDate != nil {
-			@form.DateInput("Expiration Date", "expiration_date", id, *fd.ExpirationDate, nil, nil)
-		}
-		if fd.CounterpartyID != nil {
-			@form.SelectCounterparty("counterparty_id", id, cps, *fd.CounterpartyID, false, nil)
+		if fd.CardNumber != nil || fd.Iban != nil {
+			<div class="grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-800/20 p-4">
+				if fd.CardNumber != nil {
+					@accountCardPreview(kind)
+					@form.Field("Card number", "card_number", id, icons.Card("15"), fd.CardNumber.Error) {
+						@form.Control("text", "card_number", "0000 0000 0000 0000", id, *fd.CardNumber, templ.Attributes{
+							"autocomplete":   "off",
+							"inputmode":      "numeric",
+							"x-model":        "num",
+							"x-mask:dynamic": "$input.startsWith('34') || $input.startsWith('37') ? '9999 999999 99999' : '9999 9999 9999 9999'",
+						})
+					}
+				}
+				<div class="grid grid-cols-[1fr_7rem] gap-3">
+					if fd.NameOnCard != nil {
+						<div class={ templ.KV("col-span-2", fd.ExpirationDate == nil) }>
+							@form.Field("Name on card", "name_on_card", id, icons.User("15"), fd.NameOnCard.Error) {
+								@form.Control("text", "name_on_card", "John Doe", id, *fd.NameOnCard, templ.Attributes{"x-model": "holder", "autocomplete": "off"})
+							}
+						</div>
+					}
+					if fd.ExpirationDate != nil {
+						@form.Field("Expires", "expiration_date", id, icons.Calendar("15"), fd.ExpirationDate.Error) {
+							@form.Control("text", "expiration_date", "MM/YY", id, *fd.ExpirationDate, templ.Attributes{
+								"autocomplete": "off",
+								"inputmode":    "numeric",
+								"x-mask":       "99/99",
+								"x-model":      "exp",
+							})
+						}
+					}
+				</div>
+				if fd.CardLimit != nil {
+					{{ sym := form.GetCurOrDefaultSym(curs, cur.Value, defaultCur) }}
+					@form.Field("Credit limit", "card_limit", id, nil, fd.CardLimit.Error) {
+						@form.Control("text", "card_limit", fmt.Sprintf("%s 1,000.00", sym), id, *fd.CardLimit, templ.Attributes{
+							"autocomplete":   "off",
+							"inputmode":      "decimal",
+							"x-mask:dynamic": fmt.Sprintf("'%s ' + $money($input, '.', ',')", sym),
+						})
+					}
+				}
+				if fd.Iban != nil {
+					{{ prefix := form.GetCurOrDefaultIbanPrefix(curs, cur.Value, nil) }}
+					@form.Field("IBAN", "iban", id, icons.Hash("15"), fd.Iban.Error) {
+						@form.Control("text", "iban", fmt.Sprintf("%s00 0000 0000 0000 0000 0000 0000 0", prefix), id, *fd.Iban, templ.Attributes{
+							"autocomplete": "off",
+							"x-mask":       fmt.Sprintf("%s99 9999 9999 9999 9999 9999 9999 9", prefix),
+							"class":        "input-field font-mono tracking-wide",
+						})
+					}
+				}
+			</div>
 		}
 	</div>
+}
+
+// selectAccKind is a row of tiles, one per account kind. data-kind lets the
+// .acc-form css pick the form's accent from the checked kind.
+templ selectAccKind(name, id string, aknds []models.AccountKind, data form.FDInput, attrs templ.Attributes) {
+	<fieldset id={ name + "-" + id } { attrs... }>
+		<legend class="sr-only">Account kind</legend>
+		<div class="grid grid-cols-4 gap-2">
+			for _, k := range sortedAccKinds(aknds) {
+				<label
+					class="flex flex-col items-center gap-1.5 min-w-0 py-3 px-1 rounded-2xl border border-zinc-800 bg-zinc-800/40 text-zinc-400 cursor-pointer select-none transition-colors hover:text-white hover:border-zinc-600 has-checked:border-(--accent) has-checked:bg-(--accent)/12 has-checked:text-(--accent) has-focus-visible:ring-2 has-focus-visible:ring-(--accent)"
+				>
+					<input
+						type="radio"
+						name={ name }
+						value={ k.ID }
+						data-kind={ accKindSlug(k.Enum) }
+						class="sr-only"
+						if k.ID == data.Value {
+							checked
+						}
+					/>
+					@accKindIcon(k.Enum, "22")
+					<span class="text-sm font-medium truncate max-w-full">{ accKindShortName(k.Enum) }</span>
+				</label>
+			}
+		</div>
+		@form.ErrorMessage(data.Error)
+	</fieldset>
+}
+
+// accountCardPreview mirrors the card fields as they're typed.
+templ accountCardPreview(kind models.AccKind) {
+	<div
+		aria-hidden="true"
+		class="relative w-full max-w-80 aspect-[1.586] mx-auto p-5 flex flex-col justify-between rounded-2xl overflow-hidden text-white shadow-xl shadow-black/40 ring-1 ring-white/10"
+		style="background: radial-gradient(120% 90% at 100% 0%, color-mix(in oklab, var(--accent) 75%, transparent), transparent 60%), linear-gradient(135deg, color-mix(in oklab, var(--accent) 35%, #27272a), #18181b)"
+	>
+		<div class="absolute -right-10 -bottom-16 size-48 rounded-full bg-white/5"></div>
+		<div class="flex items-start justify-between gap-3">
+			<span x-text="name.trim() || 'Account'" class="font-semibold truncate"></span>
+			<span class="shrink-0 text-xs uppercase tracking-widest text-white/60">
+				if kind == models.AccKindCreditCard {
+					Credit
+				} else {
+					Debit
+				}
+			</span>
+		</div>
+		<div class="w-10 h-7 rounded-md bg-gradient-to-br from-amber-200 to-amber-500 opacity-90"></div>
+		<p x-text="num.trim() || '•••• •••• •••• ••••'" class="font-mono text-lg sm:text-xl tracking-wider tabular-nums"></p>
+		<div class="flex items-end justify-between gap-3 text-sm">
+			<span x-text="holder.trim().toUpperCase() || 'NAME ON CARD'" class="truncate tracking-wide text-white/80"></span>
+			if kind == models.AccKindCreditCard {
+				<span class="shrink-0 font-mono text-white/80" x-text="exp || 'MM/YY'"></span>
+			}
+		</div>
+	</div>
+}
+
+// accountSections groups accounts by kind, archived ones last. Every section
+// is rendered (hidden while empty) so created or moved accounts have a place.
+type accountSection struct {
+	ID    string
+	Title string
+	Kind  models.AccKind
+}
+
+var accountSections = []accountSection{
+	{ID: "bank", Title: "Bank accounts", Kind: models.AccKindBankAcc},
+	{ID: "credit", Title: "Credit cards", Kind: models.AccKindCreditCard},
+	{ID: "cash", Title: "Cash", Kind: models.AccKindCash},
+	{ID: "debt", Title: "Debts", Kind: models.AccKindDebt},
+	{ID: "archived", Title: "Archived"},
 }
 
 templ accountsList(accounts []models.Account) {
-	@components.Grid2ColOnSMUp("accounts-list") {
-		for _, a := range accounts {
-			@Account(&a)
+	<div id="accounts-list" class="grid gap-8">
+		for _, s := range accountSections {
+			{{ accs := accountsInSection(accounts, s.ID) }}
+			if s.ID == "archived" {
+				<details class="group hidden has-[[data-account]]:block">
+					<summary class="flex items-center gap-2 mb-3 list-none cursor-pointer select-none text-zinc-500 hover:text-zinc-300 [&::-webkit-details-marker]:hidden">
+						@icons.Archive("16")
+						<h2 class="text-sm font-semibold uppercase tracking-wider">{ s.Title }</h2>
+						@icons.ChevronDown("16", &templ.Attributes{"class": "transition-transform group-open:rotate-180"})
+					</summary>
+					@accountSectionGrid(s.ID, accs)
+				</details>
+			} else {
+				<section class="hidden has-[[data-account]]:block">
+					<h2 class="flex items-center gap-2 mb-3 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+						@accKindIcon(s.Kind, "16")
+						{ s.Title }
+					</h2>
+					@accountSectionGrid(s.ID, accs)
+				</section>
+			}
 		}
-	}
+	</div>
+}
+
+templ accountSectionGrid(sectionID string, accs []models.Account) {
+	<div id={ AccountSectionID(sectionID) } class="grid sm:grid-cols-2 gap-4">
+		for _, a := range accs {
+			@accountWrapper(&a)
+		}
+	</div>
 }
 
 templ Account(a *models.Account) {
-	@components.EntryCard(components.WithCardTitle(a.Name), components.WithCardMenu(getAccountMenuItems(a))) {
-		<p>ID: { a.ID }</p>
-		if a.IsDefault {
-			<p class="text-green-500">DEFAULT</p>
-		}
-		<p>
-			Amount: <span
-	class={ templ.KV("text-red-500", a.Amount < 0) }
->{ a.ViewAmount() }</span>
-		</p>
-		<p>
-			Actual Amount: <span
-	class={ templ.KV("text-red-500", a.ActualAmount < 0) }
->{ a.ViewActualAmount() }</span>
-		</p>
-		<p>Kind: { a.Kind.Enum.String() } </p>
-		if a.Iban != "" {
-			<p>IBAN: { a.MaskIban() } </p>
-		}
-		if a.Counterparty != nil {
-			<p>Counterparty ID: { a.Counterparty.ID }</p>
-			<p>Counterparty: { a.Counterparty.Name }</p>
-		}
-		if a.CardNumber != "" {
-			<p>Card Number: { a.MaskCardNumber() } </p>
-		}
-		if a.SmsRef != "" {
-			<p>SMS Reference: { a.SmsRef } </p>
-		}
-		if a.CardLimit != 0 {
-			<p>Card Limit: { a.ViewCardLimit() } </p>
-		}
-		if a.NameOnCard != "" {
-			<p>Name on Card: { a.NameOnCard } </p>
-		}
-		if !a.ExpirationDate.IsZero() {
-			<p>Expiration Date: { a.ExpirationDate.Format(time.DateOnly) } </p>
-		}
-		if a.Note != "" {
-			<p>Note: { a.Note } </p>
-		}
-		<p>
-			Is Archive:
-			if a.IsArchive {
-				true
-			} else {
-				false
+	{{ cardLike := a.Kind.Enum == models.AccKindCreditCard || a.Kind.Enum == models.AccKindBankAcc }}
+	<div
+		hx-target="this"
+		hx-swap="outerHTML"
+		data-account
+		class={ "relative", templ.KV("opacity-60 hover:opacity-100 transition-opacity", a.IsArchive) }
+		x-data="{openMenu: false}"
+	>
+		@components.EntryMenu("openMenu", getAccountMenuItems(a))
+		<div
+			class={ "relative flex flex-col gap-4 h-full p-4 rounded-2xl bg-zinc-700/20 overflow-hidden", accKindAccentClass(a.Kind.Enum) }
+		>
+			<div aria-hidden="true" class="pointer-events-none absolute -top-16 -right-16 size-40 rounded-full bg-(--accent)/10 blur-2xl"></div>
+			<div class="relative flex items-center gap-3 min-w-0">
+				if a.Kind.Enum == models.AccKindDebt && a.Counterparty != nil {
+					<div class="grid place-items-center shrink-0 w-11 h-11 rounded-xl bg-(--accent)/15">
+						@components.CounterpartyIcon(a.Counterparty.Name, a.Counterparty.Icon, a.Counterparty.Color, "w-7 h-7 text-sm")
+					</div>
+				} else {
+					<div class="grid place-items-center shrink-0 w-11 h-11 rounded-xl bg-(--accent)/15 text-(--accent)">
+						@accKindIcon(a.Kind.Enum, "22")
+					</div>
+				}
+				<div class="flex-1 min-w-0">
+					<p class="flex items-center gap-1.5 text-lg leading-tight">
+						<span class="truncate">{ a.Name }</span>
+						if a.IsDefault {
+							<span title="Default account" class="shrink-0 text-amber-300">
+								@icons.Star("15", &templ.Attributes{"fill": "currentColor"})
+							</span>
+						}
+					</p>
+					<p class="text-sm text-zinc-500 truncate">
+						{ accountSubtitle(a, cardLike) }
+					</p>
+				</div>
+				<button
+					@click="openMenu = !openMenu"
+					aria-label="Account actions"
+					class="cursor-pointer grid place-items-center shrink-0 w-6 h-6"
+				>
+					<img src="/icons/dots-menu.svg" class="h-5"/>
+				</button>
+			</div>
+			<div class="relative mt-auto">
+				if a.Kind.Enum == models.AccKindDebt {
+					<p class="text-xs text-zinc-500">{ debtCaption(a.Amount) }</p>
+				}
+				<p
+					class={
+						"text-2xl font-bold tabular-nums truncate font-(family-name:--font-biorhyme-expanded)",
+						templ.KV("text-red-400", a.Amount < 0 && a.Kind.Enum != models.AccKindDebt),
+					}
+				>{ a.ViewAmount() }</p>
+				if a.ActualAmount != a.Amount {
+					<p title="Including money set aside for goals" class="text-sm text-zinc-500 tabular-nums">
+						{ a.ViewActualAmount() } with goals
+					</p>
+				}
+			</div>
+			if a.Kind.Enum == models.AccKindCreditCard && a.CardLimit > 0 {
+				@creditUsage(a)
 			}
-		</p>
-		<p>
-			Exclude From Balance:
-			if a.ExcludeFromBalance {
-				true
-			} else {
-				false
+			if a.IsDefault || a.ExcludeFromBalance || a.IsArchive || !a.ExpirationDate.IsZero() || a.Note != "" {
+				<div class="relative flex flex-wrap items-center gap-1.5">
+					if a.IsDefault {
+						<span class="px-2 py-0.5 rounded-full bg-amber-300/10 text-xs text-amber-300">Default</span>
+					}
+					if a.ExcludeFromBalance {
+						<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800 text-xs text-zinc-400">
+							@icons.EyeOff("12")
+							Not in balance
+						</span>
+					}
+					if a.IsArchive {
+						<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800 text-xs text-zinc-400">
+							@icons.Archive("12")
+							Archived
+						</span>
+					}
+					if !a.ExpirationDate.IsZero() {
+						@expiryChip(a.ExpirationDate)
+					}
+					if a.Note != "" {
+						<span title={ a.Note } class="min-w-0 max-w-full truncate text-xs text-zinc-500">{ a.Note }</span>
+					}
+				</div>
 			}
-		</p>
-	}
+		</div>
+	</div>
+}
+
+// creditUsage is a credit card's spent share of its limit, as its balance
+// goes negative when spending.
+templ creditUsage(a *models.Account) {
+	{{ used := max(0, -a.Amount) }}
+	{{ pct := min(100, used/a.CardLimit*100) }}
+	<div class="relative">
+		<div class="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+			<div
+				class={ "h-full rounded-full", templ.KV("bg-(--accent)", pct < 80), templ.KV("bg-red-400", pct >= 80) }
+				style={ fmt.Sprintf("width: %.1f%%", pct) }
+			></div>
+		</div>
+		<div class="flex justify-between gap-3 mt-1.5 text-xs text-zinc-500 tabular-nums">
+			<span>{ fmt.Sprintf("%.0f%% used", pct) }</span>
+			<span class="truncate">{ a.ViewAvailableCredit() } of { a.ViewCardLimit() } left</span>
+		</div>
+	</div>
+}
+
+templ expiryChip(exp time.Time) {
+	{{ end := exp.AddDate(0, 1, 0) }}
+	{{ expired := time.Now().After(end) }}
+	{{ soon := !expired && time.Until(end) < 60*24*time.Hour }}
+	<span
+		title="Card expiry"
+		class={
+			"inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs tabular-nums",
+			templ.KV("bg-zinc-800 text-zinc-400", !expired && !soon),
+			templ.KV("bg-amber-400/10 text-amber-300", soon),
+			templ.KV("bg-red-400/10 text-red-400", expired),
+		}
+	>
+		@icons.Calendar("12")
+		if expired {
+			Expired { exp.Format("01/06") }
+		} else {
+			Exp { exp.Format("01/06") }
+		}
+	</span>
 }
 
 templ AccountOOB(a *models.Account) {
-	<div id="accounts-list" hx-swap-oob="afterbegin">
+	<div id={ AccountSectionID(accountSectionOf(a)) } hx-swap-oob="afterbegin">
+		@accountWrapper(a)
+	</div>
+}
+
+// accountWrapper gives the card a stable target, as the edit form replaces
+// the card itself.
+templ accountWrapper(a *models.Account) {
+	<div id={ AccountWrapperID(a.ID) } class="contents">
 		@Account(a)
 	</div>
+}
+
+templ AccountReplaceOOB(a *models.Account) {
+	<div id={ AccountWrapperID(a.ID) } class="contents" hx-swap-oob="innerHTML">
+		@Account(a)
+	</div>
+}
+
+templ AccountDeleteOOB(id string) {
+	<div id={ AccountWrapperID(id) } hx-swap-oob="delete"></div>
+}
+
+func AccountWrapperID(id string) string {
+	return "account-" + id
+}
+
+func AccountSectionID(section string) string {
+	return "accounts-" + section
+}
+
+// AccountSectionChanged tells if an edit moves the account to another
+// section of the list.
+func AccountSectionChanged(before, after *models.Account) bool {
+	return accountSectionOf(before) != accountSectionOf(after)
+}
+
+func accountSectionOf(a *models.Account) string {
+	if a.IsArchive {
+		return "archived"
+	}
+	return accKindSlug(a.Kind.Enum)
+}
+
+func accountsInSection(accs []models.Account, section string) []models.Account {
+	var res []models.Account
+	for _, a := range accs {
+		if accountSectionOf(&a) == section {
+			res = append(res, a)
+		}
+	}
+	return res
+}
+
+func accKindSlug(k models.AccKind) string {
+	switch k {
+	case models.AccKindBankAcc:
+		return "bank"
+	case models.AccKindCreditCard:
+		return "credit"
+	case models.AccKindCash:
+		return "cash"
+	case models.AccKindDebt:
+		return "debt"
+	}
+	return "other"
+}
+
+func accKindShortName(k models.AccKind) string {
+	switch k {
+	case models.AccKindBankAcc:
+		return "Bank"
+	case models.AccKindCreditCard:
+		return "Credit"
+	}
+	return k.String()
+}
+
+// accKindAccentClass sets --accent to the kind's color, as on .acc-form.
+func accKindAccentClass(k models.AccKind) string {
+	switch k {
+	case models.AccKindBankAcc:
+		return "[--accent:var(--color-sky-400)]"
+	case models.AccKindCash:
+		return "[--accent:var(--color-emerald-400)]"
+	case models.AccKindDebt:
+		return "[--accent:var(--color-amber-400)]"
+	}
+	return "[--accent:var(--color-violet-400)]"
+}
+
+templ accKindIcon(k models.AccKind, size string) {
+	switch k {
+		case models.AccKindBankAcc:
+			@icons.Bank(size)
+		case models.AccKindCreditCard:
+			@icons.Card(size)
+		case models.AccKindCash:
+			@icons.Banknote(size)
+		case models.AccKindDebt:
+			@icons.Debt(size)
+	}
+}
+
+func sortedAccKinds(aknds []models.AccountKind) []models.AccountKind {
+	order := []models.AccKind{models.AccKindBankAcc, models.AccKindCreditCard, models.AccKindCash, models.AccKindDebt}
+	res := slices.Clone(aknds)
+	slices.SortFunc(res, func(a, b models.AccountKind) int {
+		return slices.Index(order, a.Enum) - slices.Index(order, b.Enum)
+	})
+	return res
+}
+
+func selectedAccKind(aknds []models.AccountKind, id string) models.AccKind {
+	for _, k := range aknds {
+		if k.ID == id {
+			return k.Enum
+		}
+	}
+	return models.DfltAccKind
+}
+
+func accNamePlaceholder(k models.AccKind) string {
+	switch k {
+	case models.AccKindCreditCard:
+		return "e.g. HSBC Platinum"
+	case models.AccKindCash:
+		return "e.g. Wallet"
+	}
+	return "e.g. HSBC Current"
+}
+
+func accountSubtitle(a *models.Account, cardLike bool) string {
+	parts := []string{a.Kind.Enum.String(), a.Currency.String}
+	if cardLike && len(a.CardNumber) >= 4 {
+		parts = append(parts, "•••• "+a.CardNumber[len(a.CardNumber)-4:])
+	} else if len(a.Iban) >= 4 {
+		parts = append(parts, "IBAN •••• "+a.Iban[len(a.Iban)-4:])
+	}
+	return strings.Join(parts, " · ")
+}
+
+func debtCaption(amount float64) string {
+	switch {
+	case amount > 0:
+		return "Owes you"
+	case amount < 0:
+		return "You owe"
+	}
+	return "Settled"
+}
+
+func fdValue(fd *form.FDInput) string {
+	if fd == nil {
+		return ""
+	}
+	return fd.Value
 }
 
 func getAccountMenuItems(a *models.Account) []templ.Component {
@@ -184,9 +602,15 @@ func getAccountMenuItems(a *models.Account) []templ.Component {
 		components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/accounts/%s/edit", a.ID)),
 	}
 
-	if !a.IsDefault {
+	if !a.IsDefault && !a.IsArchive {
 		items = append(items,
-			components.EntryMenuAnchorItem("Set as Default", "put", fmt.Sprintf("/accounts/%s/default", a.ID)))
+			components.EntryMenuAnchorItem("Set as default", "put", fmt.Sprintf("/accounts/%s/default", a.ID)))
+	}
+
+	if a.IsArchive {
+		items = append(items, components.EntryMenuAnchorItem("Unarchive", "put", fmt.Sprintf("/accounts/%s/archive", a.ID)))
+	} else if !a.IsDefault {
+		items = append(items, components.EntryMenuAnchorItem("Archive", "put", fmt.Sprintf("/accounts/%s/archive", a.ID)))
 	}
 
 	items = append(items, components.EntryMenuDeleteItem(fmt.Sprintf("/accounts/%s", a.ID)))

@@ -29,6 +29,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("GET /accounts/{id}/edit", handle(h.GetEditAccount))
 	mux.Handle("PUT /accounts/{id}", handle(h.EditAccount))
 	mux.Handle("PUT /accounts/{id}/default", handle(h.SetDefaultAccount))
+	mux.Handle("PUT /accounts/{id}/archive", handle(h.ToggleArchiveAccount))
 	mux.Handle("DELETE /accounts/{id}", handle(h.DeleteAccount))
 
 	mux.Handle("GET /categories", handle(h.Categories))

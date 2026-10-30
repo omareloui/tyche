@@ -118,15 +118,16 @@ func (h Handler) CreateCounterparty(w http.ResponseWriter, r *http.Request) (tem
 	return views.CreateCounterpartyForm(h.mapCounterpartyToFD(dfltCounterparty(), &errs.ValidationError{}), cats), nil
 }
 
-// QuickCreateCounterparty creates a merchant from a combobox's search and
-// responds with its combobox option. An existing counterparty with that name
-// or alias is reused.
+// QuickCreateCounterparty creates a merchant (a person with the "person"
+// query, e.g. for debts) from a combobox's search and responds with its
+// combobox option. An existing counterparty with that name or alias is reused.
 func (h Handler) QuickCreateCounterparty(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	l := logger.FromCtx(r.Context())
 
 	cp := dfltCounterparty()
 	cp.ID = idgen.New()
 	cp.Name = r.FormValue("name")
+	cp.IsMerchant = !r.URL.Query().Has("person")
 	if err := cp.SanitizeAndValidate(h.sani, h.valid); err != nil {
 		l.Error("quick create counterparty validation", zap.Error(err))
 		return nil, resperr.New(http.StatusBadRequest, err.Error())
@@ -144,7 +145,9 @@ func (h Handler) QuickCreateCounterparty(w http.ResponseWriter, r *http.Request)
 		return views.CounterpartyComboOption(existing), nil
 	}
 
-	cp.Icon = brandicons.Default().Detect(cp.Name, cp.Aliases)
+	if cp.IsMerchant {
+		cp.Icon = brandicons.Default().Detect(cp.Name, cp.Aliases)
+	}
 	cp.Color = brandicons.Default().ColorFor(cp.Icon, "")
 
 	if err := h.repo.CreateCounterparty(r.Context(), cp); err != nil {

@@ -25,7 +25,7 @@ templ AmountInputsWithCurrency(fd *AmountFD, id string, curs []models.Currency, 
 		@Field("Currency", "currency_id", id, nil, fd.CurrencyID.Error) {
 			@Combobox(ComboboxProps{
 				Name: "currency_id", ID: id, Label: "Currency", Placeholder: "Currency",
-				Options: currencyComboOptions(curs), Data: cur, Searchable: true,
+				Options: CurrencyComboOptions(curs), Data: cur, Searchable: true,
 				InputAttrs: templ.Attributes{
 					"hx-post":    fmt.Sprintf("/amount-inputs-with-currency/%s", getId(id)),
 					"hx-trigger": "change",
@@ -37,7 +37,7 @@ templ AmountInputsWithCurrency(fd *AmountFD, id string, curs []models.Currency, 
 	</div>
 }
 
-func currencyComboOptions(curs []models.Currency) []ComboOption {
+func CurrencyComboOptions(curs []models.Currency) []ComboOption {
 	opts := make([]ComboOption, len(curs))
 	for i, c := range curs {
 		opts[i] = ComboOption{
