@@ -38,9 +38,31 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(KEY_AUTH_ERROR, false)
         set(value) = prefs.edit().putBoolean(KEY_AUTH_ERROR, value).apply()
 
-    var lastSync: String?
-        get() = prefs.getString(KEY_LAST_SYNC, null)
-        set(value) = prefs.edit().putString(KEY_LAST_SYNC, value).apply()
+    /** When the queue was last fully uploaded, 0 if never. */
+    var lastSyncAt: Long
+        get() = prefs.getLong(KEY_LAST_SYNC_AT, 0)
+        set(value) = prefs.edit().putLong(KEY_LAST_SYNC_AT, value).apply()
+
+    /** How many SMS were uploaded from this install. */
+    var sentTotal: Long
+        get() = prefs.getLong(KEY_SENT_TOTAL, 0)
+        set(value) = prefs.edit().putLong(KEY_SENT_TOTAL, value).apply()
+
+    /** Why the last upload failed, cleared once one succeeds. */
+    var lastError: String?
+        get() = prefs.getString(KEY_LAST_ERROR, null)
+        set(value) = prefs.edit().putString(KEY_LAST_ERROR, value).apply()
+
+    var lastErrorAt: Long
+        get() = prefs.getLong(KEY_LAST_ERROR_AT, 0)
+        set(value) = prefs.edit().putLong(KEY_LAST_ERROR_AT, value).apply()
+
+    /** The server as host[:port], for messages. */
+    val serverHost: String
+        get() = runCatching {
+            val uri = java.net.URI(serverUrl)
+            if (uri.port > 0) "${uri.host}:${uri.port}" else uri.host
+        }.getOrNull() ?: serverUrl
 
     var token: String?
         get() = prefs.getString(KEY_TOKEN, null)?.let(::decrypt)
@@ -97,7 +119,10 @@ class Settings(context: Context) {
         private const val KEY_SENDERS = "senders"
         private const val KEY_VERIFIER = "pkce_verifier"
         private const val KEY_AUTH_ERROR = "auth_error"
-        private const val KEY_LAST_SYNC = "last_sync"
+        private const val KEY_LAST_SYNC_AT = "last_sync_at"
+        private const val KEY_LAST_ERROR = "last_error"
+        private const val KEY_SENT_TOTAL = "sent_total"
+        private const val KEY_LAST_ERROR_AT = "last_error_at"
         private const val KEY_TOKEN = "device_token"
         private const val KEY_INSTALL_ID = "install_id"
 

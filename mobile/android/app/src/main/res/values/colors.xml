@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tailwind's zinc scale and accents, as on the web app. -->
+<resources>
+    <color name="ic_launcher_bg">#000000</color>
+    <color name="bg">#09090B</color>
+    <color name="surface">#141417</color>
+    <color name="surface_raised">#1C1C20</color>
+    <color name="border">#27272A</color>
+    <color name="field">#1F1F23</color>
+    <color name="field_border">#3F3F46</color>
+    <color name="text">#FAFAFA</color>
+    <color name="text_soft">#D4D4D8</color>
+    <color name="muted">#A1A1AA</color>
+    <color name="dim">#71717A</color>
+    <color name="faint">#52525B</color>
+    <color name="on_accent">#09090B</color>
+
+    <color name="violet">#A78BFA</color>
+    <color name="emerald">#34D399</color>
+    <color name="sky">#38BDF8</color>
+    <color name="amber">#FCD34D</color>
+    <color name="red">#F87171</color>
+</resources>

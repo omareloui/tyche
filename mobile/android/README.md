@@ -29,7 +29,12 @@ Not on the Play Store, SMS permissions are restricted there, so sideload it.
    with a new token, the old one stops working.
 2. `SmsReceiver` queues SMS from the allowed senders (default HSBC, CIB, AAIB)
    in a local SQLite queue and `UploadWorker` uploads them when online.
-3. Unparsed or unmatched SMS show on Tyche's `/sms` page, where devices can be
+3. Everything the app does (SMS queued or ignored, uploads and what Tyche did
+   with each message, failures with their cause) goes to an activity log on the
+   main screen, also in logcat under the `Tyche` tag. The status card on top
+   says whether SMS get through, and when they're stuck (waiting over 10
+   minutes, a failing server, a rejected device) why and since when.
+4. Unparsed or unmatched SMS show on Tyche's `/sms` page, where devices can be
    revoked too. Set an account's "SMS Reference" for the matching.
 
 ## Testing against the local server over USB

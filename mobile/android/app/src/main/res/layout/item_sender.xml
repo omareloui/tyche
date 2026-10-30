@@ -4,6 +4,7 @@
     android:layout_height="wrap_content"
     android:gravity="center_vertical"
     android:orientation="horizontal"
+    android:paddingHorizontal="14dp"
     android:paddingVertical="12dp">
 
     <!-- The row handles clicks, the checkbox only shows the state. -->
@@ -25,8 +26,9 @@
             android:id="@+id/name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="16sp"
-            android:textStyle="bold" />
+            android:fontFamily="@font/afacad_semibold"
+            android:textColor="@color/text"
+            android:textSize="17sp" />
 
         <TextView
             android:id="@+id/preview"
@@ -34,7 +36,8 @@
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:maxLines="2"
+            android:textColor="@color/dim"
             android:textDirection="anyRtl"
-            android:textSize="13sp" />
+            android:textSize="14sp" />
     </LinearLayout>
 </LinearLayout>

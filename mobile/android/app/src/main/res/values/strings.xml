@@ -1,22 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Tyche</string>
+    <string name="wordmark" translatable="false">tyche</string>
     <string name="server_url">Tyche URL</string>
     <string name="server_url_hint">https://tyche.example.com</string>
     <string name="sign_in">Sign in with Google</string>
     <string name="sign_out">Sign out</string>
+    <string name="signed_out_title">Bank SMS, straight to Tyche</string>
+    <string name="signed_out_body">Sign in and every SMS from your banks becomes a transaction waiting for your review.</string>
+    <string name="local_hint">Running Tyche on your laptop? Connect over USB, run adb reverse tcp:3333 tcp:3333 and use http://localhost:3333.</string>
     <string name="senders_title">Bank senders</string>
     <string name="senders_hint">Select who sends your bank SMS. Only their messages are sent to Tyche.</string>
+    <string name="senders_card_hint">Only their SMS are sent to Tyche.</string>
     <string name="choose_senders">Choose bank senders</string>
     <string name="save_senders">Save</string>
+    <string name="edit">Edit</string>
     <plurals name="sender_summary">
         <item quantity="one">%1$d message%2$s</item>
         <item quantity="other">%1$d messages%2$s</item>
     </plurals>
     <string name="sender_supported">, supported by Tyche</string>
-    <string name="senders_selected">Bank senders: %1$s</string>
-    <string name="senders_none">none selected</string>
-    <string name="import_past">Import last 30 days of SMS</string>
-    <string name="import_all">Import all SMS</string>
+    <string name="senders_none">None selected</string>
+    <string name="import_title">Import from inbox</string>
+    <string name="import_hint">Send bank SMS already on the phone. Tyche skips the ones it has.</string>
+    <string name="import_past">Last 30 days</string>
+    <string name="import_all">Everything</string>
     <string name="sync_now">Sync now</string>
+    <string name="activity_title">Activity</string>
+    <string name="activity_empty">Nothing yet. New bank SMS and uploads show up here.</string>
+    <string name="clear">Clear</string>
 </resources>

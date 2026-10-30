@@ -6,10 +6,13 @@ import android.provider.Telephony
 /** Queues the bank SMS already in the inbox, the server skips the ones it has. */
 object SmsImporter {
 
-    fun importSince(context: Context, sinceMillis: Long): Int {
+    data class Result(val queued: Int, val alreadyQueued: Int)
+
+    fun importSince(context: Context, sinceMillis: Long, label: String): Result {
         val settings = Settings(context)
         val queue = SmsQueue(context)
         var count = 0
+        var already = 0
 
         context.contentResolver.query(
             Telephony.Sms.Inbox.CONTENT_URI,
@@ -25,12 +28,27 @@ object SmsImporter {
                 // date_sent matches SmsMessage.timestampMillis of the live
                 // receiver, fall back to the received date when missing.
                 val sent = c.getLong(3).takeIf { it > 0 } ?: c.getLong(2)
-                queue.add(sender, body, sent)
-                count++
+                if (queue.add(sender, body, sent)) count++ else already++
             }
         }
 
+        val log = ActivityLog.get(context)
+        when {
+            count > 0 -> log.add(
+                LogLevel.INFO,
+                "Imported $count bank SMS from $label",
+                "Queued to send. Tyche skips the ones it already has." +
+                    if (already > 0) " $already were already queued." else "",
+            )
+            already > 0 -> log.add(LogLevel.INFO, "Nothing new to import from $label", "All $already are already queued.")
+            else -> log.add(
+                LogLevel.WARN,
+                "No bank SMS found in $label",
+                "Senders: ${settings.senders.sorted().joinToString(", ")}. Check them if that's unexpected.",
+            )
+        }
+
         if (count > 0) UploadWorker.enqueue(context)
-        return count
+        return Result(count, already)
     }
 }

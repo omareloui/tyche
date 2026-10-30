@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Tyche" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:navigationBarColor">@color/bg</item>
+        <item name="colorPrimary">@color/bg</item>
+        <item name="colorPrimaryDark">@color/bg</item>
+        <item name="colorAccent">@color/violet</item>
+        <item name="colorControlNormal">@color/dim</item>
+        <item name="android:textColorPrimary">@color/text</item>
+        <item name="android:textColorSecondary">@color/muted</item>
+        <item name="android:textColorHint">@color/dim</item>
+        <item name="android:fontFamily">@font/afacad_regular</item>
+        <item name="fontFamily">@font/afacad_regular</item>
+    </style>
+
+    <!-- With an action bar, for the secondary screens' back button. -->
+    <style name="Theme.Tyche.Bar" parent="Theme.AppCompat">
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:navigationBarColor">@color/bg</item>
+        <item name="colorPrimary">@color/bg</item>
+        <item name="colorPrimaryDark">@color/bg</item>
+        <item name="colorAccent">@color/violet</item>
+        <item name="colorControlNormal">@color/muted</item>
+        <item name="android:textColorPrimary">@color/text</item>
+        <item name="android:textColorSecondary">@color/muted</item>
+        <item name="android:fontFamily">@font/afacad_regular</item>
+        <item name="fontFamily">@font/afacad_regular</item>
+        <item name="elevation">0dp</item>
+    </style>
+
+    <style name="Tyche.Heading" parent="">
+        <item name="android:fontFamily">@font/biorhyme_bold</item>
+        <item name="android:textColor">@color/text</item>
+    </style>
+
+    <style name="Tyche.Section" parent="">
+        <item name="android:fontFamily">@font/afacad_semibold</item>
+        <item name="android:textColor">@color/dim</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:letterSpacing">0.08</item>
+        <item name="android:textAllCaps">true</item>
+    </style>
+
+    <style name="Tyche.Card" parent="">
+        <item name="android:background">@drawable/bg_card</item>
+        <item name="android:padding">18dp</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
+    <style name="Tyche.Button" parent="Widget.AppCompat.Button.Borderless">
+        <item name="android:minHeight">48dp</item>
+        <item name="android:paddingStart">20dp</item>
+        <item name="android:paddingEnd">20dp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">17sp</item>
+        <item name="android:fontFamily">@font/afacad_semibold</item>
+        <item name="android:stateListAnimator">@null</item>
+        <item name="android:gravity">center</item>
+    </style>
+
+    <style name="Tyche.Button.Primary">
+        <item name="android:background">@drawable/bg_button_primary</item>
+        <item name="android:textColor">@color/on_accent</item>
+    </style>
+
+    <style name="Tyche.Button.Ghost">
+        <item name="android:background">@drawable/bg_button_ghost</item>
+        <item name="android:textColor">@color/text_soft</item>
+    </style>
+</resources>

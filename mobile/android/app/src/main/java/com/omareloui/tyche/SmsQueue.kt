@@ -9,7 +9,7 @@ data class PendingSms(val id: Long, val sender: String, val body: String, val re
 
 /** Durable queue of SMS waiting to be uploaded, survives reboots and offline periods. */
 class SmsQueue(context: Context) :
-    SQLiteOpenHelper(context.applicationContext, "sms_queue.db", null, 1) {
+    SQLiteOpenHelper(context.applicationContext, "sms_queue.db", null, 2) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -19,15 +19,23 @@ class SmsQueue(context: Context) :
                 sender TEXT NOT NULL,
                 body TEXT NOT NULL,
                 received_at INTEGER NOT NULL,
+                queued_at INTEGER,
                 UNIQUE (sender, body, received_at)
             )
             """.trimIndent(),
         )
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE pending_sms ADD COLUMN queued_at INTEGER")
+            // Unknown for the ones queued before, their SMS time is close enough.
+            db.execSQL("UPDATE pending_sms SET queued_at = received_at")
+        }
+    }
 
-    fun add(sender: String, body: String, receivedAtMillis: Long) {
+    /** Queues the SMS, false if it's already queued. */
+    fun add(sender: String, body: String, receivedAtMillis: Long): Boolean =
         writableDatabase.insertWithOnConflict(
             "pending_sms",
             null,
@@ -35,10 +43,10 @@ class SmsQueue(context: Context) :
                 put("sender", sender)
                 put("body", body)
                 put("received_at", receivedAtMillis)
+                put("queued_at", System.currentTimeMillis())
             },
             SQLiteDatabase.CONFLICT_IGNORE,
-        )
-    }
+        ) != -1L
 
     fun next(limit: Int): List<PendingSms> =
         readableDatabase.query(
@@ -63,4 +71,10 @@ class SmsQueue(context: Context) :
 
     fun count(): Long =
         readableDatabase.compileStatement("SELECT COUNT(*) FROM pending_sms").simpleQueryForLong()
+
+    /** When the oldest queued SMS got queued (its id order), null if none. */
+    fun oldestQueuedAt(): Long? =
+        readableDatabase.rawQuery("SELECT queued_at FROM pending_sms ORDER BY id LIMIT 1", null).use { c ->
+            if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null
+        }
 }

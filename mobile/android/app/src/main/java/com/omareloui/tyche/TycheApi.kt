@@ -11,6 +11,9 @@ class UnauthorizedException : IOException("unauthorized")
 
 class HttpException(val code: Int) : IOException("http $code")
 
+/** What Tyche did with an uploaded SMS. */
+data class SmsResult(val status: String, val error: String?, val transactionId: String?)
+
 /** Minimal client for the Tyche mobile endpoints. */
 class TycheApi(private val baseUrl: String) {
 
@@ -24,8 +27,25 @@ class TycheApi(private val baseUrl: String) {
         return res.getString("token")
     }
 
-    /** Uploads a batch, returns the per message statuses in the same order. */
-    fun uploadSms(token: String, messages: List<PendingSms>): List<String> {
+    /** Pings Tyche's health endpoint, returns how long it took to answer in ms. */
+    fun health(): Long {
+        val started = System.nanoTime()
+        val conn = URL("$baseUrl/health").openConnection() as HttpURLConnection
+        try {
+            conn.connectTimeout = HEALTH_TIMEOUT_MS
+            conn.readTimeout = HEALTH_TIMEOUT_MS
+            val code = conn.responseCode
+            if (code != HttpURLConnection.HTTP_OK) throw HttpException(code)
+            val status = JSONObject(conn.inputStream.bufferedReader().use { it.readText() }).optString("status")
+            if (status != "ok") throw IOException("unhealthy: ${status.ifEmpty { "no status" }}")
+        } finally {
+            conn.disconnect()
+        }
+        return (System.nanoTime() - started) / 1_000_000
+    }
+
+    /** Uploads a batch, returns the per message results in the same order. */
+    fun uploadSms(token: String, messages: List<PendingSms>): List<SmsResult> {
         val arr = JSONArray()
         messages.forEach {
             arr.put(
@@ -37,7 +57,14 @@ class TycheApi(private val baseUrl: String) {
         }
         val res = post("/api/sms", JSONObject().put("messages", arr), token)
         val results = res.getJSONArray("results")
-        return List(results.length()) { results.getJSONObject(it).getString("status") }
+        return List(results.length()) {
+            val r = results.getJSONObject(it)
+            SmsResult(
+                status = r.getString("status"),
+                error = r.optString("error").ifEmpty { null },
+                transactionId = r.optString("transaction_id").ifEmpty { null },
+            )
+        }
     }
 
     private fun post(path: String, body: JSONObject, token: String?): JSONObject {
@@ -66,5 +93,6 @@ class TycheApi(private val baseUrl: String) {
 
     companion object {
         private const val TIMEOUT_MS = 20_000
+        private const val HEALTH_TIMEOUT_MS = 5_000
     }
 }

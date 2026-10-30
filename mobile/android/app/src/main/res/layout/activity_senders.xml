@@ -2,25 +2,38 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@color/bg"
+    android:fitsSystemWindows="true"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:paddingHorizontal="18dp"
+    android:paddingBottom="18dp">
 
     <TextView
         android:id="@+id/hint"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="8dp"
-        android:text="@string/senders_hint" />
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="12dp"
+        android:text="@string/senders_hint"
+        android:textColor="@color/muted"
+        android:textSize="16sp" />
 
     <ListView
         android:id="@+id/list"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1" />
+        android:layout_weight="1"
+        android:background="@drawable/bg_card"
+        android:divider="@color/border"
+        android:dividerHeight="1dp"
+        android:paddingVertical="4dp"
+        android:clipToPadding="false" />
 
     <Button
         android:id="@+id/save"
+        style="@style/Tyche.Button.Primary"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
         android:text="@string/save_senders" />
 </LinearLayout>
