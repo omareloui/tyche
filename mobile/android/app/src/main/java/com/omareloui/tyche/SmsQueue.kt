@@ -63,8 +63,4 @@ class SmsQueue(context: Context) :
 
     fun count(): Long =
         readableDatabase.compileStatement("SELECT COUNT(*) FROM pending_sms").simpleQueryForLong()
-
-    fun clear() {
-        writableDatabase.delete("pending_sms", null, null)
-    }
 }

@@ -124,7 +124,7 @@ class MainActivity : AppCompatActivity() {
     private fun signOut() {
         settings.token = null
         settings.authError = false
-        SmsQueue(this).clear()
+        // Keep the queued SMS, they're uploaded after signing in again.
         toast("Signed out. Revoke the device from Tyche's SMS page to fully remove it.")
         render()
     }
