@@ -246,8 +246,9 @@ func (h Handler) mapFDToCategory(r *http.Request) (*models.Category, error) {
 
 	currID := r.FormValue("currency_id")
 
+	// The currency is always picked; without an amount there's no budget.
 	var cur *models.Currency
-	if currID != "" {
+	if currID != "" && budget != 0 {
 		cur = &models.Currency{
 			ID: currID,
 		}
