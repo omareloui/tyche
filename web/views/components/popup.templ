@@ -1,0 +1,33 @@
+package components
+
+// Popup is the shared floating surface (translucent, blurred box) for menus,
+// hover cards and the like. Positioning and visibility are up to the caller;
+// class adds to the base styles (padding, width, typography, ...).
+templ Popup(class string) {
+	<div
+		class={
+			"rounded-lg border border-white/10 bg-zinc-800/40 text-zinc-100 shadow-lg backdrop-blur-md",
+			class,
+		}
+	>
+		{ children... }
+	</div>
+}
+
+// HoverPopup shows a Popup below-right of the closest `group` ancestor while
+// it is hovered or focused, scaling in from its top-right corner (same timing
+// as Alpine's x-transition.scale). The ancestor needs `relative` positioning.
+templ HoverPopup(class string) {
+	<div
+		class={
+			"absolute top-full right-0 z-20 pt-2 origin-top-right",
+			"invisible scale-95 transition-[scale,visibility] duration-75 ease-in",
+			"group-hover:visible group-hover:scale-100 group-hover:duration-150 group-hover:ease-out",
+			"group-focus-within:visible group-focus-within:scale-100 group-focus-within:duration-150 group-focus-within:ease-out",
+		}
+	>
+		@Popup(class) {
+			{ children... }
+		}
+	</div>
+}

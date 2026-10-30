@@ -107,14 +107,12 @@ templ transactionsDays(transactions []models.Transaction) {
 // txSMSPopup shows the SMS a transaction was created from on hovering its
 // parent group.
 templ txSMSPopup(body, hint string) {
-	<div class="absolute top-full right-0 z-20 pt-2 hidden group-hover:block group-focus-within:block">
-		<div class="w-72 max-w-[80vw] rounded-lg border border-white/10 bg-zinc-800/40 px-3 py-2 text-sm text-zinc-100 shadow-lg backdrop-blur-md">
-			<p class="whitespace-pre-wrap break-words">{ body }</p>
-			if hint != "" {
-				<p class="mt-2 text-xs text-amber-400">{ hint }</p>
-			}
-		</div>
-	</div>
+	@components.HoverPopup("w-72 max-w-[80vw] px-3 py-2 text-sm") {
+		<p class="whitespace-pre-wrap break-words">{ body }</p>
+		if hint != "" {
+			<p class="mt-2 text-xs text-amber-400">{ hint }</p>
+		}
+	}
 }
 
 // TODO: wire up search; mock for now.
