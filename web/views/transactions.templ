@@ -488,6 +488,7 @@ templ TransactionAmountsAndKindFormBody(
 							Name: "category_id", ID: id, Label: "Category", Placeholder: "Select Category",
 							Options: categoryComboOptions(getCategoriesOfKinds(cats, kind)),
 							Data:    *fd.CategoryID, Nullable: true, Searchable: true,
+							CreateURL: categoryCreateURL(kind),
 						})
 					}
 				}
@@ -497,6 +498,7 @@ templ TransactionAmountsAndKindFormBody(
 							Name: "counterparty_id", ID: id, Label: "Counterparty", Placeholder: "Select Counterparty",
 							Options: counterpartyComboOptions(cps),
 							Data:    *fd.CounterpartyID, Nullable: true, Searchable: true,
+							CreateURL: "/counterparties/quick",
 						})
 					}
 				}
@@ -520,25 +522,48 @@ templ categoryDot(color string) {
 	<span class="shrink-0 w-2.5 h-2.5 rounded-full" style={ fmt.Sprintf("background-color: %s", models.CategoryColorToHex(color)) }></span>
 }
 
+func categoryComboOption(c *models.Category) form.ComboOption {
+	return form.ComboOption{Value: c.ID, Label: c.Name, Leading: categoryDot(c.Color)}
+}
+
 func categoryComboOptions(cats []models.Category) []form.ComboOption {
 	opts := make([]form.ComboOption, len(cats))
-	for i, c := range cats {
-		opts[i] = form.ComboOption{Value: c.ID, Label: c.Name, Leading: categoryDot(c.Color)}
+	for i := range cats {
+		opts[i] = categoryComboOption(&cats[i])
 	}
 	return form.SortComboOptions(opts)
 }
 
+// CategoryComboOption answers a category combobox's CreateURL.
+func CategoryComboOption(c *models.Category) templ.Component {
+	return form.ComboOptionItem(categoryComboOption(c), true)
+}
+
+// categoryCreateURL quick-creates categories allowing the tx kind.
+func categoryCreateURL(kind models.TxKind) string {
+	return "/categories/quick?kind=" + kind.CategoryKind().String()
+}
+
+func counterpartyComboOption(cp *models.Counterparty) form.ComboOption {
+	return form.ComboOption{
+		Value:   cp.ID,
+		Label:   cp.Name,
+		Search:  strings.Join(cp.Aliases, " "),
+		Leading: components.CounterpartyIcon(cp.Name, cp.Icon, cp.Color, "w-5 h-5 text-[11px]"),
+	}
+}
+
 func counterpartyComboOptions(cps []models.Counterparty) []form.ComboOption {
 	opts := make([]form.ComboOption, len(cps))
-	for i, cp := range cps {
-		opts[i] = form.ComboOption{
-			Value:   cp.ID,
-			Label:   cp.Name,
-			Search:  strings.Join(cp.Aliases, " "),
-			Leading: components.CounterpartyIcon(cp.Name, cp.Icon, cp.Color, "w-5 h-5 text-[11px]"),
-		}
+	for i := range cps {
+		opts[i] = counterpartyComboOption(&cps[i])
 	}
 	return form.SortComboOptions(opts)
+}
+
+// CounterpartyComboOption answers a counterparty combobox's CreateURL.
+func CounterpartyComboOption(cp *models.Counterparty) templ.Component {
+	return form.ComboOptionItem(counterpartyComboOption(cp), true)
 }
 
 func goalComboOptions(gls []models.Goal) []form.ComboOption {

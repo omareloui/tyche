@@ -180,3 +180,10 @@ templ Check(size string, attrs ...*templ.Attributes) {
 		<path d="M20 6 9 17l-5-5"></path>
 	}
 }
+
+// Plus marks creating a new item.
+templ Plus(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="M12 5v14M5 12h14"></path>
+	}
+}

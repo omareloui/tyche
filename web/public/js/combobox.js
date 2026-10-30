@@ -3,6 +3,9 @@
 // so hx-trigger="change" keeps working. The panel is position: fixed so it
 // isn't clipped by scrolling containers like the create form's body.
 //
+// With data-create-url, a "Create" row offers adding the searched name when
+// no option has that exact label (see ComboboxProps.CreateURL).
+//
 // Filtering and the active option are applied to the DOM directly (hidden,
 // data-active) instead of through Alpine reactivity, so long lists stay fast.
 document.addEventListener("alpine:init", () => {
@@ -14,6 +17,8 @@ document.addEventListener("alpine:init", () => {
       open: false,
       q: "",
       noMatches: false,
+      canCreate: false,
+      creating: false,
       panelStyle: "",
 
       options() {
@@ -23,11 +28,16 @@ document.addEventListener("alpine:init", () => {
       filter() {
         const q = this.q.trim().toLowerCase();
         visible = [];
+        let exact = false;
         for (const o of this.options()) {
           const ok = q === "" || o.dataset.search.includes(q);
           o.hidden = !ok;
           if (ok) visible.push(o);
+          if (o.dataset.value !== "" && o.dataset.label === q) exact = true;
         }
+        const create = this.$refs.list.querySelector("[data-create]");
+        this.canCreate = !!create && q !== "" && !exact;
+        if (this.canCreate) visible.push(create);
         this.noMatches = visible.length === 0;
         this.setActive(0);
       },
@@ -94,6 +104,7 @@ document.addEventListener("alpine:init", () => {
       },
 
       pick(o) {
+        if ("create" in o.dataset) return this.create();
         const input = this.$refs.input;
         for (const opt of this.options()) {
           opt.setAttribute("aria-selected", opt === o ? "true" : "false");
@@ -105,6 +116,41 @@ document.addEventListener("alpine:init", () => {
         if (input.value === o.dataset.value) return;
         input.value = o.dataset.value;
         input.dispatchEvent(new Event("change", { bubbles: true }));
+      },
+
+      // create POSTs the search to data-create-url, adds the returned option
+      // (or reuses it if the server answered with an existing one) and picks it.
+      async create() {
+        const name = this.q.trim();
+        if (this.creating || name === "") return;
+        this.creating = true;
+        try {
+          const res = await fetch(this.$root.dataset.createUrl, {
+            method: "POST",
+            body: new URLSearchParams({ name }),
+          });
+          if (!res.ok) throw new Error(await res.text());
+          const tpl = document.createElement("template");
+          tpl.innerHTML = (await res.text()).trim();
+          const o = tpl.content.firstElementChild;
+          const existing = [...this.options()].find(
+            (x) => x.dataset.value === o.dataset.value,
+          );
+          if (existing) return this.pick(existing);
+          const next = [...this.options()].find(
+            (x) => x.dataset.value !== "" && x.dataset.label > o.dataset.label,
+          );
+          this.$refs.list.insertBefore(
+            o,
+            next ?? this.$refs.list.querySelector("[data-create]"),
+          );
+          this.pick(o);
+        } catch (err) {
+          console.error("combobox create", err);
+          alert(`Couldn't create "${name}": ${err.message}`);
+        } finally {
+          this.creating = false;
+        }
       },
 
       onEscape(ev) {

@@ -25,7 +25,11 @@ type ComboboxProps struct {
 	Nullable   bool
 	Searchable bool
 	// Chip draws the button as a pill (.combo-chip) instead of a field.
-	Chip       bool
+	Chip bool
+	// CreateURL, when set on a searchable combobox, offers creating the
+	// searched name if no option matches it. The search is POSTed as "name"
+	// and the response must be the new option's ComboOptionItem.
+	CreateURL  string
 	InputAttrs templ.Attributes
 }
 
@@ -35,6 +39,9 @@ templ Combobox(p ComboboxProps) {
 	{{ sel := selectedComboOption(p) }}
 	<div
 		x-data="combobox"
+		if p.CreateURL != "" && p.Searchable {
+			data-create-url={ p.CreateURL }
+		}
 		class="relative min-w-0"
 		@keyup.escape="onEscape($event)"
 		@click.outside="close()"
@@ -107,10 +114,25 @@ templ Combobox(p ComboboxProps) {
 			}
 			<ul x-ref="list" role="listbox" tabindex="-1" aria-label={ p.Label } class="max-h-64 overflow-y-auto outline-none">
 				if p.Nullable {
-					@comboOptionItem(ComboOption{Label: "None"}, p.Data.Value == "")
+					@ComboOptionItem(ComboOption{Label: "None"}, p.Data.Value == "")
 				}
 				for _, o := range p.Options {
-					@comboOptionItem(o, o.Value == p.Data.Value)
+					@ComboOptionItem(o, o.Value == p.Data.Value)
+				}
+				if p.CreateURL != "" && p.Searchable {
+					<li
+						data-create
+						x-show="canCreate"
+						role="option"
+						aria-selected="false"
+						@click="pick($el)"
+						@mousemove="hover($el)"
+						class="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer select-none text-(--accent) data-active:bg-white/10"
+					>
+						@icons.Plus("16", &templ.Attributes{"class": "shrink-0"})
+						<span class="truncate">Create “<span x-text="q.trim()"></span>”</span>
+						<span x-show="creating" class="ml-auto text-xs text-zinc-500">Creating…</span>
+					</li>
 				}
 				<li x-show="noMatches" class="px-3 py-2 text-sm text-zinc-500">No matches</li>
 			</ul>
@@ -118,10 +140,12 @@ templ Combobox(p ComboboxProps) {
 	</div>
 }
 
-templ comboOptionItem(o ComboOption, selected bool) {
+// ComboOptionItem is a Combobox option, also the response of a CreateURL.
+templ ComboOptionItem(o ComboOption, selected bool) {
 	<li
 		data-option
 		data-value={ o.Value }
+		data-label={ strings.ToLower(o.Label) }
 		data-search={ strings.ToLower(o.Label + " " + o.Search) }
 		role="option"
 		if selected {

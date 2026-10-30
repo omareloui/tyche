@@ -3,6 +3,8 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/a-h/templ"
@@ -10,6 +12,7 @@ import (
 	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/resperr"
 	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views"
 	"github.com/omareloui/tyche/web/views/form"
@@ -109,6 +112,61 @@ func (h Handler) CreateCategory(w http.ResponseWriter, r *http.Request) (templ.C
 	l.Debug("rendered category oob")
 
 	return views.CreateCategoryForm(h.mapCategoryToFD(dfltCategory(&claims.DefaultCurrency, knds), knds, &errs.ValidationError{}), knds, currs, &claims.DefaultCurrency), nil
+}
+
+// QuickCreateCategory creates a category from a combobox's search, allowing
+// the "kind" query's tx kind, and responds with its combobox option. An
+// existing category with the same name is reused, gaining the kind if needed.
+func (h Handler) QuickCreateCategory(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	l := logger.FromCtx(r.Context())
+
+	kind := models.GetTxKindFromString(r.URL.Query().Get("kind"))
+	if !slices.Contains(getAllowedKindsForCategories(), kind) {
+		return nil, resperr.New(http.StatusBadRequest, "invalid kind")
+	}
+
+	name := strings.TrimSpace(r.FormValue("name"))
+	if name == "" {
+		return nil, resperr.New(http.StatusBadRequest, "name is required")
+	}
+
+	cats, err := h.repo.GetCategories(r.Context())
+	if err != nil {
+		l.Error("fetching categories", zap.Error(err))
+		return nil, err
+	}
+
+	if cat := slicesutils.Find(cats, func(c models.Category) bool { return strings.EqualFold(c.Name, name) }); cat != nil {
+		if !cat.HasKind(kind) {
+			cat.Kinds = append(cat.Kinds, kind)
+			if err := h.repo.UpdateCategory(r.Context(), cat); err != nil {
+				l.Error("adding kind to category", zap.Error(err))
+				return nil, err
+			}
+			l.Info("added kind to existing category", zap.String("id", cat.ID))
+		}
+		return views.CategoryComboOption(cat), nil
+	}
+
+	cat := &models.Category{
+		ID:        idgen.New(),
+		Name:      name,
+		Color:     models.GetRandomCategoryColor(),
+		Kinds:     []models.TxKind{kind},
+		CreatedAt: time.Now(),
+	}
+	if err := cat.Validate(h.valid); err != nil {
+		l.Error("quick create category validation", zap.Error(err))
+		return nil, resperr.New(http.StatusBadRequest, err.Error())
+	}
+
+	if err := h.repo.CreateCategory(r.Context(), cat); err != nil {
+		l.Error("creating category", zap.Error(err))
+		return nil, err
+	}
+	l.Info("quick created category")
+
+	return views.CategoryComboOption(cat), nil
 }
 
 func (h Handler) GetEditCategory(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

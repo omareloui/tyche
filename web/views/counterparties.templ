@@ -100,6 +100,7 @@ templ counterpartyFormBody(id string, isNew bool, fd *CounterpartyFD, cats []mod
 				@form.Combobox(form.ComboboxProps{
 					Name: "default_category_id", ID: id, Label: "Default category", Placeholder: "Select Category",
 					Options: categoryComboOptions(cats), Data: fd.DefaultCategoryID, Nullable: true, Searchable: true,
+					CreateURL: categoryCreateURL(models.ExpenseTxKind),
 				})
 			}
 			@counterpartyIconField(id, isNew, fd.Icon)

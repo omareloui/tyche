@@ -12,6 +12,7 @@ import (
 	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/resperr"
 	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views"
 	"github.com/omareloui/tyche/web/views/form"
@@ -115,6 +116,44 @@ func (h Handler) CreateCounterparty(w http.ResponseWriter, r *http.Request) (tem
 	l.Debug("rendered counterparty oob")
 
 	return views.CreateCounterpartyForm(h.mapCounterpartyToFD(dfltCounterparty(), &errs.ValidationError{}), cats), nil
+}
+
+// QuickCreateCounterparty creates a merchant from a combobox's search and
+// responds with its combobox option. An existing counterparty with that name
+// or alias is reused.
+func (h Handler) QuickCreateCounterparty(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	l := logger.FromCtx(r.Context())
+
+	cp := dfltCounterparty()
+	cp.ID = idgen.New()
+	cp.Name = r.FormValue("name")
+	if err := cp.SanitizeAndValidate(h.sani, h.valid); err != nil {
+		l.Error("quick create counterparty validation", zap.Error(err))
+		return nil, resperr.New(http.StatusBadRequest, err.Error())
+	}
+
+	cps, err := h.repo.GetCounterparties(r.Context())
+	if err != nil {
+		l.Error("fetching counterparties", zap.Error(err))
+		return nil, err
+	}
+	if existing := slicesutils.Find(cps, func(c models.Counterparty) bool {
+		return strings.EqualFold(c.Name, cp.Name) ||
+			slices.ContainsFunc(c.Aliases, func(a string) bool { return strings.EqualFold(a, cp.Name) })
+	}); existing != nil {
+		return views.CounterpartyComboOption(existing), nil
+	}
+
+	cp.Icon = brandicons.Default().Detect(cp.Name, cp.Aliases)
+	cp.Color = brandicons.Default().ColorFor(cp.Icon, "")
+
+	if err := h.repo.CreateCounterparty(r.Context(), cp); err != nil {
+		l.Error("creating counterparty", zap.Error(err))
+		return nil, err
+	}
+	l.Info("quick created counterparty")
+
+	return views.CounterpartyComboOption(cp), nil
 }
 
 func (h Handler) GetEditCounterparty(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

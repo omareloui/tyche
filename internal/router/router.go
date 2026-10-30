@@ -33,6 +33,7 @@ func New(h *handler.Handler) Router {
 
 	mux.Handle("GET /categories", handle(h.Categories))
 	mux.Handle("POST /categories", handle(h.CreateCategory))
+	mux.Handle("POST /categories/quick", handle(h.QuickCreateCategory))
 	mux.Handle("GET /categories/{id}", handle(h.Category))
 	mux.Handle("GET /categories/{id}/edit", handle(h.GetEditCategory))
 	mux.Handle("PUT /categories/{id}", handle(h.EditCategory))
@@ -73,6 +74,7 @@ func New(h *handler.Handler) Router {
 
 	mux.Handle("GET /counterparties", handle(h.Counterparties))
 	mux.Handle("POST /counterparties", handle(h.CreateCounterparty))
+	mux.Handle("POST /counterparties/quick", handle(h.QuickCreateCounterparty))
 	mux.Handle("GET /counterparties/{id}", handle(h.Counterparty))
 	mux.Handle("GET /counterparties/{id}/edit", handle(h.GetEditCounterparty))
 	mux.Handle("PUT /counterparties/{id}", handle(h.EditCounterparty))
