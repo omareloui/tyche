@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"slices"
 
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
@@ -117,7 +118,37 @@ func (r *Repository) GetTransactions(ctx context.Context) ([]models.Transaction,
 	for i, t := range dbTransactions {
 		tx[i] = *dbTransactionRowToTransaction(&t)
 	}
+	if err := r.loadGoalProgress(ctx, tx); err != nil {
+		return nil, err
+	}
 	return nestReimbursements(tx), nil
+}
+
+// loadGoalProgress swaps the transactions' goals for the full ones, with
+// their transactions, so the goal progress can be shown.
+func (r *Repository) loadGoalProgress(ctx context.Context, txs []models.Transaction) error {
+	if !slices.ContainsFunc(txs, func(t models.Transaction) bool { return t.Goal != nil }) {
+		return nil
+	}
+
+	gls, err := r.GetGoals(ctx)
+	if err != nil {
+		return err
+	}
+	byID := make(map[string]*models.Goal, len(gls))
+	for i := range gls {
+		byID[gls[i].ID] = &gls[i]
+	}
+
+	for i := range txs {
+		if txs[i].Goal == nil {
+			continue
+		}
+		if gl, ok := byID[txs[i].Goal.ID]; ok {
+			txs[i].Goal = gl
+		}
+	}
+	return nil
 }
 
 // nestReimbursements moves the reimbursements into their expense's
@@ -166,6 +197,15 @@ func (r *Repository) GetTransaction(ctx context.Context, id string) (*models.Tra
 	}
 	l.Info("queried transaction")
 	tx := dbTransactionRowToTransaction(&dbTx)
+
+	if tx.Goal != nil {
+		gl, err := r.GetGoal(ctx, tx.Goal.ID)
+		if err != nil {
+			l.Error("querying transaction goal", zap.Error(err), zap.String("id", id))
+			return nil, err
+		}
+		tx.Goal = gl
+	}
 
 	if tx.Reimbursed > 0 {
 		rows, err := q.GetReimbursementsOf(ctx, sql.NullString{String: id, Valid: true})

@@ -259,6 +259,15 @@ func (h Handler) FulfillTransaction(w http.ResponseWriter, r *http.Request) (tem
 	}
 	l.Info("fulfilled transaction")
 
+	// Count it toward the goal's progress, fetched before fulfilling.
+	if tx.Goal != nil {
+		for i := range tx.Goal.Transactions {
+			if tx.Goal.Transactions[i].ID == tx.ID {
+				tx.Goal.Transactions[i].FulfilledAt = tx.FulfilledAt
+			}
+		}
+	}
+
 	if err := h.getAndRenderBalancesOOB(w, r); err != nil {
 		return nil, err
 	}

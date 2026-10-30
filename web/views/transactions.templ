@@ -115,6 +115,21 @@ templ txSMSPopup(body, hint string) {
 	}
 }
 
+// txGoalPopup shows the goal a transaction belongs to and its progress on
+// hovering its parent group.
+templ txGoalPopup(gl *models.Goal) {
+	@components.HoverPopup("w-64 max-w-[80vw] px-3 py-2 text-sm") {
+		<div class="flex items-baseline justify-between gap-3">
+			<p class="truncate font-semibold">{ gl.Name }</p>
+			<p class="shrink-0 text-xs text-zinc-400">{ formatters.FormatNum(gl.ProgressPercentage()) }%</p>
+		</div>
+		<div class="mt-2">
+			@components.ProgressBar(gl.ProgressPercentage(), components.WithProgressBarSuccessStatus(gl.ProgressPercentage() >= 100 || !gl.FulfilledAt.IsZero()))
+		</div>
+		<p class="mt-2 text-xs text-zinc-400">{ gl.ViewProgress() } / { gl.ViewAmount() }</p>
+	}
+}
+
 // TODO: wire up search; mock for now.
 templ txSearchBar() {
 	<label
@@ -215,8 +230,9 @@ templ transaction(tx *models.Transaction) {
 					</span>
 				}
 				if tx.Goal != nil {
-					<span title={ "Goal: " + tx.Goal.Name }>
+					<span tabindex="0" aria-label={ "Goal: " + tx.Goal.Name } class="group relative flex outline-none">
 						@icons.Target("22")
+						@txGoalPopup(tx.Goal)
 					</span>
 				}
 				if len(tx.Reimbursements) > 0 {
