@@ -1,6 +1,7 @@
 package formatters
 
 import (
+	"math"
 	"strings"
 
 	"golang.org/x/text/language"
@@ -17,6 +18,16 @@ type nu interface {
 
 func FormatNum[T nu](num T) string {
 	return p.Sprintf("%v", number.Decimal(num, number.MaxFractionDigits(2)))
+}
+
+// FormatRate formats an exchange rate, keeping 3 significant digits for
+// rates under 1 (e.g. 0.000123) instead of rounding them to 0.
+func FormatRate(rate float64) string {
+	frac := 2
+	if rate > 0 && rate < 1 {
+		frac = min(12, int(math.Ceil(-math.Log10(rate)))+2)
+	}
+	return p.Sprintf("%v", number.Decimal(rate, number.MaxFractionDigits(frac)))
 }
 
 func FormatAmount(amount float64, curSymbol string) string {

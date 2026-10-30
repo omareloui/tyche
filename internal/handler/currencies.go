@@ -71,7 +71,7 @@ func (h Handler) ChangeIsShownForCurrency(isShown bool) func(w http.ResponseWrit
 		l.Debug("fetched currency", zap.Any("currency", cur))
 
 		claims := getClaims(r.Context())
-		return views.Currency(cur, &claims.DefaultCurrency), nil
+		return views.CurrencyMovedOOB(cur, &claims.DefaultCurrency), nil
 	}
 }
 

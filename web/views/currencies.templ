@@ -2,12 +2,14 @@ package views
 
 import (
 	"fmt"
-	"github.com/omareloui/tyche/internal/models"
-	"github.com/omareloui/tyche/internal/jwt"
-	"github.com/omareloui/tyche/web/views/layouts"
-	"github.com/omareloui/tyche/web/views/components"
 	"strings"
+
 	"github.com/omareloui/tyche/internal/formatters"
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
 )
 
 templ Currencies(claims *jwt.AccessClaims, balances []models.Balance, currencies []models.Currency) {
@@ -16,74 +18,273 @@ templ Currencies(claims *jwt.AccessClaims, balances []models.Balance, currencies
 	}
 }
 
+// currenciesFilterData filters the cards by the search query and kind pill.
+// q and kind are read upfront so the checks rerun on change even when no
+// card is left to match.
+const currenciesFilterData = `{
+	q: '',
+	kind: '',
+	matches(el) {
+		const q = this.q.trim().toLowerCase()
+		return (!this.kind || el.dataset.kind === this.kind) && (!q || el.dataset.search.includes(q))
+	},
+	any(el) {
+		this.q, this.kind
+		return [...el.querySelectorAll('[data-currency]')].some(c => this.matches(c))
+	},
+	get filtering() { return this.q.trim() !== '' || this.kind !== '' },
+}`
+
 templ currenciesList(currencies []models.Currency, defaultCur *models.Currency) {
-	@components.Grid3Col("currencies-list") {
+	<div
+		x-data={ currenciesFilterData }
+		@keydown.slash.window="if (!['INPUT', 'TEXTAREA'].includes($event.target.tagName)) { $event.preventDefault(); $refs.q.focus() }"
+		class="grid gap-8"
+	>
 		for _, cur := range currencies {
-			@Currency(&cur, defaultCur)
+			if cur.ID == defaultCur.ID {
+				@defaultCurrencyHero(&cur)
+			}
 		}
-	}
+		@currenciesToolbar()
+		<section x-show="!filtering || any($el)" class="hidden has-[[data-currency]]:block">
+			<header class="mb-3">
+				<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+					@icons.Eye("16")
+					Shown
+				</h2>
+				<p class="text-sm text-zinc-600">Offered when picking a currency, e.g. for an account or a budget.</p>
+			</header>
+			@currencySectionGrid("shown") {
+				for _, cur := range currencies {
+					if cur.ID != defaultCur.ID && cur.IsShown {
+						@Currency(&cur, defaultCur)
+					}
+				}
+			}
+		</section>
+		<details class="group hidden has-[[data-currency]]:block" x-show="!filtering || any($el)" :open="filtering || null">
+			<summary class="flex items-center gap-2 mb-3 list-none cursor-pointer select-none text-zinc-500 hover:text-zinc-300 [&::-webkit-details-marker]:hidden">
+				@icons.EyeOff("16")
+				<h2 class="text-sm font-semibold uppercase tracking-wider">Hidden</h2>
+				@icons.ChevronDown("16", &templ.Attributes{"class": "transition-transform group-open:rotate-180"})
+			</summary>
+			@currencySectionGrid("hidden") {
+				for _, cur := range currencies {
+					if cur.ID != defaultCur.ID && !cur.IsShown {
+						@Currency(&cur, defaultCur)
+					}
+				}
+			}
+		</details>
+		<p x-cloak x-show="filtering && !any($root)" class="py-12 text-center text-zinc-500">
+			No currencies match your search.
+		</p>
+	</div>
+}
+
+templ currencySectionGrid(section string) {
+	<div id={ CurrencySectionID(section) } class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+		{ children... }
+	</div>
+}
+
+templ defaultCurrencyHero(cur *models.Currency) {
+	<section
+		class={ "relative overflow-hidden flex items-center gap-4 p-5 sm:p-6 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800", currencyKindAccentClass(cur.Kind) }
+	>
+		<div aria-hidden="true" class="pointer-events-none absolute -top-24 -right-16 size-64 rounded-full bg-(--accent)/15 blur-3xl"></div>
+		<div class="relative grid place-items-center shrink-0 w-14 h-14 rounded-2xl bg-(--accent)/15 text-(--accent)">
+			@currencyKindIcon(cur.Kind, "28")
+		</div>
+		<div class="relative flex-1 min-w-0">
+			<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-amber-300">
+				@icons.Star("13", &templ.Attributes{"fill": "currentColor"})
+				Default currency
+			</p>
+			<p class="flex items-baseline gap-2 mt-0.5">
+				<span class="text-3xl font-bold font-(family-name:--font-biorhyme-expanded)">{ cur.String }</span>
+				if cur.Symbol != cur.String {
+					<span class="text-xl text-zinc-500">{ cur.Symbol }</span>
+				}
+			</p>
+			<p class="text-sm text-zinc-500">{ cur.Kind.String() } · your balance and the rates below are in it</p>
+		</div>
+	</section>
+}
+
+templ currenciesToolbar() {
+	<div class="grid gap-3 sm:flex sm:items-center">
+		<label
+			class="flex flex-1 items-center gap-3 h-11 px-4 rounded-xl border border-zinc-700 bg-zinc-800/60 transition-[border-color,box-shadow] hover:border-zinc-600 focus-within:border-(--accent) focus-within:shadow-[0_0_0_4px_color-mix(in_oklab,var(--accent)_15%,transparent)]"
+		>
+			@icons.Search("18", &templ.Attributes{"class": "shrink-0 text-zinc-500"})
+			<input
+				type="search"
+				x-ref="q"
+				x-model="q"
+				@keydown.escape="q = ''; $el.blur()"
+				placeholder="Search by code or symbol"
+				aria-label="Search currencies"
+				autocomplete="off"
+				class="flex-1 min-w-0 bg-transparent outline-none placeholder:text-zinc-500"
+			/>
+			<kbd class="hidden sm:grid place-items-center w-6 h-6 rounded border border-zinc-600 text-xs text-zinc-500">/</kbd>
+		</label>
+		<div role="group" aria-label="Currency kind" class="flex gap-1.5 overflow-x-auto">
+			@currencyKindPill("All", "")
+			@currencyKindPill("Fiat", currencyKindSlug(models.CurrencyKindFiat))
+			@currencyKindPill("Crypto", currencyKindSlug(models.CurrencyKindCrypto))
+			@currencyKindPill("Metals", currencyKindSlug(models.CurrencyKindPreciousMetal))
+		</div>
+	</div>
+}
+
+templ currencyKindPill(label, kind string) {
+	<button
+		type="button"
+		@click={ fmt.Sprintf("kind = '%s'", kind) }
+		:aria-pressed={ fmt.Sprintf("kind === '%s'", kind) }
+		class="shrink-0 h-9 px-4 rounded-full border border-zinc-700 text-sm text-zinc-400 cursor-pointer transition-colors hover:text-white hover:border-zinc-500 aria-pressed:border-(--accent) aria-pressed:bg-(--accent)/12 aria-pressed:text-(--accent)"
+	>
+		{ label }
+	</button>
 }
 
 templ Currency(cur *models.Currency, defaultCur *models.Currency) {
-	<div hx-target="this" class="relative" x-data="{openMenu: false}">
-		if defaultCur != nil {
-			if cur.ID != defaultCur.ID {
-				@components.EntryMenu("openMenu", []templ.Component{
-					components.EntryMenuAnchorItem("Set as Default", "put", fmt.Sprintf("/currencies/%s/set-default", cur.ID)),
-				})
-			} else {
-				<div class="absolute -z-1 top-0 left-0 w-6 h-full bg-green-600 text-xs rounded-lg"></div>
-			}
-		}
-		<div
-			class={
-				"entry-container flex flex-col justify-between place gap-4",
-				templ.KV("backdrop-blur-xl", defaultCur != nil && cur.ID == defaultCur.ID),
-			}
-		>
-			<div class="flex justify-between gap-8">
-				<div class="flex place-items-center text-xl">
-					<img
-						src={ fmt.Sprintf("/icons/currency-kind-%s.svg", strings.ToLower(string(cur.Kind))) }
-						alt={ cur.Kind.String() }
-						class="w-6 h-6 mr-4"
-					/>
-					<p class="mr-2">{ cur.String }</p>
-					<p class="text-zinc-400">{ cur.Symbol }</p>
-				</div>
-				if defaultCur != nil && cur.ID != defaultCur.ID {
-					<div class="flex text-xl place-items-center gap-4">
-						if cur.IsShown {
-							<a
-								hx-put={ fmt.Sprintf("/currencies/%s/hide", cur.ID) }
-								hx-swap="outerHTML"
-								class="cursor-pointer inline-block w-6 h-6"
-							>
-								<img src="/icons/show.svg" class="w-6 h-6"/>
-							</a>
-						} else {
-							<a
-								hx-put={ fmt.Sprintf("/currencies/%s/show", cur.ID) }
-								hx-swap="outerHTML"
-								class="cursor-pointer inline-block w-6 h-6"
-							>
-								<img src="/icons/hide.svg" class="w-6 h-6"/>
-							</a>
-						}
-						<button
-							@click="openMenu = !openMenu"
-							class="cursor-pointer inline-block w-6 h-6"
-						>
-							<img src="/icons/dots-menu.svg" class="w-6 h-6"/>
-						</button>
-					</div>
+	{{ value := cur.ValueIn(defaultCur.String) }}
+	<div
+		id={ CurrencyCardID(cur.ID) }
+		hx-target="this"
+		hx-swap="outerHTML"
+		data-currency
+		data-kind={ currencyKindSlug(cur.Kind) }
+		data-search={ strings.ToLower(cur.String + " " + cur.Symbol) }
+		x-show="matches($el)"
+		class={ "relative", currencyKindAccentClass(cur.Kind), templ.KV("opacity-60 hover:opacity-100 transition-opacity", !cur.IsShown) }
+		x-data="{openMenu: false}"
+	>
+		@components.EntryMenu("openMenu", []templ.Component{
+			components.EntryMenuAnchorItem("Set as default", "put", fmt.Sprintf("/currencies/%s/set-default", cur.ID),
+				components.WithEntryMenuItemConfirmMessage(fmt.Sprintf("Make %s your default currency? Your balance and rates will be shown in it.", cur.String))),
+		})
+		<div class="flex items-center gap-3 h-full p-3.5 rounded-2xl bg-zinc-700/20">
+			<div class="grid place-items-center shrink-0 w-10 h-10 rounded-xl bg-(--accent)/15 text-(--accent)">
+				@currencyKindIcon(cur.Kind, "20")
+			</div>
+			<div class="flex-1 min-w-0">
+				<p class="flex items-baseline gap-1.5 min-w-0">
+					<span class="font-semibold truncate">{ cur.String }</span>
+					if cur.Symbol != cur.String {
+						<span class="shrink-0 text-sm text-zinc-500">{ cur.Symbol }</span>
+					}
+				</p>
+				<p class="text-xs text-zinc-500">{ cur.Kind.String() }</p>
+			</div>
+			<div class="shrink-0 min-w-0 max-w-[45%] text-right" title={ currencyRateTitle(cur, defaultCur, value) }>
+				if value > 0 {
+					<p class="text-sm font-bold tabular-nums truncate font-(family-name:--font-biorhyme-expanded)">
+						{ defaultCur.Symbol } { formatters.FormatRate(value) }
+					</p>
+					<p class="text-xs text-zinc-500 truncate">per 1 { cur.String }</p>
+				} else {
+					<p class="text-sm text-zinc-600">No rate</p>
 				}
 			</div>
-			<hr class="border-2 border-t border-zinc-800 w-3/4 self-center"/>
-			<div class="flex gap-2 place-items-center place-content-center">
-				<img src="/icons/fx-rate.svg" class="w-4 h-4"/>
-				<p class="text-zinc-400">{ formatters.FormatAmount(cur.FxRate(defaultCur.String), defaultCur.Symbol) }</p>
+			<div class="flex items-center shrink-0 -mr-1">
+				if cur.IsShown {
+					<button
+						hx-put={ fmt.Sprintf("/currencies/%s/hide", cur.ID) }
+						title="Hide from pickers"
+						aria-label={ "Hide " + cur.String }
+						class="cursor-pointer grid place-items-center w-8 h-8 rounded-lg text-zinc-400 transition-colors hover:text-white hover:bg-zinc-700/50"
+					>
+						@icons.Eye("18")
+					</button>
+				} else {
+					<button
+						hx-put={ fmt.Sprintf("/currencies/%s/show", cur.ID) }
+						title="Show in pickers"
+						aria-label={ "Show " + cur.String }
+						class="cursor-pointer grid place-items-center w-8 h-8 rounded-lg text-zinc-500 transition-colors hover:text-white hover:bg-zinc-700/50"
+					>
+						@icons.EyeOff("18")
+					</button>
+				}
+				<button
+					@click="openMenu = !openMenu"
+					aria-label="Currency actions"
+					class="cursor-pointer grid place-items-center w-8 h-8"
+				>
+					<img src="/icons/dots-menu.svg" class="h-5"/>
+				</button>
 			</div>
 		</div>
 	</div>
+}
+
+// CurrencyMovedOOB puts a currency at the top of its section after showing or
+// hiding it; the swap itself removes the old card.
+templ CurrencyMovedOOB(cur *models.Currency, defaultCur *models.Currency) {
+	<div id={ CurrencySectionID(currencySectionOf(cur)) } hx-swap-oob="afterbegin">
+		@Currency(cur, defaultCur)
+	</div>
+}
+
+func CurrencyCardID(id string) string {
+	return "currency-" + id
+}
+
+func CurrencySectionID(section string) string {
+	return "currencies-" + section
+}
+
+func currencySectionOf(cur *models.Currency) string {
+	if cur.IsShown {
+		return "shown"
+	}
+	return "hidden"
+}
+
+func currencyRateTitle(cur, defaultCur *models.Currency, value float64) string {
+	if value <= 0 {
+		return "No exchange rate available"
+	}
+	return fmt.Sprintf("1 %s = %s %s\n1 %s = %s %s",
+		cur.String, formatters.FormatRate(value), defaultCur.String,
+		defaultCur.String, formatters.FormatRate(1/value), cur.String)
+}
+
+func currencyKindSlug(k models.CurrencyKind) string {
+	switch k {
+	case models.CurrencyKindFiat:
+		return "fiat"
+	case models.CurrencyKindCrypto:
+		return "crypto"
+	case models.CurrencyKindPreciousMetal:
+		return "metal"
+	}
+	return "other"
+}
+
+// currencyKindAccentClass sets --accent to the kind's color.
+func currencyKindAccentClass(k models.CurrencyKind) string {
+	switch k {
+	case models.CurrencyKindCrypto:
+		return "[--accent:var(--color-violet-400)]"
+	case models.CurrencyKindPreciousMetal:
+		return "[--accent:var(--color-amber-300)]"
+	}
+	return "[--accent:var(--color-emerald-400)]"
+}
+
+templ currencyKindIcon(k models.CurrencyKind, size string) {
+	switch k {
+		case models.CurrencyKindCrypto:
+			@icons.Bitcoin(size)
+		case models.CurrencyKindPreciousMetal:
+			@icons.Gem(size)
+		default:
+			@icons.Banknote(size)
+	}
 }

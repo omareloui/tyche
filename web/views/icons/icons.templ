@@ -251,3 +251,27 @@ templ Hash(size string, attrs ...*templ.Attributes) {
 		<path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18"></path>
 	}
 }
+
+// Eye marks something visible, e.g. a currency shown in pickers.
+templ Eye(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"></path>
+		<circle cx="12" cy="12" r="3"></circle>
+	}
+}
+
+// Bitcoin marks a crypto currency.
+templ Bitcoin(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="M11.767 19.089c4.924.868 6.14-6.025 1.216-6.894m-1.216 6.894L5.86 18.047m5.908 1.042-.347 1.97m1.563-8.864c4.924.869 6.14-6.025 1.215-6.893m-1.215 6.893-3.94-.694m5.155-6.2L8.29 4.26m5.908 1.042.348-1.97M7.48 20.364l3.126-17.727"></path>
+	}
+}
+
+// Gem marks a precious metal.
+templ Gem(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="M6 3h12l4 6-10 13L2 9Z"></path>
+		<path d="M11 3 8 9l4 13 4-13-3-6"></path>
+		<path d="M2 9h20"></path>
+	}
+}
