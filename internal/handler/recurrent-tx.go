@@ -252,7 +252,7 @@ func (h Handler) mapRecurrentTxToFD(rt *models.RecurrentTx, valerr *errs.Validat
 			IsRecurrent: form.FDInput{Value: "on"},
 			Unit:        form.FDInput{Value: formatIntIfNonZero(int(rt.Unit)), Error: valerr.Errors.MsgFor("Unit")},
 			Every:       form.FDInput{Value: formatIntIfNonZero(int(rt.Every)), Error: valerr.Errors.MsgFor("Every")},
-			StopsOn:     form.FDInput{Value: formatDateOnlyIfNonZero(rt.StopsAt), Error: valerr.Errors.MsgFor("StopsOn")},
+			StopsOn:     form.FDInput{Value: formatDateOnlyIfNonZero(rt.StopsAt), Error: valerr.Errors.MsgFor("StopsAt")},
 		},
 		TransactionAmountsAndKindFD: views.TransactionAmountsAndKindFD{
 			AccountIFD: form.AccountIFD{
@@ -305,6 +305,6 @@ func (h Handler) parseRecurrenceFD(r *http.Request, err *errs.ValidationError) *
 		IsRecurrent: form.FDInput{Value: r.FormValue("is_recurrent"), Error: err.Errors.MsgFor("IsRecurrent")},
 		Every:       form.FDInput{Value: r.FormValue("every"), Error: err.Errors.MsgFor("RecurrentBy")},
 		Unit:        form.FDInput{Value: r.FormValue("unit"), Error: err.Errors.MsgFor("Recurrence")},
-		StopsOn:     form.FDInput{Value: r.FormValue("stops_on"), Error: err.Errors.MsgFor("StopsOn")},
+		StopsOn:     form.FDInput{Value: r.FormValue("stops_on"), Error: err.Errors.MsgFor("StopsAt")},
 	}
 }

@@ -58,7 +58,7 @@ type createRecurrentTx struct {
 	Every uint          `validate:"required"`
 
 	StartsAt                   time.Time `validate:"required"`
-	StopsAt                    time.Time `validate:"omitempty,gtfield=StartsOn"`
+	StopsAt                    time.Time `validate:"omitempty,gtfield=StartsAt"`
 	LastTransactionScheduledTo time.Time `validate:"required"`
 }
 

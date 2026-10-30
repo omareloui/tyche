@@ -449,7 +449,7 @@ func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationE
 			IsRecurrent: form.FDInput{Value: "on"},
 			Unit:        form.FDInput{Value: formatIntIfNonZero(int(t.RecurrentTx.Unit)), Error: err.Errors.MsgFor("Unit")},
 			Every:       form.FDInput{Value: formatIntIfNonZero(int(t.RecurrentTx.Every)), Error: err.Errors.MsgFor("Every")},
-			StopsOn:     form.FDInput{Value: formatDateOnlyIfNonZero(t.RecurrentTx.StopsAt), Error: err.Errors.MsgFor("StopsOn")},
+			StopsOn:     form.FDInput{Value: formatDateOnlyIfNonZero(t.RecurrentTx.StopsAt), Error: err.Errors.MsgFor("StopsAt")},
 		}
 	}
 

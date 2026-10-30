@@ -1,7 +1,9 @@
 package valid
 
 import (
+	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/almerlucke/go-iban/iban"
@@ -16,23 +18,50 @@ type Validator struct {
 
 func (v *Validator) Validate(input any) *errs.ValidationError {
 	if err := v.validator.Struct(input); err != nil {
-		return v.parseError(err)
+		return v.parseError(input, err)
 	}
 	return nil
 }
 
-func (v *Validator) parseError(error any) *errs.ValidationError {
+func (v *Validator) parseError(input any, error any) *errs.ValidationError {
 	valerr := errs.ValidationErrors{}
 	for _, err := range error.(validator.ValidationErrors) {
-		namespace := err.Namespace()
-		firstDot := strings.Index(namespace, ".")
-		path := namespace[firstDot+1:]
-		valerr[path] = errs.ValidationField{
+		valerr[fieldPath(reflect.TypeOf(input), err.StructNamespace())] = errs.ValidationField{
 			Tag:   err.ActualTag(),
 			Param: err.Param(),
 		}
 	}
 	return &errs.ValidationError{Errors: valerr}
+}
+
+// fieldPath turns a field's namespace into its error key: it drops the root
+// struct and embedded structs, so "createTransaction.commonFieldsForTxAndRtx.Amount"
+// becomes "Amount" while "goal.Currency.ID" stays "Currency.ID".
+func fieldPath(t reflect.Type, namespace string) string {
+	segs := strings.Split(namespace, ".")[1:]
+	path := make([]string, 0, len(segs))
+	for _, seg := range segs {
+		for t != nil && slices.Contains([]reflect.Kind{reflect.Pointer, reflect.Slice, reflect.Array, reflect.Map}, t.Kind()) {
+			t = t.Elem()
+		}
+		var f reflect.StructField
+		found := false
+		if t != nil && t.Kind() == reflect.Struct {
+			name, _, _ := strings.Cut(seg, "[")
+			f, found = t.FieldByName(name)
+		}
+		if found && f.Anonymous {
+			t = f.Type
+			continue
+		}
+		path = append(path, seg)
+		if found {
+			t = f.Type
+		} else {
+			t = nil
+		}
+	}
+	return strings.Join(path, ".")
 }
 
 func New() *Validator {
