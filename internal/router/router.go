@@ -129,7 +129,13 @@ func New(h *handler.Handler) Router {
 }
 
 func static(mux *http.ServeMux, paths []string, fspath string) {
-	fs := http.StripPrefix("/", http.FileServer(http.Dir(fspath)))
+	fileServer := http.StripPrefix("/", http.FileServer(http.Dir(fspath)))
+	// Revalidated on every load (a 304 when unchanged), as their URLs aren't
+	// versioned and browsers would otherwise keep serving stale scripts.
+	fs := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
+		fileServer.ServeHTTP(w, r)
+	})
 	for _, prefix := range paths {
 		mux.Handle(fmt.Sprintf("GET /%s/{path...}", prefix), middleware.CorrelationID(middleware.RequestLogger(fs)))
 	}

@@ -160,6 +160,7 @@ func (s *Seeder) accountKinds(ctx context.Context, wg *sync.WaitGroup, q *querie
 		{ID: idgen.New(), Enum: int64(models.AccKindBankAcc)},
 		{ID: idgen.New(), Enum: int64(models.AccKindCash)},
 		{ID: idgen.New(), Enum: int64(models.AccKindDebt)},
+		{ID: idgen.New(), Enum: int64(models.AccKindGamyaa)},
 	}
 
 	seedFn(ctx, q.GetAccountKinds, seed, q.CreateAccountKind,

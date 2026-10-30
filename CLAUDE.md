@@ -187,6 +187,7 @@ Core entities and their relationships:
 - **Accounts** - User's financial accounts (bank, cash, credit card, etc.)
   - Has account kind (`account_kinds` table wrapping an enum), currency, optional counterparty, archived / exclude-from-balance flags
   - Cards have: card_number, card_limit, name_on_card, expiration_date; optional iban
+- **Gam'yaas** (جمعية, rotating savings groups) - accounts of kind `AccKindGamyaa` with a 1:1 `gamyaas` row (full-share installment, members = months, shares e.g. 0.5/2, `turns` JSON of 1-based payout months, starts_on, pay-from account, recurrent tx). `CreateGamyaa` schedules everything upfront: a monthly recurrent Transfer pay-from → gam'yaa generating all N installments (`installment × shares`), plus one scheduled Transfer back per turn (`pot / len(turns)`). Balance = paid in (positive) or still owed after a payout (negative), 0 when done. Schedule is only set on create; later changes go through its transactions. Only transfers can use gam'yaa accounts (`getTxAccs`)
 - **Transactions** - Financial transactions (expense, income, transfer, debt, refund)
   - Has kind (`models.TxKind`), amount, scheduled date, optional fulfilled date
   - Refunds (merchant money back, e.g. refund SMS) add to the account like income but take expense categories (`TxKind.CategoryKind()`) and net against spending

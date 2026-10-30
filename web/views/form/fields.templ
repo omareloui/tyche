@@ -109,7 +109,7 @@ templ SelectAccountChip(label, name, id string, accs []models.Account, data FDIn
 		ID:          id,
 		Label:       label,
 		Placeholder: "Select Account",
-		Options:     accountComboOptions(accs),
+		Options:     AccountComboOptions(accs),
 		Data:        data,
 		Searchable:  len(accs) > 7,
 		Chip:        true,
@@ -169,7 +169,7 @@ templ SheetFormButtons(submitStr, cancelUrl string) {
 	</div>
 }
 
-func accountComboOptions(accs []models.Account) []ComboOption {
+func AccountComboOptions(accs []models.Account) []ComboOption {
 	opts := make([]ComboOption, len(accs))
 	for i, a := range accs {
 		opts[i] = ComboOption{

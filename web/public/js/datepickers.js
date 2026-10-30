@@ -5,7 +5,14 @@ function loadDatePickers(root = document) {
     "input[data-datepicker]:not([data-datepicker-ready])",
   );
   for (const el of els) {
-    new Litepicker({ element: el });
+    const picker = new Litepicker({ element: el });
+    // Litepicker sets the value silently, data-datepicker-change opts into a
+    // change event (e.g. for hx-trigger="change").
+    if ("datepickerChange" in el.dataset) {
+      picker.on("selected", () =>
+        el.dispatchEvent(new Event("change", { bubbles: true })),
+      );
+    }
     el.dataset.datepickerReady = "";
   }
 }

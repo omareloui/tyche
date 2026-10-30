@@ -45,6 +45,12 @@ func (v ValidationField) String() string {
 		return "This field must be a valid URL"
 	case "gte":
 		return fmt.Sprintf("Value is low (at least %s is required)", v.Param)
+	case "gt":
+		return fmt.Sprintf("Value has to be more than %s", v.Param)
+	case "lte":
+		return fmt.Sprintf("Value is high (at most %s)", v.Param)
+	case "unique":
+		return "Values have to be unique"
 	case "min":
 		var pluralS string
 		if v.Param != "1" {

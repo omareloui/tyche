@@ -14,12 +14,15 @@ import (
 )
 
 func (r *Repository) CreateAccount(ctx context.Context, a *models.Account) error {
-	l := logger.FromCtx(ctx)
-
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
 		return err
 	}
+	return r.createAccountWithTxn(q, ctx, a)
+}
+
+func (r *Repository) createAccountWithTxn(q *queries.Queries, ctx context.Context, a *models.Account) error {
+	l := logger.FromCtx(ctx)
 
 	cpId := ""
 	if a.Counterparty != nil {
@@ -77,7 +80,11 @@ func (r *Repository) GetAccounts(ctx context.Context) ([]models.Account, error) 
 	}
 	l.Debug("queried accounts")
 
-	return dbAccountsRowToAccounts(accs), nil
+	res := dbAccountsRowToAccounts(accs)
+	if err := r.attachGamyaas(ctx, q, res); err != nil {
+		return nil, err
+	}
+	return res, nil
 }
 
 func (r *Repository) GetAccount(ctx context.Context, id string) (*models.Account, error) {
@@ -94,7 +101,16 @@ func (r *Repository) GetAccount(ctx context.Context, id string) (*models.Account
 		return nil, err
 	}
 	l.Debug("queried account")
-	return dbAccountRowToAccount(&acc), nil
+
+	res := dbAccountRowToAccount(&acc)
+	if res.Kind.Enum == models.AccKindGamyaa {
+		accs := []models.Account{*res}
+		if err := r.attachGamyaas(ctx, q, accs); err != nil {
+			return nil, err
+		}
+		res = &accs[0]
+	}
+	return res, nil
 }
 
 func (r *Repository) UpdateAccount(ctx context.Context, a *models.Account) error {

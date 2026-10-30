@@ -1,0 +1,204 @@
+package views
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/omareloui/tyche/internal/formatters"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+// gamyaaInputs are a new gam'yaa's schedule fields. Changing any of them
+// re-renders the inputs, for the turns' months and the summary.
+templ gamyaaInputs(id string, fd *GamyaaFD, onChange templ.Attributes) {
+	{{ g := fd.Gamyaa }}
+	{{ sym := fd.Currency.Symbol }}
+	<div class="grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-800/20 p-4" { onChange... }>
+		@form.Field("Paid from", "gamyaa_pay_from_id", id, icons.Bank("15"), fd.PayFromID.Error) {
+			@form.Combobox(form.ComboboxProps{
+				Name: "gamyaa_pay_from_id", ID: id, Label: "Paid from", Placeholder: "Select account",
+				Options: form.AccountComboOptions(fd.PayFromAccounts), Data: fd.PayFromID,
+				Searchable: len(fd.PayFromAccounts) > 7,
+			})
+		}
+		<div class="grid grid-cols-2 gap-3">
+			@form.Field("Installment (1 share)", "gamyaa_installment", id, icons.Coins("15"), fd.Installment.Error) {
+				@form.Control("text", "gamyaa_installment", fmt.Sprintf("%s 1,000.00", sym), id, fd.Installment, templ.Attributes{
+					"autocomplete":   "off",
+					"inputmode":      "decimal",
+					"x-mask:dynamic": fmt.Sprintf("'%s ' + $money($input, '.', ',')", sym),
+				})
+			}
+			@form.Field("First payment", "gamyaa_starts_on", id, icons.Calendar("15"), fd.StartsOn.Error) {
+				@form.Control("text", "gamyaa_starts_on", "yyyy-mm-dd", id, fd.StartsOn, templ.Attributes{
+					"autocomplete":           "off",
+					"x-mask":                 "9999-99-99",
+					"data-datepicker":        true,
+					"data-datepicker-change": true,
+				})
+			}
+			@form.Field("Members (months)", "gamyaa_members", id, icons.Users("15"), fd.Members.Error) {
+				@form.Control("text", "gamyaa_members", "e.g. 10", id, fd.Members, templ.Attributes{
+					"autocomplete": "off",
+					"inputmode":    "numeric",
+					"x-mask":       "999",
+				})
+			}
+			@form.Field("My shares", "gamyaa_shares", id, icons.PiggyBank("15"), fd.Shares.Error) {
+				@form.Control("text", "gamyaa_shares", "1, or 0.5 for half", id, fd.Shares, templ.Attributes{
+					"autocomplete": "off",
+					"inputmode":    "decimal",
+				})
+			}
+		</div>
+		@gamyaaTurnsInput(id, fd)
+		if g.Installment > 0 && g.Members > 0 && g.Shares > 0 {
+			<p class="text-sm text-zinc-400">
+				You pay <span class="text-zinc-100 tabular-nums">{ formatters.FormatAmount(g.MonthlyPayment(), sym) }</span> a month
+				{ fmt.Sprintf("for %d months, until %s,", g.Members, g.EndsOn().Format("Jan 2006")) }
+				if len(g.Turns) > 0 {
+					and receive <span class="text-(--accent) tabular-nums">{ formatters.FormatAmount(g.PayoutAmount(), sym) }</span>
+					{ "in " + gamyaaTurnMonths(g) + "." }
+				} else {
+					pick the month(s) you receive it in.
+				}
+			</p>
+		}
+		<p class="-mt-2 text-sm text-zinc-500">
+			Schedules every installment as a transfer into the gam'yaa and each payout as one back, mark them done as they happen. Its balance is what you've paid in, negative once you owe.
+		</p>
+	</div>
+}
+
+// gamyaaTurnsInput picks the months the pot is received in, one chip per
+// month.
+templ gamyaaTurnsInput(id string, fd *GamyaaFD) {
+	{{ g := fd.Gamyaa }}
+	<fieldset id={ "gamyaa_turns-" + id }>
+		<legend class="input-label">
+			@icons.Calendar("15")
+			My turn(s)
+		</legend>
+		if g.Members < 2 {
+			<p class="text-sm text-zinc-500">Set its members to pick your turns.</p>
+		} else {
+			<div class="grid grid-cols-4 sm:grid-cols-6 gap-2">
+				for n := 1; n <= g.Members; n++ {
+					<label
+						class="flex flex-col items-center py-1.5 rounded-xl border border-zinc-800 bg-zinc-800/40 text-zinc-400 cursor-pointer select-none transition-colors hover:text-white hover:border-zinc-600 has-checked:border-(--accent) has-checked:bg-(--accent)/12 has-checked:text-(--accent) has-focus-visible:ring-2 has-focus-visible:ring-(--accent)"
+					>
+						<input
+							type="checkbox"
+							name="gamyaa_turns"
+							value={ strconv.Itoa(n) }
+							class="sr-only"
+							if g.IsTurn(n) {
+								checked
+							}
+						/>
+						<span class="text-sm font-semibold tabular-nums">{ strconv.Itoa(n) }</span>
+						<span class="text-xs">{ g.MonthDate(n).Format("Jan 06") }</span>
+					</label>
+				}
+			</div>
+		}
+		@form.ErrorMessage(fd.Turns.Error)
+	</fieldset>
+}
+
+// gamyaaSummary shows an existing gam'yaa's schedule, edited through its
+// transactions rather than the account.
+templ gamyaaSummary(g *models.Gamyaa, cur *models.Currency) {
+	if g != nil {
+		<div class="grid gap-1 rounded-2xl border border-zinc-800 bg-zinc-800/20 p-4 text-sm text-zinc-400">
+			<p>
+				<span class="text-zinc-100 tabular-nums">{ formatters.FormatAmount(g.MonthlyPayment(), cur.Symbol) }</span> a month,
+				{ strconv.Itoa(g.Members) } months from { g.StartsOn.Format("Jan 2006") }, { g.ViewShares() }.
+			</p>
+			<p>
+				Receives <span class="text-zinc-100 tabular-nums">{ formatters.FormatAmount(g.PayoutAmount(), cur.Symbol) }</span>
+				{ "in " + gamyaaTurnMonths(g) + "." }
+			</p>
+			<p class="text-zinc-500">Its schedule lives in its transactions, edit or delete those to change it.</p>
+		</div>
+	}
+}
+
+// gamyaaProgress is a gam'yaa card's paid installments and its next dates.
+templ gamyaaProgress(a *models.Account) {
+	{{ g := a.Gamyaa }}
+	{{ sym := a.Currency.Symbol }}
+	{{ pct := 0.0 }}
+	if g.Members > 0 {
+		{{ pct = min(100, float64(g.PaidCount)/float64(g.Members)*100) }}
+	}
+	<div class="relative grid gap-2">
+		<div>
+			<div class="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+				<div class="h-full rounded-full bg-(--accent)" style={ fmt.Sprintf("width: %.1f%%", pct) }></div>
+			</div>
+			<div class="flex justify-between gap-3 mt-1.5 text-xs text-zinc-500 tabular-nums">
+				<span>{ fmt.Sprintf("%d/%d paid", g.PaidCount, g.Members) }</span>
+				<span class="truncate">{ g.ViewShares() } · { formatters.FormatAmount(g.MonthlyPayment(), sym) }/mo</span>
+			</div>
+		</div>
+		<div class="grid gap-1 text-sm">
+			if !g.NextPaymentOn.IsZero() {
+				<p class="flex items-center gap-1.5 text-zinc-400">
+					@icons.Clock("14")
+					<span>Next payment</span>
+					<span class={ "ml-auto tabular-nums", templ.KV("text-red-400", isOverdue(g.NextPaymentOn)) }>{ viewGamyaaDate(g.NextPaymentOn) }</span>
+				</p>
+			}
+			if !g.NextPayoutOn.IsZero() {
+				<p class="flex items-center gap-1.5 text-zinc-400">
+					@icons.PiggyBank("14")
+					<span class="sensitive">Payout { formatters.FormatAmount(g.PayoutAmount(), sym) }</span>
+					<span class="ml-auto tabular-nums text-(--accent)">{ viewGamyaaDate(g.NextPayoutOn) }</span>
+				</p>
+			} else if len(g.Turns) > 0 {
+				<p class="flex items-center gap-1.5 text-zinc-500">
+					@icons.Check("14")
+					<span>Received { strconv.Itoa(g.ReceivedCount) }/{ strconv.Itoa(len(g.Turns)) } payouts</span>
+				</p>
+			}
+		</div>
+	</div>
+}
+
+func gamyaaCaption(amount float64) string {
+	switch {
+	case amount > 0:
+		return "Paid in"
+	case amount < 0:
+		return "You owe"
+	}
+	return "Settled"
+}
+
+// gamyaaTurnMonths lists the months its pot is received in, e.g. "Mar 2027".
+func gamyaaTurnMonths(g *models.Gamyaa) string {
+	months := make([]string, len(g.Turns))
+	for i, t := range g.Turns {
+		months[i] = g.MonthDate(t).Format("Jan 2006")
+	}
+	if len(g.Turns) > 1 {
+		return fmt.Sprintf("%s (each)", strings.Join(months, ", "))
+	}
+	return strings.Join(months, ", ")
+}
+
+func viewGamyaaDate(t time.Time) string {
+	if t.Year() == time.Now().Year() {
+		return t.Format("Mon, Jan 2")
+	}
+	return t.Format("Jan 2, 2006")
+}
+
+func isOverdue(t time.Time) bool {
+	return t.Before(time.Now().Truncate(24 * time.Hour))
+}

@@ -8,6 +8,8 @@ const (
 	AccKindBankAcc
 	AccKindCash
 	AccKindDebt
+	// AccKindGamyaa is a rotating savings group (gam'yaa), see Gamyaa.
+	AccKindGamyaa
 )
 
 const DfltAccKind = AccKindBankAcc
@@ -16,7 +18,7 @@ func (a AccKind) String() string {
 	return [...]string{
 		"???", "Credit Card",
 		"Bank Account",
-		"Cash", "Debt",
+		"Cash", "Debt", "Gam'yaa",
 	}[a]
 }
 

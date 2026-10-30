@@ -374,7 +374,13 @@ func getTxAccs(accs []models.Account, txKind models.TxKind, isSwitched bool) []m
 		return slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum == models.AccKindDebt })
 	}
 
-	return slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum != models.AccKindDebt })
+	return slicesutils.Filter(accs, func(a models.Account) bool {
+		// Gam'yaas only move money by transfers, their installments and payouts.
+		if a.Kind.Enum == models.AccKindGamyaa {
+			return txKind == models.TransferTxKind
+		}
+		return a.Kind.Enum != models.AccKindDebt
+	})
 }
 
 func getTxCounterAccs(accs []models.Account, txKind models.TxKind, isSwitched bool) []models.Account {

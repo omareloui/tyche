@@ -31,18 +31,20 @@ type Account struct {
 	IsDefault          bool
 	ExpirationDate     time.Time
 	CreatedAt          time.Time
+	// Gamyaa is set on gam'yaa accounts.
+	Gamyaa *Gamyaa
 }
 
 type createAccount struct {
 	ID         string `validate:"required"`
 	Name       string `validate:"required"`
 	KindID     string `validate:"required,ulid"`
-	KindString string `validate:"required,oneof='Credit Card' 'Bank Account' Cash Debt"`
-	Iban       string `validate:"excluded_unless=KindString 'Bank Account',omitempty,iban"`
+	Kind       uint8  `validate:"required,oneof=1 2 3 4 5"`
+	Iban       string `validate:"excluded_unless=Kind 2,omitempty,iban"`
 	CardNumber string `validate:"omitempty,credit_card"`
 	// NOTE: add this validation when this gets merged: https://github.com/go-playground/validator/pull/1307
-	// CardNumber     string `validate:"excluded_unless=KindString 'Bank Account' KindString 'Credit Card',omitempty,credit_card"`
-	CounterpartyID string `validate:"required_if=KindString Debt"`
+	// CardNumber     string `validate:"excluded_unless=Kind 2 Kind 1,omitempty,credit_card"`
+	CounterpartyID string `validate:"required_if=Kind 4"`
 }
 
 func (a *Account) ViewAmount() string {
@@ -90,7 +92,7 @@ func (a *Account) toValidate() *createAccount {
 		ID:             a.ID,
 		Name:           a.Name,
 		KindID:         a.Kind.ID,
-		KindString:     a.Kind.Enum.String(),
+		Kind:           uint8(a.Kind.Enum),
 		Iban:           a.Iban,
 		CardNumber:     a.CardNumber,
 		CounterpartyID: cpId,

@@ -3,7 +3,10 @@ package handler
 import (
 	"context"
 	"errors"
+	"maps"
 	"net/http"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,21 +31,15 @@ func (h *Handler) Accounts(w http.ResponseWriter, r *http.Request) (templ.Compon
 		return nil, err
 	}
 
-	_, shownCurs, knds, cps, err := h.getAccDeps(r.Context())
+	deps, err := h.getAccDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
-
-	accs, err := h.repo.GetAccounts(r.Context())
-	if err != nil {
-		l.Error("fetching accounts", zap.Error(err))
-		return nil, err
-	}
-	l.Info("fetched accounts", zap.Int("accounts_length", len(accs)))
+	l.Info("fetched accounts", zap.Int("accounts_length", len(deps.accs)))
 
 	claims := getClaims(r.Context())
-	fd := h.mapAccToFD(defaultAccount(claims, knds), &errs.ValidationError{}, knds)
-	return views.Accounts(claims, balances, fd, knds, shownCurs, accs, cps), nil
+	fd := h.mapAccToFD(defaultAccount(claims, deps.knds), &errs.ValidationError{}, deps)
+	return views.Accounts(claims, balances, fd, deps.knds, deps.shownCurs, deps.accs, deps.cps), nil
 }
 
 func (h *Handler) Account(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -74,48 +71,51 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 
 	a.ID = idgen.New()
 
-	curs, shownCurs, knds, cps, err := h.getAccDeps(r.Context())
+	deps, err := h.getAccDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
-
-	a.Currency = *slicesutils.Find(curs, func(cur models.Currency) bool { return cur.ID == a.Currency.ID })
-	a.Kind = *slicesutils.Find(knds, func(k models.AccountKind) bool { return k.ID == a.Kind.ID })
-
-	if a.Counterparty != nil {
-		if cp := slicesutils.Find(cps, func(cp models.Counterparty) bool { return cp.ID == a.Counterparty.ID }); cp != nil {
-			a.Counterparty = cp
-		}
-	}
-
-	if a.Kind.Enum == models.AccKindDebt && a.Counterparty != nil {
-		a.Name = a.Counterparty.Name
-	}
+	deps.resolveAccount(a)
 
 	claims := getClaims(r.Context())
+	renderForm := func(valerr *errs.ValidationError) templ.Component {
+		return views.CreateAccountForm(h.mapAccToFD(a, valerr, deps), deps.knds, deps.shownCurs, deps.cps, &claims.DefaultCurrency)
+	}
 
-	if err := a.SanitizeAndValidate(h.sani, h.valid); err != nil {
+	if err := h.validateAccount(a); err != nil {
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("validating account", zap.Any("account", a), zap.Any("errors", valerr.Errors))
-			return views.CreateAccountForm(h.mapAccToFD(a, &valerr, knds), knds, shownCurs, cps, &claims.DefaultCurrency), nil
+			return renderForm(&valerr), nil
 		}
 		l.Error("sanitizing account", zap.Error(err))
 		return nil, err
 	}
 	l.Debug("validated account")
 
-	err = h.repo.CreateAccount(r.Context(), a)
+	if a.Gamyaa != nil {
+		err = h.repo.CreateGamyaa(r.Context(), a)
+	} else {
+		err = h.repo.CreateAccount(r.Context(), a)
+	}
 
 	var valerr *errs.ValidationError
 	if err != nil && errors.As(err, &valerr) {
 		l.Error("duplication error", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-		return views.CreateAccountForm(h.mapAccToFD(a, valerr, knds), knds, shownCurs, cps, &claims.DefaultCurrency), nil
+		return renderForm(valerr), nil
 	} else if err != nil {
 		l.Error("creating account", zap.Error(err), zap.Any("account", a))
 		return nil, err
 	}
 	l.Info("created account", zap.Any("account", a))
+
+	// Refetched for a gam'yaa's progress.
+	if a.Gamyaa != nil {
+		if a, err = h.repo.GetAccount(r.Context(), a.ID); err != nil {
+			l.Error("fetching created account", zap.Error(err))
+			return nil, err
+		}
+	}
 
 	if err := renderToBody(w, r, views.AccountOOB(a)); err != nil {
 		l.Error("rendering account oob", zap.Error(err))
@@ -127,8 +127,8 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 		return nil, err
 	}
 
-	fd := h.mapAccToFD(defaultAccount(claims, knds), &errs.ValidationError{}, knds)
-	return views.CreateAccountForm(fd, knds, shownCurs, cps, &claims.DefaultCurrency), nil
+	fd := h.mapAccToFD(defaultAccount(claims, deps.knds), &errs.ValidationError{}, deps)
+	return views.CreateAccountForm(fd, deps.knds, deps.shownCurs, deps.cps, &claims.DefaultCurrency), nil
 }
 
 func (h *Handler) GetEditAccount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -145,14 +145,14 @@ func (h *Handler) GetEditAccount(w http.ResponseWriter, r *http.Request) (templ.
 	}
 	l.Info("fetched account")
 
-	_, shownCurs, knds, cps, err := h.getAccDeps(r.Context())
+	deps, err := h.getAccDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
 
 	claims := getClaims(r.Context())
-	fd := h.mapAccToFD(a, &errs.ValidationError{}, knds)
-	return views.EditAccount(id, fd, knds, shownCurs, cps, &claims.DefaultCurrency), nil
+	fd := h.mapAccToFD(a, &errs.ValidationError{}, deps)
+	return views.EditAccount(id, fd, deps.knds, deps.shownCurs, deps.cps, &claims.DefaultCurrency), nil
 }
 
 func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -178,22 +178,22 @@ func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Com
 		return nil, err
 	}
 
-	curs, shownCurs, knds, cps, err := h.getAccDeps(r.Context())
+	deps, err := h.getAccDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
-	a.Currency = *slicesutils.Find(curs, func(cur models.Currency) bool { return a.Currency.ID == cur.ID })
-	a.Kind = *slicesutils.Find(knds, func(ak models.AccountKind) bool { return a.Kind.ID == ak.ID })
 
-	if a.Counterparty != nil {
-		if cp := slicesutils.Find(cps, func(cp models.Counterparty) bool { return a.Counterparty.ID == cp.ID }); cp != nil {
-			a.Counterparty = cp
-		}
+	// A gam'yaa's kind and schedule stay as created (its schedule lives in
+	// its transactions), and other accounts can't become one.
+	if prev.Kind.Enum == models.AccKindGamyaa {
+		a.Kind, a.Currency = prev.Kind, prev.Currency
+	} else if slicesutils.Find(deps.knds, func(k models.AccountKind) bool {
+		return k.ID == a.Kind.ID && k.Enum == models.AccKindGamyaa
+	}) != nil {
+		a.Kind = prev.Kind
 	}
-
-	if a.Kind.Enum == models.AccKindDebt && a.Counterparty != nil {
-		a.Name = a.Counterparty.Name
-	}
+	deps.resolveAccount(a)
+	a.Gamyaa = prev.Gamyaa
 
 	claims := getClaims(r.Context())
 
@@ -201,7 +201,7 @@ func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Com
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("validating account", zap.Any("errors", valerr.Errors))
-			return views.EditAccount(id, h.mapAccToFD(a, &valerr, knds), knds, shownCurs, cps, &claims.DefaultCurrency), nil
+			return views.EditAccount(id, h.mapAccToFD(a, &valerr, deps), deps.knds, deps.shownCurs, deps.cps, &claims.DefaultCurrency), nil
 		}
 		l.Error("sanitizing account", zap.Error(err))
 		return nil, err
@@ -213,7 +213,7 @@ func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Com
 	var valerr *errs.ValidationError
 	if err != nil && errors.As(err, &valerr) {
 		l.Error("duplication error", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-		return views.EditAccount(id, h.mapAccToFD(a, valerr, knds), knds, shownCurs, cps, &claims.DefaultCurrency), nil
+		return views.EditAccount(id, h.mapAccToFD(a, valerr, deps), deps.knds, deps.shownCurs, deps.cps, &claims.DefaultCurrency), nil
 	} else if err != nil {
 		l.Error("updating account", zap.Error(err), zap.Any("account", a))
 		return nil, err
@@ -350,7 +350,7 @@ func (h Handler) AccountInputs(w http.ResponseWriter, r *http.Request) (templ.Co
 	}
 	l.Debug("mapped formdata to account")
 
-	_, shownCurs, knds, cps, err := h.getAccDeps(r.Context())
+	deps, err := h.getAccDeps(r.Context())
 	if err != nil {
 		l.Error("fetching account deps", zap.Error(err))
 		return nil, err
@@ -360,36 +360,123 @@ func (h Handler) AccountInputs(w http.ResponseWriter, r *http.Request) (templ.Co
 	id := r.PathValue("id")
 	if id == "" {
 		id = "0"
+	} else if prev, err := h.repo.GetAccount(r.Context(), id); err == nil && prev.Kind.Enum == models.AccKindGamyaa {
+		acc.Kind, acc.Gamyaa = prev.Kind, prev.Gamyaa
 	}
+	deps.resolveAccount(acc)
 
 	claims := getClaims(r.Context())
-	fd := h.mapAccToFD(acc, &errs.ValidationError{}, knds)
-	return views.AccountInputs(id, &fd.AccountPartialFD, knds, shownCurs, cps, &claims.DefaultCurrency), nil
+	fd := h.mapAccToFD(acc, &errs.ValidationError{}, deps)
+	return views.AccountInputs(id, &fd.AccountPartialFD, deps.knds, deps.shownCurs, deps.cps, &claims.DefaultCurrency), nil
 }
 
-func (h Handler) getAccDeps(ctx context.Context) ([]models.Currency, []models.Currency, []models.AccountKind, []models.Counterparty, error) {
+type accDeps struct {
+	curs, shownCurs []models.Currency
+	knds            []models.AccountKind
+	cps             []models.Counterparty
+	accs            []models.Account
+}
+
+func (h Handler) getAccDeps(ctx context.Context) (*accDeps, error) {
 	l := logger.FromCtx(ctx)
 
 	curs, err := h.repo.GetAllCurrencies(ctx)
 	if err != nil {
 		l.Error("error fetching currencies", zap.Error(err))
-		return nil, nil, nil, nil, err
+		return nil, err
 	}
-
-	shownCurs := slicesutils.Filter(curs, func(cur models.Currency) bool { return cur.IsShown })
 
 	knds, err := h.repo.GetAccountKinds(ctx)
 	if err != nil {
 		l.Error("error fetching account kinds", zap.Error(err))
-		return nil, nil, nil, nil, err
+		return nil, err
 	}
 	cps, err := h.repo.GetCounterparties(ctx)
 	if err != nil {
 		l.Error("error fetching counterparties", zap.Error(err))
-		return nil, nil, nil, nil, err
+		return nil, err
+	}
+	accs, err := h.repo.GetAccounts(ctx)
+	if err != nil {
+		l.Error("error fetching accounts", zap.Error(err))
+		return nil, err
 	}
 	l.Debug("fetched account dependencies")
-	return curs, shownCurs, knds, cps, nil
+	return &accDeps{
+		curs:      curs,
+		shownCurs: slicesutils.Filter(curs, func(cur models.Currency) bool { return cur.IsShown }),
+		knds:      knds,
+		cps:       cps,
+		accs:      accs,
+	}, nil
+}
+
+// gamyaaPayFromAccounts are the accounts a gam'yaa can be paid from.
+func (d *accDeps) gamyaaPayFromAccounts() []models.Account {
+	return slicesutils.Filter(d.accs, func(a models.Account) bool {
+		return !a.IsArchive && a.Kind.Enum != models.AccKindDebt && a.Kind.Enum != models.AccKindGamyaa
+	})
+}
+
+// resolveAccount fills the account's currency, kind, counterparty and
+// gam'yaa pay-from account from their IDs, and its name if it takes it from
+// its counterparty.
+func (d *accDeps) resolveAccount(a *models.Account) {
+	if k := slicesutils.Find(d.knds, func(k models.AccountKind) bool { return k.ID == a.Kind.ID }); k != nil {
+		a.Kind = *k
+	}
+
+	if a.Kind.Enum != models.AccKindGamyaa {
+		a.Gamyaa = nil
+	} else if g := a.Gamyaa; g != nil && g.PayFrom != nil {
+		if pf := slicesutils.Find(d.gamyaaPayFromAccounts(), func(acc models.Account) bool { return acc.ID == g.PayFrom.ID }); pf != nil {
+			g.PayFrom = pf
+			// Paid in the pay-from account's currency.
+			a.Currency = pf.Currency
+		} else {
+			g.PayFrom = nil
+		}
+	}
+
+	if cur := slicesutils.Find(d.curs, func(cur models.Currency) bool { return cur.ID == a.Currency.ID }); cur != nil {
+		a.Currency = *cur
+	}
+
+	if a.Counterparty != nil {
+		if cp := slicesutils.Find(d.cps, func(cp models.Counterparty) bool { return cp.ID == a.Counterparty.ID }); cp != nil {
+			a.Counterparty = cp
+		}
+	}
+
+	if a.Kind.Enum == models.AccKindDebt && a.Counterparty != nil {
+		a.Name = a.Counterparty.Name
+	}
+}
+
+// validateAccount validates the account, and its gam'yaa schedule being
+// created, merging their errors.
+func (h *Handler) validateAccount(a *models.Account) error {
+	valerr := errs.ValidationError{Errors: errs.ValidationErrors{}}
+	for _, err := range []error{
+		a.SanitizeAndValidate(h.sani, h.valid),
+		func() error {
+			if a.Gamyaa == nil {
+				return nil
+			}
+			return a.Gamyaa.SanitizeAndValidate(h.sani, h.valid)
+		}(),
+	} {
+		var ve errs.ValidationError
+		if errors.As(err, &ve) {
+			maps.Copy(valerr.Errors, ve.Errors)
+		} else if err != nil {
+			return err
+		}
+	}
+	if len(valerr.Errors) > 0 {
+		return valerr
+	}
+	return nil
 }
 
 func (h *Handler) mapFDToAcc(r *http.Request) (*models.Account, error) {
@@ -400,6 +487,24 @@ func (h *Handler) mapFDToAcc(r *http.Request) (*models.Account, error) {
 
 	cardLimit, _ := parseFloatIfExists(r.FormValue("card_limit"))
 	expirationDate := parseCardExpiry(r.FormValue("expiration_date"))
+
+	// Dropped by resolveAccount unless it's a gam'yaa.
+	g := &models.Gamyaa{Shares: 1}
+	g.Installment, _ = parseFloatIfExists(r.FormValue("gamyaa_installment"))
+	g.Members, _ = parseIntIfExists(r.FormValue("gamyaa_members"))
+	if r.Form.Has("gamyaa_shares") {
+		g.Shares, _ = parseFloatIfExists(r.FormValue("gamyaa_shares"))
+	}
+	for _, v := range r.Form["gamyaa_turns"] {
+		if t, err := parseIntIfExists(v); err == nil && t > 0 && !slices.Contains(g.Turns, t) {
+			g.Turns = append(g.Turns, t)
+		}
+	}
+	slices.Sort(g.Turns)
+	g.StartsOn, _ = parseDateOnlyIfExists(r.FormValue("gamyaa_starts_on"))
+	if id := r.FormValue("gamyaa_pay_from_id"); id != "" {
+		g.PayFrom = &models.Account{ID: id}
+	}
 
 	return &models.Account{
 		Name:               r.FormValue("name"),
@@ -415,10 +520,12 @@ func (h *Handler) mapFDToAcc(r *http.Request) (*models.Account, error) {
 		IsArchive:          parseBoolean(r.FormValue("is_archive")),
 		ExcludeFromBalance: parseBoolean(r.FormValue("exclude_from_balance")),
 		ExpirationDate:     expirationDate,
+		Gamyaa:             g,
 	}, nil
 }
 
-func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, knds []models.AccountKind) *views.AccountFD {
+func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, deps *accDeps) *views.AccountFD {
+	knds := deps.knds
 	var knd *models.AccountKind
 
 	if acc != nil {
@@ -452,7 +559,7 @@ func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, kn
 		name = &form.FDInput{Value: acc.Name, Error: errs.Errors.MsgFor("Name")}
 	}
 
-	if knd.Enum == models.AccKindDebt {
+	if knd.Enum == models.AccKindDebt || knd.Enum == models.AccKindGamyaa {
 		cpID = &form.FDInput{Error: errs.Errors.MsgFor("CounterpartyID")}
 		if acc.Counterparty != nil {
 			cpID.Value = acc.Counterparty.ID
@@ -477,7 +584,52 @@ func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, kn
 		ExcludeFromBalance: form.FDInput{Value: formatBooleanIfNonZero(acc.ExcludeFromBalance), Error: errs.Errors.MsgFor("ExcludeFromBalance")},
 	}
 
+	if knd.Enum == models.AccKindGamyaa {
+		fd.AccountPartialFD.Gamyaa = mapGamyaaToFD(acc, errs, deps)
+	}
+
 	return fd
+}
+
+func mapGamyaaToFD(acc *models.Account, errs *errs.ValidationError, deps *accDeps) *views.GamyaaFD {
+	g := acc.Gamyaa
+	if g == nil {
+		g = &models.Gamyaa{Shares: 1}
+	}
+	payFrom := deps.gamyaaPayFromAccounts()
+
+	if g.PayFrom == nil && len(payFrom) > 0 {
+		def := slicesutils.Find(payFrom, func(a models.Account) bool { return a.IsDefault })
+		if def == nil {
+			def = &payFrom[0]
+		}
+		g.PayFrom = def
+		acc.Currency = def.Currency
+	}
+	if g.StartsOn.IsZero() {
+		g.StartsOn = time.Now().Truncate(24 * time.Hour)
+	}
+
+	turns := make([]string, len(g.Turns))
+	for i, t := range g.Turns {
+		turns[i] = strconv.Itoa(t)
+	}
+	payFromID := ""
+	if g.PayFrom != nil {
+		payFromID = g.PayFrom.ID
+	}
+
+	return &views.GamyaaFD{
+		Installment:     form.FDInput{Value: formatFloatIfNonZero(g.Installment), Error: errs.Errors.MsgFor("Installment")},
+		Members:         form.FDInput{Value: formatIntIfNonZero(g.Members), Error: errs.Errors.MsgFor("Members")},
+		Shares:          form.FDInput{Value: formatFloatIfNonZero(g.Shares), Error: errs.Errors.MsgFor("Shares")},
+		Turns:           form.FDInput{Value: strings.Join(turns, ","), Error: errs.Errors.MsgFor("Turns")},
+		StartsOn:        form.FDInput{Value: formatDateOnlyIfNonZero(g.StartsOn), Error: errs.Errors.MsgFor("StartsOn")},
+		PayFromID:       form.FDInput{Value: payFromID, Error: errs.Errors.MsgFor("PayFromID")},
+		PayFromAccounts: payFrom,
+		Gamyaa:          g,
+		Currency:        acc.Currency,
+	}
 }
 
 func defaultAccount(claims *jwt.AccessClaims, ak []models.AccountKind) *models.Account {

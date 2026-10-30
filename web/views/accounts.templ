@@ -32,6 +32,22 @@ type AccountPartialFD struct {
 	CardLimit      *form.FDInput
 	NameOnCard     *form.FDInput
 	ExpirationDate *form.FDInput
+	// Gamyaa is set for gam'yaa accounts.
+	Gamyaa *GamyaaFD
+}
+
+type GamyaaFD struct {
+	Installment form.FDInput
+	Members     form.FDInput
+	Shares      form.FDInput
+	Turns       form.FDInput
+	StartsOn    form.FDInput
+	PayFromID   form.FDInput
+
+	PayFromAccounts []models.Account
+	// Gamyaa is the gam'yaa as filled so far, or as created when editing.
+	Gamyaa   *models.Gamyaa
+	Currency models.Currency
 }
 
 templ Accounts(
@@ -42,7 +58,7 @@ templ Accounts(
 	cps []models.Counterparty) {
 	@layouts.WithCreateForm(claims, "Accounts", balances,
 		CreateAccountForm(fd, aknds, curs, cps, &claims.DefaultCurrency),
-		layouts.WithAlpineMask()) {
+		layouts.WithAlpineMask(), layouts.WithDatePicker()) {
 		@accountsList(accounts)
 	}
 }
@@ -110,14 +126,18 @@ templ AccountInputs(id string, fd *AccountPartialFD, aknds []models.AccountKind,
 		data-holder={ fdValue(fd.NameOnCard) }
 		data-exp={ fdValue(fd.ExpirationDate) }
 	>
-		@selectAccKind("kind_id", id, aknds, fd.KindID, onChange)
-		<div class="grid grid-cols-[1fr_9rem] gap-3">
+		if id != "0" && kind == models.AccKindGamyaa {
+			<input type="radio" name="kind_id" value={ fd.KindID.Value } data-kind="gamyaa" class="hidden" checked/>
+		} else {
+			@selectAccKind("kind_id", id, editableAccKinds(aknds, id), fd.KindID, onChange)
+		}
+		<div class={ "grid gap-3", templ.KV("grid-cols-[1fr_9rem]", kind != models.AccKindGamyaa) }>
 			if fd.Name != nil {
 				@form.Field("Name", "name", id, icons.Pencil("15"), fd.Name.Error) {
 					@form.Control("text", "name", accNamePlaceholder(kind), id, *fd.Name, templ.Attributes{"x-model": "name"})
 				}
 			}
-			if fd.CounterpartyID != nil {
+			if fd.CounterpartyID != nil && kind == models.AccKindDebt {
 				@form.Field("Who", "counterparty_id", id, icons.User("15"), fd.CounterpartyID.Error) {
 					@form.Combobox(form.ComboboxProps{
 						Name: "counterparty_id", ID: id, Label: "Who", Placeholder: "Select person",
@@ -126,16 +146,37 @@ templ AccountInputs(id string, fd *AccountPartialFD, aknds []models.AccountKind,
 					})
 				}
 			}
-			@form.Field("Currency", "currency_id", id, icons.Coins("15"), cur.Error) {
-				@form.Combobox(form.ComboboxProps{
-					Name: "currency_id", ID: id, Label: "Currency", Placeholder: "Currency",
-					Options: form.CurrencyComboOptions(curs), Data: cur, Searchable: true,
-					InputAttrs: onChange,
-				})
+			if kind == models.AccKindGamyaa {
+				// Paid in its pay-from account's currency.
+				<input type="hidden" name="currency_id" value={ cur.Value }/>
+			} else {
+				@form.Field("Currency", "currency_id", id, icons.Coins("15"), cur.Error) {
+					@form.Combobox(form.ComboboxProps{
+						Name: "currency_id", ID: id, Label: "Currency", Placeholder: "Currency",
+						Options: form.CurrencyComboOptions(curs), Data: cur, Searchable: true,
+						InputAttrs: onChange,
+					})
+				}
 			}
 		</div>
 		if kind == models.AccKindDebt {
 			<p class="-mt-2 text-sm text-zinc-500">The account takes the person's name. A positive balance means they owe you.</p>
+		}
+		if fd.Gamyaa != nil {
+			if id == "0" {
+				@gamyaaInputs(id, fd.Gamyaa, onChange)
+			} else {
+				@gamyaaSummary(fd.Gamyaa.Gamyaa, &fd.Gamyaa.Currency)
+			}
+			if fd.CounterpartyID != nil {
+				@form.Field("Organizer", "counterparty_id", id, icons.User("15"), fd.CounterpartyID.Error) {
+					@form.Combobox(form.ComboboxProps{
+						Name: "counterparty_id", ID: id, Label: "Organizer", Placeholder: "Who collects it (optional)",
+						Options: counterpartyComboOptions(cps), Data: *fd.CounterpartyID, Searchable: true, Nullable: true,
+						CreateURL: "/counterparties/quick?person",
+					})
+				}
+			}
 		}
 		if fd.CardNumber != nil || fd.Iban != nil {
 			<div class="grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-800/20 p-4">
@@ -199,7 +240,7 @@ templ AccountInputs(id string, fd *AccountPartialFD, aknds []models.AccountKind,
 templ selectAccKind(name, id string, aknds []models.AccountKind, data form.FDInput, attrs templ.Attributes) {
 	<fieldset id={ name + "-" + id } { attrs... }>
 		<legend class="sr-only">Account kind</legend>
-		<div class="grid grid-cols-4 gap-2">
+		<div class={ "grid gap-2", templ.KV("grid-cols-5", len(aknds) >= 5), templ.KV("grid-cols-4", len(aknds) < 5) }>
 			for _, k := range sortedAccKinds(aknds) {
 				<label
 					class="flex flex-col items-center gap-1.5 min-w-0 py-3 px-1 rounded-2xl border border-zinc-800 bg-zinc-800/40 text-zinc-400 cursor-pointer select-none transition-colors hover:text-white hover:border-zinc-600 has-checked:border-(--accent) has-checked:bg-(--accent)/12 has-checked:text-(--accent) has-focus-visible:ring-2 has-focus-visible:ring-(--accent)"
@@ -265,6 +306,7 @@ var accountSections = []accountSection{
 	{ID: "credit", Title: "Credit cards", Kind: models.AccKindCreditCard},
 	{ID: "cash", Title: "Cash", Kind: models.AccKindCash},
 	{ID: "debt", Title: "Debts", Kind: models.AccKindDebt},
+	{ID: "gamyaa", Title: "Gam'yaas", Kind: models.AccKindGamyaa},
 	{ID: "archived", Title: "Archived"},
 }
 
@@ -350,11 +392,13 @@ templ Account(a *models.Account) {
 			<div class="relative mt-auto">
 				if a.Kind.Enum == models.AccKindDebt {
 					<p class="text-xs text-zinc-500">{ debtCaption(a.Amount) }</p>
+				} else if a.Kind.Enum == models.AccKindGamyaa {
+					<p class="text-xs text-zinc-500">{ gamyaaCaption(a.Amount) }</p>
 				}
 				<p
 					class={
 						"sensitive text-2xl font-bold tabular-nums truncate font-(family-name:--font-biorhyme-expanded)",
-						templ.KV("text-red-400", a.Amount < 0 && a.Kind.Enum != models.AccKindDebt),
+						templ.KV("text-red-400", a.Amount < 0 && a.Kind.Enum != models.AccKindDebt && a.Kind.Enum != models.AccKindGamyaa),
 					}
 				>{ a.ViewAmount() }</p>
 				if a.ActualAmount != a.Amount {
@@ -365,6 +409,9 @@ templ Account(a *models.Account) {
 			</div>
 			if a.Kind.Enum == models.AccKindCreditCard && a.CardLimit > 0 {
 				@creditUsage(a)
+			}
+			if a.Gamyaa != nil {
+				@gamyaaProgress(a)
 			}
 			if a.IsDefault || a.ExcludeFromBalance || a.IsArchive || !a.ExpirationDate.IsZero() || a.Note != "" {
 				<div class="relative flex flex-wrap items-center gap-1.5">
@@ -501,6 +548,8 @@ func accKindSlug(k models.AccKind) string {
 		return "cash"
 	case models.AccKindDebt:
 		return "debt"
+	case models.AccKindGamyaa:
+		return "gamyaa"
 	}
 	return "other"
 }
@@ -524,6 +573,8 @@ func accKindAccentClass(k models.AccKind) string {
 		return "[--accent:var(--color-emerald-400)]"
 	case models.AccKindDebt:
 		return "[--accent:var(--color-amber-400)]"
+	case models.AccKindGamyaa:
+		return "[--accent:var(--color-teal-400)]"
 	}
 	return "[--accent:var(--color-violet-400)]"
 }
@@ -538,11 +589,13 @@ templ accKindIcon(k models.AccKind, size string) {
 			@icons.Banknote(size)
 		case models.AccKindDebt:
 			@icons.Debt(size)
+		case models.AccKindGamyaa:
+			@icons.Users(size)
 	}
 }
 
 func sortedAccKinds(aknds []models.AccountKind) []models.AccountKind {
-	order := []models.AccKind{models.AccKindBankAcc, models.AccKindCreditCard, models.AccKindCash, models.AccKindDebt}
+	order := []models.AccKind{models.AccKindBankAcc, models.AccKindCreditCard, models.AccKindCash, models.AccKindDebt, models.AccKindGamyaa}
 	res := slices.Clone(aknds)
 	slices.SortFunc(res, func(a, b models.AccountKind) int {
 		return slices.Index(order, a.Enum) - slices.Index(order, b.Enum)
@@ -565,6 +618,8 @@ func accNamePlaceholder(k models.AccKind) string {
 		return "e.g. HSBC Platinum"
 	case models.AccKindCash:
 		return "e.g. Wallet"
+	case models.AccKindGamyaa:
+		return "e.g. Office gam'yaa"
 	}
 	return "e.g. HSBC Current"
 }
@@ -577,6 +632,15 @@ func accountSubtitle(a *models.Account, cardLike bool) string {
 		parts = append(parts, "IBAN •••• "+a.Iban[len(a.Iban)-4:])
 	}
 	return strings.Join(parts, " · ")
+}
+
+// editableAccKinds are the kinds an account can be given: gam'yaas are only
+// made from the create form, as they're created with their schedule.
+func editableAccKinds(aknds []models.AccountKind, id string) []models.AccountKind {
+	if id == "0" {
+		return aknds
+	}
+	return slices.DeleteFunc(slices.Clone(aknds), func(k models.AccountKind) bool { return k.Enum == models.AccKindGamyaa })
 }
 
 func debtCaption(amount float64) string {
