@@ -179,6 +179,7 @@ func (h Handler) CreateGoalProgress(w http.ResponseWriter, r *http.Request) (tem
 		return nil, err
 	}
 	tx.Goal = gl
+	tx.Kind = models.ExpenseTxKind
 
 	accs, knds, cats, cps, gls, err := h.getTxDeps(r.Context())
 	if err != nil {
