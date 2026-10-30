@@ -275,3 +275,65 @@ templ Gem(size string, attrs ...*templ.Attributes) {
 		<path d="M2 9h20"></path>
 	}
 }
+
+// Trophy marks an achieved goal.
+templ Trophy(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
+		<path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
+		<path d="M4 22h16"></path>
+		<path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path>
+		<path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path>
+		<path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>
+	}
+}
+
+// PiggyBank marks money put towards a goal.
+templ PiggyBank(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2V5z"></path>
+		<path d="M2 9v1c0 1.1.9 2 2 2h1"></path>
+		<path d="M16 11h.01"></path>
+	}
+}
+
+// Smartphone marks a signed in device.
+templ Smartphone(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+		<path d="M12 18h.01"></path>
+	}
+}
+
+// Clock marks a time, e.g. when a device was last seen.
+templ Clock(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<circle cx="12" cy="12" r="10"></circle>
+		<path d="M12 6v6l4 2"></path>
+	}
+}
+
+// Sparkles marks something done or ready, e.g. a reached goal.
+templ Sparkles(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5A2 2 0 0 0 15.5 9.94l6.14 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"></path>
+		<path d="M20 3v4"></path>
+		<path d="M22 5h-4"></path>
+	}
+}
+
+// ArrowRight links to another page.
+templ ArrowRight(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="M5 12h14"></path>
+		<path d="m12 5 7 7-7 7"></path>
+	}
+}
+
+// Ban marks an ignored or revoked entry.
+templ Ban(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<circle cx="12" cy="12" r="10"></circle>
+		<path d="m4.9 4.9 14.2 14.2"></path>
+	}
+}

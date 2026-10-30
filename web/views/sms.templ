@@ -2,105 +2,344 @@ package views
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/models"
-	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/icons"
 	"github.com/omareloui/tyche/web/views/layouts"
 )
 
 templ SMS(claims *jwt.AccessClaims, balances []models.Balance, msgs []models.SMSMessage, devices []models.Device) {
 	@layouts.WithTitle(claims, "SMS", balances) {
-		<section class="grid gap-4 mb-12">
-			<div class="flex justify-between items-center">
-				<h2 class="text-2xl">Needs attention</h2>
-				if len(msgs) > 0 {
-					<button
-						hx-post="/sms/retry"
-						hx-target="#sms-list"
-						hx-swap="outerHTML"
-						title="Retry all"
-						class="cursor-pointer transition-transform hover:scale-120"
-					>
-						@icons.Retry("32")
-					</button>
-				}
-			</div>
-			<p class="text-zinc-400">
-				Bank SMS that didn't become transactions. Set the account's SMS reference or add a parser then retry.
-			</p>
-			@SMSList(msgs)
-		</section>
-		<section class="grid gap-4">
-			<h2 class="text-2xl">Devices</h2>
-			@components.Grid2ColOnSMUp("devices-list") {
-				for _, d := range devices {
-					@Device(&d)
-				}
-			}
-		</section>
+		<div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+			@smsInbox(msgs)
+			@devicesPanel(devices)
+		</div>
 	}
+}
+
+// smsFilterData filters the messages by status. The cards are read from the
+// DOM again only when cards get added or removed (retried, ignored), not on
+// every text change, as the counts' own x-text would retrigger it.
+const smsFilterData = `{
+	status: '',
+	cards: [],
+	init() {
+		const refresh = () => this.cards = [...document.querySelectorAll('#sms-list [data-sms]')].map(c => c.dataset.status)
+		const isCard = n => n.nodeType === 1 && n.matches('[data-sms], #sms-list')
+		new MutationObserver(ms => {
+			if (ms.some(m => [...m.addedNodes, ...m.removedNodes].some(isCard))) refresh()
+		}).observe(this.$el, {childList: true, subtree: true})
+		refresh()
+	},
+	count(s) {
+		return this.cards.filter(st => s ? st === s : st !== 'parsed').length
+	},
+	matches(el) {
+		return !this.status || el.dataset.status === this.status || el.dataset.status === 'parsed'
+	},
+}`
+
+templ smsInbox(msgs []models.SMSMessage) {
+	<section
+		x-data={ smsFilterData }
+		x-effect="if (status && !count(status)) status = ''"
+		class="grid gap-4 min-w-0"
+	>
+		<header class="flex flex-wrap items-end justify-between gap-3">
+			<div class="min-w-0">
+				<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+					@icons.Message("16")
+					Needs attention
+					<span
+						x-cloak
+						x-show="count('') > 0"
+						x-text="count('')"
+						class="grid place-items-center min-w-5 h-5 px-1.5 rounded-full bg-amber-400/15 text-xs text-amber-300 tabular-nums"
+					></span>
+				</h2>
+				<p class="text-sm text-zinc-600">Bank SMS that didn't become transactions. Fix what's wrong, then retry.</p>
+			</div>
+			<button
+				x-cloak
+				x-show="count('') > 0"
+				hx-post="/sms/retry"
+				hx-target="#sms-list"
+				hx-swap="outerHTML"
+				class="inline-flex items-center gap-2 h-9 px-4 rounded-full border border-zinc-700 text-sm text-zinc-300 cursor-pointer transition-colors hover:border-zinc-500 hover:text-white"
+			>
+				@icons.Retry("16", &templ.Attributes{"class": "in-[.htmx-request]:animate-spin"})
+				Retry all
+			</button>
+		</header>
+		<div x-cloak x-show="count('') > 0" role="group" aria-label="Status" class="flex gap-1.5 overflow-x-auto">
+			@smsStatusPill("All", "")
+			for _, st := range smsPendingStatuses {
+				@smsStatusPill(smsStatusMetaOf(st).Label, string(st))
+			}
+		</div>
+		@SMSList(msgs)
+	</section>
+}
+
+templ smsStatusPill(label, status string) {
+	<button
+		type="button"
+		if status != "" {
+			x-show={ fmt.Sprintf("count('%s') > 0", status) }
+		}
+		@click={ fmt.Sprintf("status = '%s'", status) }
+		:class={ fmt.Sprintf("status === '%s' ? 'bg-zinc-100 text-zinc-950 border-zinc-100' : 'border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500'", status) }
+		class="inline-flex shrink-0 items-center gap-1.5 h-8 px-3 rounded-full border text-sm cursor-pointer transition-colors"
+	>
+		{ label }
+		<span class="text-xs opacity-60 tabular-nums" x-text={ fmt.Sprintf("count('%s')", status) }></span>
+	</button>
 }
 
 templ SMSList(msgs []models.SMSMessage) {
-	@components.Grid2ColOnSMUp("sms-list") {
+	<div id="sms-list" class="grid gap-3">
 		for _, m := range msgs {
 			@SMSMessage(&m)
 		}
-	}
+		<div class="hidden only:grid place-items-center gap-2 py-14 px-6 rounded-3xl border border-dashed border-zinc-800 text-center">
+			<div class="relative grid place-items-center w-14 h-14 rounded-2xl bg-emerald-400/15 text-emerald-400">
+				<div aria-hidden="true" class="absolute inset-0 rounded-2xl bg-emerald-400/20 blur-xl"></div>
+				@icons.Check("28", &templ.Attributes{"class": "relative"})
+			</div>
+			<p class="mt-2 text-xl font-semibold">All caught up</p>
+			<p class="max-w-xs text-zinc-500">Every bank SMS that came in became a transaction.</p>
+		</div>
+	</div>
 }
 
 templ SMSMessage(m *models.SMSMessage) {
-	@components.EntryCard(
-		components.WithCardTitle(m.Sender),
-		components.WithCardMenu(getSMSMenuItems(m)),
-		components.WithCardStale(m.Status == models.SMSStatusParsed),
-	) {
-		<p class="text-zinc-400">{ m.ReceivedAt.Local().Format("Jan 2 2006, 3:04pm") }</p>
-		<p>
-			Status: <span class={ templ.KV("text-amber-400", m.Status != models.SMSStatusParsed) }>{ string(m.Status) }</span>
-		</p>
-		if m.Error != "" {
-			<p class="text-red-400">{ m.Error }</p>
+	{{ meta := smsStatusMetaOf(m.Status) }}
+	<article
+		data-sms
+		data-status={ string(m.Status) }
+		x-show="matches($el)"
+		hx-target="this"
+		hx-swap="outerHTML"
+		class={ "relative flex flex-col gap-3 p-4 rounded-2xl bg-zinc-700/20 overflow-hidden", meta.Accent }
+	>
+		<div aria-hidden="true" class="pointer-events-none absolute -top-16 -right-16 size-40 rounded-full bg-(--accent)/8 blur-2xl"></div>
+		<header class="relative flex items-center gap-3 min-w-0">
+			<div class="grid place-items-center shrink-0 w-10 h-10 rounded-xl bg-(--accent)/15 text-sm font-bold text-(--accent)">
+				{ initial(m.Sender) }
+			</div>
+			<div class="flex-1 min-w-0">
+				<p class="font-semibold leading-tight truncate">{ m.Sender }</p>
+				<time
+					datetime={ m.ReceivedAt.Format(time.RFC3339) }
+					title={ m.ReceivedAt.Local().Format("Mon, Jan 2 2006, 3:04pm") }
+					class="text-sm text-zinc-500"
+				>{ m.ReceivedAt.Local().Format("Jan 2, 3:04pm") }</time>
+			</div>
+			<span class="chip shrink-0 bg-(--accent)/10 text-(--accent)">
+				@meta.Icon
+				{ meta.Label }
+			</span>
+		</header>
+		<div class="relative" x-data="{more: false, long: false}" x-init="$nextTick(() => long = $refs.body.scrollHeight > $refs.body.clientHeight + 1)">
+			<p
+				x-ref="body"
+				dir="auto"
+				:class="{'line-clamp-4': !more}"
+				class="line-clamp-4 whitespace-pre-wrap break-words px-4 py-3 rounded-2xl rounded-tl-md bg-zinc-800/70 text-base leading-snug text-zinc-200"
+			>{ m.Body }</p>
+			<button
+				x-cloak
+				x-show="long"
+				@click="more = !more"
+				x-text="more ? 'Show less' : 'Show more'"
+				class="mt-1 ml-1 text-sm text-zinc-500 cursor-pointer hover:text-zinc-300"
+			></button>
+		</div>
+		if m.Status == models.SMSStatusParsed {
+			<div class="relative flex flex-wrap items-center gap-3 px-3 py-2.5 rounded-xl bg-(--accent)/8 ring-1 ring-(--accent)/20">
+				<p class="flex-1 min-w-0 text-sm text-zinc-300">It's a transaction now, waiting for your review.</p>
+				<a href="/transactions" class="inline-flex items-center gap-1 text-sm font-medium text-(--accent) hover:underline">
+					Review
+					@icons.ArrowRight("14")
+				</a>
+				<button
+					type="button"
+					@click="$el.closest('[data-sms]').remove()"
+					aria-label="Dismiss"
+					class="grid place-items-center w-7 h-7 -mr-1 rounded-full text-zinc-500 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white"
+				>
+					@icons.X("14")
+				</button>
+			</div>
+		} else {
+			<div class="relative flex gap-2.5 text-sm">
+				<span class="w-0.5 shrink-0 rounded-full bg-(--accent)/40"></span>
+				<div class="min-w-0">
+					<p class="text-zinc-400">
+						{ meta.Hint }
+						if m.Status == models.SMSStatusUnmatched {
+							<a href="/accounts" class="inline-flex items-center gap-0.5 text-(--accent) hover:underline">
+								Accounts
+								@icons.ArrowRight("12")
+							</a>
+						}
+					</p>
+					if m.Error != "" {
+						<p class="mt-0.5 font-mono text-xs text-zinc-500 break-words">{ m.Error }</p>
+					}
+				</div>
+			</div>
+			<footer class="relative flex justify-end gap-2">
+				<button
+					hx-put={ fmt.Sprintf("/sms/%s/ignore", m.ID) }
+					class="inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-sm text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white"
+				>
+					@icons.Ban("15")
+					Ignore
+				</button>
+				<button
+					hx-post={ fmt.Sprintf("/sms/%s/retry", m.ID) }
+					class="inline-flex items-center gap-1.5 h-9 pl-3 pr-4 rounded-full bg-(--accent)/15 text-sm font-medium text-(--accent) cursor-pointer transition-colors hover:bg-(--accent)/25"
+				>
+					@icons.Retry("15", &templ.Attributes{"class": "in-[.htmx-request]:animate-spin"})
+					Retry
+				</button>
+			</footer>
 		}
-		<p class="whitespace-pre-wrap break-words" dir="auto">{ m.Body }</p>
-	}
+	</article>
+}
+
+templ devicesPanel(devices []models.Device) {
+	<aside class="grid gap-4 lg:sticky lg:top-28">
+		<header>
+			<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+				@icons.Smartphone("16")
+				Devices
+			</h2>
+			<p class="text-sm text-zinc-600">Phones forwarding bank SMS here.</p>
+		</header>
+		<div id="devices-list" class="grid gap-2">
+			for _, d := range devices {
+				@Device(&d)
+			}
+			<div class="hidden only:grid gap-1 p-4 rounded-2xl border border-dashed border-zinc-800 text-sm">
+				<p class="text-zinc-300">No devices yet</p>
+				<p class="text-zinc-500">Sign in from the Tyche Android app and your bank SMS will show up as transactions.</p>
+			</div>
+		</div>
+	</aside>
 }
 
 templ Device(d *models.Device) {
-	@components.EntryCard(
-		components.WithCardTitle(d.Name),
-		components.WithCardMenu(getDeviceMenuItems(d)),
-		components.WithCardStale(d.IsRevoked()),
-	) {
-		<p>Added: { d.CreatedAt.Local().Format("Jan 2 2006") }</p>
-		if !d.LastSeenAt.IsZero() {
-			<p>Last seen: { d.LastSeenAt.Local().Format("Jan 2 2006, 3:04pm") }</p>
+	{{ online := !d.IsRevoked() && !d.LastSeenAt.IsZero() && time.Since(d.LastSeenAt) < 7*24*time.Hour }}
+	<div
+		data-device
+		hx-target="this"
+		hx-swap="outerHTML"
+		class={ "flex items-center gap-3 p-3 rounded-2xl bg-zinc-700/20", templ.KV("opacity-60", d.IsRevoked()) }
+	>
+		<div class="relative grid place-items-center shrink-0 w-10 h-10 rounded-xl bg-zinc-800 text-zinc-300">
+			@icons.Smartphone("20")
+			<span
+				class={
+					"absolute -top-0.5 -right-0.5 size-3 rounded-full ring-2 ring-zinc-950",
+					templ.KV("bg-emerald-400", online),
+					templ.KV("bg-zinc-600", !online && !d.IsRevoked()),
+					templ.KV("bg-red-400", d.IsRevoked()),
+				}
+			></span>
+		</div>
+		<div class="flex-1 min-w-0">
+			<p class="truncate leading-tight">{ d.Name }</p>
+			<p class="text-xs text-zinc-500 truncate" title={ "Added " + d.CreatedAt.Local().Format("Jan 2, 2006") }>
+				switch {
+					case d.IsRevoked():
+						<span class="text-red-400">Revoked { d.RevokedAt.Local().Format("Jan 2, 2006") }</span>
+					case d.LastSeenAt.IsZero():
+						Never synced
+					default:
+						Seen { timeAgo(d.LastSeenAt) }
+				}
+			</p>
+		</div>
+		if !d.IsRevoked() {
+			<button
+				hx-put={ fmt.Sprintf("/devices/%s/revoke", d.ID) }
+				hx-confirm="The app on this device will be signed out. Continue?"
+				aria-label="Revoke"
+				title="Revoke"
+				class="grid place-items-center shrink-0 w-8 h-8 rounded-full text-zinc-500 cursor-pointer transition-colors hover:bg-red-400/10 hover:text-red-400"
+			>
+				@icons.Ban("16")
+			</button>
 		}
-		if d.IsRevoked() {
-			<p class="text-red-400">Revoked: { d.RevokedAt.Local().Format("Jan 2 2006") }</p>
+	</div>
+}
+
+type smsStatusMeta struct {
+	Label  string
+	Hint   string
+	Accent string
+	Icon   templ.Component
+}
+
+// smsPendingStatuses are the statuses shown on the page, in pill order.
+var smsPendingStatuses = []models.SMSStatus{
+	models.SMSStatusUnmatched, models.SMSStatusUnparsed, models.SMSStatusFailed,
+}
+
+func smsStatusMetaOf(st models.SMSStatus) smsStatusMeta {
+	switch st {
+	case models.SMSStatusParsed:
+		return smsStatusMeta{
+			Label:  "Added",
+			Accent: "[--accent:var(--color-emerald-400)]",
+			Icon:   icons.Check("12"),
 		}
+	case models.SMSStatusUnmatched:
+		return smsStatusMeta{
+			Label:  "No account",
+			Hint:   "Read fine, but no account matched it. Set the account's SMS reference, or its card / IBAN last digits, in",
+			Accent: "[--accent:var(--color-amber-300)]",
+			Icon:   icons.Card("12"),
+		}
+	case models.SMSStatusUnparsed:
+		return smsStatusMeta{
+			Label:  "Not recognized",
+			Hint:   "No parser understands this message yet.",
+			Accent: "[--accent:var(--color-violet-400)]",
+			Icon:   icons.Message("12"),
+		}
+	}
+	return smsStatusMeta{
+		Label:  "Failed",
+		Hint:   "Read and matched, but creating the transaction failed.",
+		Accent: "[--accent:var(--color-red-400)]",
+		Icon:   icons.Error("12"),
 	}
 }
 
-func getSMSMenuItems(m *models.SMSMessage) []templ.Component {
-	if m.Status == models.SMSStatusParsed {
-		return nil
+func initial(name string) string {
+	for _, r := range name {
+		return string(r)
 	}
-	return []templ.Component{
-		components.EntryMenuAnchorItem("Retry", "post", fmt.Sprintf("/sms/%s/retry", m.ID)),
-		components.EntryMenuAnchorItem("Ignore", "put", fmt.Sprintf("/sms/%s/ignore", m.ID)),
-	}
+	return "?"
 }
 
-func getDeviceMenuItems(d *models.Device) []templ.Component {
-	if d.IsRevoked() {
-		return nil
+// timeAgo is a short relative time, falling back to the date after a week.
+func timeAgo(t time.Time) string {
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	case d < 7*24*time.Hour:
+		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
 	}
-	return []templ.Component{
-		components.EntryMenuAnchorItem("Revoke", "put", fmt.Sprintf("/devices/%s/revoke", d.ID),
-			components.WithEntryMenuItemConfirmMessage("The app on this device will be signed out. Continue?"),
-			components.WithEntryMenuItemClasses("text-red-500"),
-		),
-	}
+	return t.Local().Format("Jan 2")
 }

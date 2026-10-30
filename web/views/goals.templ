@@ -2,14 +2,15 @@ package views
 
 import (
 	"fmt"
+	"time"
 
-	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/jwt"
-	"github.com/omareloui/tyche/web/views/layouts"
+	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
-	"github.com/omareloui/tyche/internal/formatters"
-	"time"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
 )
 
 type GoalFD struct {
@@ -25,91 +26,554 @@ templ Goals(
 	@layouts.WithCreateForm(claims, "Goals", balances,
 		CreateGoalForm(fd, curs, &claims.DefaultCurrency),
 		layouts.WithDatePicker(), layouts.WithAlpineMask()) {
-		@goalsList(goals)
+		@goalsList(goals, &claims.DefaultCurrency)
 	}
 }
 
 templ CreateGoalForm(fd *GoalFD, curs []models.Currency, defaultCur *models.Currency) {
-	@form.CreateForm("Create Goal", "/goals", "Create Goal") {
-		@goalFormBody("", fd, curs, defaultCur)
+	@form.SheetForm("New goal", "/goals", "Create goal", "") {
+		@goalFormBody("0", fd, curs, defaultCur)
 	}
 }
 
 templ EditGoal(id string, fd *GoalFD, curs []models.Currency, defaultCur *models.Currency) {
-	@form.Form("put", fmt.Sprintf("/goals/%s", id), templ.Attributes{"hx-target": "this"}) {
-		<p>ID: { id }</p>
+	<form
+		hx-put={ string(templ.SafeURL(fmt.Sprintf("/goals/%s", id))) }
+		hx-target="this"
+		hx-swap="outerHTML"
+		data-goal
+		class="grid gap-5 sm:col-span-2 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-5 sm:p-6"
+	>
+		<header class="flex items-baseline justify-between gap-4">
+			<h3 class="text-lg font-semibold">Edit goal</h3>
+		</header>
 		@goalFormBody(id, fd, curs, defaultCur)
-		@form.EditFormButtons(fmt.Sprintf("/goals/%s", id))
-	}
+		@form.SheetFormButtons("Save changes", fmt.Sprintf("/goals/%s", id))
+	</form>
 }
 
 templ goalFormBody(id string, fd *GoalFD, curs []models.Currency, defaultCur *models.Currency) {
-	@form.TextInput("Name", "name", "Enter goal title", id, fd.Name, nil, nil)
-	@form.AmountInputsWithCurrency(fd.AmountFD, id, curs, defaultCur)
+	@form.Field("Name", "name", id, icons.Target("15"), fd.Name.Error) {
+		@form.Control("text", "name", "e.g. New laptop", id, fd.Name, nil)
+	}
+	<div class="grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-800/20 p-4">
+		<div>
+			<p class="text-zinc-300">Target</p>
+			<p class="text-sm text-zinc-500">How much you need. Money from any account counts towards it.</p>
+		</div>
+		@form.AmountInputsWithCurrency(fd.AmountFD, id, curs, defaultCur)
+	</div>
 }
 
-templ goalsList(goals []models.Goal) {
-	@components.Grid2ColOnSMUp("goals-list") {
-		for _, gl := range goals {
-			@Goal(&gl)
+// GoalProgressForm puts money from an account towards the goal, as an
+// expense linked to it.
+templ GoalProgressForm(gl *models.Goal, fd *TransactionFD, accs []models.Account, defaultCur *models.Currency) {
+	<form
+		hx-post={ string(templ.SafeURL(fmt.Sprintf("/goals/%s/progress", gl.ID))) }
+		hx-target="this"
+		hx-swap="outerHTML"
+		data-goal
+		class="grid gap-5 sm:col-span-2 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-5 sm:p-6 [--accent:var(--color-emerald-400)]"
+	>
+		<header class="flex items-center gap-3">
+			@goalRing(gl.ProgressPercentage(), goalActive, "size-11", "text-[0.65rem]")
+			<div class="min-w-0">
+				<h3 class="text-lg font-semibold truncate">Add to { gl.Name }</h3>
+				<p class="text-sm text-zinc-500 tabular-nums">
+					{ gl.ViewProgress() } of { gl.ViewAmount() } saved
+				</p>
+			</div>
+		</header>
+		@GoalProgressInputs(gl, &fd.AccountIFD, accs, defaultCur)
+		<div x-data>
+			@form.Field("Date", "scheduled_to", gl.ID, icons.Calendar("15"), fd.ScheduledTo.Error) {
+				<div class="flex gap-2">
+					<div class="flex-1 min-w-0">
+						@form.Control("text", "scheduled_to", "yyyy-mm-dd", gl.ID, fd.ScheduledTo, templ.Attributes{
+							"autocomplete":    "off",
+							"x-mask":          "9999-99-99",
+							"data-datepicker": true,
+							"x-ref":           "date",
+						})
+					</div>
+					@txDateChip("Today", 0)
+					@txDateChip("Yesterday", 1)
+				</div>
+			}
+			<p class="mt-1.5 text-sm text-zinc-500">A future date schedules it, counting once it's fulfilled.</p>
+		</div>
+		@form.SheetFormButtons("Add money", fmt.Sprintf("/goals/%s", gl.ID))
+	</form>
+}
+
+// GoalProgressInputs is the amount and the account it comes from, rendered
+// again when the account (so the currency) changes.
+templ GoalProgressInputs(gl *models.Goal, fd *form.AccountIFD, accs []models.Account, defaultCur *models.Currency) {
+	{{ sym := form.GetAccoutSym(accs, fd.AccountID.Value, defaultCur) }}
+	{{ rest := goalRestIn(gl, accs, fd.AccountID.Value) }}
+	<div
+		x-data
+		hx-target="this"
+		hx-swap="outerHTML"
+		hx-sync="closest form:abort"
+		class="grid justify-items-center gap-3 py-2"
+	>
+		@form.HeroMoneyInput("Amount", "amount", sym, gl.ID, fd.Amount, templ.Attributes{"x-ref": "amount"})
+		<div class="flex flex-wrap items-center justify-center gap-2 max-w-full">
+			<span class="text-sm text-zinc-500">from</span>
+			@form.SelectAccountChip("From account", "account_id", gl.ID, accs, fd.AccountID, templ.Attributes{
+				"hx-post":    fmt.Sprintf("/goals/%s/progress-inputs", gl.ID),
+				"hx-trigger": "change",
+			})
+		</div>
+		@form.ErrorMessage(fd.AccountID.Error)
+		if rest > 0 {
+			<button
+				type="button"
+				@click={ fmt.Sprintf("$refs.amount.value = '%s %.2f'; $refs.amount.dispatchEvent(new Event('input')); $refs.amount.focus()", sym, rest) }
+				class="inline-flex items-center gap-1.5 h-8 px-3 rounded-full border border-zinc-700 text-sm text-zinc-300 cursor-pointer transition-colors hover:border-(--accent) hover:text-(--accent)"
+			>
+				@icons.Sparkles("14")
+				Fill the rest · <span class="tabular-nums">{ formatters.FormatAmount(rest, sym) }</span>
+			</button>
 		}
-	}
+	</div>
+}
+
+templ goalsList(goals []models.Goal, defaultCur *models.Currency) {
+	<div id="goals-list" class="grid gap-8">
+		@goalsSummary(goals, defaultCur, false)
+		<section class="hidden has-[[data-goal]]:block">
+			<h2 class="flex items-center gap-2 mb-3 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+				@icons.Target("16")
+				In progress
+			</h2>
+			@goalSectionGrid(goalSectionActive) {
+				for _, gl := range goals {
+					if goalSectionOf(&gl) == goalSectionActive {
+						@Goal(&gl)
+					}
+				}
+			}
+		</section>
+		<details class="group hidden has-[[data-goal]]:block">
+			<summary class="flex items-center gap-2 mb-3 list-none cursor-pointer select-none text-zinc-500 hover:text-zinc-300 [&::-webkit-details-marker]:hidden">
+				@icons.Trophy("16")
+				<h2 class="text-sm font-semibold uppercase tracking-wider">Achieved</h2>
+				@icons.ChevronDown("16", &templ.Attributes{"class": "transition-transform group-open:rotate-180"})
+			</summary>
+			@goalSectionGrid(goalSectionAchieved) {
+				for _, gl := range goals {
+					if goalSectionOf(&gl) == goalSectionAchieved {
+						@Goal(&gl)
+					}
+				}
+			}
+		</details>
+		@goalsEmpty()
+	</div>
+}
+
+templ goalSectionGrid(section string) {
+	<div id={ GoalSectionID(section) } class="grid sm:grid-cols-2 gap-4">
+		{ children... }
+	</div>
+}
+
+templ goalsEmpty() {
+	<div class="goals-empty hidden place-items-center gap-3 py-16 text-center">
+		<div class="relative grid place-items-center w-16 h-16 rounded-2xl bg-violet-400/15 text-violet-400">
+			<div aria-hidden="true" class="absolute inset-0 rounded-2xl bg-violet-400/20 blur-xl"></div>
+			@icons.Target("30", &templ.Attributes{"class": "relative"})
+		</div>
+		<p class="mt-2 text-xl font-semibold">No goals yet</p>
+		<p class="max-w-sm text-zinc-500">Saving up for something? Set a target and watch it fill up with every bit you put aside.</p>
+		<button type="button" @click="openCreateForm=true" class="btn-primary mt-2">
+			@icons.Plus("18")
+			New goal
+		</button>
+	</div>
+}
+
+// goalsSummary is the money saved towards the goals in progress, in the
+// default currency. It's empty when there are no goals.
+templ goalsSummary(goals []models.Goal, defaultCur *models.Currency, oob bool) {
+	{{ s := summarizeGoals(goals, defaultCur) }}
+	<div
+		id="goals-summary"
+		if oob {
+			hx-swap-oob="true"
+		}
+	>
+		if len(goals) > 0 {
+			<section class="relative overflow-hidden grid gap-5 p-5 sm:p-6 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800 [--accent:var(--color-violet-400)]">
+				<div aria-hidden="true" class="pointer-events-none absolute -top-24 -right-16 size-64 rounded-full bg-(--accent)/15 blur-3xl"></div>
+				<div aria-hidden="true" class="pointer-events-none absolute -bottom-28 -left-20 size-56 rounded-full bg-emerald-400/10 blur-3xl"></div>
+				<div class="relative flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+					if s.Active > 0 {
+						<div class="min-w-0">
+							<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-(--accent)">
+								@icons.PiggyBank("14")
+								Saved so far
+							</p>
+							<p class="mt-1 text-3xl sm:text-4xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">
+								{ formatters.FormatAmount(s.Saved, defaultCur.Symbol) }
+							</p>
+							<p class="text-sm text-zinc-500 tabular-nums">
+								of { formatters.FormatAmount(s.Target, defaultCur.Symbol) } across { fmt.Sprint(s.Active) } { plural(s.Active, "goal", "goals") }
+							</p>
+						</div>
+					} else {
+						<div class="min-w-0">
+							<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-emerald-400">
+								@icons.Trophy("14")
+								All done
+							</p>
+							<p class="mt-1 text-2xl font-bold font-(family-name:--font-biorhyme-expanded)">Every goal reached</p>
+							<p class="text-sm text-zinc-500">Time to dream up the next one.</p>
+						</div>
+					}
+					<div class="flex gap-2">
+						@goalStat(fmt.Sprint(s.Active), "In progress", "text-zinc-100")
+						if s.Ready > 0 {
+							@goalStat(fmt.Sprint(s.Ready), "Ready", "text-amber-300")
+						}
+						@goalStat(fmt.Sprint(s.Achieved), "Achieved", "text-emerald-400")
+					</div>
+				</div>
+				if s.Active > 0 {
+					<div class="relative">
+						<div class="h-2.5 rounded-full bg-zinc-800 overflow-hidden">
+							<div
+								class="h-full rounded-full bg-linear-to-r from-violet-500 to-violet-300"
+								style={ fmt.Sprintf("width: %.1f%%", s.Pct()) }
+							></div>
+						</div>
+						<p class="mt-1.5 text-xs text-zinc-500 tabular-nums">{ fmt.Sprintf("%.0f%%", s.Pct()) } of the way there</p>
+					</div>
+				}
+			</section>
+		}
+	</div>
+}
+
+templ goalStat(value, label, valueClass string) {
+	<div class="min-w-20 px-3 py-2 rounded-2xl bg-zinc-900/60 ring-1 ring-zinc-800 text-center">
+		<p class={ "text-xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)", valueClass }>{ value }</p>
+		<p class="text-xs text-zinc-500">{ label }</p>
+	</div>
 }
 
 templ Goal(gl *models.Goal) {
-	@components.EntryCard(components.WithCardTitle(gl.Name), components.WithCardMenu(getGoalMenuItems(gl))) {
-		<div class="flex justify-between gap-2 items-center mb-4">
-			<p class="bg-black px-4 py-2 rounded-full w-fit font-extrabold font-(family-name:--font-biorhyme-expanded) text-sm md:block hidden">{ formatters.FormatNum(gl.ProgressPercentage()) }%</p>
-			<p class="font-(family-name:--font-biorhyme-expanded) md:text-xs text-[0.7rem] text-zinc-400 ">
-				{ gl.ViewProgress() }/{ gl.ViewAmount() }
-			</p>
+	{{ st := goalStateOf(gl) }}
+	{{ deposits, scheduled := goalDeposits(gl) }}
+	<div
+		id={ GoalID(gl.ID) }
+		hx-target="this"
+		hx-swap="outerHTML"
+		data-goal
+		class="relative"
+		x-data="{openMenu: false}"
+	>
+		@components.EntryMenu("openMenu", getGoalMenuItems(gl, st))
+		<div class={ "relative flex flex-col gap-4 h-full p-4 rounded-2xl bg-zinc-700/20 overflow-hidden", goalAccentClass(st) }>
+			<div aria-hidden="true" class="pointer-events-none absolute -top-16 -right-16 size-40 rounded-full bg-(--accent)/10 blur-2xl"></div>
+			<div class="relative flex items-center gap-4 min-w-0">
+				@goalRing(gl.ProgressPercentage(), st, "size-14", "text-xs")
+				<div class="flex-1 min-w-0">
+					<p class="text-lg leading-tight truncate">{ gl.Name }</p>
+					<p class="text-sm text-zinc-500 tabular-nums truncate">
+						<span class="text-zinc-300">{ gl.ViewProgress() }</span> of { gl.ViewAmount() }
+					</p>
+				</div>
+				<button
+					@click="openMenu = !openMenu"
+					aria-label="Goal actions"
+					class="cursor-pointer grid place-items-center shrink-0 w-6 h-6"
+				>
+					<img src="/icons/dots-menu.svg" class="h-5"/>
+				</button>
+			</div>
+			switch st {
+				case goalActive:
+					<div class="relative flex items-end justify-between gap-3 mt-auto">
+						<div class="min-w-0">
+							<p class="text-xs text-zinc-500">Still to go</p>
+							<p class="text-xl font-bold tabular-nums truncate font-(family-name:--font-biorhyme-expanded)">{ gl.ViewRemaining() }</p>
+						</div>
+						@goalAddButton(gl.ID)
+					</div>
+					@goalPlan(gl)
+				case goalReady:
+					<div class="relative flex items-center gap-3 mt-auto px-3 py-2.5 rounded-xl bg-(--accent)/8 ring-1 ring-(--accent)/20">
+						@icons.Sparkles("18", &templ.Attributes{"class": "shrink-0 text-(--accent)"})
+						<p class="flex-1 min-w-0 text-sm text-zinc-300">Target reached!</p>
+						<button
+							hx-put={ fmt.Sprintf("/goals/%s/fulfill", gl.ID) }
+							class="shrink-0 h-8 px-3 rounded-full bg-(--accent) text-sm font-semibold text-zinc-950 cursor-pointer transition hover:brightness-110 active:scale-[.98]"
+						>Mark achieved</button>
+					</div>
+				case goalAchieved:
+					<div class="relative flex items-center gap-2 mt-auto text-sm text-(--accent)">
+						@icons.Trophy("16")
+						<span>Achieved { gl.FulfilledAt.Local().Format("Jan 2, 2006") }</span>
+					</div>
+			}
+			if deposits > 0 || scheduled > 0 {
+				<div class="relative flex flex-wrap items-center gap-1.5">
+					if deposits > 0 {
+						<span class="chip">
+							@icons.PiggyBank("12")
+							{ fmt.Sprint(deposits) } { plural(deposits, "deposit", "deposits") }
+						</span>
+					}
+					if scheduled > 0 {
+						<span class="chip">
+							@icons.Calendar("12")
+							{ fmt.Sprint(scheduled) } scheduled
+						</span>
+					}
+					if last := goalLastDeposit(gl); !last.IsZero() {
+						<span class="text-xs text-zinc-500">last { goalDay(last) }</span>
+					}
+				</div>
+			}
 		</div>
-		<div class="relative h-4">
-			<span class="absolute top-0 left-0 h-full w-full bg-zinc-200 rounded-full"></span>
-			@components.ProgressBar(gl.ProgressPercentage(), components.WithProgressBarSuccessStatus(gl.ProgressPercentage() >= 100 || !gl.FulfilledAt.IsZero()))
-		</div>
-		if !gl.FulfilledAt.IsZero() {
-			<time class="text-sm text-zinc-500 block mt-1 text-right">
-				{ gl.FulfilledAt.Format(time.RFC822) }
-			</time>
-		}
-	}
+	</div>
 }
 
-templ GoalProgressForm(gl *models.Goal, fd *TransactionFD, accounts []models.Account, kinds []models.TxKind, defaultCur *models.Currency) {
-	@form.Form("post", fmt.Sprintf("/goals/%s/progress", gl.ID), templ.Attributes{"hx-target": "this"}) {
-		<h2 class="text-xl font-bold">{ gl.Name } <i class="text-gray-400 font-regular">({ gl.ViewAmount() })</i></h2>
-		@form.AmountInputsWithAccount(&fd.AccountIFD, gl.ID, accounts, defaultCur)
-		@form.DateInput("Date", "scheduled_to", gl.ID, fd.ScheduledTo, nil, nil)
-		@form.EditFormButtons(fmt.Sprintf("/goals/%s", gl.ID))
-		<script>
-			loadDatePickers();
-		</script>
-	}
+templ goalAddButton(id string) {
+	<button
+		hx-get={ fmt.Sprintf("/goals/%s/progress-form", id) }
+		class="inline-flex shrink-0 items-center gap-1.5 h-9 pl-3 pr-4 rounded-full bg-(--accent)/15 text-sm font-medium text-(--accent) cursor-pointer transition-colors hover:bg-(--accent)/25"
+	>
+		@icons.Plus("16")
+		Add money
+	</button>
+}
+
+// goalPlan is how much to put aside every month to reach the goal in a few
+// months, picked from pills.
+templ goalPlan(gl *models.Goal) {
+	<div x-data="{m: 6}" class="relative flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-zinc-800/80 text-sm">
+		<p class="text-zinc-500">
+			for _, m := range goalPlanMonths {
+				<span
+					x-show={ fmt.Sprintf("m === %d", m) }
+					if m != 6 {
+						x-cloak
+					}
+					class="tabular-nums"
+				>
+					<span class="text-zinc-200">{ formatters.FormatAmount(gl.Plan(m), gl.Currency.Symbol) }</span>/mo
+				</span>
+			}
+			to get there in
+		</p>
+		<div role="group" aria-label="Months to reach the goal" class="flex gap-1 p-0.5 rounded-full bg-zinc-800/60">
+			for _, m := range goalPlanMonths {
+				<button
+					type="button"
+					@click={ fmt.Sprintf("m = %d", m) }
+					:class={ fmt.Sprintf("m === %d ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'", m) }
+					class="h-6 px-2 rounded-full text-xs tabular-nums cursor-pointer transition-colors"
+				>{ fmt.Sprintf("%dmo", m) }</button>
+			}
+		</div>
+	</div>
+}
+
+// goalRing is the goal's progress as a ring, with the percentage (or a
+// trophy once achieved) in the middle.
+templ goalRing(pct float64, st goalState, size, textSize string) {
+	{{ arc := min(100, max(0, pct)) }}
+	<div class={ "relative shrink-0", size, goalAccentClass(st) }>
+		<svg viewBox="0 0 36 36" class="size-full -rotate-90" aria-hidden="true">
+			<circle cx="18" cy="18" r="15.915" fill="none" stroke-width="3.5" class="stroke-zinc-800"></circle>
+			if arc > 0 {
+				<circle
+					cx="18"
+					cy="18"
+					r="15.915"
+					fill="none"
+					stroke-width="3.5"
+					stroke-linecap="round"
+					stroke="var(--accent)"
+					stroke-dasharray={ fmt.Sprintf("%.2f 100", arc) }
+				></circle>
+			}
+		</svg>
+		<span class={ "absolute inset-0 grid place-items-center font-bold tabular-nums", textSize }>
+			if st == goalAchieved {
+				@icons.Trophy("40%", &templ.Attributes{"class": "text-(--accent)"})
+			} else {
+				{ fmt.Sprintf("%.0f%%", min(pct, 999)) }
+			}
+		</span>
+	</div>
 }
 
 templ GoalOOB(gl *models.Goal) {
-	<div id="goals-list" hx-swap-oob="afterbegin">
+	<div id={ GoalSectionID(goalSectionOf(gl)) } hx-swap-oob="afterbegin">
 		@Goal(gl)
 	</div>
 }
 
-func getGoalMenuItems(gl *models.Goal) []templ.Component {
-	menuItems := []templ.Component{}
+templ GoalsSummaryOOB(goals []models.Goal, defaultCur *models.Currency) {
+	@goalsSummary(goals, defaultCur, true)
+}
 
-	if gl.FulfilledAt.IsZero() {
-		menuItems = append(menuItems,
-			components.EntryMenuAnchorItem("Fulfill", "put", fmt.Sprintf("/goals/%s/fulfill", gl.ID)),
-			components.EntryMenuAnchorItem("Add progress", "get", fmt.Sprintf("/goals/%s/progress-form", gl.ID)),
-		)
+type goalState int
+
+const (
+	goalActive goalState = iota
+	// goalReady has reached its target but isn't marked achieved yet.
+	goalReady
+	goalAchieved
+)
+
+const (
+	goalSectionActive   = "active"
+	goalSectionAchieved = "achieved"
+)
+
+var goalPlanMonths = []int{3, 6, 12, 18}
+
+func GoalID(id string) string {
+	return "goal-" + id
+}
+
+func GoalSectionID(section string) string {
+	return "goals-" + section
+}
+
+func goalStateOf(gl *models.Goal) goalState {
+	switch {
+	case !gl.FulfilledAt.IsZero():
+		return goalAchieved
+	case gl.ProgressPercentage() >= 100:
+		return goalReady
+	}
+	return goalActive
+}
+
+func goalSectionOf(gl *models.Goal) string {
+	if goalStateOf(gl) == goalAchieved {
+		return goalSectionAchieved
+	}
+	return goalSectionActive
+}
+
+func goalAccentClass(st goalState) string {
+	switch st {
+	case goalReady:
+		return "[--accent:var(--color-amber-300)]"
+	case goalAchieved:
+		return "[--accent:var(--color-emerald-400)]"
+	}
+	return "[--accent:var(--color-violet-400)]"
+}
+
+// goalDeposits counts the goal's fulfilled and scheduled transactions.
+func goalDeposits(gl *models.Goal) (deposits, scheduled int) {
+	for _, tx := range gl.Transactions {
+		if tx.FulfilledAt.IsZero() {
+			scheduled++
+		} else {
+			deposits++
+		}
+	}
+	return deposits, scheduled
+}
+
+func goalLastDeposit(gl *models.Goal) time.Time {
+	var last time.Time
+	for _, tx := range gl.Transactions {
+		if !tx.FulfilledAt.IsZero() && tx.ScheduledTo.After(last) {
+			last = tx.ScheduledTo
+		}
+	}
+	return last
+}
+
+// goalRestIn is what's left to save for the goal in the account's currency,
+// 0 if it's reached or the rate is unknown.
+func goalRestIn(gl *models.Goal, accs []models.Account, accID string) float64 {
+	rest := gl.Remaining()
+	if rest <= 0 {
+		return 0
+	}
+	for _, a := range accs {
+		if a.ID == accID && a.Currency.String != gl.Currency.String {
+			return rest * gl.Currency.FxRate(a.Currency.String)
+		}
+	}
+	return rest
+}
+
+type goalsSummaryData struct {
+	Saved, Target            float64
+	Active, Ready, Achieved int
+}
+
+func (s goalsSummaryData) Pct() float64 {
+	if s.Target == 0 {
+		return 0
+	}
+	return min(100, s.Saved/s.Target*100)
+}
+
+// summarizeGoals sums the goals in progress in the default currency, capping
+// each at its target so one overshooting goal doesn't hide the others.
+func summarizeGoals(gls []models.Goal, defaultCur *models.Currency) goalsSummaryData {
+	var s goalsSummaryData
+	for _, gl := range gls {
+		switch goalStateOf(&gl) {
+		case goalAchieved:
+			s.Achieved++
+			continue
+		case goalReady:
+			s.Ready++
+		}
+		s.Active++
+		rate := 1.0
+		if gl.Currency.String != defaultCur.String {
+			rate = gl.Currency.FxRate(defaultCur.String)
+		}
+		s.Saved += min(max(0, gl.Progress()), gl.Price) * rate
+		s.Target += gl.Price * rate
+	}
+	return s
+}
+
+func getGoalMenuItems(gl *models.Goal, st goalState) []templ.Component {
+	items := []templ.Component{}
+
+	if st == goalAchieved {
+		items = append(items, components.EntryMenuAnchorItem("Reopen", "put", fmt.Sprintf("/goals/%s/unfulfill", gl.ID)))
 	} else {
-		menuItems = append(menuItems, components.EntryMenuAnchorItem("Unfulfill", "put", fmt.Sprintf("/goals/%s/unfulfill", gl.ID)))
+		items = append(items,
+			components.EntryMenuAnchorItem("Add money", "get", fmt.Sprintf("/goals/%s/progress-form", gl.ID)),
+			components.EntryMenuAnchorItem("Mark achieved", "put", fmt.Sprintf("/goals/%s/fulfill", gl.ID)),
+		)
 	}
 
-	menuItems = append(menuItems,
+	return append(items,
 		components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/goals/%s/edit", gl.ID)),
 		components.EntryMenuDeleteItem(fmt.Sprintf("/goals/%s", gl.ID)),
 	)
+}
 
-	return menuItems
+// goalDay is a deposit's day, relative when recent.
+func goalDay(day time.Time) string {
+	switch dateOf(time.Now()).Sub(dateOf(day)) {
+	case 0:
+		return "today"
+	case 24 * time.Hour:
+		return "yesterday"
+	}
+	if day.Year() != time.Now().Year() {
+		return day.Format("Jan 2, 2006")
+	}
+	return day.Format("Jan 2")
 }

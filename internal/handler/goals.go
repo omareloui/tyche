@@ -108,6 +108,10 @@ func (h Handler) CreateGoal(w http.ResponseWriter, r *http.Request) (templ.Compo
 	}
 	l.Debug("rendered goal")
 
+	if err = h.renderGoalsSummaryOOB(w, r); err != nil {
+		return nil, err
+	}
+
 	return views.CreateGoalForm(h.mapGlToFD(dfltGoal(&claims.DefaultCurrency), &errs.ValidationError{}), shownCurs, &claims.DefaultCurrency), nil
 }
 
@@ -148,7 +152,7 @@ func (h Handler) GetGoalProgressForm(w http.ResponseWriter, r *http.Request) (te
 		return nil, err
 	}
 
-	accs, knds, _, _, _, err := h.getTxDeps(r.Context())
+	accs, err := h.repo.GetAccounts(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +160,34 @@ func (h Handler) GetGoalProgressForm(w http.ResponseWriter, r *http.Request) (te
 	claims := getClaims(r.Context())
 
 	fd := h.mapTransactionToFD(defaultTransaction(accs), &errs.ValidationError{})
-	return views.GoalProgressForm(gl, fd, accs, knds, &claims.DefaultCurrency), nil
+	return views.GoalProgressForm(gl, fd, accs, &claims.DefaultCurrency), nil
+}
+
+// GoalProgressInputs renders the progress form's amount again for the picked
+// account's currency.
+func (h Handler) GoalProgressInputs(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	gl, err := h.repo.GetGoal(r.Context(), id)
+	if err != nil {
+		return nil, err
+	}
+
+	accs, err := h.repo.GetAccounts(r.Context())
+	if err != nil {
+		return nil, err
+	}
+
+	fd := &form.AccountIFD{
+		Amount:    form.FDInput{Value: r.FormValue("amount")},
+		AccountID: form.FDInput{Value: r.FormValue("account_id")},
+	}
+
+	claims := getClaims(r.Context())
+	return views.GoalProgressInputs(gl, fd, accs, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) CreateGoalProgress(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -189,7 +220,7 @@ func (h Handler) CreateGoalProgress(w http.ResponseWriter, r *http.Request) (tem
 	fd, err := h.prepareCreatingTx(r, tx, accs, knds, cats, cps, gls)
 	if fd != nil {
 		claims := getClaims(r.Context())
-		return views.GoalProgressForm(gl, fd, accs, knds, &claims.DefaultCurrency), nil
+		return views.GoalProgressForm(gl, fd, accs, &claims.DefaultCurrency), nil
 	}
 	if err != nil {
 		return nil, err
@@ -207,9 +238,11 @@ func (h Handler) CreateGoalProgress(w http.ResponseWriter, r *http.Request) (tem
 		}
 	}
 
-	gl.Transactions = append(gl.Transactions, *tx)
+	if err := h.renderGoalsSummaryOOB(w, r); err != nil {
+		return nil, err
+	}
 
-	return views.Goal(gl), nil
+	return h.Goal(w, r)
 }
 
 func (h Handler) EditGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -256,7 +289,11 @@ func (h Handler) EditGoal(w http.ResponseWriter, r *http.Request) (templ.Compone
 	}
 	l.Info("updated goal", zap.Any("goal", gl))
 
-	return views.Goal(gl), nil
+	if err := h.renderGoalsSummaryOOB(w, r); err != nil {
+		return nil, err
+	}
+
+	return h.Goal(w, r)
 }
 
 func (h Handler) FulfillGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -267,7 +304,7 @@ func (h Handler) FulfillGoal(w http.ResponseWriter, r *http.Request) (templ.Comp
 	if err := h.repo.FulfillGoal(r.Context(), id); err != nil {
 		return nil, err
 	}
-	return h.Goal(w, r)
+	return h.moveGoal(w, r, id)
 }
 
 func (h Handler) UnfulfillGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -278,7 +315,33 @@ func (h Handler) UnfulfillGoal(w http.ResponseWriter, r *http.Request) (templ.Co
 	if err := h.repo.UnfulfillGoal(r.Context(), id); err != nil {
 		return nil, err
 	}
-	return h.Goal(w, r)
+	return h.moveGoal(w, r, id)
+}
+
+// moveGoal moves the goal's card to its section after (un)fulfilling it.
+// The card itself gets removed by the empty response.
+func (h Handler) moveGoal(w http.ResponseWriter, r *http.Request, id string) (templ.Component, error) {
+	gl, err := h.repo.GetGoal(r.Context(), id)
+	if err != nil {
+		return nil, err
+	}
+	if err := renderToBody(w, r, views.GoalOOB(gl)); err != nil {
+		return nil, err
+	}
+	if err := h.renderGoalsSummaryOOB(w, r); err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
+func (h Handler) renderGoalsSummaryOOB(w http.ResponseWriter, r *http.Request) error {
+	gls, err := h.repo.GetGoals(r.Context())
+	if err != nil {
+		logger.FromCtx(r.Context()).Error("fetching goals for summary", zap.Error(err))
+		return err
+	}
+	claims := getClaims(r.Context())
+	return renderToBody(w, r, views.GoalsSummaryOOB(gls, &claims.DefaultCurrency))
 }
 
 func (h Handler) DeleteGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -294,6 +357,10 @@ func (h Handler) DeleteGoal(w http.ResponseWriter, r *http.Request) (templ.Compo
 		return nil, err
 	}
 	l.Info("deleted goal", zap.String("id", id))
+
+	if err := h.renderGoalsSummaryOOB(w, r); err != nil {
+		return nil, err
+	}
 
 	return nil, nil
 }
