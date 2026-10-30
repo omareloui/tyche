@@ -52,7 +52,7 @@ templ SelectCurrency(name, id string, curs []models.Currency, data FDInput, inpu
 }
 
 templ SelectTxKind(name, id string, knds []models.TxKind, data FDInput, inputAttrs templ.Attributes) {
-	@SegmentedRadio("Transaction Kind", name, id, stringerSlice(knds), data, inputAttrs)
+	@SegmentedRadio("Transaction Kind", name, id, stringerOptions(knds), data, inputAttrs)
 }
 
 templ SelectTxKinds(knds []models.TxKind, data TxKindFDInputs) {
@@ -154,10 +154,27 @@ func idStructsToMap[T any](structs []T, val string) map[string]string {
 	return structutils.StructsToMap(structs, "ID", val)
 }
 
-func stringerSlice[T fmt.Stringer](s []T) []string {
-	strs := make([]string, len(s))
+// stringerOptions makes radio options valued and labeled by their String.
+func stringerOptions[T fmt.Stringer](s []T) []RadioOption {
+	opts := make([]RadioOption, len(s))
 	for i, e := range s {
-		strs[i] = e.String()
+		opts[i] = RadioOption{Value: e.String(), Label: e.String()}
 	}
-	return strs
+	return opts
+}
+
+templ SelectRecurrentUnit(name, id string, data FDInput) {
+	<div>
+		<span aria-hidden="true" class="input-label">Unit</span>
+		@SegmentedRadio("Unit", name, id, recurrentUnitOptions(), data, nil)
+	</div>
+}
+
+func recurrentUnitOptions() []RadioOption {
+	units := models.RecurrentUnits()
+	opts := make([]RadioOption, len(units))
+	for i, u := range units {
+		opts[i] = RadioOption{Value: fmt.Sprintf("%d", u), Label: u.String()}
+	}
+	return opts
 }

@@ -23,12 +23,8 @@ func (fb RecurrentUnit) String() string {
 	return [...]string{"???", "Day", "Month", "Year"}[fb]
 }
 
-func RecurrentUnitOptions() map[string]string {
-	m := make(map[string]string, 3)
-	m[fmt.Sprintf("%d", RecurrentUnitDay)] = RecurrentUnitDay.String()
-	m[fmt.Sprintf("%d", RecurrentUnitMonth)] = RecurrentUnitMonth.String()
-	m[fmt.Sprintf("%d", RecurrentUnitYear)] = RecurrentUnitYear.String()
-	return m
+func RecurrentUnits() []RecurrentUnit {
+	return []RecurrentUnit{RecurrentUnitDay, RecurrentUnitMonth, RecurrentUnitYear}
 }
 
 type RecurrentTx struct {

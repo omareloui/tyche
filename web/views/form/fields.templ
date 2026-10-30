@@ -10,7 +10,12 @@ import (
 
 // SegmentedRadio is a row of pills, one per option. The hx attrs go on the
 // fieldset, so a change on any pill triggers them with the fieldset's id.
-templ SegmentedRadio(label, name, id string, options []string, data FDInput, attrs templ.Attributes) {
+type RadioOption struct {
+	Value string
+	Label string
+}
+
+templ SegmentedRadio(label, name, id string, options []RadioOption, data FDInput, attrs templ.Attributes) {
 	<fieldset
 		id={ join(name, id) }
 		if attrs != nil {
@@ -26,13 +31,13 @@ templ SegmentedRadio(label, name, id string, options []string, data FDInput, att
 					<input
 						type="radio"
 						name={ name }
-						value={ o }
+						value={ o.Value }
 						class="sr-only"
-						if o == data.Value {
+						if o.Value == data.Value {
 							checked
 						}
 					/>
-					<span class="block truncate">{ o }</span>
+					<span class="block truncate">{ o.Label }</span>
 				</label>
 			}
 		</div>

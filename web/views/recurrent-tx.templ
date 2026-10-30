@@ -57,10 +57,10 @@ templ rtxFormBody(
 }
 
 templ recurrenceFormBody(id string, fd *RecurrenceFD) {
-	<div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
-		@form.NumberInput("Every", "every", "1", id, fd.Every, nil, nil)
-		@form.SelectInput("Unit", "unit", "Unit", id, models.RecurrentUnitOptions(), fd.Unit, false, nil, nil)
-		@form.DateInput("Stops on", "stops_on", id, fd.StopsOn, nil, templ.Attributes{"class": "col-span-2 sm:col-span-1"})
+	<div class="grid grid-cols-[5.5rem_1fr] gap-4">
+		@form.NumberInput("Every", "every", "1", id, fd.Every, templ.Attributes{"min": "1"}, nil)
+		@form.SelectRecurrentUnit("unit", id, fd.Unit)
+		@form.DateInput("Stops on", "stops_on", id, fd.StopsOn, nil, templ.Attributes{"class": "col-span-2"})
 	</div>
 }
 
