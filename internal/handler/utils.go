@@ -86,6 +86,16 @@ func parseDateOnlyIfExists(str string) (time.Time, error) {
 	return time.Time{}, nil
 }
 
+// keepTimeOfDay returns date's day with timeOf's time of day, in timeOf's
+// location. date is expected to be a date-only value (midnight UTC).
+func keepTimeOfDay(date, timeOf time.Time) time.Time {
+	if date.IsZero() || timeOf.IsZero() {
+		return date
+	}
+	y, m, d := date.Date()
+	return time.Date(y, m, d, timeOf.Hour(), timeOf.Minute(), timeOf.Second(), timeOf.Nanosecond(), timeOf.Location())
+}
+
 func formatDateOnlyIfNonZero(date time.Time) string {
 	if date.IsZero() {
 		return ""

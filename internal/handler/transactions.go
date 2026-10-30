@@ -208,6 +208,9 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 
 	tx.FulfilledAt = oldTx.FulfilledAt
 	tx.CreatedAt = oldTx.CreatedAt
+	// The form only edits the date, keep the original time of day so the
+	// transaction keeps its order within the day.
+	tx.ScheduledTo = keepTimeOfDay(tx.ScheduledTo, oldTx.ScheduledTo)
 
 	if err := h.repo.UpdateTransaction(r.Context(), oldTx, tx); err != nil {
 		l.Error("updating transaction", zap.Error(err))
@@ -221,7 +224,12 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 		}
 	}
 
-	return views.Transaction(tx), nil
+	updatedTx, err := h.repo.GetTransaction(r.Context(), tx.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return views.Transaction(updatedTx), nil
 }
 
 func (h Handler) FulfillTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
