@@ -1,9 +1,9 @@
 package components
 
 import (
+	"fmt"
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/models"
-	"fmt"
 )
 
 templ Navbar(claims *jwt.AccessClaims, balances []models.Balance) {
@@ -22,9 +22,9 @@ templ Navbar(claims *jwt.AccessClaims, balances []models.Balance) {
 								@NavbarBalance(balances)
 							</div>
 						}
-						// <div class="select-none">
-						// 	<img class="w-6 h-6" src="/icons/settings.svg" alt="Settings" aria-label="Settings"/>
-						// </div>
+						<div class="select-none">
+							<img class="w-6 h-6" src="/icons/settings.svg" alt="Settings" aria-label="Settings"/>
+						</div>
 						// <div class="select-none">
 						// 	<img class="w-6 h-6" src="/icons/search.svg" alt="Search" aria-label="Search"/>
 						// </div>
@@ -61,7 +61,7 @@ templ Navbar(claims *jwt.AccessClaims, balances []models.Balance) {
 		}
 	</header>
 	if claims != nil {
-		@Navlinks([]string{"/accounts", "/categories", "/transactions", "/recurrent-tx", "/goals", "/counterparties", "/currencies", "/sms"})
+		@Navlinks([]string{"/", "/accounts", "/categories", "/transactions", "/recurrent-tx", "/goals", "/counterparties", "/currencies", "/sms"})
 	}
 }
 
