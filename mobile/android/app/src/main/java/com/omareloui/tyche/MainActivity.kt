@@ -112,6 +112,7 @@ class MainActivity : AppCompatActivity() {
                 .onSuccess { token ->
                     settings.token = token
                     settings.authError = false
+                    UploadWorker.enqueue(this@MainActivity)
                     toast("Signed in")
                     askForSmsPermissions()
                 }

@@ -67,10 +67,12 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                 )
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .build()
-            // Append so an SMS queued while a run is finishing still gets
-            // picked up by the next run.
+            // Replace, not append: appended work waits behind a run backing off
+            // after failures (up to hours), so new SMS and "Sync now" would be
+            // stuck. Cancelling a run mid-upload is fine, the queue only drops
+            // uploaded messages and the server dedups.
             WorkManager.getInstance(context)
-                .enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
+                .enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.REPLACE, request)
         }
     }
 }
