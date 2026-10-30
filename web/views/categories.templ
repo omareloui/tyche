@@ -8,6 +8,7 @@ import (
 	"github.com/omareloui/tyche/web/views/layouts"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
 )
 
 type CategoryFD struct {
@@ -32,24 +33,54 @@ templ Categories(
 }
 
 templ CreateCategoryForm(fd *CategoryFD, knds []models.TxKind, curs []models.Currency, defaultCur *models.Currency) {
-	@form.CreateForm("Create Category", "/categories", "Create Category") {
-		@categoryFormBody(fd, "", knds, curs, defaultCur)
+	@form.SheetForm("New category", "/categories", "Add category", "", categoryAccentAttrs(fd)) {
+		@categoryFormBody(fd, "0", knds, curs, defaultCur)
 	}
 }
 
 templ EditCategory(fd *CategoryFD, id string, knds []models.TxKind, curs []models.Currency, defaultCur *models.Currency) {
-	@form.Form("put", fmt.Sprintf("/categories/%s", id), templ.Attributes{"hx-target": "this"}) {
-		<p>ID: { id }</p>
+	<form
+		hx-put={ string(templ.SafeURL(fmt.Sprintf("/categories/%s", id))) }
+		hx-target="this"
+		hx-swap="outerHTML"
+		{ categoryAccentAttrs(fd)... }
+		class="grid gap-5 sm:col-span-2 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-5 sm:p-6"
+	>
+		<header class="flex items-baseline justify-between gap-4">
+			<h3 class="text-lg font-semibold">Edit category</h3>
+			<span title="Category ID" class="truncate font-mono text-xs text-zinc-500">{ id }</span>
+		</header>
 		@categoryFormBody(fd, id, knds, curs, defaultCur)
-		@form.EditFormButtons(fmt.Sprintf("/categories/%s", id))
-	}
+		@form.SheetFormButtons("Save changes", fmt.Sprintf("/categories/%s", id))
+	</form>
 }
 
 templ categoryFormBody(fd *CategoryFD, id string, knds []models.TxKind, curs []models.Currency, defaultCur *models.Currency) {
-	@form.TextInput("Name", "name", "Enter category name", id, fd.Name, nil, nil)
-	@form.SelectColor("color", id, models.CategoryColorOptions(), fd.Color, nil)
-	@form.SelectTxKinds(knds, fd.Kinds)
-	@form.AmountInputsWithCurrency(fd.BudgetAmountFD, id, curs, defaultCur)
+	@form.Field("Name", "name", id, icons.Pencil("15"), fd.Name.Error) {
+		@form.Control("text", "name", "e.g. Groceries", id, fd.Name, nil)
+	}
+	@form.SelectCategoryColor("color", id, fd.Color)
+	@form.SelectTxKinds("Applies to", knds, fd.Kinds)
+	<div class="grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-800/20 p-4">
+		<div>
+			<p class="text-zinc-300">Budget</p>
+			<p class="text-sm text-zinc-500">Optional. Leave the amount empty for no budget.</p>
+		</div>
+		@form.AmountInputsWithCurrency(fd.BudgetAmountFD, id, curs, defaultCur)
+	</div>
+}
+
+// categoryAccentAttrs tints the form (focus rings, pills, submit) with the
+// category's color, following the picked swatch.
+func categoryAccentAttrs(fd *CategoryFD) templ.Attributes {
+	accent := ""
+	if fd.Color.Value != "" {
+		accent = models.CategoryColorToHex(fd.Color.Value)
+	}
+	return templ.Attributes{
+		"x-data":  fmt.Sprintf("{accent: '%s'}", accent),
+		":style": "accent && '--accent: ' + accent",
+	}
 }
 
 templ categoriesList(categories []models.Category) {
@@ -61,30 +92,44 @@ templ categoriesList(categories []models.Category) {
 }
 
 templ Category(cat *models.Category) {
-	@components.EntryCard(components.WithCardTitle(cat.Name), components.WithCardMenu([]templ.Component{
-		components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/categories/%s/edit", cat.ID)),
-		components.EntryMenuDeleteItem(fmt.Sprintf("/categories/%s", cat.ID)),
-	})) {
-		<p class="flex items-center gap-2">
-			<span>Name:</span>
-			<span class="inline-block w-3 h-3 rounded-full" style={ fmt.Sprintf("background-color: %s", models.CategoryColorToHex(cat.Color)) }></span>
-			<span>{ cat.Name }</span>
-		</p>
-		<p>
-			Kinds: 
-			for i, kind := range cat.Kinds {
-				if i != 0 {
-					,
+	{{ hex := models.CategoryColorToHex(cat.Color) }}
+	<div hx-target="this" hx-swap="outerHTML" class="relative" x-data="{openMenu: false}">
+		@components.EntryMenu("openMenu", []templ.Component{
+			components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/categories/%s/edit", cat.ID)),
+			components.EntryMenuDeleteItem(fmt.Sprintf("/categories/%s", cat.ID)),
+		})
+		<div class="flex items-center gap-4 h-full px-4 py-4 rounded-2xl bg-zinc-700/20">
+			<div
+				class="grid place-items-center shrink-0 w-12 h-12 rounded-xl"
+				style={ fmt.Sprintf("background-color: color-mix(in oklab, %s 18%%, transparent); color: %s", hex, hex) }
+			>
+				@icons.Tag("22")
+			</div>
+			<div class="flex-1 min-w-0">
+				<p class="text-lg truncate">{ cat.Name }</p>
+				<div class="flex flex-wrap gap-1.5 mt-1">
+					for _, kind := range cat.Kinds {
+						<span class="px-2 py-0.5 rounded-full bg-zinc-800 text-xs text-zinc-400">{ kind }</span>
+					}
+				</div>
+			</div>
+			<div class="shrink-0 text-right">
+				if cat.HasBudget() {
+					<p class="text-xs text-zinc-500">Budget</p>
+					<p class="font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">{ cat.ViewBudgetAmount() }</p>
+				} else {
+					<p class="text-sm text-zinc-600">No budget</p>
 				}
-				{ kind }
-			}
-		</p>
-		if cat.BudgetCurrency != nil && cat.BudgetAmount > 0 {
-			<p>
-				Budget: { cat.ViewBudgetAmount() }
-			</p>
-		}
-	}
+			</div>
+			<button
+				@click="openMenu = !openMenu"
+				aria-label="Category actions"
+				class="cursor-pointer grid place-items-center shrink-0 w-6 h-6"
+			>
+				<img src="/icons/dots-menu.svg" class="h-5"/>
+			</button>
+		</div>
+	</div>
 }
 
 templ CategoryOOB(cat *models.Category) {

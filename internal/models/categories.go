@@ -19,14 +19,6 @@ func GetRandomCategoryColor() string {
 	return CategoryColors[rand.Intn(len(CategoryColors))]
 }
 
-func CategoryColorOptions() map[string]string {
-	options := make(map[string]string, len(CategoryColors))
-	for _, color := range CategoryColors {
-		options[color] = color
-	}
-	return options
-}
-
 func CategoryColorToHex(color string) string {
 	colorMap := map[string]string{
 		"red":     "#ef4444",
@@ -77,8 +69,16 @@ func (cat *Category) HasKind(kind TxKind) bool {
 	return slices.Contains(cat.Kinds, kind)
 }
 
+func (cat *Category) HasBudget() bool {
+	return cat.BudgetCurrency != nil && cat.BudgetAmount > 0
+}
+
 func (cat *Category) ViewBudgetAmount() string {
-	return formatters.FormatAmount(cat.BudgetAmount, cat.BudgetCurrency.String)
+	sym := cat.BudgetCurrency.Symbol
+	if sym == "" {
+		sym = cat.BudgetCurrency.String
+	}
+	return formatters.FormatAmount(cat.BudgetAmount, sym)
 }
 
 func (cat *Category) toValidate() *createCategory {

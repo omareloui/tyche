@@ -45,7 +45,7 @@ func (h Handler) AmountInputsWithCurrency(w http.ResponseWriter, r *http.Request
 		fd.CurrencyID.Value = claims.DefaultCurrency.ID
 	}
 
-	return form.AmountInputsWithCurrency(fd, r.FormValue("id"), curs, &claims.DefaultCurrency), nil
+	return form.AmountInputsWithCurrency(fd, r.PathValue("id"), curs, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) AmountInputsWithAccount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

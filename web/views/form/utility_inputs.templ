@@ -5,20 +5,53 @@ import (
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/internal/structutils"
+	"github.com/omareloui/tyche/web/views/icons"
 )
 
 templ AmountInputsWithCurrency(fd *AmountFD, id string, curs []models.Currency, defaultCur *models.Currency) {
-	<div hx-target="this" class="grid grid-cols-3 gap-4">
-		@MoneyInput("Amount", "amount", GetCurOrDefaultSym(curs, fd.CurrencyID.Value, defaultCur), id,
-			fd.Amount, nil, templ.Attributes{"class": "col-span-2"})
-		@SelectInput("Currency", "currency_id", "Select a Currency", id, idStructsToMap(curs, "String"), fd.CurrencyID,
-			false, templ.Attributes{
-				"hx-post":    fmt.Sprintf("/amount-inputs-with-currency/%s", getId(id)),
-				"hx-trigger": "change",
-				"hx-swap":    "outerHTML",
-				"hx-sync":    "closest form:abort",
-			}, nil)
+	{{ sym := GetCurOrDefaultSym(curs, fd.CurrencyID.Value, defaultCur) }}
+	{{ cur := fd.CurrencyID }}
+	if cur.Value == "" && defaultCur != nil {
+		{{ cur.Value = defaultCur.ID }}
+	}
+	<div hx-target="this" class="grid grid-cols-[1fr_9rem] gap-3">
+		@Field("Amount", "amount", id, nil, fd.Amount.Error) {
+			@Control("text", "amount", fmt.Sprintf("%s 1,000.00", sym), id, fd.Amount, templ.Attributes{
+				"autocomplete":   "off",
+				"inputmode":      "decimal",
+				"x-mask:dynamic": fmt.Sprintf("'%s ' + $money($input, '.', ',')", sym),
+			})
+		}
+		@Field("Currency", "currency_id", id, nil, fd.CurrencyID.Error) {
+			@Combobox(ComboboxProps{
+				Name: "currency_id", ID: id, Label: "Currency", Placeholder: "Currency",
+				Options: currencyComboOptions(curs), Data: cur, Searchable: true,
+				InputAttrs: templ.Attributes{
+					"hx-post":    fmt.Sprintf("/amount-inputs-with-currency/%s", getId(id)),
+					"hx-trigger": "change",
+					"hx-swap":    "outerHTML",
+					"hx-sync":    "closest form:abort",
+				},
+			})
+		}
 	</div>
+}
+
+func currencyComboOptions(curs []models.Currency) []ComboOption {
+	opts := make([]ComboOption, len(curs))
+	for i, c := range curs {
+		opts[i] = ComboOption{
+			Value:   c.ID,
+			Label:   c.String,
+			Search:  c.Symbol,
+			Leading: currencySymbol(c.Symbol),
+		}
+	}
+	return SortComboOptions(opts)
+}
+
+templ currencySymbol(sym string) {
+	<span class="shrink-0 w-7 text-center text-xs text-zinc-400">{ sym }</span>
 }
 
 templ AmountInputsWithAccount(fd *AccountIFD, id string, accs []models.Account, defaultCur *models.Currency) {
@@ -55,30 +88,36 @@ templ SelectTxKind(name, id string, knds []models.TxKind, data FDInput, inputAtt
 	@SegmentedRadio("Transaction Kind", name, id, stringerOptions(knds), data, inputAttrs)
 }
 
-templ SelectTxKinds(knds []models.TxKind, data TxKindFDInputs) {
+// SelectTxKinds is a row of checkbox pills, one per kind.
+templ SelectTxKinds(label string, knds []models.TxKind, data TxKindFDInputs) {
 	{{ var err string }}
-	<div class="flex flex-wrap gap-4 justify-center">
-		for kind, d  := range data {
-			{{ id := fmt.Sprintf("kind%s", kind.String()) }}
-			if d.Error != "" {
-				{{ err = d.Error }}
+	<fieldset>
+		<legend class="input-label">{ label }</legend>
+		<div class="flex flex-wrap gap-2">
+			for _, kind := range knds {
+				{{ d := data[kind] }}
+				if d.Error != "" {
+					{{ err = d.Error }}
+				}
+				<label
+					class="inline-flex items-center gap-1.5 h-10 px-4 rounded-full border border-zinc-700 bg-zinc-800/60 text-sm text-zinc-300 cursor-pointer select-none transition-colors hover:border-zinc-500 has-checked:border-(--accent) has-checked:bg-(--accent)/15 has-checked:text-white has-focus-visible:ring-2 has-focus-visible:ring-(--accent)"
+				>
+					<input
+						type="checkbox"
+						name="kind"
+						value={ kind.String() }
+						class="peer sr-only"
+						if d.Value != "" {
+							checked
+						}
+					/>
+					@icons.Check("15", &templ.Attributes{"class": "hidden peer-checked:block text-(--accent)"})
+					{ kind.String() }
+				</label>
 			}
-			<div>
-				<input
-					id={ join("kind", id) }
-					type="checkbox"
-					name="kind"
-					class="mr-2"
-					value={ kind.String() }
-					if d.Value != "" {
-						checked
-					}
-				/>
-				<label for={ join("kind", id) } class="cursor-pointer">{ kind.String() }</label>
-			</div>
-		}
-	</div>
-	@ErrorMessage(err)
+		</div>
+		@ErrorMessage(err)
+	</fieldset>
 }
 
 templ SelectCounterparty(name, id string, cps []models.Counterparty, data FDInput, nullable bool, inputAttrs templ.Attributes) {
@@ -97,8 +136,36 @@ templ SelectGoal(name, id string, gls []models.Goal, data FDInput, inputAttrs te
 	@SelectInput("Goal", name, "Select Goal", id, idStructsToMap(gls, "Name"), data, true, inputAttrs, nil)
 }
 
-templ SelectColor(name, id string, colors map[string]string, data FDInput, inputAttrs templ.Attributes) {
-	@SelectInput("Color", name, "Select Color", id, colors, data, false, inputAttrs, nil)
+// SelectCategoryColor is a palette of color swatches. Picking one sets the
+// Alpine `accent` of the enclosing scope, if any.
+templ SelectCategoryColor(name, id string, data FDInput) {
+	<fieldset>
+		<legend class="input-label">Color</legend>
+		<div class="flex flex-wrap gap-2.5">
+			for _, c := range models.CategoryColors {
+				{{ hex := models.CategoryColorToHex(c) }}
+				<label
+					title={ c }
+					class="relative grid place-items-center size-8 rounded-full cursor-pointer transition-transform hover:scale-110 has-checked:ring-2 has-checked:ring-white/90 has-checked:ring-offset-2 has-checked:ring-offset-zinc-900 has-focus-visible:ring-2 has-focus-visible:ring-white/60 has-focus-visible:ring-offset-2 has-focus-visible:ring-offset-zinc-900"
+					style={ "background-color: " + hex }
+				>
+					<input
+						type="radio"
+						name={ name }
+						value={ c }
+						aria-label={ c }
+						class="peer sr-only"
+						@change={ fmt.Sprintf("accent = '%s'", hex) }
+						if c == data.Value {
+							checked
+						}
+					/>
+					@icons.Check("16", &templ.Attributes{"class": "invisible peer-checked:visible text-white drop-shadow"})
+				</label>
+			}
+		</div>
+		@ErrorMessage(data.Error)
+	</fieldset>
 }
 
 func getId(id string) string {
@@ -112,7 +179,7 @@ func GetCurOrDefault(curs []models.Currency, curID string, dflt *models.Currency
 	cur := slicesutils.Find(curs, func(c models.Currency) bool {
 		return c.ID == curID
 	})
-	if dflt != nil {
+	if cur == nil && dflt != nil {
 		return dflt
 	}
 	if cur == nil {
