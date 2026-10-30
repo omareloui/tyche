@@ -13,8 +13,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// reimbursableSince limits how far back expenses are offered to be
-// reimbursed.
+// reimbursableSince limits how far back, from the income's day, expenses
+// are offered to be reimbursed.
 const reimbursableSince = 90 * 24 * time.Hour
 
 // amountEpsilon absorbs float rounding when comparing amounts rounded to 2
@@ -90,8 +90,9 @@ func (r *Repository) UnlinkReimbursement(ctx context.Context, id string) error {
 	return nil
 }
 
-// GetReimbursableExpenses returns the recent expenses the income can
-// reimburse: same currency, not a goal's, with enough left to be reimbursed.
+// GetReimbursableExpenses returns the expenses the income can reimburse
+// (same currency, not a goal's, with enough left to be reimbursed) from the
+// income's day and the days before it.
 func (r *Repository) GetReimbursableExpenses(ctx context.Context, income *models.Transaction) ([]models.ReimbursableExpense, error) {
 	l := logger.FromCtx(ctx)
 
@@ -100,9 +101,12 @@ func (r *Repository) GetReimbursableExpenses(ctx context.Context, income *models
 		return nil, err
 	}
 
+	dayEnd := startOfDay(income.ScheduledTo).AddDate(0, 0, 1)
 	rows, err := q.GetReimbursableExpenses(ctx, queries.GetReimbursableExpensesParams{
 		CurrencyID: income.Account.Currency.ID,
-		Since:      time.Now().Add(-reimbursableSince).UTC(),
+		Since:      dayEnd.Add(-reimbursableSince).UTC(),
+		Until:      dayEnd.UTC(),
+		MinLeft:    income.Amount - amountEpsilon,
 	})
 	if err != nil {
 		l.Error("querying reimbursable expenses", zap.Error(err))
@@ -111,9 +115,6 @@ func (r *Repository) GetReimbursableExpenses(ctx context.Context, income *models
 
 	exps := []models.ReimbursableExpense{}
 	for _, row := range rows {
-		if row.Reimbursed+income.Amount > row.Amount+amountEpsilon {
-			continue
-		}
 		e := models.ReimbursableExpense{
 			ID:             row.ID,
 			Title:          row.Description.String,
@@ -139,6 +140,12 @@ func (r *Repository) GetReimbursableExpenses(ctx context.Context, income *models
 		exps = append(exps, e)
 	}
 	return exps, nil
+}
+
+// startOfDay returns the midnight starting t's day, in t's location.
+func startOfDay(t time.Time) time.Time {
+	y, m, d := t.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, t.Location())
 }
 
 // syncReimbursementsOnUpdateWithTxn keeps the reimbursement links of a

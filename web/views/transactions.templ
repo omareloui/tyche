@@ -337,7 +337,7 @@ templ ReimbursePicker(tx *models.Transaction, exps []models.ReimbursableExpense,
 			<p class="text-sm text-red-500">{ errMsg }</p>
 		}
 		if len(exps) == 0 {
-			<p class="text-sm text-zinc-400">No expense in the last 90 days, in the same currency, has enough left to be paid back by it.</p>
+			<p class="text-sm text-zinc-400">No expense in the 90 days up to its day, in the same currency, has enough left to be paid back by it.</p>
 		}
 		<ul class="grid gap-2 max-h-96 overflow-y-auto">
 			for _, e := range exps {

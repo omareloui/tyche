@@ -230,9 +230,9 @@ FROM transactions
 WHERE reimburses_id = sqlc.arg(id) AND id != sqlc.arg(exclude_id);
 
 -- name: GetReimbursableExpenses :many
--- Expenses in the given currency, newest first, that still have something
--- left to be reimbursed. Goal expenses are savings, not spending, so they're
--- not reimbursable.
+-- Expenses in the given currency scheduled in [since, until), newest first,
+-- that still have at least min_left left to be reimbursed. Goal expenses are
+-- savings, not spending, so they're not reimbursable.
 SELECT
     t.id,
     t.amount,
@@ -255,9 +255,10 @@ WHERE
     AND t.goal_id IS NULL
     AND a.currency_id = sqlc.arg(currency_id)
     AND t.scheduled_to >= sqlc.arg(since)
-    AND t.amount > (
+    AND t.scheduled_to < sqlc.arg(until)
+    AND t.amount - (
         SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id
-    )
+    ) >= CAST(sqlc.arg(min_left) AS FLOAT)
 ORDER BY t.scheduled_to DESC, t.created_at DESC
 LIMIT 50;
 
