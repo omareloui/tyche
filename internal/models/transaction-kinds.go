@@ -10,13 +10,31 @@ const (
 	IncomeTxKind
 	TransferTxKind
 	DebtTxKind
+	// RefundTxKind is money returned for an earlier expense. It adds to the
+	// account like an income but uses expense categories, and should reduce
+	// the category's spending rather than count as income.
+	RefundTxKind
 )
 
 func (tk TxKind) String() string {
 	return [...]string{
 		"???", "Expense", "Income",
-		"Transfer", "Debt",
+		"Transfer", "Debt", "Refund",
 	}[tk]
+}
+
+// IsIncoming reports whether the transaction adds to its account without
+// coming from another account.
+func (tk TxKind) IsIncoming() bool {
+	return tk == IncomeTxKind || tk == RefundTxKind
+}
+
+// CategoryKind is the kind the transaction's category must allow.
+func (tk TxKind) CategoryKind() TxKind {
+	if tk == RefundTxKind {
+		return ExpenseTxKind
+	}
+	return tk
 }
 
 func (tk TxKind) MarshalJSON() ([]byte, error) {
@@ -39,6 +57,7 @@ func GetTxKinds() []TxKind {
 		IncomeTxKind,
 		TransferTxKind,
 		DebtTxKind,
+		RefundTxKind,
 	}
 }
 

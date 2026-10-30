@@ -40,7 +40,7 @@ type commonFieldsForTxAndRtx struct {
 	ToAccountID    string  `validate:"required_if=Kind 3,required_if=Kind 4,omitempty,ulid"`
 	ToAmount       float64 `validate:"required_if=Kind 3,required_if=Kind 4"`
 	Description    string  `conform:"trim"`
-	GoalID         string  `validate:"excluded_if=Kind 2,excluded_if=Kind 3,excluded_if=Kind 4,omitempty,ulid"`
+	GoalID         string  `validate:"excluded_if=Kind 2,excluded_if=Kind 3,excluded_if=Kind 4,excluded_if=Kind 5,omitempty,ulid"`
 }
 
 type createTransaction struct {

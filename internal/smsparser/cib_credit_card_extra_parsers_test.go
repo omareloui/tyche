@@ -41,7 +41,7 @@ func TestCIBCreditCardExtraParsers(t *testing.T) {
 			parser: &smsparser.CIBEnglishCreditCardReversalParser{},
 			sms:    "The transaction on your credit card#5678  from Ride Service  with EGP 247.00 on 21/10/26  at 18:04 has been refunded. Please try again. Thank you",
 			want: smsparser.SMS{
-				Bank: smsparser.CIB, TxKind: models.IncomeTxKind, AccountID: "5678",
+				Bank: smsparser.CIB, TxKind: models.RefundTxKind, AccountID: "5678",
 				Currency: "EGP", Amount: 247, Counterparty: "Ride Service", AutoCreateCounterparty: true,
 				Timestamp: time.Date(2026, 10, 21, 18, 4, 0, 0, time.UTC),
 			},
@@ -51,7 +51,7 @@ func TestCIBCreditCardExtraParsers(t *testing.T) {
 			parser: &smsparser.CIBArabicCreditCardRefundParser{},
 			sms:    "لقد تم رد EGP3227.02 على بطاقتكم الائتمانية المنتهية بـ# 5678 من Online Shop>  . يرجى ملاحظة أن هذا المبلغ سيتم إضافته إلى رصيد بطاقتك ولا يتم اعتباره بمثابة دفعة للمديونيات المستحقة لهذا الشهر.",
 			want: smsparser.SMS{
-				Bank: smsparser.CIB, TxKind: models.IncomeTxKind, AccountID: "5678",
+				Bank: smsparser.CIB, TxKind: models.RefundTxKind, AccountID: "5678",
 				Currency: "EGP", Amount: 3227.02, Counterparty: "Online Shop", AutoCreateCounterparty: true,
 			},
 		},
@@ -60,7 +60,7 @@ func TestCIBCreditCardExtraParsers(t *testing.T) {
 			parser: &smsparser.CIBArabicCreditCardRefundParser{},
 			sms:    "لقد تم رد USD14.99 على بطاقتكم الائتمانية المنتهية بـ# 5678 من STREAMING SVC>  . يرجى ملاحظة أن هذا المبلغ سيتم إضافته إلى رصيد بطاقتك",
 			want: smsparser.SMS{
-				Bank: smsparser.CIB, TxKind: models.IncomeTxKind, AccountID: "5678",
+				Bank: smsparser.CIB, TxKind: models.RefundTxKind, AccountID: "5678",
 				Currency: "USD", Amount: 14.99, Counterparty: "STREAMING SVC", AutoCreateCounterparty: true,
 			},
 		},

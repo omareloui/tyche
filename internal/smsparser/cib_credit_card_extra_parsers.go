@@ -73,7 +73,7 @@ func (p *CIBEnglishCreditCardReversalParser) Parse(sms string) (*SMS, error) {
 
 	return &SMS{
 		Bank:                   CIB,
-		TxKind:                 models.IncomeTxKind,
+		TxKind:                 models.RefundTxKind,
 		AccountID:              m[1],
 		Currency:               m[3],
 		Amount:                 amount,
@@ -107,7 +107,7 @@ func (p *CIBArabicCreditCardRefundParser) Parse(sms string) (*SMS, error) {
 
 	return &SMS{
 		Bank:                   CIB,
-		TxKind:                 models.IncomeTxKind,
+		TxKind:                 models.RefundTxKind,
 		AccountID:              m[3],
 		Currency:               m[1],
 		Amount:                 amount,

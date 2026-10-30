@@ -165,7 +165,8 @@ SET
 WHERE id = sqlc.arg(id);
 
 -- name: GetMerchantSpending :many
--- Sums fulfilled expenses (kind 1) net of refunds (kind 2) per merchant and
+-- Sums fulfilled expenses (kind 1) net of refunds (kind 5) and incomes
+-- (kind 2, treated as refunds from merchants) per merchant and
 -- account currency for a YYYY-MM month; currencies are merged in Go using live
 -- fx rates.
 SELECT
@@ -180,7 +181,7 @@ JOIN counterparties AS cp ON t.counterparty_id = cp.id
 JOIN accounts AS a ON t.account_id = a.id
 JOIN currencies AS cur ON a.currency_id = cur.id
 WHERE
-    t.kind IN (1, 2)
+    t.kind IN (1, 2, 5)
     AND t.fulfilled_at IS NOT NULL
     AND cp.is_merchant IS TRUE
     AND STRFTIME('%Y-%m', t.fulfilled_at) = CAST(sqlc.arg(month) AS TEXT)

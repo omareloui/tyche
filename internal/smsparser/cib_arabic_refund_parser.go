@@ -21,7 +21,7 @@ func (p *CIBArabicRefundParser) Parse(sms string) (*SMS, error) {
 	}
 
 	var err error
-	result := &SMS{Bank: CIB, TxKind: models.IncomeTxKind}
+	result := &SMS{Bank: CIB, TxKind: models.RefundTxKind}
 
 	parts := strings.Fields(sms)
 

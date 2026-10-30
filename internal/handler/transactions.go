@@ -428,7 +428,7 @@ func (h Handler) mapFDToTransaction(r *http.Request, isRecurrent bool) (*models.
 
 	var cat *models.Category
 	if catId := r.FormValue("category_id"); catId != "" {
-		cat = &models.Category{ID: catId, Kinds: []models.TxKind{knd}}
+		cat = &models.Category{ID: catId, Kinds: []models.TxKind{knd.CategoryKind()}}
 	}
 
 	var cp *models.Counterparty
@@ -571,7 +571,7 @@ func (h Handler) prepareTx(r *http.Request, tx *models.Transaction,
 
 	if c := slicesutils.Find(cats, func(c models.Category) bool { return tx.Category != nil && c.ID == tx.Category.ID }); c != nil {
 		tx.Category = c
-		tx.Category.Kinds = []models.TxKind{tx.Kind}
+		tx.Category.Kinds = []models.TxKind{tx.Kind.CategoryKind()}
 	}
 
 	if cp := slicesutils.Find(cps, func(c models.Counterparty) bool { return tx.Counterparty != nil && c.ID == tx.Counterparty.ID }); cp != nil {

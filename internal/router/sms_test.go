@@ -234,6 +234,53 @@ func TestIngestSMS(t *testing.T) {
 		}
 	})
 
+	t.Run("refunds add to the account with the merchant's expense category", func(t *testing.T) {
+		card := &models.Account{
+			ID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZH", Name: "CIB e2e", Amount: 100,
+			Currency: *egp, Kind: bankKind, SmsRef: "5678",
+		}
+		if err := repo.CreateAccount(ctx, card); err != nil {
+			t.Fatal(err)
+		}
+		transport := &models.Category{
+			ID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZJ", Name: "Transport e2e", Color: "#000000",
+			Kinds: []models.TxKind{models.ExpenseTxKind},
+		}
+		if err := repo.CreateCategory(ctx, transport); err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.CreateCounterparty(ctx, &models.Counterparty{
+			ID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZK", Name: "Ride Service", IsMerchant: true, DefaultCategory: transport,
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		refund := map[string]any{"messages": []map[string]any{{
+			"sender":      "CIB",
+			"body":        "The transaction on your credit card#5678  from Ride Service  with EGP 40.00 on 21/10/26  at 18:04 has been refunded. Please try again. Thank you",
+			"received_at": receivedAt,
+		}}}
+		res, out := post(token, refund)
+		if res.StatusCode != http.StatusOK || len(out.Results) != 1 || out.Results[0].TransactionID == "" {
+			t.Fatalf("got %d %+v", res.StatusCode, out)
+		}
+
+		tx, err := repo.GetTransaction(ctx, out.Results[0].TransactionID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tx.Kind != models.RefundTxKind || tx.Category == nil || tx.Category.ID != transport.ID {
+			t.Errorf("unexpected transaction %+v", tx)
+		}
+		gotAcc, err := repo.GetAccount(ctx, card.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if gotAcc.Amount != 140 {
+			t.Errorf("account amount = %v, want 140", gotAcc.Amount)
+		}
+	})
+
 	t.Run("rejects revoked devices", func(t *testing.T) {
 		if err := repo.RevokeDevice(ctx, device.ID); err != nil {
 			t.Fatal(err)

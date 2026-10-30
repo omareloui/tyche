@@ -282,6 +282,6 @@ func dfltCategory(defaultCur *models.Currency, knds []models.TxKind) *models.Cat
 
 func getAllowedKindsForCategories() []models.TxKind {
 	return slicesutils.Filter(models.GetTxKinds(), func(k models.TxKind) bool {
-		return k != models.NilTxKind && k != models.TransferTxKind && k != models.DebtTxKind
+		return k != models.NilTxKind && k != models.TransferTxKind && k != models.DebtTxKind && k != models.RefundTxKind
 	})
 }

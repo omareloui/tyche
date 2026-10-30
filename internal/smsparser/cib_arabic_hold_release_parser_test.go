@@ -87,8 +87,8 @@ func TestCIBArabicHoldReleaseParser(t *testing.T) {
 				t.Errorf("Bank = %v, want %v", result.Bank, smsparser.CIB)
 			}
 
-			if result.TxKind != models.IncomeTxKind {
-				t.Errorf("TxKind = %v, want %v", result.TxKind, models.IncomeTxKind)
+			if result.TxKind != models.RefundTxKind {
+				t.Errorf("TxKind = %v, want %v", result.TxKind, models.RefundTxKind)
 			}
 
 			if result.Counterparty != tt.expectedCounterparty {

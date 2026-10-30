@@ -204,6 +204,7 @@ func TestBuildTransactionDefaultCategory(t *testing.T) {
 	}{
 		{name: "matching kind", kind: models.ExpenseTxKind, wantCat: "cat-transport"},
 		{name: "other kind", kind: models.IncomeTxKind, wantCat: ""},
+		{name: "refund uses the expense category", kind: models.RefundTxKind, wantCat: "cat-transport"},
 	}
 
 	for _, tt := range tests {

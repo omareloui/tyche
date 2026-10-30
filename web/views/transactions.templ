@@ -321,7 +321,7 @@ func getCategoriesOfKinds(cats []models.Category, txKind models.TxKind) []models
 	kndsCats := []models.Category{}
 	for _, cat := range cats {
 		for _, kind := range cat.Kinds {
-			if kind == txKind {
+			if kind == txKind.CategoryKind() {
 				kndsCats = append(kndsCats, cat)
 			}
 		}
@@ -401,7 +401,7 @@ func newTxView(tx *models.Transaction) txView {
 	}
 
 	switch tx.Kind {
-	case models.IncomeTxKind:
+	case models.IncomeTxKind, models.RefundTxKind:
 		v.amount = "+" + tx.ViewAmount()
 		v.isIncoming = true
 	case models.TransferTxKind:

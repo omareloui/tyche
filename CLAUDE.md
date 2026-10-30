@@ -187,8 +187,9 @@ Core entities and their relationships:
 - **Accounts** - User's financial accounts (bank, cash, credit card, etc.)
   - Has account kind (`account_kinds` table wrapping an enum), currency, optional counterparty, archived / exclude-from-balance flags
   - Cards have: card_number, card_limit, name_on_card, expiration_date; optional iban
-- **Transactions** - Financial transactions (income, expense, transfer)
-  - Has kind (income/expense/transfer), amount, scheduled date, optional fulfilled date
+- **Transactions** - Financial transactions (expense, income, transfer, debt, refund)
+  - Has kind (`models.TxKind`), amount, scheduled date, optional fulfilled date
+  - Refunds (merchant money back, e.g. refund SMS) add to the account like income but take expense categories (`TxKind.CategoryKind()`) and net against spending
   - Can be linked to category, counterparty, goal, recurrent transaction
   - Transfers have to_account and to_amount
 - **Recurrent Transactions** - Templates for recurring transactions

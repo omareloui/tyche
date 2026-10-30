@@ -29,10 +29,11 @@ func (cp *Counterparty) DefaultCategoryFor(kind TxKind) *Category {
 	if cp == nil || cp.DefaultCategory == nil || cp.DefaultCategory.ID == "" {
 		return nil
 	}
-	if !cp.DefaultCategory.HasKind(kind) {
+	catKind := kind.CategoryKind()
+	if !cp.DefaultCategory.HasKind(catKind) {
 		return nil
 	}
-	return &Category{ID: cp.DefaultCategory.ID, Kinds: []TxKind{kind}}
+	return &Category{ID: cp.DefaultCategory.ID, Kinds: []TxKind{catKind}}
 }
 
 // Absorb adds the other counterparty's name and aliases to the aliases,
