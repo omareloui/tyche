@@ -57,10 +57,24 @@ templ SelectInput(label, name, placeholder, id string,
 		}
 	>
 		@inputLabel(name, id, label)
+		@SelectControl(name, placeholder, id, options, data, nullable, "input-field", inputAttrs)
+		@ErrorMessage(data.Error)
+	</div>
+}
+
+// SelectControl is a bare select with a chevron, styled by class
+// (e.g. "input-field").
+templ SelectControl(name, placeholder, id string,
+	options map[string]string, data FDInput, nullable bool,
+	class string, inputAttrs templ.Attributes) {
+	<div class="relative min-w-0">
 		<select
 			id={ join(name, id) }
 			name={ name }
-			class="input-field"
+			class={ class }
+			if data.Error != "" {
+				aria-invalid="true"
+			}
 			if inputAttrs != nil {
 				{ inputAttrs... }
 			}
@@ -68,12 +82,15 @@ templ SelectInput(label, name, placeholder, id string,
 			<option
 				value=""
 				disabled
+				if nullable {
+					hidden
+				}
 				if !nullable || data.Value != "" {
 					selected
 				}
 			>{ placeholder }</option>
 			if nullable {
-				<option value="" selected>&lt;nil&gt;</option>
+				<option value="" selected>None</option>
 			}
 			for _, k := range sortedOptionKeys(options) {
 				<option
@@ -84,7 +101,7 @@ templ SelectInput(label, name, placeholder, id string,
 				>{ options[k] }</option>
 			}
 		</select>
-		@errorMessage(data.Error)
+		@icons.ChevronDown("18", &templ.Attributes{"class": "pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400"})
 	</div>
 }
 
@@ -116,13 +133,27 @@ templ Checkbox(label, name, id string, data FDInput, inputAttrs templ.Attributes
 				{ inputAttrs... }
 			}
 		/>
-		@inputLabel(name, id, label)
-		@errorMessage(data.Error)
+		<label for={ join(name, id) } class="cursor-pointer">{ label }</label>
+		@ErrorMessage(data.Error)
 	</div>
 }
 
 templ inputLabel(name, id, label string) {
-	<label for={ join(name, id) } class="cursor-pointer">{ label }</label>
+	<label for={ join(name, id) } class="input-label">{ label }</label>
+}
+
+// Field labels a control with an optional leading icon and shows its error.
+templ Field(label, name, id string, icon templ.Component, err string) {
+	<div class="min-w-0">
+		<label for={ join(name, id) } class="input-label">
+			if icon != nil {
+				@icon
+			}
+			{ label }
+		</label>
+		{ children... }
+		@ErrorMessage(err)
+	</div>
 }
 
 templ input(name, id, kind string, attrs templ.Attributes, data FDInput) {
@@ -135,7 +166,15 @@ templ input(name, id, kind string, attrs templ.Attributes, data FDInput) {
 		name={ name }
 		value={ data.Value }
 		class="input-field"
+		if data.Error != "" {
+			aria-invalid="true"
+		}
 	/>
+}
+
+// Control is a bare input, to put in a Field.
+templ Control(kind, name, placeholder, id string, data FDInput, attrs templ.Attributes) {
+	@input(name, id, kind, joinAttrs(attrs, templ.Attributes{"placeholder": placeholder}), data)
 }
 
 templ Input(label, kind, name, placeholder, id string, data FDInput, inputAttrs templ.Attributes, wrapperAttrs templ.Attributes) {
@@ -146,11 +185,11 @@ templ Input(label, kind, name, placeholder, id string, data FDInput, inputAttrs 
 	>
 		@inputLabel(name, id, label)
 		@input(name, id, kind, joinAttrs(inputAttrs, templ.Attributes{"placeholder": placeholder}), data)
-		@errorMessage(data.Error)
+		@ErrorMessage(data.Error)
 	</div>
 }
 
-templ errorMessage(message string) {
+templ ErrorMessage(message string) {
 	if message != "" {
 		<div class="form-error-message">
 			@icons.Error("18px")

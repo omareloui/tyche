@@ -10,6 +10,7 @@ import (
 	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
 	"github.com/omareloui/tyche/web/views/layouts"
+	"strings"
 	"time"
 )
 
@@ -48,7 +49,7 @@ templ CreateTransactionForm(
 	knds []models.TxKind, cats []models.Category,
 	cps []models.Counterparty, gls []models.Goal,
 	defaultCur *models.Currency) {
-	@form.CreateForm("Create Transaction", "/transactions", "Create Transaction") {
+	@form.SheetForm("New transaction", "/transactions", "Add transaction", "tx-form") {
 		@transactionFormBody(fd, "0", accounts, knds, cats, cps, gls, defaultCur)
 	}
 }
@@ -59,11 +60,37 @@ templ transactionFormBody(
 	cps []models.Counterparty, gls []models.Goal,
 	defaultCur *models.Currency) {
 	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs, cps, gls, defaultCur)
-	@form.TextInput("Description", "description", "Enter a description", id, fd.Description, nil, nil)
-	@form.DateInput("Date", "scheduled_to", id, fd.ScheduledTo, nil, nil)
+	@form.Field("Description", "description", id, icons.Pencil("15"), fd.Description.Error) {
+		@form.Control("text", "description", "What was it for?", id, fd.Description, nil)
+	}
+	<div x-data>
+		@form.Field("Date", "scheduled_to", id, icons.Calendar("15"), fd.ScheduledTo.Error) {
+			<div class="flex gap-2">
+				<div class="flex-1 min-w-0">
+					@form.Control("text", "scheduled_to", "yyyy-mm-dd", id, fd.ScheduledTo, templ.Attributes{
+						"autocomplete":    "off",
+						"x-mask":          "9999-99-99",
+						"data-datepicker": true,
+						"x-ref":           "date",
+					})
+				</div>
+				@txDateChip("Today", 0)
+				@txDateChip("Yesterday", 1)
+			</div>
+		}
+	</div>
 	if fd.RecurrenceFD != nil {
 		@RecurrenceFormBody(id, fd.RecurrenceFD)
 	}
+}
+
+// txDateChip sets the date input (x-ref "date") to daysAgo days before today.
+templ txDateChip(label string, daysAgo int) {
+	<button
+		type="button"
+		@click={ fmt.Sprintf("$refs.date.value = new Date(Date.now() - %d * 864e5).toLocaleDateString('en-CA')", daysAgo) }
+		class="shrink-0 h-11 px-3 rounded-xl border border-zinc-700 text-sm text-zinc-300 cursor-pointer transition-colors hover:border-zinc-500 hover:text-white"
+	>{ label }</button>
 }
 
 templ TransactionsListOOB(transactions []models.Transaction) {
@@ -78,11 +105,20 @@ templ EditTransaction(
 	cats []models.Category, cps []models.Counterparty,
 	gls []models.Goal, defaultCur *models.Currency) {
 	// data-tx keeps the day section visible while editing.
-	@form.Form("put", fmt.Sprintf("/transactions/%s", tx.ID), templ.Attributes{"hx-target": "this", "data-tx": true}) {
-		<p>ID: { tx.ID }</p>
+	<form
+		hx-put={ string(templ.SafeURL(fmt.Sprintf("/transactions/%s", tx.ID))) }
+		hx-target="this"
+		hx-swap="outerHTML"
+		data-tx
+		class="tx-form grid gap-5 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-5 sm:p-6"
+	>
+		<header class="flex items-baseline justify-between gap-4">
+			<h3 class="text-lg font-semibold">Edit transaction</h3>
+			<span title="Transaction ID" class="truncate font-mono text-xs text-zinc-500">{ tx.ID }</span>
+		</header>
 		@transactionFormBody(fd, tx.ID, accounts, knds, cats, cps, gls, defaultCur)
-		@form.EditFormButtons(fmt.Sprintf("/transactions/%s", tx.ID))
-	}
+		@form.SheetFormButtons("Save changes", fmt.Sprintf("/transactions/%s", tx.ID))
+	</form>
 }
 
 templ transactionsList(transactions []models.Transaction) {
@@ -388,51 +424,145 @@ templ TransactionAmountsAndKindFormBody(
 	knds []models.TxKind, cats []models.Category,
 	accs []models.Account, cps []models.Counterparty,
 	gls []models.Goal, defaultCur *models.Currency) {
+	{{ kind := models.GetTxKindFromString(fd.Kind.Value) }}
+	{{ switched := isSwitched(accs, fd.AccountIFD.AccountID.Value) }}
+	{{ onChange := templ.Attributes{"hx-post": fmt.Sprintf("/tx-inputs/%s", id), "hx-trigger": "change"} }}
 	<div
 		class="contents"
 		hx-target="this"
 		hx-swap="outerHTML"
 		hx-sync="closest form:abort"
 	>
-		@form.SelectTxKind("kind", id, getTxKindsForAccounts(accs, knds), fd.Kind, templ.Attributes{
-			"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
-			"hx-trigger": "change",
-		})
-		<div class="grid grid-cols-3 gap-4">
-			@form.MoneyInput("Amount", "amount", form.GetAccoutSym(accs, fd.AccountIFD.AccountID.Value, defaultCur), id,
+		@form.SelectTxKind("kind", id, getTxKindsForAccounts(accs, knds), fd.Kind, onChange)
+		<div class="grid justify-items-center gap-3 py-2">
+			@form.HeroMoneyInput("Amount", "amount", form.GetAccoutSym(accs, fd.AccountIFD.AccountID.Value, defaultCur), id,
 				fd.AccountIFD.Amount, templ.Attributes{
 					"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
 					"hx-trigger": "keyup changed delay:200ms",
-				}, templ.Attributes{"class": "col-span-2"})
-			@form.SelectAccount("account_id", id, getTxAccs(accs, models.GetTxKindFromString(fd.Kind.Value), isSwitched(accs, fd.AccountIFD.AccountID.Value)), fd.AccountIFD.AccountID,
-				templ.Attributes{
-					"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
-					"hx-trigger": "change",
 				})
+			<div class="flex items-center justify-center gap-2 max-w-full">
+				@form.SelectAccountChip(txAccountLabel(fd), "account_id", id, getTxAccs(accs, kind, switched), fd.AccountIFD.AccountID, onChange)
+				if fd.ToAccountIFD != nil {
+					<button
+						type="button"
+						hx-post={ fmt.Sprintf("/tx-inputs/switch/%s", id) }
+						aria-label="Swap accounts"
+						title="Swap accounts"
+						class="grid place-items-center shrink-0 w-9 h-9 rounded-full border border-zinc-700 bg-zinc-800 text-zinc-300 cursor-pointer transition-colors hover:border-(--accent) hover:text-(--accent)"
+					>
+						@icons.Transfer("18")
+					</button>
+					@form.SelectAccountChip("To account", "to_account_id", id, getTxCounterAccs(accs, kind, switched),
+						fd.ToAccountIFD.AccountID, onChange)
+				}
+			</div>
+			@form.ErrorMessage(fd.AccountIFD.AccountID.Error)
+			if fd.ToAccountIFD != nil {
+				{{ toSym := form.GetAccoutSym(accs, fd.ToAccountIFD.AccountID.Value, defaultCur) }}
+				<label class="flex items-center gap-2 text-sm text-zinc-400">
+					Receives
+					<input
+						id={ "to_amount-" + id }
+						type="text"
+						name="to_amount"
+						value={ fd.ToAccountIFD.Amount.Value }
+						placeholder={ toSym + " 0.00" }
+						autocomplete="off"
+						inputmode="decimal"
+						x-mask:dynamic={ fmt.Sprintf("'%s ' + $money($input, '.', ',')", toSym) }
+						class="input-field w-48! h-9! text-center tabular-nums font-(family-name:--font-biorhyme-expanded)"
+						if fd.ToAccountIFD.Amount.Error != "" {
+							aria-invalid="true"
+						}
+					/>
+				</label>
+				@form.ErrorMessage(fd.ToAccountIFD.Amount.Error)
+				@form.ErrorMessage(fd.ToAccountIFD.AccountID.Error)
+			}
 		</div>
-		if fd.CategoryID != nil {
-			@form.SelectTxCat("category_id", id, getCategoriesOfKinds(cats, models.GetTxKindFromString(fd.Kind.Value)), *fd.CategoryID, nil)
-		}
-		if fd.CounterpartyID != nil {
-			@form.SelectCounterparty("counterparty_id", id, cps, *fd.CounterpartyID, true, nil)
-		}
-		if fd.GoalID != nil {
-			@form.SelectGoal("goal_id", id, gls, *fd.GoalID, nil)
-		}
-		if fd.ToAccountIFD != nil {
-			<button hx-post={ fmt.Sprintf("/tx-inputs/switch/%s", id) }>Switch</button>
-			<div class="grid grid-cols-3 gap-4">
-				@form.MoneyInput("To Amount", "to_amount",
-					form.GetAccoutSym(accs, fd.ToAccountIFD.AccountID.Value, defaultCur), id,
-					fd.ToAccountIFD.Amount, nil, templ.Attributes{"class": "col-span-2"})
-				@form.SelectToAccount("to_account_id", id, getTxCounterAccs(accs, models.GetTxKindFromString(fd.Kind.Value), isSwitched(accs, fd.AccountIFD.AccountID.Value)),
-					fd.ToAccountIFD.AccountID, templ.Attributes{
-						"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
-						"hx-trigger": "change",
-					})
+		if fd.CategoryID != nil || fd.CounterpartyID != nil || fd.GoalID != nil {
+			<div class="grid gap-5 sm:grid-cols-2">
+				if fd.CategoryID != nil {
+					@form.Field("Category", "category_id", id, icons.Tag("15"), fd.CategoryID.Error) {
+						@form.Combobox(form.ComboboxProps{
+							Name: "category_id", ID: id, Label: "Category", Placeholder: "Select Category",
+							Options: categoryComboOptions(getCategoriesOfKinds(cats, kind)),
+							Data:    *fd.CategoryID, Nullable: true, Searchable: true,
+						})
+					}
+				}
+				if fd.CounterpartyID != nil {
+					@form.Field("Counterparty", "counterparty_id", id, icons.User("15"), fd.CounterpartyID.Error) {
+						@form.Combobox(form.ComboboxProps{
+							Name: "counterparty_id", ID: id, Label: "Counterparty", Placeholder: "Select Counterparty",
+							Options: counterpartyComboOptions(cps),
+							Data:    *fd.CounterpartyID, Nullable: true, Searchable: true,
+						})
+					}
+				}
+				if fd.GoalID != nil {
+					<div class="sm:col-span-2">
+						@form.Field("Goal", "goal_id", id, icons.Target("15"), fd.GoalID.Error) {
+							@form.Combobox(form.ComboboxProps{
+								Name: "goal_id", ID: id, Label: "Goal", Placeholder: "Select Goal",
+								Options: goalComboOptions(gls),
+								Data:    *fd.GoalID, Nullable: true, Searchable: true,
+							})
+						}
+					</div>
+				}
 			</div>
 		}
 	</div>
+}
+
+templ categoryDot(color string) {
+	<span class="shrink-0 w-2.5 h-2.5 rounded-full" style={ fmt.Sprintf("background-color: %s", models.CategoryColorToHex(color)) }></span>
+}
+
+func categoryComboOptions(cats []models.Category) []form.ComboOption {
+	opts := make([]form.ComboOption, len(cats))
+	for i, c := range cats {
+		opts[i] = form.ComboOption{Value: c.ID, Label: c.Name, Leading: categoryDot(c.Color)}
+	}
+	return form.SortComboOptions(opts)
+}
+
+func counterpartyComboOptions(cps []models.Counterparty) []form.ComboOption {
+	opts := make([]form.ComboOption, len(cps))
+	for i, cp := range cps {
+		opts[i] = form.ComboOption{
+			Value:   cp.ID,
+			Label:   cp.Name,
+			Search:  strings.Join(cp.Aliases, " "),
+			Leading: components.CounterpartyIcon(cp.Name, cp.Icon, cp.Color, "w-5 h-5 text-[11px]"),
+		}
+	}
+	return form.SortComboOptions(opts)
+}
+
+func goalComboOptions(gls []models.Goal) []form.ComboOption {
+	opts := make([]form.ComboOption, len(gls))
+	for i := range gls {
+		opts[i] = form.ComboOption{
+			Value:   gls[i].ID,
+			Label:   gls[i].Name,
+			Leading: icons.Target("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"}),
+		}
+	}
+	return form.SortComboOptions(opts)
+}
+
+// txAccountLabel names the account select by where the money goes.
+func txAccountLabel(fd *TransactionAmountsAndKindFD) string {
+	switch {
+	case fd.ToAccountIFD != nil:
+		return "From account"
+	case models.GetTxKindFromString(fd.Kind.Value).IsIncoming():
+		return "To account"
+	default:
+		return "Account"
+	}
 }
 
 func getTxKindsForAccounts(accs []models.Account, knds []models.TxKind) []models.TxKind {

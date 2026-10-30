@@ -131,3 +131,52 @@ templ Message(size string, attrs ...*templ.Attributes) {
 		<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
 	}
 }
+
+// X closes a dialog.
+templ X(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="M18 6 6 18M6 6l12 12"></path>
+	}
+}
+
+// ChevronDown marks a select.
+templ ChevronDown(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="m6 9 6 6 6-6"></path>
+	}
+}
+
+// ArrowUpDown swaps the from and to accounts of a transfer.
+templ ArrowUpDown(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="m21 16-4 4-4-4M17 20V4"></path>
+		<path d="m3 8 4-4 4 4M7 4v16"></path>
+	}
+}
+
+templ Calendar(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<rect x="3" y="4" width="18" height="18" rx="2"></rect>
+		<path d="M16 2v4M8 2v4M3 10h18"></path>
+	}
+}
+
+templ Pencil(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="M21.17 6.81a1 1 0 0 0-3.98-3.98L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"></path>
+		<path d="m15 5 4 4"></path>
+	}
+}
+
+templ User(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+		<circle cx="12" cy="7" r="4"></circle>
+	}
+}
+
+templ Check(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="M20 6 9 17l-5-5"></path>
+	}
+}

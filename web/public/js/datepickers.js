@@ -1,11 +1,14 @@
-function loadDatePickers() {
-  const datePickers = [];
-  const els = document.querySelectorAll("input[data-datepicker]");
+// Attaches a picker to every date input without one yet, so inputs swapped
+// in by HTMX (e.g. inline edit forms) get one too.
+function loadDatePickers(root = document) {
+  const els = root.querySelectorAll(
+    "input[data-datepicker]:not([data-datepicker-ready])",
+  );
   for (const el of els) {
-    const picker = new Litepicker({ element: el });
-    datePickers.push(picker);
+    new Litepicker({ element: el });
+    el.dataset.datepickerReady = "";
   }
-  return datePickers;
 }
 
 loadDatePickers();
+document.body.addEventListener("htmx:afterSettle", () => loadDatePickers());

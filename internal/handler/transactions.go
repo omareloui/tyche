@@ -682,7 +682,7 @@ func (h Handler) parseTransactionAmountsAndKindFD(r *http.Request, accs []models
 	kind := models.GetTxKindFromString(kindString)
 
 	gl := r.FormValue("goal_id")
-	if gl != "" {
+	if gl != "" || kind == models.ExpenseTxKind {
 		fd.GoalID = &form.FDInput{Value: gl}
 	}
 

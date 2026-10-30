@@ -8,6 +8,7 @@ import (
 	"github.com/omareloui/tyche/web/views/layouts"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
 )
 
 type RecurrenceFD struct {
@@ -24,15 +25,15 @@ templ RecurrentTxs(claims *jwt.AccessClaims, balances []models.Balance, rtxs []m
 }
 
 templ RecurrenceFormBody(id string, fd *RecurrenceFD) {
-	<div data-recurrence-form class="grid gap-2">
-		@form.Checkbox("Is Recurrent", "is_recurrent", id, fd.IsRecurrent,
+	<div data-recurrence-form class="grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-800/20 p-4">
+		@form.Toggle("Repeat", "is_recurrent", id, icons.Repeat("18"), fd.IsRecurrent,
 			templ.Attributes{
 				"hx-post":    fmt.Sprintf("/recurrence-form/%s", id),
 				"hx-trigger": "change",
 				"hx-target":  "closest [data-recurrence-form]",
 				"hx-swap":    "outerHTML",
 				"hx-sync":    "closest form:abort",
-			}, nil)
+			})
 		if fd.IsRecurrent.Value != "" {
 			@recurrenceFormBody(id, fd)
 		}
@@ -56,10 +57,10 @@ templ rtxFormBody(
 }
 
 templ recurrenceFormBody(id string, fd *RecurrenceFD) {
-	<div class="grid grid-cols-3 gap-4">
-		@form.NumberInput("Every", "every", "Recurrent every...", id, fd.Every, nil, nil)
-		@form.SelectInput("Unit", "unit", "How recurrent", id, models.RecurrentUnitOptions(), fd.Unit, false, nil, nil)
-		@form.DateInput("Stops on", "stops_on", id, fd.StopsOn, nil, nil)
+	<div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+		@form.NumberInput("Every", "every", "1", id, fd.Every, nil, nil)
+		@form.SelectInput("Unit", "unit", "Unit", id, models.RecurrentUnitOptions(), fd.Unit, false, nil, nil)
+		@form.DateInput("Stops on", "stops_on", id, fd.StopsOn, nil, templ.Attributes{"class": "col-span-2 sm:col-span-1"})
 	</div>
 }
 

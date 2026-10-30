@@ -1,15 +1,15 @@
 package components
 
+// PopupSurface is the translucent, blurred look of floating surfaces, for ones
+// that can't use Popup itself (e.g. form.Combobox's panel, which needs its own
+// attributes). Rounding is left to the caller.
+const PopupSurface = "border border-white/10 bg-zinc-800/40 text-zinc-100 shadow-lg backdrop-blur-md"
+
 // Popup is the shared floating surface (translucent, blurred box) for menus,
 // hover cards and the like. Positioning and visibility are up to the caller;
 // class adds to the base styles (padding, width, typography, ...).
 templ Popup(class string) {
-	<div
-		class={
-			"rounded-lg border border-white/10 bg-zinc-800/40 text-zinc-100 shadow-lg backdrop-blur-md",
-			class,
-		}
-	>
+	<div class={ PopupSurface, "rounded-lg", class }>
 		{ children... }
 	</div>
 }

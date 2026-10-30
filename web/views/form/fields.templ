@@ -1,0 +1,188 @@
+package form
+
+import (
+	"fmt"
+	"slices"
+	"strings"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+// SegmentedRadio is a row of pills, one per option. The hx attrs go on the
+// fieldset, so a change on any pill triggers them with the fieldset's id.
+templ SegmentedRadio(label, name, id string, options []string, data FDInput, attrs templ.Attributes) {
+	<fieldset
+		id={ join(name, id) }
+		if attrs != nil {
+			{ attrs... }
+		}
+	>
+		<legend class="sr-only">{ label }</legend>
+		<div class="flex gap-1 p-1 rounded-2xl bg-zinc-800/60 border border-zinc-800">
+			for _, o := range options {
+				<label
+					class="flex-1 min-w-0 cursor-pointer select-none rounded-xl px-2 py-2 text-center text-sm font-medium text-zinc-400 transition-colors hover:text-white has-checked:bg-(--accent) has-checked:text-zinc-950 has-checked:shadow has-focus-visible:ring-2 has-focus-visible:ring-(--accent)"
+				>
+					<input
+						type="radio"
+						name={ name }
+						value={ o }
+						class="sr-only"
+						if o == data.Value {
+							checked
+						}
+					/>
+					<span class="block truncate">{ o }</span>
+				</label>
+			}
+		</div>
+		@ErrorMessage(data.Error)
+	</fieldset>
+}
+
+// Toggle is a checkbox drawn as a switch.
+templ Toggle(label, name, id string, icon templ.Component, data FDInput, inputAttrs templ.Attributes) {
+	<label for={ join(name, id) } class="flex items-center justify-between gap-4 cursor-pointer select-none">
+		<span class="inline-flex items-center gap-2 text-zinc-300">
+			if icon != nil {
+				@icon
+			}
+			{ label }
+		</span>
+		<input
+			id={ join(name, id) }
+			type="checkbox"
+			name={ name }
+			class="peer sr-only"
+			if data.Value != "" {
+				checked
+			}
+			if inputAttrs != nil {
+				{ inputAttrs... }
+			}
+		/>
+		<span
+			aria-hidden="true"
+			class="relative shrink-0 w-11 h-6 rounded-full bg-zinc-700 transition-colors peer-checked:bg-(--accent) peer-focus-visible:ring-2 peer-focus-visible:ring-(--accent) peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-zinc-900 after:absolute after:top-0.5 after:left-0.5 after:size-5 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:after:translate-x-5"
+		></span>
+	</label>
+	@ErrorMessage(data.Error)
+}
+
+// HeroMoneyInput is a large, centered money input for a form's main amount.
+templ HeroMoneyInput(label, name, currencySymbol, id string, data FDInput, inputAttrs templ.Attributes) {
+	<div class="w-full">
+		<label for={ join(name, id) } class="sr-only">{ label }</label>
+		<input
+			id={ join(name, id) }
+			type="text"
+			name={ name }
+			value={ data.Value }
+			placeholder={ fmt.Sprintf("%s 0.00", currencySymbol) }
+			autocomplete="off"
+			inputmode="decimal"
+			x-mask:dynamic={ fmt.Sprintf("'%s ' + $money($input, '.', ',')", currencySymbol) }
+			class="amount-hero"
+			if data.Error != "" {
+				aria-invalid="true"
+			}
+			if inputAttrs != nil {
+				{ inputAttrs... }
+			}
+		/>
+		<div class="flex justify-center">
+			@ErrorMessage(data.Error)
+		</div>
+	</div>
+}
+
+// SelectAccountChip is a pill combobox of accounts, searchable when there
+// are many.
+templ SelectAccountChip(label, name, id string, accs []models.Account, data FDInput, inputAttrs templ.Attributes) {
+	@Combobox(ComboboxProps{
+		Name:        name,
+		ID:          id,
+		Label:       label,
+		Placeholder: "Select Account",
+		Options:     accountComboOptions(accs),
+		Data:        data,
+		Searchable:  len(accs) > 7,
+		Chip:        true,
+		InputAttrs:  inputAttrs,
+	})
+}
+
+// SheetForm is a create form in a dialog: a centered card on wide screens, a
+// bottom sheet on phones. Expects an Alpine openCreateForm in scope.
+templ SheetForm(title, postTo, submitStr, class string) {
+	<div
+		hx-target="this"
+		@click.self="openCreateForm=false"
+		class="fixed inset-0 z-55 grid items-end sm:place-items-center bg-zinc-950/70 backdrop-blur-sm"
+	>
+		<form
+			hx-post={ string(templ.SafeURL(postTo)) }
+			hx-swap="outerHTML"
+			class={ "flex flex-col w-full sm:w-[34rem] max-h-[92dvh] rounded-t-3xl sm:rounded-3xl bg-zinc-900 ring-1 ring-zinc-800 shadow-2xl shadow-black/50", class }
+		>
+			<header class="flex items-center justify-between gap-4 px-6 pt-5 pb-4">
+				<h2 class="text-xl font-bold font-(family-name:--font-biorhyme-expanded)">{ title }</h2>
+				<button
+					type="button"
+					@click="openCreateForm=false"
+					aria-label="Close"
+					class="grid place-items-center w-9 h-9 -mr-2 rounded-full text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white"
+				>
+					@icons.X("20")
+				</button>
+			</header>
+			<div class="grid gap-5 px-6 pb-6 overflow-y-auto">
+				{ children... }
+			</div>
+			<footer class="flex justify-end gap-2 px-6 py-4 border-t border-zinc-800">
+				<button type="button" @click="openCreateForm=false" class="btn-ghost">Cancel</button>
+				<button type="submit" class="btn-primary">{ submitStr }</button>
+			</footer>
+		</form>
+	</div>
+}
+
+// SheetFormButtons are an inline edit form's cancel and submit buttons;
+// cancelling (or Escape) gets the entry back from cancelUrl.
+templ SheetFormButtons(submitStr, cancelUrl string) {
+	<div class="flex justify-end gap-2 pt-4 border-t border-zinc-800">
+		<button
+			type="button"
+			class="btn-ghost"
+			hx-get={ string(templ.SafeURL(cancelUrl)) }
+			hx-trigger="click, keyup[key === 'Escape'] from:body"
+		>Cancel</button>
+		<button type="submit" class="btn-primary">{ submitStr }</button>
+	</div>
+}
+
+func accountComboOptions(accs []models.Account) []ComboOption {
+	opts := make([]ComboOption, len(accs))
+	for i, a := range accs {
+		opts[i] = ComboOption{
+			Value:   a.ID,
+			Label:   a.Name,
+			Search:  a.Currency.String,
+			Leading: icons.Card("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"}),
+		}
+	}
+	return SortComboOptions(opts)
+}
+
+// SortComboOptions orders the options by label, case-insensitively.
+func SortComboOptions(opts []ComboOption) []ComboOption {
+	slices.SortStableFunc(opts, func(a, b ComboOption) int {
+		return strings.Compare(strings.ToLower(a.Label), strings.ToLower(b.Label))
+	})
+	return opts
+}
+
+// Options maps structs by ID to their val field, for SelectControl.
+func Options[T any](structs []T, val string) map[string]string {
+	return idStructsToMap(structs, val)
+}

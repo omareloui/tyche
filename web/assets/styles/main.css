@@ -42,16 +42,99 @@ body {
 }
 
 /* ============ FORM ============ */
+:root {
+  /* Accent of the active form, overridden per tx kind on .tx-form. */
+  --accent: var(--color-violet-400);
+}
+
 .input-label {
-  @apply mb-1 block text-sm font-medium text-white;
+  @apply mb-1.5 inline-flex items-center gap-1.5 text-sm font-medium text-zinc-400 cursor-pointer;
 }
 
 .input-field {
-  @apply bg-zinc-50 border-2 border-zinc-300 text-zinc-900 text-sm rounded-lg focus:border-blue-300 block w-full p-2.5 focus:outline-none h-11;
+  @apply block w-full h-11 px-3.5 rounded-xl border border-zinc-700 bg-zinc-800/60 text-base text-zinc-100 placeholder:text-zinc-500 transition-[border-color,box-shadow] outline-none;
+}
+
+.input-field:hover {
+  @apply border-zinc-600;
+}
+
+.input-field:focus,
+.combo-chip:focus,
+.combo-chip[aria-expanded="true"],
+.combo-field[aria-expanded="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 15%, transparent);
+}
+
+.input-field[aria-invalid="true"],
+.combo-chip[aria-invalid="true"] {
+  @apply border-red-500/70;
+}
+
+select.input-field {
+  @apply appearance-none pr-10 cursor-pointer;
 }
 
 textarea.input-field {
-  @apply h-32;
+  @apply h-32 py-2.5;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  @apply appearance-none m-0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+.combo-field {
+  @apply flex items-center gap-2 text-left cursor-pointer;
+}
+
+/* Compact pill combobox, e.g. the account under the tx amount. */
+.combo-chip {
+  @apply flex items-center gap-2 max-w-full h-10 pl-3.5 pr-3 rounded-full border border-zinc-700 bg-zinc-800 text-base text-zinc-100 cursor-pointer outline-none transition-[border-color,box-shadow] hover:border-zinc-500;
+}
+
+.combo-field[data-empty="true"] [x-ref="display"],
+.combo-chip[data-empty="true"] [x-ref="display"] {
+  @apply text-zinc-500;
+}
+
+.amount-hero {
+  @apply w-full bg-transparent text-center text-3xl sm:text-4xl font-bold tabular-nums outline-none placeholder:text-zinc-700;
+  font-family: var(--font-biorhyme-expanded);
+  color: var(--accent);
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 h-11 px-6 rounded-xl font-semibold text-zinc-950 cursor-pointer transition hover:brightness-110 active:scale-[.98];
+  background-color: var(--accent);
+}
+
+.btn-ghost {
+  @apply inline-flex items-center justify-center gap-2 h-11 px-5 rounded-xl text-zinc-300 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white;
+}
+
+.btn-primary:focus-visible,
+.btn-ghost:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.tx-form:has(input[name="kind"][value="Income"]:checked),
+.tx-form:has(input[name="kind"][value="Refund"]:checked) {
+  --accent: var(--color-emerald-400);
+}
+
+.tx-form:has(input[name="kind"][value="Transfer"]:checked) {
+  --accent: var(--color-sky-400);
+}
+
+.tx-form:has(input[name="kind"][value="Debt"]:checked) {
+  --accent: var(--color-amber-400);
 }
 
 .form-visibility-button {
@@ -63,5 +146,54 @@ textarea.input-field {
 }
 
 .form-error-message {
-  @apply flex gap-1 text-red-500 mt-1 ml-2 items-center text-sm;
+  @apply flex gap-1.5 text-red-400 mt-1.5 items-center text-sm;
+}
+
+/* ============ LITEPICKER (dark) ============ */
+/* Litepicker injects its light theme as variables on :root; redefining them
+   on .litepicker wins over the inherited ones. */
+.litepicker {
+  --litepicker-container-months-color-bg: var(--color-zinc-900);
+  --litepicker-container-months-box-shadow-color: rgb(0 0 0 / 0.6);
+  --litepicker-footer-color-bg: var(--color-zinc-900);
+  --litepicker-footer-box-shadow-color: var(--color-zinc-800);
+  --litepicker-tooltip-color-bg: var(--color-zinc-800);
+  --litepicker-month-header-color: var(--color-zinc-100);
+  --litepicker-month-weekday-color: var(--color-zinc-500);
+  --litepicker-month-week-number-color: var(--color-zinc-500);
+  --litepicker-day-color: var(--color-zinc-300);
+  --litepicker-day-color-hover: var(--accent);
+  --litepicker-is-today-color: var(--accent);
+  --litepicker-is-in-range-color: var(--color-zinc-800);
+  --litepicker-is-locked-color: var(--color-zinc-700);
+  --litepicker-is-start-color: var(--color-zinc-950);
+  --litepicker-is-start-color-bg: var(--accent);
+  --litepicker-is-end-color: var(--color-zinc-950);
+  --litepicker-is-end-color-bg: var(--accent);
+  --litepicker-highlighted-day-color: var(--color-zinc-100);
+  --litepicker-highlighted-day-color-bg: var(--color-zinc-700);
+  --litepicker-button-prev-month-color: var(--color-zinc-400);
+  --litepicker-button-prev-month-color-hover: var(--accent);
+  --litepicker-button-next-month-color: var(--color-zinc-400);
+  --litepicker-button-next-month-color-hover: var(--accent);
+  --litepicker-button-reset-color: var(--color-zinc-400);
+  --litepicker-button-reset-color-hover: var(--accent);
+  --litepicker-button-cancel-color: var(--color-zinc-100);
+  --litepicker-button-cancel-color-bg: var(--color-zinc-700);
+  --litepicker-button-apply-color: var(--color-zinc-950);
+  --litepicker-button-apply-color-bg: var(--accent);
+
+  font-family: inherit;
+}
+
+.litepicker .container__months {
+  @apply rounded-2xl ring-1 ring-zinc-700 overflow-hidden;
+}
+
+.litepicker .container__days .day-item {
+  @apply rounded-lg transition-colors;
+}
+
+.litepicker .container__days .day-item:hover {
+  box-shadow: inset 0 0 0 1px var(--accent);
 }

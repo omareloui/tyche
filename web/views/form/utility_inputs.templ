@@ -52,7 +52,7 @@ templ SelectCurrency(name, id string, curs []models.Currency, data FDInput, inpu
 }
 
 templ SelectTxKind(name, id string, knds []models.TxKind, data FDInput, inputAttrs templ.Attributes) {
-	@SelectInput("Transaction Kind", name, "Select Kind", id, mapFromStringerSlice(knds), data, false, inputAttrs, nil)
+	@SegmentedRadio("Transaction Kind", name, id, stringerSlice(knds), data, inputAttrs)
 }
 
 templ SelectTxKinds(knds []models.TxKind, data TxKindFDInputs) {
@@ -74,11 +74,11 @@ templ SelectTxKinds(knds []models.TxKind, data TxKindFDInputs) {
 						checked
 					}
 				/>
-				@inputLabel("kind", id, kind.String())
+				<label for={ join("kind", id) } class="cursor-pointer">{ kind.String() }</label>
 			</div>
 		}
 	</div>
-	@errorMessage(err)
+	@ErrorMessage(err)
 }
 
 templ SelectCounterparty(name, id string, cps []models.Counterparty, data FDInput, nullable bool, inputAttrs templ.Attributes) {
@@ -154,11 +154,10 @@ func idStructsToMap[T any](structs []T, val string) map[string]string {
 	return structutils.StructsToMap(structs, "ID", val)
 }
 
-func mapFromStringerSlice[T fmt.Stringer](s []T) map[string]string {
-	m := make(map[string]string, len(s))
-	for _, e := range s {
-		str := e.String()
-		m[str] = str
+func stringerSlice[T fmt.Stringer](s []T) []string {
+	strs := make([]string, len(s))
+	for i, e := range s {
+		strs[i] = e.String()
 	}
-	return m
+	return strs
 }

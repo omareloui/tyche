@@ -1,0 +1,163 @@
+package form
+
+import (
+	"strings"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+type ComboOption struct {
+	Value string
+	Label string
+	// Search is extra text the search matches, e.g. a counterparty's aliases.
+	Search string
+	// Leading is shown before the label, e.g. a color dot or an icon.
+	Leading templ.Component
+}
+
+type ComboboxProps struct {
+	Name, ID    string
+	Label       string
+	Placeholder string
+	Options     []ComboOption
+	Data        FDInput
+	// Nullable adds a "None" option with an empty value.
+	Nullable   bool
+	Searchable bool
+	// Chip draws the button as a pill (.combo-chip) instead of a field.
+	Chip       bool
+	InputAttrs templ.Attributes
+}
+
+// Combobox is a custom select, with an optional search box focused on opening.
+// Behavior lives in the "combobox" Alpine component (/js/combobox.js).
+templ Combobox(p ComboboxProps) {
+	{{ sel := selectedComboOption(p) }}
+	<div
+		x-data="combobox"
+		class="relative min-w-0"
+		@keyup.escape="onEscape($event)"
+		@click.outside="close()"
+	>
+		<input
+			type="hidden"
+			x-ref="input"
+			id={ join(p.Name, p.ID) }
+			name={ p.Name }
+			value={ p.Data.Value }
+			if p.InputAttrs != nil {
+				{ p.InputAttrs... }
+			}
+		/>
+		<button
+			type="button"
+			x-ref="button"
+			@click="toggle()"
+			@keydown.down.prevent="show()"
+			aria-haspopup="listbox"
+			:aria-expanded="open"
+			aria-label={ p.Label }
+			title={ p.Label }
+			if sel == nil || sel.Value == "" {
+				data-empty="true"
+			}
+			if p.Data.Error != "" {
+				aria-invalid="true"
+			}
+			class={ templ.KV("combo-chip", p.Chip), templ.KV("input-field combo-field", !p.Chip) }
+		>
+			<span x-ref="display" class="flex min-w-0 items-center gap-2">
+				if sel != nil {
+					@comboOptionDisplay(*sel)
+				} else {
+					<span class="truncate">{ p.Placeholder }</span>
+				}
+			</span>
+			@icons.ChevronDown("18", &templ.Attributes{
+				"class":  "shrink-0 ml-auto text-zinc-400 transition-transform",
+				":class": "open && 'rotate-180'",
+			})
+		</button>
+		<div
+			x-ref="panel"
+			x-cloak
+			x-show="open"
+			x-transition.opacity.duration.100ms
+			:style="panelStyle"
+			@keydown.down.prevent="move(1)"
+			@keydown.up.prevent="move(-1)"
+			@keydown.enter.prevent="pickActive()"
+			@keydown.tab="close()"
+			class={ "z-70 p-1.5 rounded-xl", components.PopupSurface }
+		>
+			if p.Searchable {
+				<div class="relative mb-1.5">
+					@icons.Search("16", &templ.Attributes{"class": "pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"})
+					<input
+						x-ref="search"
+						x-model="q"
+						@input="filter()"
+						type="text"
+						placeholder="Search…"
+						autocomplete="off"
+						aria-label={ "Search " + p.Label }
+						class="w-full h-10 pl-9 pr-3 rounded-lg border border-white/10 bg-white/5 text-base outline-none placeholder:text-zinc-400 focus:border-(--accent)"
+					/>
+				</div>
+			}
+			<ul x-ref="list" role="listbox" tabindex="-1" aria-label={ p.Label } class="max-h-64 overflow-y-auto outline-none">
+				if p.Nullable {
+					@comboOptionItem(ComboOption{Label: "None"}, p.Data.Value == "")
+				}
+				for _, o := range p.Options {
+					@comboOptionItem(o, o.Value == p.Data.Value)
+				}
+				<li x-show="noMatches" class="px-3 py-2 text-sm text-zinc-500">No matches</li>
+			</ul>
+		</div>
+	</div>
+}
+
+templ comboOptionItem(o ComboOption, selected bool) {
+	<li
+		data-option
+		data-value={ o.Value }
+		data-search={ strings.ToLower(o.Label + " " + o.Search) }
+		role="option"
+		if selected {
+			aria-selected="true"
+		} else {
+			aria-selected="false"
+		}
+		@click="pick($el)"
+		@mousemove="hover($el)"
+		class="group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer select-none data-active:bg-white/10"
+	>
+		<span data-display class="flex min-w-0 items-center gap-2">
+			@comboOptionDisplay(o)
+		</span>
+		@icons.Check("16", &templ.Attributes{"class": "shrink-0 ml-auto invisible text-(--accent) group-aria-selected:visible"})
+	</li>
+}
+
+templ comboOptionDisplay(o ComboOption) {
+	if o.Leading != nil {
+		@o.Leading
+	}
+	<span class={ "truncate", templ.KV("text-zinc-400", o.Value == "") }>{ o.Label }</span>
+}
+
+func selectedComboOption(p ComboboxProps) *ComboOption {
+	if p.Data.Value == "" {
+		if p.Nullable {
+			return &ComboOption{Label: "None"}
+		}
+		return nil
+	}
+	for i := range p.Options {
+		if p.Options[i].Value == p.Data.Value {
+			return &p.Options[i]
+		}
+	}
+	return nil
+}
