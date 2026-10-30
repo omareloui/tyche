@@ -63,7 +63,6 @@ templ EditAccount(id string, fd *AccountFD, aknds []models.AccountKind, curs []m
 	>
 		<header class="flex items-baseline justify-between gap-4">
 			<h3 class="text-lg font-semibold">Edit account</h3>
-			<span title="Account ID" class="truncate font-mono text-xs text-zinc-500">{ id }</span>
 		</header>
 		@accountFormBody(id, fd, aknds, curs, cps, defaultCur)
 		@form.SheetFormButtons("Save changes", fmt.Sprintf("/accounts/%s", id))

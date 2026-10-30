@@ -37,12 +37,14 @@ SELECT
     sqlc.embed(t),
     sqlc.embed(a),
     sqlc.embed(c),
+    ak.enum AS account_kind_enum,
     cp.name AS counterparty_name,
     cp.icon AS counterparty_icon,
     cp.color AS counterparty_color,
     ta.id AS to_account_id,
     ta.name AS to_account_name,
     ta.kind_id AS to_account_kind_id,
+    tak.enum AS to_account_kind_enum,
     ta.amount AS to_account_amount,
     ta.currency_id AS to_account_currency_id,
     ta.counterparty_id AS to_account_counterparty_id,
@@ -59,6 +61,7 @@ SELECT
     tc.symbol AS to_account_currency_symbol,
     cat.id AS category_id,
     cat.name AS category_name,
+    cat.color AS category_color,
     cat.budget_amount AS category_budget_amount,
     cat.budget_currency_id AS category_budget_currency_id,
     cat.created_at AS category_created_at,
@@ -78,7 +81,9 @@ FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN account_kinds AS ak ON a.kind_id = ak.id
 LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
+LEFT JOIN account_kinds AS tak ON ta.kind_id = tak.id
 LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
 LEFT JOIN categories AS cat ON t.category_id = cat.id
 LEFT JOIN goals AS g ON t.goal_id = g.id
@@ -90,12 +95,14 @@ SELECT
     sqlc.embed(t),
     sqlc.embed(a),
     sqlc.embed(c),
+    ak.enum AS account_kind_enum,
     cp.name AS counterparty_name,
     cp.icon AS counterparty_icon,
     cp.color AS counterparty_color,
     ta.id AS to_account_id,
     ta.name AS to_account_name,
     ta.kind_id AS to_account_kind_id,
+    tak.enum AS to_account_kind_enum,
     ta.amount AS to_account_amount,
     ta.currency_id AS to_account_currency_id,
     ta.counterparty_id AS to_account_counterparty_id,
@@ -112,6 +119,7 @@ SELECT
     tc.symbol AS to_account_currency_symbol,
     cat.id AS category_id,
     cat.name AS category_name,
+    cat.color AS category_color,
     cat.budget_amount AS category_budget_amount,
     cat.budget_currency_id AS category_budget_currency_id,
     cat.created_at AS category_created_at,
@@ -131,7 +139,9 @@ FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN account_kinds AS ak ON a.kind_id = ak.id
 LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
+LEFT JOIN account_kinds AS tak ON ta.kind_id = tak.id
 LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
 LEFT JOIN categories AS cat ON t.category_id = cat.id
 LEFT JOIN goals AS g ON t.goal_id = g.id
@@ -167,6 +177,19 @@ WHERE id = sqlc.arg(id);
 -- name: MarkTransactionReviewed :exec
 UPDATE transactions
 SET
+    needs_review = FALSE
+WHERE id = sqlc.arg(id);
+
+-- name: MarkAllTransactionsReviewed :exec
+UPDATE transactions
+SET
+    needs_review = FALSE
+WHERE needs_review = TRUE;
+
+-- name: ReviewTransactionCategory :exec
+UPDATE transactions
+SET
+    category_id = sqlc.narg(category_id),
     needs_review = FALSE
 WHERE id = sqlc.arg(id);
 
@@ -242,6 +265,7 @@ SELECT
     cur.symbol AS currency_symbol,
     cp.name AS counterparty_name,
     cat.name AS category_name,
+    cat.color AS category_color,
     CAST((
         SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id
     ) AS FLOAT) AS reimbursed

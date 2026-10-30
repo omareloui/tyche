@@ -1,0 +1,891 @@
+package views
+
+import (
+	"fmt"
+	"math"
+	"strings"
+	"time"
+
+	"github.com/omareloui/tyche/internal/formatters"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+// TxList is the whole list: the review banner, upcoming transactions, then
+// the history by month and day. Every change to a transaction re-renders it,
+// as it moves totals, sections and counts.
+templ TxList(txs []models.Transaction, def *models.Currency) {
+	@txList(txs, def, false)
+}
+
+templ TransactionsListOOB(txs []models.Transaction, def *models.Currency) {
+	@txList(txs, def, true)
+}
+
+templ txList(txs []models.Transaction, def *models.Currency, oob bool) {
+	{{ l := buildTxList(txs, def) }}
+	<div
+		id="tx-list"
+		if oob {
+			hx-swap-oob="outerHTML"
+		}
+		class="grid gap-8"
+		x-init="if (!$el.querySelector('[data-review]')) reviewOnly = false"
+	>
+		if l.Empty {
+			@txEmptyState()
+		} else {
+			if l.NeedsReview > 0 {
+				@txReviewBanner(l.NeedsReview)
+			}
+			if len(l.Upcoming) > 0 {
+				@txUpcoming(&l, def)
+			}
+			for _, m := range l.Months {
+				@txMonthSection(&m, def)
+			}
+			<p class="hidden sm:flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-zinc-600">
+				<span><kbd class="kbd">j</kbd> <kbd class="kbd">k</kbd> move</span>
+				<span><kbd class="kbd">e</kbd> edit</span>
+				<span><kbd class="kbd">f</kbd> fulfill</span>
+				<span><kbd class="kbd">r</kbd> reviewed</span>
+				<span><kbd class="kbd">⌫</kbd> delete</span>
+				<span><kbd class="kbd">n</kbd> new</span>
+			</p>
+		}
+	</div>
+}
+
+templ txEmptyState() {
+	<div class="grid justify-items-center gap-3 py-16 text-center">
+		<div class="grid place-items-center w-16 h-16 rounded-2xl bg-violet-400/10 text-violet-400">
+			@icons.Banknote("30")
+		</div>
+		<p class="text-xl font-semibold">No transactions yet</p>
+		<p class="max-w-sm text-zinc-500">Add what you spend and earn, or forward your bank SMS from the app to have them added for you.</p>
+		<button type="button" @click="openCreateForm = true" class="btn-primary mt-2">
+			@icons.Plus("18")
+			Add a transaction
+		</button>
+	</div>
+}
+
+templ txReviewBanner(count int) {
+	<div class="flex flex-wrap items-center gap-3 p-4 rounded-2xl bg-amber-400/8 ring-1 ring-amber-400/20">
+		<div class="grid place-items-center shrink-0 w-10 h-10 rounded-xl bg-amber-400/15 text-amber-300">
+			@icons.Message("20")
+		</div>
+		<div class="flex-1 min-w-48">
+			<p class="font-semibold">
+				{ fmt.Sprint(count) }
+				if count == 1 {
+					transaction
+				} else {
+					transactions
+				}
+				from SMS { plural(count, "needs", "need") } review
+			</p>
+			<p class="text-sm text-zinc-400">Check their category, then mark them as reviewed.</p>
+		</div>
+		<div class="flex gap-2">
+			<button
+				type="button"
+				@click="reviewOnly = !reviewOnly"
+				x-text="reviewOnly ? 'Show all' : 'Review'"
+				class="h-9 px-4 rounded-full bg-amber-300 text-sm font-semibold text-zinc-950 cursor-pointer transition hover:brightness-110"
+			>Review</button>
+			<button
+				type="button"
+				hx-put="/transactions/reviewed"
+				hx-target="#tx-list"
+				hx-swap="outerHTML"
+				hx-confirm={ fmt.Sprintf("Mark all %d as reviewed?", count) }
+				class="h-9 px-4 rounded-full text-sm text-zinc-300 cursor-pointer transition-colors hover:bg-white/5 hover:text-white"
+			>Mark all reviewed</button>
+		</div>
+	</div>
+}
+
+templ txUpcoming(l *txListView, def *models.Currency) {
+	<details
+		class="group rounded-2xl ring-1 ring-zinc-800"
+		x-show="!reviewOnly || $el.querySelector('[data-review]')"
+		if l.Overdue > 0 {
+			open
+		}
+	>
+		<summary class="flex items-center gap-3 p-4 list-none cursor-pointer select-none [&::-webkit-details-marker]:hidden">
+			<div class="grid place-items-center shrink-0 w-10 h-10 rounded-xl bg-sky-400/10 text-sky-400">
+				@icons.Calendar("20")
+			</div>
+			<div class="flex-1 min-w-0">
+				<p class="font-semibold">Upcoming</p>
+				<p class="text-sm text-zinc-500">
+					{ fmt.Sprint(len(l.Upcoming)) } scheduled
+					if l.Overdue > 0 {
+						· <span class="text-red-400">{ fmt.Sprint(l.Overdue) } overdue</span>
+					}
+				</p>
+			</div>
+			@txFlowTotals(l.UpcomingIn, l.UpcomingOut, def)
+			@icons.ChevronDown("18", &templ.Attributes{"class": "shrink-0 text-zinc-500 transition-transform group-open:rotate-180"})
+		</summary>
+		<div class="grid gap-2 px-2 pb-2 sm:px-3 sm:pb-3">
+			for _, t := range l.Upcoming {
+				@Transaction(&t, def)
+			}
+		</div>
+	</details>
+}
+
+templ txMonthSection(m *txMonth, def *models.Currency) {
+	<section class="grid gap-5" x-show="!reviewOnly || $el.querySelector('[data-review]')">
+		<header class="sticky top-17 sm:top-22 z-10 -mx-2 px-2 py-2 bg-zinc-950/85 backdrop-blur-md">
+			<div class="flex items-baseline justify-between gap-4">
+				<h2 class="text-xl font-bold font-(family-name:--font-biorhyme-expanded)">{ formatTxMonth(m.Month) }</h2>
+				@txFlowTotals(m.In, m.Out, def)
+			</div>
+			if m.In > 0 || m.Out > 0 {
+				{{ inPct := m.In / (m.In + max(m.Out, 0)) * 100 }}
+				<div class="flex gap-0.5 h-1 mt-2 rounded-full overflow-hidden" title="Earned vs spent">
+					<div class="bg-emerald-400/70" style={ fmt.Sprintf("width: %.1f%%", inPct) }></div>
+					<div class="flex-1 bg-red-400/70"></div>
+				</div>
+			}
+		</header>
+		for _, d := range m.Days {
+			// Hidden once all its transactions get deleted.
+			<section class="hidden has-[[data-tx]]:grid gap-2" x-show="!reviewOnly || $el.querySelector('[data-review]')">
+				<h3 class="flex items-baseline justify-between gap-4 px-1 text-sm">
+					<span class="font-semibold text-zinc-300">{ formatTxDay(d.Day) }</span>
+					if d.In != 0 || d.Out != 0 {
+						<span class="tabular-nums text-zinc-500">{ formatSignedAmount(d.In-d.Out, def.Symbol) }</span>
+					}
+				</h3>
+				for _, t := range d.Txs {
+					@Transaction(&t, def)
+				}
+			</section>
+		}
+	</section>
+}
+
+templ txFlowTotals(in, out float64, def *models.Currency) {
+	<p class="shrink-0 flex gap-3 text-sm tabular-nums">
+		if in > 0 {
+			<span class="text-emerald-400" title="Earned">{ "+" + formatters.FormatAmount(in, def.Symbol) }</span>
+		}
+		if out != 0 {
+			<span class="text-zinc-400" title="Spent">{ formatSignedAmount(-out, def.Symbol) }</span>
+		}
+	</p>
+}
+
+templ Transaction(tx *models.Transaction, def *models.Currency) {
+	if tx.IsReimbursement() {
+		@reimbursement(tx, def)
+	} else {
+		@transaction(tx, def)
+	}
+}
+
+// txRowAttrs are what the row's swipe and keyboard actions (transactions.js)
+// read: its id, label for the undo toast, and which actions it has.
+func txRowAttrs(tx *models.Transaction, v *txView) templ.Attributes {
+	attrs := templ.Attributes{
+		"id":         TxRowID(tx.ID),
+		"data-tx":    true,
+		"data-id":    tx.ID,
+		"data-label": v.title,
+		"x-show":     "shown",
+	}
+	if tx.FulfilledAt.IsZero() {
+		attrs["data-scheduled"] = true
+	}
+	if tx.NeedsReview {
+		attrs["data-review"] = true
+	}
+	return attrs
+}
+
+templ transaction(tx *models.Transaction, def *models.Currency) {
+	{{ v := newTxView(tx) }}
+	<div
+		{ txRowAttrs(tx, &v)... }
+		hx-target="this"
+		hx-swap="outerHTML"
+		class="relative"
+		x-data="txRow"
+	>
+		@components.EntryMenu("openMenu", getTransactionMenuItems(tx))
+		<div
+			data-tx-row
+			tabindex="0"
+			x-bind="swipe"
+			class={
+				"relative flex items-center gap-3 sm:gap-4 px-3 sm:px-4 py-3 rounded-2xl touch-pan-y outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60",
+				templ.KV("bg-tx-row", !v.isScheduled),
+				templ.KV("bg-zinc-950 border border-dashed border-zinc-700", v.isScheduled),
+			}
+		>
+			@txTile(tx, &v)
+			<div class="flex-1 min-w-0">
+				<p class="truncate leading-snug">{ v.title }</p>
+				{{ meta := txMeta(&v) }}
+				if meta != "" {
+					<p class="text-sm text-zinc-500 truncate">
+						{ meta }
+						<span class="md:hidden">· { v.account }</span>
+					</p>
+				} else {
+					<p class="md:hidden text-sm text-zinc-500 truncate">{ v.account }</p>
+				}
+				@txChips(tx, &v)
+			</div>
+			<div class="hidden md:flex items-center gap-2 w-44 shrink-0 min-w-0 text-sm text-zinc-400">
+				<span class="shrink-0 text-zinc-500">
+					@accKindIcon(v.accKind, "18")
+				</span>
+				<span class="truncate">{ v.account }</span>
+			</div>
+			<div class="shrink-0 text-right tabular-nums">
+				if v.original != "" {
+					<p class="text-xs text-zinc-500 line-through">{ v.original }</p>
+				}
+				<p
+					class={
+						"font-semibold font-(family-name:--font-biorhyme-expanded) text-[15px]",
+						templ.KV("text-emerald-400", v.tone == txToneIn),
+						templ.KV("text-zinc-400", v.tone == txToneNeutral),
+					}
+				>{ v.amount }</p>
+				{{ conv := txConverted(tx, def) }}
+				if conv != "" {
+					<p class="text-xs text-zinc-500">{ conv }</p>
+				}
+			</div>
+			if v.isScheduled {
+				<button
+					hx-put={ fmt.Sprintf("/transactions/%s/fulfill", tx.ID) }
+					title="Mark as done, applying it to the account"
+					class="hidden sm:inline-flex shrink-0 items-center gap-1 h-8 px-3 rounded-full border border-zinc-700 text-sm text-zinc-300 cursor-pointer transition-colors hover:border-emerald-400 hover:text-emerald-400"
+				>
+					@icons.Check("14")
+					Fulfill
+				</button>
+			}
+			<button
+				@click="openMenu = !openMenu"
+				aria-label="Transaction actions"
+				class="cursor-pointer grid place-items-center shrink-0 w-6 h-6"
+			>
+				<img src="/icons/dots-menu.svg" class="h-5"/>
+			</button>
+		</div>
+		if tx.NeedsReview {
+			@txReviewStrip(tx)
+		}
+		if len(tx.Reimbursements) > 0 {
+			@reimbursementsBreakdown(tx, def)
+		}
+	</div>
+}
+
+templ txTile(tx *models.Transaction, v *txView) {
+	if v.counterparty != nil {
+		<div class="grid place-items-center shrink-0 w-11 h-11 rounded-xl bg-zinc-800/70">
+			@components.CounterpartyIcon(v.counterparty.Name, v.counterparty.Icon, v.counterparty.Color, "w-7 h-7 text-sm")
+		</div>
+	} else if tx.Kind == models.TransferTxKind {
+		<div class="grid place-items-center shrink-0 w-11 h-11 rounded-xl bg-sky-400/12 text-sky-400">
+			@icons.Transfer("22")
+		</div>
+	} else if tx.Kind == models.DebtTxKind {
+		<div class="grid place-items-center shrink-0 w-11 h-11 rounded-xl bg-amber-400/12 text-amber-400">
+			@icons.Debt("22")
+		</div>
+	} else if tx.Category != nil && tx.Category.Color != "" {
+		{{ hex := models.CategoryColorToHex(tx.Category.Color) }}
+		<div
+			class="grid place-items-center shrink-0 w-11 h-11 rounded-xl"
+			style={ fmt.Sprintf("background-color: color-mix(in oklab, %s 16%%, transparent); color: %s", hex, hex) }
+		>
+			@icons.Tag("20")
+		</div>
+	} else {
+		<div class="grid place-items-center shrink-0 w-11 h-11 rounded-xl bg-zinc-800/70 text-zinc-400">
+			@icons.Tag("20")
+		</div>
+	}
+}
+
+templ txChips(tx *models.Transaction, v *txView) {
+	{{ hasChips := v.isScheduled || tx.FromSMS || tx.RecurrentTx != nil || tx.Goal != nil || len(tx.Reimbursements) > 0 }}
+	if hasChips {
+		<div class="flex flex-wrap items-center gap-1.5 mt-1.5">
+			if v.isOverdue {
+				<span class="chip bg-red-400/10 text-red-400">
+					@icons.Calendar("12")
+					Overdue · { tx.ScheduledTo.Format("Jan 2") }
+				</span>
+			} else if v.isScheduled {
+				<span class="chip bg-sky-400/10 text-sky-300">
+					@icons.Calendar("12")
+					Scheduled · { tx.ScheduledTo.Format("Jan 2") }
+				</span>
+			}
+			if tx.RecurrentTx != nil {
+				<span class="chip">
+					@icons.Repeat("12")
+					Recurring
+				</span>
+			}
+			if tx.NeedsReview {
+				<span tabindex="0" class="group relative chip bg-amber-400/10 text-amber-300 outline-none">
+					@icons.Message("12")
+					Needs review
+					@txSMSPopup(tx.SMSBody, "From SMS, needs review")
+				</span>
+			} else if tx.FromSMS {
+				<span tabindex="0" class="group relative chip outline-none">
+					@icons.Message("12")
+					SMS
+					@txSMSPopup(tx.SMSBody, "")
+				</span>
+			}
+			if tx.Goal != nil {
+				<span tabindex="0" class="group relative chip max-w-48 outline-none">
+					@icons.Target("12")
+					<span class="truncate">{ tx.Goal.Name }</span>
+					@txGoalPopup(tx.Goal)
+				</span>
+			}
+			if len(tx.Reimbursements) > 0 {
+				<button
+					type="button"
+					@click="openReimbursements = !openReimbursements"
+					:aria-expanded="openReimbursements"
+					title="Show what got paid back"
+					class="chip cursor-pointer bg-emerald-400/10 text-emerald-300 transition-colors hover:bg-emerald-400/20"
+				>
+					@icons.Users("12")
+					{ fmt.Sprint(len(tx.Reimbursements)) } paid back
+					@icons.ChevronDown("12", &templ.Attributes{":class": "openReimbursements && 'rotate-180'", "class": "transition-transform"})
+				</button>
+			}
+		</div>
+	}
+}
+
+// txReviewStrip lets reviewing an SMS transaction in place, while in review
+// mode: fix its category or confirm it as is.
+templ txReviewStrip(tx *models.Transaction) {
+	{{ hasCategory := tx.Kind != models.TransferTxKind && tx.Kind != models.DebtTxKind }}
+	// Kept light (classes in main.css, no icons): there may be many to review.
+	<div x-cloak x-show="reviewOnly" class="tx-review">
+		if hasCategory {
+			// The picker loads on demand.
+			<button
+				type="button"
+				hx-get={ fmt.Sprintf("/transactions/%s/category", tx.ID) }
+				hx-target="this"
+				hx-swap="outerHTML"
+				title="Category. Changing it marks the transaction as reviewed"
+				class="combo-chip max-w-56"
+			>
+				if tx.Category != nil {
+					@categoryDot(tx.Category.Color)
+					<span class="truncate">{ tx.Category.Name }</span>
+				} else {
+					<span class="truncate text-zinc-400">Pick a category</span>
+				}
+				<span class="text-zinc-400">▾</span>
+			</button>
+		}
+		<button type="button" hx-put={ fmt.Sprintf("/transactions/%s/reviewed", tx.ID) } class="tx-review-ok">✓ Looks good</button>
+	</div>
+}
+
+// TxReviewCategoryPicker is the category combobox of a transaction under
+// review, opened as it replaces the button the user clicked.
+templ TxReviewCategoryPicker(tx *models.Transaction, cats []models.Category) {
+	{{ catID := "" }}
+	if tx.Category != nil {
+		{{ catID = tx.Category.ID }}
+	}
+	<div class="min-w-0 max-w-56" x-init="$nextTick(() => $el.querySelector('[x-ref=button]')?.click())">
+		@form.Combobox(form.ComboboxProps{
+			Name: "category_id", ID: "review-" + tx.ID, Label: "Category", Placeholder: "Pick a category",
+			Options: categoryComboOptions(getCategoriesOfKinds(cats, tx.Kind)),
+			Data:    form.FDInput{Value: catID}, Nullable: true, Searchable: true, Chip: true,
+			CreateURL: categoryCreateURL(tx.Kind),
+			InputAttrs: templ.Attributes{
+				"hx-put":     fmt.Sprintf("/transactions/%s/category", tx.ID),
+				"hx-trigger": "change",
+			},
+		})
+	</div>
+}
+
+// txSMSPopup shows the SMS a transaction was created from on hovering its
+// parent group.
+templ txSMSPopup(body, hint string) {
+	@components.HoverPopup("w-72 max-w-[80vw] px-3 py-2 text-sm text-zinc-200") {
+		<p class="whitespace-pre-wrap break-words">{ body }</p>
+		if hint != "" {
+			<p class="mt-2 text-xs text-amber-400">{ hint }</p>
+		}
+	}
+}
+
+// txGoalPopup shows the goal a transaction belongs to and its progress on
+// hovering its parent group.
+templ txGoalPopup(gl *models.Goal) {
+	@components.HoverPopup("w-64 max-w-[80vw] px-3 py-2 text-sm text-zinc-200") {
+		<div class="flex items-baseline justify-between gap-3">
+			<p class="truncate font-semibold">{ gl.Name }</p>
+			<p class="shrink-0 text-xs text-zinc-400">{ formatters.FormatNum(gl.ProgressPercentage()) }%</p>
+		</div>
+		<div class="mt-2">
+			@components.ProgressBar(gl.ProgressPercentage(), components.WithProgressBarSuccessStatus(gl.ProgressPercentage() >= 100 || !gl.FulfilledAt.IsZero()))
+		</div>
+		<p class="mt-2 text-xs text-zinc-400">{ gl.ViewProgress() } / { gl.ViewAmount() }</p>
+	}
+}
+
+// reimbursementsBreakdown shows how an expense's net amount came to be: what
+// got paid, minus each reimbursement.
+templ reimbursementsBreakdown(tx *models.Transaction, def *models.Currency) {
+	<div x-cloak x-show="openReimbursements" x-transition class="ml-6 md:ml-16 mt-2 grid gap-2 border-l-2 border-emerald-400/20 pl-4">
+		<div class="flex justify-between px-4 text-sm text-zinc-400">
+			<span>Paid</span>
+			<span class="tabular-nums">{ "-" + tx.ViewAmount() }</span>
+		</div>
+		for _, rt := range tx.Reimbursements {
+			@reimbursement(&rt, def)
+		}
+		<div class="flex justify-between px-4 text-sm font-semibold">
+			<span>Net</span>
+			<span class="tabular-nums">{ "-" + tx.ViewNetAmount() }</span>
+		</div>
+	</div>
+}
+
+// reimbursement is an income paying back (part of) an expense, shown under
+// its expense.
+templ reimbursement(tx *models.Transaction, def *models.Currency) {
+	{{ v := newTxView(tx) }}
+	<div
+		{ txRowAttrs(tx, &v)... }
+		hx-target="this"
+		hx-swap="outerHTML"
+		class="relative"
+		x-data="txRow"
+	>
+		@components.EntryMenu("openMenu", getReimbursementMenuItems(tx))
+		<div
+			data-tx-row
+			tabindex="0"
+			class={ "flex items-center gap-3 px-4 py-2 rounded-xl bg-tx-row outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60", templ.KV("opacity-70", v.isScheduled) }
+		>
+			<div class="grid place-items-center shrink-0 w-9 h-9 rounded-lg bg-emerald-400/10 text-emerald-400">
+				if v.counterparty != nil {
+					@components.CounterpartyIcon(v.counterparty.Name, v.counterparty.Icon, v.counterparty.Color, "w-5 h-5 text-[11px]")
+				} else {
+					@icons.Users("18")
+				}
+			</div>
+			<div class="flex-1 min-w-0">
+				<p class="truncate">{ v.title }</p>
+				<p class="text-xs text-zinc-500 truncate">
+					{ formatTxDay(tx.ScheduledTo) } · { v.account }
+				</p>
+			</div>
+			<div class="shrink-0 text-right tabular-nums">
+				<p class="font-semibold text-emerald-400">{ v.amount }</p>
+				{{ conv := txConverted(tx, def) }}
+				if conv != "" {
+					<p class="text-xs text-zinc-500">{ conv }</p>
+				}
+			</div>
+			<button
+				@click="openMenu = !openMenu"
+				aria-label="Reimbursement actions"
+				class="cursor-pointer grid place-items-center shrink-0 w-6 h-6"
+			>
+				<img src="/icons/dots-menu.svg" class="h-5"/>
+			</button>
+		</div>
+		if tx.NeedsReview {
+			@txReviewStrip(tx)
+		}
+	</div>
+}
+
+templ txUndoToast() {
+	<div
+		x-cloak
+		x-show="$store.txs.toast"
+		x-transition.opacity.duration.150ms
+		role="status"
+		class="fixed z-60 bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 max-w-[calc(100vw-2rem)] pl-5 pr-1.5 py-1.5 rounded-full bg-zinc-800 ring-1 ring-zinc-700 shadow-xl shadow-black/50"
+	>
+		<span class="truncate text-base">Deleted “<span x-text="$store.txs.toast?.label"></span>”</span>
+		<button
+			type="button"
+			@click="$store.txs.undo()"
+			class="shrink-0 h-9 px-4 rounded-full font-semibold text-violet-300 cursor-pointer transition-colors hover:bg-white/5"
+		>Undo</button>
+	</div>
+}
+
+// txMenuDelete deletes the transaction after a few seconds, offering an undo
+// meanwhile (transactions.js).
+templ txMenuDelete() {
+	<a @click="openMenu = false; $store.txs.remove($el.closest('[data-tx]'))" class="block text-red-500 transition-transform hover:translate-x-0.5">Delete</a>
+}
+
+// txMenuDuplicate opens the create form filled with the transaction, dated
+// today.
+templ txMenuDuplicate(id string) {
+	<a
+		hx-get={ fmt.Sprintf("/transactions/%s/duplicate", id) }
+		hx-target="#tx-create"
+		hx-swap="innerHTML"
+		@click="openMenu = false; openCreateForm = true"
+		class="block transition-transform hover:translate-x-0.5"
+	>Duplicate</a>
+}
+
+func getTransactionMenuItems(tx *models.Transaction) []templ.Component {
+	items := []templ.Component{}
+
+	if tx.FulfilledAt.IsZero() {
+		items = append(items,
+			components.EntryMenuAnchorItem("Fulfill", "put", fmt.Sprintf("/transactions/%s/fulfill", tx.ID)))
+	}
+
+	if tx.NeedsReview {
+		items = append(items,
+			components.EntryMenuAnchorItem("Mark reviewed", "put", fmt.Sprintf("/transactions/%s/reviewed", tx.ID)))
+	}
+
+	if tx.Kind == models.IncomeTxKind {
+		items = append(items,
+			components.EntryMenuAnchorItem("Reimburses…", "get", fmt.Sprintf("/transactions/%s/reimburses", tx.ID)))
+	}
+
+	return append(items,
+		components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/transactions/%s/edit", tx.ID)),
+		txMenuDuplicate(tx.ID),
+		txMenuDelete(),
+	)
+}
+
+func getReimbursementMenuItems(tx *models.Transaction) []templ.Component {
+	items := []templ.Component{}
+
+	if tx.FulfilledAt.IsZero() {
+		items = append(items,
+			components.EntryMenuAnchorItem("Fulfill", "put", fmt.Sprintf("/transactions/%s/fulfill", tx.ID)))
+	}
+
+	if tx.NeedsReview {
+		items = append(items,
+			components.EntryMenuAnchorItem("Mark reviewed", "put", fmt.Sprintf("/transactions/%s/reviewed", tx.ID)))
+	}
+
+	return append(items,
+		components.EntryMenuAnchorItem("Unlink reimbursement", "delete", fmt.Sprintf("/transactions/%s/reimburses", tx.ID)),
+		components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/transactions/%s/edit", tx.ID)),
+		txMenuDelete(),
+	)
+}
+
+func TxRowID(id string) string {
+	return "tx-" + id
+}
+
+type txDay struct {
+	Day     time.Time
+	Txs     []models.Transaction
+	In, Out float64
+}
+
+type txMonth struct {
+	Month   time.Time
+	Days    []txDay
+	In, Out float64
+}
+
+type txListView struct {
+	// Upcoming are the scheduled (not yet fulfilled) ones, soonest first.
+	Upcoming                []models.Transaction
+	UpcomingIn, UpcomingOut float64
+	Overdue                 int
+	Months                  []txMonth
+	NeedsReview             int
+	Empty                   bool
+}
+
+// buildTxList splits the transactions, sorted newest first, into upcoming
+// ones and the history by month and day, with totals in def.
+func buildTxList(txs []models.Transaction, def *models.Currency) txListView {
+	l := txListView{Empty: len(txs) == 0}
+	today := dateOf(time.Now())
+
+	for _, tx := range txs {
+		if tx.NeedsReview {
+			l.NeedsReview++
+		}
+		for _, rt := range tx.Reimbursements {
+			if rt.NeedsReview {
+				l.NeedsReview++
+			}
+		}
+
+		in, out := txFlow(&tx, def)
+
+		if tx.FulfilledAt.IsZero() {
+			l.Upcoming = append(l.Upcoming, tx)
+			l.UpcomingIn += in
+			l.UpcomingOut += out
+			if tx.ScheduledTo.Before(today) {
+				l.Overdue++
+			}
+			continue
+		}
+
+		day := dateOf(tx.ScheduledTo)
+		month := time.Date(day.Year(), day.Month(), 1, 0, 0, 0, 0, day.Location())
+
+		if n := len(l.Months); n == 0 || !l.Months[n-1].Month.Equal(month) {
+			l.Months = append(l.Months, txMonth{Month: month})
+		}
+		m := &l.Months[len(l.Months)-1]
+		m.In += in
+		m.Out += out
+
+		if n := len(m.Days); n == 0 || !m.Days[n-1].Day.Equal(day) {
+			m.Days = append(m.Days, txDay{Day: day})
+		}
+		d := &m.Days[len(m.Days)-1]
+		d.Txs = append(d.Txs, tx)
+		d.In += in
+		d.Out += out
+	}
+
+	for i, j := 0, len(l.Upcoming)-1; i < j; i, j = i+1, j-1 {
+		l.Upcoming[i], l.Upcoming[j] = l.Upcoming[j], l.Upcoming[i]
+	}
+
+	return l
+}
+
+// txFlow is what a transaction earns and spends in def, following the
+// analysis rule: expenses net of reimbursements, refunds netted against
+// spending; transfers and debts move money without earning or spending it.
+func txFlow(tx *models.Transaction, def *models.Currency) (in, out float64) {
+	if tx.IsReimbursement() {
+		return 0, 0
+	}
+	rate := tx.Account.Currency.FxRate(def.String)
+	switch tx.Kind {
+	case models.ExpenseTxKind:
+		return 0, tx.AnalysisAmount() * rate
+	case models.RefundTxKind:
+		return 0, -tx.Amount * rate
+	case models.IncomeTxKind:
+		return tx.Amount * rate, 0
+	}
+	return 0, 0
+}
+
+// txConverted is the transaction's amount in def, for ones in another
+// currency.
+func txConverted(tx *models.Transaction, def *models.Currency) string {
+	if def == nil || tx.Kind == models.TransferTxKind {
+		return ""
+	}
+	amount, cur := tx.NetAmount(), tx.Account.Currency
+	if tx.Kind == models.DebtTxKind && tx.ToAccount != nil && tx.Account.Kind.Enum == models.AccKindDebt {
+		amount, cur = tx.ToAmount, tx.ToAccount.Currency
+	}
+	if cur.ID == def.ID || cur.String == def.String {
+		return ""
+	}
+	rate := cur.FxRate(def.String)
+	if rate == 0 {
+		return ""
+	}
+	return "≈ " + formatters.FormatAmount(amount*rate, def.Symbol)
+}
+
+// dateOf is t's calendar date (in its own location) as a UTC midnight, the
+// way scheduled dates are stored, so dates compare across locations.
+func dateOf(t time.Time) time.Time {
+	y, m, d := t.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+}
+
+func formatTxDay(day time.Time) string {
+	today := dateOf(time.Now())
+	switch dateOf(day).Sub(today) {
+	case 0:
+		return "Today"
+	case -24 * time.Hour:
+		return "Yesterday"
+	case 24 * time.Hour:
+		return "Tomorrow"
+	}
+	if day.Year() != today.Year() {
+		return day.Format("Mon, Jan 2 2006")
+	}
+	return day.Format("Mon, Jan 2")
+}
+
+func formatTxMonth(month time.Time) string {
+	if month.Year() != time.Now().Year() {
+		return month.Format("January 2006")
+	}
+	return month.Format("January")
+}
+
+// formatSignedAmount prefixes the amount with + or −.
+func formatSignedAmount(amount float64, sym string) string {
+	sign := "+"
+	if amount < 0 {
+		sign = "−"
+	}
+	return sign + formatters.FormatAmount(math.Abs(amount), sym)
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
+}
+
+const (
+	txToneOut     = "out"
+	txToneIn      = "in"
+	txToneNeutral = "neutral"
+)
+
+type txView struct {
+	counterparty *models.Counterparty
+	title        string
+	subtitle     string
+	time         string
+	// account is where the money moved, e.g. "HSBC" or "HSBC → Wallet".
+	account string
+	accKind models.AccKind
+	amount  string
+	// original is the amount before reimbursements, shown struck through.
+	original    string
+	tone        string
+	isScheduled bool
+	isOverdue   bool
+}
+
+func newTxView(tx *models.Transaction) txView {
+	v := txView{
+		title:       tx.Description,
+		account:     tx.Account.Name,
+		accKind:     tx.Account.Kind.Enum,
+		amount:      "-" + tx.ViewAmount(),
+		tone:        txToneOut,
+		isScheduled: tx.FulfilledAt.IsZero(),
+	}
+
+	if v.isScheduled {
+		v.isOverdue = tx.ScheduledTo.Before(dateOf(time.Now()))
+	} else {
+		v.time = tx.FulfilledAt.Format("3:04pm")
+	}
+
+	switch tx.Kind {
+	case models.ExpenseTxKind:
+		if tx.Reimbursed > 0 {
+			v.original = "-" + tx.ViewAmount()
+			v.amount = "-" + tx.ViewNetAmount()
+		}
+	case models.IncomeTxKind, models.RefundTxKind:
+		v.amount = "+" + tx.ViewAmount()
+		v.tone = txToneIn
+	case models.TransferTxKind:
+		v.tone = txToneNeutral
+		if v.title == "" {
+			v.title = "Transfer"
+		}
+		if tx.ToAccount != nil {
+			v.account = tx.Account.Name + " → " + tx.ToAccount.Name
+			v.amount = tx.ViewToAmount()
+			if tx.Account.Currency.ID != tx.ToAccount.Currency.ID {
+				v.subtitle = "Sent " + tx.ViewAmount()
+			} else if fee := tx.Amount - tx.ToAmount; fee > 0 {
+				v.subtitle = "Fees " + formatters.FormatAmount(fee, tx.Account.Currency.Symbol)
+			}
+		}
+		return v
+	case models.DebtTxKind:
+		if tx.ToAccount != nil {
+			// Borrowing: money comes from the debt account into a real one.
+			if tx.Account.Kind.Enum == models.AccKindDebt {
+				v.title = debtPartyName(&tx.Account)
+				v.account = tx.ToAccount.Name
+				v.accKind = tx.ToAccount.Kind.Enum
+				v.amount = "+" + tx.ViewToAmount()
+				v.tone = txToneIn
+				v.subtitle = "Borrowed"
+			} else {
+				v.title = debtPartyName(tx.ToAccount)
+				v.subtitle = "Lent"
+			}
+		}
+		if tx.Description != "" {
+			v.subtitle = tx.Description
+		}
+		return v
+	}
+
+	if v.title == "" && tx.Category != nil {
+		v.title = tx.Category.Name
+	}
+
+	if tx.Counterparty != nil {
+		v.counterparty = tx.Counterparty
+		if v.title == "" {
+			v.title = tx.Counterparty.Name
+		} else {
+			v.subtitle = tx.Counterparty.Name
+		}
+	}
+
+	if v.title == "" {
+		v.title = tx.Kind.String()
+	}
+
+	return v
+}
+
+// txMeta is the row's second line: subtitle and time.
+func txMeta(v *txView) string {
+	parts := make([]string, 0, 2)
+	for _, p := range []string{v.subtitle, v.time} {
+		if p != "" {
+			parts = append(parts, p)
+		}
+	}
+	return strings.Join(parts, " · ")
+}
+
+func debtPartyName(acc *models.Account) string {
+	if acc.Counterparty != nil && acc.Counterparty.Name != "" {
+		return acc.Counterparty.Name
+	}
+	return acc.Name
+}

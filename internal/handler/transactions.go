@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -134,7 +135,7 @@ func (h Handler) Transaction(w http.ResponseWriter, r *http.Request) (templ.Comp
 	}
 	l.Info("fetched transaction", zap.Any("tx", tx))
 
-	return views.Transaction(tx), nil
+	return views.Transaction(tx, &getClaims(r.Context()).DefaultCurrency), nil
 }
 
 func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -216,12 +217,7 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 	}
 	l.Info("updated transaction")
 
-	// The amounts shown for its expense or reimbursements changed.
-	if hasReimbursementLinks(oldTx) {
-		if err := h.renderTransactionsListOOB(w, r); err != nil {
-			return nil, err
-		}
-	}
+	hxRetargetTxList(w)
 
 	if !oldTx.FulfilledAt.IsZero() {
 		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
@@ -229,12 +225,7 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 		}
 	}
 
-	updatedTx, err := h.repo.GetTransaction(r.Context(), tx.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	return views.Transaction(updatedTx), nil
+	return h.transactionsList(r)
 }
 
 func (h Handler) FulfillTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -259,20 +250,13 @@ func (h Handler) FulfillTransaction(w http.ResponseWriter, r *http.Request) (tem
 	}
 	l.Info("fulfilled transaction")
 
-	// Count it toward the goal's progress, fetched before fulfilling.
-	if tx.Goal != nil {
-		for i := range tx.Goal.Transactions {
-			if tx.Goal.Transactions[i].ID == tx.ID {
-				tx.Goal.Transactions[i].FulfilledAt = tx.FulfilledAt
-			}
-		}
-	}
+	hxRetargetTxList(w)
 
 	if err := h.getAndRenderBalancesOOB(w, r); err != nil {
 		return nil, err
 	}
 
-	return views.Transaction(tx), nil
+	return h.transactionsList(r)
 }
 
 func (h Handler) MarkTransactionReviewed(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -288,13 +272,112 @@ func (h Handler) MarkTransactionReviewed(w http.ResponseWriter, r *http.Request)
 	}
 	l.Info("marked transaction as reviewed")
 
+	hxRetargetTxList(w)
+	return h.transactionsList(r)
+}
+
+func (h Handler) MarkAllTransactionsReviewed(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	l := logger.FromCtx(r.Context())
+
+	if err := h.repo.MarkAllTransactionsReviewed(r.Context()); err != nil {
+		return nil, err
+	}
+	l.Info("marked all transactions as reviewed")
+
+	hxRetargetTxList(w)
+	return h.transactionsList(r)
+}
+
+// ReviewTransactionCategory sets the category of a transaction under review,
+// marking it as reviewed.
+func (h Handler) ReviewTransactionCategory(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+
 	tx, err := h.repo.GetTransaction(r.Context(), id)
 	if err != nil {
 		l.Error("fetching transaction", zap.Error(err))
 		return nil, err
 	}
 
-	return views.Transaction(tx), nil
+	catID := r.FormValue("category_id")
+	if catID != "" {
+		cats, err := h.repo.GetCategories(r.Context())
+		if err != nil {
+			l.Error("fetching categories", zap.Error(err))
+			return nil, err
+		}
+		cat := slicesutils.Find(cats, func(c models.Category) bool { return c.ID == catID })
+		if cat == nil || !slices.Contains(cat.Kinds, tx.Kind.CategoryKind()) {
+			l.Error("category doesn't apply to the transaction", zap.String("category_id", catID))
+			return nil, errs.ErrInvalidID
+		}
+	}
+
+	if err := h.repo.ReviewTransactionCategory(r.Context(), id, catID); err != nil {
+		return nil, err
+	}
+	l.Info("reviewed transaction category", zap.String("category_id", catID))
+
+	hxRetargetTxList(w)
+	return h.transactionsList(r)
+}
+
+func (h Handler) GetReviewCategoryPicker(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	tx, err := h.repo.GetTransaction(r.Context(), id)
+	if err != nil {
+		return nil, err
+	}
+
+	cats, err := h.repo.GetCategories(r.Context())
+	if err != nil {
+		return nil, err
+	}
+
+	return views.TxReviewCategoryPicker(tx, cats), nil
+}
+
+// DuplicateTransaction answers the create form filled with the transaction,
+// dated today.
+func (h Handler) DuplicateTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+
+	tx, err := h.repo.GetTransaction(r.Context(), id)
+	if err != nil {
+		l.Error("fetching transaction", zap.Error(err))
+		return nil, err
+	}
+
+	accs, knds, cats, cps, gls, err := h.getTxDeps(r.Context())
+	if err != nil {
+		return nil, err
+	}
+
+	dup := *tx
+	dup.ScheduledTo = time.Now()
+	dup.FulfilledAt = time.Time{}
+	dup.RecurrentTx = nil
+	if dup.Goal != nil && !slices.ContainsFunc(gls, func(gl models.Goal) bool { return gl.ID == dup.Goal.ID }) {
+		dup.Goal = nil
+	}
+
+	claims := getClaims(r.Context())
+	fd := h.mapTransactionToFD(&dup, new(errs.ValidationError))
+	return views.CreateTransactionForm(fd, accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -318,12 +401,7 @@ func (h Handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) (temp
 	}
 	l.Info("deleted transaction")
 
-	// Its expense's net amount changed, or its reimbursements got freed.
-	if hasReimbursementLinks(tx) {
-		if err := h.renderTransactionsListOOB(w, r); err != nil {
-			return nil, err
-		}
-	}
+	hxRetargetTxList(w)
 
 	if !tx.FulfilledAt.IsZero() {
 		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
@@ -331,7 +409,25 @@ func (h Handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) (temp
 		}
 	}
 
-	return nil, nil
+	return h.transactionsList(r)
+}
+
+// hxRetargetTxList swaps the response in place of the whole transactions
+// list, as changing a transaction moves its totals, sections and counts. Call
+// it before rendering anything, as it sets headers.
+func hxRetargetTxList(w http.ResponseWriter) {
+	w.Header().Set("HX-Retarget", "#tx-list")
+	w.Header().Set("HX-Reswap", "outerHTML")
+}
+
+func (h Handler) transactionsList(r *http.Request) (templ.Component, error) {
+	l := logger.FromCtx(r.Context())
+	txs, err := h.repo.GetTransactions(r.Context())
+	if err != nil {
+		l.Error("fetch transactions from db", zap.Error(err))
+		return nil, err
+	}
+	return views.TxList(txs, &getClaims(r.Context()).DefaultCurrency), nil
 }
 
 func (h Handler) renderTransactionsListOOB(w http.ResponseWriter, r *http.Request) error {
@@ -341,16 +437,12 @@ func (h Handler) renderTransactionsListOOB(w http.ResponseWriter, r *http.Reques
 		l.Error("fetch transactions from db", zap.Error(err))
 		return err
 	}
-	if err = renderToBody(w, r, views.TransactionsListOOB(txs)); err != nil {
+	if err = renderToBody(w, r, views.TransactionsListOOB(txs, &getClaims(r.Context()).DefaultCurrency)); err != nil {
 		l.Error("rendering transactions list OOB", zap.Error(err))
 		return err
 	}
 	l.Debug("rendered transactions list OOB")
 	return nil
-}
-
-func hasReimbursementLinks(tx *models.Transaction) bool {
-	return tx.IsReimbursement() || tx.Reimbursed > 0
 }
 
 func (h Handler) getAndRenderBalancesOOB(w http.ResponseWriter, r *http.Request) error {

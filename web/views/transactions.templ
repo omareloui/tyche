@@ -2,7 +2,6 @@ package views
 
 import (
 	"fmt"
-	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/slicesutils"
@@ -11,7 +10,6 @@ import (
 	"github.com/omareloui/tyche/web/views/icons"
 	"github.com/omareloui/tyche/web/views/layouts"
 	"strings"
-	"time"
 )
 
 type TransactionFD struct {
@@ -38,10 +36,22 @@ templ Transactions(
 	knds []models.TxKind, cats []models.Category,
 	cps []models.Counterparty, gls []models.Goal) {
 	@layouts.WithCreateForm(claims, "Transactions", balances,
-		CreateTransactionForm(fd, accounts, knds, cats, cps, gls, &claims.DefaultCurrency),
+		txCreateSlot(CreateTransactionForm(fd, accounts, knds, cats, cps, gls, &claims.DefaultCurrency)),
 		layouts.WithDatePicker(), layouts.WithAlpineMask()) {
-		@transactionsList(transactions)
+		<div x-data="txPage" @keydown.window="onKey($event)">
+			@txSearchBar()
+			@TxList(transactions, &claims.DefaultCurrency)
+			@txUndoToast()
+		</div>
 	}
+}
+
+// txCreateSlot gives the create form a stable target, e.g. for duplicating a
+// transaction into it.
+templ txCreateSlot(f templ.Component) {
+	<div id="tx-create" class="contents">
+		@f
+	</div>
 }
 
 templ CreateTransactionForm(
@@ -93,12 +103,6 @@ templ txDateChip(label string, daysAgo int) {
 	>{ label }</button>
 }
 
-templ TransactionsListOOB(transactions []models.Transaction) {
-	<div id="tx-list" hx-swap-oob="outerHTML" class="grid gap-8 no-entries">
-		@transactionsDays(transactions)
-	</div>
-}
-
 templ EditTransaction(
 	tx *models.Transaction, fd *TransactionFD,
 	accounts []models.Account, knds []models.TxKind,
@@ -114,56 +118,10 @@ templ EditTransaction(
 	>
 		<header class="flex items-baseline justify-between gap-4">
 			<h3 class="text-lg font-semibold">Edit transaction</h3>
-			<span title="Transaction ID" class="truncate font-mono text-xs text-zinc-500">{ tx.ID }</span>
 		</header>
 		@transactionFormBody(fd, tx.ID, accounts, knds, cats, cps, gls, defaultCur)
 		@form.SheetFormButtons("Save changes", fmt.Sprintf("/transactions/%s", tx.ID))
 	</form>
-}
-
-templ transactionsList(transactions []models.Transaction) {
-	@txSearchBar()
-	<div id="tx-list" class="grid gap-8 no-entries">
-		@transactionsDays(transactions)
-	</div>
-}
-
-templ transactionsDays(transactions []models.Transaction) {
-	for _, day := range groupTxsByDay(transactions) {
-		// Hidden once all its transactions get deleted.
-		<section class="hidden has-[[data-tx]]:grid gap-3">
-			<h2 class="text-zinc-400">{ formatTxDay(day.Day) }</h2>
-			for _, t := range day.Txs {
-				@Transaction(&t)
-			}
-		</section>
-	}
-}
-
-// txSMSPopup shows the SMS a transaction was created from on hovering its
-// parent group.
-templ txSMSPopup(body, hint string) {
-	@components.HoverPopup("w-72 max-w-[80vw] px-3 py-2 text-sm") {
-		<p class="whitespace-pre-wrap break-words">{ body }</p>
-		if hint != "" {
-			<p class="mt-2 text-xs text-amber-400">{ hint }</p>
-		}
-	}
-}
-
-// txGoalPopup shows the goal a transaction belongs to and its progress on
-// hovering its parent group.
-templ txGoalPopup(gl *models.Goal) {
-	@components.HoverPopup("w-64 max-w-[80vw] px-3 py-2 text-sm") {
-		<div class="flex items-baseline justify-between gap-3">
-			<p class="truncate font-semibold">{ gl.Name }</p>
-			<p class="shrink-0 text-xs text-zinc-400">{ formatters.FormatNum(gl.ProgressPercentage()) }%</p>
-		</div>
-		<div class="mt-2">
-			@components.ProgressBar(gl.ProgressPercentage(), components.WithProgressBarSuccessStatus(gl.ProgressPercentage() >= 100 || !gl.FulfilledAt.IsZero()))
-		</div>
-		<p class="mt-2 text-xs text-zinc-400">{ gl.ViewProgress() } / { gl.ViewAmount() }</p>
-	}
 }
 
 // TODO: wire up search; mock for now.
@@ -179,197 +137,6 @@ templ txSearchBar() {
 		/>
 		<kbd class="hidden sm:grid place-items-center w-6 h-6 rounded border border-zinc-500 text-xs text-zinc-500">/</kbd>
 	</label>
-}
-
-templ Transaction(tx *models.Transaction) {
-	if tx.IsReimbursement() {
-		@reimbursement(tx)
-	} else {
-		@transaction(tx)
-	}
-}
-
-templ transaction(tx *models.Transaction) {
-	{{ v := newTxView(tx) }}
-	<div
-		data-tx
-		hx-target="this"
-		hx-swap="outerHTML"
-		class="relative"
-		x-data="{openMenu: false, openReimbursements: false}"
-	>
-		@components.EntryMenu("openMenu", getTransactionMenuItems(tx))
-		<div
-			class={
-				"flex items-center gap-4 px-4 py-3 rounded-2xl",
-				templ.KV("bg-zinc-700/20", !v.isStale),
-				templ.KV("bg-zinc-400/20 opacity-70", v.isStale),
-			}
-		>
-			// TODO: per-category/kind icons.
-			<div
-				class={
-					"grid place-items-center shrink-0 w-12 h-12 rounded-xl bg-zinc-700/40",
-					templ.KV("text-violet-400", !v.isIncoming),
-					templ.KV("text-emerald-400", v.isIncoming),
-				}
-			>
-				if v.counterparty != nil {
-					@components.CounterpartyIcon(v.counterparty.Name, v.counterparty.Icon, v.counterparty.Color, "w-7 h-7")
-				} else if tx.Kind == models.DebtTxKind {
-					@icons.Debt("24")
-				} else {
-					@icons.Tag("24")
-				}
-			</div>
-			<div class="flex-1 min-w-0">
-				<p class="text-lg truncate">{ v.title }</p>
-				<p class="text-xs text-zinc-400 truncate">
-					if v.subtitle != "" {
-						<span class="text-sm">{ v.subtitle }</span>
-						<span>·</span>
-					}
-					<span>{ v.time }</span>
-				</p>
-			</div>
-			<div class="hidden md:flex flex-1 min-w-0 items-center gap-3">
-				// TODO: per-account icons.
-				@icons.Card("24", &templ.Attributes{"class": "shrink-0 text-zinc-300"})
-				<span class="truncate">{ v.account }</span>
-			</div>
-			<div class="flex items-center gap-3 text-zinc-500">
-				if tx.NeedsReview {
-					<span class="group relative flex">
-						<button
-							hx-put={ fmt.Sprintf("/transactions/%s/reviewed", tx.ID) }
-							aria-label="Added from SMS, needs review. Click to mark reviewed"
-							class="cursor-pointer text-amber-400 transition-colors hover:text-amber-300"
-						>
-							@icons.Message("22")
-						</button>
-						@txSMSPopup(tx.SMSBody, "Needs review. Click to mark reviewed")
-					</span>
-				} else if tx.FromSMS {
-					<span tabindex="0" aria-label="Added from SMS" class="group relative flex outline-none">
-						@icons.Message("22")
-						@txSMSPopup(tx.SMSBody, "")
-					</span>
-				}
-				if tx.Kind == models.TransferTxKind {
-					<span title="Transfer">
-						@icons.Transfer("22")
-					</span>
-				}
-				if tx.RecurrentTx != nil {
-					<span title="Recurrent">
-						@icons.Repeat("22")
-					</span>
-				}
-				if tx.Goal != nil {
-					<span tabindex="0" aria-label={ "Goal: " + tx.Goal.Name } class="group relative flex outline-none">
-						@icons.Target("22")
-						@txGoalPopup(tx.Goal)
-					</span>
-				}
-				if len(tx.Reimbursements) > 0 {
-					<button
-						@click="openReimbursements = !openReimbursements"
-						:class="openReimbursements && 'text-zinc-200'"
-						aria-label="Show reimbursements"
-						title="Reimbursed, click to show the breakdown"
-						class="cursor-pointer flex items-center gap-1 transition-colors hover:text-zinc-300"
-					>
-						@icons.Users("22")
-						<span class="text-sm tabular-nums">{ fmt.Sprint(len(tx.Reimbursements)) }</span>
-					</button>
-				}
-			</div>
-			<p
-				class={
-					"shrink-0 text-right tabular-nums font-semibold",
-					templ.KV("text-emerald-400", v.isIncoming),
-				}
-			>
-				{ v.amount }
-			</p>
-			<button
-				@click="openMenu = !openMenu"
-				class="cursor-pointer grid place-items-center shrink-0 w-6 h-6"
-			>
-				<img src="/icons/dots-menu.svg" class="h-5"/>
-			</button>
-		</div>
-		if len(tx.Reimbursements) > 0 {
-			@reimbursementsBreakdown(tx)
-		}
-	</div>
-}
-
-// reimbursementsBreakdown shows how an expense's net amount came to be: what
-// got paid, minus each reimbursement.
-templ reimbursementsBreakdown(tx *models.Transaction) {
-	<div x-cloak x-show="openReimbursements" x-transition class="ml-6 md:ml-16 mt-2 grid gap-2 border-l-2 border-zinc-700 pl-4">
-		<div class="flex justify-between px-4 text-sm text-zinc-400">
-			<span>Paid</span>
-			<span class="tabular-nums">{ "-" + tx.ViewAmount() }</span>
-		</div>
-		for _, rt := range tx.Reimbursements {
-			@reimbursement(&rt)
-		}
-		<div class="flex justify-between px-4 text-sm font-semibold">
-			<span>Net</span>
-			<span class="tabular-nums">{ "-" + tx.ViewNetAmount() }</span>
-		</div>
-	</div>
-}
-
-// reimbursement is an income paying back (part of) an expense, shown under
-// its expense.
-templ reimbursement(tx *models.Transaction) {
-	{{ v := newTxView(tx) }}
-	<div
-		data-tx
-		hx-target="this"
-		hx-swap="outerHTML"
-		class="relative"
-		x-data="{openMenu: false}"
-	>
-		@components.EntryMenu("openMenu", getReimbursementMenuItems(tx))
-		<div class={ "flex items-center gap-3 px-4 py-2 rounded-xl bg-zinc-700/20", templ.KV("opacity-70", v.isStale) }>
-			<div class="grid place-items-center shrink-0 w-9 h-9 rounded-lg bg-zinc-700/40 text-emerald-400">
-				if v.counterparty != nil {
-					@components.CounterpartyIcon(v.counterparty.Name, v.counterparty.Icon, v.counterparty.Color, "w-5 h-5")
-				} else {
-					@icons.Tag("18")
-				}
-			</div>
-			<div class="flex-1 min-w-0">
-				<p class="truncate">{ v.title }</p>
-				<p class="text-xs text-zinc-400 truncate">
-					{ formatTxDay(tx.ScheduledTo) } · { v.account }
-				</p>
-			</div>
-			if tx.NeedsReview {
-				<span class="group relative flex">
-					<button
-						hx-put={ fmt.Sprintf("/transactions/%s/reviewed", tx.ID) }
-						aria-label="Added from SMS, needs review. Click to mark reviewed"
-						class="cursor-pointer text-amber-400 transition-colors hover:text-amber-300"
-					>
-						@icons.Message("20")
-					</button>
-					@txSMSPopup(tx.SMSBody, "Needs review. Click to mark reviewed")
-				</span>
-			}
-			<p class="shrink-0 text-right tabular-nums font-semibold text-emerald-400">{ v.amount }</p>
-			<button
-				@click="openMenu = !openMenu"
-				class="cursor-pointer grid place-items-center shrink-0 w-6 h-6"
-			>
-				<img src="/icons/dots-menu.svg" class="h-5"/>
-			</button>
-		</div>
-	</div>
 }
 
 // ReimbursePicker lets choosing the expense an income pays back.
@@ -633,162 +400,4 @@ func getCategoriesOfKinds(cats []models.Category, txKind models.TxKind) []models
 		}
 	}
 	return kndsCats
-}
-
-func getTransactionMenuItems(tx *models.Transaction) []templ.Component {
-	items := []templ.Component{}
-
-	if tx.FulfilledAt.IsZero() {
-		items = append(items,
-			components.EntryMenuAnchorItem("Fulfill", "put", fmt.Sprintf("/transactions/%s/fulfill", tx.ID)))
-	}
-
-	if tx.NeedsReview {
-		items = append(items,
-			components.EntryMenuAnchorItem("Mark reviewed", "put", fmt.Sprintf("/transactions/%s/reviewed", tx.ID)))
-	}
-
-	if tx.Kind == models.IncomeTxKind {
-		items = append(items,
-			components.EntryMenuAnchorItem("Reimburses…", "get", fmt.Sprintf("/transactions/%s/reimburses", tx.ID)))
-	}
-
-	items = append(items,
-		components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/transactions/%s/edit", tx.ID)),
-		components.EntryMenuDeleteItem(fmt.Sprintf("/transactions/%s", tx.ID)),
-	)
-
-	return items
-}
-
-func getReimbursementMenuItems(tx *models.Transaction) []templ.Component {
-	items := []templ.Component{}
-
-	if tx.FulfilledAt.IsZero() {
-		items = append(items,
-			components.EntryMenuAnchorItem("Fulfill", "put", fmt.Sprintf("/transactions/%s/fulfill", tx.ID)))
-	}
-
-	if tx.NeedsReview {
-		items = append(items,
-			components.EntryMenuAnchorItem("Mark reviewed", "put", fmt.Sprintf("/transactions/%s/reviewed", tx.ID)))
-	}
-
-	return append(items,
-		components.EntryMenuAnchorItem("Unlink reimbursement", "delete", fmt.Sprintf("/transactions/%s/reimburses", tx.ID)),
-		components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/transactions/%s/edit", tx.ID)),
-		components.EntryMenuDeleteItem(fmt.Sprintf("/transactions/%s", tx.ID)),
-	)
-}
-
-type txDay struct {
-	Day time.Time
-	Txs []models.Transaction
-}
-
-// groupTxsByDay expects transactions already sorted by scheduled date.
-func groupTxsByDay(txs []models.Transaction) []txDay {
-	days := []txDay{}
-	for _, tx := range txs {
-		y, m, d := tx.ScheduledTo.Date()
-		day := time.Date(y, m, d, 0, 0, 0, 0, tx.ScheduledTo.Location())
-		if n := len(days); n > 0 && days[n-1].Day.Equal(day) {
-			days[n-1].Txs = append(days[n-1].Txs, tx)
-			continue
-		}
-		days = append(days, txDay{Day: day, Txs: []models.Transaction{tx}})
-	}
-	return days
-}
-
-func formatTxDay(day time.Time) string {
-	if day.Year() != time.Now().Year() {
-		return day.Format("January 2 2006, Monday")
-	}
-	return day.Format("January 2, Monday")
-}
-
-type txView struct {
-	counterparty *models.Counterparty
-	title        string
-	subtitle     string
-	time         string
-	account      string
-	amount       string
-	isIncoming   bool
-	isStale      bool
-}
-
-func newTxView(tx *models.Transaction) txView {
-	v := txView{
-		title:   tx.Description,
-		account: tx.Account.Name,
-		amount:  "-" + tx.ViewAmount(),
-		isStale: tx.FulfilledAt.IsZero(),
-		time:    "Scheduled",
-	}
-	if !v.isStale {
-		v.time = tx.FulfilledAt.Format("3:04pm")
-	}
-
-	switch tx.Kind {
-	case models.ExpenseTxKind:
-		if tx.Reimbursed > 0 {
-			v.amount = "-" + tx.ViewNetAmount()
-		}
-	case models.IncomeTxKind, models.RefundTxKind:
-		v.amount = "+" + tx.ViewAmount()
-		v.isIncoming = true
-	case models.TransferTxKind:
-		if tx.ToAccount != nil {
-			v.title = tx.Account.Name
-			v.account = tx.ToAccount.Name
-			v.amount = tx.ViewToAmount()
-			if tx.Account.Currency.ID != tx.ToAccount.Currency.ID {
-				v.subtitle = "-" + tx.ViewAmount()
-			} else if fee := tx.Amount - tx.ToAmount; fee > 0 {
-				v.subtitle = "Fees " + formatters.FormatAmount(fee, tx.Account.Currency.Symbol)
-			}
-		}
-		return v
-	case models.DebtTxKind:
-		if tx.ToAccount != nil {
-			// Borrowing: money comes from the debt account into a real one.
-			if tx.Account.Kind.Enum == models.AccKindDebt {
-				v.title = debtPartyName(&tx.Account)
-				v.account = tx.ToAccount.Name
-				v.amount = "+" + tx.ViewToAmount()
-				v.isIncoming = true
-			} else {
-				v.title = debtPartyName(tx.ToAccount)
-			}
-		}
-		if tx.Description != "" {
-			v.subtitle = tx.Description
-		}
-		return v
-	}
-
-	if v.title == "" && tx.Category != nil {
-		v.title = tx.Category.Name
-	}
-	if tx.Counterparty != nil {
-		v.counterparty = tx.Counterparty
-		if v.title == "" {
-			v.title = tx.Counterparty.Name
-		} else {
-			v.subtitle = tx.Counterparty.Name
-		}
-	}
-	if v.title == "" {
-		v.title = tx.Kind.String()
-	}
-	return v
-}
-
-func debtPartyName(acc *models.Account) string {
-	if acc.Counterparty != nil && acc.Counterparty.Name != "" {
-		return acc.Counterparty.Name
-	}
-	return acc.Name
 }

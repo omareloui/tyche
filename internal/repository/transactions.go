@@ -418,7 +418,7 @@ func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTran
 			KindID:             _dbTx.ToAccountKindID.String,
 			Amount:             _dbTx.ToAccountAmount.Float64,
 			CurrencyID:         _dbTx.ToAccountCurrencyID.String,
-			CounterpartyID:     _dbTx.ToAccountCurrencyID,
+			CounterpartyID:     _dbTx.ToAccountCounterpartyID,
 			CardNumber:         _dbTx.ToAccountCardNumber,
 			CardLimit:          _dbTx.ToAccountCardLimit.Float64,
 			NameOnCard:         _dbTx.ToAccountNameOnCard,
@@ -446,6 +446,7 @@ func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTran
 			Name:             _dbTx.CategoryName.String,
 			BudgetAmount:     _dbTx.CategoryBudgetAmount,
 			BudgetCurrencyID: _dbTx.CategoryBudgetCurrencyID,
+			Color:            _dbTx.CategoryColor.String,
 			CreatedAt:        _dbTx.CategoryCreatedAt.Time,
 		}
 	}
@@ -454,8 +455,47 @@ func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTran
 		&_dbTx.Transaction, &_dbTx.Account,
 		&_dbTx.Currency, toAcc, toAccCurr,
 		cat, cp, gl, glCur)
+	tx.Account.Kind.Enum = models.AccKind(_dbTx.AccountKindEnum.Int64)
+	if tx.ToAccount != nil {
+		tx.ToAccount.Kind.Enum = models.AccKind(_dbTx.ToAccountKindEnum.Int64)
+	}
 	tx.SMSBody = _dbTx.SmsBody
 	tx.FromSMS = tx.SMSBody != ""
 	tx.Reimbursed = _dbTx.Reimbursed
 	return tx
+}
+
+func (r *Repository) MarkAllTransactionsReviewed(ctx context.Context) error {
+	l := logger.FromCtx(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+
+	if err := q.MarkAllTransactionsReviewed(ctx); err != nil {
+		l.Error("marking all transactions as reviewed", zap.Error(err))
+		return err
+	}
+	return nil
+}
+
+// ReviewTransactionCategory sets a transaction's category (empty clears it)
+// and marks it as reviewed.
+func (r *Repository) ReviewTransactionCategory(ctx context.Context, id, categoryID string) error {
+	l := logger.FromCtx(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+
+	if err := q.ReviewTransactionCategory(ctx, queries.ReviewTransactionCategoryParams{
+		ID:         id,
+		CategoryID: sql.NullString{String: categoryID, Valid: categoryID != ""},
+	}); err != nil {
+		l.Error("reviewing transaction category", zap.Error(err), zap.String("id", id))
+		return err
+	}
+	return nil
 }
