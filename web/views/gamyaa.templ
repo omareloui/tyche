@@ -157,7 +157,7 @@ templ gamyaaProgress(a *models.Account) {
 			if !g.NextPayoutOn.IsZero() {
 				<p class="flex items-center gap-1.5 text-zinc-400">
 					@icons.PiggyBank("14")
-					<span class="sensitive">Payout { formatters.FormatAmount(g.PayoutAmount(), sym) }</span>
+					<span class="sensitive">Payout { formatters.FormatAmount(g.Pot(), sym) }</span>
 					<span class="ml-auto tabular-nums text-(--accent)">{ viewGamyaaDate(g.NextPayoutOn) }</span>
 				</p>
 			} else if len(g.Turns) > 0 {
