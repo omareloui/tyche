@@ -56,6 +56,16 @@ templ Repeat(size string, attrs ...*templ.Attributes) {
 	}
 }
 
+// Users marks an expense others paid back part of.
+templ Users(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+		<circle cx="9" cy="7" r="4"></circle>
+		<path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+		<path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+	}
+}
+
 // Target marks a transaction linked to a goal.
 templ Target(size string, attrs ...*templ.Attributes) {
 	@strokeIcon(size, attrs...) {

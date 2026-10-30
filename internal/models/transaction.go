@@ -28,6 +28,11 @@ type Transaction struct {
 	FromSMS        bool
 	SMSBody        string
 	CreatedAt      time.Time
+	// ReimbursesID is the expense this income pays back (part of).
+	ReimbursesID string
+	// Reimbursed is the total of the incomes reimbursing this expense.
+	Reimbursed     float64
+	Reimbursements []Transaction
 }
 
 type commonFieldsForTxAndRtx struct {
@@ -50,6 +55,31 @@ type createTransaction struct {
 
 func (t *Transaction) ViewAmount() string {
 	return formatters.FormatAmount(t.Amount, t.Account.Currency.Symbol)
+}
+
+func (t *Transaction) ViewNetAmount() string {
+	return formatters.FormatAmount(t.NetAmount(), t.Account.Currency.Symbol)
+}
+
+// IsReimbursement reports whether the transaction pays back (part of) an
+// expense.
+func (t *Transaction) IsReimbursement() bool {
+	return t.ReimbursesID != ""
+}
+
+// NetAmount is the amount minus what got reimbursed of it.
+func (t *Transaction) NetAmount() float64 {
+	return t.Amount - t.Reimbursed
+}
+
+// AnalysisAmount is the amount every analysis (spending, income, charts) must
+// use: expenses count net of their reimbursements and the reimbursements
+// themselves count as 0, as they're already netted from their expense.
+func (t *Transaction) AnalysisAmount() float64 {
+	if t.IsReimbursement() {
+		return 0
+	}
+	return t.NetAmount()
 }
 
 func (t *Transaction) ViewToAmount() string {

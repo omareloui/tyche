@@ -46,6 +46,9 @@ func New(h *handler.Handler) Router {
 	mux.Handle("PUT /transactions/{id}/fulfill", handle(h.FulfillTransaction))
 	mux.Handle("PUT /transactions/{id}/reviewed", handle(h.MarkTransactionReviewed))
 	mux.Handle("DELETE /transactions/{id}", handle(h.DeleteTransaction))
+	mux.Handle("GET /transactions/{id}/reimburses", handle(h.GetReimbursePicker))
+	mux.Handle("PUT /transactions/{id}/reimburses", handle(h.LinkReimbursement))
+	mux.Handle("DELETE /transactions/{id}/reimburses", handle(h.UnlinkReimbursement))
 
 	mux.Handle("POST /recurrence-form/", handle(h.RecurrenceForm))
 	mux.Handle("POST /recurrence-form/{id}", handle(h.RecurrenceForm))

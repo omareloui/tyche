@@ -192,6 +192,8 @@ Core entities and their relationships:
   - Refunds (merchant money back, e.g. refund SMS) add to the account like income but take expense categories (`TxKind.CategoryKind()`) and net against spending
   - Can be linked to category, counterparty, goal, recurrent transaction
   - Transfers have to_account and to_amount
+  - Reimbursements: an income can pay back (part of) an expense via `reimburses_id` (e.g. friends' shares of a bill you paid; linked from the income's "Reimburses…" menu, unlinked from the expense's breakdown). Balances are untouched; the expense shows its net amount (`amount − Σ reimbursements`) with the reimbursements nested under it. Only same-currency, non-goal expenses; Σ reimbursements ≤ expense amount
+  - **Analysis rule**: every analysis/chart (spending, income, categories, merchants) must use `Transaction.AnalysisAmount()` — net for expenses, 0 for reimbursements — never raw `amount`. In SQL: net expenses with `t.amount - (SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id)` and skip rows with `reimburses_id IS NOT NULL` (see `GetMerchantSpending`)
 - **Recurrent Transactions** - Templates for recurring transactions
   - Has frequency (every N units: day/week/month/year)
   - Tracks last_transaction_scheduled_to to avoid duplicates

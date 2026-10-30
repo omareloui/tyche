@@ -70,7 +70,10 @@ SELECT
     gc.symbol AS goal_currency_symbol,
     CAST(COALESCE((
         SELECT sm.body FROM sms_messages AS sm WHERE sm.transaction_id = t.id LIMIT 1
-    ), '') AS TEXT) AS sms_body
+    ), '') AS TEXT) AS sms_body,
+    CAST((
+        SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id
+    ) AS FLOAT) AS reimbursed
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
@@ -120,7 +123,10 @@ SELECT
     gc.symbol AS goal_currency_symbol,
     CAST(COALESCE((
         SELECT sm.body FROM sms_messages AS sm WHERE sm.transaction_id = t.id LIMIT 1
-    ), '') AS TEXT) AS sms_body
+    ), '') AS TEXT) AS sms_body,
+    CAST((
+        SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id
+    ) AS FLOAT) AS reimbursed
 FROM transactions AS t
 LEFT JOIN accounts AS a ON t.account_id = a.id
 LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
@@ -165,8 +171,8 @@ SET
 WHERE id = sqlc.arg(id);
 
 -- name: GetMerchantSpending :many
--- Sums fulfilled expenses (kind 1) net of refunds (kind 5) and incomes
--- (kind 2, treated as refunds from merchants) per merchant and
+-- Sums fulfilled expenses (kind 1, net of their reimbursements) net of refunds
+-- (kind 5) and incomes (kind 2, treated as refunds from merchants) per merchant and
 -- account currency for a YYYY-MM month; currencies are merged in Go using live
 -- fx rates.
 SELECT
@@ -175,13 +181,21 @@ SELECT
     cp.icon AS counterparty_icon,
     cp.color AS counterparty_color,
     sqlc.embed(cur),
-    TOTAL(IIF(t.kind = 1, t.amount, -t.amount)) AS total
+    TOTAL(IIF(
+        t.kind = 1,
+        t.amount - (
+            SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id
+        ),
+        -t.amount
+    )) AS total
 FROM transactions AS t
 JOIN counterparties AS cp ON t.counterparty_id = cp.id
 JOIN accounts AS a ON t.account_id = a.id
 JOIN currencies AS cur ON a.currency_id = cur.id
 WHERE
     t.kind IN (1, 2, 5)
+    -- Reimbursements are netted from their expense.
+    AND t.reimburses_id IS NULL
     AND t.fulfilled_at IS NOT NULL
     AND cp.is_merchant IS TRUE
     AND STRFTIME('%Y-%m', t.fulfilled_at) = CAST(sqlc.arg(month) AS TEXT)
@@ -197,3 +211,69 @@ WHERE
     AND t.fulfilled_at IS NOT NULL
     AND cp.is_merchant IS TRUE
 ORDER BY month DESC;
+
+-- name: SetTransactionReimburses :exec
+UPDATE transactions
+SET
+    reimburses_id = sqlc.narg(reimburses_id)
+WHERE id = sqlc.arg(id);
+
+-- name: ClearReimbursementsOf :exec
+UPDATE transactions
+SET
+    reimburses_id = NULL
+WHERE reimburses_id = sqlc.arg(id);
+
+-- name: GetReimbursedTotal :one
+SELECT CAST(TOTAL(amount) AS FLOAT) AS total
+FROM transactions
+WHERE reimburses_id = sqlc.arg(id) AND id != sqlc.arg(exclude_id);
+
+-- name: GetReimbursableExpenses :many
+-- Expenses in the given currency, newest first, that still have something
+-- left to be reimbursed. Goal expenses are savings, not spending, so they're
+-- not reimbursable.
+SELECT
+    t.id,
+    t.amount,
+    t.description,
+    t.scheduled_to,
+    a.name AS account_name,
+    cur.symbol AS currency_symbol,
+    cp.name AS counterparty_name,
+    cat.name AS category_name,
+    CAST((
+        SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id
+    ) AS FLOAT) AS reimbursed
+FROM transactions AS t
+JOIN accounts AS a ON t.account_id = a.id
+JOIN currencies AS cur ON a.currency_id = cur.id
+LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
+LEFT JOIN categories AS cat ON t.category_id = cat.id
+WHERE
+    t.kind = 1
+    AND t.goal_id IS NULL
+    AND a.currency_id = sqlc.arg(currency_id)
+    AND t.scheduled_to >= sqlc.arg(since)
+    AND t.amount > (
+        SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id
+    )
+ORDER BY t.scheduled_to DESC, t.created_at DESC
+LIMIT 50;
+
+-- name: GetReimbursementsOf :many
+SELECT
+    sqlc.embed(t),
+    sqlc.embed(a),
+    sqlc.embed(c),
+    cp.name AS counterparty_name,
+    cp.icon AS counterparty_icon,
+    cp.color AS counterparty_color,
+    cat.name AS category_name
+FROM transactions AS t
+JOIN accounts AS a ON t.account_id = a.id
+JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
+LEFT JOIN categories AS cat ON t.category_id = cat.id
+WHERE t.reimburses_id = sqlc.arg(id)
+ORDER BY t.scheduled_to, t.created_at;

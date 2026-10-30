@@ -105,16 +105,9 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 	l.Info("created transaction")
 
 	// Re-render the whole list so new transactions land in their day group.
-	txs, err := h.repo.GetTransactions(r.Context())
-	if err != nil {
-		l.Error("fetch transactions from db", zap.Error(err))
+	if err := h.renderTransactionsListOOB(w, r); err != nil {
 		return nil, err
 	}
-	if err = renderToBody(w, r, views.TransactionsListOOB(txs)); err != nil {
-		l.Error("rendering transactions list OOB", zap.Error(err))
-		return nil, err
-	}
-	l.Debug("rendered transactions list OOB")
 
 	if !tx.FulfilledAt.IsZero() {
 		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
@@ -213,10 +206,22 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 	tx.ScheduledTo = keepTimeOfDay(tx.ScheduledTo, oldTx.ScheduledTo)
 
 	if err := h.repo.UpdateTransaction(r.Context(), oldTx, tx); err != nil {
+		var valerr *errs.ValidationError
+		if errors.As(err, &valerr) {
+			claims := getClaims(r.Context())
+			return views.EditTransaction(tx, h.mapTransactionToFD(tx, valerr), accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
+		}
 		l.Error("updating transaction", zap.Error(err))
 		return nil, err
 	}
 	l.Info("updated transaction")
+
+	// The amounts shown for its expense or reimbursements changed.
+	if hasReimbursementLinks(oldTx) {
+		if err := h.renderTransactionsListOOB(w, r); err != nil {
+			return nil, err
+		}
+	}
 
 	if !oldTx.FulfilledAt.IsZero() {
 		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
@@ -304,6 +309,13 @@ func (h Handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) (temp
 	}
 	l.Info("deleted transaction")
 
+	// Its expense's net amount changed, or its reimbursements got freed.
+	if hasReimbursementLinks(tx) {
+		if err := h.renderTransactionsListOOB(w, r); err != nil {
+			return nil, err
+		}
+	}
+
 	if !tx.FulfilledAt.IsZero() {
 		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
 			return nil, err
@@ -311,6 +323,25 @@ func (h Handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) (temp
 	}
 
 	return nil, nil
+}
+
+func (h Handler) renderTransactionsListOOB(w http.ResponseWriter, r *http.Request) error {
+	l := logger.FromCtx(r.Context())
+	txs, err := h.repo.GetTransactions(r.Context())
+	if err != nil {
+		l.Error("fetch transactions from db", zap.Error(err))
+		return err
+	}
+	if err = renderToBody(w, r, views.TransactionsListOOB(txs)); err != nil {
+		l.Error("rendering transactions list OOB", zap.Error(err))
+		return err
+	}
+	l.Debug("rendered transactions list OOB")
+	return nil
+}
+
+func hasReimbursementLinks(tx *models.Transaction) bool {
+	return tx.IsReimbursement() || tx.Reimbursed > 0
 }
 
 func (h Handler) getAndRenderBalancesOOB(w http.ResponseWriter, r *http.Request) error {

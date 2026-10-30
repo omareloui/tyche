@@ -117,7 +117,38 @@ func (r *Repository) GetTransactions(ctx context.Context) ([]models.Transaction,
 	for i, t := range dbTransactions {
 		tx[i] = *dbTransactionRowToTransaction(&t)
 	}
-	return tx, nil
+	return nestReimbursements(tx), nil
+}
+
+// nestReimbursements moves the reimbursements into their expense's
+// Reimbursements (oldest first), keeping the order of the rest.
+func nestReimbursements(txs []models.Transaction) []models.Transaction {
+	idx := make(map[string]int, len(txs))
+	for i, t := range txs {
+		if !t.IsReimbursement() {
+			idx[t.ID] = i
+		}
+	}
+
+	// Transactions are sorted newest first, walk backwards for oldest first.
+	nested := make(map[int]bool)
+	for i := len(txs) - 1; i >= 0; i-- {
+		if !txs[i].IsReimbursement() {
+			continue
+		}
+		if p, ok := idx[txs[i].ReimbursesID]; ok {
+			txs[p].Reimbursements = append(txs[p].Reimbursements, txs[i])
+			nested[i] = true
+		}
+	}
+
+	res := make([]models.Transaction, 0, len(txs)-len(nested))
+	for i, t := range txs {
+		if !nested[i] {
+			res = append(res, t)
+		}
+	}
+	return res
 }
 
 func (r *Repository) GetTransaction(ctx context.Context, id string) (*models.Transaction, error) {
@@ -134,7 +165,19 @@ func (r *Repository) GetTransaction(ctx context.Context, id string) (*models.Tra
 		return nil, err
 	}
 	l.Info("queried transaction")
-	return dbTransactionRowToTransaction(&dbTx), nil
+	tx := dbTransactionRowToTransaction(&dbTx)
+
+	if tx.Reimbursed > 0 {
+		rows, err := q.GetReimbursementsOf(ctx, sql.NullString{String: id, Valid: true})
+		if err != nil {
+			l.Error("querying reimbursements", zap.Error(err), zap.String("id", id))
+			return nil, err
+		}
+		for _, row := range rows {
+			tx.Reimbursements = append(tx.Reimbursements, dbReimbursementRowToTransaction(&row))
+		}
+	}
+	return tx, nil
 }
 
 func (r *Repository) DeleteTransaction(ctx context.Context, tx *models.Transaction) error {
@@ -198,6 +241,10 @@ func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transa
 		}
 		l.Debug("updated transaction", zap.Any("new_transaction", tx), zap.Any("old_transaction", oldTx))
 
+		if err := r.syncReimbursementsOnUpdateWithTxn(qtx, ctx, oldTx, tx); err != nil {
+			return err
+		}
+
 		if !oldTx.FulfilledAt.IsZero() {
 			if err := r.undoTxToAccountWithTxn(qtx, ctx, oldTx); err != nil {
 				return err
@@ -259,6 +306,8 @@ func dbTransactionToTransaction(
 		ScheduledTo: dbTx.ScheduledTo,
 		NeedsReview: dbTx.NeedsReview,
 		CreatedAt:   dbTx.CreatedAt,
+
+		ReimbursesID: dbTx.ReimbursesID.String,
 	}
 
 	if acc != nil {
@@ -367,5 +416,6 @@ func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTran
 		cat, cp, gl, glCur)
 	tx.SMSBody = _dbTx.SmsBody
 	tx.FromSMS = tx.SMSBody != ""
+	tx.Reimbursed = _dbTx.Reimbursed
 	return tx
 }

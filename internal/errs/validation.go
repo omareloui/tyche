@@ -71,6 +71,10 @@ func (v ValidationField) String() string {
 		return "This field is in use, try another one"
 	case "credit_card":
 		return "This field has to be a valid card number"
+	case "lt_reimbursed":
+		return fmt.Sprintf("Can't be less than what got reimbursed of it (%s)", v.Param)
+	case "gt_reimbursable":
+		return fmt.Sprintf("Exceeds what's left to reimburse of its expense (%s)", v.Param)
 	case "brand_icon":
 		return "Unknown icon, use a slug from simpleicons.org or leave it empty"
 	default:

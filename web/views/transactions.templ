@@ -133,13 +133,21 @@ templ txSearchBar() {
 }
 
 templ Transaction(tx *models.Transaction) {
+	if tx.IsReimbursement() {
+		@reimbursement(tx)
+	} else {
+		@transaction(tx)
+	}
+}
+
+templ transaction(tx *models.Transaction) {
 	{{ v := newTxView(tx) }}
 	<div
 		data-tx
 		hx-target="this"
 		hx-swap="outerHTML"
 		class="relative"
-		x-data="{openMenu: false}"
+		x-data="{openMenu: false, openReimbursements: false}"
 	>
 		@components.EntryMenu("openMenu", getTransactionMenuItems(tx))
 		<div
@@ -213,6 +221,18 @@ templ Transaction(tx *models.Transaction) {
 						@icons.Target("22")
 					</span>
 				}
+				if len(tx.Reimbursements) > 0 {
+					<button
+						@click="openReimbursements = !openReimbursements"
+						:class="openReimbursements && 'text-zinc-200'"
+						aria-label="Show reimbursements"
+						title="Reimbursed, click to show the breakdown"
+						class="cursor-pointer flex items-center gap-1 transition-colors hover:text-zinc-300"
+					>
+						@icons.Users("22")
+						<span class="text-sm tabular-nums">{ fmt.Sprint(len(tx.Reimbursements)) }</span>
+					</button>
+				}
 			</div>
 			<p
 				class={
@@ -229,6 +249,123 @@ templ Transaction(tx *models.Transaction) {
 				<img src="/icons/dots-menu.svg" class="h-5"/>
 			</button>
 		</div>
+		if len(tx.Reimbursements) > 0 {
+			@reimbursementsBreakdown(tx)
+		}
+	</div>
+}
+
+// reimbursementsBreakdown shows how an expense's net amount came to be: what
+// got paid, minus each reimbursement.
+templ reimbursementsBreakdown(tx *models.Transaction) {
+	<div x-cloak x-show="openReimbursements" x-transition class="ml-6 md:ml-16 mt-2 grid gap-2 border-l-2 border-zinc-700 pl-4">
+		<div class="flex justify-between px-4 text-sm text-zinc-400">
+			<span>Paid</span>
+			<span class="tabular-nums">{ "-" + tx.ViewAmount() }</span>
+		</div>
+		for _, rt := range tx.Reimbursements {
+			@reimbursement(&rt)
+		}
+		<div class="flex justify-between px-4 text-sm font-semibold">
+			<span>Net</span>
+			<span class="tabular-nums">{ "-" + tx.ViewNetAmount() }</span>
+		</div>
+	</div>
+}
+
+// reimbursement is an income paying back (part of) an expense, shown under
+// its expense.
+templ reimbursement(tx *models.Transaction) {
+	{{ v := newTxView(tx) }}
+	<div
+		data-tx
+		hx-target="this"
+		hx-swap="outerHTML"
+		class="relative"
+		x-data="{openMenu: false}"
+	>
+		@components.EntryMenu("openMenu", getReimbursementMenuItems(tx))
+		<div class={ "flex items-center gap-3 px-4 py-2 rounded-xl bg-zinc-700/20", templ.KV("opacity-70", v.isStale) }>
+			<div class="grid place-items-center shrink-0 w-9 h-9 rounded-lg bg-zinc-700/40 text-emerald-400">
+				if v.counterparty != nil {
+					@components.CounterpartyIcon(v.counterparty.Name, v.counterparty.Icon, v.counterparty.Color, "w-5 h-5")
+				} else {
+					@icons.Tag("18")
+				}
+			</div>
+			<div class="flex-1 min-w-0">
+				<p class="truncate">{ v.title }</p>
+				<p class="text-xs text-zinc-400 truncate">
+					{ formatTxDay(tx.ScheduledTo) } · { v.account }
+				</p>
+			</div>
+			if tx.NeedsReview {
+				<span class="group relative flex">
+					<button
+						hx-put={ fmt.Sprintf("/transactions/%s/reviewed", tx.ID) }
+						aria-label="Added from SMS, needs review. Click to mark reviewed"
+						class="cursor-pointer text-amber-400 transition-colors hover:text-amber-300"
+					>
+						@icons.Message("20")
+					</button>
+					@txSMSPopup(tx.SMSBody, "Needs review. Click to mark reviewed")
+				</span>
+			}
+			<p class="shrink-0 text-right tabular-nums font-semibold text-emerald-400">{ v.amount }</p>
+			<button
+				@click="openMenu = !openMenu"
+				class="cursor-pointer grid place-items-center shrink-0 w-6 h-6"
+			>
+				<img src="/icons/dots-menu.svg" class="h-5"/>
+			</button>
+		</div>
+	</div>
+}
+
+// ReimbursePicker lets choosing the expense an income pays back.
+templ ReimbursePicker(tx *models.Transaction, exps []models.ReimbursableExpense, errMsg string) {
+	{{ v := newTxView(tx) }}
+	<div data-tx hx-target="this" hx-swap="outerHTML" class="grid gap-3 px-4 py-3 rounded-2xl bg-zinc-700/20">
+		<div class="flex items-center justify-between gap-4">
+			<p>
+				Which expense does <span class="font-semibold">{ v.title }</span>
+				<span class="tabular-nums text-emerald-400">{ v.amount }</span> pay back?
+			</p>
+			<button hx-get={ fmt.Sprintf("/transactions/%s", tx.ID) } class="cursor-pointer text-sm text-zinc-400 hover:text-zinc-200">Cancel</button>
+		</div>
+		if errMsg != "" {
+			<p class="text-sm text-red-500">{ errMsg }</p>
+		}
+		if len(exps) == 0 {
+			<p class="text-sm text-zinc-400">No expense in the last 90 days, in the same currency, has enough left to be paid back by it.</p>
+		}
+		<ul class="grid gap-2 max-h-96 overflow-y-auto">
+			for _, e := range exps {
+				<li>
+					<button
+						hx-put={ fmt.Sprintf("/transactions/%s/reimburses", tx.ID) }
+						hx-vals={ fmt.Sprintf(`{"expense_id": %q}`, e.ID) }
+						class="cursor-pointer w-full flex items-center gap-4 px-4 py-2 rounded-xl bg-zinc-700/30 text-left transition-colors hover:bg-zinc-600/40"
+					>
+						<div class="flex-1 min-w-0">
+							<p class="truncate">{ e.Title }</p>
+							<p class="text-xs text-zinc-400 truncate">
+								if e.Subtitle != "" {
+									{ e.Subtitle } ·
+								}
+								{ formatTxDay(e.ScheduledTo) } · { e.Account }
+							</p>
+						</div>
+						<div class="shrink-0 text-right tabular-nums">
+							<p class="font-semibold">{ "-" + e.ViewAmount() }</p>
+							if e.Reimbursed > 0 {
+								<p class="text-xs text-zinc-400">{ "Net -" + e.ViewNetAmount() }</p>
+							}
+						</div>
+					</button>
+				</li>
+			}
+		</ul>
 	</div>
 }
 
@@ -342,12 +479,37 @@ func getTransactionMenuItems(tx *models.Transaction) []templ.Component {
 			components.EntryMenuAnchorItem("Mark reviewed", "put", fmt.Sprintf("/transactions/%s/reviewed", tx.ID)))
 	}
 
+	if tx.Kind == models.IncomeTxKind {
+		items = append(items,
+			components.EntryMenuAnchorItem("Reimburses…", "get", fmt.Sprintf("/transactions/%s/reimburses", tx.ID)))
+	}
+
 	items = append(items,
 		components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/transactions/%s/edit", tx.ID)),
 		components.EntryMenuDeleteItem(fmt.Sprintf("/transactions/%s", tx.ID)),
 	)
 
 	return items
+}
+
+func getReimbursementMenuItems(tx *models.Transaction) []templ.Component {
+	items := []templ.Component{}
+
+	if tx.FulfilledAt.IsZero() {
+		items = append(items,
+			components.EntryMenuAnchorItem("Fulfill", "put", fmt.Sprintf("/transactions/%s/fulfill", tx.ID)))
+	}
+
+	if tx.NeedsReview {
+		items = append(items,
+			components.EntryMenuAnchorItem("Mark reviewed", "put", fmt.Sprintf("/transactions/%s/reviewed", tx.ID)))
+	}
+
+	return append(items,
+		components.EntryMenuAnchorItem("Unlink reimbursement", "delete", fmt.Sprintf("/transactions/%s/reimburses", tx.ID)),
+		components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/transactions/%s/edit", tx.ID)),
+		components.EntryMenuDeleteItem(fmt.Sprintf("/transactions/%s", tx.ID)),
+	)
 }
 
 type txDay struct {
@@ -401,6 +563,10 @@ func newTxView(tx *models.Transaction) txView {
 	}
 
 	switch tx.Kind {
+	case models.ExpenseTxKind:
+		if tx.Reimbursed > 0 {
+			v.amount = "-" + tx.ViewNetAmount()
+		}
 	case models.IncomeTxKind, models.RefundTxKind:
 		v.amount = "+" + tx.ViewAmount()
 		v.isIncoming = true
