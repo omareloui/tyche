@@ -337,10 +337,14 @@ templ txChips(tx *models.Transaction, v *txView) {
 				</span>
 			}
 			if tx.RecurrentTx != nil {
-				<span class="chip">
+				<a
+					href={ templ.SafeURL("/recurrent-tx#" + RecurrentTxID(tx.RecurrentTx.ID)) }
+					title="See the recurring transaction"
+					class="chip transition-colors hover:bg-zinc-700 hover:text-zinc-200"
+				>
 					@icons.Repeat("12")
 					Recurring
-				</span>
+				</a>
 			}
 			if tx.NeedsReview {
 				<span tabindex="0" class="group relative chip bg-amber-400/10 text-amber-300 outline-none">

@@ -37,12 +37,35 @@ VALUES (
 
 
 -- name: GetRecurrentTxs :many
-SELECT * FROM recurrent_txs_details;
+SELECT
+    sqlc.embed(rtd),
+    ak.enum AS account_kind_enum,
+    tak.enum AS to_account_kind_enum,
+    cp.icon AS counterparty_icon,
+    cp.color AS counterparty_color,
+    cat.color AS category_color
+FROM recurrent_txs_details AS rtd
+LEFT JOIN account_kinds AS ak ON rtd.account_kind_id = ak.id
+LEFT JOIN account_kinds AS tak ON rtd.to_account_kind_id = tak.id
+LEFT JOIN counterparties AS cp ON rtd.recurrent_tx_counterparty_id = cp.id
+LEFT JOIN categories AS cat ON rtd.recurrent_tx_category_id = cat.id
+ORDER BY rtd.recurrent_tx_created_at DESC;
 
 
 -- name: GetRecurrentTx :one
-SELECT * FROM recurrent_txs_details
-WHERE recurrent_tx_id = sqlc.arg(id);
+SELECT
+    sqlc.embed(rtd),
+    ak.enum AS account_kind_enum,
+    tak.enum AS to_account_kind_enum,
+    cp.icon AS counterparty_icon,
+    cp.color AS counterparty_color,
+    cat.color AS category_color
+FROM recurrent_txs_details AS rtd
+LEFT JOIN account_kinds AS ak ON rtd.account_kind_id = ak.id
+LEFT JOIN account_kinds AS tak ON rtd.to_account_kind_id = tak.id
+LEFT JOIN counterparties AS cp ON rtd.recurrent_tx_counterparty_id = cp.id
+LEFT JOIN categories AS cat ON rtd.recurrent_tx_category_id = cat.id
+WHERE rtd.recurrent_tx_id = sqlc.arg(id);
 
 
 -- name: UpdateRecurrentTx :exec
@@ -81,3 +104,23 @@ WHERE (
     tx.recurrent_id = sqlc.arg(recurrent_id)
     AND tx.fulfilled_at IS NULL
 );
+
+-- name: GetRecurrentTxsOccurrences :many
+-- Dates of the transactions generated from recurrent txs, scheduled and
+-- fulfilled ones.
+SELECT
+    tx.recurrent_id,
+    tx.scheduled_to,
+    tx.fulfilled_at
+FROM transactions AS tx
+WHERE tx.recurrent_id IS NOT NULL
+ORDER BY tx.scheduled_to;
+
+-- name: GetRecurrentTxOccurrences :many
+SELECT
+    tx.recurrent_id,
+    tx.scheduled_to,
+    tx.fulfilled_at
+FROM transactions AS tx
+WHERE tx.recurrent_id = sqlc.arg(recurrent_id)
+ORDER BY tx.scheduled_to;

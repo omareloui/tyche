@@ -2,6 +2,7 @@ package models
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/omareloui/tyche/internal/errs"
@@ -46,6 +47,63 @@ type RecurrentTx struct {
 	StopsAt                    time.Time
 	CreatedAt                  time.Time
 	LastTransactionScheduledTo time.Time
+
+	// Upcoming are its scheduled, not yet fulfilled, transactions' dates,
+	// soonest first.
+	Upcoming []time.Time
+	// FulfilledCount and LastFulfilledOn are about its fulfilled ones.
+	FulfilledCount  int
+	LastFulfilledOn time.Time
+}
+
+// AddOccurrence records one of its generated transactions, passed in
+// scheduled date order.
+func (rt *RecurrentTx) AddOccurrence(scheduledTo time.Time, fulfilled bool) {
+	if fulfilled {
+		rt.FulfilledCount++
+		rt.LastFulfilledOn = scheduledTo
+		return
+	}
+	rt.Upcoming = append(rt.Upcoming, scheduledTo)
+}
+
+// HasEnded tells if it stopped and has nothing scheduled left.
+func (rt *RecurrentTx) HasEnded(now time.Time) bool {
+	return !rt.StopsAt.IsZero() && rt.StopsAt.Before(now) && len(rt.Upcoming) == 0
+}
+
+// PerMonth is how many times it happens in an average month.
+func (rt *RecurrentTx) PerMonth() float64 {
+	if rt.Every == 0 {
+		return 0
+	}
+	every := float64(rt.Every)
+	switch rt.Unit {
+	case RecurrentUnitDay:
+		return 365.25 / 12 / every
+	case RecurrentUnitMonth:
+		return 1 / every
+	case RecurrentUnitYear:
+		return 1 / (12 * every)
+	}
+	return 0
+}
+
+// AsTransaction is a transaction as it generates them, to show it like one.
+func (rt *RecurrentTx) AsTransaction() *Transaction {
+	return &Transaction{
+		ID:           rt.ID,
+		Account:      rt.Account,
+		Amount:       rt.Amount,
+		Kind:         rt.Kind,
+		Category:     rt.Category,
+		Counterparty: rt.Counterparty,
+		ToAccount:    rt.ToAccount,
+		ToAmount:     rt.ToAmount,
+		Description:  rt.Description,
+		Goal:         rt.Goal,
+		RecurrentTx:  rt,
+	}
 }
 
 type createRecurrentTx struct {
@@ -59,11 +117,17 @@ type createRecurrentTx struct {
 }
 
 func (rt *RecurrentTx) ViewRecurrence() string {
-	extraS := ""
-	if rt.Every != 1 {
-		extraS = "s"
+	if rt.Every == 1 {
+		switch rt.Unit {
+		case RecurrentUnitDay:
+			return "Daily"
+		case RecurrentUnitMonth:
+			return "Monthly"
+		case RecurrentUnitYear:
+			return "Yearly"
+		}
 	}
-	return fmt.Sprintf("Every %d %s%s", rt.Every, rt.Unit, extraS)
+	return fmt.Sprintf("Every %d %ss", rt.Every, strings.ToLower(rt.Unit.String()))
 }
 
 func (rt *RecurrentTx) ViewAmount() string {

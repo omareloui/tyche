@@ -2,13 +2,15 @@ package views
 
 import (
 	"fmt"
+	"slices"
 	"time"
-	"github.com/omareloui/tyche/internal/models"
+
 	"github.com/omareloui/tyche/internal/jwt"
-	"github.com/omareloui/tyche/web/views/layouts"
+	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
 )
 
 type RecurrenceFD struct {
@@ -19,8 +21,8 @@ type RecurrenceFD struct {
 }
 
 templ RecurrentTxs(claims *jwt.AccessClaims, balances []models.Balance, rtxs []models.RecurrentTx) {
-	@layouts.WithTitle(claims, "Recurrent Transactions", balances) {
-		@rtxsList(rtxs)
+	@layouts.WithTitle(claims, "Recurring", balances, layouts.WithDatePicker(), layouts.WithAlpineMask()) {
+		@rtxsList(rtxs, &claims.DefaultCurrency)
 	}
 }
 
@@ -52,21 +54,36 @@ templ rtxFormBody(
 	cats []models.Category, cps []models.Counterparty,
 	gls []models.Goal, defaultCur *models.Currency) {
 	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs, cps, gls, defaultCur)
-	@form.TextInput("Description", "description", "Enter a description", id, fd.Description, nil, nil)
-	@recurrenceFormBody(id, &fd.RecurrenceFD)
-}
-
-templ recurrenceFormBody(id string, fd *RecurrenceFD) {
-	<div class="grid grid-cols-[5.5rem_1fr] gap-4">
-		@form.NumberInput("Every", "every", "1", id, fd.Every, templ.Attributes{"min": "1"}, nil)
-		@form.SelectRecurrentUnit("unit", id, fd.Unit)
-		@form.DateInput("Stops on", "stops_on", id, fd.StopsOn, nil, templ.Attributes{"class": "col-span-2"})
+	@form.Field("Description", "description", id, icons.Pencil("15"), fd.Description.Error) {
+		@form.Control("text", "description", "What is it for?", id, fd.Description, nil)
+	}
+	<div class="grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-800/20 p-4">
+		<p class="inline-flex items-center gap-2 text-zinc-300">
+			@icons.Repeat("18")
+			Repeats
+		</p>
+		@recurrenceFormBody(id, &fd.RecurrenceFD)
 	</div>
 }
 
-templ RecurrentTransactionOOB(rtx *models.RecurrentTx) {
-	<div id="tx-list" hx-swap-oob="afterbegin">
-		@RecurrentTx(rtx)
+templ recurrenceFormBody(id string, fd *RecurrenceFD) {
+	<div class="grid grid-cols-[5.5rem_1fr] gap-3">
+		@form.Field("Every", "every", id, nil, fd.Every.Error) {
+			@form.Control("number", "every", "1", id, fd.Every, templ.Attributes{"min": "1", "inputmode": "numeric", "class": "input-field text-center tabular-nums"})
+		}
+		<div class="min-w-0">
+			@form.SelectRecurrentUnit("unit", id, fd.Unit)
+		</div>
+	</div>
+	<div>
+		@form.Field("Stops on", "stops_on", id, icons.Calendar("15"), fd.StopsOn.Error) {
+			@form.Control("text", "stops_on", "Never", id, fd.StopsOn, templ.Attributes{
+				"autocomplete":    "off",
+				"x-mask":          "9999-99-99",
+				"data-datepicker": true,
+			})
+		}
+		<p class="mt-1.5 text-sm text-zinc-500">Leave it empty to keep it going.</p>
 	</div>
 }
 
@@ -75,59 +92,372 @@ templ EditRecurrentTx(
 	accs []models.Account, knds []models.TxKind,
 	cats []models.Category, cps []models.Counterparty,
 	gls []models.Goal, defaultCur *models.Currency) {
-	@form.Form("put", fmt.Sprintf("/recurrent-tx/%s", rtx.ID), templ.Attributes{"hx-target": "this"}) {
-		<p>ID: { rtx.ID }</p>
+	<form
+		id={ RecurrentTxID(rtx.ID) }
+		hx-put={ string(templ.SafeURL(fmt.Sprintf("/recurrent-tx/%s", rtx.ID))) }
+		hx-target="this"
+		hx-swap="outerHTML"
+		data-rtx
+		class="tx-form grid gap-5 sm:col-span-2 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-5 sm:p-6"
+	>
+		<header class="grid gap-1">
+			<h3 class="text-lg font-semibold">Edit recurring transaction</h3>
+			<p class="text-sm text-zinc-500">Its upcoming scheduled transactions get replaced, starting from today.</p>
+		</header>
 		@rtxFormBody(rtx.ID, fd, accs, knds, cats, cps, gls, defaultCur)
-		@form.EditFormButtons(fmt.Sprintf("/recurrent-tx/%s", rtx.ID))
-	}
+		@form.SheetFormButtons("Save changes", fmt.Sprintf("/recurrent-tx/%s", rtx.ID))
+	</form>
 }
 
-templ rtxsList(recurrentTx []models.RecurrentTx) {
-	@components.List("tx-list") {
-		for _, rt := range recurrentTx {
-			@RecurrentTx(&rt)
-		}
-	}
+templ rtxsList(rtxs []models.RecurrentTx, def *models.Currency) {
+	{{ active, ended := splitRecurrentTxs(rtxs) }}
+	<div id="rtx-list" class="grid gap-8">
+		@rtxSummary(rtxs, def, false)
+		<section class="hidden has-[[data-rtx]]:block">
+			<h2 class="flex items-center gap-2 mb-3 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+				@icons.Repeat("16")
+				Active
+			</h2>
+			<div class="grid sm:grid-cols-2 gap-4">
+				for _, rt := range active {
+					@RecurrentTx(&rt)
+				}
+			</div>
+		</section>
+		<details class="group hidden has-[[data-rtx]]:block">
+			<summary class="flex items-center gap-2 mb-3 list-none cursor-pointer select-none text-zinc-500 hover:text-zinc-300 [&::-webkit-details-marker]:hidden">
+				@icons.Archive("16")
+				<h2 class="text-sm font-semibold uppercase tracking-wider">Ended</h2>
+				@icons.ChevronDown("16", &templ.Attributes{"class": "transition-transform group-open:rotate-180"})
+			</summary>
+			<div class="grid sm:grid-cols-2 gap-4">
+				for _, rt := range ended {
+					@RecurrentTx(&rt)
+				}
+			</div>
+		</details>
+		<div class="rtx-empty hidden place-items-center gap-3 py-16 text-center">
+			<div class="relative grid place-items-center w-16 h-16 rounded-2xl bg-violet-400/15 text-violet-400">
+				<div aria-hidden="true" class="absolute inset-0 rounded-2xl bg-violet-400/20 blur-xl"></div>
+				@icons.Repeat("30", &templ.Attributes{"class": "relative"})
+			</div>
+			<p class="mt-2 text-xl font-semibold">Nothing recurring yet</p>
+			<p class="max-w-sm text-zinc-500">Rent, salary, subscriptions… turn on <span class="text-zinc-300">Repeat</span> when adding a transaction and it shows up here.</p>
+			<a href="/transactions" class="btn-primary mt-2">
+				Go to transactions
+				@icons.ArrowRight("18")
+			</a>
+		</div>
+	</div>
 }
 
-templ RecurrentTx(rtx *models.RecurrentTx) {
-	@components.EntryCard(
-		components.WithCardTitle(rtx.ID),
-		components.WithCardMenu([]templ.Component{
-			components.EntryMenuAnchorItem("Generate Transactions", "post", fmt.Sprintf("/recurrent-tx/%s/generate-txs", rtx.ID)),
-			components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/recurrent-tx/%s/edit", rtx.ID)),
-			components.EntryMenuDeleteItem(fmt.Sprintf("/recurrent-tx/%s", rtx.ID)),
-		}),
-	) {
-		<p>ID: { rtx.ID }</p>
-		<p>Account: { rtx.Account.Name }</p>
-		<p>Amount: { rtx.ViewAmount() }</p>
-		if rtx.ToAccount != nil {
-			<p>To Account: { rtx.ToAccount.Name }</p>
-			<p>To Amount: { rtx.ViewToAmount() }</p>
+// rtxSummary is what the active recurring transactions add up to in an
+// average month, in the default currency.
+templ rtxSummary(rtxs []models.RecurrentTx, def *models.Currency, oob bool) {
+	{{ s := summarizeRecurrentTxs(rtxs, def) }}
+	<div
+		id="rtx-summary"
+		if oob {
+			hx-swap-oob="true"
 		}
-		<p>Kind: { rtx.Kind.String() }</p>
-		if rtx.Description != "" {
-			<p>Description: { rtx.Description }</p>
+	>
+		if s.Active > 0 {
+			<section class="relative overflow-hidden grid gap-5 p-5 sm:p-6 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800">
+				<div aria-hidden="true" class="pointer-events-none absolute -top-24 -right-16 size-64 rounded-full bg-violet-400/12 blur-3xl"></div>
+				<div aria-hidden="true" class="pointer-events-none absolute -bottom-28 -left-20 size-56 rounded-full bg-emerald-400/10 blur-3xl"></div>
+				<div class="relative flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+					<div class="min-w-0">
+						<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-violet-400">
+							@icons.Calendar("14")
+							In a typical month
+						</p>
+						<div class="flex flex-wrap items-baseline gap-x-5 gap-y-1 mt-1">
+							<p class="text-3xl sm:text-4xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">
+								{ formatSignedAmount(-s.Out, def.Symbol) }
+							</p>
+							if s.In > 0 {
+								<p class="text-xl font-bold tabular-nums text-emerald-400 font-(family-name:--font-biorhyme-expanded)">
+									{ formatSignedAmount(s.In, def.Symbol) }
+								</p>
+							}
+						</div>
+						<p class="text-sm text-zinc-500">
+							going out
+							if s.In > 0 {
+								· coming in
+							}
+							across { fmt.Sprint(s.Active) } recurring { plural(s.Active, "transaction", "transactions") }
+						</p>
+					</div>
+					<div class="flex gap-2">
+						@statTile(fmt.Sprint(s.Active), "Active", "text-zinc-100")
+						@statTile(fmt.Sprint(s.DueThisWeek), "This week", rtxStatClass(s.DueThisWeek > 0, "text-sky-300"))
+						if s.Overdue > 0 {
+							@statTile(fmt.Sprint(s.Overdue), "Overdue", "text-red-400")
+						}
+					</div>
+				</div>
+			</section>
 		}
-		if rtx.Category != nil {
-			<p>Category ID: { rtx.Category.ID }</p>
-			<p>Category Name: { rtx.Category.Name }</p>
+	</div>
+}
+
+templ RecurrentTx(rt *models.RecurrentTx) {
+	{{ tx := rt.AsTransaction() }}
+	{{ v := newTxView(tx) }}
+	{{ today := dateOf(time.Now()) }}
+	{{ ended := rt.HasEnded(today) }}
+	<div
+		id={ RecurrentTxID(rt.ID) }
+		hx-target="this"
+		hx-swap="outerHTML"
+		data-rtx
+		class={ "relative", templ.KV("opacity-60 hover:opacity-100 transition-opacity", ended) }
+		x-data="{openMenu: false}"
+	>
+		@components.EntryMenu("openMenu", getRecurrentTxMenuItems(rt))
+		<div class={ "relative flex flex-col gap-4 h-full p-4 rounded-2xl bg-zinc-700/20 overflow-hidden", rtxAccentClass(rt.Kind) }>
+			<div aria-hidden="true" class="pointer-events-none absolute -top-16 -right-16 size-40 rounded-full bg-(--accent)/10 blur-2xl"></div>
+			<div class="relative flex items-center gap-3 min-w-0">
+				@txTile(tx, &v)
+				<div class="flex-1 min-w-0">
+					<p class="text-lg leading-tight truncate">{ v.title }</p>
+					<p class="flex items-center gap-1.5 text-sm text-zinc-500 min-w-0">
+						<span class="shrink-0">
+							@accKindIcon(v.accKind, "14")
+						</span>
+						<span class="truncate">
+							if v.subtitle != "" {
+								{ v.subtitle } ·
+							}
+							{ v.account }
+						</span>
+					</p>
+				</div>
+				<button
+					@click="openMenu = !openMenu"
+					aria-label="Recurring transaction actions"
+					class="cursor-pointer grid place-items-center shrink-0 w-6 h-6"
+				>
+					<img src="/icons/dots-menu.svg" class="h-5"/>
+				</button>
+			</div>
+			<div class="relative flex items-end justify-between gap-3">
+				<p
+					class={
+						"text-2xl font-bold tabular-nums truncate font-(family-name:--font-biorhyme-expanded)",
+						templ.KV("text-emerald-400", v.tone == txToneIn),
+						templ.KV("text-zinc-300", v.tone == txToneNeutral),
+					}
+				>{ v.amount }</p>
+				<span class="inline-flex shrink-0 items-center gap-1.5 h-7 px-2.5 rounded-full bg-(--accent)/12 text-sm text-(--accent)">
+					@icons.Repeat("14")
+					{ rt.ViewRecurrence() }
+				</span>
+			</div>
+			@rtxSchedule(rt, today, ended)
+			@rtxChips(rt, v.title)
+		</div>
+	</div>
+}
+
+// rtxSchedule is when it happens next, followed by the dates after.
+templ rtxSchedule(rt *models.RecurrentTx, today time.Time, ended bool) {
+	<div class="relative mt-auto pt-3 border-t border-zinc-800/80">
+		if len(rt.Upcoming) > 0 {
+			{{ next := rt.Upcoming[0] }}
+			{{ overdue := next.Before(today) }}
+			<div class="flex items-center gap-3">
+				<div
+					class={
+						"grid shrink-0 w-11 py-1 rounded-xl text-center leading-none",
+						templ.KV("bg-(--accent)/12 text-(--accent)", !overdue),
+						templ.KV("bg-red-400/12 text-red-400", overdue),
+					}
+				>
+					<span class="text-[0.65rem] font-semibold uppercase tracking-wider">{ next.Format("Jan") }</span>
+					<span class="text-lg font-bold tabular-nums">{ next.Format("2") }</span>
+				</div>
+				<div class="flex-1 min-w-0">
+					<p class="text-xs text-zinc-500">
+						if overdue {
+							Overdue
+						} else {
+							Next
+						}
+					</p>
+					<p class={ "truncate", templ.KV("text-red-400", overdue) }>
+						{ next.Format("Monday") } · { relDay(next, today) }
+					</p>
+				</div>
+				if len(rt.Upcoming) > 1 {
+					<div class="hidden min-[420px]:flex items-center gap-1" title="Scheduled after">
+						for _, d := range rt.Upcoming[1:min(4, len(rt.Upcoming))] {
+							<span class="px-2 py-0.5 rounded-full bg-zinc-800 text-xs text-zinc-400 tabular-nums">{ d.Format("Jan 2") }</span>
+						}
+					</div>
+				}
+			</div>
+		} else if ended {
+			<p class="flex items-center gap-2 text-sm text-zinc-500">
+				@icons.Archive("16")
+				Ended { rt.StopsAt.Format("Jan 2, 2006") }
+			</p>
+		} else {
+			<div class="flex items-center justify-between gap-3">
+				<p class="text-sm text-zinc-400">Nothing scheduled ahead.</p>
+				<button
+					hx-post={ fmt.Sprintf("/recurrent-tx/%s/generate-txs", rt.ID) }
+					class="inline-flex shrink-0 items-center gap-1.5 h-9 pl-3 pr-4 rounded-full bg-(--accent)/15 text-sm font-medium text-(--accent) cursor-pointer transition-colors hover:bg-(--accent)/25"
+				>
+					@icons.Calendar("15")
+					Schedule next
+				</button>
+			</div>
 		}
-		if rtx.Counterparty != nil {
-			<p>Counterparty ID: { rtx.Counterparty.ID }</p>
-			<p>Counterparty Name: { rtx.Counterparty.Name }</p>
+	</div>
+}
+
+templ rtxChips(rt *models.RecurrentTx, title string) {
+	<div class="relative flex flex-wrap items-center gap-1.5">
+		if rt.FulfilledCount > 0 {
+			<span class="chip" title={ "Last on " + rt.LastFulfilledOn.Format("Jan 2, 2006") }>
+				@icons.Check("12")
+				{ fmt.Sprintf("Done %d×", rt.FulfilledCount) }
+			</span>
 		}
-		if rtx.Goal != nil {
-			<p>Goal ID: { rtx.Goal.ID }</p>
-			<p>Goal Name: { rtx.Goal.Name }</p>
+		if rt.Category != nil && rt.Category.Name != "" && rt.Category.Name != title {
+			<span class="chip">
+				@icons.Tag("12")
+				{ rt.Category.Name }
+			</span>
 		}
-		<p>Recurrence: { rtx.ViewRecurrence() }</p>
-		<p>Starts At: { rtx.StartsAt.Format(time.RFC1123Z) }</p>
-		if !rtx.StopsAt.IsZero() {
-			<p>Stops At: { rtx.StopsAt.Format(time.RFC1123Z) }</p>
+		if rt.Goal != nil {
+			<span class="chip max-w-48">
+				@icons.Target("12")
+				<span class="truncate">{ rt.Goal.Name }</span>
+			</span>
 		}
-		<p>Last Transaction Scheduled To: { rtx.LastTransactionScheduledTo.Format(time.RFC1123Z) }</p>
-		<p>Created At: { rtx.CreatedAt.Format(time.RFC1123Z) }</p>
+		if !rt.StopsAt.IsZero() {
+			<span class="chip">
+				@icons.Calendar("12")
+				Until { rt.StopsAt.Format("Jan 2006") }
+			</span>
+		} else {
+			<span class="text-xs text-zinc-500">Since { rt.StartsAt.Format("Jan 2006") }</span>
+		}
+	</div>
+}
+
+templ RecurrentTxsSummaryOOB(rtxs []models.RecurrentTx, def *models.Currency) {
+	@rtxSummary(rtxs, def, true)
+}
+
+func RecurrentTxID(id string) string {
+	return "rtx-" + id
+}
+
+// splitRecurrentTxs splits the active ones, soonest due first, from the ended
+// ones.
+func splitRecurrentTxs(rtxs []models.RecurrentTx) (active, ended []models.RecurrentTx) {
+	today := dateOf(time.Now())
+	for _, rt := range rtxs {
+		if rt.HasEnded(today) {
+			ended = append(ended, rt)
+		} else {
+			active = append(active, rt)
+		}
+	}
+	slices.SortStableFunc(active, func(a, b models.RecurrentTx) int {
+		return nextDue(&a).Compare(nextDue(&b))
+	})
+	return active, ended
+}
+
+// nextDue is the next scheduled date, or far ahead with none.
+func nextDue(rt *models.RecurrentTx) time.Time {
+	if len(rt.Upcoming) == 0 {
+		return time.Date(9999, 1, 1, 0, 0, 0, 0, time.UTC)
+	}
+	return rt.Upcoming[0]
+}
+
+type rtxSummaryData struct {
+	In, Out             float64
+	Active, DueThisWeek int
+	Overdue             int
+}
+
+func summarizeRecurrentTxs(rtxs []models.RecurrentTx, def *models.Currency) rtxSummaryData {
+	var s rtxSummaryData
+	today := dateOf(time.Now())
+	weekEnd := today.AddDate(0, 0, 7)
+	for _, rt := range rtxs {
+		if rt.HasEnded(today) {
+			continue
+		}
+		s.Active++
+		in, out := txFlow(rt.AsTransaction(), def)
+		s.In += in * rt.PerMonth()
+		s.Out += out * rt.PerMonth()
+		for _, d := range rt.Upcoming {
+			if d.Before(today) {
+				s.Overdue++
+			} else if d.Before(weekEnd) {
+				s.DueThisWeek++
+			}
+		}
+	}
+	return s
+}
+
+func rtxStatClass(on bool, class string) string {
+	if on {
+		return class
+	}
+	return "text-zinc-100"
+}
+
+// rtxAccentClass tints the card by kind, as the transaction form does.
+func rtxAccentClass(k models.TxKind) string {
+	switch k {
+	case models.IncomeTxKind, models.RefundTxKind:
+		return "[--accent:var(--color-emerald-400)]"
+	case models.TransferTxKind:
+		return "[--accent:var(--color-sky-400)]"
+	case models.DebtTxKind:
+		return "[--accent:var(--color-amber-400)]"
+	}
+	return "[--accent:var(--color-violet-400)]"
+}
+
+// relDay is how far day is from today, e.g. "tomorrow" or "in 5 days".
+func relDay(day, today time.Time) string {
+	days := int(dateOf(day).Sub(today).Hours() / 24)
+	switch {
+	case days == 0:
+		return "today"
+	case days == 1:
+		return "tomorrow"
+	case days == -1:
+		return "yesterday"
+	case days < 0:
+		return fmt.Sprintf("%d days ago", -days)
+	case days < 14:
+		return fmt.Sprintf("in %d days", days)
+	case days < 60:
+		return fmt.Sprintf("in %d weeks", days/7)
+	}
+	return fmt.Sprintf("in %d months", days/30)
+}
+
+func getRecurrentTxMenuItems(rt *models.RecurrentTx) []templ.Component {
+	return []templ.Component{
+		components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/recurrent-tx/%s/edit", rt.ID)),
+		components.EntryMenuAnchorItem("Schedule more", "post", fmt.Sprintf("/recurrent-tx/%s/generate-txs", rt.ID)),
+		components.EntryMenuAnchorItem("Delete", "delete", fmt.Sprintf("/recurrent-tx/%s", rt.ID),
+			components.WithEntryMenuItemConfirmMessage("Delete it with its upcoming scheduled transactions? Past ones are kept."),
+			components.WithEntryMenuItemClasses("text-red-500"),
+		),
 	}
 }

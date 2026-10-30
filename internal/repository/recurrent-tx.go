@@ -71,7 +71,24 @@ func (r *Repository) GetRecurrentTxs(ctx context.Context) ([]models.RecurrentTx,
 	}
 	l.Debug("queried recurrent transactions")
 
-	return dbRecurrentTxsDetailsToRecurrentTxs(dbRtx), nil
+	rts := dbRecurrentTxsDetailsToRecurrentTxs(dbRtx)
+
+	occs, err := q.GetRecurrentTxsOccurrences(ctx)
+	if err != nil {
+		l.Error("querying recurrent transactions occurrences", zap.Error(err))
+		return nil, err
+	}
+	byID := make(map[string]*models.RecurrentTx, len(rts))
+	for i := range rts {
+		byID[rts[i].ID] = &rts[i]
+	}
+	for _, o := range occs {
+		if rt := byID[o.RecurrentID.String]; rt != nil {
+			rt.AddOccurrence(o.ScheduledTo, o.FulfilledAt.Valid)
+		}
+	}
+
+	return rts, nil
 }
 
 func (r *Repository) GetRecurrentTx(ctx context.Context, id string) (*models.RecurrentTx, error) {
@@ -89,7 +106,18 @@ func (r *Repository) GetRecurrentTx(ctx context.Context, id string) (*models.Rec
 	}
 	l.Debug("queried recurrent transactions")
 
-	return dbRecurrentTxDetailsToRecurrentTx(dbRtx), nil
+	rt := dbRecurrentTxRowToRecurrentTx(queries.GetRecurrentTxsRow(dbRtx))
+
+	occs, err := q.GetRecurrentTxOccurrences(ctx, sql.NullString{String: id, Valid: true})
+	if err != nil {
+		l.Error("querying recurrent transaction occurrences", zap.Error(err))
+		return nil, err
+	}
+	for _, o := range occs {
+		rt.AddOccurrence(o.ScheduledTo, o.FulfilledAt.Valid)
+	}
+
+	return rt, nil
 }
 
 func (r *Repository) UpdateRecurrentTx(ctx context.Context, rt *models.RecurrentTx, scheduledTxs []models.Transaction) error {
@@ -189,14 +217,32 @@ func (r *Repository) GenerateScheduledTransactions(ctx context.Context, rt *mode
 	})
 }
 
-func dbRecurrentTxsDetailsToRecurrentTxs(dbRts []queries.RecurrentTxsDetail) []models.RecurrentTx {
+func dbRecurrentTxsDetailsToRecurrentTxs(dbRts []queries.GetRecurrentTxsRow) []models.RecurrentTx {
 	var rts []models.RecurrentTx
 
 	for _, dbRt := range dbRts {
-		rts = append(rts, *dbRecurrentTxDetailsToRecurrentTx(dbRt))
+		rts = append(rts, *dbRecurrentTxRowToRecurrentTx(dbRt))
 	}
 
 	return rts
+}
+
+// dbRecurrentTxRowToRecurrentTx adds what the details view lacks: the
+// accounts' kinds, the counterparty's icon and the category's color.
+func dbRecurrentTxRowToRecurrentTx(row queries.GetRecurrentTxsRow) *models.RecurrentTx {
+	rt := dbRecurrentTxDetailsToRecurrentTx(row.RecurrentTxsDetail)
+	rt.Account.Kind.Enum = models.AccKind(row.AccountKindEnum.Int64)
+	if rt.ToAccount != nil {
+		rt.ToAccount.Kind.Enum = models.AccKind(row.ToAccountKindEnum.Int64)
+	}
+	if rt.Counterparty != nil {
+		rt.Counterparty.Icon = row.CounterpartyIcon.String
+		rt.Counterparty.Color = row.CounterpartyColor.String
+	}
+	if rt.Category != nil {
+		rt.Category.Color = row.CategoryColor.String
+	}
+	return rt
 }
 
 func dbRecurrentTxDetailsToRecurrentTx(dbRtx queries.RecurrentTxsDetail) *models.RecurrentTx {

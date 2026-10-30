@@ -155,6 +155,10 @@ func (h Handler) EditRecurrentTx(w http.ResponseWriter, r *http.Request) (templ.
 	}
 	l.Debug("fetched recurrent tx", zap.Any("recurrent_tx", rt))
 
+	if err := h.renderRecurrentTxsSummaryOOB(w, r); err != nil {
+		return nil, err
+	}
+
 	return views.RecurrentTx(rt), nil
 }
 
@@ -179,7 +183,12 @@ func (h Handler) GenerateTransactions(w http.ResponseWriter, r *http.Request) (t
 		return nil, err
 	}
 
-	return views.RecurrentTx(rt), nil
+	if err := h.renderRecurrentTxsSummaryOOB(w, r); err != nil {
+		return nil, err
+	}
+
+	// refetched for its new upcoming dates
+	return h.RecurrentTx(w, r)
 }
 
 func (h Handler) DeleteRecurrentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -196,7 +205,21 @@ func (h Handler) DeleteRecurrentTx(w http.ResponseWriter, r *http.Request) (temp
 	}
 	l.Info("deleted recurrent transaction")
 
+	if err := h.renderRecurrentTxsSummaryOOB(w, r); err != nil {
+		return nil, err
+	}
+
 	return nil, nil
+}
+
+func (h Handler) renderRecurrentTxsSummaryOOB(w http.ResponseWriter, r *http.Request) error {
+	rts, err := h.repo.GetRecurrentTxs(r.Context())
+	if err != nil {
+		logger.FromCtx(r.Context()).Error("fetching recurrent txs for summary", zap.Error(err))
+		return err
+	}
+	claims := getClaims(r.Context())
+	return renderToBody(w, r, views.RecurrentTxsSummaryOOB(rts, &claims.DefaultCurrency))
 }
 
 func generateNextScheduledTransactions(rt *models.RecurrentTx, count int) []models.Transaction {

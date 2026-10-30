@@ -243,3 +243,13 @@ input[type="number"] {
 #goals-list:not(:has([data-goal])) .goals-empty {
   display: grid;
 }
+
+/* ============ RECURRING ============ */
+#rtx-list:not(:has([data-rtx])) .rtx-empty {
+  display: grid;
+}
+
+/* Linked from a transaction's "Recurring" chip. */
+[data-rtx]:target > div:last-child {
+  @apply ring-2 ring-(--accent);
+}
