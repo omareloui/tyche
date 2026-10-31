@@ -221,6 +221,11 @@ input[type="number"] {
 
 /* In the components layer so utilities (e.g. a chip's colors) override it. */
 @layer components {
+  /* Frosted chart tooltip, the chart showing through blurred. */
+  .glass-tooltip {
+    @apply whitespace-nowrap rounded-xl bg-zinc-900/55 backdrop-blur-md backdrop-saturate-150 ring-1 ring-white/10 shadow-xl shadow-black/40 px-2.5 py-1.5 text-sm leading-tight;
+  }
+
   .chip {
     @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800 text-xs text-zinc-400;
   }

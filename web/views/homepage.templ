@@ -3,12 +3,9 @@ package views
 import "github.com/omareloui/tyche/internal/models"
 import "github.com/omareloui/tyche/internal/jwt"
 import "github.com/omareloui/tyche/web/views/layouts"
-import "github.com/omareloui/tyche/web/views/components"
 
-templ HomePage(claims *jwt.AccessClaims, balances []models.Balance, merchantSpending *models.MerchantSpending) {
-	@layouts.WithTitle(claims, "Tyche: Fortune Builder", balances) {
-		if merchantSpending != nil {
-			@components.MerchantSpendingChart(merchantSpending)
-		}
-	}
+// HomePage is the homepage when signed out, the dashboard (Dashboard)
+// otherwise.
+templ HomePage(claims *jwt.AccessClaims, balances []models.Balance) {
+	@layouts.WithTitle(claims, "Tyche: Fortune Builder", balances)
 }

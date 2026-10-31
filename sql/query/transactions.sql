@@ -401,3 +401,61 @@ LEFT JOIN goals AS g ON t.goal_id = g.id
 LEFT JOIN currencies AS gc ON g.currency_id = gc.id
 WHERE t.reimburses_id IN (SELECT value FROM json_each(sqlc.arg(ids)))
 ORDER BY t.scheduled_to DESC, t.created_at DESC;
+
+-- name: GetDailyFlow :many
+-- Fulfilled income (kind 2) and spending (kind 1 net of its reimbursements,
+-- minus refunds, kind 5) per day and account currency since from_date,
+-- following the analysis rule. Days are scheduled_to's, as the transactions
+-- list groups them; currencies are merged in Go using live fx rates.
+SELECT
+    CAST(SUBSTR(t.scheduled_to, 1, 10) AS TEXT) AS day,
+    sqlc.embed(cur),
+    CAST(TOTAL(IIF(t.kind = 2, t.amount, 0)) AS FLOAT) AS income,
+    CAST(TOTAL(CASE t.kind
+        WHEN 1 THEN t.amount - (
+            SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id
+        )
+        WHEN 5 THEN -t.amount
+        ELSE 0
+    END) AS FLOAT) AS expenses
+FROM transactions AS t
+JOIN accounts AS a ON t.account_id = a.id
+JOIN currencies AS cur ON a.currency_id = cur.id
+WHERE
+    t.kind IN (1, 2, 5)
+    -- Reimbursements are netted from their expense.
+    AND t.reimburses_id IS NULL
+    AND t.fulfilled_at IS NOT NULL
+    AND t.scheduled_to >= sqlc.arg(from_date)
+GROUP BY day, cur.id
+ORDER BY day;
+
+-- name: GetCategorySpending :many
+-- Fulfilled spending (expenses net of their reimbursements, minus refunds)
+-- per category (empty for none) and account currency between from_date and
+-- to_date (exclusive).
+SELECT
+    CAST(IFNULL(t.category_id, '') AS TEXT) AS category_id,
+    sqlc.embed(cur),
+    CAST(TOTAL(IIF(
+        t.kind = 1,
+        t.amount - (
+            SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id
+        ),
+        -t.amount
+    )) AS FLOAT) AS total
+FROM transactions AS t
+JOIN accounts AS a ON t.account_id = a.id
+JOIN currencies AS cur ON a.currency_id = cur.id
+WHERE
+    t.kind IN (1, 5)
+    AND t.reimburses_id IS NULL
+    AND t.fulfilled_at IS NOT NULL
+    AND t.scheduled_to >= sqlc.arg(from_date)
+    AND t.scheduled_to < sqlc.arg(to_date)
+GROUP BY t.category_id, cur.id;
+
+-- name: GetFirstFulfilledTransactionDate :one
+SELECT CAST(IFNULL(MIN(SUBSTR(scheduled_to, 1, 10)), '') AS TEXT)
+FROM transactions
+WHERE fulfilled_at IS NOT NULL;

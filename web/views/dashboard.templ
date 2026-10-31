@@ -1,0 +1,910 @@
+package views
+
+import (
+	"cmp"
+	"fmt"
+	"math"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/omareloui/tyche/internal/formatters"
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+// dashAxisTicks is how many labels the dashboard charts' y axes have, zero
+// excluded.
+const dashAxisTicks = 3
+
+const (
+	dashMaxAccounts = 6
+	dashMaxGoals    = 4
+	dashMaxUpcoming = 5
+)
+
+type DashboardData struct {
+	Claims   *jwt.AccessClaims
+	Balances []models.Balance
+	Flow     *models.Flow
+	// NeedsReview counts the transactions waiting for a review.
+	NeedsReview int
+	// SMSAttention counts the sms that created no transaction.
+	SMSAttention int
+}
+
+// Dashboard is the signed in homepage. What's cheap (balances, the flow and
+// counts) renders right away, the rest loads in once the page is shown.
+templ Dashboard(d DashboardData) {
+	{{ def := &d.Claims.DefaultCurrency }}
+	@layouts.Main(d.Claims, "Dashboard", d.Balances, layouts.WithAlpine()) {
+		@components.Container() {
+			<div class="grid grid-cols-1 gap-4 sm:gap-5">
+				@dashGreeting(d.Claims)
+				@dashHero(d, def)
+				@dashAlerts(d.NeedsReview, d.SMSAttention)
+				<div class="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-2">
+					@dashFlowChart(d.Flow, def)
+					@dashPaceChart(d.Flow, def)
+				</div>
+				<div class="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-2">
+					@dashLazy("/dashboard/budgets", "h-72", "load")
+					@dashLazy("/dashboard/categories", "h-72", "load")
+				</div>
+				@dashLazy("/merchant-spending", "h-96", "revealed")
+				<div class="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-5 items-start">
+					<div class="lg:col-span-3">
+						@dashLazy("/dashboard/activity", "h-96", "revealed")
+					</div>
+					<div class="grid grid-cols-1 gap-4 sm:gap-5 lg:col-span-2">
+						@dashLazy("/dashboard/goals", "h-48", "revealed")
+						@dashLazy("/dashboard/accounts", "h-80", "revealed")
+					</div>
+				</div>
+			</div>
+		}
+	}
+}
+
+// dashLazy is a placeholder replaced by url's widget on trigger.
+templ dashLazy(url, class, trigger string) {
+	<div
+		hx-get={ url }
+		hx-trigger={ trigger }
+		hx-swap="outerHTML"
+		hx-on::response-error="this.classList.remove('animate-pulse'); this.classList.add('grid', 'place-items-center', 'text-sm', 'text-zinc-500'); this.textContent = 'Couldn’t load this, refresh to try again'"
+		aria-busy="true"
+		class={ "rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800 animate-pulse", class }
+	></div>
+}
+
+templ dashGreeting(claims *jwt.AccessClaims) {
+	{{ now := time.Now() }}
+	<div class="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
+		<h1 class="text-2xl sm:text-3xl font-bold font-(family-name:--font-biorhyme-expanded)">
+			{ greeting(now) }
+			if claims.FirstName != "" {
+				<span class="text-zinc-400">{ claims.FirstName }</span>
+			}
+		</h1>
+		<p class="text-sm text-zinc-500">{ now.Format("Monday, January 2") }</p>
+	</div>
+}
+
+// dashCardHeader is a card's small colored title, with a "see all" link.
+templ dashCardHeader(title, colorClass, href string, icon templ.Component) {
+	<div class="flex items-center justify-between gap-3">
+		<h2 class={ "flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider", colorClass }>
+			@icon
+			{ title }
+		</h2>
+		if href != "" {
+			<a href={ templ.SafeURL(href) } class="flex items-center gap-1 text-sm text-zinc-400 transition-colors hover:text-white">
+				See all
+				@icons.ArrowRight("14")
+			</a>
+		}
+	</div>
+}
+
+templ dashHero(d DashboardData, def *models.Currency) {
+	{{ total, partial := components.TotalBalance(d.Balances, def) }}
+	{{ cur, prevToDate := d.Flow.Current(), d.Flow.PrevToDate() }}
+	@components.GlassCard("grid gap-6 p-5 sm:p-6", "bg-violet-400/14", "bg-emerald-400/10") {
+		<div class="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
+			<div class="min-w-0">
+				<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-violet-400">
+					@icons.Wallet("14")
+					Net worth
+				</p>
+				<p class={ "sensitive mt-1 text-3xl sm:text-4xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)", templ.KV("text-red-400", total < 0) }>
+					if partial {
+						≈
+					}
+					{ formatters.FormatAmount(total, def.Symbol) }
+				</p>
+				<p class="text-sm text-zinc-500">
+					across { fmt.Sprint(len(d.Balances)) } { plural(len(d.Balances), "currency", "currencies") }
+					if partial {
+						· some rates are missing
+					}
+				</p>
+			</div>
+			<div class="grid grid-cols-3 gap-2 w-full sm:w-auto">
+				@dashStat(formatters.FormatAmount(cur.In, def.Symbol), "In · "+cur.Month.Format("Jan"), "text-emerald-400")
+				@dashStat(formatters.FormatAmount(cur.Out, def.Symbol), "Out · "+cur.Month.Format("Jan"), "text-zinc-100")
+				{{ rate, ok := cur.SavingsRate() }}
+				if ok {
+					@dashStat(fmt.Sprintf("%.0f%%", rate), "Saved", savedClass(rate))
+				} else {
+					@dashStat(formatSignedAmount(cur.Saved(), def.Symbol), "Saved", savedClass(cur.Saved()))
+				}
+			</div>
+		</div>
+		<div class="flex flex-wrap gap-2">
+			@dashDelta("Spending", cur.Out, prevToDate.Out, false, def)
+			@dashDelta("Income", cur.In, prevToDate.In, true, def)
+		</div>
+	}
+}
+
+templ dashStat(value, label, valueClass string) {
+	<div class="min-w-0 px-3 py-2 rounded-2xl bg-zinc-900/60 ring-1 ring-zinc-800 text-center">
+		<p class={ "sensitive text-base sm:text-lg font-bold tabular-nums truncate font-(family-name:--font-biorhyme-expanded)", valueClass }>{ value }</p>
+		<p class="text-xs text-zinc-500 truncate">{ label }</p>
+	</div>
+}
+
+// dashDelta compares a month in progress with last month by the same day;
+// up is good for income, bad for spending.
+templ dashDelta(label string, cur, prev float64, upIsGood bool, def *models.Currency) {
+	{{ pct, ok := models.PctChange(cur, prev) }}
+	{{ diff := cur - prev }}
+	<p
+		class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900/60 ring-1 ring-zinc-800 text-sm"
+		title={ fmt.Sprintf("%s by this day last month: %s", label, formatters.FormatAmount(prev, def.Symbol)) }
+	>
+		<span class="text-zinc-400">{ label }</span>
+		if !ok {
+			<span class="text-zinc-500">nothing to compare by this day last month</span>
+		} else if math.Abs(pct) < 0.5 {
+			<span class="text-zinc-300">same as by this day last month</span>
+		} else {
+			<span class={ "font-semibold tabular-nums", deltaClass(diff > 0 == upIsGood) }>
+				if diff > 0 {
+					▲
+				} else {
+					▼
+				}
+				{ fmtPctChange(pct) }
+			</span>
+			<span class="sensitive text-zinc-500 tabular-nums">
+				({ formatSignedAmount(diff, def.Symbol) })
+			</span>
+			<span class="text-zinc-500">vs this day last month</span>
+		}
+	</p>
+}
+
+templ dashAlerts(review, sms int) {
+	if review > 0 || sms > 0 {
+		<div class="flex flex-wrap gap-2">
+			if review > 0 {
+				@dashAlert(fmt.Sprintf("/transactions?%s=%s", models.TxFilterStatus, models.TxStatusReview),
+					fmt.Sprintf("%d %s to review", review, plural(review, "transaction", "transactions")), icons.Check("16"))
+			}
+			if sms > 0 {
+				@dashAlert("/sms", fmt.Sprintf("%d %s couldn’t be turned into transactions", sms, plural(sms, "SMS", "SMSs")), icons.Message("16"))
+			}
+		</div>
+	}
+}
+
+templ dashAlert(href, text string, icon templ.Component) {
+	<a
+		href={ templ.SafeURL(href) }
+		class="flex items-center gap-2 px-4 py-2 rounded-full bg-amber-400/10 ring-1 ring-amber-400/25 text-sm text-amber-200 transition-colors hover:bg-amber-400/15"
+	>
+		<span class="text-amber-300">
+			@icon
+		</span>
+		{ text }
+		@icons.ArrowRight("14", &templ.Attributes{"class": "text-amber-300/70"})
+	</a>
+}
+
+// dashLegendItem is a legend entry, a dash for dashed lines.
+templ dashLegendItem(label, colorClass string, dashed bool) {
+	<span class="flex items-center gap-1.5 text-xs text-zinc-400">
+		if dashed {
+			<span class={ "w-3 border-t-2 border-dashed", colorClass }></span>
+		} else {
+			<span class={ "size-2.5 rounded-full", colorClass }></span>
+		}
+		{ label }
+	</span>
+}
+
+// dashYAxis is a chart's y axis labels, the plot being h-48.
+templ dashYAxis(axisMax float64) {
+	<div class="relative w-10 h-48 shrink-0 text-xs text-zinc-500 tabular-nums">
+		for _, tick := range models.AxisTicks(axisMax, dashAxisTicks) {
+			<span class="absolute right-2 translate-y-1/2" style={ components.BottomPct(axisPct(tick, axisMax)) }>
+				{ components.CompactNum(tick) }
+			</span>
+		}
+		<span class="absolute right-2 bottom-0 translate-y-1/2">0</span>
+	</div>
+}
+
+templ dashGridLines(axisMax float64) {
+	<div aria-hidden="true" class="absolute inset-0 pointer-events-none">
+		for _, tick := range models.AxisTicks(axisMax, dashAxisTicks) {
+			<div class="absolute inset-x-0 border-t border-dashed border-zinc-800" style={ components.BottomPct(axisPct(tick, axisMax)) }></div>
+		}
+		<div class="absolute inset-x-0 bottom-0 border-t border-zinc-700/70"></div>
+	</div>
+}
+
+// dashFlowChart is the income vs expenses of the last months, as pairs of
+// bars.
+templ dashFlowChart(f *models.Flow, def *models.Currency) {
+	{{ axisMax := flowAxisMax(f) }}
+	@components.GlassCard("grid gap-4 p-5 sm:p-6", "bg-emerald-400/8") {
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<h2 class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-emerald-400">
+				@icons.Scale("14")
+				Income vs expenses
+			</h2>
+			<div class="flex gap-3">
+				@dashLegendItem("Income", "bg-emerald-400", false)
+				@dashLegendItem("Expenses", "bg-rose-400", false)
+			</div>
+		</div>
+		<div class="flex">
+			@dashYAxis(axisMax)
+			<div class="grow min-w-0">
+				<div class="relative h-48">
+					@dashGridLines(axisMax)
+					<div class="relative flex h-full justify-around">
+						for i, m := range f.Months {
+							@flowMonth(m, axisMax, i == len(f.Months)-1, def)
+						}
+					</div>
+				</div>
+				<div class="flex justify-around mt-2 text-xs text-zinc-500">
+					for _, m := range f.Months {
+						<span class="flex-1 text-center">{ m.Month.Format("Jan") }</span>
+					}
+				</div>
+			</div>
+		</div>
+	}
+}
+
+templ flowMonth(m models.MonthFlow, axisMax float64, current bool, def *models.Currency) {
+	<div tabindex="0" class="group relative flex-1 flex items-end justify-center gap-0.5 h-full outline-none">
+		<div class="absolute inset-y-0 inset-x-1 rounded-lg transition-colors group-hover:bg-white/4 group-focus:bg-white/4"></div>
+		<div class="relative w-3 sm:w-4 rounded-t-[4px] bg-emerald-400" style={ components.HeightPct(axisPct(m.In, axisMax)) }></div>
+		<div class="relative w-3 sm:w-4 rounded-t-[4px] bg-rose-400" style={ components.HeightPct(axisPct(max(m.Out, 0), axisMax)) }></div>
+		<div class="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 hidden group-hover:block group-focus:block z-10">
+			<div class="glass-tooltip">
+				<p class="text-zinc-400">
+					{ m.Month.Format("January") }
+					if current {
+						so far
+					}
+				</p>
+				<p class="sensitive text-emerald-400 tabular-nums">{ "+" + formatters.FormatAmount(m.In, def.Symbol) }</p>
+				<p class="sensitive text-rose-300 tabular-nums">{ "−" + formatters.FormatAmount(m.Out, def.Symbol) }</p>
+				<p class="sensitive pt-0.5 mt-0.5 border-t border-white/10 text-zinc-200 tabular-nums">{ formatSignedAmount(m.Saved(), def.Symbol) } net</p>
+			</div>
+		</div>
+	</div>
+}
+
+// dashPaceChart is this month's cumulative spending against last month's.
+templ dashPaceChart(f *models.Flow, def *models.Currency) {
+	{{ cur, prev := f.Pace() }}
+	{{ days := max(len(prev), daysInMonth(f.Today)) }}
+	{{ axisMax := models.AxisMax(max(last(cur), last(prev)), dashAxisTicks) }}
+	{{ prevToDate := f.PrevToDate() }}
+	@components.GlassCard("grid gap-4 p-5 sm:p-6", "bg-violet-400/10") {
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<h2 class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-violet-400">
+				@icons.Hourglass("14")
+				Spending pace
+			</h2>
+			<div class="flex gap-3">
+				@dashLegendItem(f.Today.Format("January"), "bg-violet-400", false)
+				@dashLegendItem(f.Prev().Month.Format("January"), "border-zinc-500", true)
+			</div>
+		</div>
+		<div class="flex">
+			@dashYAxis(axisMax)
+			<div class="grow min-w-0">
+				<div class="relative h-48">
+					@dashGridLines(axisMax)
+					<svg viewBox="0 0 100 100" preserveAspectRatio="none" class="absolute inset-0 size-full overflow-visible" aria-hidden="true">
+						<polygon points={ paceArea(cur, days, axisMax) } class="fill-violet-400/10"></polygon>
+						<polyline points={ pacePoints(prev, days, axisMax) } fill="none" stroke-width="2" stroke-dasharray="4 4" vector-effect="non-scaling-stroke" class="stroke-zinc-500"></polyline>
+						<polyline points={ pacePoints(cur, days, axisMax) } fill="none" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke" class="stroke-violet-400"></polyline>
+					</svg>
+					if len(cur) > 0 {
+						<span
+							aria-hidden="true"
+							class="absolute size-2.5 -translate-x-1/2 translate-y-1/2 rounded-full bg-violet-400 ring-2 ring-zinc-900"
+							style={ paceDotStyle(len(cur)-1, last(cur), days, axisMax) }
+						></span>
+					}
+					<div class="absolute inset-0 flex">
+						for i := range days {
+							@paceDay(i, days, cur, prev, f, def)
+						}
+					</div>
+				</div>
+				<div class="flex justify-between mt-2 text-xs text-zinc-500">
+					<span>1</span>
+					<span>15</span>
+					<span>{ fmt.Sprint(days) }</span>
+				</div>
+			</div>
+		</div>
+		<p class="text-sm text-zinc-500">
+			<span class="sensitive text-zinc-200 tabular-nums">{ formatters.FormatAmount(last(cur), def.Symbol) }</span>
+			spent so far, vs
+			<span class="sensitive text-zinc-300 tabular-nums">{ formatters.FormatAmount(prevToDate.Out, def.Symbol) }</span>
+			by this day last month
+		</p>
+	}
+}
+
+// paceDay is a day's hover target with its tooltip.
+templ paceDay(i, days int, cur, prev []float64, f *models.Flow, def *models.Currency) {
+	<div class="group relative flex-1 h-full">
+		<div class="absolute inset-y-0 left-1/2 border-l border-zinc-500/60 hidden group-hover:block"></div>
+		<div class={ "absolute bottom-full mb-1 hidden group-hover:block z-10", tooltipSide(i, days) }>
+			<div class="glass-tooltip">
+				<p class="text-zinc-400">{ fmt.Sprintf("Day %d", i+1) }</p>
+				if i < len(cur) {
+					<p class="sensitive tabular-nums"><span class="text-violet-300">{ f.Today.Format("Jan") }</span> { formatters.FormatAmount(cur[i], def.Symbol) }</p>
+				}
+				if i < len(prev) {
+					<p class="sensitive tabular-nums"><span class="text-zinc-400">{ f.Prev().Month.Format("Jan") }</span> { formatters.FormatAmount(prev[i], def.Symbol) }</p>
+				}
+			</div>
+		</div>
+	</div>
+}
+
+// DashBudgets is the current month's budgets with what's safe to spend a
+// day.
+templ DashBudgets(b *models.Budgets) {
+	@components.GlassCard("grid content-start gap-4 p-5 sm:p-6", "bg-amber-400/10") {
+		@dashCardHeader("Budgets · "+b.Today.Format("January"), "text-amber-300", "/categories", icons.Coins("14"))
+		if len(b.Items) == 0 {
+			<div class="grid place-items-center gap-2 py-8 text-center">
+				<p class="text-zinc-400">No budgets yet</p>
+				<a href="/categories" class="text-sm text-violet-300 hover:underline">Set one on a category →</a>
+			</div>
+		} else {
+			<div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+				{{ safe, ok := b.SafePerDay() }}
+				if ok {
+					<p>
+						<span class="sensitive text-2xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">{ formatters.FormatAmount(safe, b.Currency.Symbol) }</span>
+						<span class="text-sm text-zinc-500">a day for { fmt.Sprint(b.DaysLeft()) } { plural(b.DaysLeft(), "day", "days") } left</span>
+					</p>
+				}
+				if n := b.Over(); n > 0 {
+					<p class="flex items-center gap-1 text-sm text-red-400">
+						@icons.Error("14")
+						{ fmt.Sprintf("%d over budget", n) }
+					</p>
+				}
+			</div>
+			<ul class="grid gap-3.5">
+				for _, it := range b.Items {
+					@budgetRow(it, b.MonthPct())
+				}
+			</ul>
+			if b.Partial {
+				<p class="text-xs text-amber-300">Some rates are unavailable, those amounts aren’t counted.</p>
+			}
+		}
+	}
+}
+
+templ budgetRow(it models.BudgetUsage, monthPct float64) {
+	{{ hex := models.CategoryColorToHex(it.Category.Color) }}
+	{{ over := it.Left() < 0 }}
+	{{ ahead := !over && it.Pct() > monthPct }}
+	{{ sym := it.Category.BudgetCurrency.Symbol }}
+	<li class="grid gap-1.5">
+		<div class="flex items-baseline justify-between gap-3 text-sm">
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/transactions?%s=%s", models.TxFilterCategory, it.Category.ID)) }
+				class="flex items-center gap-2 min-w-0 hover:underline"
+			>
+				<span class="size-2.5 shrink-0 rounded-full" style={ "background-color:" + hex }></span>
+				<span class="truncate">{ it.Category.Name }</span>
+			</a>
+			<span class="sensitive shrink-0 tabular-nums text-zinc-400">
+				{ formatters.FormatAmount(it.Spent, sym) }
+				<span class="text-zinc-600">/ { formatters.FormatNum(it.Category.BudgetAmount) }</span>
+			</span>
+		</div>
+		<div class="relative h-2 rounded-full bg-zinc-800" title={ fmt.Sprintf("%.0f%% used, %.0f%% of the month passed", it.Pct(), monthPct) }>
+			<div
+				class="absolute inset-y-0 left-0 rounded-full"
+				style={ fmt.Sprintf("width:%.2f%%;background-color:%s", min(100, max(0, it.Pct())), budgetFill(hex, over)) }
+			></div>
+			<div aria-hidden="true" class="absolute -inset-y-1 w-0.5 rounded-full bg-zinc-300/70" style={ fmt.Sprintf("left:%.2f%%", monthPct) }></div>
+		</div>
+		<p class={ "text-xs tabular-nums", templ.KV("text-red-400", over), templ.KV("text-amber-300", ahead), templ.KV("text-zinc-500", !over && !ahead) }>
+			if over {
+				<span class="sensitive">{ formatters.FormatAmount(-it.Left(), sym) }</span> over budget
+			} else {
+				<span class="sensitive">{ formatters.FormatAmount(it.Left(), sym) }</span> left
+				if ahead {
+					· ahead of the month
+				}
+			}
+		</p>
+	</li>
+}
+
+// DashCategories is a month's spending per category, with month navigation.
+templ DashCategories(cs *models.CategorySpending) {
+	<div id="dash-categories" class="h-full">
+		@components.GlassCard("grid content-start gap-4 p-5 sm:p-6", "bg-sky-400/10") {
+			<div class="flex items-center justify-between gap-3">
+				<h2 class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-sky-300">
+					@icons.Tag("14")
+					By category
+				</h2>
+				<div class="flex items-center gap-1 rounded-full bg-zinc-900/60 ring-1 ring-zinc-800 px-2 py-1 shrink-0 text-base">
+					@dashMonthNav(cs.Prev, "Previous month", "M3.828 7l4.95 4.95-1.414 1.414L1 7 7.364.636 8.778 2.05z")
+					<span class="min-w-12 text-center">{ shortMonth(cs.Month) }</span>
+					@dashMonthNav(cs.Next, "Next month", "M6.172 7L1.222 2.05 2.636.636 9 7l-6.364 6.364-1.414-1.414z")
+				</div>
+			</div>
+			if len(cs.Items) == 0 {
+				<p class="py-10 text-center text-zinc-400">No spending this month</p>
+			} else {
+				<p>
+					<span class="sensitive text-2xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">{ formatters.FormatAmount(cs.Total, cs.Currency.Symbol) }</span>
+					<span class="text-sm text-zinc-500">spent</span>
+				</p>
+				// The month's share per category, 2px apart.
+				<div class="flex gap-0.5 h-2.5" aria-hidden="true">
+					for _, it := range cs.Items {
+						<div class="first:rounded-l-full last:rounded-r-full" style={ fmt.Sprintf("width:%.2f%%;background-color:%s", cs.Pct(it.Amount), models.CategoryColorToHex(it.Color)) }></div>
+					}
+				</div>
+				<ul class="grid gap-2.5">
+					for _, it := range cs.Items {
+						@categorySpendRow(cs, it)
+					}
+				</ul>
+				if cs.Partial {
+					<p class="text-xs text-amber-300">Some rates are unavailable, those amounts aren’t counted.</p>
+				}
+			}
+		}
+	</div>
+}
+
+templ categorySpendRow(cs *models.CategorySpending, it models.CategorySpend) {
+	{{ hex := models.CategoryColorToHex(it.Color) }}
+	<li class="grid grid-cols-[minmax(0,7rem)_1fr_auto] sm:grid-cols-[minmax(0,9rem)_1fr_auto] items-center gap-3 text-sm">
+		if href := categoryTxsURL(cs, it); href != "" {
+			<a href={ templ.SafeURL(href) } class="flex items-center gap-2 min-w-0 hover:underline">
+				<span class="size-2.5 shrink-0 rounded-full" style={ "background-color:" + hex }></span>
+				<span class="truncate">{ it.Name }</span>
+			</a>
+		} else {
+			<span class="flex items-center gap-2 min-w-0">
+				<span class="size-2.5 shrink-0 rounded-full" style={ "background-color:" + hex }></span>
+				<span class="truncate">{ it.Name }</span>
+			</span>
+		}
+		<div class="h-2 rounded-full bg-zinc-800/70">
+			<div class="h-full rounded-full" style={ fmt.Sprintf("width:%.2f%%;background-color:%s", it.Amount/cs.Max()*100, hex) }></div>
+		</div>
+		<span class="text-right tabular-nums">
+			<span class="sensitive">{ formatters.FormatAmount(it.Amount, cs.Currency.Symbol) }</span>
+			<span class="inline-block w-9 text-zinc-500">{ fmt.Sprintf("%.0f%%", cs.Pct(it.Amount)) }</span>
+		</span>
+	</li>
+}
+
+templ dashMonthNav(month, label, path string) {
+	<button
+		type="button"
+		aria-label={ label }
+		title={ label }
+		class="p-1.5 rounded-full enabled:cursor-pointer enabled:hover:bg-zinc-700 disabled:opacity-30"
+		if month == "" {
+			disabled
+		} else {
+			hx-get={ "/dashboard/categories?month=" + month }
+			hx-target="#dash-categories"
+			hx-swap="outerHTML"
+		}
+	>
+		<svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor" aria-hidden="true">
+			<path d={ path }></path>
+		</svg>
+	</button>
+}
+
+// DashGoals is the closest unfulfilled goals.
+templ DashGoals(goals []models.Goal) {
+	@components.GlassCard("grid content-start gap-4 p-5", "bg-violet-400/10") {
+		@dashCardHeader("Goals", "text-violet-400", "/goals", icons.Target("14"))
+		if len(goals) == 0 {
+			<div class="grid place-items-center gap-2 py-6 text-center">
+				<p class="text-zinc-400">No goals in progress</p>
+				<a href="/goals" class="text-sm text-violet-300 hover:underline">Save for something →</a>
+			</div>
+		} else {
+			<ul class="grid gap-3">
+				for _, gl := range topGoals(goals) {
+					{{ st := goalStateOf(&gl) }}
+					<li class="flex items-center gap-3 min-w-0">
+						@goalRing(gl.ProgressPercentage(), st, "size-11", "text-[10px]")
+						<div class="flex-1 min-w-0">
+							<p class="truncate">{ gl.Name }</p>
+							<p class="sensitive text-sm text-zinc-500 tabular-nums truncate">
+								{ gl.ViewProgress() } of { gl.ViewAmount() }
+							</p>
+						</div>
+						if st == goalReady {
+							<span class="chip shrink-0 bg-amber-300/10 text-amber-300">Ready</span>
+						}
+					</li>
+				}
+			</ul>
+		}
+	}
+}
+
+// DashActivity is what's due in the coming days and the latest
+// transactions.
+templ DashActivity(recent, upcoming []models.Transaction, def *models.Currency) {
+	@components.GlassCard("grid content-start gap-5 p-5 sm:p-6", "bg-sky-400/8") {
+		if len(upcoming) > 0 {
+			<div class="grid gap-3">
+				{{ _, out := upcomingFlow(upcoming, def) }}
+				<div class="flex items-center justify-between gap-3">
+					<h2 class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-sky-300">
+						@icons.Calendar("14")
+						Coming up · next 7 days
+					</h2>
+					if out > 0 {
+						<span class="sensitive text-sm text-zinc-400 tabular-nums">{ "−" + formatters.FormatAmount(out, def.Symbol) } due</span>
+					}
+				</div>
+				<ul class="grid gap-1">
+					for _, tx := range upcoming[:min(len(upcoming), dashMaxUpcoming)] {
+						@dashTxRow(&tx)
+					}
+				</ul>
+				if n := len(upcoming) - dashMaxUpcoming; n > 0 {
+					<a href={ templ.SafeURL(fmt.Sprintf("/transactions?%s=%s", models.TxFilterStatus, models.TxStatusScheduled)) } class="text-sm text-zinc-400 hover:text-white">
+						{ fmt.Sprintf("+%d more", n) }
+					</a>
+				}
+			</div>
+		}
+		<div class="grid gap-3">
+			@dashCardHeader("Recent transactions", "text-zinc-300", "/transactions", icons.ArrowUpDown("14"))
+			if len(recent) == 0 {
+				<div class="grid place-items-center gap-2 py-8 text-center">
+					<p class="text-zinc-400">No transactions yet</p>
+					<a href="/transactions" class="text-sm text-violet-300 hover:underline">Add your first one →</a>
+				</div>
+			} else {
+				<ul class="grid gap-1">
+					for _, tx := range recent {
+						@dashTxRow(&tx)
+					}
+				</ul>
+			}
+		</div>
+	}
+}
+
+templ dashTxRow(tx *models.Transaction) {
+	{{ v := newTxView(tx) }}
+	<li class="flex items-center gap-3 px-2 py-2 -mx-2 rounded-2xl transition-colors hover:bg-white/3">
+		@txTile(tx, &v)
+		<div class="flex-1 min-w-0">
+			<p class="truncate leading-snug">{ v.title }</p>
+			<p class="text-sm text-zinc-500 truncate">
+				if v.isOverdue {
+					<span class="text-red-400">Overdue</span> ·
+				}
+				{ formatTxDay(tx.ScheduledTo) } · { v.account }
+			</p>
+		</div>
+		<p
+			class={
+				"sensitive shrink-0 font-semibold tabular-nums font-(family-name:--font-biorhyme-expanded) text-[15px]",
+				templ.KV("text-emerald-400", v.tone == txToneIn),
+				templ.KV("text-zinc-400", v.tone == txToneNeutral),
+			}
+		>{ v.amount }</p>
+	</li>
+}
+
+// DashAccounts is the biggest active accounts and the exchange rates of the
+// shown currencies.
+templ DashAccounts(accs []models.Account, curs []models.Currency, def *models.Currency, ratesAt time.Time) {
+	{{ shown := topAccounts(accs, def) }}
+	{{ rates := fxCurrencies(curs, def) }}
+	@components.GlassCard("grid content-start gap-4 p-5", "bg-sky-400/10", "bg-teal-400/6") {
+		@dashCardHeader("Accounts", "text-sky-300", "/accounts", icons.Bank("14"))
+		if len(shown) == 0 {
+			<div class="grid place-items-center gap-2 py-6 text-center">
+				<p class="text-zinc-400">No accounts yet</p>
+				<a href="/accounts" class="text-sm text-violet-300 hover:underline">Add one →</a>
+			</div>
+		} else {
+			<ul class="grid gap-2.5">
+				for _, a := range shown {
+					<li class={ "flex items-center gap-3 min-w-0", accKindAccentClass(a.Kind.Enum) }>
+						<div class="grid place-items-center shrink-0 size-9 rounded-xl bg-(--accent)/15 text-(--accent)">
+							@accKindIcon(a.Kind.Enum, "18")
+						</div>
+						<div class="flex-1 min-w-0">
+							<p class="truncate leading-snug">{ a.Name }</p>
+							<p class="text-xs text-zinc-500 truncate">
+								{ accKindShortName(a.Kind.Enum) }
+								if a.IsDefault {
+									· Default
+								}
+								if a.ExcludeFromBalance {
+									· Not in balance
+								}
+							</p>
+						</div>
+						<div class="shrink-0 text-right tabular-nums">
+							<p class={ "sensitive text-sm font-semibold font-(family-name:--font-biorhyme-expanded)", templ.KV("text-red-400", a.Amount < 0) }>{ a.ViewAmount() }</p>
+							if conv := accountConverted(&a, def); conv != "" {
+								<p class="sensitive text-xs text-zinc-500">{ conv }</p>
+							}
+						</div>
+					</li>
+				}
+			</ul>
+			if n := activeCount(accs) - len(shown); n > 0 {
+				<a href="/accounts" class="text-sm text-zinc-400 hover:text-white">{ fmt.Sprintf("+%d more", n) }</a>
+			}
+		}
+		if len(rates) > 0 {
+			<div class="grid gap-2.5 pt-4 border-t border-white/8">
+				<div class="flex items-center justify-between gap-3">
+					<h3 class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-teal-300">
+						@icons.Coins("14")
+						Exchange rates
+					</h3>
+					if !ratesAt.IsZero() {
+						<span class="text-xs text-zinc-500">updated { timeAgo(ratesAt) }</span>
+					}
+				</div>
+				<ul class="grid grid-cols-2 gap-2">
+					for _, cur := range rates {
+						{{ value := cur.ValueIn(def.String) }}
+						<li class="flex items-baseline justify-between gap-2 px-3 py-2 rounded-xl bg-zinc-900/60 ring-1 ring-zinc-800" title={ currencyRateTitle(&cur, def, value) }>
+							<span class="text-sm text-zinc-400">{ cur.String }</span>
+							if value > 0 {
+								<span class="text-sm font-semibold tabular-nums truncate">{ def.Symbol } { formatters.FormatRate(value) }</span>
+							} else {
+								<span class="text-sm text-zinc-600">No rate</span>
+							}
+						</li>
+					}
+				</ul>
+			</div>
+		}
+	}
+}
+
+func greeting(t time.Time) string {
+	switch h := t.Hour(); {
+	case h < 5:
+		return "Good night"
+	case h < 12:
+		return "Good morning"
+	case h < 18:
+		return "Good afternoon"
+	}
+	return "Good evening"
+}
+
+func savedClass(v float64) string {
+	if v < 0 {
+		return "text-red-400"
+	}
+	return "text-violet-300"
+}
+
+// fmtPctChange is a change's size, capped as huge ones say little more.
+func fmtPctChange(pct float64) string {
+	if pct = math.Abs(pct); pct > 999 {
+		return ">999%"
+	}
+	return fmt.Sprintf("%.0f%%", pct)
+}
+
+func deltaClass(good bool) string {
+	if good {
+		return "text-emerald-400"
+	}
+	return "text-rose-400"
+}
+
+func axisPct(v, axisMax float64) float64 {
+	if axisMax == 0 {
+		return 0
+	}
+	return min(100, max(0, v/axisMax*100))
+}
+
+func flowAxisMax(f *models.Flow) float64 {
+	var top float64
+	for _, m := range f.Months {
+		top = max(top, m.In, m.Out)
+	}
+	return models.AxisMax(top, dashAxisTicks)
+}
+
+func last(vals []float64) float64 {
+	if len(vals) == 0 {
+		return 0
+	}
+	return vals[len(vals)-1]
+}
+
+func daysInMonth(t time.Time) int {
+	return time.Date(t.Year(), t.Month()+1, 0, 0, 0, 0, 0, time.UTC).Day()
+}
+
+// paceXY is a day's point in the pace chart's 100×100 view box.
+func paceXY(i int, v float64, days int, axisMax float64) (x, y float64) {
+	if days > 1 {
+		x = float64(i) / float64(days-1) * 100
+	}
+	return x, 100 - axisPct(v, axisMax)
+}
+
+func pacePoints(vals []float64, days int, axisMax float64) string {
+	var b strings.Builder
+	for i, v := range vals {
+		x, y := paceXY(i, v, days, axisMax)
+		fmt.Fprintf(&b, "%.2f,%.2f ", x, y)
+	}
+	return b.String()
+}
+
+// paceArea is the area under the line, closed along the x axis.
+func paceArea(vals []float64, days int, axisMax float64) string {
+	if len(vals) == 0 {
+		return ""
+	}
+	lastX, _ := paceXY(len(vals)-1, 0, days, axisMax)
+	return fmt.Sprintf("0,100 %s%.2f,100", pacePoints(vals, days, axisMax), lastX)
+}
+
+func paceDotStyle(i int, v float64, days int, axisMax float64) templ.SafeCSS {
+	x, y := paceXY(i, v, days, axisMax)
+	return templ.SafeCSS(fmt.Sprintf("left:%.2f%%;bottom:%.2f%%;", x, 100-y))
+}
+
+// tooltipSide keeps a tooltip inside the chart near its edges.
+func tooltipSide(i, n int) string {
+	switch {
+	case i < n/3:
+		return "left-0"
+	case i >= n*2/3:
+		return "right-0"
+	}
+	return "left-1/2 -translate-x-1/2"
+}
+
+func shortMonth(month time.Time) string {
+	if month.Year() == time.Now().Year() {
+		return month.Format("Jan")
+	}
+	return month.Format("Jan 2006")
+}
+
+// categoryTxsURL lists the month's transactions of the item's category, empty
+// for "Other" and uncategorized spending.
+func categoryTxsURL(cs *models.CategorySpending, it models.CategorySpend) string {
+	if it.Category == nil {
+		return ""
+	}
+	end := cs.Month.AddDate(0, 1, -1)
+	return fmt.Sprintf("/transactions?%s=%s&%s=%s&%s=%s",
+		models.TxFilterCategory, it.Category.ID,
+		models.TxFilterFrom, cs.Month.Format(time.DateOnly),
+		models.TxFilterTo, end.Format(time.DateOnly))
+}
+
+func budgetFill(hex string, over bool) string {
+	if over {
+		return "var(--color-red-400)"
+	}
+	return hex
+}
+
+// topGoals are the goals closest to their target first.
+func topGoals(goals []models.Goal) []models.Goal {
+	res := slices.Clone(goals)
+	slices.SortStableFunc(res, func(a, b models.Goal) int {
+		return cmp.Compare(b.ProgressPercentage(), a.ProgressPercentage())
+	})
+	return res[:min(len(res), dashMaxGoals)]
+}
+
+func upcomingFlow(txs []models.Transaction, def *models.Currency) (in, out float64) {
+	for _, tx := range txs {
+		i, o := txFlow(&tx, def)
+		in += i
+		out += o
+	}
+	return in, out
+}
+
+// topAccounts are the active accounts worth the most, either way, in def.
+func topAccounts(accs []models.Account, def *models.Currency) []models.Account {
+	res := slices.DeleteFunc(slices.Clone(accs), func(a models.Account) bool { return a.IsArchive })
+	worth := func(a *models.Account) float64 {
+		v, _ := models.Convert(a.Amount, &a.Currency, def.String)
+		return math.Abs(v)
+	}
+	slices.SortStableFunc(res, func(a, b models.Account) int {
+		if a.IsDefault != b.IsDefault {
+			if a.IsDefault {
+				return -1
+			}
+			return 1
+		}
+		return cmp.Compare(worth(&b), worth(&a))
+	})
+	return res[:min(len(res), dashMaxAccounts)]
+}
+
+func activeCount(accs []models.Account) int {
+	var n int
+	for _, a := range accs {
+		if !a.IsArchive {
+			n++
+		}
+	}
+	return n
+}
+
+func accountConverted(a *models.Account, def *models.Currency) string {
+	if a.Currency.String == def.String || a.Amount == 0 {
+		return ""
+	}
+	v, ok := models.Convert(a.Amount, &a.Currency, def.String)
+	if !ok {
+		return ""
+	}
+	return "≈ " + formatters.FormatAmount(v, def.Symbol)
+}
+
+// fxCurrencies are the shown currencies besides def.
+func fxCurrencies(curs []models.Currency, def *models.Currency) []models.Currency {
+	return slices.DeleteFunc(slices.Clone(curs), func(c models.Currency) bool {
+		return !c.IsShown || c.String == def.String
+	})
+}

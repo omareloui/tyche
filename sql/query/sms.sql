@@ -50,3 +50,7 @@ SET
     error = sqlc.arg(error),
     transaction_id = sqlc.arg(transaction_id)
 WHERE id = sqlc.arg(id);
+
+-- name: CountSMSMessagesByStatus :one
+SELECT COUNT(*) FROM sms_messages
+WHERE status IN (sqlc.slice(statuses));

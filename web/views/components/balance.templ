@@ -11,7 +11,7 @@ import (
 // NavbarBalance is the total balance in the default currency, with a toggle
 // blurring amounts (.sensitive) and the per currency breakdown on click.
 templ NavbarBalance(balances []models.Balance, def *models.Currency, oob bool) {
-	{{ total, partial := totalBalance(balances, def) }}
+	{{ total, partial := TotalBalance(balances, def) }}
 	<div
 		id="balance"
 		if oob {
@@ -107,8 +107,8 @@ templ Balance(balances []models.Balance) {
 	}
 }
 
-// totalBalance sums the balances in def, partial when a rate is missing.
-func totalBalance(balances []models.Balance, def *models.Currency) (total float64, partial bool) {
+// TotalBalance sums the balances in def, partial when a rate is missing.
+func TotalBalance(balances []models.Balance, def *models.Currency) (total float64, partial bool) {
 	for _, b := range balances {
 		if b.Currency.String == def.String {
 			total += b.Amount

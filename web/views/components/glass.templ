@@ -1,0 +1,29 @@
+package components
+
+// GlassCard is a frosted card with soft colored glows behind its content.
+// hues are the glows' background classes (e.g. "bg-violet-400/12"): the
+// first sits in the top right corner, the second bottom left, the third
+// bottom right. class styles the content wrapper. Only the glows are
+// clipped to the card, so tooltips can overflow it.
+templ GlassCard(class string, hues ...string) {
+	<section class="relative h-full rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800">
+		if len(hues) > 0 {
+			<div aria-hidden="true" class="pointer-events-none absolute inset-0 overflow-hidden rounded-3xl">
+				for i, hue := range hues {
+					<div class={ "absolute rounded-full blur-3xl", glassGlowPos(i), hue }></div>
+				}
+			</div>
+		}
+		<div class={ "relative h-full", class }>
+			{ children... }
+		</div>
+	</section>
+}
+
+func glassGlowPos(i int) string {
+	return [...]string{
+		"-top-24 -right-16 size-64",
+		"-bottom-28 -left-20 size-56",
+		"-bottom-24 -right-24 size-56",
+	}[i%3]
+}

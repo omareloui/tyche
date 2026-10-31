@@ -162,9 +162,7 @@ templ rtxSummary(rtxs []models.RecurrentTx, def *models.Currency, oob bool) {
 		}
 	>
 		if s.Active > 0 {
-			<section class="relative overflow-hidden grid gap-5 p-5 sm:p-6 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800">
-				<div aria-hidden="true" class="pointer-events-none absolute -top-24 -right-16 size-64 rounded-full bg-violet-400/12 blur-3xl"></div>
-				<div aria-hidden="true" class="pointer-events-none absolute -bottom-28 -left-20 size-56 rounded-full bg-emerald-400/10 blur-3xl"></div>
+			@components.GlassCard("grid gap-5 p-5 sm:p-6", "bg-violet-400/12", "bg-emerald-400/10") {
 				<div class="relative flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
 					<div class="min-w-0">
 						<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-violet-400">
@@ -197,7 +195,7 @@ templ rtxSummary(rtxs []models.RecurrentTx, def *models.Currency, oob bool) {
 						}
 					</div>
 				</div>
-			</section>
+			}
 		}
 	</div>
 }

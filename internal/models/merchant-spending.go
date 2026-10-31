@@ -28,17 +28,12 @@ func (ms *MerchantSpending) AxisMax() float64 {
 	for _, it := range ms.Items {
 		max = math.Max(max, it.Amount)
 	}
-	return niceStep(max/merchantSpendingTicks) * merchantSpendingTicks
+	return AxisMax(max, merchantSpendingTicks)
 }
 
 // Ticks returns the y axis labels from top to bottom, excluding zero.
 func (ms *MerchantSpending) Ticks() []float64 {
-	axisMax := ms.AxisMax()
-	ticks := make([]float64, merchantSpendingTicks)
-	for i := range ticks {
-		ticks[i] = axisMax * float64(merchantSpendingTicks-i) / merchantSpendingTicks
-	}
-	return ticks
+	return AxisTicks(ms.AxisMax(), merchantSpendingTicks)
 }
 
 // Pct is the amount's height as a percentage of the y axis.

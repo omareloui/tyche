@@ -133,16 +133,7 @@ func (r *Repository) GetTransactionsPage(ctx context.Context, f models.TxFilter,
 
 	page := &models.TxPage{}
 	list := func(p queries.GetTransactionsParams) ([]models.Transaction, error) {
-		rows, err := q.GetTransactions(ctx, p)
-		if err != nil {
-			l.Error("querying transactions", zap.Error(err))
-			return nil, err
-		}
-		txs := make([]models.Transaction, len(rows))
-		for i := range rows {
-			txs[i] = *dbTransactionRowToTransaction(&rows[i])
-		}
-		return txs, nil
+		return r.listTransactions(ctx, p)
 	}
 
 	base := txFilterParams(&f)

@@ -10,8 +10,9 @@ import (
 )
 
 func (h *Handler) MerchantSpending(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	// Empty for the latest month with spending.
 	month := r.URL.Query().Get("month")
-	if _, err := time.Parse("2006-01", month); err != nil {
+	if _, err := time.Parse("2006-01", month); month != "" && err != nil {
 		return nil, resperr.New(http.StatusUnprocessableEntity, "invalid month")
 	}
 
