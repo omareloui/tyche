@@ -131,16 +131,72 @@ templ counterpartyIconField(id string, isNew bool, data form.FDInput) {
 	</div>
 }
 
+// counterpartiesFilterData filters the cards (data-search: name and aliases)
+// by the search query. q is read upfront so the checks rerun on change even
+// when no card is left to match.
+const counterpartiesFilterData = `{
+	q: '',
+	matches(el) {
+		const q = this.q.trim().toLowerCase()
+		return !q || el.dataset.search.includes(q)
+	},
+	any(el) {
+		this.q
+		return [...el.querySelectorAll('[data-counterparty]')].some(c => this.matches(c))
+	},
+}`
+
 templ counterpartiesList(counterparties []models.Counterparty) {
-	@components.Grid2ColOnSMUp("counterparties-list") {
-		for _, cp := range counterparties {
-			@counterpartyWrapper(&cp)
+	<div
+		x-data={ counterpartiesFilterData }
+		@keydown.slash.window="if (!openCreateForm && !$event.target.closest('input, textarea, select, [contenteditable]')) { $event.preventDefault(); $refs.q.focus(); $refs.q.select() }"
+		class="grid gap-6"
+	>
+		if len(counterparties) > 0 {
+			@counterpartiesSearch()
 		}
-	}
+		@components.Grid2ColOnSMUp("counterparties-list") {
+			for _, cp := range counterparties {
+				@counterpartyWrapper(&cp)
+			}
+		}
+		<p x-cloak x-show="q.trim() && !any($root)" class="py-12 text-center text-zinc-500">No counterparties match</p>
+	</div>
 }
 
+templ counterpartiesSearch() {
+	<label
+		class="flex items-center gap-3 h-12 px-4 rounded-2xl border-2 border-zinc-700 bg-zinc-800/40 focus-within:border-zinc-400 transition-colors"
+	>
+		@icons.Search("20", &templ.Attributes{"class": "text-zinc-500 shrink-0"})
+		<input
+			type="search"
+			x-ref="q"
+			x-model="q"
+			@keydown.escape.prevent="q ? q = '' : $el.blur()"
+			autocomplete="off"
+			enterkeyhint="search"
+			placeholder="Search by name or SMS alias"
+			aria-label="Search counterparties"
+			class="flex-1 min-w-0 bg-transparent outline-none placeholder:text-zinc-500 [&::-webkit-search-cancel-button]:hidden"
+		/>
+		<kbd class="hidden sm:grid place-items-center shrink-0 w-6 h-6 rounded border border-zinc-600 text-xs text-zinc-500">/</kbd>
+	</label>
+}
+
+// counterpartyAliasChips is how many aliases a card shows, the rest counted.
+const counterpartyAliasChips = 3
+
 templ Counterparty(cp *models.Counterparty) {
-	<div hx-target="this" hx-swap="outerHTML" class="relative" x-data="{openMenu: false}">
+	<div
+		hx-target="this"
+		hx-swap="outerHTML"
+		class="relative min-w-0"
+		x-data="{openMenu: false}"
+		data-counterparty
+		data-search={ strings.ToLower(cp.Name + " " + strings.Join(cp.Aliases, " ")) }
+		x-show="matches($el)"
+	>
 		@components.EntryMenu("openMenu", []templ.Component{
 			components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/counterparties/%s/edit", cp.ID)),
 			components.EntryMenuAnchorItem("Merge into…", "get", fmt.Sprintf("/counterparties/%s/merge", cp.ID)),
@@ -166,9 +222,16 @@ templ Counterparty(cp *models.Counterparty) {
 					</div>
 				}
 				if len(cp.Aliases) > 0 {
-					<p title={ strings.Join(cp.Aliases, ", ") } class="mt-1 text-xs text-zinc-500 truncate">
-						aka { strings.Join(cp.Aliases, ", ") }
-					</p>
+					<div title={ "aka " + strings.Join(cp.Aliases, ", ") } class="flex flex-wrap gap-1 mt-1.5 min-w-0">
+						for i, a := range cp.Aliases {
+							if i < counterpartyAliasChips {
+								<span class="max-w-full truncate px-2 py-0.5 rounded-md bg-zinc-800/70 text-xs text-zinc-400">{ a }</span>
+							}
+						}
+						if n := len(cp.Aliases) - counterpartyAliasChips; n > 0 {
+							<span class="shrink-0 px-2 py-0.5 rounded-md text-xs text-zinc-500">+{ fmt.Sprint(n) } more</span>
+						}
+					</div>
 				}
 			</div>
 			<button
