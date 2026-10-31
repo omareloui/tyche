@@ -63,13 +63,32 @@ document.addEventListener("alpine:init", () => {
   });
 
   Alpine.data("txPage", () => ({
+    // reviewOnly shows the review strips, when filtering by status=review.
     reviewOnly: false,
+    filtersOpen: false,
+    activeFilters: 0,
+
+    // syncFilters counts the filters set in the form (the search apart, the
+    // date and amount ranges once each).
+    syncFilters(form) {
+      const set = (name) => !!form.elements[name]?.value.trim();
+      const keys = ["kind", "account", "category", "counterparty", "goal", "status", "source"];
+      this.activeFilters =
+        keys.filter(set).length + (set("from") || set("to")) + (set("min") || set("max"));
+      this.reviewOnly = form.elements.status?.value === "review";
+    },
 
     onKey(e) {
       if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
       const t = e.target;
-      if (t.closest?.("input, textarea, select, [contenteditable], form, [role=listbox]")) return;
       if (this.openCreateForm) return;
+      if (e.key === "/" && !t.closest?.("input, textarea, select, [contenteditable]")) {
+        e.preventDefault();
+        this.$refs.q?.focus();
+        this.$refs.q?.select();
+        return;
+      }
+      if (t.closest?.("input, textarea, select, [contenteditable], form, [role=listbox]")) return;
 
       // Edit forms are data-tx too, without an id.
       const row = t.closest?.("[data-tx][data-id]");
@@ -134,12 +153,9 @@ document.addEventListener("alpine:init", () => {
     y0: null,
     swiping: false,
 
-    // shown hides rows waiting to be deleted, and the ones not needing review
-    // in review mode.
+    // shown hides rows waiting to be deleted.
     get shown() {
-      const el = this.$root;
-      if (Alpine.store("txs").isPending(el.dataset.id)) return false;
-      return !this.reviewOnly || el.hasAttribute("data-review") || !!el.querySelector("[data-review]");
+      return !Alpine.store("txs").isPending(this.$root.dataset.id);
     },
 
     // swipe binds the row to the pointer, with x-bind to keep each row's
@@ -251,6 +267,19 @@ document.addEventListener("alpine:init", () => {
 window.addEventListener("pagehide", () => Alpine.store("txs")?.flush());
 // Boosted navigation swaps the page without unloading it.
 document.addEventListener("htmx:beforeHistorySave", () => Alpine.store("txs")?.flush());
+
+// Re-rendering the list after changing a transaction keeps the older months
+// loaded by scrolling (see handler.loadedTxListData).
+document.addEventListener("htmx:configRequest", (e) => {
+  const until = document.getElementById("tx-until")?.dataset.until;
+  if (until) e.detail.headers["X-Tx-Until"] = until;
+  // Keep the URL the filters go into short.
+  if (e.detail.elt.id === "tx-filters") {
+    for (const [k, v] of Object.entries(e.detail.parameters)) {
+      if (typeof v === "string" && v.trim() === "") delete e.detail.parameters[k];
+    }
+  }
+});
 
 // Keep the keyboard focus on the same transaction across list re-renders.
 let txRefocusId = null;

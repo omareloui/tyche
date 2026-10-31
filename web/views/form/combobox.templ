@@ -1,9 +1,9 @@
 package form
 
 import (
-	"strings"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/icons"
+	"strings"
 )
 
 type ComboOption struct {
@@ -22,7 +22,9 @@ type ComboboxProps struct {
 	Options     []ComboOption
 	Data        FDInput
 	// Nullable adds a "None" option with an empty value.
-	Nullable   bool
+	Nullable bool
+	// NullLabel names the empty option instead of "None", e.g. "Any".
+	NullLabel  string
 	Searchable bool
 	// Chip draws the button as a pill (.combo-chip) instead of a field.
 	Chip bool
@@ -114,7 +116,7 @@ templ Combobox(p ComboboxProps) {
 			}
 			<ul x-ref="list" role="listbox" tabindex="-1" aria-label={ p.Label } class="max-h-64 overflow-y-auto outline-none">
 				if p.Nullable {
-					@ComboOptionItem(ComboOption{Label: "None"}, p.Data.Value == "")
+					@ComboOptionItem(ComboOption{Label: nullLabel(p)}, p.Data.Value == "")
 				}
 				for _, o := range p.Options {
 					@ComboOptionItem(o, o.Value == p.Data.Value)
@@ -174,7 +176,7 @@ templ comboOptionDisplay(o ComboOption) {
 func selectedComboOption(p ComboboxProps) *ComboOption {
 	if p.Data.Value == "" {
 		if p.Nullable {
-			return &ComboOption{Label: "None"}
+			return &ComboOption{Label: nullLabel(p)}
 		}
 		return nil
 	}
@@ -184,4 +186,11 @@ func selectedComboOption(p ComboboxProps) *ComboOption {
 		}
 	}
 	return nil
+}
+
+func nullLabel(p ComboboxProps) string {
+	if p.NullLabel != "" {
+		return p.NullLabel
+	}
+	return "None"
 }

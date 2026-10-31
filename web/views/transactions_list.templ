@@ -13,49 +13,134 @@ import (
 	"github.com/omareloui/tyche/web/views/icons"
 )
 
-// TxList is the whole list: the review banner, upcoming transactions, then
-// the history by month and day. Every change to a transaction re-renders it,
-// as it moves totals, sections and counts.
-templ TxList(txs []models.Transaction, def *models.Currency) {
-	@txList(txs, def, false)
+// TxListData is a chunk of the transactions list with what it's filtered by.
+type TxListData struct {
+	Page   *models.TxPage
+	Filter models.TxFilter
+	Def    *models.Currency
 }
 
-templ TransactionsListOOB(txs []models.Transaction, def *models.Currency) {
-	@txList(txs, def, true)
+// TxList is the whole list loaded so far: the review banner, upcoming
+// transactions, then the history by month and day, ending with the trigger
+// loading older months. Every change to a transaction re-renders it, as it
+// moves totals, sections and counts.
+templ TxList(d TxListData) {
+	@txList(d, false)
 }
 
-templ txList(txs []models.Transaction, def *models.Currency, oob bool) {
-	{{ l := buildTxList(txs, def) }}
+templ TransactionsListOOB(d TxListData) {
+	@txList(d, true)
+}
+
+templ txList(d TxListData, oob bool) {
+	{{ l := buildTxList(d.Page, d.Def) }}
 	<div
 		id="tx-list"
 		if oob {
 			hx-swap-oob="outerHTML"
 		}
 		class="grid gap-8"
-		x-init="if (!$el.querySelector('[data-review]')) reviewOnly = false"
 	>
+		@txUntil(d.Page, false)
+		if d.Page.NeedsReview > 0 {
+			@txReviewBanner(d.Page.NeedsReview, &d.Filter)
+		}
 		if l.Empty {
-			@txEmptyState()
-		} else {
-			if l.NeedsReview > 0 {
-				@txReviewBanner(l.NeedsReview)
+			if d.Filter.IsZero() {
+				@txEmptyState()
+			} else {
+				@txNoMatches(&d.Filter)
 			}
+		} else {
 			if len(l.Upcoming) > 0 {
-				@txUpcoming(&l, def)
+				@txUpcoming(&l, d.Def)
 			}
 			for _, m := range l.Months {
-				@txMonthSection(&m, def)
+				@txMonthSection(&m, d.Def)
 			}
-			<p class="hidden sm:flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-zinc-600">
-				<span><kbd class="kbd">j</kbd> <kbd class="kbd">k</kbd> move</span>
-				<span><kbd class="kbd">e</kbd> edit</span>
-				<span><kbd class="kbd">f</kbd> fulfill</span>
-				<span><kbd class="kbd">r</kbd> reviewed</span>
-				<span><kbd class="kbd">⌫</kbd> delete</span>
-				<span><kbd class="kbd">n</kbd> new</span>
-			</p>
+			@txMore(&d)
 		}
 	</div>
+}
+
+// TxListChunk is a chunk of older months, replacing the trigger that loaded
+// it (txMore).
+templ TxListChunk(d TxListData) {
+	{{ l := buildTxList(d.Page, d.Def) }}
+	for _, m := range l.Months {
+		@txMonthSection(&m, d.Def)
+	}
+	@txMore(&d)
+	@txUntil(d.Page, true)
+}
+
+// txMore loads the next chunk once scrolled into view.
+templ txMore(d *TxListData) {
+	if d.Page.HasMore {
+		{{ v := d.Filter.Values() }}
+		{{ v.Set("before", d.Page.Until.Format("2006-01-02")) }}
+		<div
+			hx-get={ "/transactions/more?" + v.Encode() }
+			hx-trigger="revealed"
+			hx-swap="outerHTML"
+			class="flex justify-center py-6 text-sm text-zinc-500"
+		>
+			<span class="animate-pulse">Loading older transactions…</span>
+		</div>
+	}
+}
+
+// txUntil tells how far back the list is loaded, sent along with every
+// request (transactions.js) so re-rendering the list keeps it all.
+templ txUntil(p *models.TxPage, oob bool) {
+	<span
+		id="tx-until"
+		hidden
+		if oob {
+			hx-swap-oob="true"
+		}
+		if p.HasMore {
+			data-until={ p.Until.Format("2006-01-02") }
+		} else {
+			data-until="all"
+		}
+	></span>
+}
+
+templ txNoMatches(f *models.TxFilter) {
+	<div class="grid justify-items-center gap-3 py-16 text-center">
+		<div class="grid place-items-center w-16 h-16 rounded-2xl bg-zinc-800/70 text-zinc-400">
+			@icons.Search("30")
+		</div>
+		<p class="text-xl font-semibold">No transactions match</p>
+		<p class="max-w-sm text-zinc-500">Try another search or fewer filters.</p>
+		@txFilterLink("/transactions", "btn-primary mt-2") {
+			@icons.X("18")
+			Clear filters
+		}
+	</div>
+}
+
+// txFilterLink re-renders the filters and the list for url, from outside
+// the filters form.
+templ txFilterLink(url, class string) {
+	<button
+		type="button"
+		hx-get={ url }
+		hx-target="#tx-body"
+		hx-swap="innerHTML"
+		hx-replace-url="true"
+		class={ class }
+	>
+		{ children... }
+	</button>
+}
+
+func txFilterURL(qs string) string {
+	if qs == "" {
+		return "/transactions"
+	}
+	return "/transactions?" + qs
 }
 
 templ txEmptyState() {
@@ -72,7 +157,7 @@ templ txEmptyState() {
 	</div>
 }
 
-templ txReviewBanner(count int) {
+templ txReviewBanner(count int, f *models.TxFilter) {
 	<div class="flex flex-wrap items-center gap-3 p-4 rounded-2xl bg-amber-400/8 ring-1 ring-amber-400/20">
 		<div class="grid place-items-center shrink-0 w-10 h-10 rounded-xl bg-amber-400/15 text-amber-300">
 			@icons.Message("20")
@@ -90,12 +175,18 @@ templ txReviewBanner(count int) {
 			<p class="text-sm text-zinc-400">Check their category, then mark them as reviewed.</p>
 		</div>
 		<div class="flex gap-2">
-			<button
-				type="button"
-				@click="reviewOnly = !reviewOnly"
-				x-text="reviewOnly ? 'Show all' : 'Review'"
-				class="h-9 px-4 rounded-full bg-amber-300 text-sm font-semibold text-zinc-950 cursor-pointer transition hover:brightness-110"
-			>Review</button>
+			{{ reviewBtn := "h-9 px-4 rounded-full bg-amber-300 text-sm font-semibold text-zinc-950 cursor-pointer transition hover:brightness-110" }}
+			if f.Status == models.TxStatusReview {
+				@txFilterLink(txFilterURL(f.Without(models.TxFilterStatus)), reviewBtn) {
+					Show all
+				}
+			} else {
+				{{ v := f.Values() }}
+				{{ v.Set(models.TxFilterStatus, string(models.TxStatusReview)) }}
+				@txFilterLink(txFilterURL(v.Encode()), reviewBtn) {
+					Review
+				}
+			}
 			<button
 				type="button"
 				hx-put="/transactions/reviewed"
@@ -111,7 +202,6 @@ templ txReviewBanner(count int) {
 templ txUpcoming(l *txListView, def *models.Currency) {
 	<details
 		class="group rounded-2xl ring-1 ring-zinc-800"
-		x-show="!reviewOnly || $el.querySelector('[data-review]')"
 		if l.Overdue > 0 {
 			open
 		}
@@ -141,7 +231,7 @@ templ txUpcoming(l *txListView, def *models.Currency) {
 }
 
 templ txMonthSection(m *txMonth, def *models.Currency) {
-	<section class="grid gap-5" x-show="!reviewOnly || $el.querySelector('[data-review]')">
+	<section class="grid gap-5">
 		<header class="sticky top-16 z-10 -mx-2 px-2 py-2 bg-zinc-950/85 backdrop-blur-md">
 			<div class="flex items-baseline justify-between gap-4">
 				<h2 class="text-xl font-bold font-(family-name:--font-biorhyme-expanded)">{ formatTxMonth(m.Month) }</h2>
@@ -157,7 +247,7 @@ templ txMonthSection(m *txMonth, def *models.Currency) {
 		</header>
 		for _, d := range m.Days {
 			// Hidden once all its transactions get deleted.
-			<section class="hidden has-[[data-tx]]:grid gap-2" x-show="!reviewOnly || $el.querySelector('[data-review]')">
+			<section class="hidden has-[[data-tx]]:grid gap-2">
 				<h3 class="flex items-baseline justify-between gap-4 px-1 text-sm">
 					<span class="font-semibold text-zinc-300">{ formatTxDay(d.Day) }</span>
 					if d.In != 0 || d.Out != 0 {
@@ -630,38 +720,26 @@ type txListView struct {
 	UpcomingIn, UpcomingOut float64
 	Overdue                 int
 	Months                  []txMonth
-	NeedsReview             int
 	Empty                   bool
 }
 
-// buildTxList splits the transactions, sorted newest first, into upcoming
-// ones and the history by month and day, with totals in def.
-func buildTxList(txs []models.Transaction, def *models.Currency) txListView {
-	l := txListView{Empty: len(txs) == 0}
+// buildTxList groups the page's history by month and day, with totals in
+// def.
+func buildTxList(p *models.TxPage, def *models.Currency) txListView {
+	l := txListView{Upcoming: p.Upcoming, Empty: len(p.Upcoming) == 0 && len(p.History) == 0}
 	today := dateOf(time.Now())
 
-	for _, tx := range txs {
-		if tx.NeedsReview {
-			l.NeedsReview++
-		}
-		for _, rt := range tx.Reimbursements {
-			if rt.NeedsReview {
-				l.NeedsReview++
-			}
-		}
-
+	for _, tx := range p.Upcoming {
 		in, out := txFlow(&tx, def)
-
-		if tx.FulfilledAt.IsZero() {
-			l.Upcoming = append(l.Upcoming, tx)
-			l.UpcomingIn += in
-			l.UpcomingOut += out
-			if tx.ScheduledTo.Before(today) {
-				l.Overdue++
-			}
-			continue
+		l.UpcomingIn += in
+		l.UpcomingOut += out
+		if tx.ScheduledTo.Before(today) {
+			l.Overdue++
 		}
+	}
 
+	for _, tx := range p.History {
+		in, out := txFlow(&tx, def)
 		day := dateOf(tx.ScheduledTo)
 		month := time.Date(day.Year(), day.Month(), 1, 0, 0, 0, 0, day.Location())
 
@@ -679,10 +757,6 @@ func buildTxList(txs []models.Transaction, def *models.Currency) txListView {
 		d.Txs = append(d.Txs, tx)
 		d.In += in
 		d.Out += out
-	}
-
-	for i, j := 0, len(l.Upcoming)-1; i < j; i, j = i+1, j-1 {
-		l.Upcoming[i], l.Upcoming[j] = l.Upcoming[j], l.Upcoming[i]
 	}
 
 	return l

@@ -88,7 +88,46 @@ LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
 LEFT JOIN categories AS cat ON t.category_id = cat.id
 LEFT JOIN goals AS g ON t.goal_id = g.id
 LEFT JOIN currencies AS gc ON g.currency_id = gc.id
-ORDER BY t.scheduled_to DESC, t.created_at DESC;
+-- Top-level transactions only: reimbursements come nested under their
+-- expense (GetReimbursementsOfMany). Every filter is optional (NULL = any).
+WHERE
+    t.reimburses_id IS NULL
+    AND (sqlc.narg(q) IS NULL
+        OR INSTR(LOWER(t.description), sqlc.narg(q)) > 0
+        OR INSTR(LOWER(cp.name), sqlc.narg(q)) > 0
+        OR INSTR(LOWER(cp.aliases), sqlc.narg(q)) > 0
+        OR INSTR(LOWER(cat.name), sqlc.narg(q)) > 0
+        OR INSTR(LOWER(a.name), sqlc.narg(q)) > 0
+        OR INSTR(LOWER(ta.name), sqlc.narg(q)) > 0
+        OR EXISTS (
+            SELECT 1 FROM transactions AS rt
+            LEFT JOIN counterparties AS rcp ON rt.counterparty_id = rcp.id
+            WHERE rt.reimburses_id = t.id
+                AND (INSTR(LOWER(rt.description), sqlc.narg(q)) > 0 OR INSTR(LOWER(rcp.name), sqlc.narg(q)) > 0)
+        ))
+    AND (sqlc.narg(kind) IS NULL OR t.kind = sqlc.narg(kind))
+    AND (sqlc.narg(account_id) IS NULL OR t.account_id = sqlc.narg(account_id) OR t.to_account_id = sqlc.narg(account_id))
+    AND (sqlc.narg(category_id) IS NULL OR t.category_id = sqlc.narg(category_id))
+    AND (sqlc.narg(counterparty_id) IS NULL OR t.counterparty_id = sqlc.narg(counterparty_id))
+    AND (sqlc.narg(goal_id) IS NULL OR t.goal_id = sqlc.narg(goal_id))
+    AND (sqlc.narg(fulfilled) IS NULL OR (t.fulfilled_at IS NOT NULL) = sqlc.narg(fulfilled))
+    AND (sqlc.narg(needs_review) IS NULL OR (t.needs_review OR EXISTS (
+        SELECT 1 FROM transactions AS rt WHERE rt.reimburses_id = t.id AND rt.needs_review
+    )) = sqlc.narg(needs_review))
+    AND (sqlc.narg(from_sms) IS NULL OR EXISTS (
+        SELECT 1 FROM sms_messages AS sm WHERE sm.transaction_id = t.id
+    ) = sqlc.narg(from_sms))
+    AND (sqlc.narg(from_date) IS NULL OR t.scheduled_to >= sqlc.narg(from_date))
+    AND (sqlc.narg(to_date) IS NULL OR t.scheduled_to <= sqlc.narg(to_date))
+    AND (sqlc.narg(min_amount) IS NULL OR t.amount >= sqlc.narg(min_amount))
+    AND (sqlc.narg(max_amount) IS NULL OR t.amount <= sqlc.narg(max_amount))
+    AND (sqlc.narg(before) IS NULL OR t.scheduled_to < sqlc.narg(before))
+    AND (sqlc.narg(after) IS NULL OR t.scheduled_to >= sqlc.narg(after))
+ORDER BY t.scheduled_to DESC, t.created_at DESC
+LIMIT sqlc.arg(lim) OFFSET sqlc.arg(off);
+
+-- name: CountTransactionsNeedingReview :one
+SELECT COUNT(*) FROM transactions WHERE needs_review;
 
 -- name: GetTransaction :one
 SELECT
@@ -302,3 +341,63 @@ LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
 LEFT JOIN categories AS cat ON t.category_id = cat.id
 WHERE t.reimburses_id = sqlc.arg(id)
 ORDER BY t.scheduled_to, t.created_at;
+
+-- name: GetReimbursementsOfMany :many
+-- The reimbursements of the expenses ids (a JSON array), oldest first.
+SELECT
+    sqlc.embed(t),
+    sqlc.embed(a),
+    sqlc.embed(c),
+    ak.enum AS account_kind_enum,
+    cp.name AS counterparty_name,
+    cp.icon AS counterparty_icon,
+    cp.color AS counterparty_color,
+    ta.id AS to_account_id,
+    ta.name AS to_account_name,
+    ta.kind_id AS to_account_kind_id,
+    tak.enum AS to_account_kind_enum,
+    ta.amount AS to_account_amount,
+    ta.currency_id AS to_account_currency_id,
+    ta.counterparty_id AS to_account_counterparty_id,
+    ta.card_number AS to_account_card_number,
+    ta.card_limit AS to_account_card_limit,
+    ta.name_on_card AS to_account_name_on_card,
+    ta.iban AS to_account_iban,
+    ta.note AS to_account_note,
+    ta.is_archived AS to_account_is_archived,
+    ta.exclude_from_balance AS to_account_exclude_from_balance,
+    ta.expiration_date AS to_account_expiration_date,
+    ta.created_at AS to_account_created_at,
+    tc.string AS to_account_currency_string,
+    tc.symbol AS to_account_currency_symbol,
+    cat.id AS category_id,
+    cat.name AS category_name,
+    cat.color AS category_color,
+    cat.budget_amount AS category_budget_amount,
+    cat.budget_currency_id AS category_budget_currency_id,
+    cat.created_at AS category_created_at,
+    g.name AS goal_name,
+    g.price AS goal_price,
+    g.currency_id AS goal_currency_id,
+    g.fulfilled_at AS goal_fulfilled_at,
+    gc.string AS goal_currency_string,
+    gc.symbol AS goal_currency_symbol,
+    CAST(COALESCE((
+        SELECT sm.body FROM sms_messages AS sm WHERE sm.transaction_id = t.id LIMIT 1
+    ), '') AS TEXT) AS sms_body,
+    CAST((
+        SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id
+    ) AS FLOAT) AS reimbursed
+FROM transactions AS t
+LEFT JOIN accounts AS a ON t.account_id = a.id
+LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
+LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN account_kinds AS ak ON a.kind_id = ak.id
+LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
+LEFT JOIN account_kinds AS tak ON ta.kind_id = tak.id
+LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
+LEFT JOIN categories AS cat ON t.category_id = cat.id
+LEFT JOIN goals AS g ON t.goal_id = g.id
+LEFT JOIN currencies AS gc ON g.currency_id = gc.id
+WHERE t.reimburses_id IN (SELECT value FROM json_each(sqlc.arg(ids)))
+ORDER BY t.scheduled_to DESC, t.created_at DESC;

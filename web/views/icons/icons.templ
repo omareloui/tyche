@@ -139,6 +139,21 @@ templ X(size string, attrs ...*templ.Attributes) {
 	}
 }
 
+// Filter toggles filters.
+templ Filter(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="M10 5H3"></path>
+		<path d="M12 19H3"></path>
+		<path d="M14 3v4"></path>
+		<path d="M16 17v4"></path>
+		<path d="M21 12h-9"></path>
+		<path d="M21 19h-5"></path>
+		<path d="M21 5h-7"></path>
+		<path d="M8 10v4"></path>
+		<path d="M8 12H3"></path>
+	}
+}
+
 // ChevronDown marks a select.
 templ ChevronDown(size string, attrs ...*templ.Attributes) {
 	@strokeIcon(size, attrs...) {

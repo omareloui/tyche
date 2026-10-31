@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/resperr"
 	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views"
 	"github.com/omareloui/tyche/web/views/form"
@@ -24,20 +26,26 @@ import (
 func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	l := logger.FromCtx(r.Context())
 
+	list, err := h.txListData(r, models.ParseTxFilter(r.URL.Query()), time.Time{}, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// The filters form swaps only the list, so typing in it isn't disturbed.
+	target := r.Header.Get("HX-Target")
+	if target == "tx-list" {
+		return views.TxList(*list), nil
+	}
+
 	accs, knds, cats, cps, gls, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
-
-	fd := h.mapTransactionToFD(defaultTransaction(accs), new(errs.ValidationError))
-
-	txs, err := h.repo.GetTransactions(r.Context())
-	if err != nil {
-		l.Error("fetch transaction from db", zap.Error(err))
-		return nil, err
+	if target == "tx-body" {
+		return views.TxBody(*list, accs, knds, cats, cps, gls), nil
 	}
 
-	l.Debug("transaction from data", zap.Int("transactions_count", len(txs)))
+	fd := h.mapTransactionToFD(defaultTransaction(accs), new(errs.ValidationError))
 
 	balances, err := h.repo.GetBalances(r.Context())
 	if err != nil {
@@ -46,7 +54,51 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 	}
 	l.Debug("fetched balances")
 
-	return views.Transactions(getClaims(r.Context()), balances, txs, fd, accs, knds, cats, cps, gls), nil
+	return views.Transactions(getClaims(r.Context()), balances, *list, fd, accs, knds, cats, cps, gls), nil
+}
+
+// TransactionsMore is the chunk of the list older than ?before=.
+func (h Handler) TransactionsMore(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	before, err := time.Parse(time.DateOnly, r.URL.Query().Get("before"))
+	if err != nil {
+		return nil, resperr.New(http.StatusBadRequest, "invalid before date")
+	}
+	list, err := h.txListData(r, models.ParseTxFilter(r.URL.Query()), before, nil)
+	if err != nil {
+		return nil, err
+	}
+	return views.TxListChunk(*list), nil
+}
+
+func (h Handler) txListData(r *http.Request, f models.TxFilter, before time.Time, until *time.Time) (*views.TxListData, error) {
+	page, err := h.repo.GetTransactionsPage(r.Context(), f, before, until)
+	if err != nil {
+		logger.FromCtx(r.Context()).Error("fetch transactions from db", zap.Error(err))
+		return nil, err
+	}
+	return &views.TxListData{Page: page, Filter: f, Def: &getClaims(r.Context()).DefaultCurrency}, nil
+}
+
+// loadedTxListData is the list as the page shows it, to re-render it after
+// changing a transaction: filtered by the page's query string, loaded back
+// to the X-Tx-Until header (transactions.js).
+func (h Handler) loadedTxListData(r *http.Request) (*views.TxListData, error) {
+	var f models.TxFilter
+	if u, err := url.Parse(r.Header.Get("HX-Current-URL")); err == nil && u.Path == "/transactions" {
+		f = models.ParseTxFilter(u.Query())
+	}
+
+	var until *time.Time
+	switch v := r.Header.Get("X-Tx-Until"); v {
+	case "":
+	case "all":
+		until = new(time.Time)
+	default:
+		if d, err := time.Parse(time.DateOnly, v); err == nil {
+			until = &d
+		}
+	}
+	return h.txListData(r, f, time.Time{}, until)
 }
 
 func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -443,23 +495,20 @@ func hxRetargetTxList(w http.ResponseWriter) {
 }
 
 func (h Handler) transactionsList(r *http.Request) (templ.Component, error) {
-	l := logger.FromCtx(r.Context())
-	txs, err := h.repo.GetTransactions(r.Context())
+	list, err := h.loadedTxListData(r)
 	if err != nil {
-		l.Error("fetch transactions from db", zap.Error(err))
 		return nil, err
 	}
-	return views.TxList(txs, &getClaims(r.Context()).DefaultCurrency), nil
+	return views.TxList(*list), nil
 }
 
 func (h Handler) renderTransactionsListOOB(w http.ResponseWriter, r *http.Request) error {
 	l := logger.FromCtx(r.Context())
-	txs, err := h.repo.GetTransactions(r.Context())
+	list, err := h.loadedTxListData(r)
 	if err != nil {
-		l.Error("fetch transactions from db", zap.Error(err))
 		return err
 	}
-	if err = renderToBody(w, r, views.TransactionsListOOB(txs, &getClaims(r.Context()).DefaultCurrency)); err != nil {
+	if err = renderToBody(w, r, views.TransactionsListOOB(*list)); err != nil {
 		l.Error("rendering transactions list OOB", zap.Error(err))
 		return err
 	}

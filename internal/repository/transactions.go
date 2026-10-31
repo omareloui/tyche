@@ -3,7 +3,10 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"slices"
+	"strings"
+	"time"
 
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
@@ -99,7 +102,28 @@ func (r *Repository) createTransactionAndApplyToAccountIfNeededWithTxn(ctx conte
 	return nil
 }
 
+// txPageSize is about how many fulfilled transactions a chunk of the list
+// has, rounded up to whole months so their totals stay right.
+const txPageSize = 50
+
+// GetTransactions is every transaction, unfiltered, newest first.
 func (r *Repository) GetTransactions(ctx context.Context) ([]models.Transaction, error) {
+	all := time.Time{}
+	p, err := r.GetTransactionsPage(ctx, models.TxFilter{}, time.Time{}, &all)
+	if err != nil {
+		return nil, err
+	}
+	// Upcoming are soonest first, put them back newest first.
+	slices.Reverse(p.Upcoming)
+	return append(p.Upcoming, p.History...), nil
+}
+
+// GetTransactionsPage is a chunk of the filtered transactions list: the
+// first one (with the upcoming transactions) for a zero before, else the one
+// older than before. A non-nil until re-renders the list as loaded so far,
+// from now back to *until (zero for everything), as after changing a
+// transaction.
+func (r *Repository) GetTransactionsPage(ctx context.Context, f models.TxFilter, before time.Time, until *time.Time) (*models.TxPage, error) {
 	l := logger.FromCtx(ctx)
 
 	_, q, err := r.dbFromCtx(ctx)
@@ -107,21 +131,181 @@ func (r *Repository) GetTransactions(ctx context.Context) ([]models.Transaction,
 		return nil, err
 	}
 
-	dbTransactions, err := q.GetTransactions(ctx)
-	if err != nil {
-		l.Error("querying transactions", zap.Error(err))
-		return nil, err
+	page := &models.TxPage{}
+	list := func(p queries.GetTransactionsParams) ([]models.Transaction, error) {
+		rows, err := q.GetTransactions(ctx, p)
+		if err != nil {
+			l.Error("querying transactions", zap.Error(err))
+			return nil, err
+		}
+		txs := make([]models.Transaction, len(rows))
+		for i := range rows {
+			txs[i] = *dbTransactionRowToTransaction(&rows[i])
+		}
+		return txs, nil
 	}
-	l.Info("queried transactions")
 
-	tx := make([]models.Transaction, len(dbTransactions))
-	for i, t := range dbTransactions {
-		tx[i] = *dbTransactionRowToTransaction(&t)
+	base := txFilterParams(&f)
+	if before.IsZero() && f.Status != models.TxStatusFulfilled {
+		p := base
+		p.Fulfilled = false
+		if page.Upcoming, err = list(p); err != nil {
+			return nil, err
+		}
+		// Soonest first.
+		slices.Reverse(page.Upcoming)
 	}
-	if err := r.loadGoalProgress(ctx, tx); err != nil {
+
+	if f.Status != models.TxStatusScheduled {
+		p := base
+		p.Fulfilled = true
+		if !before.IsZero() {
+			p.Before = before
+		}
+
+		var after time.Time
+		if until != nil {
+			after = *until
+		} else {
+			cut := p
+			cut.Lim, cut.Off = 1, txPageSize-1
+			rows, err := list(cut)
+			if err != nil {
+				return nil, err
+			}
+			if len(rows) > 0 {
+				d := rows[0].ScheduledTo.UTC()
+				after = time.Date(d.Year(), d.Month(), 1, 0, 0, 0, 0, time.UTC)
+			}
+		}
+
+		if !after.IsZero() {
+			p.After = after
+		}
+		if page.History, err = list(p); err != nil {
+			return nil, err
+		}
+
+		if !after.IsZero() {
+			older := base
+			older.Fulfilled = true
+			older.Before = after
+			older.Lim = 1
+			rows, err := list(older)
+			if err != nil {
+				return nil, err
+			}
+			page.HasMore = len(rows) > 0
+			page.Until = after
+		}
+	}
+
+	if err := r.loadReimbursements(ctx, q, page.Upcoming, page.History); err != nil {
 		return nil, err
 	}
-	return nestReimbursements(tx), nil
+	if err := r.loadGoalProgress(ctx, page.Upcoming); err != nil {
+		return nil, err
+	}
+	if err := r.loadGoalProgress(ctx, page.History); err != nil {
+		return nil, err
+	}
+
+	n, err := q.CountTransactionsNeedingReview(ctx)
+	if err != nil {
+		l.Error("counting transactions to review", zap.Error(err))
+		return nil, err
+	}
+	page.NeedsReview = int(n)
+
+	l.Info("queried transactions page",
+		zap.Int("upcoming", len(page.Upcoming)), zap.Int("history", len(page.History)),
+		zap.Time("until", page.Until), zap.Bool("has_more", page.HasMore))
+	return page, nil
+}
+
+// txFilterParams is the list query for the filter, all of it (no limit).
+func txFilterParams(f *models.TxFilter) queries.GetTransactionsParams {
+	p := queries.GetTransactionsParams{Lim: -1}
+	if f.Q != "" {
+		p.Q = strings.ToLower(f.Q)
+	}
+	if f.Kind != models.NilTxKind {
+		p.Kind = int64(f.Kind)
+	}
+	if f.AccountID != "" {
+		p.AccountID = f.AccountID
+	}
+	if f.CategoryID != "" {
+		p.CategoryID = f.CategoryID
+	}
+	if f.CounterpartyID != "" {
+		p.CounterpartyID = f.CounterpartyID
+	}
+	if f.GoalID != "" {
+		p.GoalID = f.GoalID
+	}
+	if f.Status == models.TxStatusReview {
+		p.NeedsReview = true
+	}
+	switch f.Source {
+	case models.TxSourceSMS:
+		p.FromSms = true
+	case models.TxSourceManual:
+		p.FromSms = false
+	}
+	if !f.From.IsZero() {
+		p.FromDate = f.From.UTC()
+	}
+	if !f.To.IsZero() {
+		p.ToDate = f.To.UTC()
+	}
+	if f.MinAmount != nil {
+		p.MinAmount = *f.MinAmount
+	}
+	if f.MaxAmount != nil {
+		p.MaxAmount = *f.MaxAmount
+	}
+	return p
+}
+
+// loadReimbursements nests the reimbursements of the expenses in lists under
+// them, oldest first. They're left out of the list query, so an expense gets
+// them even when they're in another chunk.
+func (r *Repository) loadReimbursements(ctx context.Context, q *queries.Queries, lists ...[]models.Transaction) error {
+	var ids []string
+	for _, txs := range lists {
+		for _, t := range txs {
+			if t.Reimbursed > 0 {
+				ids = append(ids, t.ID)
+			}
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+
+	b, err := json.Marshal(ids)
+	if err != nil {
+		return err
+	}
+	rows, err := q.GetReimbursementsOfMany(ctx, string(b))
+	if err != nil {
+		logger.FromCtx(ctx).Error("querying reimbursements", zap.Error(err))
+		return err
+	}
+
+	byExpense := make(map[string][]models.Transaction)
+	// Rows are newest first, walk backwards for oldest first.
+	for i := len(rows) - 1; i >= 0; i-- {
+		rt := dbTransactionRowToTransaction(&rows[i])
+		byExpense[rt.ReimbursesID] = append(byExpense[rt.ReimbursesID], *rt)
+	}
+	for _, txs := range lists {
+		for i := range txs {
+			txs[i].Reimbursements = byExpense[txs[i].ID]
+		}
+	}
+	return nil
 }
 
 // loadGoalProgress swaps the transactions' goals for the full ones, with
@@ -149,37 +333,6 @@ func (r *Repository) loadGoalProgress(ctx context.Context, txs []models.Transact
 		}
 	}
 	return nil
-}
-
-// nestReimbursements moves the reimbursements into their expense's
-// Reimbursements (oldest first), keeping the order of the rest.
-func nestReimbursements(txs []models.Transaction) []models.Transaction {
-	idx := make(map[string]int, len(txs))
-	for i, t := range txs {
-		if !t.IsReimbursement() {
-			idx[t.ID] = i
-		}
-	}
-
-	// Transactions are sorted newest first, walk backwards for oldest first.
-	nested := make(map[int]bool)
-	for i := len(txs) - 1; i >= 0; i-- {
-		if !txs[i].IsReimbursement() {
-			continue
-		}
-		if p, ok := idx[txs[i].ReimbursesID]; ok {
-			txs[p].Reimbursements = append(txs[p].Reimbursements, txs[i])
-			nested[i] = true
-		}
-	}
-
-	res := make([]models.Transaction, 0, len(txs)-len(nested))
-	for i, t := range txs {
-		if !nested[i] {
-			res = append(res, t)
-		}
-	}
-	return res
 }
 
 func (r *Repository) GetTransaction(ctx context.Context, id string) (*models.Transaction, error) {
@@ -382,7 +535,7 @@ func dbTransactionToTransaction(
 	return &tx
 }
 
-func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTransactionsRow](dbTx *T) *models.Transaction {
+func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTransactionsRow | queries.GetReimbursementsOfManyRow](dbTx *T) *models.Transaction {
 	_dbTx := queries.GetTransactionsRow(*dbTx)
 
 	var cp *queries.Counterparty
