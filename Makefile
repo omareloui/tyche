@@ -41,7 +41,7 @@ dev: sqlgen
 regen-db:
 	@read -p "Are you sure you want to delete the current databases (y/N) " _res
 	@if [[ $$_res == "y" || $$_res == "Y" ]]; then
-	@  rm -rf data/*.sqlite internal/queries
+	@  rm -rf data/*.sqlite* internal/queries internal/sharedqueries
 	@  make --no-print-directory sqlgen
 	@fi
 

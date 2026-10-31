@@ -2,6 +2,7 @@ package jwt
 
 import (
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -51,6 +52,11 @@ type AccessClaims struct {
 	Picture         string
 	DefaultCurrency models.Currency
 	DefaultAccount  *models.Account
+}
+
+// IsAdmin reports whether the user is listed in ADMIN_TENANT_IDS.
+func (c *AccessClaims) IsAdmin() bool {
+	return c != nil && slices.Contains(config.GetAdminTenantIDs(), models.TenantID(c.OAuthProvider, c.OAuthID))
 }
 
 var (

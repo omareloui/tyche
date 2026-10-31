@@ -1,0 +1,197 @@
+package views
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/omareloui/tyche/internal/formatters"
+	"github.com/omareloui/tyche/internal/fxrate"
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+type FxRatesStatusData struct {
+	Info     fxrate.Info
+	Status   fxrate.Status
+	Interval time.Duration
+	// Pending is a run just triggered that hasn't started yet.
+	Pending bool
+}
+
+func (d FxRatesStatusData) busy() bool {
+	return d.Pending || d.Status.Running
+}
+
+templ AdminFxRates(claims *jwt.AccessClaims, balances []models.Balance, status FxRatesStatusData, currencies []models.Currency) {
+	@layouts.WithTitle(claims, "FX Rates", balances) {
+		<div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+			@FxRatesStatus(status)
+			@fxRatesTable(&claims.DefaultCurrency, currencies)
+		</div>
+	}
+}
+
+// FxRatesStatus polls itself while a run is pending or running.
+templ FxRatesStatus(d FxRatesStatusData) {
+	<section
+		id="fx-rates-status"
+		hx-target="this"
+		hx-swap="outerHTML"
+		if d.busy() {
+			hx-get="/admin/fx-rates/status"
+			hx-trigger="every 2s"
+		}
+		class="grid gap-4 min-w-0"
+	>
+		<header class="flex flex-wrap items-end justify-between gap-3">
+			<div class="min-w-0">
+				<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+					@icons.Coins("16")
+					Fetch job
+					@fxJobBadge(d)
+				</h2>
+				<p class="text-sm text-zinc-600">Shared by every user, refetched every { fmtDuration(d.Interval) }.</p>
+			</div>
+			<button
+				hx-post="/admin/fx-rates/refresh"
+				disabled?={ d.busy() }
+				class="btn-primary h-9! inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+			>
+				@icons.Retry("16")
+				if d.busy() {
+					Fetching…
+				} else {
+					Fetch now
+				}
+			</button>
+		</header>
+		<dl class="grid gap-3 sm:grid-cols-2">
+			@fxStat("Last fetched", fmtWhen(d.Info.FetchedAt), fmtAbs(d.Info.FetchedAt))
+			@fxStat("Provider date", orDash(d.Info.AsOf), "")
+			@fxStat("Pairs", formatters.FormatNum(d.Info.Pairs), fmt.Sprintf("%d bases", d.Info.Bases))
+			@fxStat("Next run", fmtWhen(d.Status.NextRunAt), fmtAbs(d.Status.NextRunAt))
+			@fxStat("Last run", fmtWhen(d.Status.LastRunAt), fmtLastRun(d.Status))
+			@fxStat("Last success", fmtWhen(d.Status.LastSuccessAt), fmtAbs(d.Status.LastSuccessAt))
+		</dl>
+		if d.Status.LastErr != "" {
+			<div class="grid gap-1 p-4 rounded-2xl bg-red-400/8 text-sm">
+				<p class="flex items-center gap-2 text-red-400">
+					@icons.Error("16")
+					Last run failed
+				</p>
+				<p class="text-zinc-400 break-words">{ d.Status.LastErr }</p>
+			</div>
+		}
+		if len(d.Status.FailedBases) > 0 {
+			<div class="grid gap-2 p-4 rounded-2xl bg-amber-400/8 text-sm">
+				<p class="text-amber-300">
+					{ fmt.Sprint(len(d.Status.FailedBases)) } bases failed, their previous rates are kept
+				</p>
+				<p class="flex flex-wrap gap-1.5">
+					for _, b := range d.Status.FailedBases {
+						<span class="px-2 py-0.5 rounded-full bg-zinc-800 text-xs text-zinc-300 uppercase">{ b }</span>
+					}
+				</p>
+			</div>
+		}
+	</section>
+}
+
+templ fxJobBadge(d FxRatesStatusData) {
+	switch {
+		case d.busy():
+			<span class="px-2 py-0.5 rounded-full bg-violet-400/15 text-xs normal-case tracking-normal text-violet-300 animate-pulse">Running</span>
+		case d.Status.LastErr != "":
+			<span class="px-2 py-0.5 rounded-full bg-red-400/15 text-xs normal-case tracking-normal text-red-400">Failed</span>
+		default:
+			<span class="px-2 py-0.5 rounded-full bg-emerald-400/15 text-xs normal-case tracking-normal text-emerald-400">Idle</span>
+	}
+}
+
+templ fxStat(label, value, hint string) {
+	<div class="grid gap-0.5 p-4 rounded-2xl bg-zinc-700/20">
+		<dt class="text-xs text-zinc-500">{ label }</dt>
+		<dd class="text-lg tabular-nums">{ value }</dd>
+		if hint != "" {
+			<dd class="text-xs text-zinc-500 tabular-nums">{ hint }</dd>
+		}
+	</div>
+}
+
+// fxRatesTable is what one unit of each shown currency is worth in the
+// default one.
+templ fxRatesTable(def *models.Currency, currencies []models.Currency) {
+	<aside class="grid gap-4">
+		<header>
+			<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+				@icons.ArrowUpDown("16")
+				In { def.String }
+			</h2>
+			<p class="text-sm text-zinc-600">Your shown currencies, as loaded in memory.</p>
+		</header>
+		<div class="grid gap-1">
+			for _, cur := range currencies {
+				if cur.String != def.String {
+					<div class="flex items-center justify-between gap-3 px-3 py-2 rounded-xl bg-zinc-700/20">
+						<span>1 { cur.String }</span>
+						if v := cur.ValueIn(def.String); v > 0 {
+							<span class="tabular-nums text-zinc-300">{ formatters.FormatRate(v) } { def.Symbol }</span>
+						} else {
+							<span class="text-sm text-red-400">No rate</span>
+						}
+					</div>
+				}
+			}
+		</div>
+	</aside>
+}
+
+func fmtWhen(t time.Time) string {
+	if t.IsZero() {
+		return "—"
+	}
+	d := time.Until(t)
+	if d <= 0 {
+		return timeAgo(t)
+	}
+	return "in " + fmtDuration(d)
+}
+
+func fmtAbs(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Local().Format("Jan 2, 15:04:05")
+}
+
+func fmtLastRun(s fxrate.Status) string {
+	if s.LastRunAt.IsZero() {
+		return "Not since the app started"
+	}
+	if s.Running {
+		return "Running…"
+	}
+	return "Took " + s.LastDuration.Round(100*time.Millisecond).String()
+}
+
+// fmtDuration is a short duration, e.g. 6h, 2h 5m, 40s.
+func fmtDuration(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d%time.Hour < time.Minute:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	}
+	return fmt.Sprintf("%dh %dm", int(d.Hours()), int(d.Minutes())%60)
+}
+
+func orDash(s string) string {
+	if s == "" {
+		return "—"
+	}
+	return s
+}

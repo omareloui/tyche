@@ -52,7 +52,7 @@ func newTenantManager() *TenantManager {
 }
 
 func (tm *TenantManager) GetTenant(provider models.OAuthProvider, oauthID string) (*sql.DB, *queries.Queries, error) {
-	tenantID := getTenantID(provider, oauthID)
+	tenantID := models.TenantID(provider, oauthID)
 
 	tm.mu.RLock()
 	if tenant, exists := tm.connections[tenantID]; exists {
@@ -142,8 +142,4 @@ func (tm *TenantManager) Close() error {
 		delete(tm.connections, tenantID)
 	}
 	return lastErr
-}
-
-func getTenantID(p models.OAuthProvider, oauthID string) string {
-	return fmt.Sprintf("%s_%s", p.Prefix(), oauthID)
 }

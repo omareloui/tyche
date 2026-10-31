@@ -32,6 +32,10 @@ var (
 		{"/currencies", "Currencies", icons.Coins},
 		{"/sms", "SMS", icons.Message},
 	}
+	// adminNav are appended to moreNav for the users in ADMIN_TENANT_IDS.
+	adminNav = []navLink{
+		{"/admin/fx-rates", "FX Rates", icons.Sparkles},
+	}
 	mobileNav = []navLink{
 		{"/", "Home", icons.Home},
 		{"/transactions", "Activity", icons.ArrowUpDown},
@@ -55,7 +59,7 @@ templ Navbar(claims *jwt.AccessClaims, balances []models.Balance) {
 						for _, l := range primaryNav {
 							@navPill(l, isActive(path, l.Href))
 						}
-						@navMore(path)
+						@navMore(path, moreNavFor(claims))
 					</nav>
 					<div class="flex items-center gap-2 ml-auto">
 						if len(balances) > 0 {
@@ -70,7 +74,7 @@ templ Navbar(claims *jwt.AccessClaims, balances []models.Balance) {
 		}
 	</header>
 	if claims != nil {
-		@mobileTabBar(path)
+		@mobileTabBar(path, sheetNav(claims))
 	}
 }
 
@@ -93,8 +97,8 @@ templ navPill(l navLink, active bool) {
 	</a>
 }
 
-templ navMore(path string) {
-	{{ active := activeIn(path, moreNav) }}
+templ navMore(path string, links []navLink) {
+	{{ active := activeIn(path, links) }}
 	<div class="relative" x-data="{open: false}" @click.outside="open = false" @keydown.escape.window="open = false">
 		<button
 			type="button"
@@ -117,7 +121,7 @@ templ navMore(path string) {
 			class="absolute left-0 top-full mt-2 w-56"
 		>
 			@Popup("p-1.5 grid gap-0.5") {
-				for _, l := range moreNav {
+				for _, l := range links {
 					@menuLink(l, isActive(path, l.Href))
 				}
 			}
@@ -199,8 +203,8 @@ templ avatar(claims *jwt.AccessClaims, class string) {
 
 // mobileTabBar is the phone's bottom navigation, with the rest of the pages
 // in a sheet.
-templ mobileTabBar(path string) {
-	{{ moreActive := activeIn(path, sheetNav()) != nil }}
+templ mobileTabBar(path string, sheet []navLink) {
+	{{ moreActive := activeIn(path, sheet) != nil }}
 	<nav
 		hx-boost="true"
 		aria-label="Main"
@@ -228,7 +232,7 @@ templ mobileTabBar(path string) {
 		>
 			<div class="mx-auto mb-3 h-1 w-10 rounded-full bg-zinc-700"></div>
 			<div class="grid grid-cols-3 gap-2">
-				for _, l := range sheetNav() {
+				for _, l := range sheet {
 					@sheetLink(l, isActive(path, l.Href))
 				}
 				<a
@@ -318,8 +322,15 @@ func activeIn(path string, links []navLink) *navLink {
 
 // sheetNav are the pages in the phone's "More" sheet: what the bottom bar
 // lacks.
-func sheetNav() []navLink {
-	return slices.Concat([]navLink{primaryNav[2]}, moreNav)
+func sheetNav(claims *jwt.AccessClaims) []navLink {
+	return slices.Concat([]navLink{primaryNav[2]}, moreNavFor(claims))
+}
+
+func moreNavFor(claims *jwt.AccessClaims) []navLink {
+	if claims.IsAdmin() {
+		return slices.Concat(moreNav, adminNav)
+	}
+	return moreNav
 }
 
 func initials(claims *jwt.AccessClaims) string {

@@ -26,3 +26,10 @@ sql:
             go_type:
               import: github.com/omareloui/tyche/internal/dbtypes
               type: JSON
+  - engine: sqlite
+    queries: sql/shared/query
+    schema: sql/shared/schema
+    gen:
+      go:
+        package: sharedqueries
+        out: internal/sharedqueries

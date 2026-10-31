@@ -349,3 +349,13 @@ var currSeed = []queries.CreateCurrencyParams{
 	{ID: idgen.New(), String: "ZWG", Symbol: "ZWG", Kind: string(models.CurrencyKindCrypto)},
 	{ID: idgen.New(), String: "ZWL", Symbol: "ZWL", IbanPrefix: sql.NullString{String: "ZW", Valid: true}, Kind: string(models.CurrencyKindFiat)},
 }
+
+// CurrencyCodes are the codes of the seeded currencies, the ones the fx rates
+// job fetches.
+func CurrencyCodes() []string {
+	codes := make([]string, len(currSeed))
+	for i, c := range currSeed {
+		codes[i] = c.String
+	}
+	return codes
+}

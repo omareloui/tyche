@@ -1,6 +1,10 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
 
 func GetApplicationPort() int {
 	return getEnvironmentInt("PORT")
@@ -31,12 +35,25 @@ func GetGoogleOAuthClientSecret() string {
 	return getEnvironmentValue("GOOGLE_CLIENT_SECRET")
 }
 
-func GetCacheDir() string {
-	return getEnvironmentValueWithDefault("CACHE_DIR", ".cache")
+// GetFxRateFetchInterval is how often the fx rates job refetches the rates.
+func GetFxRateFetchInterval() time.Duration {
+	return time.Hour * time.Duration(max(getEnvironmentIntWithDefault("FX_RATE_FETCH_INTERVAL_HOURS", 6), 1))
 }
 
-func GetCacheExpiryInDays() int {
-	return getEnvironmentIntWithDefault("FX_RATE_CACHE_EXPIRY_IN_DAYS", 1)
+func GetSharedDBPath() string {
+	return getEnvironmentValueWithDefault("SHARED_DB_PATH", "./data/shared.sqlite")
+}
+
+// GetAdminTenantIDs are the tenant IDs (`{provider_prefix}_{oauth_id}`, as
+// the database file names) allowed on the admin pages.
+func GetAdminTenantIDs() []string {
+	var ids []string
+	for id := range strings.SplitSeq(getEnvironmentValueWithDefault("ADMIN_TENANT_IDS", ""), ",") {
+		if id = strings.TrimSpace(id); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }
 
 func GetExtraBrandIconsDir() string {

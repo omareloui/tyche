@@ -138,7 +138,7 @@ func TestCreateGamyaaFromForm(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := handler.New(repo, valid.New(), sanitizer.New())
+	h := handler.New(repo, valid.New(), sanitizer.New(), nil)
 	post := func(path string, f url.Values) string {
 		t.Helper()
 		r := httptest.NewRequest("POST", path, strings.NewReader(f.Encode())).WithContext(ctx)

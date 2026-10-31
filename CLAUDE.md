@@ -100,6 +100,7 @@ The app uses a **per-user database model** where each authenticated user gets th
   - Auto-seeding via `internal/seeder/` (currencies, account kinds, default accounts, default categories)
   - Idle connection cleanup (30 min timeout)
   - Thread-safe connection management
+- One **shared DB** (`data/shared.sqlite`, own goose dir `sql/shared/schema`) holds data common to all users, for now only `fx_rates` (latest rate per base → quote pair). Opened in `main`; on a fresh one the first fx fetch blocks startup so conversions never start at 0
 
 ### Request Flow
 
@@ -132,7 +133,9 @@ The app uses a **per-user database model** where each authenticated user gets th
   - `resperr/` - HTTP response errors
   - `route_handler/` - Adapts handler methods (templ/JSON) to `http.Handler`
   - `seeder/` - Per-tenant DB seed data
-  - `fxrate/` - Exchange rate fetching with file cache (`CACHE_DIR`)
+  - `fxrate/` - Exchange rates held in memory for all users (`GetFxRate`, USD cross-rate fallback); `Job` fetches one base per seeded currency every `FX_RATE_FETCH_INTERVAL_HOURS` into the shared DB's `fx_rates`, then swaps the in-memory rates. Status + manual run at `/admin/fx-rates`
+  - `shareddb/` - Opens + migrates the shared (non-tenant) DB (`SHARED_DB_PATH`, default `data/shared.sqlite`)
+  - `sharedqueries/` - **Generated** sqlc code from `sql/shared/query/*.sql`
   - `smsparser/` - Parses bank SMS (HSBC, CIB, AAIB) into transaction data; `Default()` registry with all parsers
   - `smsingest/` - Builds transactions from parsed SMS (account matching via `accounts.sms_ref` / card / iban suffix, fx conversion)
   - `brandicons/` - Indexes the simple-icons submodule (`third_party/simple-icons`) plus local extras in `web/brand-icons/` (brands simple-icons lacks or forbids, takes precedence) to detect counterparty icons from name/aliases; both served at `/brand-icons/`
@@ -142,6 +145,7 @@ The app uses a **per-user database model** where each authenticated user gets th
 - `sql/`
   - `schema/` - Goose migrations
   - `query/` - SQL queries for sqlc (one file per resource)
+  - `shared/schema/`, `shared/query/` - Migrations and queries of the shared DB (fx rates)
 - `web/`
   - `views/` - Templ templates (generate `*_templ.go` files); subdirs `components/`, `form/`, `icons/`, `layouts/`
   - `public/` - Static assets (CSS, JS, images); vendored HTMX/Alpine/Chartist/Litepicker in `public/js/vendor/`
@@ -165,6 +169,8 @@ func (h *Handler) Accounts(w http.ResponseWriter, r *http.Request) (templ.Compon
 }
 ```
 JSON endpoints use `HandlerJSONMethod` via `handlePubJSON()`.
+
+**Admin pages**: `/admin/*` routes use `handle(h.X, middleware.Admin)`: only users whose tenant ID (`models.TenantID`, same as the DB file name, e.g. `GL_123`) is in `ADMIN_TENANT_IDS` get through (cookie JWT only, `HX-Request` required on unsafe methods); everyone else gets a 404. Nav links via `adminNav`, shown when `claims.IsAdmin()`
 
 **Mobile/SMS ingest**: the Android app signs in via `GET /oauth/mobile` (PKCE) → `tyche://auth?code=` → `POST /api/mobile/token`, getting a non-expiring device JWT (`jwt.NewDeviceToken`). `/api/*` device routes use `handleDeviceJSON()` + `middleware.DeviceAuth`, which checks the `devices` table (revocable from `/sms`; signing in again from the same app install, `install_id`, reuses the row and rotates its `token_id`, invalidating older tokens) and sets `AccessClaims` so repos resolve the tenant as usual. Every received SMS is stored in `sms_messages` (dedup by hash); parsed ones create fulfilled transactions with `needs_review`, others can be retried from `/sms`.
 
@@ -201,12 +207,12 @@ Core entities and their relationships:
 - **Categories** - Transaction categories with optional budgets, a color, and `kinds` (JSON list of tx kinds the category applies to)
 - **Goals** - Savings goals with target amount and currency
 - **Counterparties** - People/companies involved in transactions; `is_merchant` flag (SMS-created ones are merchants; `default_category_id` and `icon` are merchant-only, cleared otherwise); optional `default_category_id` (applied to new transactions — form, recurrent, SMS — with no category, if the category allows the tx kind); optional `aliases` (SMS merchant names) and `icon` (simple-icons slug, auto-detected for merchants only, `''` = no icon, NULL = not yet detected) and `color` (icon's brand hex, else random placeholder color for the first-letter avatar); NULLs backfilled on list; merging one into another (`POST /counterparties/{id}/merge`) moves its transactions/recurrent txs/accounts and adds its name + aliases to the target's aliases
-- **Currencies** - Seeded currency list (string, symbol, kind, is_shown); exchange rates fetched live by `internal/fxrate` (fawazahmed0 currency-api), not stored in DB
+- **Currencies** - Seeded currency list (string, symbol, kind, is_shown); exchange rates live in the shared DB (`fx_rates`, keyed by lowercase code, not per-tenant currency ID), fetched by `internal/fxrate` (fawazahmed0 currency-api) for the seeded codes only
 
 ## Important Notes
 
 - **Never commit `.env` files or `data/*.sqlite` databases**
-- **Generated files** (`internal/queries/*.go`, `web/views/**/*_templ.go`, `web/public/styles/main.css`) are gitignored; never commit them. Regenerate with `make sqlgen`, `make templ`, `make css` before building
+- **Generated files** (`internal/queries/*.go`, `internal/sharedqueries/*.go`, `web/views/**/*_templ.go`, `web/public/styles/main.css`) are gitignored; never commit them. Regenerate with `make sqlgen`, `make templ`, `make css` before building
 - **Authentication** is OAuth-only (no username/password)
 - **HTMX convention**: Most handlers return HTML partials for HTMX, not full pages
 - **Validation tags** use go-playground/validator syntax (`validate:"required,ulid"`)

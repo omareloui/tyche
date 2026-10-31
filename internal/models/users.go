@@ -27,6 +27,11 @@ func (p OAuthProvider) String() string {
 	}[p]
 }
 
+// TenantID identifies a user across the app, and names their database file.
+func TenantID(p OAuthProvider, oauthID string) string {
+	return fmt.Sprintf("%s_%s", p.Prefix(), oauthID)
+}
+
 func (p OAuthProvider) Prefix() string {
 	return [...]string{
 		"??", "GL",

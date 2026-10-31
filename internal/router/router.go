@@ -115,6 +115,10 @@ func New(h *handler.Handler) Router {
 	mux.Handle("PUT /devices/{id}/revoke", handle(h.RevokeDevice))
 	mux.Handle("GET /signout", handle(h.Signout))
 
+	mux.Handle("GET /admin/fx-rates", handle(h.AdminFxRates, middleware.Admin))
+	mux.Handle("GET /admin/fx-rates/status", handle(h.AdminFxRatesStatus, middleware.Admin))
+	mux.Handle("POST /admin/fx-rates/refresh", handle(h.RefreshFxRates, middleware.Admin))
+
 	static(mux, []string{
 		"styles", "js", "images",
 		"fonts", "icons", "favicons",

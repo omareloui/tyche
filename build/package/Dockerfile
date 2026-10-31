@@ -24,7 +24,7 @@ RUN make templ sqlgen && \
   -tags netgo \
   -o /usr/src/bin/tyche \
   ./cmd/tyche && \
-  mkdir .cache data logs
+  mkdir data logs
 
 ###
 FROM node:23-bullseye AS css
@@ -51,7 +51,6 @@ COPY --from=build /etc/passwd /etc/passwd
 COPY --from=build /usr/src/bin/tyche bin/tyche
 COPY --from=build /usr/src/sql sql
 
-COPY --from=build --chown=nonroot:nonroot /usr/src/.cache .cache
 COPY --from=build --chown=nonroot:nonroot /usr/src/data data
 COPY --from=build --chown=nonroot:nonroot /usr/src/logs logs
 
