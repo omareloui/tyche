@@ -17,6 +17,8 @@ type TransactionFD struct {
 	RecurrenceFD *RecurrenceFD
 	ScheduledTo  form.FDInput
 	Description  form.FDInput
+	// WishlistID is the wishlist item being bought, if any.
+	WishlistID string
 }
 
 type TransactionAmountsAndKindFD struct {
@@ -69,6 +71,9 @@ templ transactionFormBody(
 	knds []models.TxKind, cats []models.Category,
 	cps []models.Counterparty, gls []models.Goal,
 	defaultCur *models.Currency) {
+	if fd.WishlistID != "" {
+		<input type="hidden" name="wishlist_id" value={ fd.WishlistID }/>
+	}
 	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs, cps, gls, defaultCur)
 	@form.Field("Description", "description", id, icons.Pencil("15"), fd.Description.Error) {
 		@form.Control("text", "description", "What was it for?", id, fd.Description, nil)

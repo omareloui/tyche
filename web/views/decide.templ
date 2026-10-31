@@ -1,0 +1,378 @@
+package views
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/omareloui/tyche/internal/formatters"
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+const (
+	PayCash         = "cash"
+	PayInstallments = "installments"
+)
+
+// PurchaseFD is a price, paid cash or in monthly installments.
+type PurchaseFD struct {
+	AmountFD          *form.AmountFD
+	Mode              form.FDInput
+	Installments      form.FDInput
+	InstallmentAmount form.FDInput
+}
+
+type WorkSettingsFD struct {
+	Salary       *form.AmountFD
+	HoursPerWeek form.FDInput
+}
+
+templ Decide(
+	claims *jwt.AccessClaims,
+	balances []models.Balance,
+	curs []models.Currency,
+	ws *models.WorkSettings,
+	items []models.WishlistItem,
+	wlFD *WishlistItemFD,
+	pfd *PurchaseFD) {
+	@layouts.WithCreateForm(claims, "Decide", balances,
+		CreateWishlistItemForm(wlFD, curs, &claims.DefaultCurrency),
+		layouts.WithDatePicker(), layouts.WithAlpineMask()) {
+		<div class="grid gap-8">
+			<div class="grid gap-4 lg:grid-cols-[1fr_22rem] items-start">
+				@AffordSection(pfd, "", curs, &claims.DefaultCurrency, AffordResult(nil, nil))
+				@WorkSettingsCard(ws, NewWorkSettingsFD(ws), curs, &claims.DefaultCurrency, false)
+			</div>
+			@Wishlist(items, ws, &claims.DefaultCurrency, false)
+		</div>
+		<div id="decide-sheet"></div>
+	}
+}
+
+// AffordSection is the "Can I afford it?" calculator, checking the purchase
+// as it's typed.
+templ AffordSection(fd *PurchaseFD, name string, curs []models.Currency, defaultCur *models.Currency, result templ.Component) {
+	<section
+		id="afford"
+		class="relative overflow-hidden grid gap-5 p-5 sm:p-6 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800 [--accent:var(--color-sky-400)]"
+	>
+		<div aria-hidden="true" class="pointer-events-none absolute -top-24 -right-16 size-64 rounded-full bg-(--accent)/10 blur-3xl"></div>
+		<header class="relative">
+			<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-(--accent)">
+				@icons.Scale("14")
+				Can I afford it?
+			</p>
+			if name != "" {
+				<h2 class="mt-1 text-2xl font-bold font-(family-name:--font-biorhyme-expanded) truncate">{ name }</h2>
+			} else {
+				<p class="mt-1 text-sm text-zinc-500">Enter a price to see what it does to your balance and goals.</p>
+			}
+		</header>
+		<form
+			hx-post="/decide/afford"
+			hx-trigger={ "input delay:400ms, change, " + WorkSettingsChangedEvent + " from:body" }
+			hx-target="#afford-result"
+			hx-swap="innerHTML"
+			class="relative grid gap-4"
+			@submit.prevent
+		>
+			@purchaseInputs(fd, "afford", curs, defaultCur)
+		</form>
+		<div id="afford-result" class="relative">
+			@result
+		</div>
+	</section>
+}
+
+// purchaseInputs are a price, its currency and how it's paid: cash, or in
+// installments given by their months, their amount per month or both (see
+// the moneyInputs Alpine component).
+templ purchaseInputs(fd *PurchaseFD, id string, curs []models.Currency, defaultCur *models.Currency) {
+	{{ mode := fd.Mode.Value }}
+	if mode == "" {
+		{{ mode = PayCash }}
+	}
+	<div x-data={ moneyInputsData(curs, fd.AmountFD.CurrencyID.Value, defaultCur, mode) } @input="read()" @change="onChange($event)" class="grid gap-4">
+		@plainAmountInputs("Price", icons.Tag("15"), fd.AmountFD, id, curs, defaultCur)
+		@form.SegmentedRadio("Paying", "mode", id, []form.RadioOption{
+			{Value: PayCash, Label: "Cash"},
+			{Value: PayInstallments, Label: "Installments"},
+		}, form.FDInput{Value: mode}, nil)
+		<div x-show={ fmt.Sprintf("mode === '%s'", PayInstallments) } x-cloak class="grid gap-2">
+			<div class="grid grid-cols-[1fr_auto_1fr] items-start gap-3">
+				@form.Field("Months", "installments", id, icons.Calendar("15"), "") {
+					@form.Control("text", "installments", "e.g. 12", id, form.FDInput{Value: fd.Installments.Value}, templ.Attributes{
+						"inputmode":    "numeric",
+						"autocomplete": "off",
+						"x-mask":       "999",
+						":placeholder": "plan && !months ? plan[0] : 'e.g. 12'",
+					})
+				}
+				<span class="self-end pb-2.5 text-sm text-zinc-500">or</span>
+				@form.Field("Per month", "installment_amount", id, icons.Coins("15"), "") {
+					@form.Control("text", "installment_amount", "", id, form.FDInput{Value: fd.InstallmentAmount.Value}, templ.Attributes{
+						"inputmode":      "decimal",
+						"autocomplete":   "off",
+						"data-money":     true,
+						"x-mask:dynamic": moneyMask,
+						":placeholder":   "plan && !per ? money(plan[1]) : money(1000)",
+					})
+				}
+			</div>
+			@form.ErrorMessage(fd.Installments.Error)
+			@form.ErrorMessage(fd.InstallmentAmount.Error)
+			<p class="text-sm text-zinc-500 tabular-nums" x-text="planText"></p>
+		</div>
+	</div>
+}
+
+// moneyMask formats an amount with the symbol of the currency picked in the
+// moneyInputs scope.
+const moneyMask = "(sym ? sym + ' ' : '') + $money($input, '.', ',')"
+
+// plainAmountInputs is a labeled amount and a currency picker with no
+// requests of their own. It expects a moneyInputs scope for the symbol.
+templ plainAmountInputs(label string, icon templ.Component, fd *form.AmountFD, id string, curs []models.Currency, defaultCur *models.Currency) {
+	{{ cur := fd.CurrencyID }}
+	if cur.Value == "" && defaultCur != nil {
+		{{ cur.Value = defaultCur.ID }}
+	}
+	<div class="grid grid-cols-[1fr_9rem] gap-3">
+		@form.Field(label, "amount", id, icon, fd.Amount.Error) {
+			@form.Control("text", "amount", "", id, fd.Amount, templ.Attributes{
+				"autocomplete":   "off",
+				"inputmode":      "decimal",
+				"data-money":     true,
+				"x-mask:dynamic": moneyMask,
+				":placeholder":   "money(1000)",
+			})
+		}
+		@form.Field("Currency", "currency_id", id, nil, fd.CurrencyID.Error) {
+			@form.Combobox(form.ComboboxProps{
+				Name: "currency_id", ID: id, Label: "Currency", Placeholder: "Currency",
+				Options: form.CurrencyComboOptions(curs), Data: cur, Searchable: true,
+			})
+		}
+	</div>
+}
+
+// moneyInputsData starts a moneyInputs scope with the currencies' symbols
+// and the picked one's.
+func moneyInputsData(curs []models.Currency, curID string, defaultCur *models.Currency, mode string) string {
+	syms := make(map[string]string, len(curs))
+	for _, c := range curs {
+		syms[c.ID] = c.Symbol
+	}
+	symsJSON, _ := json.Marshal(syms)
+	symJSON, _ := json.Marshal(form.GetCurOrDefaultSym(curs, curID, defaultCur))
+	modeJSON, _ := json.Marshal(mode)
+	return fmt.Sprintf("moneyInputs(%s, %s, %s)", symsJSON, symJSON, modeJSON)
+}
+
+// AffordResult is the purchase's impact, or a hint when there's none yet.
+templ AffordResult(a *models.Affordability, ws *models.WorkSettings) {
+	if a == nil {
+		@AffordHint("The verdict shows up here.")
+	} else {
+		{{ sym := a.Currency.Symbol }}
+		<div class="grid gap-4">
+			<div class={ "flex items-start gap-3 px-4 py-3 rounded-2xl ring-1", verdictClass(a.Verdict) }>
+				<div class="min-w-0">
+					<p class="font-semibold">{ a.Verdict.String() }</p>
+					if len(a.Reasons) > 0 {
+						<ul class="mt-1 text-sm opacity-80 list-disc pl-4">
+							for _, reason := range a.Reasons {
+								<li>{ reason }</li>
+							}
+						</ul>
+					}
+				</div>
+			</div>
+			<dl class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+				@affordStat("Balance now", formatters.FormatAmount(a.BalanceNow, sym), "")
+				if a.Purchase.IsInstallments() {
+					@affordStat("After the 1st installment", formatters.FormatAmount(a.BalanceAfter, sym), amountClass(a.BalanceAfter))
+					@affordStat("After all of them", formatters.FormatAmount(a.BalanceAfterAll, sym), amountClass(a.BalanceAfterAll))
+					@affordStat("Per month", formatters.FormatAmount(a.Upfront, sym), "")
+					@affordStat("In total", formatters.FormatAmount(a.TotalCost, sym), "")
+					if a.Markup > 0 {
+						@affordStat("Over the cash price", formatters.FormatAmount(a.Markup, sym), "text-amber-300")
+					}
+				} else {
+					@affordStat("After buying", formatters.FormatAmount(a.BalanceAfter, sym), amountClass(a.BalanceAfter))
+				}
+				if a.SalaryShare > 0 {
+					@affordStat(salaryShareLabel(a), fmt.Sprintf("%.0f%%", a.SalaryShare*100), "")
+				}
+			</dl>
+			if a.WorkHours > 0 {
+				<p class="flex items-center gap-2 text-zinc-300">
+					@icons.Clock("16", &templ.Attributes{"class": "shrink-0 text-(--accent)"})
+					<span>That's <span class="font-semibold tabular-nums">{ ws.ViewHours(a.WorkHours) }</span> of work.</span>
+				</p>
+			} else if !ws.IsSet() {
+				<p class="text-sm text-zinc-500">Set your salary to see it in work hours.</p>
+			}
+			if len(a.Goals) > 0 {
+				<div class="grid gap-2">
+					<p class="text-xs font-semibold uppercase tracking-wider text-zinc-500">Your goals</p>
+					for _, g := range a.Goals {
+						@goalImpact(&g)
+					}
+				</div>
+			}
+		</div>
+	}
+}
+
+templ affordStat(label, value, valueClass string) {
+	<div class="min-w-0 px-3 py-2 rounded-2xl bg-zinc-900/60 ring-1 ring-zinc-800">
+		<dt class="text-xs text-zinc-500 truncate">{ label }</dt>
+		<dd class={ "text-lg font-bold tabular-nums truncate", valueClass }>{ value }</dd>
+	</div>
+}
+
+templ goalImpact(g *models.GoalImpact) {
+	<div class="flex items-center gap-3 px-3 py-2 rounded-2xl bg-zinc-900/60 ring-1 ring-zinc-800">
+		@icons.Target("16", &templ.Attributes{"class": "shrink-0 text-violet-400"})
+		<div class="flex-1 min-w-0">
+			<p class="truncate">{ g.Goal.Name }</p>
+			<p class="text-xs text-zinc-500 tabular-nums">
+				{ formatters.FormatAmount(g.Remaining, g.Goal.Currency.Symbol) } left · this is { fmt.Sprintf("%.0f%%", g.PctOfRemaining) } of it
+			</p>
+		</div>
+		<p class="shrink-0 text-sm text-right tabular-nums">
+			if g.DelayMonths >= 0 {
+				<span class={ delayClass(g.DelayMonths) }>+{ fmt.Sprintf("%.1f", g.DelayMonths) } mo</span>
+			} else {
+				<span class="text-zinc-500">no recent savings</span>
+			}
+		</p>
+	</div>
+}
+
+templ AffordHint(msg string) {
+	<p class="text-sm text-zinc-500">{ msg }</p>
+}
+
+// WorkSettingsCard shows what an hour of work is worth, with a form to set
+// the salary behind it.
+templ WorkSettingsCard(ws *models.WorkSettings, fd *WorkSettingsFD, curs []models.Currency, defaultCur *models.Currency, editing bool) {
+	<section
+		id="work-settings"
+		x-data={ fmt.Sprintf("{editing: %t}", editing || !ws.IsSet()) }
+		hx-target="this"
+		hx-swap="outerHTML"
+		class="grid gap-4 p-5 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800 [--accent:var(--color-amber-300)]"
+	>
+		<header class="flex items-start justify-between gap-3">
+			<div class="min-w-0">
+				<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-(--accent)">
+					@icons.Clock("14")
+					Cost in work hours
+				</p>
+				if ws.IsSet() {
+					<p class="mt-1 text-2xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">
+						{ formatters.FormatAmount(ws.HourlyRate(), ws.Currency.Symbol) }<span class="text-base font-normal text-zinc-500">/h</span>
+					</p>
+					<p class="text-sm text-zinc-500 tabular-nums">
+						{ formatters.FormatAmount(ws.MonthlySalary, ws.Currency.Symbol) }/mo · { fmt.Sprintf("%g", ws.HoursPerWeek) } h a week
+					</p>
+				} else {
+					<p class="mt-1 text-sm text-zinc-500">Enter what you earn a month and how long you work, to see prices as hours of your work.</p>
+				}
+			</div>
+			if ws.IsSet() {
+				<button
+					type="button"
+					x-show="!editing"
+					@click="editing = true"
+					aria-label="Edit salary"
+					class="grid place-items-center shrink-0 w-8 h-8 rounded-full text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white"
+				>
+					@icons.Pencil("16")
+				</button>
+			}
+		</header>
+		<form
+			hx-put="/decide/work-settings"
+			x-show="editing"
+			x-cloak
+			x-data={ moneyInputsData(curs, fd.Salary.CurrencyID.Value, defaultCur, PayCash) }
+			@change="onChange($event)"
+			class="grid gap-4"
+		>
+			<div>
+				@plainAmountInputs("Monthly salary / income", icons.Banknote("15"), fd.Salary, "salary", curs, defaultCur)
+				<p class="mt-1.5 text-sm text-zinc-500">What lands in your account each month, after tax.</p>
+			</div>
+			@form.Field("Hours you work a week", "work_hours_per_week", "salary", icons.Clock("15"), fd.HoursPerWeek.Error) {
+				@form.Control("text", "work_hours_per_week", "40", "salary", fd.HoursPerWeek, templ.Attributes{
+					"inputmode": "decimal", "autocomplete": "off",
+				})
+			}
+			<div class="flex justify-end gap-2">
+				if ws.IsSet() {
+					<button type="button" @click="editing = false" class="btn-ghost">Cancel</button>
+				}
+				<button type="submit" class="btn-primary">Save</button>
+			</div>
+		</form>
+	</section>
+}
+
+func NewWorkSettingsFD(ws *models.WorkSettings) *WorkSettingsFD {
+	amt := ""
+	if ws.MonthlySalary > 0 {
+		amt = fmt.Sprintf("%.2f", ws.MonthlySalary)
+	}
+	return &WorkSettingsFD{
+		Salary: &form.AmountFD{
+			Amount:     form.FDInput{Value: amt},
+			CurrencyID: form.FDInput{Value: ws.Currency.ID},
+		},
+		HoursPerWeek: form.FDInput{Value: fmt.Sprintf("%g", ws.HoursPerWeek)},
+	}
+}
+
+// WishlistBuySheet opens the prefilled transaction form in a sheet of its
+// own over the page.
+templ WishlistBuySheet(f templ.Component) {
+	<div x-data="{openCreateForm: true}" x-show="openCreateForm" @keyup.escape.document="openCreateForm=false">
+		@f
+	</div>
+}
+
+func verdictClass(v models.Verdict) string {
+	switch v {
+	case models.VerdictNo:
+		return "bg-red-400/10 ring-red-400/30 text-red-300"
+	case models.VerdictCareful:
+		return "bg-amber-300/10 ring-amber-300/30 text-amber-200"
+	}
+	return "bg-emerald-400/10 ring-emerald-400/30 text-emerald-300"
+}
+
+func amountClass(amount float64) string {
+	if amount < 0 {
+		return "text-red-400"
+	}
+	return ""
+}
+
+func delayClass(months float64) string {
+	if months > 1 {
+		return "text-amber-300"
+	}
+	return "text-zinc-300"
+}
+
+func salaryShareLabel(a *models.Affordability) string {
+	if a.Purchase.IsInstallments() {
+		return "Of a month's salary, monthly"
+	}
+	return "Of a month's salary"
+}

@@ -164,3 +164,18 @@ WHERE id = sqlc.arg(id);
 -- name: DeleteGoal :exec
 DELETE FROM goals
 WHERE id = sqlc.arg(id);
+
+-- name: GetGoalContributionsSince :many
+-- Money put towards each goal since a date, in its account's currency.
+SELECT
+    t.goal_id,
+    c.string AS currency_string,
+    TOTAL(t.amount) AS amount
+FROM transactions AS t
+JOIN accounts AS a ON a.id = t.account_id
+JOIN currencies AS c ON c.id = a.currency_id
+WHERE
+    t.goal_id IS NOT NULL
+    AND t.fulfilled_at IS NOT NULL
+    AND t.scheduled_to >= sqlc.arg(since)
+GROUP BY t.goal_id, c.string;

@@ -72,8 +72,12 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 
 	claims := getClaims(r.Context())
 
+	// Set when buying a wishlist item, which the transaction then marks bought.
+	wishlistID := r.FormValue("wishlist_id")
+
 	fd, err := h.prepareTx(r, tx, accs, knds, cats, cps, gls)
 	if fd != nil {
+		fd.WishlistID = wishlistID
 		return views.CreateTransactionForm(fd, accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
 	}
 	if err != nil {
@@ -90,7 +94,9 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 			var valerr errs.ValidationError
 			if errors.As(err, &valerr) {
 				l.Error("validating recurrent transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-				return views.CreateTransactionForm(h.mapTransactionToFD(tx, &valerr), accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
+				fd := h.mapTransactionToFD(tx, &valerr)
+				fd.WishlistID = wishlistID
+				return views.CreateTransactionForm(fd, accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
 			}
 			l.Error("sanitizing recurrent transaction", zap.Error(err))
 			return nil, err
@@ -104,6 +110,14 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		return nil, err
 	}
 	l.Info("created transaction")
+
+	if wishlistID != "" {
+		if err := h.repo.SetWishlistItemStatus(r.Context(), wishlistID, models.WishlistBought, tx.ID); err != nil {
+			return nil, err
+		}
+		hxRespondWithRedirect(w, "/decide")
+		return nil, nil
+	}
 
 	// Re-render the whole list so new transactions land in their day group.
 	if err := h.renderTransactionsListOOB(w, r); err != nil {

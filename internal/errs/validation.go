@@ -81,6 +81,8 @@ func (v ValidationField) String() string {
 		return fmt.Sprintf("Can't be less than what got reimbursed of it (%s)", v.Param)
 	case "gt_reimbursable":
 		return fmt.Sprintf("Exceeds what's left to reimburse of its expense (%s)", v.Param)
+	case "months_or_amount":
+		return "Fill in the months or the amount per month"
 	case "brand_icon":
 		return "Unknown icon, use a slug from simpleicons.org or leave it empty"
 	default:

@@ -78,6 +78,20 @@ func New(h *handler.Handler) Router {
 	mux.Handle("PUT /goals/{id}/unfulfill", handle(h.UnfulfillGoal))
 	mux.Handle("DELETE /goals/{id}", handle(h.DeleteGoal))
 
+	mux.Handle("GET /decide", handle(h.Decide))
+	mux.Handle("GET /decide/afford", handle(h.AffordSection))
+	mux.Handle("POST /decide/afford", handle(h.Afford))
+	mux.Handle("PUT /decide/work-settings", handle(h.EditWorkSettings))
+
+	mux.Handle("GET /wishlist", handle(h.Wishlist))
+	mux.Handle("POST /wishlist", handle(h.CreateWishlistItem))
+	mux.Handle("GET /wishlist/{id}/edit", handle(h.GetEditWishlistItem))
+	mux.Handle("PUT /wishlist/{id}", handle(h.EditWishlistItem))
+	mux.Handle("PUT /wishlist/{id}/abandon", handle(h.AbandonWishlistItem))
+	mux.Handle("PUT /wishlist/{id}/restore", handle(h.RestoreWishlistItem))
+	mux.Handle("GET /wishlist/{id}/buy", handle(h.BuyWishlistItem))
+	mux.Handle("DELETE /wishlist/{id}", handle(h.DeleteWishlistItem))
+
 	mux.Handle("GET /counterparties", handle(h.Counterparties))
 	mux.Handle("POST /counterparties", handle(h.CreateCounterparty))
 	mux.Handle("POST /counterparties/quick", handle(h.QuickCreateCounterparty))

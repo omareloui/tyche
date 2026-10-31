@@ -62,3 +62,21 @@ VALUES (
     sqlc.arg(default_currency_id),
     sqlc.arg(start_of_period)
 );
+
+-- name: GetWorkSettings :one
+SELECT
+    user.monthly_salary,
+    user.work_hours_per_week,
+    c.id AS currency_id,
+    c.string AS currency_string,
+    c.symbol AS currency_symbol
+FROM user
+LEFT JOIN currencies AS c ON c.id = COALESCE(user.salary_currency_id, user.default_currency_id)
+LIMIT 1;
+
+-- name: SetWorkSettings :exec
+UPDATE user
+SET
+    monthly_salary = sqlc.arg(monthly_salary),
+    salary_currency_id = sqlc.arg(salary_currency_id),
+    work_hours_per_week = sqlc.arg(work_hours_per_week);

@@ -1,0 +1,333 @@
+package views
+
+import (
+	"fmt"
+	"slices"
+	"strconv"
+	"time"
+
+	"github.com/omareloui/tyche/internal/formatters"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+type WishlistItemFD struct {
+	Name        form.FDInput
+	PurchaseFD  *PurchaseFD
+	CoolingDays form.FDInput
+	URL         form.FDInput
+	Note        form.FDInput
+}
+
+// WorkSettingsChangedEvent re-renders what's priced in work hours.
+const WorkSettingsChangedEvent = "work-settings-changed"
+
+templ CreateWishlistItemForm(fd *WishlistItemFD, curs []models.Currency, defaultCur *models.Currency) {
+	@form.SheetForm("Add to wishlist", "/wishlist", "Add", "", templ.Attributes{
+		"@wishlist-created.window": "openCreateForm = false",
+	}) {
+		@wishlistItemFormBody("wl", fd, curs, defaultCur)
+	}
+}
+
+// EditWishlistItem replaces the item's card; saving re-renders the whole
+// wishlist.
+templ EditWishlistItem(id string, fd *WishlistItemFD, curs []models.Currency, defaultCur *models.Currency) {
+	<form
+		id={ WishlistItemID(id) }
+		hx-put={ string(templ.SafeURL(fmt.Sprintf("/wishlist/%s", id))) }
+		hx-target="#wishlist"
+		hx-swap="outerHTML"
+		data-wl
+		class="grid gap-5 sm:col-span-2 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-5 sm:p-6"
+	>
+		<h3 class="text-lg font-semibold">Edit wish</h3>
+		@wishlistItemFormBody(id, fd, curs, defaultCur)
+		@form.SheetFormButtons("Save changes", "/wishlist")
+	</form>
+}
+
+templ wishlistItemFormBody(id string, fd *WishlistItemFD, curs []models.Currency, defaultCur *models.Currency) {
+	@form.Field("What is it?", "name", id, icons.Star("15"), fd.Name.Error) {
+		@form.Control("text", "name", "e.g. Noise cancelling headphones", id, fd.Name, nil)
+	}
+	@purchaseInputs(fd.PurchaseFD, id, curs, defaultCur)
+	<div class="grid gap-2">
+		<p class="flex items-center gap-2 text-zinc-300">
+			@icons.Hourglass("15")
+			Cooling-off period
+		</p>
+		@form.SegmentedRadio("Cooling-off period", "cooling_days", id, coolingOptions(), fd.CoolingDays, nil)
+		<p class="text-sm text-zinc-500">Still want it after that? Then buy it.</p>
+	</div>
+	@form.Field("Link", "url", id, icons.ExternalLink("15"), fd.URL.Error) {
+		@form.Control("url", "url", "https://", id, fd.URL, nil)
+	}
+	@form.Field("Note", "note", id, icons.Pencil("15"), fd.Note.Error) {
+		@form.Control("text", "note", "Why do you want it?", id, fd.Note, nil)
+	}
+}
+
+// Wishlist is every item, grouped by where it is in its cooling-off, with
+// the stats on what was decided. Changing the salary re-renders it.
+templ Wishlist(items []models.WishlistItem, ws *models.WorkSettings, defaultCur *models.Currency, oob bool) {
+	{{ now := time.Now() }}
+	{{ s := models.SummarizeWishlist(items, defaultCur) }}
+	{{ ready, cooling, decided := groupWishlist(items, now) }}
+	<section
+		id="wishlist"
+		hx-get="/wishlist"
+		hx-trigger={ WorkSettingsChangedEvent + " from:body" }
+		hx-swap="outerHTML"
+		if oob {
+			hx-swap-oob="true"
+		}
+		class="grid gap-6"
+	>
+		<div class="flex flex-wrap items-end justify-between gap-4">
+			<div>
+				<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+					@icons.Hourglass("16")
+					Wishlist
+				</h2>
+				if s.Bought+s.Abandoned > 0 {
+					<p class="mt-1 text-sm text-zinc-500 tabular-nums">
+						You let go of { fmt.Sprintf("%.0f%%", s.AbandonRate()) } of your wishes
+						if s.Saved > 0 {
+							, keeping <span class="text-emerald-400">{ formatters.FormatAmount(s.Saved, defaultCur.Symbol) }</span>
+						}
+					</p>
+				}
+			</div>
+			<div class="flex gap-2">
+				@statTile(strconv.Itoa(s.Waiting), "Waiting", "text-zinc-100")
+				@statTile(strconv.Itoa(s.Bought), "Bought", "text-sky-400")
+				@statTile(strconv.Itoa(s.Abandoned), "Let go", "text-emerald-400")
+			</div>
+		</div>
+		if len(ready) > 0 {
+			@wishlistGroup("Ready to decide", icons.Sparkles("16"), ready, ws)
+		}
+		if len(cooling) > 0 {
+			@wishlistGroup("Cooling off", icons.Hourglass("16"), cooling, ws)
+		}
+		if len(ready)+len(cooling) == 0 {
+			<div class="grid place-items-center gap-3 py-12 text-center">
+				<div class="grid place-items-center w-16 h-16 rounded-2xl bg-sky-400/15 text-sky-400">
+					@icons.Hourglass("30")
+				</div>
+				<p class="mt-2 text-xl font-semibold">Nothing on your wishlist</p>
+				<p class="max-w-sm text-zinc-500">Want something? Add it and wait a week or a month. If you still want it then, buy it.</p>
+				<button type="button" @click="openCreateForm=true" class="btn-primary mt-2">
+					@icons.Plus("18")
+					Add a wish
+				</button>
+			</div>
+		}
+		if len(decided) > 0 {
+			<details class="group">
+				<summary class="flex items-center gap-2 mb-3 list-none cursor-pointer select-none text-zinc-500 hover:text-zinc-300 [&::-webkit-details-marker]:hidden">
+					@icons.Check("16")
+					<h3 class="text-sm font-semibold uppercase tracking-wider">Decided</h3>
+					@icons.ChevronDown("16", &templ.Attributes{"class": "transition-transform group-open:rotate-180"})
+				</summary>
+				<div class="grid sm:grid-cols-2 gap-4">
+					for _, item := range decided {
+						@WishlistItem(&item, ws)
+					}
+				</div>
+			</details>
+		}
+	</section>
+}
+
+templ wishlistGroup(title string, icon templ.Component, items []models.WishlistItem, ws *models.WorkSettings) {
+	<div>
+		<h3 class="flex items-center gap-2 mb-3 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+			@icon
+			{ title }
+		</h3>
+		<div class="grid sm:grid-cols-2 gap-4">
+			for _, item := range items {
+				@WishlistItem(&item, ws)
+			}
+		</div>
+	</div>
+}
+
+templ WishlistItem(item *models.WishlistItem, ws *models.WorkSettings) {
+	{{ now := time.Now() }}
+	{{ ready := item.IsReady(now) }}
+	<div
+		id={ WishlistItemID(item.ID) }
+		hx-target="#wishlist"
+		hx-swap="outerHTML"
+		data-wl
+		class="relative"
+		x-data="{openMenu: false}"
+	>
+		@components.EntryMenu("openMenu", wishlistMenuItems(item))
+		<div class={ "relative flex flex-col gap-3 h-full p-4 rounded-2xl bg-zinc-700/20 overflow-hidden", wishlistAccentClass(item, ready) }>
+			<div class="flex items-start gap-3 min-w-0">
+				<div class="flex-1 min-w-0">
+					<p class="flex items-center gap-1.5 text-lg leading-tight">
+						<span class="truncate">{ item.Name }</span>
+						if item.URL != "" {
+							<a href={ templ.SafeURL(item.URL) } target="_blank" rel="noopener noreferrer" hx-boost="false" aria-label="Open link" class="shrink-0 text-zinc-500 hover:text-(--accent)">
+								@icons.ExternalLink("14")
+							</a>
+						}
+					</p>
+					<p class="text-sm text-zinc-500 tabular-nums truncate">
+						if item.IsInstallments() {
+							{ fmt.Sprint(item.Installments) } × { item.ViewInstallment() } · cash { item.ViewPrice() }
+						} else {
+							{ item.ViewPrice() }
+						}
+					</p>
+				</div>
+				<button
+					@click="openMenu = !openMenu"
+					aria-label="Wish actions"
+					class="cursor-pointer grid place-items-center shrink-0 w-6 h-6"
+				>
+					<img src="/icons/dots-menu.svg" class="h-5"/>
+				</button>
+			</div>
+			<div class="flex flex-wrap items-center gap-1.5">
+				if hours := ws.ViewHoursFor(item.TotalCost(), &item.Currency); hours != "" {
+					<span class="chip">
+						@icons.Clock("12")
+						{ hours } of work
+					</span>
+				}
+				if item.Note != "" {
+					<span class="text-sm text-zinc-500 truncate">{ item.Note }</span>
+				}
+			</div>
+			switch item.Status {
+				case models.WishlistWaiting:
+					if !ready {
+						<div>
+							<div class="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+								<div class="h-full rounded-full bg-(--accent)" style={ fmt.Sprintf("width: %.1f%%", item.CoolingProgress(now)*100) }></div>
+							</div>
+							<p class="mt-1.5 text-xs text-zinc-500">
+								Ready in { fmt.Sprint(item.DaysLeft(now)) } { plural(item.DaysLeft(now), "day", "days") } · { item.ReadyAt().Local().Format("Jan 2") }
+							</p>
+						</div>
+					} else {
+						<p class="flex items-center gap-1.5 text-sm text-(--accent)">
+							@icons.Sparkles("14")
+							Cooled off { goalDay(item.ReadyAt()) }. Still want it?
+						</p>
+					}
+					<div class="flex flex-wrap gap-2 mt-auto">
+						<button
+							hx-get={ fmt.Sprintf("/decide/afford?wishlist_id=%s", item.ID) }
+							hx-target="#afford"
+							hx-swap="outerHTML show:#afford:top"
+							class="wl-action"
+						>
+							@icons.Scale("14")
+							Can I afford it?
+						</button>
+						<button
+							hx-get={ fmt.Sprintf("/wishlist/%s/buy", item.ID) }
+							hx-target="#decide-sheet"
+							hx-swap="innerHTML"
+							if !ready {
+								hx-confirm="It's still cooling off. Buy it anyway?"
+							}
+							class={ "wl-action", templ.KV("wl-action-primary", ready) }
+						>
+							@icons.Check("14")
+							Buy
+						</button>
+						<button hx-put={ fmt.Sprintf("/wishlist/%s/abandon", item.ID) } class="wl-action">
+							@icons.Ban("14")
+							Let it go
+						</button>
+					</div>
+				case models.WishlistBought:
+					<p class="flex items-center gap-1.5 mt-auto text-sm text-(--accent)">
+						@icons.Check("14")
+						Bought { goalDay(item.DecidedAt) }
+					</p>
+				case models.WishlistAbandoned:
+					<p class="flex items-center gap-1.5 mt-auto text-sm text-(--accent)">
+						@icons.PiggyBank("14")
+						Let go { goalDay(item.DecidedAt) }, kept { formatters.FormatAmount(item.TotalCost(), item.Currency.Symbol) }
+					</p>
+			}
+		</div>
+	</div>
+}
+
+func WishlistItemID(id string) string {
+	return "wl-" + id
+}
+
+func coolingOptions() []form.RadioOption {
+	opts := make([]form.RadioOption, len(models.WishlistCoolingDays))
+	for i, d := range models.WishlistCoolingDays {
+		opts[i] = form.RadioOption{Value: strconv.Itoa(d), Label: fmt.Sprintf("%d days", d)}
+	}
+	return opts
+}
+
+// groupWishlist splits the items into waiting ones ready to decide on (oldest
+// ready first), still cooling off (soonest first) and decided ones (latest
+// first).
+func groupWishlist(items []models.WishlistItem, now time.Time) (ready, cooling, decided []models.WishlistItem) {
+	for _, item := range items {
+		switch {
+		case item.Status != models.WishlistWaiting:
+			decided = append(decided, item)
+		case item.IsReady(now):
+			ready = append(ready, item)
+		default:
+			cooling = append(cooling, item)
+		}
+	}
+	byReadyAt := func(a, b models.WishlistItem) int { return a.ReadyAt().Compare(b.ReadyAt()) }
+	slices.SortStableFunc(ready, byReadyAt)
+	slices.SortStableFunc(cooling, byReadyAt)
+	slices.SortStableFunc(decided, func(a, b models.WishlistItem) int { return b.DecidedAt.Compare(a.DecidedAt) })
+	return ready, cooling, decided
+}
+
+func wishlistAccentClass(item *models.WishlistItem, ready bool) string {
+	switch {
+	case item.Status == models.WishlistBought:
+		return "[--accent:var(--color-sky-400)]"
+	case item.Status == models.WishlistAbandoned:
+		return "[--accent:var(--color-emerald-400)]"
+	case ready:
+		return "[--accent:var(--color-amber-300)]"
+	}
+	return "[--accent:var(--color-violet-400)]"
+}
+
+func wishlistMenuItems(item *models.WishlistItem) []templ.Component {
+	items := []templ.Component{}
+	if item.Status == models.WishlistWaiting {
+		items = append(items, wishlistEditMenuItem(item.ID))
+	} else {
+		items = append(items, components.EntryMenuAnchorItem("Back to waiting", "put", fmt.Sprintf("/wishlist/%s/restore", item.ID)))
+	}
+	return append(items, components.EntryMenuDeleteItem(fmt.Sprintf("/wishlist/%s", item.ID)))
+}
+
+// wishlistEditMenuItem swaps the card alone for its edit form, unlike the
+// other actions re-rendering the whole wishlist.
+templ wishlistEditMenuItem(id string) {
+	<a
+		class="block transition-transform hover:translate-x-0.5"
+		hx-get={ fmt.Sprintf("/wishlist/%s/edit", id) }
+		hx-target={ "#" + WishlistItemID(id) }
+		hx-swap="outerHTML"
+	>Edit</a>
+}
