@@ -596,6 +596,14 @@ func (fd *SMSTemplateFD) input(name, value string) form.FDInput {
 	return form.FDInput{Value: value, Error: fd.Errors[name]}
 }
 
+func txKindComboOptions(kinds []models.TxKind) []form.ComboOption {
+	opts := make([]form.ComboOption, len(kinds))
+	for i, k := range kinds {
+		opts[i] = form.ComboOption{Value: k.String(), Label: k.String()}
+	}
+	return opts
+}
+
 // smsTemplateKinds are the transaction kinds a template can make.
 var smsTemplateKinds = []models.TxKind{models.ExpenseTxKind, models.IncomeTxKind, models.TransferTxKind, models.RefundTxKind}
 
@@ -669,11 +677,10 @@ templ SMSTemplateForm(fd *SMSTemplateFD, preview *SMSTemplatePreviewData) {
 			</div>
 			<div x-show="action === 'transaction'">
 				@form.Field("Transaction", "tx_kind", "tmpl", nil, fd.Errors["TxKind"]) {
-					<select id="tx_kind-tmpl" name="tx_kind" class="input-field">
-						for _, k := range smsTemplateKinds {
-							<option value={ k.String() } selected?={ fd.TxKind == k.String() }>{ k.String() }</option>
-						}
-					</select>
+					@form.Combobox(form.ComboboxProps{
+						Name: "tx_kind", ID: "tmpl", Label: "Transaction", Placeholder: "Transaction kind",
+						Options: txKindComboOptions(smsTemplateKinds), Data: fd.input("TxKind", fd.TxKind),
+					})
 				}
 			</div>
 		</div>
@@ -760,7 +767,7 @@ templ SMSTemplatePreview(p *SMSTemplatePreviewData) {
 	<div
 		id="sms-template-preview"
 		hx-post="/sms/templates/preview"
-		hx-trigger="input delay:400ms from:closest form"
+		hx-trigger="input delay:400ms from:closest form, change delay:400ms from:closest form"
 		hx-include="closest form"
 		hx-target="this"
 		hx-swap="outerHTML"
