@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"time"
 
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
@@ -110,4 +112,35 @@ func dbUserRowToUser(dbU queries.GetUserByOAuthIDRow) *models.User {
 		CreatedAt:          dbU.AccountCreatedAt.Time,
 	}
 	return dbUserToUser(&dbU.User, &dbU.Currency, &acc)
+}
+
+// GetTimezone is the time zone of the user's sms, the default one if the
+// stored one doesn't load.
+func (r *Repository) GetTimezone(ctx context.Context) (*time.Location, error) {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	name, err := q.GetTimezone(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return models.LoadTimezone(models.DefaultTimezone)
+	}
+	if err != nil {
+		return nil, err
+	}
+	loc, err := models.LoadTimezone(name)
+	if err != nil {
+		logger.FromCtx(ctx).Warn("invalid stored time zone, using the default", zap.String("timezone", name))
+		return models.LoadTimezone(models.DefaultTimezone)
+	}
+	return loc, nil
+}
+
+func (r *Repository) SetTimezone(ctx context.Context, loc *time.Location) error {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+	return q.SetTimezone(ctx, loc.String())
 }

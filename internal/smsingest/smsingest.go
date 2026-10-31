@@ -35,12 +35,13 @@ func Hash(sender, body string, receivedAt time.Time) string {
 }
 
 // BuildTransaction creates a fulfilled transaction flagged for review from a
-// parsed SMS.
+// parsed SMS, at the sms date (and time) in loc when it has one.
 func BuildTransaction(
 	sms *smsparser.SMS,
 	accounts []models.Account,
 	counterparties []models.Counterparty,
 	receivedAt time.Time,
+	loc *time.Location,
 	fxRate FxRateFunc,
 ) (*models.Transaction, error) {
 	from := matchAccount(sms.AccountID, sms.Currency, accounts)
@@ -70,16 +71,20 @@ func BuildTransaction(
 		return nil, ErrUnmatchedAccount
 	}
 
+	at := TxTime(sms, receivedAt, loc)
 	tx := &models.Transaction{
 		ID:          idgen.New(),
 		Account:     *acc,
 		Kind:        kind,
-		ScheduledTo: receivedAt,
-		FulfilledAt: receivedAt,
+		ScheduledTo: at,
+		FulfilledAt: at,
 		NeedsReview: true,
 	}
 
 	var notes []string
+	if sms.Note != "" {
+		notes = append(notes, sms.Note)
+	}
 
 	amount, note, err := convert(sms.Amount, sms.Currency, acc, fxRate)
 	if err != nil {
@@ -109,7 +114,7 @@ func BuildTransaction(
 		tx.Category = cp.DefaultCategoryFor(kind)
 	} else if name := strings.TrimSpace(sms.Counterparty); name != "" && sms.AutoCreateCounterparty {
 		// no ID, the caller creates it
-		tx.Counterparty = &models.Counterparty{Name: name}
+		tx.Counterparty = &models.Counterparty{Name: name, IsMerchant: sms.CounterpartyIsMerchant}
 	} else if sms.Counterparty != "" {
 		notes = append([]string{sms.Counterparty}, notes...)
 	}
@@ -123,6 +128,42 @@ func BuildTransaction(
 	tx.Description = strings.Join(notes, " · ")
 
 	return tx, nil
+}
+
+// maxClockSkew is how far after receiving it an sms date can be, more is
+// taken as a misread date.
+const maxClockSkew = time.Hour
+
+// TxTime is when the sms says the transaction happened, in loc: its date at
+// its time, or at the time it was received when it has no time. Dates without
+// a year are in the last 12 months. Falls back to receivedAt when the sms has
+// no date or it's in the future.
+func TxTime(sms *smsparser.SMS, receivedAt time.Time, loc *time.Location) time.Time {
+	d := sms.Timestamp
+	if d.IsZero() {
+		return receivedAt
+	}
+
+	local := receivedAt.In(loc)
+	year := d.Year()
+	if year == 0 {
+		year = local.Year()
+	}
+
+	h, m, s := local.Clock()
+	if sms.HasTime {
+		h, m, s = d.Clock()
+	}
+	t := time.Date(year, d.Month(), d.Day(), h, m, s, 0, loc)
+
+	limit := receivedAt.Add(maxClockSkew)
+	if d.Year() == 0 && t.After(limit) {
+		t = t.AddDate(-1, 0, 0)
+	}
+	if t.After(limit) {
+		return receivedAt
+	}
+	return t
 }
 
 // otherRef is the side of the transfer that didn't match an account.

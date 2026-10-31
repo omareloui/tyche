@@ -80,3 +80,9 @@ SET
     monthly_salary = sqlc.arg(monthly_salary),
     salary_currency_id = sqlc.arg(salary_currency_id),
     work_hours_per_week = sqlc.arg(work_hours_per_week);
+
+-- name: GetTimezone :one
+SELECT timezone FROM user LIMIT 1;
+
+-- name: SetTimezone :exec
+UPDATE user SET timezone = sqlc.arg(timezone);

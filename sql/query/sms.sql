@@ -8,7 +8,8 @@ INSERT INTO sms_messages (
     status,
     error,
     transaction_id,
-    device_id
+    device_id,
+    template_id
 )
 VALUES (
     sqlc.arg(id),
@@ -19,7 +20,8 @@ VALUES (
     sqlc.arg(status),
     sqlc.arg(error),
     sqlc.arg(transaction_id),
-    sqlc.arg(device_id)
+    sqlc.arg(device_id),
+    sqlc.arg(template_id)
 );
 
 -- name: GetSMSMessageByHash :one
@@ -48,7 +50,8 @@ UPDATE sms_messages
 SET
     status = sqlc.arg(status),
     error = sqlc.arg(error),
-    transaction_id = sqlc.arg(transaction_id)
+    transaction_id = sqlc.arg(transaction_id),
+    template_id = sqlc.arg(template_id)
 WHERE id = sqlc.arg(id);
 
 -- name: CountSMSMessagesByStatus :one

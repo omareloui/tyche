@@ -85,6 +85,7 @@ func (r *Repository) CreateSMSMessage(ctx context.Context, msg *models.SMSMessag
 			Error:         nullString(msg.Error),
 			TransactionID: nullString(msg.TransactionID),
 			DeviceID:      nullString(msg.DeviceID),
+			TemplateID:    nullString(msg.TemplateID),
 		}); err != nil {
 			l.Error("creating sms message", zap.Error(err), zap.String("hash", msg.Hash))
 			return err
@@ -112,6 +113,7 @@ func (r *Repository) UpdateSMSMessageResult(ctx context.Context, msg *models.SMS
 			Status:        string(msg.Status),
 			Error:         nullString(msg.Error),
 			TransactionID: nullString(msg.TransactionID),
+			TemplateID:    nullString(msg.TemplateID),
 		}); err != nil {
 			l.Error("updating sms message", zap.Error(err), zap.String("id", msg.ID))
 			return err
@@ -136,6 +138,7 @@ func dbSMSMessageToSMSMessage(m *queries.SmsMessage) *models.SMSMessage {
 		Error:         m.Error.String,
 		TransactionID: m.TransactionID.String,
 		DeviceID:      m.DeviceID.String,
+		TemplateID:    m.TemplateID.String,
 		CreatedAt:     m.CreatedAt,
 	}
 }

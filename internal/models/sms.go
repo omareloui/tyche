@@ -30,5 +30,7 @@ type SMSMessage struct {
 	Error         string
 	TransactionID string
 	DeviceID      string
-	CreatedAt     time.Time
+	// TemplateID is the template that read it (or made it ignored).
+	TemplateID string
+	CreatedAt  time.Time
 }

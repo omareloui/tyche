@@ -3,11 +3,16 @@ package smsparser
 import (
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 func amountStrToFloat(amt string) (float64, error) {
-	amt = strings.NewReplacer(",", "", " ", "").Replace(amt)
-	amt = strings.TrimRight(strings.TrimRight(strings.TrimRight(amt, "-"), "+"), ".")
-	res, err := strconv.ParseFloat(amt, 64)
-	return res, err
+	amt = strings.Map(func(r rune) rune {
+		if r == ',' || unicode.IsSpace(r) {
+			return -1
+		}
+		return r
+	}, amt)
+	amt = strings.TrimRight(amt, "+-.")
+	return strconv.ParseFloat(amt, 64)
 }

@@ -9,6 +9,7 @@ const (
 	ResetTransactions   ResetEntity = "transactions"
 	ResetRecurrent      ResetEntity = "recurrent"
 	ResetSMS            ResetEntity = "sms"
+	ResetSMSTemplates   ResetEntity = "sms_templates"
 	ResetCategories     ResetEntity = "categories"
 	ResetCounterparties ResetEntity = "counterparties"
 	ResetGoals          ResetEntity = "goals"
@@ -33,13 +34,14 @@ var ResetEntities = []ResetEntityInfo{
 	{ResetTransactions, "Transactions", "Every transaction, scheduled ones and reimbursements included. Kept accounts go back to a 0 balance.", nil},
 	{ResetRecurrent, "Recurring transactions", "The recurring templates. Transactions they already made are kept unless deleted too.", nil},
 	{ResetSMS, "SMS messages", "Every received bank SMS.", nil},
+	{ResetSMSTemplates, "SMS templates", "Your own templates reading bank SMS, the shared ones stay.", nil},
 	{ResetCategories, "Categories", "Categories and their budgets. Kept transactions lose their category.", nil},
 	{ResetCounterparties, "Counterparties", "People and merchants, with their aliases and icons.", nil},
 	{ResetGoals, "Goals", "Savings goals. Kept transactions lose their goal.", nil},
 	{ResetAccounts, "Accounts", "Every account and gam'yaa, with all their transactions and recurring transactions.", []ResetEntity{ResetTransactions, ResetRecurrent}},
 	{ResetWishlist, "Wishlist", "The items on the decide page's wishlist.", nil},
 	{ResetDevices, "Devices", "Linked phones, they'll stop forwarding SMS until signed in again.", nil},
-	{ResetSettings, "Settings", "Default currency and account, shown currencies and work settings (salary, hours).", nil},
+	{ResetSettings, "Settings", "Default currency and account, shown currencies, work settings (salary, hours) and the SMS time zone.", nil},
 }
 
 // ResetOptions is the set of entities to delete.

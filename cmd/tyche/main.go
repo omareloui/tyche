@@ -24,6 +24,7 @@ import (
 	"github.com/omareloui/tyche/internal/sanitizer"
 	"github.com/omareloui/tyche/internal/seeder"
 	"github.com/omareloui/tyche/internal/shareddb"
+	"github.com/omareloui/tyche/internal/smstemplates"
 	"github.com/omareloui/tyche/internal/valid"
 )
 
@@ -54,10 +55,18 @@ func main() {
 
 	fxJob := startFxRates(ctx, l, fxrate.NewJob(sharedDB, sharedQ, seeder.CurrencyCodes(), config.GetFxRateFetchInterval()))
 
+	smsTemplates := smstemplates.New(sharedQ)
+	if err := smsTemplates.Seed(ctx); err != nil {
+		log.Fatalln(err)
+	}
+	if err := smsTemplates.Load(ctx); err != nil {
+		log.Fatalln(err)
+	}
+
 	repo := repository.New()
 	valid := valid.New()
 	sani := sanitizer.New()
-	h := handler.New(repo, valid, sani, fxJob)
+	h := handler.New(repo, valid, sani, fxJob, smsTemplates)
 
 	srv := http.Server{
 		Addr:    fmt.Sprintf(":%d", port),

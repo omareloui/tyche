@@ -1,0 +1,807 @@
+package views
+
+import (
+	"cmp"
+	"errors"
+	"fmt"
+	"maps"
+	"net/url"
+	"slices"
+	"strconv"
+	"strings"
+
+	"github.com/omareloui/tyche/internal/formatters"
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/smsparser"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+// SMSTemplateRow is a template in the lists, with whether it reads its sample.
+type SMSTemplateRow struct {
+	models.SMSTemplate
+	CompileErr string
+	// SampleOK is nil without a sample.
+	SampleOK *bool
+}
+
+func NewSMSTemplateRows(ts []models.SMSTemplate) []SMSTemplateRow {
+	rows := make([]SMSTemplateRow, len(ts))
+	for i, t := range ts {
+		rows[i] = SMSTemplateRow{SMSTemplate: t}
+		if _, err := smsparser.Compile(t.Body); err != nil {
+			rows[i].CompileErr = err.Error()
+			continue
+		}
+		if t.Sample != "" {
+			_, err := smsparser.MatchTemplate(t, t.Sample)
+			ok := err == nil || (t.Action == models.SMSTemplateIgnore && errors.Is(err, smsparser.ErrNotTransaction))
+			rows[i].SampleOK = &ok
+		}
+	}
+	return rows
+}
+
+type SMSTemplateLists struct {
+	Mine, Shared []SMSTemplateRow
+}
+
+templ SMSTemplates(claims *jwt.AccessClaims, balances []models.Balance, lists SMSTemplateLists, sms string) {
+	@layouts.WithTitle(claims, "SMS Templates", balances) {
+		<div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+			<div class="grid gap-10 min-w-0">
+				@backLink("/sms", "SMS")
+				@SMSSandbox(&SMSSandboxResult{Body: sms, IsAdmin: claims.IsAdmin()})
+				<div
+					x-data={ smsTemplatesFilterData }
+					@keydown.slash.window="if (!$event.target.closest('input, textarea, select, [contenteditable]')) { $event.preventDefault(); $refs.q.focus(); $refs.q.select() }"
+					class="grid gap-10 min-w-0"
+				>
+					@smsTemplatesSearch()
+					@smsTemplateList(models.SMSTemplateMine, "Mine", "Only for you, tried before the shared ones.", lists.Mine, claims.IsAdmin())
+					if claims.IsAdmin() {
+						@smsTemplateList(models.SMSTemplateShared, "Shared", "Used for every user. Seeded ones keep your edits.", lists.Shared, true)
+					} else {
+						@smsTemplateList(models.SMSTemplateShared, "Shared", "Used for every user. Override one to read its SMS your own way.", lists.Shared, false)
+					}
+				</div>
+			</div>
+			<div class="lg:sticky lg:top-22">
+				@smsTemplateDocs()
+			</div>
+		</div>
+	}
+}
+
+// SMSSandboxResult is an sms read with every template.
+type SMSSandboxResult struct {
+	Sender, Body string
+	Match        *smsparser.Match
+	Ignored      bool
+	Err          string
+	Tx           *models.Transaction
+	TxErr        string
+	Broken       []smsparser.TemplateError
+	IsAdmin      bool
+}
+
+templ SMSSandbox(res *SMSSandboxResult) {
+	<section id="sms-sandbox" class="grid gap-4 min-w-0">
+		<header>
+			<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+				@icons.Sparkles("16")
+				Sandbox
+			</h2>
+			<p class="text-sm text-zinc-600">Paste an SMS to see which template reads it and the transaction it'd make. Nothing is saved.</p>
+		</header>
+		<form hx-post="/sms/templates/sandbox" hx-target="#sms-sandbox" hx-swap="outerHTML" class="grid gap-3">
+			<div class="grid gap-3 sm:grid-cols-[12rem_minmax(0,1fr)]">
+				@form.Field("Sender", "sender", "sandbox", nil, "") {
+					@form.Control("text", "sender", "CIB", "sandbox", form.FDInput{Value: res.Sender}, templ.Attributes{"autocomplete": "off"})
+				}
+				@form.Field("SMS", "body", "sandbox", nil, "") {
+					<textarea id="body-sandbox" name="body" dir="auto" required class="input-field h-24! font-mono text-sm">{ res.Body }</textarea>
+				}
+			</div>
+			<div class="flex justify-end">
+				<button type="submit" class="btn-primary h-9!">
+					@icons.Retry("15", &templ.Attributes{"class": "in-[.htmx-request]:animate-spin"})
+					Run
+				</button>
+			</div>
+		</form>
+		if res.Body != "" && (res.Match != nil || res.Err != "") {
+			@sandboxResult(res)
+		}
+	</section>
+}
+
+templ sandboxResult(res *SMSSandboxResult) {
+	<div class="grid gap-3 p-4 rounded-2xl bg-zinc-700/20 ring-1 ring-zinc-800">
+		if res.Match == nil {
+			<div class="flex flex-wrap items-center justify-between gap-3">
+				<div class="min-w-0">
+					<p class="flex items-center gap-2 font-medium text-amber-300">
+						@icons.Error("16")
+						No template reads it
+					</p>
+					<p class="mt-0.5 font-mono text-xs text-zinc-500 break-words">{ res.Err }</p>
+				</div>
+				<a href={ newTemplateURL(models.SMSTemplateMine, res.Sender, res.Body) } class="btn-ghost h-9!">
+					@icons.Plus("15")
+					Make a template
+				</a>
+			</div>
+		} else {
+			<div class="flex flex-wrap items-center justify-between gap-3">
+				<p class="flex items-center gap-2 min-w-0">
+					if res.Ignored {
+						<span class="chip bg-zinc-500/15 text-zinc-300">
+							@icons.Ban("13")
+							Ignored
+						</span>
+					} else {
+						<span class="chip bg-emerald-400/10 text-emerald-300">
+							@icons.Check("13")
+							Read
+						</span>
+					}
+					<span class="truncate">by <strong class="font-semibold">{ res.Match.Template.Name }</strong></span>
+					@scopeChip(res.Match.Template.Scope)
+				</p>
+				if res.IsAdmin || res.Match.Template.Scope == models.SMSTemplateMine {
+					<a href={ editTemplateURL(res.Match.Template) } class="inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-white">
+						@icons.Pencil("14")
+						Edit
+					</a>
+				} else {
+					@overrideLink(res.Match.Template)
+				}
+			</div>
+			@matchFields(res.Match)
+			if !res.Ignored {
+				if res.TxErr != "" {
+					<p class="flex items-start gap-2 text-sm text-red-400">
+						@icons.Error("16")
+						<span class="min-w-0 break-words">Couldn't make the transaction: { res.TxErr }</span>
+					</p>
+				} else if res.Tx != nil {
+					@sandboxTx(res.Tx)
+				}
+			}
+		}
+		for _, b := range res.Broken {
+			<p class="text-xs text-red-400 break-words">Skipped the broken template "{ b.Template.Name }": { b.Err.Error() }</p>
+		}
+	</div>
+}
+
+templ sandboxTx(tx *models.Transaction) {
+	<dl class="grid gap-x-6 gap-y-2 p-3 rounded-xl bg-zinc-900/60 text-sm sm:grid-cols-2">
+		@kv("Transaction", tx.Kind.String())
+		@kv("Amount", formatters.FormatAmount(tx.Amount, tx.Account.Currency.Symbol))
+		@kv("Account", tx.Account.Name)
+		if tx.ToAccount != nil {
+			@kv("To", fmt.Sprintf("%s (%s)", tx.ToAccount.Name, formatters.FormatAmount(tx.ToAmount, tx.ToAccount.Currency.Symbol)))
+		}
+		@kv("Date", tx.FulfilledAt.Format("Mon, Jan 2 2006, 3:04pm MST"))
+		if tx.Counterparty != nil {
+			if tx.Counterparty.ID == "" {
+				if tx.Counterparty.IsMerchant {
+					@kv("Counterparty", tx.Counterparty.Name+" (new merchant)")
+				} else {
+					@kv("Counterparty", tx.Counterparty.Name+" (new)")
+				}
+			} else {
+				@kv("Counterparty", tx.Counterparty.Name)
+			}
+		}
+		if tx.Category != nil {
+			@kv("Category", tx.Category.Name)
+		}
+		if tx.Description != "" {
+			@kv("Description", tx.Description)
+		}
+	</dl>
+}
+
+templ kv(k, v string) {
+	<div class="min-w-0">
+		<dt class="text-xs text-zinc-500">{ k }</dt>
+		<dd dir="auto" class="break-words">{ v }</dd>
+	</div>
+}
+
+templ matchFields(m *smsparser.Match) {
+	if len(m.Fields) > 0 {
+		<dl class="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+			for _, k := range slices.Sorted(maps.Keys(m.Fields)) {
+				<div class="min-w-0">
+					<dt class="font-mono text-xs text-zinc-500">{ k }</dt>
+					<dd dir="auto" class="font-mono break-words">
+						{ m.Fields[k] }
+						if v := parsedValue(m.SMS, k); v != "" && v != m.Fields[k] {
+							<span class="text-zinc-500">→ { v }</span>
+						}
+					</dd>
+				</div>
+			}
+		</dl>
+	}
+}
+
+// parsedValue is the value a field got once read, e.g. the amount as a
+// number.
+func parsedValue(sms *smsparser.SMS, field string) string {
+	if sms == nil {
+		return ""
+	}
+	num := func(f float64) string { return strconv.FormatFloat(f, 'f', -1, 64) }
+	switch field {
+	case "account_id":
+		return sms.AccountID
+	case "to_account_id":
+		return sms.ToAccountID
+	case "amount":
+		return num(sms.Amount)
+	case "to_amount":
+		return num(sms.ToAmount)
+	case "available_amount":
+		return num(sms.AvailableBalance)
+	case "currency":
+		return sms.Currency
+	case "to_currency":
+		return sms.ToCurrency
+	case "available_currency":
+		return sms.AvailableBalanceCurrency
+	case "counterparty":
+		if sms.CounterpartyIsMerchant {
+			return sms.Counterparty + " (merchant)"
+		}
+		return sms.Counterparty
+	case "date", "time":
+		switch {
+		case sms.Timestamp.IsZero():
+			return "not a date"
+		case sms.HasTime:
+			return sms.Timestamp.Format("2006-01-02 15:04")
+		case sms.Timestamp.Year() == 0:
+			return sms.Timestamp.Format("Jan 2, no year")
+		default:
+			return sms.Timestamp.Format("2006-01-02")
+		}
+	}
+	return ""
+}
+
+// smsTemplatesFilterData filters the template rows (data-search: name, bank,
+// template and sample) by the search query. q is read upfront so the checks
+// rerun on change even when no row is left to match.
+const smsTemplatesFilterData = `{
+	q: '',
+	matches(el) {
+		const q = this.q.trim().toLowerCase()
+		return !q || el.dataset.search.includes(q)
+	},
+	any(el) {
+		this.q
+		return [...el.querySelectorAll('[data-sms-template]')].some(r => this.matches(r))
+	},
+}`
+
+templ smsTemplatesSearch() {
+	<label
+		class="flex items-center gap-3 h-12 px-4 rounded-2xl border-2 border-zinc-700 bg-zinc-800/40 focus-within:border-zinc-400 transition-colors"
+	>
+		@icons.Search("20", &templ.Attributes{"class": "text-zinc-500 shrink-0"})
+		<input
+			type="search"
+			x-ref="q"
+			x-model="q"
+			@keydown.escape.prevent="q ? q = '' : $el.blur()"
+			autocomplete="off"
+			enterkeyhint="search"
+			placeholder="Search by name, bank or SMS"
+			aria-label="Search templates"
+			class="flex-1 min-w-0 bg-transparent outline-none placeholder:text-zinc-500 [&::-webkit-search-cancel-button]:hidden"
+		/>
+		<kbd class="hidden sm:grid place-items-center shrink-0 w-6 h-6 rounded border border-zinc-600 text-xs text-zinc-500">/</kbd>
+	</label>
+}
+
+// smsTemplateList lists templates, editable unless they're shared and the
+// user isn't an admin.
+templ smsTemplateList(scope models.SMSTemplateScope, title, desc string, rows []SMSTemplateRow, editable bool) {
+	<section class="grid gap-4 min-w-0">
+		<header class="flex flex-wrap items-end justify-between gap-3">
+			<div class="min-w-0">
+				<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+					@icons.Message("16")
+					{ title }
+					<span class="text-zinc-600 tabular-nums">{ strconv.Itoa(len(rows)) }</span>
+				</h2>
+				<p class="text-sm text-zinc-600">{ desc }</p>
+			</div>
+			if editable {
+				<a href={ newTemplateURL(scope, "", "") } class="btn-ghost h-9!">
+					@icons.Plus("15")
+					New
+				</a>
+			}
+		</header>
+		<div class="grid gap-2">
+			for _, row := range rows {
+				@smsTemplateRow(row, editable)
+			}
+			<p class="hidden only:block p-4 rounded-2xl border border-dashed border-zinc-800 text-sm text-zinc-500">No templates yet.</p>
+			if len(rows) > 0 {
+				<p x-cloak x-show="q.trim() && !any($el.parentElement)" class="p-4 text-sm text-zinc-500">No templates match</p>
+			}
+		</div>
+	</section>
+}
+
+templ smsTemplateRow(row SMSTemplateRow, editable bool) {
+	<article
+		data-sms-template
+		data-search={ strings.ToLower(strings.Join([]string{row.Name, row.Bank, row.Body, row.Sample}, " ")) }
+		x-show="matches($el)"
+		hx-target="this"
+		hx-swap="outerHTML"
+		class={ "grid gap-2 p-4 rounded-2xl bg-zinc-700/20", templ.KV("opacity-50", !row.IsEnabled) }
+	>
+		<header class="flex items-start gap-3 min-w-0">
+			<div class="flex-1 min-w-0">
+				<p class="flex flex-wrap items-center gap-2">
+					<span class="font-semibold">{ row.Name }</span>
+					if row.Bank != "" {
+						<span class="chip bg-zinc-500/15 text-zinc-300">{ row.Bank }</span>
+					}
+					@actionChip(&row.SMSTemplate)
+					if !row.IsEnabled {
+						<span class="chip bg-zinc-500/15 text-zinc-400">Disabled</span>
+					}
+					if row.CompileErr != "" {
+						<span class="chip bg-red-400/10 text-red-400">Broken</span>
+					} else if row.SampleOK != nil && *row.SampleOK {
+						<span class="chip bg-emerald-400/10 text-emerald-300" title="Reads its sample">
+							@icons.Check("13")
+							Sample
+						</span>
+					} else if row.SampleOK != nil {
+						<span class="chip bg-red-400/10 text-red-400" title="Doesn't read its sample">
+							@icons.X("13")
+							Sample
+						</span>
+					}
+				</p>
+				<p class="text-xs text-zinc-500">
+					if len(row.Senders) > 0 {
+						From { strings.Join(row.Senders, ", ") }
+					} else {
+						From any sender
+					}
+					if row.Priority != 0 {
+						· priority { strconv.Itoa(row.Priority) }
+					}
+					for _, k := range slices.Sorted(maps.Keys(row.Fixed)) {
+						· { k } = { row.Fixed[k] }
+					}
+				</p>
+			</div>
+			if editable {
+				<a href={ editTemplateURL(&row.SMSTemplate) } aria-label="Edit" title="Edit" class="grid place-items-center shrink-0 w-8 h-8 rounded-full text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white">
+					@icons.Pencil("15")
+				</a>
+				<button
+					hx-delete={ fmt.Sprintf("/sms/templates/%s/%s", row.Scope, row.ID) }
+					hx-confirm={ fmt.Sprintf("Delete the template %q?", row.Name) }
+					aria-label="Delete"
+					title="Delete"
+					class="grid place-items-center shrink-0 w-8 h-8 rounded-full text-zinc-500 cursor-pointer transition-colors hover:bg-red-400/10 hover:text-red-400"
+				>
+					@icons.X("15")
+				</button>
+			} else {
+				@overrideLink(&row.SMSTemplate)
+			}
+		</header>
+		<p dir="auto" class="line-clamp-3 whitespace-pre-wrap break-words px-3 py-2 rounded-xl bg-zinc-900/60 font-mono text-xs text-zinc-300">{ row.Body }</p>
+		if row.CompileErr != "" {
+			<p class="font-mono text-xs text-red-400 break-words">{ row.CompileErr }</p>
+		}
+	</article>
+}
+
+templ actionChip(t *models.SMSTemplate) {
+	if t.Action == models.SMSTemplateIgnore {
+		<span class="chip bg-zinc-500/15 text-zinc-300">
+			@icons.Ban("13")
+			Ignore
+		</span>
+	} else {
+		<span class="chip bg-violet-400/10 text-violet-300">{ t.TxKind.String() }</span>
+	}
+}
+
+templ scopeChip(scope models.SMSTemplateScope) {
+	if scope == models.SMSTemplateShared {
+		<span class="chip bg-sky-400/10 text-sky-300">Shared</span>
+	} else {
+		<span class="chip bg-amber-400/10 text-amber-300">Mine</span>
+	}
+}
+
+// overrideLink copies a shared template into the user's, which are tried
+// first.
+templ overrideLink(t *models.SMSTemplate) {
+	<a
+		href={ templ.SafeURL("/sms/templates/new?" + url.Values{"copy": {t.ID}}.Encode()) }
+		title="Copy into your templates, yours are tried first"
+		class="inline-flex items-center gap-1 shrink-0 h-8 px-3 rounded-full text-sm text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+	>
+		@icons.Pencil("14")
+		Override
+	</a>
+}
+
+templ backLink(href templ.SafeURL, label string) {
+	<a href={ href } class="inline-flex items-center gap-1 justify-self-start text-sm text-zinc-500 hover:text-zinc-300">
+		<span class="rotate-180">
+			@icons.ArrowRight("14")
+		</span>
+		{ label }
+	</a>
+}
+
+// NewTemplateURL opens the form of a new template, prefilled with the sms.
+func NewTemplateURL(sender, sms string) templ.SafeURL {
+	return newTemplateURL(models.SMSTemplateMine, sender, sms)
+}
+
+func newTemplateURL(scope models.SMSTemplateScope, sender, sms string) templ.SafeURL {
+	q := url.Values{"scope": {string(scope)}}
+	if sender != "" {
+		q.Set("sender", sender)
+	}
+	if sms != "" {
+		q.Set("sms", sms)
+	}
+	return templ.SafeURL("/sms/templates/new?" + q.Encode())
+}
+
+func editTemplateURL(t *models.SMSTemplate) templ.SafeURL {
+	return templ.SafeURL(fmt.Sprintf("/sms/templates/%s/%s/edit", t.Scope, t.ID))
+}
+
+templ smsTemplateDocs() {
+	<aside class="grid gap-4 p-5 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800 text-sm lg:max-h-[calc(100dvh-7rem)] lg:overflow-y-auto lg:overscroll-contain">
+		<header>
+			<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+				@icons.Hash("16")
+				Template syntax
+			</h2>
+			<p class="text-zinc-500">The SMS text with placeholders. It has to match the whole SMS; spaces match any spaces, and the spaces around placeholders are optional.</p>
+		</header>
+		<dl class="grid gap-2">
+			@docItem("{{field}}", "Reads a field, see below.")
+			@docItem("{{counterparty:merchant}}", "Creates the counterparty as a merchant (with its brand icon) if it's new.")
+			@docItem("{{date:MM/DD/YYYY}}", "A date in this format (DD, MM, MMM, YY, YYYY) instead of detecting it.")
+			@docItem("{{field:/regexp/}}", "A field matching the regexp instead of its default.")
+			@docItem("{{/regexp/}}", "Skips text matching the regexp, e.g. {{/\\d+/}}.")
+			@docItem("{{*}}", "Skips any text, e.g. the end of the SMS.")
+		</dl>
+		<div class="grid gap-2">
+			<h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500">Fields</h3>
+			for _, f := range smsparser.Fields() {
+				<div>
+					<p class="font-mono text-zinc-200">{ f.Name }</p>
+					<p class="text-zinc-500">{ f.Desc }</p>
+				</div>
+			}
+		</div>
+		<p class="text-zinc-500">The account, counterparty and note can also be fixed values (e.g. "Cash" for ATM withdrawals). Dates come in your time zone set on the SMS page.</p>
+	</aside>
+}
+
+templ docItem(code, desc string) {
+	<div>
+		<dt class="font-mono text-zinc-200">{ code }</dt>
+		<dd class="text-zinc-500">{ desc }</dd>
+	</div>
+}
+
+// SMSTemplateFD is the template form.
+type SMSTemplateFD struct {
+	IsNew bool
+	// IsAdmin can pick the shared scope.
+	IsAdmin   bool
+	ID        string
+	Scope     models.SMSTemplateScope
+	Name      string
+	Bank      string
+	Senders   string
+	Action    models.SMSTemplateAction
+	TxKind    string
+	Body      string
+	Sample    string
+	Priority  string
+	IsEnabled bool
+	Fixed     map[string]string
+	Errors    map[string]string
+}
+
+func NewSMSTemplateFD(t *models.SMSTemplate) *SMSTemplateFD {
+	fd := &SMSTemplateFD{
+		ID:        t.ID,
+		Scope:     t.Scope,
+		Name:      t.Name,
+		Bank:      t.Bank,
+		Senders:   strings.Join(t.Senders, ", "),
+		Action:    t.Action,
+		Body:      t.Body,
+		Sample:    t.Sample,
+		IsEnabled: t.IsEnabled,
+		Fixed:     maps.Clone(t.Fixed),
+	}
+	if t.TxKind != models.NilTxKind {
+		fd.TxKind = t.TxKind.String()
+	}
+	if t.Priority != 0 {
+		fd.Priority = strconv.Itoa(t.Priority)
+	}
+	return fd
+}
+
+// Template is the template in the form.
+func (fd *SMSTemplateFD) Template() *models.SMSTemplate {
+	priority, _ := strconv.Atoi(strings.TrimSpace(fd.Priority))
+	return &models.SMSTemplate{
+		ID:        fd.ID,
+		Scope:     fd.Scope,
+		Name:      fd.Name,
+		Bank:      fd.Bank,
+		Senders:   SplitSenders(fd.Senders),
+		Action:    cmp.Or(fd.Action, models.SMSTemplateTransaction),
+		TxKind:    models.GetTxKindFromString(fd.TxKind),
+		Body:      fd.Body,
+		Sample:    fd.Sample,
+		Priority:  priority,
+		IsEnabled: fd.IsEnabled,
+		Fixed:     maps.Clone(fd.Fixed),
+	}
+}
+
+func enabledValue(on bool) string {
+	if on {
+		return "on"
+	}
+	return ""
+}
+
+// SplitSenders reads a comma separated list of senders.
+func SplitSenders(s string) []string {
+	var senders []string
+	for p := range strings.SplitSeq(s, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			senders = append(senders, p)
+		}
+	}
+	return senders
+}
+
+func (fd *SMSTemplateFD) input(name, value string) form.FDInput {
+	return form.FDInput{Value: value, Error: fd.Errors[name]}
+}
+
+// smsTemplateKinds are the transaction kinds a template can make.
+var smsTemplateKinds = []models.TxKind{models.ExpenseTxKind, models.IncomeTxKind, models.TransferTxKind, models.RefundTxKind}
+
+templ EditSMSTemplatePage(claims *jwt.AccessClaims, balances []models.Balance, fd *SMSTemplateFD, preview *SMSTemplatePreviewData) {
+	@layouts.WithTitle(claims, "SMS Template", balances) {
+		<div class="grid gap-6">
+			@backLink("/sms/templates", "SMS templates")
+			<div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+				@SMSTemplateForm(fd, preview)
+				<div class="lg:sticky lg:top-22">
+					@smsTemplateDocs()
+				</div>
+			</div>
+		</div>
+	}
+}
+
+templ SMSTemplateForm(fd *SMSTemplateFD, preview *SMSTemplatePreviewData) {
+	<form
+		if fd.IsNew {
+			hx-post="/sms/templates"
+		} else {
+			hx-put={ fmt.Sprintf("/sms/templates/%s/%s", fd.Scope, fd.ID) }
+		}
+		hx-target="this"
+		hx-swap="outerHTML"
+		x-data={ fmt.Sprintf("{action: %q}", cmp.Or(string(fd.Action), string(models.SMSTemplateTransaction))) }
+		class="grid gap-6 min-w-0"
+	>
+		<header class="flex flex-wrap items-center justify-between gap-3">
+			<h1 class="text-2xl font-bold font-(family-name:--font-biorhyme-expanded)">
+				if fd.IsNew {
+					New template
+				} else {
+					Edit template
+				}
+			</h1>
+			if fd.IsNew && fd.IsAdmin {
+				@form.SegmentedRadio("", "scope", "tmpl", []form.RadioOption{
+					{Label: "Mine", Value: string(models.SMSTemplateMine)},
+					{Label: "Shared", Value: string(models.SMSTemplateShared)},
+				}, form.FDInput{Value: string(fd.Scope)}, nil)
+			} else {
+				if fd.IsNew {
+					<input type="hidden" name="scope" value={ string(fd.Scope) }/>
+				}
+				@scopeChip(fd.Scope)
+			}
+		</header>
+		<div class="grid gap-4 sm:grid-cols-2">
+			@form.Field("Name", "name", "tmpl", nil, fd.Errors["Name"]) {
+				@form.Control("text", "name", "Credit card purchase", "tmpl", fd.input("Name", fd.Name), templ.Attributes{"required": true, "autocomplete": "off"})
+			}
+			@form.Field("Bank", "bank", "tmpl", icons.Bank("15"), fd.Errors["Bank"]) {
+				@form.Control("text", "bank", "CIB", "tmpl", fd.input("Bank", fd.Bank), templ.Attributes{"autocomplete": "off"})
+			}
+			<div class="sm:col-span-2">
+				@form.Field("Senders", "senders", "tmpl", icons.Smartphone("15"), "") {
+					@form.Control("text", "senders", "CIB, 19666", "tmpl", form.FDInput{Value: fd.Senders}, templ.Attributes{"autocomplete": "off"})
+				}
+				<p class="mt-1.5 text-sm text-zinc-500">Comma separated, empty for any sender. SMS from senders no template lists are tried with every template.</p>
+			</div>
+		</div>
+		<div class="grid gap-4 sm:grid-cols-2">
+			<div>
+				<span class="input-label">Action</span>
+				<div class="flex gap-2">
+					@actionRadio("Make a transaction", models.SMSTemplateTransaction)
+					@actionRadio("Ignore the SMS", models.SMSTemplateIgnore)
+				</div>
+			</div>
+			<div x-show="action === 'transaction'">
+				@form.Field("Transaction", "tx_kind", "tmpl", nil, fd.Errors["TxKind"]) {
+					<select id="tx_kind-tmpl" name="tx_kind" class="input-field">
+						for _, k := range smsTemplateKinds {
+							<option value={ k.String() } selected?={ fd.TxKind == k.String() }>{ k.String() }</option>
+						}
+					</select>
+				}
+			</div>
+		</div>
+		<div class="grid gap-2">
+			@form.Field("Template", "body", "tmpl", icons.Hash("15"), fd.Errors["Body"]) {
+				<textarea
+					id="body-tmpl"
+					name="body"
+					dir="auto"
+					required
+					spellcheck="false"
+					if fd.Errors["Body"] != "" {
+						aria-invalid="true"
+					}
+					class="input-field h-36! font-mono text-sm"
+				>{ fd.Body }</textarea>
+			}
+		</div>
+		<div class="grid gap-2">
+			@form.Field("Sample SMS", "sample", "tmpl", icons.Message("15"), fd.Errors["Sample"]) {
+				<textarea
+					id="sample-tmpl"
+					name="sample"
+					dir="auto"
+					spellcheck="false"
+					if fd.Errors["Sample"] != "" {
+						aria-invalid="true"
+					}
+					class="input-field h-24! font-mono text-sm"
+				>{ fd.Sample }</textarea>
+			}
+			<p class="text-sm text-zinc-500">An SMS the template has to read, checked on save.</p>
+		</div>
+		@SMSTemplatePreview(preview)
+		<fieldset x-show="action === 'transaction'" class="grid gap-3">
+			<legend class="input-label">Fixed values</legend>
+			<p class="-mt-1 text-sm text-zinc-500">Used when the template doesn't read the field, e.g. "Cash" as the receiving account of an ATM withdrawal.</p>
+			<div class="grid gap-3 sm:grid-cols-2">
+				for _, f := range models.SMSTemplateFixedFields {
+					@form.Field(f, "fixed_"+f, "tmpl", nil, "") {
+						@form.Control("text", "fixed_"+f, "", "tmpl", form.FDInput{Value: fd.Fixed[f]}, templ.Attributes{"autocomplete": "off"})
+					}
+				}
+			</div>
+		</fieldset>
+		<div class="grid gap-4 sm:grid-cols-2 sm:items-end">
+			<div>
+				@form.Field("Priority", "priority", "tmpl", nil, fd.Errors["Priority"]) {
+					@form.Control("text", "priority", "0", "tmpl", fd.input("Priority", fd.Priority), templ.Attributes{"inputmode": "numeric", "autocomplete": "off"})
+				}
+				<p class="mt-1.5 text-sm text-zinc-500">Higher ones are tried first.</p>
+			</div>
+			@form.Toggle("Enabled", "is_enabled", "tmpl", nil, form.FDInput{Value: enabledValue(fd.IsEnabled)}, nil)
+		</div>
+		<div class="flex justify-end gap-2">
+			<a href="/sms/templates" class="btn-ghost">Cancel</a>
+			<button type="submit" class="btn-primary">Save</button>
+		</div>
+	</form>
+}
+
+templ actionRadio(label string, action models.SMSTemplateAction) {
+	<label
+		:class={ fmt.Sprintf("action === %q ? 'border-(--accent) text-white' : 'border-zinc-700 text-zinc-400'", action) }
+		class="flex-1 grid place-items-center h-11 px-3 rounded-xl border text-sm text-center cursor-pointer transition-colors hover:text-white"
+	>
+		<input type="radio" name="action" value={ string(action) } x-model="action" class="sr-only"/>
+		{ label }
+	</label>
+}
+
+// SMSTemplatePreviewData is a template of the form compiled and read on its
+// sample.
+type SMSTemplatePreviewData struct {
+	CompileErr string
+	Fields     []string
+	HasSample  bool
+	Match      *smsparser.Match
+	Ignored    bool
+	MatchErr   string
+}
+
+templ SMSTemplatePreview(p *SMSTemplatePreviewData) {
+	<div
+		id="sms-template-preview"
+		hx-post="/sms/templates/preview"
+		hx-trigger="input delay:400ms from:closest form"
+		hx-include="closest form"
+		hx-target="this"
+		hx-swap="outerHTML"
+		hx-sync="this:replace"
+		class="grid gap-3 p-4 rounded-2xl bg-zinc-700/20 ring-1 ring-zinc-800 text-sm"
+	>
+		switch  {
+			case p.CompileErr != "":
+				<p class="flex items-start gap-2 text-red-400">
+					@icons.Error("16")
+					<span class="min-w-0 font-mono text-xs break-words">{ p.CompileErr }</span>
+				</p>
+			case !p.HasSample:
+				<p class="text-zinc-500">
+					Reads
+					if len(p.Fields) == 0 {
+						no fields.
+					} else {
+						<span class="font-mono text-zinc-300">{ strings.Join(p.Fields, ", ") }</span>.
+					}
+					Add a sample SMS to try it.
+				</p>
+			case p.Match == nil:
+				<p class="flex items-start gap-2 text-amber-300">
+					@icons.Error("16")
+					<span class="min-w-0 break-words">
+						It doesn't read the sample.
+						<span class="block font-mono text-xs text-zinc-500">{ p.MatchErr }</span>
+					</span>
+				</p>
+			case p.Ignored:
+				<p class="flex items-center gap-2 text-zinc-300">
+					@icons.Ban("16")
+					The sample matches, it'd be ignored.
+				</p>
+			default:
+				<p class="flex items-center gap-2 text-emerald-300">
+					@icons.Check("16")
+					The sample matches
+				</p>
+				@matchFields(p.Match)
+		}
+	</div>
+}

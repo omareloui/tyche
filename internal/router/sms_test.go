@@ -4,10 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"html"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,6 +25,8 @@ import (
 	"github.com/omareloui/tyche/internal/repository"
 	"github.com/omareloui/tyche/internal/router"
 	"github.com/omareloui/tyche/internal/sanitizer"
+	"github.com/omareloui/tyche/internal/shareddb"
+	"github.com/omareloui/tyche/internal/smstemplates"
 	"github.com/omareloui/tyche/internal/valid"
 )
 
@@ -60,6 +67,25 @@ func setupTenant(t *testing.T) (*repository.Repository, context.Context, *models
 	return repository.New(), ctx, usr
 }
 
+// sharedTemplates opens a seeded shared database, from the temp dir of
+// setupTenant.
+func sharedTemplates(t *testing.T) *smstemplates.Store {
+	t.Helper()
+	db, q, err := shareddb.Open("data/shared.sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	s := smstemplates.New(q)
+	if err := s.Seed(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Load(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
 func TestIngestSMS(t *testing.T) {
 	repo, ctx, usr := setupTenant(t)
 
@@ -98,7 +124,7 @@ func TestIngestSMS(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	srv := httptest.NewServer(router.New(handler.New(repo, valid.New(), sanitizer.New(), nil)))
+	srv := httptest.NewServer(router.New(handler.New(repo, valid.New(), sanitizer.New(), nil, sharedTemplates(t))))
 	defer srv.Close()
 
 	post := func(token string, body any) (*http.Response, ingestResp) {
@@ -170,6 +196,29 @@ func TestIngestSMS(t *testing.T) {
 		}
 		if len(msgs) != 2 {
 			t.Errorf("stored %d failed messages, want 2", len(msgs))
+		}
+	})
+
+	t.Run("unparsed sms link to a new template", func(t *testing.T) {
+		pair, _ := jwt.NewPair(usr)
+		req, _ := http.NewRequest(http.MethodGet, srv.URL+"/sms", nil)
+		req.AddCookie(&http.Cookie{Name: "access_token", Value: pair.Access.Encoded})
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		body := string(b)
+		want := "/sms/templates/new?" + url.Values{"scope": {"mine"}, "sender": {"HSBC"}, "sms": {"Your OTP is 1234"}}.Encode()
+		if !strings.Contains(body, html.EscapeString(want)) {
+			t.Errorf("no make template link %q", want)
+		}
+		if strings.Count(body, "Make template") != 1 {
+			t.Errorf("want the link on the unparsed sms only, got %d", strings.Count(body, "Make template"))
+		}
+		if !strings.Contains(body, `href="/sms/templates"`) {
+			t.Error("no link to the templates page")
 		}
 	})
 
@@ -278,6 +327,99 @@ func TestIngestSMS(t *testing.T) {
 		}
 		if gotAcc.Amount != 140 {
 			t.Errorf("account amount = %v, want 140", gotAcc.Amount)
+		}
+	})
+
+	t.Run("uses the sms date in the user's time zone and their own templates first", func(t *testing.T) {
+		card := &models.Account{
+			ID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZM", Name: "CIB debit e2e", Amount: 100,
+			Currency: *egp, Kind: bankKind, SmsRef: "4321",
+		}
+		if err := repo.CreateAccount(ctx, card); err != nil {
+			t.Fatal(err)
+		}
+		withRow := *usr
+		withRow.Email, withRow.FirstName, withRow.LastName, withRow.DefaultCurrency = "e2e@example.com", "E2E", "User", *egp
+		if err := repo.CreateUser(ctx, &withRow); err != nil {
+			t.Fatal(err)
+		}
+		dubai, _ := time.LoadLocation("Asia/Dubai")
+		if err := repo.SetTimezone(ctx, dubai); err != nil {
+			t.Fatal(err)
+		}
+		mine := &models.SMSTemplate{
+			ID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZN", Name: "mine", Action: models.SMSTemplateTransaction,
+			TxKind: models.IncomeTxKind, IsEnabled: true, Body: "تم خصم مبلغ {{*}}",
+		}
+		if err := repo.CreateSMSTemplate(ctx, mine); err != nil {
+			t.Fatal(err)
+		}
+
+		sms := "تم خصم مبلغ  EGP 25.00 من بطاقة الخصم المباشر المنتهية بـ **4321 عند Bakery في 15/10/25 18:12 ، الرصيد المتاح 75.00 EGP"
+		msgs := map[string]any{"messages": []map[string]any{{
+			"sender": "CIB", "body": sms, "received_at": time.Date(2025, 10, 15, 16, 0, 0, 0, time.UTC),
+		}}}
+		// the user's template has no amount, so it can't build a transaction
+		// and the shared one reads it
+		res, out := post(token, msgs)
+		if res.StatusCode != http.StatusOK || out.Results[0].TransactionID == "" {
+			t.Fatalf("got %d %+v", res.StatusCode, out)
+		}
+		tx, err := repo.GetTransaction(ctx, out.Results[0].TransactionID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := time.Date(2025, 10, 15, 14, 12, 0, 0, time.UTC); !tx.FulfilledAt.Equal(want) {
+			t.Errorf("fulfilled at %v, want %v", tx.FulfilledAt, want)
+		}
+		cps, err := repo.GetCounterparties(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tx.Counterparty == nil || !slices.ContainsFunc(cps, func(cp models.Counterparty) bool {
+			return cp.ID == tx.Counterparty.ID && cp.Name == "Bakery" && cp.IsMerchant
+		}) {
+			t.Errorf("counterparty = %+v, want a new Bakery merchant", tx.Counterparty)
+		}
+
+		// an ignore template of the user wins over the shared ones
+		mine.Action, mine.TxKind = models.SMSTemplateIgnore, models.NilTxKind
+		if err := repo.UpdateSMSTemplate(ctx, mine); err != nil {
+			t.Fatal(err)
+		}
+		msgs["messages"].([]map[string]any)[0]["received_at"] = time.Date(2025, 10, 15, 16, 5, 0, 0, time.UTC)
+		if _, out := post(token, msgs); out.Results[0].Status != "ignored" {
+			t.Errorf("status %q, want ignored", out.Results[0].Status)
+		}
+	})
+
+	t.Run("retrying an sms a new template ignores shows it as ignored", func(t *testing.T) {
+		if err := repo.CreateSMSTemplate(ctx, &models.SMSTemplate{
+			ID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZP", Name: "otp", Action: models.SMSTemplateIgnore,
+			IsEnabled: true, Body: "Your OTP is {{*}}",
+		}); err != nil {
+			t.Fatal(err)
+		}
+		msgs, err := repo.GetSMSMessagesByStatus(ctx, models.SMSStatusUnparsed)
+		if err != nil || len(msgs) != 1 {
+			t.Fatalf("got %d unparsed messages, err: %v", len(msgs), err)
+		}
+
+		pair, _ := jwt.NewPair(usr)
+		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/sms/"+msgs[0].ID+"/retry", nil)
+		req.AddCookie(&http.Cookie{Name: "access_token", Value: pair.Access.Encoded})
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		body := string(b)
+		if res.StatusCode != http.StatusOK || !strings.Contains(body, `data-status="ignored"`) || !strings.Contains(body, "A template ignores") {
+			t.Errorf("got %d, want the card as ignored", res.StatusCode)
+		}
+		if strings.Contains(body, "Failed") || strings.Contains(body, "/retry") {
+			t.Error("an ignored card shouldn't look failed nor offer a retry")
 		}
 	})
 

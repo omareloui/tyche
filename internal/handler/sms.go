@@ -30,8 +30,6 @@ const (
 	maxSMSBodyBytes = 1 << 20
 )
 
-var smsRegistry = smsparser.Default()
-
 // pendingSMSStatuses are the statuses of sms that can still become transactions.
 var pendingSMSStatuses = []models.SMSStatus{
 	models.SMSStatusUnparsed, models.SMSStatusUnmatched, models.SMSStatusFailed,
@@ -62,6 +60,10 @@ type ingestSMSResp struct {
 type smsContext struct {
 	accounts       []models.Account
 	counterparties []models.Counterparty
+	// registry has the user's templates then the shared ones.
+	registry *smsparser.Registry
+	// loc is the time zone of the dates in the user's sms.
+	loc *time.Location
 }
 
 func (h *Handler) IngestSMS(w http.ResponseWriter, r *http.Request) ([]byte, error) {
@@ -141,7 +143,11 @@ func (h *Handler) ingestSMS(ctx context.Context, sctx *smsContext, in smsIn, dev
 func (h *Handler) processSMS(ctx context.Context, sctx *smsContext, msg *models.SMSMessage) *models.Transaction {
 	l := logger.FromCtx(ctx)
 
-	parsed, err := smsRegistry.ParseFromSender(msg.Sender, msg.Body)
+	m, err := sctx.registry.Parse(msg.Sender, msg.Body)
+	msg.TemplateID = ""
+	if m != nil {
+		msg.TemplateID = m.Template.ID
+	}
 	if errors.Is(err, smsparser.ErrNotTransaction) {
 		msg.Status, msg.Error = models.SMSStatusIgnored, ""
 		return nil
@@ -151,7 +157,7 @@ func (h *Handler) processSMS(ctx context.Context, sctx *smsContext, msg *models.
 		return nil
 	}
 
-	tx, err := smsingest.BuildTransaction(parsed, sctx.accounts, sctx.counterparties, msg.ReceivedAt, fxrate.GetFxRate)
+	tx, err := smsingest.BuildTransaction(m.SMS, sctx.accounts, sctx.counterparties, msg.ReceivedAt, sctx.loc, fxrate.GetFxRate)
 	if err != nil {
 		msg.Status, msg.Error = models.SMSStatusFailed, err.Error()
 		if errors.Is(err, smsingest.ErrUnmatchedAccount) {
@@ -168,9 +174,9 @@ func (h *Handler) processSMS(ctx context.Context, sctx *smsContext, msg *models.
 			msg.Status, msg.Error = models.SMSStatusFailed, "invalid counterparty"
 			return nil
 		}
-		// only card purchases auto-create counterparties
-		newCp.IsMerchant = true
-		newCp.Icon = brandicons.Default().Detect(newCp.Name, newCp.Aliases)
+		if newCp.IsMerchant {
+			newCp.Icon = brandicons.Default().Detect(newCp.Name, newCp.Aliases)
+		}
 		newCp.Color = brandicons.Default().ColorFor(newCp.Icon, "")
 	} else {
 		newCp = nil
@@ -217,7 +223,36 @@ func (h *Handler) SMSPage(w http.ResponseWriter, r *http.Request) (templ.Compone
 		return nil, err
 	}
 
-	return views.SMS(getClaims(ctx), b, msgs, devices), nil
+	loc, err := h.repo.GetTimezone(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	templates, err := h.repo.GetSMSTemplates(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return views.SMS(getClaims(ctx), b, msgs, devices, views.NewTimezoneFD(loc), len(templates)), nil
+}
+
+// SetTimezone sets the time zone of the dates in the user's sms.
+func (h *Handler) SetTimezone(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	fd := &views.TimezoneFD{Name: strings.TrimSpace(r.FormValue("timezone"))}
+
+	loc, err := models.LoadTimezone(fd.Name)
+	if err != nil {
+		fd.Error = "Unknown time zone, use a name like Africa/Cairo"
+		return views.TimezoneCard(fd), nil
+	}
+	if err := h.repo.SetTimezone(r.Context(), loc); err != nil {
+		return nil, err
+	}
+	logger.FromCtx(r.Context()).Info("set the sms time zone", zap.String("timezone", loc.String()))
+
+	fd = views.NewTimezoneFD(loc)
+	fd.Saved = true
+	return views.TimezoneCard(fd), nil
 }
 
 func (h *Handler) RetrySMS(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -356,7 +391,28 @@ func (h *Handler) loadSMSContext(ctx context.Context) (*smsContext, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &smsContext{accounts: accounts, counterparties: counterparties}, nil
+	registry, err := h.smsRegistry(ctx)
+	if err != nil {
+		return nil, err
+	}
+	loc, err := h.repo.GetTimezone(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &smsContext{accounts: accounts, counterparties: counterparties, registry: registry, loc: loc}, nil
+}
+
+// smsRegistry has the user's templates, tried first, then the shared ones.
+func (h *Handler) smsRegistry(ctx context.Context) (*smsparser.Registry, error) {
+	mine, err := h.repo.GetSMSTemplates(ctx)
+	if err != nil {
+		return nil, err
+	}
+	r := smsparser.NewRegistry(mine, h.smsTemplates.List())
+	for _, e := range r.Errors() {
+		logger.FromCtx(ctx).Warn("skipping an invalid sms template", zap.String("id", e.Template.ID), zap.String("scope", string(e.Template.Scope)), zap.Error(e.Err))
+	}
+	return r, nil
 }
 
 // VerifyDevice is used by the device auth middleware.

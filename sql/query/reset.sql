@@ -10,6 +10,9 @@ DELETE FROM recurrent_txs;
 -- name: ResetDeleteSMSMessages :exec
 DELETE FROM sms_messages;
 
+-- name: ResetDeleteSMSTemplates :exec
+DELETE FROM sms_templates;
+
 -- name: ResetDeleteGoals :exec
 DELETE FROM goals;
 
@@ -46,6 +49,7 @@ SET
     monthly_salary = NULL,
     salary_currency_id = NULL,
     work_hours_per_week = 40,
+    timezone = 'Africa/Cairo',
     default_account_id = NULL,
     default_currency_id = COALESCE(
         (SELECT c.id FROM currencies AS c WHERE c.string = sqlc.arg(default_currency)),

@@ -47,6 +47,7 @@ func TestBuildTransaction(t *testing.T) {
 		wantCp      string
 		wantNewCp   string
 		wantDescrip string
+		wantMerch   bool
 	}{
 		{
 			name:        "expense by sms ref",
@@ -71,6 +72,23 @@ func TestBuildTransaction(t *testing.T) {
 			wantAcc:    "cib-card",
 			wantAmount: 99,
 			wantNewCp:  "Food App",
+		},
+		{
+			name:       "auto creates merchants",
+			sms:        smsparser.SMS{TxKind: models.ExpenseTxKind, AccountID: "1234", Currency: "EGP", Amount: 99, Counterparty: "Food App", AutoCreateCounterparty: true, CounterpartyIsMerchant: true},
+			wantKind:   models.ExpenseTxKind,
+			wantAcc:    "cib-card",
+			wantAmount: 99,
+			wantNewCp:  "Food App",
+			wantMerch:  true,
+		},
+		{
+			name:        "note goes first in the description",
+			sms:         smsparser.SMS{TxKind: models.TransferTxKind, AccountID: "123-456***-789", ToAccountID: "EG12345", Currency: "EGP", Amount: 360, Note: "CIB BRANCH A ATM"},
+			wantKind:    models.ExpenseTxKind,
+			wantAcc:     "hsbc-egp",
+			wantAmount:  360,
+			wantDescrip: "CIB BRANCH A ATM · Transfer to EG12345",
 		},
 		{
 			name:       "auto create prefers existing counterparty",
@@ -140,7 +158,7 @@ func TestBuildTransaction(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tx, err := smsingest.BuildTransaction(&tt.sms, accounts, counterparties, receivedAt, fx)
+			tx, err := smsingest.BuildTransaction(&tt.sms, accounts, counterparties, receivedAt, time.UTC, fx)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got %+v", tx)
@@ -183,6 +201,9 @@ func TestBuildTransaction(t *testing.T) {
 			if newCp != tt.wantNewCp {
 				t.Errorf("new counterparty = %q, want %q", newCp, tt.wantNewCp)
 			}
+			if newCp != "" && tx.Counterparty.IsMerchant != tt.wantMerch {
+				t.Errorf("new counterparty merchant = %v, want %v", tx.Counterparty.IsMerchant, tt.wantMerch)
+			}
 			if tx.Description != tt.wantDescrip {
 				t.Errorf("description = %q, want %q", tx.Description, tt.wantDescrip)
 			}
@@ -210,7 +231,7 @@ func TestBuildTransactionDefaultCategory(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			sms := smsparser.SMS{TxKind: tt.kind, AccountID: "123-456***-789", Currency: "EGP", Amount: 100, Counterparty: "Ride Service A"}
-			tx, err := smsingest.BuildTransaction(&sms, accounts, cps, receivedAt, fx)
+			tx, err := smsingest.BuildTransaction(&sms, accounts, cps, receivedAt, time.UTC, fx)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -220,6 +241,38 @@ func TestBuildTransactionDefaultCategory(t *testing.T) {
 			}
 			if cat != tt.wantCat {
 				t.Errorf("category = %q, want %q", cat, tt.wantCat)
+			}
+		})
+	}
+}
+
+func TestTxTime(t *testing.T) {
+	cairo, err := time.LoadLocation("Africa/Cairo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 2025-10-07 15:30 in Cairo (UTC+3 then)
+	received := time.Date(2025, 10, 7, 12, 30, 0, 0, time.UTC)
+	date := func(y int, m time.Month, d, h, min int) time.Time { return time.Date(y, m, d, h, min, 0, 0, time.UTC) }
+
+	tests := []struct {
+		name string
+		sms  smsparser.SMS
+		want time.Time
+	}{
+		{"no date", smsparser.SMS{}, received},
+		{"date and time in the sms time zone", smsparser.SMS{Timestamp: date(2025, 10, 6, 21, 45), HasTime: true}, time.Date(2025, 10, 6, 21, 45, 0, 0, cairo)},
+		{"date only gets the received time", smsparser.SMS{Timestamp: date(2025, 10, 5, 0, 0)}, time.Date(2025, 10, 5, 15, 30, 0, 0, cairo)},
+		{"same day keeps the received time", smsparser.SMS{Timestamp: date(2025, 10, 7, 0, 0)}, received},
+		{"future date falls back", smsparser.SMS{Timestamp: date(2025, 10, 9, 10, 0), HasTime: true}, received},
+		{"slightly ahead clock is kept", smsparser.SMS{Timestamp: date(2025, 10, 7, 15, 50), HasTime: true}, time.Date(2025, 10, 7, 15, 50, 0, 0, cairo)},
+		{"no year is this year", smsparser.SMS{Timestamp: date(0, 9, 1, 10, 0), HasTime: true}, time.Date(2025, 9, 1, 10, 0, 0, 0, cairo)},
+		{"no year in the future is last year", smsparser.SMS{Timestamp: date(0, 12, 30, 10, 0), HasTime: true}, time.Date(2024, 12, 30, 10, 0, 0, 0, cairo)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := smsingest.TxTime(&tt.sms, received, cairo); !got.Equal(tt.want) {
+				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})
 	}

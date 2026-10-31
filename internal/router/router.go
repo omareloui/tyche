@@ -133,6 +133,17 @@ func New(h *handler.Handler) Router {
 	mux.Handle("POST /sms/retry", handle(h.RetryAllSMS))
 	mux.Handle("POST /sms/{id}/retry", handle(h.RetrySMS))
 	mux.Handle("PUT /sms/{id}/ignore", handle(h.IgnoreSMS))
+	mux.Handle("PUT /sms/timezone", handle(h.SetTimezone))
+
+	mux.Handle("GET /sms/templates", handle(h.SMSTemplates))
+	mux.Handle("POST /sms/templates", handle(h.CreateSMSTemplate))
+	mux.Handle("GET /sms/templates/new", handle(h.NewSMSTemplate))
+	mux.Handle("POST /sms/templates/sandbox", handle(h.SMSTemplateSandbox))
+	mux.Handle("POST /sms/templates/preview", handle(h.PreviewSMSTemplate))
+	mux.Handle("GET /sms/templates/{scope}/{id}/edit", handle(h.EditSMSTemplate))
+	mux.Handle("PUT /sms/templates/{scope}/{id}", handle(h.UpdateSMSTemplate))
+	mux.Handle("DELETE /sms/templates/{scope}/{id}", handle(h.DeleteSMSTemplate))
+
 	mux.Handle("PUT /devices/{id}/revoke", handle(h.RevokeDevice))
 	mux.Handle("GET /reset", handle(h.ResetPage))
 	mux.Handle("POST /reset", handle(h.Reset))

@@ -25,6 +25,14 @@ sql:
             go_type:
               import: github.com/omareloui/tyche/internal/dbtypes
               type: JSON
+          - column: sms_templates.senders
+            go_type:
+              import: github.com/omareloui/tyche/internal/dbtypes
+              type: JSON
+          - column: sms_templates.fixed
+            go_type:
+              import: github.com/omareloui/tyche/internal/dbtypes
+              type: JSON
           # Nullable: recurrent txs without a category get NULL from the view.
           - column: recurrent_txs_details.category_kinds
             go_type:
@@ -37,3 +45,12 @@ sql:
       go:
         package: sharedqueries
         out: internal/sharedqueries
+        overrides:
+          - column: sms_templates.senders
+            go_type:
+              import: github.com/omareloui/tyche/internal/dbtypes
+              type: JSON
+          - column: sms_templates.fixed
+            go_type:
+              import: github.com/omareloui/tyche/internal/dbtypes
+              type: JSON

@@ -6,17 +6,125 @@ import (
 
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
 	"github.com/omareloui/tyche/web/views/layouts"
 )
 
-templ SMS(claims *jwt.AccessClaims, balances []models.Balance, msgs []models.SMSMessage, devices []models.Device) {
+templ SMS(claims *jwt.AccessClaims, balances []models.Balance, msgs []models.SMSMessage, devices []models.Device, tz *TimezoneFD, templatesCount int) {
 	@layouts.WithTitle(claims, "SMS", balances) {
 		<div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
 			@smsInbox(msgs)
-			@devicesPanel(devices)
+			<div class="grid gap-10 lg:sticky lg:top-22">
+				@templatesCard(templatesCount)
+				@devicesPanel(devices)
+				@TimezoneCard(tz)
+			</div>
 		</div>
 	}
+}
+
+templ templatesCard(count int) {
+	<section class="grid gap-4">
+		<header>
+			<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+				@icons.Hash("16")
+				Templates
+			</h2>
+			<p class="text-sm text-zinc-600">How bank SMS are read. Add your own for formats Tyche doesn't know yet.</p>
+		</header>
+		<a
+			href="/sms/templates"
+			class="flex items-center gap-3 p-3 rounded-2xl bg-zinc-700/20 transition-colors hover:bg-zinc-700/35"
+		>
+			<div class="grid place-items-center shrink-0 w-10 h-10 rounded-xl bg-zinc-800 text-zinc-300">
+				@icons.Message("20")
+			</div>
+			<div class="flex-1 min-w-0">
+				<p class="leading-tight">SMS templates</p>
+				<p class="text-xs text-zinc-500">
+					switch count {
+						case 0:
+							None of your own yet
+						case 1:
+							1 of your own
+						default:
+							{ fmt.Sprintf("%d of your own", count) }
+					}
+				</p>
+			</div>
+			@icons.ArrowRight("16")
+		</a>
+	</section>
+}
+
+// TimezoneFD is the time zone form of the sms page.
+type TimezoneFD struct {
+	Name  string
+	Error string
+	// Saved shows it got saved.
+	Saved bool
+}
+
+func NewTimezoneFD(loc *time.Location) *TimezoneFD {
+	return &TimezoneFD{Name: loc.String()}
+}
+
+// TimezoneCard sets the time zone the bank sms dates are read in.
+templ TimezoneCard(fd *TimezoneFD) {
+	<section id="sms-timezone" class="grid gap-4">
+		<header>
+			<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+				@icons.Clock("16")
+				Time zone
+			</h2>
+			<p class="text-sm text-zinc-600">The dates and times in your bank SMS are read in it.</p>
+		</header>
+		<form
+			hx-put="/sms/timezone"
+			hx-target="#sms-timezone"
+			hx-swap="outerHTML"
+			x-data
+			class="grid gap-2"
+		>
+			<div class="flex gap-2">
+				<input
+					x-ref="tz"
+					name="timezone"
+					value={ fd.Name }
+					list="sms-timezones"
+					autocomplete="off"
+					spellcheck="false"
+					aria-label="Time zone"
+					placeholder="Africa/Cairo"
+					class="input-field flex-1 min-w-0"
+					if fd.Error != "" {
+						aria-invalid="true"
+					}
+				/>
+				<button type="submit" class="btn-primary shrink-0">Save</button>
+			</div>
+			<datalist id="sms-timezones">
+				for _, tz := range models.CommonTimezones {
+					<option value={ tz }></option>
+				}
+			</datalist>
+			<button
+				type="button"
+				@click="$refs.tz.value = Intl.DateTimeFormat().resolvedOptions().timeZone; $el.form.requestSubmit()"
+				class="justify-self-start text-sm text-zinc-500 cursor-pointer hover:text-zinc-300"
+			>
+				Use this device's time zone
+			</button>
+			@form.ErrorMessage(fd.Error)
+			if fd.Saved {
+				<p class="flex items-center gap-1.5 text-sm text-emerald-400">
+					@icons.Check("14")
+					Saved, retry the pending SMS to use it.
+				</p>
+			}
+		</form>
+	</section>
 }
 
 // smsFilterData filters the messages by status. The cards are read from the
@@ -33,11 +141,15 @@ const smsFilterData = `{
 		}).observe(this.$el, {childList: true, subtree: true})
 		refresh()
 	},
+	// done are the cards left from a retry, shown until dismissed
+	done(st) {
+		return st === 'parsed' || st === 'ignored'
+	},
 	count(s) {
-		return this.cards.filter(st => s ? st === s : st !== 'parsed').length
+		return this.cards.filter(st => s ? st === s : !this.done(st)).length
 	},
 	matches(el) {
-		return !this.status || el.dataset.status === this.status || el.dataset.status === 'parsed'
+		return !this.status || el.dataset.status === this.status || this.done(el.dataset.status)
 	},
 }`
 
@@ -173,6 +285,18 @@ templ SMSMessage(m *models.SMSMessage) {
 					@icons.X("14")
 				</button>
 			</div>
+		} else if m.Status == models.SMSStatusIgnored {
+			<div class="relative flex flex-wrap items-center gap-3 px-3 py-2.5 rounded-xl bg-(--accent)/8 ring-1 ring-(--accent)/20">
+				<p class="flex-1 min-w-0 text-sm text-zinc-300">A template ignores this SMS, it won't become a transaction.</p>
+				<button
+					type="button"
+					@click="$el.closest('[data-sms]').remove()"
+					aria-label="Dismiss"
+					class="grid place-items-center w-7 h-7 -mr-1 rounded-full text-zinc-500 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white"
+				>
+					@icons.X("14")
+				</button>
+			</div>
 		} else {
 			<div class="relative flex gap-2.5 text-sm">
 				<span class="w-0.5 shrink-0 rounded-full bg-(--accent)/40"></span>
@@ -191,7 +315,17 @@ templ SMSMessage(m *models.SMSMessage) {
 					}
 				</div>
 			</div>
-			<footer class="relative flex justify-end gap-2">
+			<footer class="relative flex flex-wrap justify-end gap-2">
+				if m.Status == models.SMSStatusUnparsed {
+					<a
+						href={ NewTemplateURL(m.Sender, m.Body) }
+						title="Teach Tyche to read this SMS"
+						class="inline-flex items-center gap-1.5 h-9 px-3 mr-auto rounded-full text-sm text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+					>
+						@icons.Plus("15")
+						Make template
+					</a>
+				}
 				<button
 					hx-put={ fmt.Sprintf("/sms/%s/ignore", m.ID) }
 					class="inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-sm text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white"
@@ -212,7 +346,7 @@ templ SMSMessage(m *models.SMSMessage) {
 }
 
 templ devicesPanel(devices []models.Device) {
-	<aside class="grid gap-4 lg:sticky lg:top-22">
+	<aside class="grid gap-4">
 		<header>
 			<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
 				@icons.Smartphone("16")
@@ -254,7 +388,7 @@ templ Device(d *models.Device) {
 		<div class="flex-1 min-w-0">
 			<p class="truncate leading-tight">{ d.Name }</p>
 			<p class="text-xs text-zinc-500 truncate" title={ "Added " + d.CreatedAt.Local().Format("Jan 2, 2006") }>
-				switch {
+				switch  {
 					case d.IsRevoked():
 						<span class="text-red-400">Revoked { d.RevokedAt.Local().Format("Jan 2, 2006") }</span>
 					case d.LastSeenAt.IsZero():
@@ -305,10 +439,16 @@ func smsStatusMetaOf(st models.SMSStatus) smsStatusMeta {
 			Accent: "[--accent:var(--color-amber-300)]",
 			Icon:   icons.Card("12"),
 		}
+	case models.SMSStatusIgnored:
+		return smsStatusMeta{
+			Label:  "Ignored",
+			Accent: "[--accent:var(--color-zinc-400)]",
+			Icon:   icons.Ban("12"),
+		}
 	case models.SMSStatusUnparsed:
 		return smsStatusMeta{
 			Label:  "Not recognized",
-			Hint:   "No parser understands this message yet.",
+			Hint:   "No template reads this message yet.",
 			Accent: "[--accent:var(--color-violet-400)]",
 			Icon:   icons.Message("12"),
 		}

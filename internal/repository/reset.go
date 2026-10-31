@@ -22,6 +22,7 @@ func (r *Repository) Reset(ctx context.Context, opts models.ResetOptions) error 
 			run func(context.Context) error
 		}{
 			{opts.Has(models.ResetSMS), qtx.ResetDeleteSMSMessages},
+			{opts.Has(models.ResetSMSTemplates), qtx.ResetDeleteSMSTemplates},
 			{opts.Has(models.ResetWishlist), qtx.ResetDeleteWishlistItems},
 			{opts.Has(models.ResetTransactions), qtx.ResetDeleteTransactions},
 			// Balances are the sum of the transactions, so kept accounts
