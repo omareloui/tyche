@@ -16,6 +16,7 @@ import (
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/resperr"
 	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views"
 	"github.com/omareloui/tyche/web/views/form"
@@ -656,4 +657,74 @@ func formatCardExpiry(date time.Time) string {
 		return ""
 	}
 	return date.Format("01/06")
+}
+
+// FixBalancesPage lists the active accounts with their balance editable, to
+// set them to what they really are.
+func (h *Handler) FixBalancesPage(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	balances, err := h.repo.GetBalances(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	accs, err := h.activeAccounts(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	return views.FixBalances(getClaims(r.Context()), balances, accs), nil
+}
+
+// FixBalances sets the submitted balances, as adjustment transactions of the
+// differences or as is.
+func (h *Handler) FixBalances(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	l := logger.FromCtx(r.Context())
+
+	if err := r.ParseForm(); err != nil {
+		return nil, resperr.New(http.StatusBadRequest, "invalid form")
+	}
+
+	accs, err := h.activeAccounts(r.Context())
+	if err != nil {
+		return nil, err
+	}
+
+	var fixes []models.BalanceFix
+	for _, a := range accs {
+		v := strings.TrimSpace(r.PostFormValue("amount-" + a.ID))
+		if v == "" {
+			continue
+		}
+		amount, err := parseSignedFloatIfExists(v)
+		if err != nil {
+			return nil, resperr.New(http.StatusUnprocessableEntity, "Invalid balance for "+a.Name+".")
+		}
+		fixes = append(fixes, models.BalanceFix{AccountID: a.ID, Amount: amount})
+	}
+
+	mode := r.PostFormValue("mode")
+	if mode != views.FixBalancesSet {
+		mode = views.FixBalancesAsTx
+	}
+
+	changed, err := h.repo.FixBalances(r.Context(), fixes, mode == views.FixBalancesAsTx, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	l.Info("fixed balances", zap.Int("changed", changed), zap.String("mode", mode))
+
+	if err := h.getAndRenderBalancesOOB(w, r); err != nil {
+		return nil, err
+	}
+
+	if accs, err = h.activeAccounts(r.Context()); err != nil {
+		return nil, err
+	}
+	return views.FixBalancesForm(accs, mode, changed), nil
+}
+
+func (h *Handler) activeAccounts(ctx context.Context) ([]models.Account, error) {
+	accs, err := h.repo.GetAccounts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return slicesutils.Filter(accs, func(a models.Account) bool { return !a.IsArchive }), nil
 }

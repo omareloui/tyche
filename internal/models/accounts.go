@@ -126,3 +126,13 @@ func (b *Balance) ViewAmountWithCurrency(cur *Currency) string {
 func (b *Balance) AmountWithCurrency(cur *Currency) float64 {
 	return b.Currency.FxRate(cur.String) * b.Amount
 }
+
+// BalanceFix is an account's real balance, e.g. as its bank shows it.
+type BalanceFix struct {
+	AccountID string
+	Amount    float64
+}
+
+// BalanceFixDescription describes the adjustment transactions fixing a
+// balance.
+const BalanceFixDescription = "Balance correction"

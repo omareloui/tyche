@@ -40,12 +40,12 @@ type commonFieldsForTxAndRtx struct {
 	AccountID      string  `validate:"required,ulid"`
 	Amount         float64 `validate:"required"`
 	Kind           uint8   `validate:"required"`
-	CategoryID     string  `validate:"excluded_if=Kind 3,excluded_if=Kind 4,omitempty,ulid"`
-	CounterpartyID string  `validate:"excluded_if=Kind 3,excluded_if=Kind 4,omitempty,ulid"`
+	CategoryID     string  `validate:"excluded_if=Kind 3,excluded_if=Kind 4,excluded_if=Kind 6,omitempty,ulid"`
+	CounterpartyID string  `validate:"excluded_if=Kind 3,excluded_if=Kind 4,excluded_if=Kind 6,omitempty,ulid"`
 	ToAccountID    string  `validate:"required_if=Kind 3,required_if=Kind 4,omitempty,ulid"`
 	ToAmount       float64 `validate:"required_if=Kind 3,required_if=Kind 4"`
 	Description    string  `conform:"trim"`
-	GoalID         string  `validate:"excluded_if=Kind 2,excluded_if=Kind 3,excluded_if=Kind 4,excluded_if=Kind 5,omitempty,ulid"`
+	GoalID         string  `validate:"excluded_if=Kind 2,excluded_if=Kind 3,excluded_if=Kind 4,excluded_if=Kind 5,excluded_if=Kind 6,omitempty,ulid"`
 }
 
 type createTransaction struct {

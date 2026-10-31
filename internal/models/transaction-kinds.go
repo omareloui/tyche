@@ -14,12 +14,17 @@ const (
 	// account like an income but uses expense categories, and should reduce
 	// the category's spending rather than count as income.
 	RefundTxKind
+	// AdjustmentTxKind corrects an account's balance to what it really is. Its
+	// amount is signed (added to the account) and it's left out of every
+	// analysis, as it's neither earned nor spent.
+	AdjustmentTxKind
 )
 
 func (tk TxKind) String() string {
 	return [...]string{
 		"???", "Expense", "Income",
 		"Transfer", "Debt", "Refund",
+		"Adjustment",
 	}[tk]
 }
 
@@ -58,6 +63,7 @@ func GetTxKinds() []TxKind {
 		TransferTxKind,
 		DebtTxKind,
 		RefundTxKind,
+		AdjustmentTxKind,
 	}
 }
 

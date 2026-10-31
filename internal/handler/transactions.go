@@ -227,6 +227,10 @@ func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (tem
 
 	l.Debug("get edit transaction", zap.Any("transaction", tx))
 
+	if tx.Kind == models.AdjustmentTxKind {
+		return nil, errAdjustmentNotEditable
+	}
+
 	accs, knds, cats, cps, gls, err := h.getTxDeps(r.Context())
 	if err != nil {
 		l.Error("fetching currencies and kinds")
@@ -436,6 +440,10 @@ func (h Handler) DuplicateTransaction(w http.ResponseWriter, r *http.Request) (t
 		return nil, err
 	}
 
+	if tx.Kind == models.AdjustmentTxKind {
+		return nil, errAdjustmentNotEditable
+	}
+
 	accs, knds, cats, cps, gls, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
@@ -489,6 +497,10 @@ func (h Handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) (temp
 // hxRetargetTxList swaps the response in place of the whole transactions
 // list, as changing a transaction moves its totals, sections and counts. Call
 // it before rendering anything, as it sets headers.
+// errAdjustmentNotEditable is returned for forms of adjustments, as their
+// amount is signed; they come from fixing balances.
+var errAdjustmentNotEditable = resperr.New(http.StatusUnprocessableEntity, "Balance corrections can't be edited, fix the balance again instead.")
+
 func hxRetargetTxList(w http.ResponseWriter) {
 	w.Header().Set("HX-Retarget", "#tx-list")
 	w.Header().Set("HX-Reswap", "outerHTML")

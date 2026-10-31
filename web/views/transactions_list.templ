@@ -396,6 +396,10 @@ templ txTile(tx *models.Transaction, v *txView) {
 		<div class="grid place-items-center shrink-0 w-11 h-11 rounded-xl bg-amber-400/12 text-amber-400">
 			@icons.Debt("22")
 		</div>
+	} else if tx.Kind == models.AdjustmentTxKind {
+		<div class="grid place-items-center shrink-0 w-11 h-11 rounded-xl bg-zinc-800/70 text-zinc-400">
+			@icons.Scale("22")
+		</div>
 	} else if tx.Category != nil && tx.Category.Color != "" {
 		{{ hex := models.CategoryColorToHex(tx.Category.Color) }}
 		<div
@@ -671,6 +675,12 @@ func getTransactionMenuItems(tx *models.Transaction) []templ.Component {
 			components.EntryMenuAnchorItem("Reimburses…", "get", fmt.Sprintf("/transactions/%s/reimburses", tx.ID)))
 	}
 
+	// Adjustments are signed, which the form can't edit; fix the balance
+	// again instead.
+	if tx.Kind == models.AdjustmentTxKind {
+		return append(items, txMenuDelete())
+	}
+
 	return append(items,
 		components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/transactions/%s/edit", tx.ID)),
 		txMenuDuplicate(tx.ID),
@@ -894,6 +904,13 @@ func newTxView(tx *models.Transaction) txView {
 	case models.IncomeTxKind, models.RefundTxKind:
 		v.amount = "+" + tx.ViewAmount()
 		v.tone = txToneIn
+	case models.AdjustmentTxKind:
+		v.amount = formatSignedAmount(tx.Amount, tx.Account.Currency.Symbol)
+		v.tone = txToneNeutral
+		if v.title == "" {
+			v.title = models.BalanceFixDescription
+		}
+		return v
 	case models.TransferTxKind:
 		v.tone = txToneNeutral
 		if v.title == "" {

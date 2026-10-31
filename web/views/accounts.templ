@@ -58,6 +58,17 @@ templ Accounts(
 	cps []models.Counterparty) {
 	@layouts.WithCreateForm(claims, "Accounts", balances,
 		CreateAccountForm(fd, aknds, curs, cps, &claims.DefaultCurrency)) {
+		if len(accounts) > 0 {
+			<div class="flex justify-end -mt-3 mb-4">
+				<a
+					href="/accounts/fix-balances"
+					class="inline-flex items-center gap-1.5 text-sm text-zinc-400 transition-colors hover:text-white"
+				>
+					@icons.Scale("16")
+					Fix balances
+				</a>
+			</div>
+		}
 		@accountsList(accounts)
 	}
 }

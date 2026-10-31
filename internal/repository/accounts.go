@@ -3,8 +3,11 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"math"
 	"strings"
+	"time"
 
+	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/middleware"
@@ -177,6 +180,55 @@ func (r *Repository) DeleteAccount(ctx context.Context, id string) error {
 	return nil
 }
 
+// FixBalances sets each account's balance to its fix, recording the
+// difference as an adjustment transaction fulfilled at `at` when asTx, else
+// overwriting the balance. It returns how many accounts changed.
+func (r *Repository) FixBalances(ctx context.Context, fixes []models.BalanceFix, asTx bool, at time.Time) (int, error) {
+	l := logger.FromCtx(ctx)
+	changed := 0
+	err := r.transact(ctx, func(qtx *queries.Queries) error {
+		for _, f := range fixes {
+			cur, err := qtx.GetAccountAmount(ctx, f.AccountID)
+			if err != nil {
+				l.Error("getting account amount", zap.Error(err), zap.String("id", f.AccountID))
+				return err
+			}
+			diff := math.Round((f.Amount-cur)*100) / 100
+			if diff == 0 {
+				continue
+			}
+			changed++
+
+			if !asTx {
+				if err := qtx.SetAccountAmount(ctx, queries.SetAccountAmountParams{ID: f.AccountID, Amount: f.Amount}); err != nil {
+					l.Error("setting account amount", zap.Error(err), zap.String("id", f.AccountID))
+					return err
+				}
+				continue
+			}
+
+			tx := &models.Transaction{
+				ID:          idgen.New(),
+				Account:     models.Account{ID: f.AccountID},
+				Amount:      diff,
+				Kind:        models.AdjustmentTxKind,
+				Description: models.BalanceFixDescription,
+				ScheduledTo: at,
+				FulfilledAt: at,
+			}
+			if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, tx); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	l.Debug("fixed balances", zap.Int("changed", changed), zap.Bool("as_tx", asTx))
+	return changed, nil
+}
+
 func (r *Repository) applyTxToAccountWithTxn(qtx *queries.Queries, ctx context.Context, tx *models.Transaction) error {
 	l := logger.FromCtx(ctx)
 
@@ -191,6 +243,12 @@ func (r *Repository) applyTxToAccountWithTxn(qtx *queries.Queries, ctx context.C
 			return err
 		}
 		l.Debug("applied transfer: add to account")
+	} else if tx.Kind == models.AdjustmentTxKind {
+		// Signed, added as is.
+		if err := r.addToAccountWithTxn(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {
+			l.Error("applying adjustment to account", zap.Error(err), zap.Any("transaction", tx))
+			return err
+		}
 	} else {
 		upBalance := r.removeFromAccountWithTxn
 		if tx.Kind.IsIncoming() {
@@ -218,6 +276,11 @@ func (r *Repository) undoTxToAccountWithTxn(qtx *queries.Queries, ctx context.Co
 			return err
 		}
 		l.Debug("undone transfer: add to account")
+	} else if tx.Kind == models.AdjustmentTxKind {
+		if err := r.removeFromAccountWithTxn(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {
+			l.Error("undoing adjustment to account", zap.Error(err), zap.Any("transaction", tx))
+			return err
+		}
 	} else {
 		upBalance := r.addToAccountWithTxn
 		if tx.Kind.IsIncoming() {

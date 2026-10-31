@@ -545,7 +545,10 @@ func txAccountLabel(fd *TransactionAmountsAndKindFD) string {
 }
 
 func getTxKindsForAccounts(accs []models.Account, knds []models.TxKind) []models.TxKind {
-	nknds := slicesutils.Filter(knds, func(k models.TxKind) bool { return k != models.NilTxKind })
+	// Adjustments only come from fixing balances on the accounts page.
+	nknds := slicesutils.Filter(knds, func(k models.TxKind) bool {
+		return k != models.NilTxKind && k != models.AdjustmentTxKind
+	})
 	notDebt := slicesutils.Filter(accs, func(a models.Account) bool { return a.Kind.Enum != models.AccKindDebt })
 	if len(notDebt) < 2 {
 		nknds = slicesutils.Filter(nknds, func(k models.TxKind) bool { return k != models.TransferTxKind })

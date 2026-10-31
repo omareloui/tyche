@@ -150,6 +150,16 @@ SET
     amount = ROUND(amount - sqlc.arg(amount), 2)
 WHERE id = sqlc.arg(id);
 
+-- name: GetAccountAmount :one
+SELECT amount FROM accounts
+WHERE id = sqlc.arg(id);
+
+-- name: SetAccountAmount :exec
+UPDATE accounts
+SET
+    amount = ROUND(sqlc.arg(amount), 2)
+WHERE id = sqlc.arg(id);
+
 -- name: GetBalances :many
 SELECT
     a.currency_id,

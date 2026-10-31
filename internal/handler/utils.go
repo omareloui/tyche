@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/a-h/templ"
@@ -73,6 +74,16 @@ func parseFloatIfExists(str string) (float64, error) {
 		return num, nil
 	}
 	return 0, nil
+}
+
+// parseSignedFloatIfExists is parseFloatIfExists keeping a leading minus.
+func parseSignedFloatIfExists(str string) (float64, error) {
+	str = strings.TrimSpace(str)
+	num, err := parseFloatIfExists(str)
+	if strings.HasPrefix(str, "-") || strings.HasPrefix(str, "−") {
+		num = -num
+	}
+	return num, err
 }
 
 func parseDateOnlyIfExists(str string) (time.Time, error) {

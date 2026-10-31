@@ -1,0 +1,139 @@
+package views
+
+import (
+	"encoding/json"
+	"fmt"
+	"strconv"
+
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+// FixBalancesMode is how the fix balances form applies the differences.
+const (
+	FixBalancesAsTx = "tx"
+	FixBalancesSet  = "set"
+)
+
+templ FixBalances(claims *jwt.AccessClaims, balances []models.Balance, accs []models.Account) {
+	@layouts.WithTitle(claims, "Fix balances", balances) {
+		<div class="max-w-2xl grid gap-4">
+			<p class="text-zinc-400">
+				Type what each account really has, e.g. as your bank shows it. Only the changed ones get updated.
+			</p>
+			@FixBalancesForm(accs, FixBalancesAsTx, -1)
+		</div>
+	}
+}
+
+// FixBalancesForm lists the accounts with their balance editable. changed is
+// how many accounts the last submit changed, -1 before any.
+templ FixBalancesForm(accs []models.Account, mode string, changed int) {
+	<form
+		hx-post="/accounts/fix-balances"
+		hx-target="this"
+		hx-swap="outerHTML"
+		hx-disabled-elt="find button[type=submit]"
+		class="grid gap-6"
+	>
+		if len(accs) == 0 {
+			@components.GlassCard("p-5 sm:p-6") {
+				<p class="text-zinc-400">
+					No accounts yet. <a href="/accounts" class="text-(--accent) hover:underline">Add one →</a>
+				</p>
+			}
+		} else {
+			for _, s := range accountSections {
+				if accs := accountsInSection(accs, s.ID); len(accs) > 0 {
+					<section class="grid gap-3">
+						<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+							@accKindIcon(s.Kind, "16")
+							{ s.Title }
+						</h2>
+						@components.GlassCard("divide-y divide-zinc-800") {
+							for _, a := range accs {
+								@fixBalanceRow(a)
+							}
+						}
+					</section>
+				}
+			}
+			<div class="grid gap-2">
+				<span class="input-label">Apply the differences as</span>
+				@form.SegmentedRadio("Apply the differences as", "mode", "fix", []form.RadioOption{
+					{Value: FixBalancesAsTx, Label: "Correction transactions"},
+					{Value: FixBalancesSet, Label: "New balances as is"},
+				}, form.FDInput{Value: mode}, nil)
+				<p class="text-sm text-zinc-500">
+					Corrections are "Adjustment" transactions, kept in your history but out of every analysis; delete one to undo it. Setting them as is leaves no trace.
+				</p>
+			</div>
+			<div class="flex items-center justify-end gap-4">
+				if changed == 0 {
+					<p class="text-sm text-zinc-400">Nothing changed.</p>
+				} else if changed > 0 {
+					<p class="inline-flex items-center gap-1.5 text-sm text-emerald-400">
+						@icons.Check("16")
+						{ fmt.Sprintf("Updated %d %s.", changed, plural(changed, "account", "accounts")) }
+					</p>
+				}
+				<button type="submit" class="btn-primary">Save balances</button>
+			</div>
+		}
+	</form>
+}
+
+templ fixBalanceRow(a models.Account) {
+	{{ id := "fix-amount-" + a.ID }}
+	<div class="flex flex-wrap items-center gap-x-4 gap-y-2 p-4" x-data={ fixBalanceRowData(&a) }>
+		<label for={ id } class="min-w-0 flex-1">
+			<span class="block truncate font-medium">{ a.Name }</span>
+			<span class="block text-sm text-zinc-500 tabular-nums">
+				Now <span class="sensitive">{ a.ViewAmount() }</span>
+				<span
+					x-cloak
+					x-show="diff() !== 0"
+					:class="diff() > 0 ? 'text-emerald-400' : 'text-red-400'"
+					x-text="fmtDiff()"
+				></span>
+			</span>
+		</label>
+		<div class="flex items-center gap-2 w-full sm:w-52">
+			<span class="text-sm text-zinc-500">{ a.Currency.Symbol }</span>
+			<input
+				id={ id }
+				name={ "amount-" + a.ID }
+				type="text"
+				inputmode="decimal"
+				autocomplete="off"
+				value={ strconv.FormatFloat(a.Amount, 'f', 2, 64) }
+				x-model="val"
+				x-mask:dynamic="$money($input, '.', ',')"
+				class="input-field sensitive text-right tabular-nums"
+			/>
+		</div>
+	</div>
+}
+
+// fixBalanceRowData is the row's Alpine state: the stored balance and the
+// typed one, with their difference.
+func fixBalanceRowData(a *models.Account) string {
+	cur, _ := json.Marshal(a.Amount)
+	val, _ := json.Marshal(strconv.FormatFloat(a.Amount, 'f', 2, 64))
+	return fmt.Sprintf(`{
+		cur: %s,
+		val: %s,
+		diff() {
+			const n = parseFloat(String(this.val).replace(/[^0-9.\-]/g, ''));
+			return isNaN(n) ? 0 : Math.round((n - this.cur) * 100) / 100;
+		},
+		fmtDiff() {
+			const d = this.diff();
+			return (d > 0 ? '+' : '−') + Math.abs(d).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+		},
+	}`, cur, val)
+}
