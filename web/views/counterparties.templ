@@ -160,7 +160,23 @@ templ counterpartiesList(counterparties []models.Counterparty) {
 				@counterpartyWrapper(&cp)
 			}
 		}
+		@counterpartiesEmpty()
 		<p x-cloak x-show="q.trim() && !any($root)" class="py-12 text-center text-zinc-500">No counterparties match</p>
+	</div>
+}
+
+templ counterpartiesEmpty() {
+	<div class="counterparties-empty hidden place-items-center gap-3 py-16 text-center">
+		<div class="relative grid place-items-center w-16 h-16 rounded-2xl bg-violet-400/15 text-violet-400">
+			<div aria-hidden="true" class="absolute inset-0 rounded-2xl bg-violet-400/20 blur-xl"></div>
+			@icons.Users("30", &templ.Attributes{"class": "relative"})
+		</div>
+		<p class="mt-2 text-xl font-semibold">No counterparties yet</p>
+		<p class="max-w-sm text-zinc-500">The people and shops you pay or get paid by. Add them here, or they show up as your bank SMS come in.</p>
+		<button type="button" @click="openCreateForm=true" class="btn-primary mt-2">
+			@icons.Plus("18")
+			New counterparty
+		</button>
 	</div>
 }
 

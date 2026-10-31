@@ -87,6 +87,22 @@ templ categoriesList(categories []models.Category) {
 			@Category(&cat)
 		}
 	}
+	@categoriesEmpty()
+}
+
+templ categoriesEmpty() {
+	<div class="categories-empty hidden place-items-center gap-3 py-16 text-center">
+		<div class="relative grid place-items-center w-16 h-16 rounded-2xl bg-violet-400/15 text-violet-400">
+			<div aria-hidden="true" class="absolute inset-0 rounded-2xl bg-violet-400/20 blur-xl"></div>
+			@icons.Tag("30", &templ.Attributes{"class": "relative"})
+		</div>
+		<p class="mt-2 text-xl font-semibold">No categories yet</p>
+		<p class="max-w-sm text-zinc-500">Group your transactions, like groceries, rent or salary, to see where your money goes and set budgets.</p>
+		<button type="button" @click="openCreateForm=true" class="btn-primary mt-2">
+			@icons.Plus("18")
+			New category
+		</button>
+	</div>
 }
 
 templ Category(cat *models.Category) {

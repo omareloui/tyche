@@ -332,6 +332,22 @@ templ accountsList(accounts []models.Account) {
 				</section>
 			}
 		}
+		@accountsEmpty()
+	</div>
+}
+
+templ accountsEmpty() {
+	<div class="accounts-empty hidden place-items-center gap-3 py-16 text-center">
+		<div class="relative grid place-items-center w-16 h-16 rounded-2xl bg-violet-400/15 text-violet-400">
+			<div aria-hidden="true" class="absolute inset-0 rounded-2xl bg-violet-400/20 blur-xl"></div>
+			@icons.Wallet("30", &templ.Attributes{"class": "relative"})
+		</div>
+		<p class="mt-2 text-xl font-semibold">No accounts yet</p>
+		<p class="max-w-sm text-zinc-500">Add your bank accounts, cards and cash to track where your money is and what's left to spend.</p>
+		<button type="button" @click="openCreateForm=true" class="btn-primary mt-2">
+			@icons.Plus("18")
+			New account
+		</button>
 	</div>
 }
 

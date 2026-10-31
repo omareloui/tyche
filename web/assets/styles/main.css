@@ -257,6 +257,21 @@ input[type="number"] {
   display: grid;
 }
 
+/* ============ ACCOUNTS / CATEGORIES / COUNTERPARTIES ============ */
+#accounts-list:not(:has([data-account])) .accounts-empty {
+  display: grid;
+}
+
+/* A deleted counterparty leaves its (empty) wrapper behind, so look past it. */
+#categories-list:not(:has(> *)),
+#counterparties-list:not(:has(> * > *)) {
+  display: none;
+}
+#categories-list:not(:has(> *)) ~ .categories-empty,
+#counterparties-list:not(:has(> * > *)) ~ .counterparties-empty {
+  display: grid;
+}
+
 /* ============ RECURRING ============ */
 #rtx-list:not(:has([data-rtx])) .rtx-empty {
   display: grid;
