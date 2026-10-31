@@ -38,8 +38,7 @@ templ Transactions(
 	knds []models.TxKind, cats []models.Category,
 	cps []models.Counterparty, gls []models.Goal) {
 	@layouts.WithCreateForm(claims, "Transactions", balances,
-		txCreateSlot(CreateTransactionForm(fd, accounts, knds, cats, cps, gls, &claims.DefaultCurrency)),
-		layouts.WithDatePicker(), layouts.WithAlpineMask()) {
+		txCreateSlot(CreateTransactionForm(fd, accounts, knds, cats, cps, gls, &claims.DefaultCurrency))) {
 		<div x-data="txPage" @keydown.window="onKey($event)">
 			<div id="tx-body" class="contents">
 				@TxBody(list, accounts, knds, cats, cps, gls)

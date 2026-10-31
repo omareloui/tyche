@@ -21,7 +21,7 @@ type RecurrenceFD struct {
 }
 
 templ RecurrentTxs(claims *jwt.AccessClaims, balances []models.Balance, rtxs []models.RecurrentTx) {
-	@layouts.WithTitle(claims, "Recurring", balances, layouts.WithDatePicker(), layouts.WithAlpineMask()) {
+	@layouts.WithTitle(claims, "Recurring", balances) {
 		@rtxsList(rtxs, &claims.DefaultCurrency)
 	}
 }

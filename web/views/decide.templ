@@ -38,8 +38,7 @@ templ Decide(
 	wlFD *WishlistItemFD,
 	pfd *PurchaseFD) {
 	@layouts.WithCreateForm(claims, "Decide", balances,
-		CreateWishlistItemForm(wlFD, curs, &claims.DefaultCurrency),
-		layouts.WithDatePicker(), layouts.WithAlpineMask()) {
+		CreateWishlistItemForm(wlFD, curs, &claims.DefaultCurrency)) {
 		<div class="grid gap-8">
 			<div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] items-start">
 				@AffordSection(pfd, "", curs, &claims.DefaultCurrency, AffordResult(nil, nil))

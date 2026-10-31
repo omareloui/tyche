@@ -57,8 +57,7 @@ templ Accounts(
 	curs []models.Currency, accounts []models.Account,
 	cps []models.Counterparty) {
 	@layouts.WithCreateForm(claims, "Accounts", balances,
-		CreateAccountForm(fd, aknds, curs, cps, &claims.DefaultCurrency),
-		layouts.WithAlpineMask(), layouts.WithDatePicker()) {
+		CreateAccountForm(fd, aknds, curs, cps, &claims.DefaultCurrency)) {
 		@accountsList(accounts)
 	}
 }

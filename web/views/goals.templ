@@ -24,8 +24,7 @@ templ Goals(
 	fd *GoalFD, goals []models.Goal,
 	curs []models.Currency) {
 	@layouts.WithCreateForm(claims, "Goals", balances,
-		CreateGoalForm(fd, curs, &claims.DefaultCurrency),
-		layouts.WithDatePicker(), layouts.WithAlpineMask()) {
+		CreateGoalForm(fd, curs, &claims.DefaultCurrency)) {
 		@goalsList(goals, &claims.DefaultCurrency)
 	}
 }

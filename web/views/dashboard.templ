@@ -40,7 +40,7 @@ type DashboardData struct {
 // counts) renders right away, the rest loads in once the page is shown.
 templ Dashboard(d DashboardData) {
 	{{ def := &d.Claims.DefaultCurrency }}
-	@layouts.Main(d.Claims, "Dashboard", d.Balances, layouts.WithAlpine()) {
+	@layouts.Main(d.Claims, "Dashboard", d.Balances) {
 		@components.Container() {
 			<div class="grid grid-cols-1 gap-4 sm:gap-5">
 				@dashGreeting(d.Claims)
