@@ -1,0 +1,326 @@
+package views
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/omareloui/tyche/internal/formatters"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+const (
+	UnitAmount = "amount"
+	UnitPct    = "pct"
+)
+
+// InstallmentPlanFD is a models.InstallmentPlan's fields.
+type InstallmentPlanFD struct {
+	Strategy          form.FDInput
+	Installments      form.FDInput
+	InstallmentAmount form.FDInput
+	Rate              form.FDInput
+	RatePeriod        form.FDInput
+	DownPayment       form.FDInput
+	DownPaymentUnit   form.FDInput
+	AdminFee          form.FDInput
+	AdminFeeUnit      form.FDInput
+	AdminFeeFinanced  form.FDInput
+	MonthlyFee        form.FDInput
+	InsuranceRate     form.FDInput
+	BalloonPct        form.FDInput
+	GraceMonths       form.FDInput
+}
+
+func (fd *InstallmentPlanFD) strategy() string {
+	if fd.Strategy.Value == "" {
+		return models.StrategyKnownAmount.String()
+	}
+	return fd.Strategy.Value
+}
+
+// hasExtras tells if any of the less common fields is filled or wrong, to
+// show them open.
+func (fd *InstallmentPlanFD) hasExtras() bool {
+	for _, f := range []form.FDInput{fd.DownPayment, fd.AdminFee, fd.MonthlyFee, fd.InsuranceRate, fd.BalloonPct, fd.GraceMonths} {
+		if (f.Value != "" && f.Value != "0") || f.Error != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// pctMask keeps a percentage's digits and dot.
+const pctMask = "$input.replace(/[^0-9.]/g, '')"
+
+// unitMask is the money or percentage mask, after the unit picked in a
+// unitToggle.
+func unitMask(unitName string) string {
+	return fmt.Sprintf("unitOf('%s') === '%s' ? %s : %s", unitName, UnitPct, pctMask, moneyMask)
+}
+
+templ installmentPlanInputs(fd *InstallmentPlanFD, id string, withPreview bool) {
+	<div class="grid gap-4">
+		<fieldset>
+			<legend class="input-label">How the bank or shop charges it</legend>
+			<div class="grid sm:grid-cols-2 gap-2">
+				for _, s := range models.InstallmentStrategies() {
+					<label class="flex flex-col gap-0.5 px-3 py-2.5 rounded-2xl border border-zinc-800 bg-zinc-800/30 cursor-pointer transition-colors hover:border-zinc-600 has-checked:border-(--accent) has-checked:bg-(--accent)/8 has-focus-visible:ring-2 has-focus-visible:ring-(--accent)">
+						<input
+							type="radio"
+							name="strategy"
+							value={ s.String() }
+							class="sr-only"
+							if s.String() == fd.strategy() {
+								checked
+							}
+						/>
+						<span class="text-sm font-medium">{ s.Label() }</span>
+						<span class="text-xs text-zinc-500">{ s.Description() }</span>
+					</label>
+				}
+			</div>
+		</fieldset>
+		<div class="grid gap-2">
+			<div class="grid grid-cols-[1fr_auto_1fr] items-start gap-3">
+				@form.Field("Months", "installments", id, icons.Calendar("15"), "") {
+					@form.Control("text", "installments", "e.g. 12", id, form.FDInput{Value: fd.Installments.Value}, templ.Attributes{
+						"inputmode": "numeric", "autocomplete": "off", "x-mask": "999",
+					})
+				}
+				<span x-show="strategy === 'known'" class="self-end pb-2.5 text-sm text-zinc-500">or</span>
+				<div x-show="strategy === 'known'">
+					@form.Field("Per month", "installment_amount", id, icons.Coins("15"), "") {
+						@form.Control("text", "installment_amount", "", id, form.FDInput{Value: fd.InstallmentAmount.Value}, templ.Attributes{
+							"inputmode":      "decimal",
+							"autocomplete":   "off",
+							"data-money":     true,
+							"x-mask:dynamic": moneyMask,
+							":placeholder":   "money(1000)",
+						})
+					}
+				</div>
+				<span x-show="strategy !== 'known'" x-cloak></span>
+				<div x-show="strategy !== 'known'" x-cloak>
+					@form.Field("Interest", "rate", id, icons.Hash("15"), "") {
+						<div class="flex gap-2">
+							<div class="flex-1 min-w-0">
+								@form.Control("text", "rate", "%", id, form.FDInput{Value: fd.Rate.Value}, templ.Attributes{
+									"inputmode": "decimal", "autocomplete": "off", "x-mask:dynamic": pctMask,
+								})
+							</div>
+							@unitToggle("rate_period", id, fd.RatePeriod.Value, []form.RadioOption{
+								{Value: models.RatePerYear.String(), Label: "% / yr"},
+								{Value: models.RatePerMonth.String(), Label: "% / mo"},
+							})
+						</div>
+					}
+				</div>
+			</div>
+			<p x-show="strategy === 'known'" class="text-sm text-zinc-500">Fill in the months or the amount per month, the other is worked out from the price. Both if it costs more than the price.</p>
+			<p x-show="strategy !== 'known'" x-cloak class="text-sm text-zinc-500">The yearly rate banks quote, or the monthly one of credit card plans.</p>
+			@form.ErrorMessage(fd.Installments.Error)
+			@form.ErrorMessage(fd.InstallmentAmount.Error)
+			@form.ErrorMessage(fd.Rate.Error)
+		</div>
+		<details
+			class="group rounded-2xl border border-zinc-800 bg-zinc-800/20"
+			if fd.hasExtras() {
+				open
+			}
+		>
+			<summary class="flex items-center justify-between gap-2 px-4 py-3 list-none cursor-pointer select-none text-zinc-300 [&::-webkit-details-marker]:hidden">
+				<span>Down payment, fees and more</span>
+				@icons.ChevronDown("16", &templ.Attributes{"class": "text-zinc-500 transition-transform group-open:rotate-180"})
+			</summary>
+			<div class="grid sm:grid-cols-2 gap-4 px-4 pb-4">
+				@planUnitField("Down payment", "down_payment", "down_payment_unit", id, fd.DownPayment, fd.DownPaymentUnit, "Paid on the day")
+				<div class="grid gap-2">
+					@planUnitField("Admin fee", "admin_fee", "admin_fee_unit", id, fd.AdminFee, fd.AdminFeeUnit, "One-time, % of what's borrowed")
+					@form.Toggle("Added to the loan", "admin_fee_financed", id, nil, fd.AdminFeeFinanced, nil)
+				</div>
+				@form.Field("Monthly fee", "monthly_fee", id, icons.Coins("15"), fd.MonthlyFee.Error) {
+					@form.Control("text", "monthly_fee", "", id, fd.MonthlyFee, templ.Attributes{
+						"inputmode":      "decimal",
+						"autocomplete":   "off",
+						"data-money":     true,
+						"x-mask:dynamic": moneyMask,
+						":placeholder":   "money(0)",
+					})
+					<p class="mt-1 text-xs text-zinc-500">Added to every payment, e.g. an account fee</p>
+				}
+				@form.Field("Insurance, % a year", "insurance_rate", id, icons.Hash("15"), fd.InsuranceRate.Error) {
+					@form.Control("text", "insurance_rate", "0", id, fd.InsuranceRate, templ.Attributes{
+						"inputmode": "decimal", "autocomplete": "off", "x-mask:dynamic": pctMask,
+					})
+					<p class="mt-1 text-xs text-zinc-500">Of what's borrowed, paid monthly (e.g. life or car insurance)</p>
+				}
+				@form.Field("Last payment, % of price", "balloon_pct", id, icons.Hash("15"), fd.BalloonPct.Error) {
+					@form.Control("text", "balloon_pct", "0", id, fd.BalloonPct, templ.Attributes{
+						"inputmode": "decimal", "autocomplete": "off", "x-mask:dynamic": pctMask,
+					})
+					<p class="mt-1 text-xs text-zinc-500">A balloon or residual value, lowering the other payments</p>
+				}
+				@form.Field("Grace months", "grace_months", id, icons.Calendar("15"), fd.GraceMonths.Error) {
+					@form.Control("text", "grace_months", "0", id, fd.GraceMonths, templ.Attributes{
+						"inputmode": "numeric", "autocomplete": "off", "x-mask": "99",
+					})
+					<p class="mt-1 text-xs text-zinc-500">Before the first payment, interest still runs</p>
+				}
+			</div>
+		</details>
+		if withPreview {
+			<div
+				hx-post="/decide/plan-preview"
+				hx-trigger="load, input delay:400ms from:closest form, change from:closest form"
+				hx-target="this"
+				hx-swap="innerHTML"
+				hx-sync="this:replace"
+			></div>
+		}
+	</div>
+}
+
+// planUnitField is an amount or a percentage, picked by a unit toggle.
+templ planUnitField(label, name, unitName, id string, data, unit form.FDInput, hint string) {
+	@form.Field(label, name, id, icons.Coins("15"), data.Error) {
+		<div class="flex gap-2">
+			<div class="flex-1 min-w-0">
+				@form.Control("text", name, "0", id, data, templ.Attributes{
+					"inputmode":      "decimal",
+					"autocomplete":   "off",
+					"data-money":     true,
+					"x-mask:dynamic": unitMask(unitName),
+				})
+			</div>
+			@unitToggle(unitName, id, unit.Value, []form.RadioOption{
+				{Value: UnitAmount, Label: ""},
+				{Value: UnitPct, Label: "%"},
+			})
+		</div>
+		<p class="mt-1 text-xs text-zinc-500">{ hint }</p>
+	}
+}
+
+// unitToggle is a pair of small pills; an empty label shows the currency
+// symbol.
+templ unitToggle(name, id, value string, opts []form.RadioOption) {
+	if value == "" {
+		{{ value = opts[0].Value }}
+	}
+	<div role="radiogroup" class="flex shrink-0 h-11 p-1 rounded-xl bg-zinc-800/60 border border-zinc-800">
+		for _, o := range opts {
+			<label class="grid place-items-center min-w-10 px-2 rounded-lg text-sm text-zinc-400 cursor-pointer select-none transition-colors hover:text-white has-checked:bg-(--accent) has-checked:text-zinc-950">
+				<input
+					type="radio"
+					name={ name }
+					value={ o.Value }
+					class="sr-only"
+					if o.Value == value {
+						checked
+					}
+				/>
+				if o.Label == "" {
+					<span x-text="sym || '#'"></span>
+				} else {
+					<span>{ o.Label }</span>
+				}
+			</label>
+		}
+	</div>
+}
+
+// PlanPreview sums a plan up while it's filled.
+templ PlanPreview(s *models.InstallmentSchedule, sym, problem string) {
+	if problem != "" {
+		<p class="text-sm text-zinc-500">{ problem }</p>
+	} else if s != nil {
+		<div class="grid gap-1 px-4 py-3 rounded-2xl bg-zinc-800/30 ring-1 ring-zinc-800 text-sm tabular-nums">
+			<p class="text-zinc-200">{ s.Summary(sym) }</p>
+			<p class="text-zinc-500">
+				{ formatters.FormatAmount(s.TotalPaid, sym) } in total
+				if s.Extra() > 0.005 {
+					· { formatters.FormatAmount(s.Extra(), sym) } over the price · { models.ViewRate(s.APR) } a year in effect
+				}
+			</p>
+		</div>
+	}
+}
+
+// planBreakdown is a plan's totals and its payment schedule.
+templ planBreakdown(s *models.InstallmentSchedule, sym string) {
+	<div class="grid gap-3">
+		<dl class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+			@affordStat("Monthly", planMonthly(s, sym), "")
+			@affordStat("Interest", formatters.FormatAmount(s.TotalInterest, sym), "")
+			@affordStat("Fees", formatters.FormatAmount(s.TotalFees, sym), "")
+			@affordStat("Effective rate", models.ViewRate(s.APR)+" / yr", aprClass(s.APR))
+		</dl>
+		<details class="group">
+			<summary class="flex items-center gap-2 list-none cursor-pointer select-none text-sm text-zinc-400 hover:text-zinc-200 [&::-webkit-details-marker]:hidden">
+				@icons.Calendar("14")
+				Payment schedule · { fmt.Sprint(len(s.Rows)) } { plural(len(s.Rows), "payment", "payments") }
+				@icons.ChevronDown("14", &templ.Attributes{"class": "transition-transform group-open:rotate-180"})
+			</summary>
+			<div class="mt-2 max-h-80 overflow-auto rounded-2xl ring-1 ring-zinc-800">
+				<table class="w-full text-sm tabular-nums">
+					<thead class="sticky top-0 bg-zinc-900 text-xs text-zinc-500">
+						<tr>
+							<th class="px-3 py-2 text-left font-medium">Month</th>
+							<th class="px-3 py-2 text-right font-medium">Payment</th>
+							<th class="px-3 py-2 text-right font-medium">Interest</th>
+							<th class="px-3 py-2 text-right font-medium hidden sm:table-cell">Principal</th>
+							<th class="px-3 py-2 text-right font-medium hidden sm:table-cell">Fees</th>
+							<th class="px-3 py-2 text-right font-medium">Left</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-zinc-800/80">
+						if s.PaidOnDay() > 0 {
+							<tr>
+								<td class="px-3 py-1.5 text-zinc-400">Today</td>
+								<td class="px-3 py-1.5 text-right">{ formatters.FormatNum(s.PaidOnDay()) }</td>
+								<td class="px-3 py-1.5 text-right text-zinc-500">–</td>
+								<td class="px-3 py-1.5 text-right hidden sm:table-cell">{ formatters.FormatNum(s.DownPayment) }</td>
+								<td class="px-3 py-1.5 text-right hidden sm:table-cell">{ formatters.FormatNum(s.UpfrontFees) }</td>
+								<td class="px-3 py-1.5 text-right text-zinc-500">{ formatters.FormatNum(s.Financed) }</td>
+							</tr>
+						}
+						for _, row := range s.Rows {
+							<tr>
+								<td class="px-3 py-1.5 text-zinc-400">{ time.Now().AddDate(0, row.Month, 0).Format("Jan 2006") }</td>
+								<td class="px-3 py-1.5 text-right">{ formatters.FormatNum(row.Payment) }</td>
+								<td class="px-3 py-1.5 text-right">{ formatters.FormatNum(row.Interest) }</td>
+								<td class="px-3 py-1.5 text-right hidden sm:table-cell">{ formatters.FormatNum(row.Principal) }</td>
+								<td class="px-3 py-1.5 text-right hidden sm:table-cell">{ formatters.FormatNum(row.Fees) }</td>
+								<td class="px-3 py-1.5 text-right text-zinc-500">{ formatters.FormatNum(row.Left) }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+			<p class="mt-1.5 text-xs text-zinc-500">In { sym }. Your bank's numbers may differ by rounding.</p>
+		</details>
+	</div>
+}
+
+func planMonthly(s *models.InstallmentSchedule, sym string) string {
+	if s.IsEven() {
+		return formatters.FormatAmount(s.FirstPayment(), sym)
+	}
+	last := s.LastPayment()
+	if s.Plan.BalloonPct > 0 && len(s.Rows) > 1 {
+		last = s.Rows[len(s.Rows)-2].Payment
+	}
+	return fmt.Sprintf("%s → %s", formatters.FormatNum(s.FirstPayment()), formatters.FormatNum(last))
+}
+
+func aprClass(apr float64) string {
+	switch {
+	case apr > 30:
+		return "text-red-400"
+	case apr > 15:
+		return "text-amber-300"
+	}
+	return ""
+}

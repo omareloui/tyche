@@ -53,7 +53,7 @@ templ wishlistItemFormBody(id string, fd *WishlistItemFD, curs []models.Currency
 	@form.Field("What is it?", "name", id, icons.Star("15"), fd.Name.Error) {
 		@form.Control("text", "name", "e.g. Noise cancelling headphones", id, fd.Name, nil)
 	}
-	@purchaseInputs(fd.PurchaseFD, id, curs, defaultCur)
+	@purchaseInputs(fd.PurchaseFD, id, curs, defaultCur, true)
 	<div class="grid gap-2">
 		<p class="flex items-center gap-2 text-zinc-300">
 			@icons.Hourglass("15")
@@ -165,7 +165,7 @@ templ WishlistItem(item *models.WishlistItem, ws *models.WorkSettings) {
 		hx-target="#wishlist"
 		hx-swap="outerHTML"
 		data-wl
-		class="relative"
+		class="relative min-w-0"
 		x-data="{openMenu: false}"
 	>
 		@components.EntryMenu("openMenu", wishlistMenuItems(item))
@@ -173,7 +173,7 @@ templ WishlistItem(item *models.WishlistItem, ws *models.WorkSettings) {
 			<div class="flex items-start gap-3 min-w-0">
 				<div class="flex-1 min-w-0">
 					<p class="flex items-center gap-1.5 text-lg leading-tight">
-						<span class="truncate">{ item.Name }</span>
+						<span title={ item.Name } class="min-w-0 truncate">{ item.Name }</span>
 						if item.URL != "" {
 							<a href={ templ.SafeURL(item.URL) } target="_blank" rel="noopener noreferrer" hx-boost="false" aria-label="Open link" class="shrink-0 text-zinc-500 hover:text-(--accent)">
 								@icons.ExternalLink("14")
@@ -181,8 +181,8 @@ templ WishlistItem(item *models.WishlistItem, ws *models.WorkSettings) {
 						}
 					</p>
 					<p class="text-sm text-zinc-500 tabular-nums truncate">
-						if item.IsInstallments() {
-							{ fmt.Sprint(item.Installments) } × { item.ViewInstallment() } · cash { item.ViewPrice() }
+						if plan := item.ViewPlan(); plan != "" {
+							{ plan } · cash { item.ViewPrice() }
 						} else {
 							{ item.ViewPrice() }
 						}

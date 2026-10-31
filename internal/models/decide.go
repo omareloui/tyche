@@ -89,31 +89,24 @@ func (v Verdict) String() string {
 	return [...]string{"You can afford it", "Think it over", "You can't afford it now"}[v]
 }
 
-// Purchase is what to check: a price paid cash, or in monthly installments.
+// Purchase is what to check: a price paid cash, or by an installment plan.
 type Purchase struct {
-	Price             float64
-	Currency          Currency
-	Installments      int
-	InstallmentAmount float64
+	Price    float64
+	Currency Currency
+	// Plan is nil when paying cash.
+	Plan *InstallmentPlan
 }
 
 func (p *Purchase) IsInstallments() bool {
-	return p.Installments > 0
+	return p.Plan != nil
 }
 
-func (p *Purchase) TotalCost() float64 {
-	if p.IsInstallments() {
-		return p.InstallmentAmount * float64(p.Installments)
+// Schedule is the plan worked out for the price, nil when paying cash.
+func (p *Purchase) Schedule() (*InstallmentSchedule, error) {
+	if p.Plan == nil {
+		return nil, nil
 	}
-	return p.Price
-}
-
-// Upfront is what's paid right away: the price, or the first installment.
-func (p *Purchase) Upfront() float64 {
-	if p.IsInstallments() {
-		return p.InstallmentAmount
-	}
-	return p.Price
+	return p.Plan.Schedule(p.Price)
 }
 
 // GoalImpact is how a purchase affects a goal in progress, in its currency.
@@ -133,22 +126,30 @@ type GoalImpact struct {
 // Affordability is a purchase's impact on the balance and goals, in the
 // default currency unless said otherwise.
 type Affordability struct {
-	Purchase        Purchase
-	Currency        Currency
-	BalanceNow      float64
-	Upfront         float64
-	TotalCost       float64
+	Purchase Purchase
+	Currency Currency
+	// Schedule is the installments in the purchase's currency, nil for cash.
+	Schedule   *InstallmentSchedule
+	BalanceNow float64
+	// PaidOnDay is the price, or a plan's down payment and fees on the day.
+	PaidOnDay float64
+	// FirstPayment is a plan's first monthly payment.
+	FirstPayment float64
+	TotalCost    float64
+	// BalanceAfter is the balance after paying on the day and the first
+	// monthly payment.
 	BalanceAfter    float64
 	BalanceAfterAll float64
-	// Markup is the installments' extra cost over the cash price.
-	Markup float64
-	// SalaryShare is the monthly outlay (the installment, or the price when
-	// paying cash) as a share of the monthly salary, 0 if not set.
-	SalaryShare float64
-	WorkHours   float64
-	Goals       []GoalImpact
-	Verdict     Verdict
-	Reasons     []string
+	// Extra is what the plan costs over the cash price.
+	Extra float64
+	// MonthlyOutlay is the highest monthly payment, or the price when paying
+	// cash, and SalaryShare it as a share of the monthly salary (0 if not set).
+	MonthlyOutlay float64
+	SalaryShare   float64
+	WorkHours     float64
+	Goals         []GoalImpact
+	Verdict       Verdict
+	Reasons       []string
 }
 
 // GoalPaces are each goal's average monthly contribution in its currency.
@@ -156,22 +157,32 @@ type GoalPaces map[string]float64
 
 // CheckAffordability weighs a purchase against the balances and the
 // unfulfilled goals.
-func CheckAffordability(p Purchase, balances []Balance, goals []Goal, paces GoalPaces, ws *WorkSettings, dflt *Currency) Affordability {
+func CheckAffordability(p Purchase, balances []Balance, goals []Goal, paces GoalPaces, ws *WorkSettings, dflt *Currency) (Affordability, error) {
 	a := Affordability{Purchase: p, Currency: *dflt}
 
 	for _, b := range balances {
 		a.BalanceNow += convert(b.Amount, &b.Currency, dflt)
 	}
 
-	a.Upfront = convert(p.Upfront(), &p.Currency, dflt)
-	a.TotalCost = convert(p.TotalCost(), &p.Currency, dflt)
-	a.BalanceAfter = a.BalanceNow - a.Upfront
-	a.BalanceAfterAll = a.BalanceNow - a.TotalCost
-	if p.IsInstallments() {
-		a.Markup = a.TotalCost - convert(p.Price, &p.Currency, dflt)
+	sch, err := p.Schedule()
+	if err != nil {
+		return a, err
 	}
-	a.SalaryShare = ws.SalaryShare(p.Upfront(), &p.Currency)
-	a.WorkHours = ws.HoursFor(p.TotalCost(), &p.Currency)
+	a.Schedule = sch
+
+	total, onDay, outlay := p.Price, p.Price, p.Price
+	if sch != nil {
+		total, onDay, outlay = sch.TotalPaid, sch.PaidOnDay(), sch.MaxPayment()
+		a.FirstPayment = convert(sch.FirstPayment(), &p.Currency, dflt)
+		a.Extra = convert(sch.Extra(), &p.Currency, dflt)
+	}
+	a.TotalCost = convert(total, &p.Currency, dflt)
+	a.PaidOnDay = convert(onDay, &p.Currency, dflt)
+	a.MonthlyOutlay = convert(outlay, &p.Currency, dflt)
+	a.BalanceAfter = a.BalanceNow - a.PaidOnDay - a.FirstPayment
+	a.BalanceAfterAll = a.BalanceNow - a.TotalCost
+	a.SalaryShare = ws.SalaryShare(outlay, &p.Currency)
+	a.WorkHours = ws.HoursFor(total, &p.Currency)
 
 	maxDelay := 0.0
 	for _, gl := range goals {
@@ -179,7 +190,7 @@ func CheckAffordability(p Purchase, balances []Balance, goals []Goal, paces Goal
 		if !gl.FulfilledAt.IsZero() || rem <= 0 {
 			continue
 		}
-		cost := convert(p.TotalCost(), &p.Currency, &gl.Currency)
+		cost := convert(total, &p.Currency, &gl.Currency)
 		gi := GoalImpact{Goal: gl, Remaining: rem, Cost: cost, PctOfRemaining: cost / rem * 100, DelayMonths: -1}
 		if pace := paces[gl.ID]; pace > 0 {
 			gi.DelayMonths = cost / pace
@@ -214,6 +225,20 @@ func CheckAffordability(p Purchase, balances []Balance, goals []Goal, paces Goal
 		}
 		a.Reasons = append(a.Reasons, "It's over half your balance")
 	}
+	if sch != nil && sch.APR > 30 {
+		if a.Verdict == VerdictYes {
+			a.Verdict = VerdictCareful
+		}
+		a.Reasons = append(a.Reasons, fmt.Sprintf("The plan costs %s a year in effect", ViewRate(sch.APR)))
+	}
 
-	return a
+	return a, nil
+}
+
+// ViewRate is a yearly rate as text, e.g. "18.4%".
+func ViewRate(pct float64) string {
+	if math.IsInf(pct, 1) {
+		return "over 100%"
+	}
+	return fmt.Sprintf("%.1f%%", pct)
 }

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -48,7 +49,7 @@ func (h Handler) CreateWishlistItem(w http.ResponseWriter, r *http.Request) (tem
 		return nil, err
 	}
 
-	item, missingInstallments, err := mapFDToWishlistItem(r, curs)
+	item, err := mapFDToWishlistItem(r, curs)
 	if err != nil {
 		l.Error("parsing form to wishlist item", zap.Error(err))
 		return nil, err
@@ -58,7 +59,7 @@ func (h Handler) CreateWishlistItem(w http.ResponseWriter, r *http.Request) (tem
 
 	claims := getClaims(r.Context())
 
-	if err := h.validateWishlistItem(item, missingInstallments); err != nil {
+	if err := item.SanitizeAndValidate(h.sani, h.valid); err != nil {
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			return views.CreateWishlistItemForm(mapWishlistItemToFD(item, &valerr), curs, &claims.DefaultCurrency), nil
@@ -117,13 +118,13 @@ func (h Handler) EditWishlistItem(w http.ResponseWriter, r *http.Request) (templ
 		return nil, err
 	}
 
-	item, missingInstallments, err := mapFDToWishlistItem(r, curs)
+	item, err := mapFDToWishlistItem(r, curs)
 	if err != nil {
 		return nil, err
 	}
 	item.ID = id
 
-	if err := h.validateWishlistItem(item, missingInstallments); err != nil {
+	if err := item.SanitizeAndValidate(h.sani, h.valid); err != nil {
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			// The form targets the whole wishlist, the errors go in its place.
@@ -208,21 +209,22 @@ func (h Handler) BuyWishlistItem(w http.ResponseWriter, r *http.Request) (templ.
 		}
 	}
 
-	amount := item.Price
-	if item.IsInstallments() {
-		amount = item.InstallmentAmount
-		now := time.Now()
-		tx.RecurrentTx = &models.RecurrentTx{
-			Unit:    models.RecurrentUnitMonth,
-			Every:   1,
-			StopsAt: now.AddDate(0, item.Installments-1, 0),
+	// The form is the first payment, on the day or the plan's first month;
+	// creating it schedules the plan's other payments.
+	rate := wishlistFxRate(item, &tx.Account)
+	tx.Amount = item.Price * rate
+	tx.Description = item.Name
+	if s := item.Schedule(); s != nil {
+		if s.PaidOnDay() > 0 {
+			tx.Amount = s.PaidOnDay() * rate
+			tx.Description = item.Name + " (down payment)"
+		} else {
+			tx.Amount = s.FirstPayment() * rate
+			tx.ScheduledTo = time.Now().AddDate(0, s.Rows[0].Month, 0)
+			tx.Description = fmt.Sprintf("%s (1/%d)", item.Name, len(s.Rows))
 		}
 	}
-	if tx.Account.Currency.String != item.Currency.String {
-		amount *= item.Currency.FxRate(tx.Account.Currency.String)
-	}
-	tx.Amount = amount
-	tx.Description = item.Name
+	tx.Amount = models.RoundCents(tx.Amount)
 	applyCounterpartyDefaultCategory(tx, cps)
 
 	fd := h.mapTransactionToFD(tx, new(errs.ValidationError))
@@ -232,75 +234,85 @@ func (h Handler) BuyWishlistItem(w http.ResponseWriter, r *http.Request) (templ.
 	return views.WishlistBuySheet(views.CreateTransactionForm(fd, accs, knds, cats, cps, gls, &claims.DefaultCurrency)), nil
 }
 
-func mapWishlistItemToFD(item *models.WishlistItem, err *errs.ValidationError) *views.WishlistItemFD {
-	p := &models.Purchase{
-		Price:             item.Price,
-		Currency:          item.Currency,
-		Installments:      item.Installments,
-		InstallmentAmount: item.InstallmentAmount,
+// wishlistFxRate converts the item's amounts to the account's currency,
+// keeping them as they are when the rate is unknown.
+func wishlistFxRate(item *models.WishlistItem, acc *models.Account) float64 {
+	if acc.Currency.String == item.Currency.String {
+		return 1
 	}
-	pfd := mapPurchaseToFD(p)
-	pfd.AmountFD.Amount.Error = err.Errors.MsgFor("Price")
-	pfd.AmountFD.CurrencyID.Error = err.Errors.MsgFor("CurrencyID")
-	pfd.Installments.Error = err.Errors.MsgFor("Installments")
-	pfd.InstallmentAmount.Error = err.Errors.MsgFor("InstallmentAmount")
-	if pfd.Installments.Error != "" || pfd.InstallmentAmount.Error != "" {
-		pfd.Mode.Value = views.PayInstallments
+	if rate := item.Currency.FxRate(acc.Currency.String); rate > 0 {
+		return rate
 	}
+	return 1
+}
 
+func mapWishlistItemToFD(item *models.WishlistItem, err *errs.ValidationError) *views.WishlistItemFD {
+	p := item.Purchase()
 	return &views.WishlistItemFD{
 		Name:        form.FDInput{Value: item.Name, Error: err.Errors.MsgFor("Name")},
-		PurchaseFD:  pfd,
+		PurchaseFD:  mapPurchaseToFD(&p, err.Errors),
 		CoolingDays: form.FDInput{Value: strconv.Itoa(item.CoolingDays), Error: err.Errors.MsgFor("CoolingDays")},
 		URL:         form.FDInput{Value: item.URL, Error: err.Errors.MsgFor("URL")},
 		Note:        form.FDInput{Value: item.Note, Error: err.Errors.MsgFor("Note")},
 	}
 }
 
-// mapFDToWishlistItem reads the item, and whether it's paid in installments
-// with neither their count nor amount given.
-func mapFDToWishlistItem(r *http.Request, curs []models.Currency) (*models.WishlistItem, bool, error) {
+func mapFDToWishlistItem(r *http.Request, curs []models.Currency) (*models.WishlistItem, error) {
 	if err := r.ParseForm(); err != nil {
-		return nil, false, err
+		return nil, err
 	}
 
 	p, err := mapFDToPurchase(r, curs, &models.Currency{})
-	missingInstallments := errors.Is(err, errNoInstallments)
-	if err != nil && !missingInstallments {
-		return nil, false, err
+	if err != nil {
+		return nil, err
 	}
 
 	days, _ := strconv.Atoi(r.FormValue("cooling_days"))
 
 	return &models.WishlistItem{
-		Name:              r.FormValue("name"),
-		Price:             p.Price,
-		Currency:          p.Currency,
-		Installments:      p.Installments,
-		InstallmentAmount: p.InstallmentAmount,
-		URL:               r.FormValue("url"),
-		Note:              r.FormValue("note"),
-		CoolingDays:       days,
-	}, missingInstallments, nil
+		Name:        r.FormValue("name"),
+		Price:       p.Price,
+		Currency:    p.Currency,
+		Plan:        p.Plan,
+		URL:         r.FormValue("url"),
+		Note:        r.FormValue("note"),
+		CoolingDays: days,
+	}, nil
 }
 
-// validateWishlistItem sanitizes and validates the item, also asking for the
-// installments when paying in them without any.
-func (h Handler) validateWishlistItem(item *models.WishlistItem, missingInstallments bool) error {
-	err := item.SanitizeAndValidate(h.sani, h.valid)
-	if !missingInstallments {
-		return err
+// wishlistPlanTxs are the scheduled payments of a wishlist item's plan after
+// first, the transaction buying it: its down payment, or its first monthly
+// payment.
+func wishlistPlanTxs(item *models.WishlistItem, first *models.Transaction) []models.Transaction {
+	s := item.Schedule()
+	if s == nil {
+		return nil
 	}
 
-	var valerr errs.ValidationError
-	if err != nil && !errors.As(err, &valerr) {
-		return err
+	rows := s.Rows
+	day := first.ScheduledTo
+	if s.PaidOnDay() == 0 {
+		day = day.AddDate(0, -rows[0].Month, 0)
+		rows = rows[1:]
 	}
-	if valerr.Errors == nil {
-		valerr.Errors = errs.ValidationErrors{}
+
+	rate := wishlistFxRate(item, &first.Account)
+
+	txs := make([]models.Transaction, len(rows))
+	for i, row := range rows {
+		txs[i] = models.Transaction{
+			ID:           idgen.New(),
+			Account:      first.Account,
+			Amount:       models.RoundCents(row.Payment * rate),
+			Kind:         first.Kind,
+			Category:     first.Category,
+			Counterparty: first.Counterparty,
+			Description:  fmt.Sprintf("%s (%d/%d)", item.Name, len(s.Rows)-len(rows)+i+1, len(s.Rows)),
+			ScheduledTo:  day.AddDate(0, row.Month, 0),
+			CreatedAt:    time.Now(),
+		}
 	}
-	valerr.Errors["Installments"] = errs.ValidationField{Tag: "months_or_amount"}
-	return valerr
+	return txs
 }
 
 func dfltWishlistItem(dfltCur *models.Currency) *models.WishlistItem {

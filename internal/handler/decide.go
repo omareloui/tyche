@@ -1,8 +1,7 @@
 package handler
 
 import (
-	"errors"
-	"math"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -10,7 +9,6 @@ import (
 	"github.com/omareloui/tyche/internal/errs"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
-	"github.com/omareloui/tyche/internal/numsutils"
 	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views"
 	"github.com/omareloui/tyche/web/views/form"
@@ -45,7 +43,7 @@ func (h Handler) Decide(w http.ResponseWriter, r *http.Request) (templ.Component
 	claims := getClaims(r.Context())
 	return views.Decide(claims, balances, curs, ws, items,
 		mapWishlistItemToFD(dfltWishlistItem(&claims.DefaultCurrency), &errs.ValidationError{}),
-		mapPurchaseToFD(&models.Purchase{Currency: claims.DefaultCurrency})), nil
+		mapPurchaseToFD(&models.Purchase{Currency: claims.DefaultCurrency}, nil)), nil
 }
 
 // Afford checks a purchase from the afford form.
@@ -61,14 +59,72 @@ func (h Handler) Afford(w http.ResponseWriter, r *http.Request) (templ.Component
 
 	claims := getClaims(r.Context())
 	p, err := mapFDToPurchase(r, curs, &claims.DefaultCurrency)
-	if errors.Is(err, errNoInstallments) {
-		return views.AffordHint("Fill in the months or the amount per month."), nil
-	}
 	if err != nil {
+		return views.AffordHint("Check the numbers, some aren't valid."), nil
+	}
+	if p.Price <= 0 {
 		return views.AffordResult(nil, nil), nil
+	}
+	if p.Plan != nil {
+		if ve := p.Plan.Validate(p.Price); len(ve) > 0 {
+			return views.AffordHint(planProblem(ve)), nil
+		}
 	}
 
 	return h.affordResult(r, p)
+}
+
+// PlanPreview sums up the plan being filled in a form.
+func (h Handler) PlanPreview(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	if err := r.ParseForm(); err != nil {
+		return nil, err
+	}
+
+	curs, err := h.repo.GetCurrencies(r.Context())
+	if err != nil {
+		return nil, err
+	}
+
+	claims := getClaims(r.Context())
+	p, err := mapFDToPurchase(r, curs, &claims.DefaultCurrency)
+	if err != nil {
+		return views.PlanPreview(nil, "", "Check the numbers, some aren't valid."), nil
+	}
+	if p.Plan == nil || p.Price <= 0 {
+		return views.PlanPreview(nil, "", ""), nil
+	}
+	if ve := p.Plan.Validate(p.Price); len(ve) > 0 {
+		return views.PlanPreview(nil, "", planProblem(ve)), nil
+	}
+
+	s, err := p.Schedule()
+	if err != nil {
+		return views.PlanPreview(nil, "", err.Error()), nil
+	}
+	return views.PlanPreview(s, p.Currency.Symbol, ""), nil
+}
+
+// planFieldLabels name a plan's fields in its problems.
+var planFieldLabels = map[string]string{
+	"Installments":      "Months",
+	"InstallmentAmount": "Per month",
+	"Rate":              "Interest",
+	"DownPayment":       "Down payment",
+	"AdminFee":          "Admin fee",
+	"MonthlyFee":        "Monthly fee",
+	"InsuranceRate":     "Insurance",
+	"BalloonPct":        "Last payment",
+	"GraceMonths":       "Grace months",
+}
+
+// planProblem is the first of a plan's problems, as text.
+func planProblem(ve errs.ValidationErrors) string {
+	for _, key := range []string{"Installments", "InstallmentAmount", "Rate", "DownPayment", "AdminFee", "MonthlyFee", "InsuranceRate", "BalloonPct", "GraceMonths"} {
+		if msg := ve.MsgFor(key); msg != "" {
+			return fmt.Sprintf("%s: %s.", planFieldLabels[key], msg)
+		}
+	}
+	return ""
 }
 
 // AffordSection renders the afford form, prefilled from a wishlist item if
@@ -89,23 +145,19 @@ func (h Handler) AffordSection(w http.ResponseWriter, r *http.Request) (templ.Co
 			return nil, err
 		}
 		name = item.Name
-		p = &models.Purchase{
-			Price:             item.Price,
-			Currency:          item.Currency,
-			Installments:      item.Installments,
-			InstallmentAmount: item.InstallmentAmount,
-		}
+		purchase := item.Purchase()
+		p = &purchase
 	}
 
 	result, err := h.affordResult(r, p)
 	if err != nil {
 		return nil, err
 	}
-	return views.AffordSection(mapPurchaseToFD(p), name, curs, &claims.DefaultCurrency, result), nil
+	return views.AffordSection(mapPurchaseToFD(p, nil), name, curs, &claims.DefaultCurrency, result), nil
 }
 
 func (h Handler) affordResult(r *http.Request, p *models.Purchase) (templ.Component, error) {
-	if p.Price <= 0 && p.TotalCost() <= 0 {
+	if p.Price <= 0 {
 		return views.AffordResult(nil, nil), nil
 	}
 
@@ -130,7 +182,10 @@ func (h Handler) affordResult(r *http.Request, p *models.Purchase) (templ.Compon
 	}
 
 	claims := getClaims(r.Context())
-	a := models.CheckAffordability(*p, balances, goals, paces, ws, &claims.DefaultCurrency)
+	a, err := models.CheckAffordability(*p, balances, goals, paces, ws, &claims.DefaultCurrency)
+	if err != nil {
+		return views.AffordHint(err.Error()), nil
+	}
 	return views.AffordResult(&a, ws), nil
 }
 
@@ -187,32 +242,54 @@ func (h Handler) EditWorkSettings(w http.ResponseWriter, r *http.Request) (templ
 	return views.WorkSettingsCard(ws, views.NewWorkSettingsFD(ws), curs, &claims.DefaultCurrency, false), nil
 }
 
-func mapPurchaseToFD(p *models.Purchase) *views.PurchaseFD {
-	mode := views.PayCash
-	if p.IsInstallments() {
-		mode = views.PayInstallments
-	}
-	return &views.PurchaseFD{
+// mapPurchaseToFD fills the purchase's form, with the plan's problems if
+// any.
+func mapPurchaseToFD(p *models.Purchase, ve errs.ValidationErrors) *views.PurchaseFD {
+	fd := &views.PurchaseFD{
 		AmountFD: &form.AmountFD{
-			Amount:     form.FDInput{Value: formatFloatIfNonZero(p.Price)},
-			CurrencyID: form.FDInput{Value: p.Currency.ID},
+			Amount:     form.FDInput{Value: formatFloatIfNonZero(p.Price), Error: ve.MsgFor("Price")},
+			CurrencyID: form.FDInput{Value: p.Currency.ID, Error: ve.MsgFor("CurrencyID")},
 		},
-		Mode:              form.FDInput{Value: mode},
-		Installments:      form.FDInput{Value: formatIntIfNonZero(p.Installments)},
-		InstallmentAmount: form.FDInput{Value: formatFloatIfNonZero(p.InstallmentAmount)},
+		Mode: form.FDInput{Value: views.PayCash},
 	}
+
+	plan := p.Plan
+	if plan == nil {
+		plan = &models.InstallmentPlan{}
+	} else {
+		fd.Mode.Value = views.PayInstallments
+	}
+
+	unit := func(pct bool) form.FDInput {
+		if pct {
+			return form.FDInput{Value: views.UnitPct}
+		}
+		return form.FDInput{Value: views.UnitAmount}
+	}
+	fd.Plan = views.InstallmentPlanFD{
+		Strategy:          form.FDInput{Value: plan.Strategy.String()},
+		Installments:      form.FDInput{Value: formatIntIfNonZero(plan.Months), Error: ve.MsgFor("Installments")},
+		InstallmentAmount: form.FDInput{Value: formatFloatIfNonZero(plan.Amount), Error: ve.MsgFor("InstallmentAmount")},
+		Rate:              form.FDInput{Value: formatFloatIfNonZero(plan.Rate), Error: ve.MsgFor("Rate")},
+		RatePeriod:        form.FDInput{Value: plan.RatePeriod.String()},
+		DownPayment:       form.FDInput{Value: formatFloatIfNonZero(plan.DownPayment), Error: ve.MsgFor("DownPayment")},
+		DownPaymentUnit:   unit(plan.DownPaymentPct),
+		AdminFee:          form.FDInput{Value: formatFloatIfNonZero(plan.AdminFee), Error: ve.MsgFor("AdminFee")},
+		AdminFeeUnit:      unit(plan.AdminFeePct),
+		AdminFeeFinanced:  form.FDInput{Value: formatBooleanIfNonZero(plan.AdminFeeFinanced)},
+		MonthlyFee:        form.FDInput{Value: formatFloatIfNonZero(plan.MonthlyFee), Error: ve.MsgFor("MonthlyFee")},
+		InsuranceRate:     form.FDInput{Value: formatFloatIfNonZero(plan.InsuranceRate), Error: ve.MsgFor("InsuranceRate")},
+		BalloonPct:        form.FDInput{Value: formatFloatIfNonZero(plan.BalloonPct), Error: ve.MsgFor("BalloonPct")},
+		GraceMonths:       form.FDInput{Value: formatIntIfNonZero(plan.GraceMonths), Error: ve.MsgFor("GraceMonths")},
+	}
+	if planProblem(ve) != "" {
+		fd.Mode.Value = views.PayInstallments
+	}
+	return fd
 }
 
-var (
-	errInvalidPurchase = errors.New("invalid purchase")
-	// errNoInstallments is paying in installments with neither their count
-	// nor their amount. The purchase is still returned, as cash.
-	errNoInstallments = errors.New("missing the installments")
-)
-
 // mapFDToPurchase reads a price, its currency and, when paying in
-// installments, either their count or their amount (working out the other
-// from the price) or both, when the installments cost more than the price.
+// installments, the plan.
 func mapFDToPurchase(r *http.Request, curs []models.Currency, dflt *models.Currency) (*models.Purchase, error) {
 	price, err := parseFloatIfExists(r.FormValue("amount"))
 	if err != nil {
@@ -225,29 +302,54 @@ func mapFDToPurchase(r *http.Request, curs []models.Currency, dflt *models.Curre
 	}
 
 	if r.FormValue("mode") == views.PayInstallments {
-		n, err := parseIntIfExists(r.FormValue("installments"))
+		plan, err := mapFDToInstallmentPlan(r)
 		if err != nil {
 			return nil, err
 		}
-		amt, err := parseFloatIfExists(r.FormValue("installment_amount"))
-		if err != nil {
-			return nil, err
-		}
-		if n < 0 || amt < 0 {
-			return nil, errInvalidPurchase
-		}
-		switch {
-		case n == 0 && amt == 0:
-			return p, errNoInstallments
-		case n == 0 && price > 0:
-			// Enough months to pay the price, split evenly over them.
-			n = int(math.Ceil(numsutils.Round(price / amt)))
-			amt = numsutils.Round(price / float64(n))
-		case amt == 0:
-			amt = numsutils.Round(price / float64(n))
-		}
-		p.Installments, p.InstallmentAmount = n, amt
+		p.Plan = plan
 	}
 
 	return p, nil
+}
+
+func mapFDToInstallmentPlan(r *http.Request) (*models.InstallmentPlan, error) {
+	var err error
+	float := func(name string) float64 {
+		v, e := parseFloatIfExists(r.FormValue(name))
+		if e != nil {
+			err = e
+		}
+		return v
+	}
+	integer := func(name string) int {
+		v, e := parseIntIfExists(r.FormValue(name))
+		if e != nil {
+			err = e
+		}
+		return v
+	}
+
+	plan := &models.InstallmentPlan{
+		Strategy:         models.InstallmentStrategyFromString(r.FormValue("strategy")),
+		Months:           integer("installments"),
+		Rate:             float("rate"),
+		DownPayment:      float("down_payment"),
+		DownPaymentPct:   r.FormValue("down_payment_unit") == views.UnitPct,
+		AdminFee:         float("admin_fee"),
+		AdminFeePct:      r.FormValue("admin_fee_unit") == views.UnitPct,
+		AdminFeeFinanced: parseBoolean(r.FormValue("admin_fee_financed")),
+		MonthlyFee:       float("monthly_fee"),
+		InsuranceRate:    float("insurance_rate"),
+		BalloonPct:       float("balloon_pct"),
+		GraceMonths:      integer("grace_months"),
+	}
+	if r.FormValue("rate_period") == models.RatePerMonth.String() {
+		plan.RatePeriod = models.RatePerMonth
+	}
+	// The amount and the rate only apply to their strategies.
+	if plan.Strategy == models.StrategyKnownAmount {
+		plan.Amount = float("installment_amount")
+		plan.Rate = 0
+	}
+	return plan, err
 }

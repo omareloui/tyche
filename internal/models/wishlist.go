@@ -28,41 +28,36 @@ type WishlistItem struct {
 	Name     string
 	Price    float64
 	Currency Currency
-	// Installments is the number of monthly installments, 0 to pay cash.
-	Installments      int
-	InstallmentAmount float64
-	URL               string
-	Note              string
-	CoolingDays       int
-	Status            WishlistStatus
-	DecidedAt         time.Time
-	TransactionID     string
-	CreatedAt         time.Time
+	// Plan is how it's paid in installments, nil to pay cash.
+	Plan          *InstallmentPlan
+	URL           string
+	Note          string
+	CoolingDays   int
+	Status        WishlistStatus
+	DecidedAt     time.Time
+	TransactionID string
+	CreatedAt     time.Time
 }
 
 type createWishlistItem struct {
-	ID                string  `validate:"required"`
-	Name              string  `validate:"required" conform:"trim"`
-	Price             float64 `validate:"required,gt=0"`
-	CurrencyID        string  `validate:"required"`
-	Installments      int     `validate:"gte=0,lte=120"`
-	InstallmentAmount float64 `validate:"gte=0"`
-	URL               string  `validate:"omitempty,http_url" conform:"trim"`
-	Note              string  `conform:"trim"`
-	CoolingDays       int     `validate:"oneof=7 30"`
+	ID          string  `validate:"required"`
+	Name        string  `validate:"required" conform:"trim"`
+	Price       float64 `validate:"required,gt=0"`
+	CurrencyID  string  `validate:"required"`
+	URL         string  `validate:"omitempty,http_url" conform:"trim"`
+	Note        string  `conform:"trim"`
+	CoolingDays int     `validate:"oneof=7 30"`
 }
 
 func (w *WishlistItem) toValidate() *createWishlistItem {
 	return &createWishlistItem{
-		ID:                w.ID,
-		Name:              w.Name,
-		Price:             w.Price,
-		CurrencyID:        w.Currency.ID,
-		Installments:      w.Installments,
-		InstallmentAmount: w.InstallmentAmount,
-		URL:               w.URL,
-		Note:              w.Note,
-		CoolingDays:       w.CoolingDays,
+		ID:          w.ID,
+		Name:        w.Name,
+		Price:       w.Price,
+		CurrencyID:  w.Currency.ID,
+		URL:         w.URL,
+		Note:        w.Note,
+		CoolingDays: w.CoolingDays,
 	}
 }
 
@@ -76,12 +71,10 @@ func (w *WishlistItem) SanitizeAndValidate(sani *sanitizer.Sanitizer, valid *val
 	if valerr == nil {
 		valerr = &errs.ValidationError{Errors: errs.ValidationErrors{}}
 	}
-	// Paying in installments needs at least 2 of them, and their amount.
-	if v.Installments == 1 {
-		valerr.Errors["Installments"] = errs.ValidationField{Tag: "gte", Param: "2"}
-	}
-	if v.Installments > 0 && v.InstallmentAmount <= 0 {
-		valerr.Errors["InstallmentAmount"] = errs.ValidationField{Tag: "required"}
+	if w.Plan != nil {
+		for k, v := range w.Plan.Validate(w.Price) {
+			valerr.Errors[k] = v
+		}
 	}
 	if len(valerr.Errors) > 0 {
 		return *valerr
@@ -90,14 +83,31 @@ func (w *WishlistItem) SanitizeAndValidate(sani *sanitizer.Sanitizer, valid *val
 }
 
 func (w *WishlistItem) IsInstallments() bool {
-	return w.Installments > 0
+	return w.Plan != nil
 }
 
-// TotalCost is what it costs in the end: the price, or the sum of the
-// installments.
+func (w *WishlistItem) Purchase() Purchase {
+	return Purchase{Price: w.Price, Currency: w.Currency, Plan: w.Plan}
+}
+
+// Schedule is its plan worked out, nil when paid cash or the plan doesn't
+// work out.
+func (w *WishlistItem) Schedule() *InstallmentSchedule {
+	if w.Plan == nil {
+		return nil
+	}
+	s, err := w.Plan.Schedule(w.Price)
+	if err != nil {
+		return nil
+	}
+	return s
+}
+
+// TotalCost is what it costs in the end: the price, or everything its plan
+// pays.
 func (w *WishlistItem) TotalCost() float64 {
-	if w.IsInstallments() {
-		return w.InstallmentAmount * float64(w.Installments)
+	if s := w.Schedule(); s != nil {
+		return s.TotalPaid
 	}
 	return w.Price
 }
@@ -133,8 +143,14 @@ func (w *WishlistItem) ViewPrice() string {
 	return formatters.FormatAmount(w.Price, w.Currency.Symbol)
 }
 
-func (w *WishlistItem) ViewInstallment() string {
-	return formatters.FormatAmount(w.InstallmentAmount, w.Currency.Symbol)
+// ViewPlan sums its plan up, e.g. "12 × E£ 1,100" or "12 mo, E£ 1,200 →
+// E£ 850", with the down payment if any. "" when paid cash.
+func (w *WishlistItem) ViewPlan() string {
+	s := w.Schedule()
+	if s == nil {
+		return ""
+	}
+	return s.Summary(w.Currency.Symbol)
 }
 
 // WishlistStats sums up the decided items, with what abandoning saved in the

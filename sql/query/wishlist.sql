@@ -22,6 +22,7 @@ INSERT INTO wishlist_items (
     currency_id,
     installments,
     installment_amount,
+    installment_plan,
     url,
     note,
     cooling_days,
@@ -34,6 +35,7 @@ VALUES (
     sqlc.arg(currency_id),
     sqlc.arg(installments),
     sqlc.arg(installment_amount),
+    sqlc.arg(installment_plan),
     sqlc.arg(url),
     sqlc.arg(note),
     sqlc.arg(cooling_days),
@@ -48,6 +50,7 @@ SET
     currency_id = sqlc.arg(currency_id),
     installments = sqlc.arg(installments),
     installment_amount = sqlc.arg(installment_amount),
+    installment_plan = sqlc.arg(installment_plan),
     url = sqlc.arg(url),
     note = sqlc.arg(note),
     cooling_days = sqlc.arg(cooling_days)

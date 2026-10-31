@@ -65,7 +65,7 @@ func TestSummarizeWishlist(t *testing.T) {
 		{Status: models.WishlistWaiting, Price: 100, Currency: egp},
 		{Status: models.WishlistBought, Price: 200, Currency: egp},
 		{Status: models.WishlistAbandoned, Price: 300, Currency: egp},
-		{Status: models.WishlistAbandoned, Price: 999, Installments: 3, InstallmentAmount: 400, Currency: egp},
+		{Status: models.WishlistAbandoned, Price: 999, Plan: &models.InstallmentPlan{Months: 3, Amount: 400}, Currency: egp},
 	}
 	s := models.SummarizeWishlist(items, &egp)
 	if s.Waiting != 1 || s.Bought != 1 || s.Abandoned != 2 || s.Saved != 1500 {
@@ -91,8 +91,8 @@ func TestCheckAffordability(t *testing.T) {
 	paces := models.GoalPaces{"car": 2000}
 
 	t.Run("cash", func(t *testing.T) {
-		a := models.CheckAffordability(models.Purchase{Price: 3000, Currency: egp}, balances, goals, paces, ws, &egp)
-		if a.BalanceNow != 10000 || a.BalanceAfter != 7000 || a.BalanceAfterAll != 7000 || a.Markup != 0 {
+		a, _ := models.CheckAffordability(models.Purchase{Price: 3000, Currency: egp}, balances, goals, paces, ws, &egp)
+		if a.BalanceNow != 10000 || a.BalanceAfter != 7000 || a.BalanceAfterAll != 7000 || a.Extra != 0 || a.PaidOnDay != 3000 {
 			t.Errorf("balances = %+v", a)
 		}
 		if !near(a.WorkHours, 10) {
@@ -112,9 +112,12 @@ func TestCheckAffordability(t *testing.T) {
 	})
 
 	t.Run("installments", func(t *testing.T) {
-		p := models.Purchase{Price: 12000, Currency: egp, Installments: 12, InstallmentAmount: 1100}
-		a := models.CheckAffordability(p, balances, nil, nil, ws, &egp)
-		if a.Upfront != 1100 || a.TotalCost != 13200 || a.Markup != 1200 || a.BalanceAfter != 8900 || a.BalanceAfterAll != -3200 {
+		p := models.Purchase{Price: 12000, Currency: egp, Plan: &models.InstallmentPlan{Months: 12, Amount: 1100}}
+		a, err := models.CheckAffordability(p, balances, nil, nil, ws, &egp)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !near(a.FirstPayment, 1100) || !near(a.TotalCost, 13200) || !near(a.Extra, 1200) || !near(a.BalanceAfter, 8900) || !near(a.BalanceAfterAll, -3200) || a.PaidOnDay != 0 {
 			t.Errorf("affordability = %+v", a)
 		}
 		if a.Verdict != models.VerdictCareful {
@@ -122,15 +125,30 @@ func TestCheckAffordability(t *testing.T) {
 		}
 	})
 
+	t.Run("down payment and a pricey plan", func(t *testing.T) {
+		plan := &models.InstallmentPlan{Strategy: models.StrategyFlat, Months: 12, Rate: 30, DownPayment: 2000, AdminFee: 100}
+		a, err := models.CheckAffordability(models.Purchase{Price: 6000, Currency: egp, Plan: plan}, balances, nil, nil, ws, &egp)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// 4,000 financed at 30% flat: 1,200 interest, 433.33 a month.
+		if !near(a.PaidOnDay, 2100) || !near(a.FirstPayment, 5200.0/12) || !near(a.TotalCost, 7300) {
+			t.Errorf("affordability = %+v", a)
+		}
+		if a.Verdict != models.VerdictCareful || a.Schedule.APR < 30 {
+			t.Errorf("Verdict = %v, APR = %v", a.Verdict, a.Schedule.APR)
+		}
+	})
+
 	t.Run("too expensive", func(t *testing.T) {
-		a := models.CheckAffordability(models.Purchase{Price: 20000, Currency: egp}, balances, nil, nil, ws, &egp)
+		a, _ := models.CheckAffordability(models.Purchase{Price: 20000, Currency: egp}, balances, nil, nil, ws, &egp)
 		if a.Verdict != models.VerdictNo {
 			t.Errorf("Verdict = %v, want no", a.Verdict)
 		}
 	})
 
 	t.Run("cheap, no salary, no pace", func(t *testing.T) {
-		a := models.CheckAffordability(models.Purchase{Price: 100, Currency: egp}, balances, goals, nil, &models.WorkSettings{HoursPerWeek: 40}, &egp)
+		a, _ := models.CheckAffordability(models.Purchase{Price: 100, Currency: egp}, balances, goals, nil, &models.WorkSettings{HoursPerWeek: 40}, &egp)
 		if a.Verdict != models.VerdictYes || a.WorkHours != 0 || a.SalaryShare != 0 || a.Goals[0].DelayMonths != -1 {
 			t.Errorf("affordability = %+v", a)
 		}

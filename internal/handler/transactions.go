@@ -105,6 +105,14 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		scheduledTxs = generateNextScheduledTransactions(tx.RecurrentTx, generateNextScheduledTransactionsCount)
 	}
 
+	if wishlistID != "" && tx.RecurrentTx == nil {
+		item, err := h.repo.GetWishlistItem(r.Context(), wishlistID)
+		if err != nil {
+			return nil, err
+		}
+		scheduledTxs = append(scheduledTxs, wishlistPlanTxs(item, tx)...)
+	}
+
 	if err := h.repo.CreateTransaction(r.Context(), tx, tx.RecurrentTx, scheduledTxs); err != nil {
 		l.Error("creating transaction", zap.Error(err))
 		return nil, err

@@ -83,6 +83,10 @@ func (v ValidationField) String() string {
 		return fmt.Sprintf("Exceeds what's left to reimburse of its expense (%s)", v.Param)
 	case "months_or_amount":
 		return "Fill in the months or the amount per month"
+	case "down_payment_too_high":
+		return "With the last payment, it's more than the price"
+	case "amount_too_low":
+		return "It doesn't pay off the price in these months"
 	case "brand_icon":
 		return "Unknown icon, use a slug from simpleicons.org or leave it empty"
 	default:

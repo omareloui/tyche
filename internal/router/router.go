@@ -81,6 +81,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("GET /decide", handle(h.Decide))
 	mux.Handle("GET /decide/afford", handle(h.AffordSection))
 	mux.Handle("POST /decide/afford", handle(h.Afford))
+	mux.Handle("POST /decide/plan-preview", handle(h.PlanPreview))
 	mux.Handle("PUT /decide/work-settings", handle(h.EditWorkSettings))
 
 	mux.Handle("GET /wishlist", handle(h.Wishlist))
