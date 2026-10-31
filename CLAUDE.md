@@ -178,6 +178,8 @@ JSON endpoints use `HandlerJSONMethod` via `handlePubJSON()`.
 
 **Mobile/SMS ingest**: the Android app signs in via `GET /oauth/mobile` (PKCE) → `tyche://auth?code=` → `POST /api/mobile/token`, getting a non-expiring device JWT (`jwt.NewDeviceToken`). `/api/*` device routes use `handleDeviceJSON()` + `middleware.DeviceAuth`, which checks the `devices` table (revocable from `/sms`; signing in again from the same app install, `install_id`, reuses the row and rotates its `token_id`, invalidating older tokens) and sets `AccessClaims` so repos resolve the tenant as usual. Every received SMS is stored in `sms_messages` (dedup by hash); parsed ones create fulfilled transactions with `needs_review`, others can be retried from `/sms`.
 
+**Account reset** (`/reset`, linked from the user menu): `models.ResetEntities` lists what can be wiped (transactions, recurrent, sms, categories, counterparties, goals, accounts, wishlist, devices, settings), `Requires` adds dependents (accounts ⇒ transactions + recurrent). `Repository.Reset` deletes them in one transaction (`sql/query/reset.sql`), clearing references without an FK action first (`category_id`, `accounts.counterparty_id`); kept accounts get a 0 balance when transactions go. Selecting everything clears `seeded_at` and reseeds (`TenantManager.Reseed`). The handler requires typing `RESET` and drops the access cookie so the claims (default currency/account) refresh
+
 **Database Queries**: Use sqlc-generated code in `internal/queries/`:
 - Write SQL in `sql/query/*.sql` with sqlc annotations
 - Run `make sqlgen` to generate type-safe Go code

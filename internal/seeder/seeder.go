@@ -192,3 +192,14 @@ func seedFn[E any, S any, ID comparable](ctx context.Context,
 		}
 	}
 }
+
+// ShownCurrencies are the codes of the currencies shown by default.
+func ShownCurrencies() []string {
+	var codes []string
+	for _, c := range currSeed {
+		if c.IsShown {
+			codes = append(codes, c.String)
+		}
+	}
+	return codes
+}

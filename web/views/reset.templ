@@ -1,0 +1,127 @@
+package views
+
+import (
+	"encoding/json"
+
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+templ Reset(claims *jwt.AccessClaims, balances []models.Balance) {
+	@layouts.WithTitle(claims, "Reset account", balances) {
+		<div class="max-w-2xl" style="--accent: var(--color-red-400)">
+			@components.GlassCard("p-5 sm:p-6 grid gap-6", "bg-red-400/10") {
+				<div class="flex gap-3 text-zinc-300">
+					@icons.Error("22", &templ.Attributes{"class": "shrink-0 mt-0.5 text-red-400"})
+					<p>
+						Pick what to delete from your account. This can't be undone.
+					</p>
+				</div>
+				<form
+					hx-post="/reset"
+					hx-target="#reset-error"
+					hx-swap="innerHTML"
+					hx-disabled-elt="find button[type=submit]"
+					x-data={ resetFormData() }
+					class="grid gap-6"
+				>
+					<div class="grid gap-2">
+						<label
+							class="flex items-center gap-3 p-3.5 rounded-2xl border border-zinc-700 bg-zinc-800/40 cursor-pointer select-none transition-colors hover:border-zinc-500 has-checked:border-red-400/60 has-checked:bg-red-400/10"
+						>
+							<input
+								type="checkbox"
+								class="w-4 h-4 accent-red-400"
+								:checked="all()"
+								x-effect="$el.indeterminate = !all() && any()"
+								@change="setAll($el.checked)"
+							/>
+							<span class="font-semibold">Everything</span>
+							<span class="ml-auto text-sm text-zinc-500">a fresh start, like a new account</span>
+						</label>
+						<div class="grid gap-2 sm:grid-cols-2">
+							for _, e := range models.ResetEntities {
+								@resetEntity(e)
+							}
+						</div>
+					</div>
+					<div class="grid gap-1.5 text-sm text-zinc-400" x-cloak x-show="any()">
+						<p x-show="sel.transactions && !sel.accounts">Kept accounts will have their balance set to 0.</p>
+						<p x-show="all()">The default Cash account and categories will be created again.</p>
+						<p x-show="sel.settings">You'll get the default currency (USD) back; set yours again from Currencies.</p>
+					</div>
+					<div>
+						<label for="reset-confirm" class="input-label">
+							Type <span class="font-mono text-red-300">{ models.ResetConfirmation }</span> to confirm
+						</label>
+						<input
+							id="reset-confirm"
+							name="confirm"
+							autocomplete="off"
+							class="input-field"
+							x-model="confirm"
+						/>
+					</div>
+					<p id="reset-error" class="text-sm text-red-400 empty:hidden"></p>
+					<div class="flex justify-end">
+						<button
+							type="submit"
+							class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
+							:disabled={ "!any() || confirm.trim() !== '" + models.ResetConfirmation + "'" }
+						>
+							Reset account
+						</button>
+					</div>
+				</form>
+			}
+		</div>
+	}
+}
+
+templ resetEntity(e models.ResetEntityInfo) {
+	<label
+		class="flex gap-3 p-3.5 rounded-2xl border border-zinc-800 bg-zinc-800/20 cursor-pointer select-none transition-colors hover:border-zinc-600 has-checked:border-red-400/50 has-checked:bg-red-400/8 has-disabled:cursor-default"
+	>
+		<input
+			type="checkbox"
+			name="entity"
+			value={ string(e.Entity) }
+			class="w-4 h-4 mt-1 shrink-0 accent-red-400"
+			:checked={ "isOn('" + string(e.Entity) + "')" }
+			:disabled={ "forced('" + string(e.Entity) + "')" }
+			@change={ "sel['" + string(e.Entity) + "'] = $el.checked" }
+		/>
+		<span class="grid gap-0.5">
+			<span>{ e.Label }</span>
+			<span class="text-sm text-zinc-500">{ e.Description }</span>
+		</span>
+	</label>
+}
+
+// resetFormData is the Alpine state of the reset form: the checked entities
+// and the ones forced by them (deleting accounts deletes their transactions).
+func resetFormData() string {
+	sel := map[string]bool{}
+	requires := map[string][]string{}
+	for _, e := range models.ResetEntities {
+		sel[string(e.Entity)] = false
+		for _, r := range e.Requires {
+			requires[string(r)] = append(requires[string(r)], string(e.Entity))
+		}
+	}
+	selJSON, _ := json.Marshal(sel)
+	reqJSON, _ := json.Marshal(requires)
+	return `{
+		sel: ` + string(selJSON) + `,
+		requiredBy: ` + string(reqJSON) + `,
+		confirm: '',
+		forced(e) { return (this.requiredBy[e] || []).some(by => this.sel[by]) },
+		isOn(e) { return this.sel[e] || this.forced(e) },
+		all() { return Object.keys(this.sel).every(e => this.isOn(e)) },
+		any() { return Object.keys(this.sel).some(e => this.isOn(e)) },
+		setAll(on) { for (const e in this.sel) this.sel[e] = on },
+	}`
+}

@@ -39,6 +39,22 @@ func (r *Repository) transact(ctx context.Context, txFunc func(*queries.Queries)
 }
 
 func (r *Repository) dbFromCtx(ctx context.Context) (*sql.DB, *queries.Queries, error) {
+	oauthProvider, oauthId, err := tenantFromCtx(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	db, q, err := r.tm.GetTenant(oauthProvider, oauthId)
+	if err != nil {
+		l := logger.FromCtx(ctx)
+		l.Error("getting db from context", zap.Error(err))
+		return nil, nil, err
+	}
+	return db, q, nil
+}
+
+// tenantFromCtx gets who the tenant is from the access or refresh claims.
+func tenantFromCtx(ctx context.Context) (models.OAuthProvider, string, error) {
 	var oauthId string
 	var oauthProvider models.OAuthProvider
 
@@ -57,14 +73,7 @@ func (r *Repository) dbFromCtx(ctx context.Context) (*sql.DB, *queries.Queries, 
 	}
 
 	if oauthId == "" {
-		return nil, nil, fmt.Errorf("no access nor refresh claims in the context to get the tenant")
+		return 0, "", fmt.Errorf("no access nor refresh claims in the context to get the tenant")
 	}
-
-	db, q, err := r.tm.GetTenant(oauthProvider, oauthId)
-	if err != nil {
-		l := logger.FromCtx(ctx)
-		l.Error("getting db from context", zap.Error(err))
-		return nil, nil, err
-	}
-	return db, q, nil
+	return oauthProvider, oauthId, nil
 }

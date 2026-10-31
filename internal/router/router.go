@@ -134,6 +134,8 @@ func New(h *handler.Handler) Router {
 	mux.Handle("POST /sms/{id}/retry", handle(h.RetrySMS))
 	mux.Handle("PUT /sms/{id}/ignore", handle(h.IgnoreSMS))
 	mux.Handle("PUT /devices/{id}/revoke", handle(h.RevokeDevice))
+	mux.Handle("GET /reset", handle(h.ResetPage))
+	mux.Handle("POST /reset", handle(h.Reset))
 	mux.Handle("GET /signout", handle(h.Signout))
 
 	mux.Handle("GET /admin/fx-rates", handle(h.AdminFxRates, middleware.Admin))

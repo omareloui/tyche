@@ -103,6 +103,25 @@ func (tm *TenantManager) GetTenant(provider models.OAuthProvider, oauthID string
 	return tenant.db, tenant.queries, nil
 }
 
+// Reseed seeds the tenant's database again, e.g. after a reset cleared its
+// seeded_at to get the default categories and accounts back.
+func (tm *TenantManager) Reseed(ctx context.Context, provider models.OAuthProvider, oauthID string) error {
+	_, q, err := tm.GetTenant(provider, oauthID)
+	if err != nil {
+		return err
+	}
+
+	tm.mu.RLock()
+	tenant := tm.connections[models.TenantID(provider, oauthID)]
+	tm.mu.RUnlock()
+	if tenant == nil {
+		return fmt.Errorf("tenant connection not found")
+	}
+
+	tenant.seeder.Seed(ctx, q, oauthID)
+	return nil
+}
+
 func (tm *TenantManager) runMigrations(db *sql.DB) error {
 	if err := goose.SetDialect("sqlite3"); err != nil {
 		return fmt.Errorf("failed to set dialect: %w", err)
