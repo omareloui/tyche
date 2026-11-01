@@ -9,6 +9,7 @@ import (
 	_ "github.com/omareloui/tyche/internal/sqlite"
 	"go.uber.org/zap"
 
+	"github.com/omareloui/tyche/internal/dbtypes"
 	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
@@ -107,7 +108,7 @@ func (s *Seeder) accounts(ctx context.Context, wg *sync.WaitGroup, q *queries.Qu
 	}
 
 	seed := []queries.CreateAccountParams{
-		{ID: idgen.New(), Name: "Cash", KindID: cashKnd.AccountKind.ID, CurrencyID: cur.Currency.ID},
+		{ID: idgen.New(), Name: "Cash", KindID: cashKnd.AccountKind.ID, CurrencyID: cur.Currency.ID, SmsRefs: dbtypes.JSON("[]")},
 	}
 
 	seedFn(ctx, q.GetAccounts, seed, q.CreateAccount,
