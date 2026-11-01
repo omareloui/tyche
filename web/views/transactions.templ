@@ -373,6 +373,82 @@ templ ReimbursePicker(tx *models.Transaction, exps []models.ReimbursableExpense,
 	</div>
 }
 
+// TransferPairPicker pairs a transaction by hand with the other side of a
+// transfer between the user's accounts. The ones that look like it (amount
+// and time) are flagged.
+templ TransferPairPicker(tx *models.Transaction, cands []models.Transaction, errMsg string) {
+	{{ v := newTxView(tx) }}
+	<div data-tx hx-target="this" hx-swap="outerHTML" class="grid gap-3 px-4 py-3 rounded-2xl bg-zinc-700/20">
+		<div class="flex items-center justify-between gap-4">
+			<p>
+				if tx.Kind == models.IncomeTxKind {
+					Where did <span class="font-semibold">{ v.title }</span>
+					<span class="tabular-nums text-emerald-400">{ v.amount }</span> into { tx.Account.Name } come from?
+				} else {
+					Where did <span class="font-semibold">{ v.title }</span>
+					<span class="tabular-nums">{ v.amount }</span> from { tx.Account.Name } go?
+				}
+			</p>
+			<button hx-get={ fmt.Sprintf("/transactions/%s", tx.ID) } class="cursor-pointer text-sm text-zinc-400 hover:text-zinc-200">Cancel</button>
+		</div>
+		if errMsg != "" {
+			<p class="text-sm text-red-500">{ errMsg }</p>
+		}
+		if len(cands) == 0 {
+			<p class="text-sm text-zinc-400">
+				No unpaired
+				if tx.Kind == models.IncomeTxKind {
+					expense
+				} else {
+					income
+				}
+				in another account within a week of it.
+			</p>
+		}
+		<ul class="grid gap-2 max-h-96 overflow-y-auto">
+			for _, c := range cands {
+				{{ cv := newTxView(&c) }}
+				<li>
+					<button
+						hx-put={ fmt.Sprintf("/transactions/%s/transfer-pair", tx.ID) }
+						hx-vals={ fmt.Sprintf(`{"other_id": %q}`, c.ID) }
+						class="cursor-pointer w-full flex items-center gap-4 px-4 py-2 rounded-xl bg-zinc-700/30 text-left transition-colors hover:bg-zinc-600/40"
+					>
+						<div class="flex-1 min-w-0">
+							<p class="flex items-center gap-2 min-w-0">
+								<span class="truncate">{ cv.title }</span>
+								if transferPairLikely(tx, &c) {
+									<span class="chip shrink-0 bg-sky-400/10 text-sky-300">Likely</span>
+								}
+							</p>
+							<p class="text-xs text-zinc-400 truncate">
+								{ formatTxDay(c.ScheduledTo) }
+								if cv.time != "" {
+									· { cv.time }
+								}
+								· { c.Account.Name }
+							</p>
+						</div>
+						<p class={ "shrink-0 font-semibold tabular-nums", templ.KV("text-emerald-400", cv.tone == txToneIn) }>{ cv.amount }</p>
+					</button>
+				</li>
+			}
+		</ul>
+	</div>
+}
+
+// transferPairLikely reports whether a and b look like the two sides of a
+// transfer, as auto pairing would see them.
+func transferPairLikely(a, b *models.Transaction) bool {
+	out, in := a, b
+	if out.Kind == models.IncomeTxKind {
+		out, in = in, out
+	}
+	return models.MatchesTransferPair(out, in, func(from, to string) float64 {
+		return (&models.Currency{String: from}).FxRate(to)
+	})
+}
+
 templ TransactionAmountsAndKindFormBody(
 	fd *TransactionAmountsAndKindFD, id string,
 	knds []models.TxKind, cats []models.Category,

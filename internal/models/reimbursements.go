@@ -8,10 +8,11 @@ import (
 )
 
 var (
-	ErrReimbursementKinds    = errors.New("only an income can reimburse an expense")
-	ErrReimbursementGoal     = errors.New("goal expenses can't be reimbursed")
-	ErrReimbursementCurrency = errors.New("the income and the expense must be in the same currency")
-	ErrReimbursementExceeds  = errors.New("the reimbursements would exceed the expense")
+	ErrReimbursementKinds        = errors.New("only an income can reimburse an expense")
+	ErrReimbursementGoal         = errors.New("goal expenses can't be reimbursed")
+	ErrReimbursementCurrency     = errors.New("the income and the expense must be in the same currency")
+	ErrReimbursementExceeds      = errors.New("the reimbursements would exceed the expense")
+	ErrReimbursementTransferPair = errors.New("transfers between your accounts can't be reimbursed")
 )
 
 // ReimbursableExpense is an expense an income can be linked to as its

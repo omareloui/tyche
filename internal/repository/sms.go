@@ -95,6 +95,9 @@ func (r *Repository) CreateSMSMessage(ctx context.Context, msg *models.SMSMessag
 			if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, tx); err != nil {
 				return err
 			}
+			if _, err := r.pairTransferWithTxn(ctx, qtx, tx); err != nil {
+				return err
+			}
 			msg.TransactionID = tx.ID
 		}
 
@@ -126,6 +129,9 @@ func (r *Repository) UpdateSMSMessageResult(ctx context.Context, msg *models.SMS
 
 		if tx != nil {
 			if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, tx); err != nil {
+				return err
+			}
+			if _, err := r.pairTransferWithTxn(ctx, qtx, tx); err != nil {
 				return err
 			}
 			msg.TransactionID = tx.ID

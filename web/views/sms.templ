@@ -17,6 +17,7 @@ templ SMS(claims *jwt.AccessClaims, balances []models.Balance, msgs []models.SMS
 			@smsInbox(msgs)
 			<div class="grid gap-10 lg:sticky lg:top-22">
 				@templatesCard(templatesCount)
+				@TransferPairsCard(nil)
 				@devicesPanel(devices)
 				@TimezoneCard(tz)
 			</div>
@@ -55,6 +56,45 @@ templ templatesCard(count int) {
 			</div>
 			@icons.ArrowRight("16")
 		</a>
+	</section>
+}
+
+// TransferPairsCard pairs the two SMS of transfers between the user's
+// accounts received before pairing existed; paired is how many got paired,
+// nil before running it.
+templ TransferPairsCard(paired *int) {
+	<section id="sms-transfer-pairs" class="grid gap-4">
+		<header>
+			<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+				@icons.Transfer("16")
+				Transfers
+			</h2>
+			<p class="text-sm text-zinc-600">A transfer between your accounts often comes as two SMS. They're paired into one transfer, out of your income and spending.</p>
+		</header>
+		<div class="grid gap-2">
+			<button
+				hx-post="/sms/pair-transfers"
+				hx-target="#sms-transfer-pairs"
+				hx-swap="outerHTML"
+				class="justify-self-start inline-flex items-center gap-2 h-9 px-4 rounded-full border border-zinc-700 text-sm text-zinc-300 cursor-pointer transition-colors hover:border-zinc-500 hover:text-white"
+			>
+				@icons.Retry("16", &templ.Attributes{"class": "in-[.htmx-request]:animate-spin"})
+				Match past transfers
+			</button>
+			if paired != nil {
+				<p class="flex items-center gap-1.5 text-sm text-emerald-400">
+					@icons.Check("14")
+					switch *paired {
+						case 0:
+							No new pairs found.
+						case 1:
+							Paired 1 transfer.
+						default:
+							{ fmt.Sprintf("Paired %d transfers.", *paired) }
+					}
+				</p>
+			}
+		</div>
 	</section>
 }
 

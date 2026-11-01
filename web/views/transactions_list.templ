@@ -276,6 +276,10 @@ templ txFlowTotals(in, out float64, def *models.Currency) {
 templ Transaction(tx *models.Transaction, def *models.Currency) {
 	if tx.IsReimbursement() {
 		@reimbursement(tx, def)
+	} else if tx.TransferPair != nil {
+		@transferPair(tx, def)
+	} else if tx.IsTransferLeg() {
+		@transferLeg(tx, def)
 	} else {
 		@transaction(tx, def)
 	}
@@ -392,7 +396,11 @@ templ transaction(tx *models.Transaction, def *models.Currency) {
 }
 
 templ txTile(tx *models.Transaction, v *txView) {
-	if v.counterparty != nil {
+	if tx.IsTransferLeg() {
+		<div class="grid place-items-center shrink-0 w-11 h-11 rounded-xl bg-sky-400/12 text-sky-400">
+			@icons.Transfer("22")
+		</div>
+	} else if v.counterparty != nil {
 		<div class="grid place-items-center shrink-0 w-11 h-11 rounded-xl bg-zinc-800/70">
 			@components.CounterpartyIcon(v.counterparty.Name, v.counterparty.Icon, v.counterparty.Color, "w-7 h-7 text-sm")
 		</div>
@@ -488,7 +496,7 @@ templ txChips(tx *models.Transaction, v *txView) {
 // txReviewStrip lets reviewing an SMS transaction in place, while in review
 // mode: fix its category or confirm it as is.
 templ txReviewStrip(tx *models.Transaction) {
-	{{ hasCategory := tx.Kind != models.TransferTxKind && tx.Kind != models.DebtTxKind }}
+	{{ hasCategory := tx.Kind != models.TransferTxKind && tx.Kind != models.DebtTxKind && !tx.IsTransferLeg() }}
 	// Kept light (classes in main.css, no icons): there may be many to review.
 	<div x-cloak x-show="reviewOnly" class="tx-review">
 		if hasCategory {
@@ -576,6 +584,176 @@ templ reimbursementsBreakdown(tx *models.Transaction, def *models.Currency) {
 			<span>Net</span>
 			<span class="tabular-nums">{ "-" + tx.ViewNetAmount() }</span>
 		</div>
+	</div>
+}
+
+// transferPair is a transfer between the user's accounts that came as two
+// SMS: one row for the transfer, with both sides (the transactions the SMS
+// made) under it. Actions on a side are on its own row.
+templ transferPair(out *models.Transaction, def *models.Currency) {
+	{{ v := newTxView(out) }}
+	{{ in := out.TransferPair }}
+	<div
+		id={ "tx-pair-" + out.ID }
+		hx-target="this"
+		hx-swap="outerHTML"
+		class="relative"
+		x-data="txRow"
+	>
+		@components.EntryMenu("openMenu", []templ.Component{
+			components.EntryMenuAnchorItem("Unlink transfer", "delete", fmt.Sprintf("/transactions/%s/transfer-pair", out.ID)),
+		})
+		<div
+			data-tx-row
+			tabindex="0"
+			class="relative flex items-center gap-3 sm:gap-4 px-3 sm:px-4 py-3 rounded-2xl bg-tx-row outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60"
+		>
+			@txTile(out, &v)
+			<div class="flex-1 min-w-0">
+				<p class="truncate leading-snug">{ v.title }</p>
+				{{ meta := txMeta(&v) }}
+				<p class={ "flex gap-1 min-w-0 text-sm text-zinc-500", templ.KV("md:hidden", meta == "") }>
+					if meta != "" {
+						<span class="truncate">{ meta }</span>
+						<span class="md:hidden shrink-0">·</span>
+					}
+					<span class="md:hidden flex gap-1 min-w-0">
+						@txAccounts(&v)
+					</span>
+				</p>
+				<div class="flex flex-wrap items-center gap-1.5 mt-1.5">
+					<button
+						type="button"
+						@click="openTransferPair = !openTransferPair"
+						:aria-expanded="openTransferPair"
+						title="Show both sides of the transfer"
+						class="chip cursor-pointer bg-sky-400/10 text-sky-300 transition-colors hover:bg-sky-400/20"
+					>
+						@icons.Transfer("12")
+						Both sides
+						@icons.ChevronDown("12", &templ.Attributes{":class": "openTransferPair && 'rotate-180'", "class": "transition-transform"})
+					</button>
+					if out.NeedsReview || in.NeedsReview {
+						<button
+							type="button"
+							@click="openTransferPair = true"
+							title="A side needs review"
+							class="chip cursor-pointer bg-amber-400/10 text-amber-300"
+						>Needs review</button>
+					}
+				</div>
+			</div>
+			<div class="hidden md:flex items-center gap-2 w-44 shrink-0 min-w-0 text-sm text-zinc-400">
+				<span class="shrink-0 text-zinc-500">
+					@accKindIcon(v.accKind, "18")
+				</span>
+				<div class="min-w-0" title={ v.account + " → " + v.toAccount }>
+					<p class="truncate">{ v.account }</p>
+					<p class="truncate">→ { v.toAccount }</p>
+				</div>
+			</div>
+			<p class="shrink-0 text-right tabular-nums font-semibold font-(family-name:--font-biorhyme-expanded) text-[15px] text-zinc-400">{ v.amount }</p>
+			<button
+				@click="openMenu = !openMenu"
+				aria-label="Transfer actions"
+				class="cursor-pointer grid place-items-center shrink-0 w-6 h-6"
+			>
+				<img src="/icons/dots-menu.svg" class="h-5"/>
+			</button>
+		</div>
+		<div x-cloak x-show="openTransferPair" x-transition class="ml-6 md:ml-16 mt-2 grid gap-2 border-l-2 border-sky-400/20 pl-4">
+			@transferLeg(out, def)
+			@transferLeg(in, def)
+			if fee := out.TransferFee(); fee >= 0.01 {
+				<div class="flex justify-between px-4 text-sm font-semibold">
+					<span>Fees</span>
+					<span class="tabular-nums">{ "-" + formatters.FormatAmount(fee, out.Account.Currency.Symbol) }</span>
+				</div>
+			}
+		</div>
+	</div>
+}
+
+// transferLeg is a side of a transfer pair, the transaction an SMS made:
+// what left an account or reached the other.
+templ transferLeg(tx *models.Transaction, def *models.Currency) {
+	{{ v := newTxView(tx) }}
+	{{ sent := tx.Kind == models.ExpenseTxKind }}
+	<div
+		{ txRowAttrs(tx, &v)... }
+		hx-target="this"
+		hx-swap="outerHTML"
+		class="relative"
+		x-data="txRow"
+	>
+		@components.EntryMenu("openMenu", getTransferLegMenuItems(tx))
+		<div
+			data-tx-row
+			tabindex="0"
+			class="flex items-center gap-3 px-4 py-2 rounded-xl bg-tx-row outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60"
+		>
+			<div class="grid place-items-center shrink-0 w-9 h-9 rounded-lg bg-sky-400/10 text-sky-400">
+				@accKindIcon(tx.Account.Kind.Enum, "18")
+			</div>
+			<div class="flex-1 min-w-0">
+				<p class="truncate">
+					if sent {
+						Sent from { tx.Account.Name }
+					} else {
+						Received in { tx.Account.Name }
+					}
+				</p>
+				<p class="text-xs text-zinc-500 truncate">
+					{ formatTxDay(tx.ScheduledTo) }
+					if v.time != "" {
+						· { v.time }
+					}
+					if d := strings.TrimSpace(tx.Description); d != "" {
+						· { d }
+					}
+				</p>
+				if tx.FromSMS {
+					<div class="flex flex-wrap items-center gap-1.5 mt-1">
+						if tx.NeedsReview {
+							<span tabindex="0" class="group relative chip bg-amber-400/10 text-amber-300 outline-none">
+								@icons.Message("12")
+								Needs review
+								@txSMSPopup(tx.SMSBody, "From SMS, needs review")
+							</span>
+						} else {
+							<span tabindex="0" class="group relative chip outline-none">
+								@icons.Message("12")
+								SMS
+								@txSMSPopup(tx.SMSBody, "")
+							</span>
+						}
+					</div>
+				} else if tx.NeedsReview {
+					<div class="mt-1"><span class="chip bg-amber-400/10 text-amber-300">Needs review</span></div>
+				}
+			</div>
+			<div class="shrink-0 text-right tabular-nums">
+				if sent {
+					<p class="font-semibold">{ "-" + tx.ViewAmount() }</p>
+				} else {
+					<p class="font-semibold text-emerald-400">{ "+" + tx.ViewAmount() }</p>
+				}
+				{{ conv := txConverted(tx, def) }}
+				if conv != "" {
+					<p class="text-xs text-zinc-500">{ conv }</p>
+				}
+			</div>
+			<button
+				@click="openMenu = !openMenu"
+				aria-label="Transfer side actions"
+				class="cursor-pointer grid place-items-center shrink-0 w-6 h-6"
+			>
+				<img src="/icons/dots-menu.svg" class="h-5"/>
+			</button>
+		</div>
+		if tx.NeedsReview {
+			@txReviewStrip(tx)
+		}
 	</div>
 }
 
@@ -678,9 +856,17 @@ func getTransactionMenuItems(tx *models.Transaction) []templ.Component {
 			components.EntryMenuAnchorItem("Mark reviewed", "put", fmt.Sprintf("/transactions/%s/reviewed", tx.ID)))
 	}
 
-	if tx.Kind == models.IncomeTxKind {
+	if tx.Kind == models.IncomeTxKind && !tx.IsTransferLeg() {
 		items = append(items,
 			components.EntryMenuAnchorItem("Reimburses…", "get", fmt.Sprintf("/transactions/%s/reimburses", tx.ID)))
+	}
+
+	if tx.IsTransferLeg() {
+		items = append(items,
+			components.EntryMenuAnchorItem("Unlink transfer", "delete", fmt.Sprintf("/transactions/%s/transfer-pair", tx.ID)))
+	} else if canPairTransfer(tx) {
+		items = append(items,
+			components.EntryMenuAnchorItem("Pair transfer…", "get", fmt.Sprintf("/transactions/%s/transfer-pair", tx.ID)))
 	}
 
 	// Adjustments are signed, which the form can't edit; fix the balance
@@ -692,6 +878,28 @@ func getTransactionMenuItems(tx *models.Transaction) []templ.Component {
 	return append(items,
 		components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/transactions/%s/edit", tx.ID)),
 		txMenuDuplicate(tx.ID),
+		txMenuDelete(),
+	)
+}
+
+// canPairTransfer reports whether tx can be paired by hand with the other
+// side of a transfer between the user's accounts.
+func canPairTransfer(tx *models.Transaction) bool {
+	return (tx.Kind == models.ExpenseTxKind || tx.Kind == models.IncomeTxKind) &&
+		!tx.FulfilledAt.IsZero() && tx.Goal == nil && !tx.IsReimbursement() && tx.Reimbursed == 0
+}
+
+func getTransferLegMenuItems(tx *models.Transaction) []templ.Component {
+	items := []templ.Component{}
+
+	if tx.NeedsReview {
+		items = append(items,
+			components.EntryMenuAnchorItem("Mark reviewed", "put", fmt.Sprintf("/transactions/%s/reviewed", tx.ID)))
+	}
+
+	return append(items,
+		components.EntryMenuAnchorItem("Unlink transfer", "delete", fmt.Sprintf("/transactions/%s/transfer-pair", tx.ID)),
+		components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/transactions/%s/edit", tx.ID)),
 		txMenuDelete(),
 	)
 }
@@ -782,9 +990,10 @@ func buildTxList(p *models.TxPage, def *models.Currency) txListView {
 
 // txFlow is what a transaction earns and spends in def, following the
 // analysis rule: expenses net of reimbursements, refunds netted against
-// spending; transfers and debts move money without earning or spending it.
+// spending; transfers (and transfer pairs) and debts move money without
+// earning or spending it.
 func txFlow(tx *models.Transaction, def *models.Currency) (in, out float64) {
-	if tx.IsReimbursement() {
+	if tx.IsReimbursement() || tx.IsTransferLeg() {
 		return 0, 0
 	}
 	rate := tx.Account.Currency.FxRate(def.String)
@@ -903,6 +1112,20 @@ func newTxView(tx *models.Transaction) txView {
 		v.isOverdue = tx.ScheduledTo.Before(dateOf(time.Now()))
 	} else {
 		v.time = tx.FulfilledAt.Format("3:04pm")
+	}
+
+	// A transfer pair shows as a transfer: what reached the other account.
+	if in := tx.TransferPair; in != nil {
+		v.tone = txToneNeutral
+		v.title = "Transfer"
+		v.toAccount = in.Account.Name
+		v.amount = in.ViewAmount()
+		if tx.Account.Currency.String != in.Account.Currency.String {
+			v.subtitle = "Sent " + tx.ViewAmount()
+		} else if fee := tx.TransferFee(); fee >= 0.01 {
+			v.subtitle = "Fees " + formatters.FormatAmount(fee, tx.Account.Currency.Symbol)
+		}
+		return v
 	}
 
 	switch tx.Kind {

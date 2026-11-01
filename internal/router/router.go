@@ -68,6 +68,9 @@ func New(h *handler.Handler) Router {
 	mux.Handle("GET /transactions/{id}/reimburses", handle(h.GetReimbursePicker))
 	mux.Handle("PUT /transactions/{id}/reimburses", handle(h.LinkReimbursement))
 	mux.Handle("DELETE /transactions/{id}/reimburses", handle(h.UnlinkReimbursement))
+	mux.Handle("GET /transactions/{id}/transfer-pair", handle(h.GetTransferPairPicker))
+	mux.Handle("PUT /transactions/{id}/transfer-pair", handle(h.LinkTransferPair))
+	mux.Handle("DELETE /transactions/{id}/transfer-pair", handle(h.UnlinkTransferPair))
 
 	mux.Handle("POST /recurrence-form/", handle(h.RecurrenceForm))
 	mux.Handle("POST /recurrence-form/{id}", handle(h.RecurrenceForm))
@@ -139,6 +142,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("GET /sms", handle(h.SMSPage))
 	mux.Handle("POST /sms/retry", handle(h.RetryAllSMS))
 	mux.Handle("POST /sms/ignore", handle(h.IgnoreAllSMS))
+	mux.Handle("POST /sms/pair-transfers", handle(h.PairTransfers))
 	mux.Handle("POST /sms/{id}/retry", handle(h.RetrySMS))
 	mux.Handle("PUT /sms/{id}/ignore", handle(h.IgnoreSMS))
 	mux.Handle("PUT /sms/timezone", handle(h.SetTimezone))

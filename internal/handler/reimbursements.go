@@ -17,6 +17,7 @@ var linkReimbursementErrs = []error{
 	models.ErrReimbursementGoal,
 	models.ErrReimbursementCurrency,
 	models.ErrReimbursementExceeds,
+	models.ErrReimbursementTransferPair,
 }
 
 func (h Handler) GetReimbursePicker(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

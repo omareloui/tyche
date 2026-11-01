@@ -194,6 +194,9 @@ func (r *Repository) GetTransactionsPage(ctx context.Context, f models.TxFilter,
 	if err := r.loadReimbursements(ctx, q, page.Upcoming, page.History); err != nil {
 		return nil, err
 	}
+	if err := r.loadTransferPairs(ctx, q, page.Upcoming, page.History); err != nil {
+		return nil, err
+	}
 	if err := r.loadGoalProgress(ctx, page.Upcoming); err != nil {
 		return nil, err
 	}
@@ -361,6 +364,14 @@ func (r *Repository) GetTransaction(ctx context.Context, id string) (*models.Tra
 			tx.Reimbursements = append(tx.Reimbursements, dbReimbursementRowToTransaction(&row))
 		}
 	}
+
+	if tx.IsTransferLeg() && tx.Kind == models.ExpenseTxKind {
+		txs := []models.Transaction{*tx}
+		if err := r.loadTransferPairs(ctx, q, txs); err != nil {
+			return nil, err
+		}
+		tx.TransferPair = txs[0].TransferPair
+	}
 	return tx, nil
 }
 
@@ -428,6 +439,9 @@ func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transa
 		if err := r.syncReimbursementsOnUpdateWithTxn(qtx, ctx, oldTx, tx); err != nil {
 			return err
 		}
+		if err := r.syncTransferPairOnUpdateWithTxn(qtx, ctx, oldTx, tx); err != nil {
+			return err
+		}
 
 		if !oldTx.FulfilledAt.IsZero() {
 			if err := r.undoTxToAccountWithTxn(qtx, ctx, oldTx); err != nil {
@@ -491,7 +505,8 @@ func dbTransactionToTransaction(
 		NeedsReview: dbTx.NeedsReview,
 		CreatedAt:   dbTx.CreatedAt,
 
-		ReimbursesID: dbTx.ReimbursesID.String,
+		ReimbursesID:   dbTx.ReimbursesID.String,
+		TransferPairID: dbTx.TransferPairID.String,
 	}
 
 	if acc != nil {
@@ -526,7 +541,7 @@ func dbTransactionToTransaction(
 	return &tx
 }
 
-func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTransactionsRow | queries.GetReimbursementsOfManyRow](dbTx *T) *models.Transaction {
+func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTransactionsRow | queries.GetReimbursementsOfManyRow | queries.GetTransferPairsOfManyRow | queries.GetTransferPairCandidatesRow](dbTx *T) *models.Transaction {
 	_dbTx := queries.GetTransactionsRow(*dbTx)
 
 	var cp *queries.Counterparty

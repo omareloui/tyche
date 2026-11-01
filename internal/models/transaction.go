@@ -33,6 +33,11 @@ type Transaction struct {
 	// Reimbursed is the total of the incomes reimbursing this expense.
 	Reimbursed     float64
 	Reimbursements []Transaction
+	// TransferPairID is the other leg of the transfer between own accounts
+	// this expense or income is half of (see transfer_pairs.go).
+	TransferPairID string
+	// TransferPair is the incoming leg, nested under the outgoing one.
+	TransferPair *Transaction
 }
 
 type commonFieldsForTxAndRtx struct {
@@ -74,9 +79,10 @@ func (t *Transaction) NetAmount() float64 {
 
 // AnalysisAmount is the amount every analysis (spending, income, charts) must
 // use: expenses count net of their reimbursements and the reimbursements
-// themselves count as 0, as they're already netted from their expense.
+// themselves count as 0, as they're already netted from their expense. Both
+// legs of a transfer pair count as 0, the money stays the user's.
 func (t *Transaction) AnalysisAmount() float64 {
-	if t.IsReimbursement() {
+	if t.IsReimbursement() || t.IsTransferLeg() {
 		return 0
 	}
 	return t.NetAmount()

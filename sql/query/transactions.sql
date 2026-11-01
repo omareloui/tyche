@@ -89,9 +89,12 @@ LEFT JOIN categories AS cat ON t.category_id = cat.id
 LEFT JOIN goals AS g ON t.goal_id = g.id
 LEFT JOIN currencies AS gc ON g.currency_id = gc.id
 -- Top-level transactions only: reimbursements come nested under their
--- expense (GetReimbursementsOfMany). Every filter is optional (NULL = any).
+-- expense (GetReimbursementsOfMany) and the incoming leg of a transfer pair
+-- under its outgoing one (GetTransferPairsOfMany). Every filter is optional
+-- (NULL = any); a transfer pair counts as a transfer.
 WHERE
     t.reimburses_id IS NULL
+    AND NOT (t.transfer_pair_id IS NOT NULL AND t.kind = 2)
     AND (sqlc.narg(q) IS NULL
         OR INSTR(LOWER(t.description), sqlc.narg(q)) > 0
         OR INSTR(LOWER(cp.name), sqlc.narg(q)) > 0
@@ -104,15 +107,28 @@ WHERE
             LEFT JOIN counterparties AS rcp ON rt.counterparty_id = rcp.id
             WHERE rt.reimburses_id = t.id
                 AND (INSTR(LOWER(rt.description), sqlc.narg(q)) > 0 OR INSTR(LOWER(rcp.name), sqlc.narg(q)) > 0)
+        )
+        OR EXISTS (
+            SELECT 1 FROM transactions AS pt
+            JOIN accounts AS pa ON pt.account_id = pa.id
+            WHERE pt.id = t.transfer_pair_id
+                AND (INSTR(LOWER(pt.description), sqlc.narg(q)) > 0 OR INSTR(LOWER(pa.name), sqlc.narg(q)) > 0)
         ))
-    AND (sqlc.narg(kind) IS NULL OR t.kind = sqlc.narg(kind))
-    AND (sqlc.narg(account_id) IS NULL OR t.account_id = sqlc.narg(account_id) OR t.to_account_id = sqlc.narg(account_id))
+    AND (sqlc.narg(kind) IS NULL
+        OR (t.transfer_pair_id IS NULL AND t.kind = sqlc.narg(kind))
+        OR (t.transfer_pair_id IS NOT NULL AND sqlc.narg(kind) = 3))
+    AND (sqlc.narg(account_id) IS NULL OR t.account_id = sqlc.narg(account_id) OR t.to_account_id = sqlc.narg(account_id)
+        OR EXISTS (
+            SELECT 1 FROM transactions AS pt WHERE pt.id = t.transfer_pair_id AND pt.account_id = sqlc.narg(account_id)
+        ))
     AND (sqlc.narg(category_id) IS NULL OR t.category_id = sqlc.narg(category_id))
     AND (sqlc.narg(counterparty_id) IS NULL OR t.counterparty_id = sqlc.narg(counterparty_id))
     AND (sqlc.narg(goal_id) IS NULL OR t.goal_id = sqlc.narg(goal_id))
     AND (sqlc.narg(fulfilled) IS NULL OR (t.fulfilled_at IS NOT NULL) = sqlc.narg(fulfilled))
     AND (sqlc.narg(needs_review) IS NULL OR (t.needs_review OR EXISTS (
         SELECT 1 FROM transactions AS rt WHERE rt.reimburses_id = t.id AND rt.needs_review
+    ) OR EXISTS (
+        SELECT 1 FROM transactions AS pt WHERE pt.id = t.transfer_pair_id AND pt.needs_review
     )) = sqlc.narg(needs_review))
     AND (sqlc.narg(from_sms) IS NULL OR EXISTS (
         SELECT 1 FROM sms_messages AS sm WHERE sm.transaction_id = t.id
@@ -258,6 +274,8 @@ WHERE
     t.kind IN (1, 2, 5)
     -- Reimbursements are netted from their expense.
     AND t.reimburses_id IS NULL
+    -- Transfer pairs move money between own accounts.
+    AND t.transfer_pair_id IS NULL
     AND t.fulfilled_at IS NOT NULL
     AND cp.is_merchant IS TRUE
     AND STRFTIME('%Y-%m', t.fulfilled_at) = CAST(sqlc.arg(month) AS TEXT)
@@ -270,6 +288,7 @@ FROM transactions AS t
 JOIN counterparties AS cp ON t.counterparty_id = cp.id
 WHERE
     t.kind = 1
+    AND t.transfer_pair_id IS NULL
     AND t.fulfilled_at IS NOT NULL
     AND cp.is_merchant IS TRUE
 ORDER BY month DESC;
@@ -316,6 +335,7 @@ LEFT JOIN categories AS cat ON t.category_id = cat.id
 WHERE
     t.kind = 1
     AND t.goal_id IS NULL
+    AND t.transfer_pair_id IS NULL
     AND a.currency_id = sqlc.arg(currency_id)
     AND t.scheduled_to >= sqlc.arg(since)
     AND t.scheduled_to < sqlc.arg(until)
@@ -402,6 +422,171 @@ LEFT JOIN currencies AS gc ON g.currency_id = gc.id
 WHERE t.reimburses_id IN (SELECT value FROM json_each(sqlc.arg(ids)))
 ORDER BY t.scheduled_to DESC, t.created_at DESC;
 
+-- name: GetTransferPairsOfMany :many
+-- The incoming legs paired with the outgoing ones of ids (a JSON array).
+SELECT
+    sqlc.embed(t),
+    sqlc.embed(a),
+    sqlc.embed(c),
+    ak.enum AS account_kind_enum,
+    cp.name AS counterparty_name,
+    cp.icon AS counterparty_icon,
+    cp.color AS counterparty_color,
+    ta.id AS to_account_id,
+    ta.name AS to_account_name,
+    ta.kind_id AS to_account_kind_id,
+    tak.enum AS to_account_kind_enum,
+    ta.amount AS to_account_amount,
+    ta.currency_id AS to_account_currency_id,
+    ta.counterparty_id AS to_account_counterparty_id,
+    ta.card_number AS to_account_card_number,
+    ta.card_limit AS to_account_card_limit,
+    ta.name_on_card AS to_account_name_on_card,
+    ta.iban AS to_account_iban,
+    ta.note AS to_account_note,
+    ta.is_archived AS to_account_is_archived,
+    ta.exclude_from_balance AS to_account_exclude_from_balance,
+    ta.expiration_date AS to_account_expiration_date,
+    ta.created_at AS to_account_created_at,
+    tc.string AS to_account_currency_string,
+    tc.symbol AS to_account_currency_symbol,
+    cat.id AS category_id,
+    cat.name AS category_name,
+    cat.color AS category_color,
+    cat.budget_amount AS category_budget_amount,
+    cat.budget_currency_id AS category_budget_currency_id,
+    cat.created_at AS category_created_at,
+    g.name AS goal_name,
+    g.price AS goal_price,
+    g.currency_id AS goal_currency_id,
+    g.fulfilled_at AS goal_fulfilled_at,
+    gc.string AS goal_currency_string,
+    gc.symbol AS goal_currency_symbol,
+    CAST(COALESCE((
+        SELECT sm.body FROM sms_messages AS sm WHERE sm.transaction_id = t.id LIMIT 1
+    ), '') AS TEXT) AS sms_body,
+    CAST((
+        SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id
+    ) AS FLOAT) AS reimbursed
+FROM transactions AS t
+LEFT JOIN accounts AS a ON t.account_id = a.id
+LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
+LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN account_kinds AS ak ON a.kind_id = ak.id
+LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
+LEFT JOIN account_kinds AS tak ON ta.kind_id = tak.id
+LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
+LEFT JOIN categories AS cat ON t.category_id = cat.id
+LEFT JOIN goals AS g ON t.goal_id = g.id
+LEFT JOIN currencies AS gc ON g.currency_id = gc.id
+WHERE t.transfer_pair_id IN (SELECT value FROM json_each(sqlc.arg(ids)));
+
+-- name: GetTransferPairCandidates :many
+-- Unpaired transactions of kind (1 expense, 2 income) out of account_id,
+-- fulfilled between since and until, that could be the other leg of a
+-- transfer: no goal, not reimbursing nor reimbursed. With sms_only (auto
+-- pairing), only SMS ones and no merchant.
+SELECT
+    sqlc.embed(t),
+    sqlc.embed(a),
+    sqlc.embed(c),
+    ak.enum AS account_kind_enum,
+    cp.name AS counterparty_name,
+    cp.icon AS counterparty_icon,
+    cp.color AS counterparty_color,
+    ta.id AS to_account_id,
+    ta.name AS to_account_name,
+    ta.kind_id AS to_account_kind_id,
+    tak.enum AS to_account_kind_enum,
+    ta.amount AS to_account_amount,
+    ta.currency_id AS to_account_currency_id,
+    ta.counterparty_id AS to_account_counterparty_id,
+    ta.card_number AS to_account_card_number,
+    ta.card_limit AS to_account_card_limit,
+    ta.name_on_card AS to_account_name_on_card,
+    ta.iban AS to_account_iban,
+    ta.note AS to_account_note,
+    ta.is_archived AS to_account_is_archived,
+    ta.exclude_from_balance AS to_account_exclude_from_balance,
+    ta.expiration_date AS to_account_expiration_date,
+    ta.created_at AS to_account_created_at,
+    tc.string AS to_account_currency_string,
+    tc.symbol AS to_account_currency_symbol,
+    cat.id AS category_id,
+    cat.name AS category_name,
+    cat.color AS category_color,
+    cat.budget_amount AS category_budget_amount,
+    cat.budget_currency_id AS category_budget_currency_id,
+    cat.created_at AS category_created_at,
+    g.name AS goal_name,
+    g.price AS goal_price,
+    g.currency_id AS goal_currency_id,
+    g.fulfilled_at AS goal_fulfilled_at,
+    gc.string AS goal_currency_string,
+    gc.symbol AS goal_currency_symbol,
+    CAST(COALESCE((
+        SELECT sm.body FROM sms_messages AS sm WHERE sm.transaction_id = t.id LIMIT 1
+    ), '') AS TEXT) AS sms_body,
+    CAST((
+        SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id
+    ) AS FLOAT) AS reimbursed
+FROM transactions AS t
+LEFT JOIN accounts AS a ON t.account_id = a.id
+LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
+LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN account_kinds AS ak ON a.kind_id = ak.id
+LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
+LEFT JOIN account_kinds AS tak ON ta.kind_id = tak.id
+LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
+LEFT JOIN categories AS cat ON t.category_id = cat.id
+LEFT JOIN goals AS g ON t.goal_id = g.id
+LEFT JOIN currencies AS gc ON g.currency_id = gc.id
+WHERE
+    t.kind = sqlc.arg(kind)
+    AND t.account_id != sqlc.arg(account_id)
+    AND t.id != sqlc.arg(id)
+    AND t.transfer_pair_id IS NULL
+    AND t.reimburses_id IS NULL
+    AND t.goal_id IS NULL
+    AND t.fulfilled_at IS NOT NULL
+    AND JULIANDAY(t.fulfilled_at) BETWEEN JULIANDAY(sqlc.arg(since)) AND JULIANDAY(sqlc.arg(until))
+    AND NOT EXISTS (SELECT 1 FROM transactions AS rt WHERE rt.reimburses_id = t.id)
+    AND (CAST(sqlc.arg(sms_only) AS BOOLEAN) = FALSE OR (
+        cp.is_merchant IS NOT TRUE
+        AND EXISTS (SELECT 1 FROM sms_messages AS sm WHERE sm.transaction_id = t.id)
+    ))
+ORDER BY t.fulfilled_at;
+
+-- name: GetUnpairedSMSTransactions :many
+-- Ids of the SMS expenses and incomes that could still be a transfer leg,
+-- oldest first.
+SELECT t.id
+FROM transactions AS t
+LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
+WHERE
+    t.kind IN (1, 2)
+    AND t.transfer_pair_id IS NULL
+    AND t.reimburses_id IS NULL
+    AND t.goal_id IS NULL
+    AND t.fulfilled_at IS NOT NULL
+    AND cp.is_merchant IS NOT TRUE
+    AND EXISTS (SELECT 1 FROM sms_messages AS sm WHERE sm.transaction_id = t.id)
+ORDER BY t.fulfilled_at;
+
+-- name: SetTransferPair :exec
+-- Pairs a and b, each pointing at the other.
+UPDATE transactions
+SET
+    transfer_pair_id = IIF(id = sqlc.arg(a), CAST(sqlc.arg(b) AS TEXT), sqlc.arg(a))
+WHERE id IN (sqlc.arg(a), sqlc.arg(b));
+
+-- name: ClearTransferPair :exec
+-- Unpairs id and its other leg.
+UPDATE transactions
+SET
+    transfer_pair_id = NULL
+WHERE id = sqlc.arg(id) OR transfer_pair_id = sqlc.arg(id);
+
 -- name: GetDailyFlow :many
 -- Fulfilled income (kind 2) and spending (kind 1 net of its reimbursements,
 -- minus refunds, kind 5) per day and account currency since from_date,
@@ -425,6 +610,8 @@ WHERE
     t.kind IN (1, 2, 5)
     -- Reimbursements are netted from their expense.
     AND t.reimburses_id IS NULL
+    -- Transfer pairs move money between own accounts.
+    AND t.transfer_pair_id IS NULL
     AND t.fulfilled_at IS NOT NULL
     AND t.scheduled_to >= sqlc.arg(from_date)
 GROUP BY day, cur.id
@@ -450,6 +637,7 @@ JOIN currencies AS cur ON a.currency_id = cur.id
 WHERE
     t.kind IN (1, 5)
     AND t.reimburses_id IS NULL
+    AND t.transfer_pair_id IS NULL
     AND t.fulfilled_at IS NOT NULL
     AND t.scheduled_to >= sqlc.arg(from_date)
     AND t.scheduled_to < sqlc.arg(to_date)

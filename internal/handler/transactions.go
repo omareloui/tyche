@@ -209,6 +209,13 @@ func (h Handler) Transaction(w http.ResponseWriter, r *http.Request) (templ.Comp
 	}
 	l.Info("fetched transaction", zap.Any("tx", tx))
 
+	// A side of a transfer pair lives in its pair's group, re-render the list
+	// to put it back there (e.g. canceling its edit).
+	if tx.IsTransferLeg() {
+		hxRetargetTxList(w)
+		return h.transactionsList(r)
+	}
+
 	return views.Transaction(tx, &getClaims(r.Context()).DefaultCurrency), nil
 }
 

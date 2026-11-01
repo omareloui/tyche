@@ -42,6 +42,9 @@ func (r *Repository) LinkReimbursement(ctx context.Context, incomeID, expenseID 
 			models.TxKind(expense.Transaction.Kind) != models.ExpenseTxKind {
 			return models.ErrReimbursementKinds
 		}
+		if income.Transaction.TransferPairID.Valid || expense.Transaction.TransferPairID.Valid {
+			return models.ErrReimbursementTransferPair
+		}
 		if expense.Transaction.GoalID.Valid {
 			return models.ErrReimbursementGoal
 		}
