@@ -133,7 +133,7 @@ templ dashHero(d DashboardData, def *models.Currency) {
 					}
 				</p>
 			</div>
-			<div class="grid grid-cols-3 gap-2 w-full sm:w-auto">
+			<div class="grid sm:grid-cols-3 gap-2 w-full sm:w-auto">
 				@dashStat(formatters.FormatAmount(cur.In, def.Symbol), "In · "+cur.Month.Format("Jan"), "text-emerald-400")
 				@dashStat(formatters.FormatAmount(cur.Out, def.Symbol), "Out · "+cur.Month.Format("Jan"), "text-zinc-100")
 				{{ rate, ok := cur.SavingsRate() }}
@@ -152,8 +152,8 @@ templ dashHero(d DashboardData, def *models.Currency) {
 }
 
 templ dashStat(value, label, valueClass string) {
-	<div class="min-w-0 px-3 py-2 rounded-2xl bg-zinc-900/60 ring-1 ring-zinc-800 text-center">
-		<p class={ "sensitive text-base sm:text-lg font-bold tabular-nums truncate font-(family-name:--font-biorhyme-expanded)", valueClass }>{ value }</p>
+	<div class="flex flex-row-reverse items-baseline justify-between gap-3 min-w-0 px-3 py-2 rounded-2xl bg-zinc-900/60 ring-1 ring-zinc-800 sm:block sm:text-center">
+		<p class={ "sensitive min-w-0 text-base sm:text-lg font-bold tabular-nums truncate font-(family-name:--font-biorhyme-expanded)", valueClass }>{ value }</p>
 		<p class="text-xs text-zinc-500 truncate">{ label }</p>
 	</div>
 }
