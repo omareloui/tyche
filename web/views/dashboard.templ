@@ -625,11 +625,14 @@ templ dashTxRow(tx *models.Transaction) {
 		@txTile(tx, &v)
 		<div class="flex-1 min-w-0">
 			<p class="truncate leading-snug">{ v.title }</p>
-			<p class="text-sm text-zinc-500 truncate">
-				if v.isOverdue {
-					<span class="text-red-400">Overdue</span> ·
-				}
-				{ formatTxDay(tx.ScheduledTo) } · { v.account }
+			<p class="flex gap-1 min-w-0 text-sm text-zinc-500">
+				<span class="shrink-0">
+					if v.isOverdue {
+						<span class="text-red-400">Overdue</span> ·
+					}
+					{ formatTxDay(tx.ScheduledTo) } ·
+				</span>
+				@txAccounts(&v)
 			</p>
 		</div>
 		<p

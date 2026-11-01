@@ -324,21 +324,29 @@ templ transaction(tx *models.Transaction, def *models.Currency) {
 			<div class="flex-1 min-w-0">
 				<p class="truncate leading-snug">{ v.title }</p>
 				{{ meta := txMeta(&v) }}
-				if meta != "" {
-					<p class="text-sm text-zinc-500 truncate">
-						{ meta }
-						<span class="md:hidden">· { v.account }</span>
-					</p>
-				} else {
-					<p class="md:hidden text-sm text-zinc-500 truncate">{ v.account }</p>
-				}
+				<p class={ "flex gap-1 min-w-0 text-sm text-zinc-500", templ.KV("md:hidden", meta == "") }>
+					if meta != "" {
+						<span class="truncate">{ meta }</span>
+						<span class="md:hidden shrink-0">·</span>
+					}
+					<span class="md:hidden flex gap-1 min-w-0">
+						@txAccounts(&v)
+					</span>
+				</p>
 				@txChips(tx, &v)
 			</div>
 			<div class="hidden md:flex items-center gap-2 w-44 shrink-0 min-w-0 text-sm text-zinc-400">
 				<span class="shrink-0 text-zinc-500">
 					@accKindIcon(v.accKind, "18")
 				</span>
-				<span class="truncate">{ v.account }</span>
+				if v.toAccount != "" {
+					<div class="min-w-0" title={ v.account + " → " + v.toAccount }>
+						<p class="truncate">{ v.account }</p>
+						<p class="truncate">→ { v.toAccount }</p>
+					</div>
+				} else {
+					<span class="truncate">{ v.account }</span>
+				}
 			</div>
 			<div class="shrink-0 text-right tabular-nums">
 				if v.original != "" {
@@ -868,8 +876,10 @@ type txView struct {
 	title        string
 	subtitle     string
 	time         string
-	// account is where the money moved, e.g. "HSBC" or "HSBC → Wallet".
-	account string
+	// account is where the money moved, e.g. "HSBC"; toAccount is the
+	// destination of a transfer, e.g. "Wallet".
+	account   string
+	toAccount string
 	accKind models.AccKind
 	amount  string
 	// original is the amount before reimbursements, shown struck through.
@@ -917,7 +927,7 @@ func newTxView(tx *models.Transaction) txView {
 			v.title = "Transfer"
 		}
 		if tx.ToAccount != nil {
-			v.account = tx.Account.Name + " → " + tx.ToAccount.Name
+			v.toAccount = tx.ToAccount.Name
 			v.amount = tx.ViewToAmount()
 			if tx.Account.Currency.ID != tx.ToAccount.Currency.ID {
 				v.subtitle = "Sent " + tx.ViewAmount()
@@ -965,6 +975,18 @@ func newTxView(tx *models.Transaction) txView {
 	}
 
 	return v
+}
+
+// txAccounts renders the account names inline in a flex container, each
+// truncated on its own so both ends of a transfer stay visible.
+templ txAccounts(v *txView) {
+	if v.toAccount != "" {
+		<span class="truncate" title={ v.account }>{ v.account }</span>
+		<span class="shrink-0">→</span>
+		<span class="truncate" title={ v.toAccount }>{ v.toAccount }</span>
+	} else {
+		<span class="truncate">{ v.account }</span>
+	}
 }
 
 // txMeta is the row's second line: subtitle and time.

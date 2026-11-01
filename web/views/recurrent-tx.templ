@@ -224,12 +224,11 @@ templ RecurrentTx(rt *models.RecurrentTx) {
 						<span class="shrink-0">
 							@accKindIcon(v.accKind, "14")
 						</span>
-						<span class="truncate">
-							if v.subtitle != "" {
-								{ v.subtitle } ·
-							}
-							{ v.account }
-						</span>
+						if v.subtitle != "" {
+							<span class="truncate">{ v.subtitle }</span>
+							<span class="shrink-0">·</span>
+						}
+						@txAccounts(&v)
 					</p>
 				</div>
 				<button
