@@ -19,6 +19,29 @@ match `compileSdk`/`buildToolsVersion` in `app/build.gradle.kts`.
 
 Not on the Play Store, SMS permissions are restricted there, so sideload it.
 
+## Releases
+
+`.github/workflows/mobile-release.yml` builds a signed release APK on every push
+to `main` or `dev` touching `mobile/` and publishes it as a GitHub release
+`mobile-v0.1.<run>` (prerelease from `dev`). The run number is the
+`versionCode`, so each release installs over the previous one.
+
+It signs with a keystore from the repo secrets `ANDROID_KEYSTORE_BASE64`,
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`.
+Create it once (keep it safe, losing it means uninstalling to upgrade):
+
+```bash
+keytool -genkeypair -v -keystore tyche-release.jks -keyalg RSA -keysize 4096 -validity 10000 -alias tyche
+base64 -w0 tyche-release.jks | gh secret set ANDROID_KEYSTORE_BASE64
+gh secret set ANDROID_KEYSTORE_PASSWORD
+gh secret set ANDROID_KEY_ALIAS --body tyche
+gh secret set ANDROID_KEY_PASSWORD
+```
+
+Local release builds read the same from `keystore.properties` (gitignored):
+`storeFile`, `storePassword`, `keyAlias`, `keyPassword`. Debug and release
+builds are signed with different keys, so switching needs one uninstall.
+
 ## Flow
 
 1. Enter the Tyche URL and sign in. The app opens `/oauth/mobile` with a PKCE
