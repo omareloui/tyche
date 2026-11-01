@@ -407,6 +407,10 @@ templ devicesPanel(devices []models.Device) {
 				Devices
 			</h2>
 			<p class="text-sm text-zinc-600">Phones forwarding bank SMS here.</p>
+			<a href={ templ.SafeURL(AndroidReleaseURL) } target="_blank" rel="noopener" class="mt-1 inline-flex items-center gap-1.5 text-sm text-sky-400 hover:text-sky-300">
+				@icons.Download("14")
+				Get the Android app
+			</a>
 		</header>
 		<div id="devices-list" class="grid gap-2">
 			for _, d := range devices {
@@ -414,7 +418,11 @@ templ devicesPanel(devices []models.Device) {
 			}
 			<div class="hidden only:grid gap-1 p-4 rounded-2xl border border-dashed border-zinc-800 text-sm">
 				<p class="text-zinc-300">No devices yet</p>
-				<p class="text-zinc-500">Sign in from the Tyche Android app and your bank SMS will show up as transactions.</p>
+				<p class="text-zinc-500">
+					Sign in from the
+					<a href={ templ.SafeURL(AndroidReleaseURL) } target="_blank" rel="noopener" class="text-sky-400 hover:text-sky-300">Tyche Android app</a>
+					and your bank SMS will show up as transactions.
+				</p>
 			</div>
 		</div>
 	</aside>

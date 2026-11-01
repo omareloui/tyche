@@ -11,6 +11,10 @@ import (
 	"github.com/omareloui/tyche/web/views/layouts"
 )
 
+// AndroidReleaseURL is where the Android app is downloaded from: the latest
+// non-prerelease GitHub release, built from main by the mobile-release workflow.
+const AndroidReleaseURL = "https://github.com/omareloui/tyche/releases/latest"
+
 type landingIcon = func(size string, attrs ...*templ.Attributes) templ.Component
 
 // landingFeature is a card of the landing page's feature grid. Tile and Glow
@@ -257,13 +261,19 @@ templ landingSpotlightCopy(icon landingIcon, tile, eyebrow, title, body string, 
 
 templ landingSMS() {
 	@landingSpotlight(false) {
-		@landingSpotlightCopy(icons.Message, "bg-sky-400/15 text-sky-300", "Automatic", "Your bank texts you. Tyche does the bookkeeping.",
-			"The Android companion app forwards bank SMS to Tyche, which reads them into transactions. No typing, no spreadsheets, just a quick review.",
-			[]string{
-				"Templates for HSBC, CIB, AAIB, QNB and Arab Bank, or write your own",
-				"Merchants and categories filled in for you",
-				"Both sides of a transfer between your accounts matched together",
-			})
+		<div>
+			@landingSpotlightCopy(icons.Message, "bg-sky-400/15 text-sky-300", "Automatic", "Your bank texts you. Tyche does the bookkeeping.",
+				"The Android companion app forwards bank SMS to Tyche, which reads them into transactions. No typing, no spreadsheets, just a quick review.",
+				[]string{
+					"Templates for HSBC, CIB, AAIB, QNB and Arab Bank, or write your own",
+					"Merchants and categories filled in for you",
+					"Both sides of a transfer between your accounts matched together",
+				})
+			<a href={ templ.SafeURL(AndroidReleaseURL) } target="_blank" rel="noopener" class="btn-ghost mt-8 h-12! text-lg ring-1 ring-zinc-700">
+				@icons.Download("18")
+				Get the Android app
+			</a>
+		</div>
 		<div aria-hidden="true" class="relative">
 			<div class="pointer-events-none absolute inset-0 -z-10 m-auto size-72 rounded-full bg-sky-400/10 blur-3xl"></div>
 			<div class="mx-auto max-w-sm space-y-4">

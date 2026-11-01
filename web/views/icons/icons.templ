@@ -320,6 +320,15 @@ templ Smartphone(size string, attrs ...*templ.Attributes) {
 	}
 }
 
+// Download gets a file, e.g. the Android app.
+templ Download(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="M12 15V3"></path>
+		<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+		<path d="m7 10 5 5 5-5"></path>
+	}
+}
+
 // Clock marks a time, e.g. when a device was last seen.
 templ Clock(size string, attrs ...*templ.Attributes) {
 	@strokeIcon(size, attrs...) {
