@@ -1,0 +1,201 @@
+package views
+
+import (
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+type BackupData struct {
+	// Encrypted is whether the user's database is encrypted (the export isn't).
+	Encrypted bool
+	// HasPrev is whether there's data replaced by an import to restore.
+	HasPrev bool
+}
+
+templ Backup(claims *jwt.AccessClaims, balances []models.Balance, data BackupData) {
+	@layouts.WithTitle(claims, "Backup", balances) {
+		<div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+			<div class="grid gap-6">
+				@exportBackup(data.Encrypted)
+				@importBackup()
+				if data.HasPrev {
+					@restorePrevBackup()
+				}
+			</div>
+			<div class="grid gap-10 lg:sticky lg:top-22">
+				@backupInfo(data.Encrypted)
+			</div>
+		</div>
+	}
+}
+
+templ exportBackup(encrypted bool) {
+	@components.GlassCard("p-5 sm:p-6 grid gap-5", "bg-sky-400/10") {
+		<div class="flex flex-wrap items-center gap-4">
+			<div class="flex gap-3 flex-1 min-w-60">
+				@icons.Download("22", &templ.Attributes{"class": "shrink-0 mt-0.5 text-sky-400"})
+				<div class="grid gap-1">
+					<h2 class="text-white font-semibold">Download a backup</h2>
+					<p class="text-base text-zinc-400">All your data in one file you can import back anytime.</p>
+				</div>
+			</div>
+			<a href="/backup/export" hx-boost="false" download class="btn-primary inline-flex items-center gap-2 max-sm:w-full max-sm:justify-center">
+				@icons.Download("18")
+				Download
+			</a>
+		</div>
+		if encrypted {
+			<p class="flex gap-2 p-3 rounded-2xl bg-amber-400/10 text-sm text-amber-300">
+				@icons.Warning("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
+				The file isn't encrypted, even though your data here is. Keep it somewhere safe.
+			</p>
+		}
+	}
+}
+
+templ importBackup() {
+	@components.GlassCard("p-5 sm:p-6 grid gap-5") {
+		<div class="flex gap-3">
+			@icons.Upload("22", &templ.Attributes{"class": "shrink-0 mt-0.5 text-zinc-400"})
+			<div class="grid gap-1">
+				<h2 class="text-white font-semibold">Restore from a backup</h2>
+				<p class="text-base text-zinc-400">Replaces all your current data with the file's.</p>
+			</div>
+		</div>
+		<form
+			hx-post="/backup/import"
+			hx-encoding="multipart/form-data"
+			hx-target="#import-error"
+			hx-swap="innerHTML"
+			hx-disabled-elt="find button[type=submit]"
+			x-data={ importFormData() }
+			class="grid gap-4"
+		>
+			<input
+				id="import-confirm-value"
+				type="hidden"
+				name="confirm"
+				:value="confirm"
+			/>
+			<label
+				for="import-file"
+				class="grid justify-items-center gap-2 p-6 rounded-2xl border border-dashed text-center cursor-pointer transition-colors"
+				:class="dragging ? 'border-sky-400 bg-sky-400/10' : name ? 'border-zinc-600 bg-zinc-800/40' : 'border-zinc-700 hover:border-zinc-500 hover:bg-zinc-800/30'"
+				@dragover.prevent="dragging = true"
+				@dragleave.prevent="dragging = false"
+				@drop.prevent="dragging = false; $refs.file.files = $event.dataTransfer.files; pick($refs.file)"
+			>
+				<input
+					id="import-file"
+					x-ref="file"
+					type="file"
+					name="file"
+					accept=".sqlite,.db,application/vnd.sqlite3,application/x-sqlite3"
+					class="sr-only"
+					@change="pick($el)"
+				/>
+				<template x-if="!name">
+					<div class="grid justify-items-center gap-2">
+						@icons.Upload("24", &templ.Attributes{"class": "text-zinc-500"})
+						<p class="text-zinc-300">Drop your backup here or <span class="text-sky-400 underline underline-offset-2">browse</span></p>
+						<p class="text-sm text-zinc-500">The <span class="text-zinc-400">.sqlite</span> file you downloaded, up to <span class="whitespace-nowrap">200 MB</span></p>
+					</div>
+				</template>
+				<template x-if="name">
+					<div class="flex items-center gap-3 max-w-full">
+						@icons.Check("18", &templ.Attributes{"class": "shrink-0 text-emerald-400"})
+						<span class="truncate text-zinc-200" x-text="name"></span>
+						<span class="shrink-0 text-sm text-zinc-500" x-text="size"></span>
+					</div>
+				</template>
+			</label>
+			<div x-cloak x-show="name" x-transition class="grid gap-4">
+				<div>
+					<label for="import-confirm" class="input-label">
+						Type <span class="font-mono text-red-300">{ models.ImportConfirmation }</span> to replace your data
+					</label>
+					<input id="import-confirm" autocomplete="off" class="input-field" x-model="confirm"/>
+				</div>
+			</div>
+			<p id="import-error" class="text-sm text-red-400 empty:hidden"></p>
+			<div class="flex justify-end">
+				<button
+					type="submit"
+					class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed max-sm:w-full"
+					:disabled={ "!name || confirm.trim() !== '" + models.ImportConfirmation + "'" }
+				>
+					Replace my data
+				</button>
+			</div>
+		</form>
+	}
+}
+
+templ restorePrevBackup() {
+	@components.GlassCard("p-5 sm:p-6") {
+		<div class="flex flex-wrap items-center gap-4">
+			<div class="flex gap-3 flex-1 min-w-60">
+				@icons.RotateCcw("22", &templ.Attributes{"class": "shrink-0 mt-0.5 text-zinc-400"})
+				<div class="grid gap-1">
+					<h2 class="text-white font-semibold">Undo the last import</h2>
+					<p class="text-base text-zinc-400">Gets back the data it replaced.</p>
+				</div>
+			</div>
+			<button
+				type="button"
+				hx-post="/backup/restore"
+				hx-target="#restore-error"
+				hx-swap="innerHTML"
+				hx-disabled-elt="this"
+				hx-confirm="Restore the data replaced by the last import?"
+				class="btn-ghost ring-1 ring-zinc-700 max-sm:w-full"
+			>
+				Restore previous data
+			</button>
+		</div>
+		<p id="restore-error" class="mt-3 text-sm text-red-400 empty:hidden"></p>
+	}
+}
+
+templ backupInfo(encrypted bool) {
+	@securitySection("What's in it", icons.Archive("16")) {
+		<p class="text-sm text-zinc-600">
+			Accounts, transactions, recurrent transactions, goals, categories, counterparties, currencies, SMS and their templates,
+			your wishlist and settings.
+		</p>
+	}
+	@securitySection("Restoring", icons.RotateCcw("16")) {
+		<p class="text-sm text-zinc-600">
+			Your current data is kept until the next import, so you can undo it. Backups from older versions are upgraded.
+		</p>
+	}
+	@securitySection("Phones", icons.Smartphone("16")) {
+		<p class="text-sm text-zinc-600">Phones forwarding your SMS are signed out by a restore and need to sign in again.</p>
+	}
+	if encrypted {
+		@securitySection("Encryption", icons.Lock("16")) {
+			<p class="text-sm text-zinc-600">Restored data is encrypted with your current password.</p>
+		}
+	}
+}
+
+// importFormData is the Alpine state of the import form: the picked file and
+// the confirmation.
+func importFormData() string {
+	return `{
+		name: '',
+		size: '',
+		confirm: '',
+		dragging: false,
+		pick(input) {
+			const f = input.files[0]
+			this.name = f ? f.name : ''
+			if (!f) return
+			const mb = f.size / (1 << 20)
+			this.size = mb >= 1 ? mb.toFixed(1) + ' MB' : Math.max(1, Math.round(f.size / 1024)) + ' KB'
+		},
+	}`
+}

@@ -174,6 +174,12 @@ func New(h *handler.Handler) Router {
 	mux.Handle("PUT /devices/{id}/revoke", handle(h.RevokeDevice))
 	mux.Handle("GET /reset", handle(h.ResetPage))
 	mux.Handle("POST /reset", handle(h.Reset))
+
+	mux.Handle("GET /backup", handle(h.BackupPage))
+	mux.Handle("GET /backup/export", handle(h.ExportBackup))
+	mux.Handle("POST /backup/import", handle(h.ImportBackup, middleware.HTMXOnly))
+	mux.Handle("POST /backup/restore", handle(h.RestorePrevBackup, middleware.HTMXOnly))
+
 	// Public: signing out of a locked database has no access token.
 	mux.Handle("GET /signout", handlePub(h.Signout))
 	mux.Handle("GET /avatar", handle(h.Avatar))

@@ -329,6 +329,15 @@ templ Download(size string, attrs ...*templ.Attributes) {
 	}
 }
 
+// Upload marks importing a file, e.g. a backup.
+templ Upload(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="M12 3v12"></path>
+		<path d="m17 8-5-5-5 5"></path>
+		<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+	}
+}
+
 // Clock marks a time, e.g. when a device was last seen.
 templ Clock(size string, attrs ...*templ.Attributes) {
 	@strokeIcon(size, attrs...) {

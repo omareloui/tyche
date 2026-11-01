@@ -204,13 +204,12 @@ func (tm *TenantManager) export(tenantID string, from, to []byte, done func() er
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 
-	if tenant, ok := tm.connections[tenantID]; ok {
-		tenant.db.Close()
-		delete(tm.connections, tenantID)
-	}
+	tm.closeTenant(tenantID)
 	if err := exportDB(tm.dbPath(tenantID), from, to); err != nil {
 		return err
 	}
+	// The previous database kept by an import has the old key.
+	_ = os.Remove(tm.backupPath(tenantID))
 	if done != nil {
 		return done()
 	}
@@ -220,16 +219,40 @@ func (tm *TenantManager) export(tenantID string, from, to []byte, done func() er
 // exportDB rewrites the database at path, read with the from key, with the to
 // key (nil for plain text) through sqlcipher_export, then replaces it.
 func exportDB(path string, from, to []byte) error {
-	tmp := path + ".export"
+	return exportFile(path, path, from, to)
+}
+
+// exportFile writes the database at src, read with the from key, to dst with
+// the to key (nil for plain text) through sqlcipher_export, replacing dst.
+func exportFile(src, dst string, from, to []byte) error {
+	tmp := dst + ".export"
 	_ = os.Remove(tmp)
 
-	db, err := openDB(path, from)
+	db, err := openDB(src, from)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
 
-	ctx := context.Background()
+	if err := exportTo(context.Background(), db, tmp, to); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	db.Close()
+
+	if err := syncFile(tmp); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, dst); err != nil {
+		return fmt.Errorf("replacing the database: %w", err)
+	}
+	_ = os.Remove(dst + "-journal")
+	return syncFile(filepath.Dir(dst))
+}
+
+// exportTo copies the whole database of db to a new database at dst,
+// encrypted with the to key (nil for plain text).
+func exportTo(ctx context.Context, db *sql.DB, dst string, to []byte) error {
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return err
@@ -240,28 +263,17 @@ func exportDB(path string, from, to []byte) error {
 	if to != nil {
 		toKey = `"` + vault.SQLCipherKey(to) + `"`
 	}
-	if _, err := conn.ExecContext(ctx, "ATTACH DATABASE ? AS export KEY "+toKey, tmp); err != nil {
+	if _, err := conn.ExecContext(ctx, "ATTACH DATABASE ? AS export KEY "+toKey, dst); err != nil {
 		return fmt.Errorf("attaching the export database: %w", err)
 	}
 	if _, err := conn.ExecContext(ctx, "SELECT sqlcipher_export('export')"); err != nil {
 		_, _ = conn.ExecContext(ctx, "DETACH DATABASE export")
-		_ = os.Remove(tmp)
 		return fmt.Errorf("exporting the database: %w", err)
 	}
 	if _, err := conn.ExecContext(ctx, "DETACH DATABASE export"); err != nil {
 		return fmt.Errorf("detaching the export database: %w", err)
 	}
-	conn.Close()
-	db.Close()
-
-	if err := syncFile(tmp); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		return fmt.Errorf("replacing the database: %w", err)
-	}
-	_ = os.Remove(path + "-journal")
-	return syncFile(filepath.Dir(path))
+	return nil
 }
 
 func syncFile(path string) error {
