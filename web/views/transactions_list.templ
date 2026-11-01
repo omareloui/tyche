@@ -49,7 +49,7 @@ templ txList(d TxListData, oob bool) {
 		if oob {
 			hx-swap-oob="outerHTML"
 		}
-		class="grid gap-8"
+		class="grid grid-cols-1 gap-8"
 	>
 		@txUntil(d.Page, false)
 		if d.Page.NeedsReview > 0 {
@@ -297,7 +297,7 @@ templ txUpcoming(l *txListView, def *models.Currency) {
 			@txFlowTotals(l.UpcomingIn, l.UpcomingOut, def)
 			@icons.ChevronDown("18", &templ.Attributes{"class": "shrink-0 text-zinc-500 transition-transform group-open:rotate-180"})
 		</summary>
-		<div class="grid gap-2 px-2 pb-2 sm:px-3 sm:pb-3">
+		<div class="grid grid-cols-1 gap-2 px-1.5 pb-1.5 sm:px-3 sm:pb-3">
 			for _, t := range l.Upcoming {
 				@Transaction(&t, def)
 			}
@@ -306,7 +306,7 @@ templ txUpcoming(l *txListView, def *models.Currency) {
 }
 
 templ txMonthSection(m *txMonth, def *models.Currency) {
-	<section class="grid gap-5">
+	<section class="grid grid-cols-1 gap-5">
 		<header class="sticky top-16 z-10 -mx-2 px-2 py-2 bg-zinc-950/85 backdrop-blur-md">
 			<div class="flex items-baseline justify-between gap-4">
 				<h2 class="text-xl font-bold font-(family-name:--font-biorhyme-expanded)">
@@ -331,7 +331,7 @@ templ txMonthSection(m *txMonth, def *models.Currency) {
 		</header>
 		for _, d := range m.Days {
 			// Hidden once all its transactions get deleted.
-			<section class="hidden has-[[data-tx]]:grid gap-2">
+			<section class="hidden has-[[data-tx]]:grid grid-cols-1 gap-2">
 				<h3 class="flex items-baseline justify-between gap-4 px-1 text-sm">
 					<span class="font-semibold text-zinc-300">{ formatTxDay(d.Day) }</span>
 					if d.In != 0 || d.Out != 0 {
@@ -414,7 +414,7 @@ templ transaction(tx *models.Transaction, def *models.Currency) {
 				{{ meta := txMeta(&v) }}
 				<p class={ "flex gap-1 min-w-0 text-sm text-zinc-500", templ.KV("md:hidden", meta == "") }>
 					if meta != "" {
-						<span class="truncate">{ meta }</span>
+						<span class="truncate shrink-0 max-w-[70%] md:max-w-full">{ meta }</span>
 						<span class="md:hidden shrink-0">·</span>
 					}
 					<span class="md:hidden flex gap-1 min-w-0">
@@ -447,7 +447,7 @@ templ transaction(tx *models.Transaction, def *models.Currency) {
 				}
 				<p
 					class={
-						"font-semibold font-(family-name:--font-biorhyme-expanded) text-[15px]",
+						"font-semibold sm:font-(family-name:--font-biorhyme-expanded) sm:text-[15px]",
 						templ.KV("text-emerald-400", v.tone == txToneIn),
 						templ.KV("text-zinc-400", v.tone == txToneNeutral),
 					}
@@ -462,10 +462,10 @@ templ transaction(tx *models.Transaction, def *models.Currency) {
 					hx-put={ fmt.Sprintf("/transactions/%s/fulfill", tx.ID) }
 					title="Mark as done, applying it to the account"
 					aria-label="Fulfill"
-					class="inline-flex shrink-0 items-center justify-center gap-1 w-8 sm:w-auto h-8 sm:px-3 rounded-full border border-zinc-700 text-sm text-zinc-300 cursor-pointer transition-colors hover:border-emerald-400 hover:text-emerald-400"
+					class="hidden sm:inline-flex shrink-0 items-center justify-center gap-1 h-8 px-3 rounded-full border border-zinc-700 text-sm text-zinc-300 cursor-pointer transition-colors hover:border-emerald-400 hover:text-emerald-400"
 				>
 					@icons.Check("14")
-					<span class="hidden sm:inline">Fulfill</span>
+					Fulfill
 				</button>
 			}
 			@components.EntryMenuTrigger("openMenu", "Transaction actions")
@@ -687,7 +687,7 @@ templ txGoalPopup(gl *models.Goal) {
 // reimbursementsBreakdown shows how an expense's net amount came to be: what
 // got paid, minus each reimbursement.
 templ reimbursementsBreakdown(tx *models.Transaction, def *models.Currency) {
-	<div x-cloak x-show="openReimbursements" x-transition class="ml-6 md:ml-16 mt-2 grid gap-2 border-l-2 border-emerald-400/20 pl-4">
+	<div x-cloak x-show="openReimbursements" x-transition class="ml-6 md:ml-16 mt-2 grid grid-cols-1 gap-2 border-l-2 border-emerald-400/20 pl-4">
 		<div class="flex justify-between px-4 text-sm text-zinc-400">
 			<span>Paid</span>
 			<span class="tabular-nums">{ "-" + tx.ViewAmount() }</span>
@@ -729,7 +729,7 @@ templ transferPair(out *models.Transaction, def *models.Currency) {
 				{{ meta := txMeta(&v) }}
 				<p class={ "flex gap-1 min-w-0 text-sm text-zinc-500", templ.KV("md:hidden", meta == "") }>
 					if meta != "" {
-						<span class="truncate">{ meta }</span>
+						<span class="truncate shrink-0 max-w-[70%] md:max-w-full">{ meta }</span>
 						<span class="md:hidden shrink-0">·</span>
 					}
 					<span class="md:hidden flex gap-1 min-w-0">
@@ -767,10 +767,10 @@ templ transferPair(out *models.Transaction, def *models.Currency) {
 					<p class="truncate">→ { v.toAccount }</p>
 				</div>
 			</div>
-			<p class="shrink-0 text-right tabular-nums font-semibold font-(family-name:--font-biorhyme-expanded) text-[15px] text-zinc-400">{ v.amount }</p>
+			<p class="shrink-0 text-right tabular-nums font-semibold sm:font-(family-name:--font-biorhyme-expanded) sm:text-[15px] text-zinc-400">{ v.amount }</p>
 			@components.EntryMenuTrigger("openMenu", "Transfer actions")
 		</div>
-		<div x-cloak x-show="openTransferPair" x-transition class="ml-6 md:ml-16 mt-2 grid gap-2 border-l-2 border-sky-400/20 pl-4">
+		<div x-cloak x-show="openTransferPair" x-transition class="ml-6 md:ml-16 mt-2 grid grid-cols-1 gap-2 border-l-2 border-sky-400/20 pl-4">
 			@transferLeg(out, def)
 			@transferLeg(in, def)
 			if fee := out.TransferFee(); fee >= 0.01 {
