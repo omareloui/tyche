@@ -57,3 +57,8 @@ WHERE id = sqlc.arg(id);
 -- name: CountSMSMessagesByStatus :one
 SELECT COUNT(*) FROM sms_messages
 WHERE status IN (sqlc.slice(statuses));
+
+-- name: IgnoreSMSMessagesByStatus :execrows
+UPDATE sms_messages
+SET status = 'ignored'
+WHERE status IN (sqlc.slice(statuses));

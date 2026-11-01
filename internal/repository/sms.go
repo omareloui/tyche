@@ -62,6 +62,29 @@ func (r *Repository) GetSMSMessagesByStatus(ctx context.Context, statuses ...mod
 	return msgs, nil
 }
 
+// IgnoreSMSMessagesByStatus ignores every sms with one of the statuses,
+// returning how many got ignored.
+func (r *Repository) IgnoreSMSMessagesByStatus(ctx context.Context, statuses ...models.SMSStatus) (int64, error) {
+	l := logger.FromCtx(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	sts := make([]string, len(statuses))
+	for i, s := range statuses {
+		sts[i] = string(s)
+	}
+
+	n, err := q.IgnoreSMSMessagesByStatus(ctx, sts)
+	if err != nil {
+		l.Error("ignoring sms messages", zap.Error(err))
+		return 0, err
+	}
+	return n, nil
+}
+
 // CreateSMSMessage stores the sms and, if passed, creates its transaction in
 // the same database transaction.
 func (r *Repository) CreateSMSMessage(ctx context.Context, msg *models.SMSMessage, tx *models.Transaction) error {

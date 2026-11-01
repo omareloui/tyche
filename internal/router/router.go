@@ -138,6 +138,7 @@ func New(h *handler.Handler) Router {
 
 	mux.Handle("GET /sms", handle(h.SMSPage))
 	mux.Handle("POST /sms/retry", handle(h.RetryAllSMS))
+	mux.Handle("POST /sms/ignore", handle(h.IgnoreAllSMS))
 	mux.Handle("POST /sms/{id}/retry", handle(h.RetrySMS))
 	mux.Handle("PUT /sms/{id}/ignore", handle(h.IgnoreSMS))
 	mux.Handle("PUT /sms/timezone", handle(h.SetTimezone))

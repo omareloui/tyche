@@ -284,14 +284,29 @@ func (h *Handler) RetrySMS(w http.ResponseWriter, r *http.Request) (templ.Compon
 	return views.SMSMessage(msg), nil
 }
 
-// RetryAllSMS re-processes every pending sms and returns the ones still pending.
+// RetryAllSMS re-processes the pending sms of the status in the form (every
+// pending one when empty) and returns the ones still pending.
 func (h *Handler) RetryAllSMS(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	ctx := r.Context()
 	l := logger.FromCtx(ctx)
 
-	msgs, err := h.repo.GetSMSMessagesByStatus(ctx, pendingSMSStatuses...)
+	statuses, err := formPendingStatuses(r)
 	if err != nil {
 		return nil, err
+	}
+
+	all, err := h.repo.GetSMSMessagesByStatus(ctx, pendingSMSStatuses...)
+	if err != nil {
+		return nil, err
+	}
+	var msgs []models.SMSMessage
+	stillPending := []models.SMSMessage{}
+	for _, m := range all {
+		if slices.Contains(statuses, m.Status) {
+			msgs = append(msgs, m)
+		} else {
+			stillPending = append(stillPending, m)
+		}
 	}
 
 	sctx, err := h.loadSMSContext(ctx)
@@ -299,7 +314,6 @@ func (h *Handler) RetryAllSMS(w http.ResponseWriter, r *http.Request) (templ.Com
 		return nil, err
 	}
 
-	stillPending := []models.SMSMessage{}
 	created := 0
 	for i := range msgs {
 		msg := &msgs[i]
@@ -314,7 +328,7 @@ func (h *Handler) RetryAllSMS(w http.ResponseWriter, r *http.Request) (templ.Com
 			stillPending = append(stillPending, *msg)
 		}
 	}
-	l.Info("retried all sms", zap.Int("count", len(msgs)), zap.Int("transactions_created", created))
+	l.Info("retried all sms", zap.Int("count", len(msgs)), zap.Int("transactions_created", created), zap.String("status", r.FormValue("status")))
 
 	if created > 0 {
 		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
@@ -322,7 +336,46 @@ func (h *Handler) RetryAllSMS(w http.ResponseWriter, r *http.Request) (templ.Com
 		}
 	}
 
+	slices.SortStableFunc(stillPending, func(a, b models.SMSMessage) int {
+		return b.ReceivedAt.Compare(a.ReceivedAt)
+	})
 	return views.SMSList(stillPending), nil
+}
+
+// formPendingStatuses is the pending sms status in the form, every pending one
+// when empty.
+func formPendingStatuses(r *http.Request) ([]models.SMSStatus, error) {
+	st := models.SMSStatus(r.FormValue("status"))
+	if st == "" {
+		return pendingSMSStatuses, nil
+	}
+	if !slices.Contains(pendingSMSStatuses, st) {
+		return nil, resperr.New(http.StatusBadRequest, "invalid status")
+	}
+	return []models.SMSStatus{st}, nil
+}
+
+// IgnoreAllSMS ignores the pending sms of the status in the form (every
+// pending one when empty) and returns the ones still pending.
+func (h *Handler) IgnoreAllSMS(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	ctx := r.Context()
+
+	statuses, err := formPendingStatuses(r)
+	if err != nil {
+		return nil, err
+	}
+
+	n, err := h.repo.IgnoreSMSMessagesByStatus(ctx, statuses...)
+	if err != nil {
+		return nil, err
+	}
+	logger.FromCtx(ctx).Info("ignored all sms", zap.Int64("count", n), zap.String("status", r.FormValue("status")))
+
+	msgs, err := h.repo.GetSMSMessagesByStatus(ctx, pendingSMSStatuses...)
+	if err != nil {
+		return nil, err
+	}
+	return views.SMSList(msgs), nil
 }
 
 func (h *Handler) IgnoreSMS(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
