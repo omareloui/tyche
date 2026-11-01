@@ -3,7 +3,6 @@ package middleware
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -23,62 +22,72 @@ var RoutesToExcludeAuthMiddleware = []string{
 	"/health", "/favicons", "/fonts", "/icons", "/js", "/styles",
 }
 
-func Auth(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		currPath := r.URL.Path
+// TokenRefresher issues new tokens for the user of the refresh claims in the
+// request's context, setting their cookies, and returns the new access claims.
+type TokenRefresher func(w http.ResponseWriter, r *http.Request) (*jwt.AccessClaims, error)
 
-		shouldIgnore := slicesutils.Contains(RoutesToExcludeAuthMiddleware, func(r string) bool {
-			return strings.HasPrefix(currPath, r)
-		})
+// Auth sets the access claims from the access token cookie. When it's expired
+// and the refresh token is valid, the tokens are refreshed in place, so the
+// request goes on with its method and body (a redirect would lose them).
+func Auth(refresh TokenRefresher) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			currPath := r.URL.Path
 
-		if shouldIgnore {
-			next.ServeHTTP(w, r)
-			return
-		}
+			shouldIgnore := slicesutils.Contains(RoutesToExcludeAuthMiddleware, func(r string) bool {
+				return strings.HasPrefix(currPath, r)
+			})
 
-		var claims *jwt.AccessClaims
-
-		accessCookie, err := r.Cookie("access_token")
-		if !errors.Is(err, http.ErrNoCookie) {
-			accessClaims, err := jwt.ParseAccessClaims(accessCookie.Value)
-			if err == nil {
-				claims = accessClaims
+			if shouldIgnore {
+				next.ServeHTTP(w, r)
+				return
 			}
-		}
 
-		if claims != nil {
-			ctx := context.WithValue(r.Context(), AccessClaimsCtxKey{}, claims)
-			next.ServeHTTP(w, r.WithContext(ctx))
-			return
-		}
+			var claims *jwt.AccessClaims
 
-		isRefreshTokenRoute := strings.Contains(currPath, "oauth/refresh-tokens")
-		refreshCookie, err := r.Cookie("refresh_token")
-		if err != nil {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		if !isRefreshTokenRoute {
-			queries := r.URL.Query()
-			next := queries.Get("next")
-			if next == "" {
-				next = currPath
+			accessCookie, err := r.Cookie("access_token")
+			if !errors.Is(err, http.ErrNoCookie) {
+				accessClaims, err := jwt.ParseAccessClaims(accessCookie.Value)
+				if err == nil {
+					claims = accessClaims
+				}
 			}
-			path := fmt.Sprintf("/oauth/refresh-tokens?next=%s", next)
-			http.Redirect(w, r, path, http.StatusTemporaryRedirect)
-			return
-		} else {
+
+			if claims != nil {
+				ctx := context.WithValue(r.Context(), AccessClaimsCtxKey{}, claims)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			refreshCookie, err := r.Cookie("refresh_token")
+			if err != nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			refreshClaims, err := jwt.ParseRefreshClaims(refreshCookie.Value)
 			if err != nil {
 				next.ServeHTTP(w, r)
 				return
 			}
 			ctx := context.WithValue(r.Context(), RefreshClaimsCtxKey{}, refreshClaims)
+
+			if strings.Contains(currPath, "oauth/refresh-tokens") {
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			claims, err = refresh(w, r.WithContext(ctx))
+			if err != nil {
+				logger.FromCtx(ctx).Warn("refreshing tokens", zap.Error(err))
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			ctx = context.WithValue(r.Context(), AccessClaimsCtxKey{}, claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
-			return
-		}
-	})
+		})
+	}
 }
 
 func Protected(next http.Handler) http.Handler {

@@ -14,7 +14,12 @@ type Router interface {
 	http.Handler
 }
 
+// auth is the Auth middleware wrapping every route, set by New as it refreshes
+// the tokens through the handler.
+var auth func(http.Handler) http.Handler
+
 func New(h *handler.Handler) Router {
+	auth = middleware.Auth(h.RefreshSession)
 	mux := http.NewServeMux()
 
 	mux.Handle("GET /{$}", handlePub(h.HomePage))
@@ -193,7 +198,7 @@ func handlePubJSON(h handler.HandlerJSONMethod, appendMiddlewares ...(func(http.
 		handler = appendMiddlewares[i](handler)
 	}
 
-	handler = middleware.Auth(handler)
+	handler = auth(handler)
 	handler = middleware.RequestLogger(handler)
 	handler = middleware.CorrelationID(handler)
 
@@ -217,7 +222,7 @@ func handlePub(h handler.HandlerMethod, appendMiddlewares ...(func(http.Handler)
 		handler = appendMiddlewares[i](handler)
 	}
 
-	handler = middleware.Auth(handler)
+	handler = auth(handler)
 	handler = middleware.RequestLogger(handler)
 	handler = middleware.CorrelationID(handler)
 

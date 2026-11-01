@@ -67,14 +67,10 @@ func (h *Handler) OAuthCB(w http.ResponseWriter, r *http.Request) (templ.Compone
 
 	l.Debug("generating cookies for the user", zap.Any("user", usr))
 
-	access, refresh, err := generateJWTCookies(usr)
-	if err != nil {
+	if _, err := setJWTCookies(w, usr); err != nil {
 		l.Error("error generating jwt cookies", zap.Error(err), zap.Any("user", usr))
 		return nil, err
 	}
-
-	http.SetCookie(w, access)
-	http.SetCookie(w, refresh)
 
 	l.Info("new user singed", zap.Any("user", usr))
 
@@ -133,37 +129,15 @@ func (h *Handler) signInGoogleUser(ctx context.Context, code string) (*models.Us
 }
 
 func (h *Handler) RefreshTokens(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	l := logger.FromCtx(r.Context())
-
-	claims := r.Context().Value(middleware.RefreshClaimsCtxKey{})
-	if claims == nil {
-		l.Error("can't find the refresh token to refresh the tokens")
-		return nil, jwt.ErrExpiredToken
-	}
-	_claims := claims.(*jwt.RefreshClaims)
-
-	l.Debug("refreshing tokens for user", zap.String("id", _claims.ID), zap.String("oauth_id", _claims.OAuthID))
-
-	usr, err := h.repo.GetUserByOAuthID(r.Context(), _claims.OAuthID)
-	if err != nil || usr == nil {
-		l.Error("refreshing token. can't get the user to refresh the token.", zap.String("oauth_id", _claims.OAuthID), zap.Error(err))
-		l.Info("signing out.")
+	if _, err := h.RefreshSession(w, r); err != nil {
+		if errors.Is(err, jwt.ErrExpiredToken) {
+			return nil, err
+		}
+		logger.FromCtx(r.Context()).Info("signing out.")
 		return h.Signout(w, r)
 	}
 
-	access, refresh, err := generateJWTCookies(usr)
-	if err != nil {
-		l.Error("error generating jwt cookies", zap.Error(err), zap.Any("user", usr))
-		return nil, err
-	}
-
-	http.SetCookie(w, access)
-	http.SetCookie(w, refresh)
-
-	queries := r.URL.Query()
-
-	next := queries.Get("next")
-
+	next := r.URL.Query().Get("next")
 	if next == "" {
 		next = "/"
 	}
@@ -171,6 +145,37 @@ func (h *Handler) RefreshTokens(w http.ResponseWriter, r *http.Request) (templ.C
 	http.Redirect(w, r, next, http.StatusTemporaryRedirect)
 
 	return nil, nil
+}
+
+// RefreshSession is the middleware.TokenRefresher: it issues new tokens for the
+// user of the refresh claims in the context. When the user is gone, the
+// cookies are unset.
+func (h *Handler) RefreshSession(w http.ResponseWriter, r *http.Request) (*jwt.AccessClaims, error) {
+	l := logger.FromCtx(r.Context())
+
+	claims, ok := r.Context().Value(middleware.RefreshClaimsCtxKey{}).(*jwt.RefreshClaims)
+	if !ok {
+		l.Error("can't find the refresh token to refresh the tokens")
+		return nil, jwt.ErrExpiredToken
+	}
+
+	l.Debug("refreshing tokens for user", zap.String("id", claims.ID), zap.String("oauth_id", claims.OAuthID))
+
+	usr, err := h.repo.GetUserByOAuthID(r.Context(), claims.OAuthID)
+	if err != nil || usr == nil {
+		l.Error("refreshing token. can't get the user to refresh the token.", zap.String("oauth_id", claims.OAuthID), zap.Error(err))
+		unsetCookie(w, refreshTokenCookieName)
+		unsetCookie(w, accessTokenCookieName)
+		return nil, fmt.Errorf("getting the user to refresh the tokens: %w", err)
+	}
+
+	tokens, err := setJWTCookies(w, usr)
+	if err != nil {
+		l.Error("error generating jwt cookies", zap.Error(err), zap.Any("user", usr))
+		return nil, err
+	}
+
+	return jwt.ParseAccessClaims(tokens.Access.Encoded)
 }
 
 func (h *Handler) Signout(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -215,18 +220,17 @@ func getOAuth2Conf() *oauth2.Config {
 	return oauthConf
 }
 
-func generateJWTCookies(usr *models.User) (access *http.Cookie, refresh *http.Cookie, err error) {
-	var tokens *jwt.TokenPair
-
-	tokens, err = jwt.NewPair(usr)
+// setJWTCookies issues a new token pair for the user and sets its cookies.
+func setJWTCookies(w http.ResponseWriter, usr *models.User) (*jwt.TokenPair, error) {
+	tokens, err := jwt.NewPair(usr)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	access = newCookie(refreshTokenCookieName, tokens.Refresh.Encoded, tokens.Refresh.Expiration)
-	refresh = newCookie(accessTokenCookieName, tokens.Access.Encoded, tokens.Access.Expiration)
+	http.SetCookie(w, newCookie(accessTokenCookieName, tokens.Access.Encoded, tokens.Access.Expiration))
+	http.SetCookie(w, newCookie(refreshTokenCookieName, tokens.Refresh.Encoded, tokens.Refresh.Expiration))
 
-	return access, refresh, nil
+	return tokens, nil
 }
 
 func newCookie(name, value string, exp time.Time) *http.Cookie {
