@@ -274,7 +274,7 @@ templ Goal(gl *models.Goal) {
 		class="relative"
 		x-data="{openMenu: false}"
 	>
-		@components.EntryMenu("openMenu", getGoalMenuItems(gl, st))
+		@components.EntryMenuAt("openMenu", "top-16 right-3 origin-top-right", getGoalMenuItems(gl, st))
 		<div class={ "relative flex flex-col gap-4 h-full p-4 rounded-2xl bg-zinc-700/20 overflow-hidden", goalAccentClass(st) }>
 			<div aria-hidden="true" class="pointer-events-none absolute -top-16 -right-16 size-40 rounded-full bg-(--accent)/10 blur-2xl"></div>
 			<div class="relative flex items-center gap-4 min-w-0">
@@ -285,13 +285,7 @@ templ Goal(gl *models.Goal) {
 						<span class="text-zinc-300">{ gl.ViewProgress() }</span> of { gl.ViewAmount() }
 					</p>
 				</div>
-				<button
-					@click="openMenu = !openMenu"
-					aria-label="Goal actions"
-					class="cursor-pointer grid place-items-center shrink-0 w-6 h-6"
-				>
-					<img src="/icons/dots-menu.svg" class="h-5"/>
-				</button>
+				@components.EntryMenuTrigger("openMenu", "Goal actions")
 			</div>
 			switch st {
 				case goalActive:
@@ -549,16 +543,21 @@ func getGoalMenuItems(gl *models.Goal, st goalState) []templ.Component {
 	items := []templ.Component{}
 
 	if st == goalAchieved {
-		items = append(items, components.EntryMenuAnchorItem("Reopen", "put", fmt.Sprintf("/goals/%s/unfulfill", gl.ID)))
+		items = append(items, components.EntryMenuAnchorItem("Reopen", "put", fmt.Sprintf("/goals/%s/unfulfill", gl.ID),
+			components.WithEntryMenuItemIcon(icons.RotateCcw("16"))))
 	} else {
 		items = append(items,
-			components.EntryMenuAnchorItem("Add money", "get", fmt.Sprintf("/goals/%s/progress-form", gl.ID)),
-			components.EntryMenuAnchorItem("Mark achieved", "put", fmt.Sprintf("/goals/%s/fulfill", gl.ID)),
+			components.EntryMenuAnchorItem("Add money", "get", fmt.Sprintf("/goals/%s/progress-form", gl.ID),
+				components.WithEntryMenuItemIcon(icons.Plus("16"))),
+			components.EntryMenuAnchorItem("Mark achieved", "put", fmt.Sprintf("/goals/%s/fulfill", gl.ID),
+				components.WithEntryMenuItemIcon(icons.Trophy("16"))),
 		)
 	}
 
 	return append(items,
-		components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/goals/%s/edit", gl.ID)),
+		components.EntryMenuSeparator(),
+		components.EntryMenuEditItem(fmt.Sprintf("/goals/%s/edit", gl.ID)),
+		components.EntryMenuSeparator(),
 		components.EntryMenuDeleteItem(fmt.Sprintf("/goals/%s", gl.ID)),
 	)
 }

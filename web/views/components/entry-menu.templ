@@ -1,71 +1,188 @@
 package components
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/omareloui/tyche/web/views/icons"
+)
 
 type entryMenuItemOpts struct {
 	classes        []string
 	confirmMessage string
+	icon           templ.Component
+	danger         bool
+	shortcut       string
+	attrs          templ.Attributes
 }
 
-type entryMenuItemOptsFunc func(o *entryMenuItemOpts)
+type EntryMenuItemOpt func(o *entryMenuItemOpts)
 
-templ EntryMenuAnchorItem(label string, action string, url string, opts ...entryMenuItemOptsFunc) {
+// EntryMenuItem is a menu row running whatever attrs say on click (htmx,
+// Alpine, ...).
+templ EntryMenuItem(label string, attrs templ.Attributes, opts ...EntryMenuItemOpt) {
 	{{ o := getEntryMenuItemOptions(opts) }}
-	<a
+	<button
+		type="button"
+		role="menuitem"
 		class={
-			"block transition-transform hover:translate-x-0.5",
+			"group/item flex items-center gap-2.5 w-full px-2.5 py-1.5 rounded-md text-left text-base whitespace-nowrap cursor-pointer outline-none transition-colors",
+			templ.KV("text-zinc-200 hover:bg-white/8 hover:text-white focus-visible:bg-white/8 focus-visible:text-white", !o.danger),
+			templ.KV("text-red-400 hover:bg-red-500/12 hover:text-red-300 focus-visible:bg-red-500/12 focus-visible:text-red-300", o.danger),
 			strings.Join(o.classes, " "),
 		}
-		{ "hx-" + action }={ url }
-		hx-swap="outerHTML"
 		if o.confirmMessage != "" {
 			hx-confirm={ o.confirmMessage }
 		}
+		{ attrs... }
+		if o.attrs != nil {
+			{ o.attrs... }
+		}
 	>
-		{ label }
-	</a>
+		if o.icon != nil {
+			<span
+				class={
+					"grid place-items-center shrink-0 w-4 transition-colors",
+					templ.KV("text-zinc-500 group-hover/item:text-zinc-200 group-focus-visible/item:text-zinc-200", !o.danger),
+				}
+			>
+				@o.icon
+			</span>
+		}
+		<span class="flex-1">{ label }</span>
+		if o.shortcut != "" {
+			<kbd class="hidden [@media(pointer:fine)]:inline ml-4 min-w-5 px-1 rounded border border-white/10 text-center font-sans text-xs text-zinc-500">{ o.shortcut }</kbd>
+		}
+	</button>
 }
 
-templ EntryMenuDeleteItem(url string, opts ...entryMenuItemOptsFunc) {
-	@EntryMenuAnchorItem("Delete", "delete", url,
-		WithEntryMenuItemConfirmMessage("Are you sure you want to delete this entry?"),
-		WithEntryMenuItemClasses("text-red-500"),
+templ EntryMenuAnchorItem(label string, action string, url string, opts ...EntryMenuItemOpt) {
+	@EntryMenuItem(label, templ.Attributes{"hx-" + action: url, "hx-swap": "outerHTML"}, opts...)
+}
+
+// EntryMenuEditItem gets the entry's edit form at url.
+templ EntryMenuEditItem(url string, opts ...EntryMenuItemOpt) {
+	@EntryMenuAnchorItem("Edit", "get", url,
+		append([]EntryMenuItemOpt{WithEntryMenuItemIcon(icons.Pencil("16"))}, opts...)...,
 	)
 }
 
-templ EntryMenu(showKey string, entries []templ.Component) {
+templ EntryMenuDeleteItem(url string, opts ...EntryMenuItemOpt) {
+	@EntryMenuAnchorItem("Delete", "delete", url,
+		append([]EntryMenuItemOpt{
+			WithEntryMenuItemConfirmMessage("Are you sure you want to delete this entry?"),
+			WithEntryMenuItemIcon(icons.Trash("16")),
+			WithEntryMenuItemDanger(),
+		}, opts...)...,
+	)
+}
+
+// EntryMenuSeparator splits a menu's items into groups, e.g. before the
+// destructive ones.
+templ EntryMenuSeparator() {
+	<div role="separator" class="my-1 mx-1 h-px bg-white/8"></div>
+}
+
+// EntryMenuAt is an entry's actions menu, placed by position (absolute offsets
+// + transform origin) in its closest positioned ancestor, which should get
+// z-30 while it's open so later entries don't cover it. It takes the focus when
+// opened, arrow keys move it, Escape closes the menu.
+templ EntryMenuAt(showKey string, position string, entries []templ.Component) {
 	<div
 		x-cloak
 		x-show={ showKey }
+		x-effect={ "if (" + showKey + ") $nextTick(() => $el.querySelector('[role=menuitem]')?.focus())" }
 		@click.away={ showKey + " = false" }
-		x-transition.scale.origin.bottom.right
-		class="absolute z-20 -top-8 right-10"
+		@keydown.escape.window={ showKey + " = false" }
+		@keydown.arrow-down.prevent="entryMenuMove($el, 1)"
+		@keydown.arrow-up.prevent="entryMenuMove($el, -1)"
+		x-transition:enter="transition ease-out duration-100"
+		x-transition:enter-start="opacity-0 scale-95"
+		x-transition:enter-end="opacity-100 scale-100"
+		x-transition:leave="transition ease-in duration-75"
+		x-transition:leave-start="opacity-100 scale-100"
+		x-transition:leave-end="opacity-0 scale-95"
+		class={ "absolute z-20", position }
 	>
-		@Popup("overflow-hidden") {
-			<ul class="py-2 min-w-28">
+		@Popup("rounded-xl! p-1 min-w-44 shadow-xl shadow-black/40") {
+			<div role="menu" class="flex flex-col">
 				for _, entry := range entries {
-					<li class="transition-colors hover:bg-zinc-500/20 px-4 cursor-pointer">
-						@entry
-					</li>
+					@entry
 				}
-			</ul>
+			</div>
 		}
 	</div>
 }
 
-func WithEntryMenuItemClasses(classes ...string) entryMenuItemOptsFunc {
+// EntryMenuAnchored is an EntryMenuTrigger with its menu opening right under
+// it, for entries not clipping their content (no overflow-hidden between the
+// two).
+templ EntryMenuAnchored(showKey string, label string, entries []templ.Component) {
+	<div class="relative shrink-0">
+		@EntryMenuTrigger(showKey, label)
+		@EntryMenuAt(showKey, "top-full mt-1 -right-1 origin-top-right", entries)
+	</div>
+}
+
+// EntryMenuTrigger is the "⋮" button toggling the menu shown by showKey.
+templ EntryMenuTrigger(showKey string, label string) {
+	<button
+		type="button"
+		@click={ showKey + " = !" + showKey }
+		aria-haspopup="menu"
+		:aria-expanded={ showKey }
+		aria-label={ label }
+		:class={ showKey + " ? 'bg-white/10 text-white' : 'text-zinc-400'" }
+		class="cursor-pointer grid place-items-center shrink-0 w-8 h-8 -mr-1 rounded-full transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60"
+	>
+		<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+			<circle cx="12" cy="5" r="2"></circle>
+			<circle cx="12" cy="12" r="2"></circle>
+			<circle cx="12" cy="19" r="2"></circle>
+		</svg>
+	</button>
+}
+
+func WithEntryMenuItemClasses(classes ...string) EntryMenuItemOpt {
 	return func(o *entryMenuItemOpts) {
 		o.classes = classes
 	}
 }
 
-func WithEntryMenuItemConfirmMessage(message string) entryMenuItemOptsFunc {
+func WithEntryMenuItemConfirmMessage(message string) EntryMenuItemOpt {
 	return func(o *entryMenuItemOpts) {
 		o.confirmMessage = message
 	}
 }
 
-func getEntryMenuItemOptions(options []entryMenuItemOptsFunc) *entryMenuItemOpts {
+func WithEntryMenuItemIcon(icon templ.Component) EntryMenuItemOpt {
+	return func(o *entryMenuItemOpts) {
+		o.icon = icon
+	}
+}
+
+// WithEntryMenuItemAttrs adds attributes, e.g. an hx-target.
+func WithEntryMenuItemAttrs(attrs templ.Attributes) EntryMenuItemOpt {
+	return func(o *entryMenuItemOpts) {
+		o.attrs = attrs
+	}
+}
+
+// WithEntryMenuItemShortcut shows the keyboard shortcut doing the same, on
+// devices with a mouse.
+func WithEntryMenuItemShortcut(key string) EntryMenuItemOpt {
+	return func(o *entryMenuItemOpts) {
+		o.shortcut = key
+	}
+}
+
+// WithEntryMenuItemDanger marks a destructive item (delete, ...).
+func WithEntryMenuItemDanger() EntryMenuItemOpt {
+	return func(o *entryMenuItemOpts) {
+		o.danger = true
+	}
+}
+
+func getEntryMenuItemOptions(options []EntryMenuItemOpt) *entryMenuItemOpts {
 	o := new(entryMenuItemOpts)
 	for _, fun := range options {
 		fun(o)

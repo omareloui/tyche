@@ -17,10 +17,11 @@ templ EntryCard(opts ...cardOptsFunc) {
 		class="relative"
 		if len(o.menuItems) > 0 {
 			x-data="{openMenu: false}"
+			:class="{ 'z-30': openMenu }"
 		}
 	>
 		if len(o.menuItems) > 0 {
-			@EntryMenu("openMenu", o.menuItems)
+			@EntryMenuAt("openMenu", "top-15 right-7 origin-top-right", o.menuItems)
 		}
 		<div
 			class={
@@ -32,23 +33,13 @@ templ EntryCard(opts ...cardOptsFunc) {
 			if len(o.menuItems) > 0 && o.title != "" {
 				<div class="flex justify-between gap-8">
 					@cardTitle(o)
-					<button
-						@click="openMenu = !openMenu"
-						class="cursor-pointer inline-block w-6 h-6"
-					>
-						<img src="/icons/dots-menu.svg" class="w-6 h-6"/>
-					</button>
+					@EntryMenuTrigger("openMenu", "Actions")
 				</div>
 			} else if o.title != "" {
 				@cardTitle(o)
 			} else if len(o.menuItems) > 0 {
 				<div class="flex justify-end gap-8">
-					<button
-						@click="openMenu = !openMenu"
-						class="cursor-pointer inline-block w-6 h-6"
-					>
-						<img src="/icons/dots-menu.svg" class="w-6 h-6"/>
-					</button>
+					@EntryMenuTrigger("openMenu", "Actions")
 				</div>
 			}
 			{ children... }

@@ -168,7 +168,7 @@ templ WishlistItem(item *models.WishlistItem, ws *models.WorkSettings) {
 		class="relative min-w-0"
 		x-data="{openMenu: false}"
 	>
-		@components.EntryMenu("openMenu", wishlistMenuItems(item))
+		@components.EntryMenuAt("openMenu", "top-13 right-3 origin-top-right", wishlistMenuItems(item))
 		<div class={ "relative flex flex-col gap-3 h-full p-4 rounded-2xl bg-zinc-700/20 overflow-hidden", wishlistAccentClass(item, ready) }>
 			<div class="flex items-start gap-3 min-w-0">
 				<div class="flex-1 min-w-0">
@@ -188,13 +188,7 @@ templ WishlistItem(item *models.WishlistItem, ws *models.WorkSettings) {
 						}
 					</p>
 				</div>
-				<button
-					@click="openMenu = !openMenu"
-					aria-label="Wish actions"
-					class="cursor-pointer grid place-items-center shrink-0 w-6 h-6"
-				>
-					<img src="/icons/dots-menu.svg" class="h-5"/>
-				</button>
+				@components.EntryMenuTrigger("openMenu", "Wish actions")
 			</div>
 			<div class="flex flex-wrap items-center gap-1.5">
 				if hours := ws.ViewHoursFor(item.TotalCost(), &item.Currency); hours != "" {
@@ -316,18 +310,18 @@ func wishlistMenuItems(item *models.WishlistItem) []templ.Component {
 	if item.Status == models.WishlistWaiting {
 		items = append(items, wishlistEditMenuItem(item.ID))
 	} else {
-		items = append(items, components.EntryMenuAnchorItem("Back to waiting", "put", fmt.Sprintf("/wishlist/%s/restore", item.ID)))
+		items = append(items, components.EntryMenuAnchorItem("Back to waiting", "put", fmt.Sprintf("/wishlist/%s/restore", item.ID),
+			components.WithEntryMenuItemIcon(icons.RotateCcw("16"))))
 	}
-	return append(items, components.EntryMenuDeleteItem(fmt.Sprintf("/wishlist/%s", item.ID)))
+	return append(items,
+		components.EntryMenuSeparator(),
+		components.EntryMenuDeleteItem(fmt.Sprintf("/wishlist/%s", item.ID)),
+	)
 }
 
 // wishlistEditMenuItem swaps the card alone for its edit form, unlike the
 // other actions re-rendering the whole wishlist.
-templ wishlistEditMenuItem(id string) {
-	<a
-		class="block transition-transform hover:translate-x-0.5"
-		hx-get={ fmt.Sprintf("/wishlist/%s/edit", id) }
-		hx-target={ "#" + WishlistItemID(id) }
-		hx-swap="outerHTML"
-	>Edit</a>
+func wishlistEditMenuItem(id string) templ.Component {
+	return components.EntryMenuEditItem(fmt.Sprintf("/wishlist/%s/edit", id),
+		components.WithEntryMenuItemAttrs(templ.Attributes{"hx-target": "#" + WishlistItemID(id)}))
 }

@@ -163,11 +163,8 @@ templ Currency(cur *models.Currency, defaultCur *models.Currency) {
 		x-show="matches($el)"
 		class={ "relative", currencyKindAccentClass(cur.Kind), templ.KV("opacity-60 hover:opacity-100 transition-opacity", !cur.IsShown) }
 		x-data="{openMenu: false}"
+		:class="{ 'z-30': openMenu }"
 	>
-		@components.EntryMenu("openMenu", []templ.Component{
-			components.EntryMenuAnchorItem("Set as default", "put", fmt.Sprintf("/currencies/%s/set-default", cur.ID),
-				components.WithEntryMenuItemConfirmMessage(fmt.Sprintf("Make %s your default currency? Your balance and rates will be shown in it.", cur.String))),
-		})
 		<div class="flex items-center gap-3 h-full p-3.5 rounded-2xl bg-zinc-700/20">
 			<div class="grid place-items-center shrink-0 w-10 h-10 rounded-xl bg-(--accent)/15 text-(--accent)">
 				@currencyKindIcon(cur.Kind, "20")
@@ -211,13 +208,11 @@ templ Currency(cur *models.Currency, defaultCur *models.Currency) {
 						@icons.EyeOff("18")
 					</button>
 				}
-				<button
-					@click="openMenu = !openMenu"
-					aria-label="Currency actions"
-					class="cursor-pointer grid place-items-center w-8 h-8"
-				>
-					<img src="/icons/dots-menu.svg" class="h-5"/>
-				</button>
+				@components.EntryMenuAnchored("openMenu", "Currency actions", []templ.Component{
+					components.EntryMenuAnchorItem("Set as default", "put", fmt.Sprintf("/currencies/%s/set-default", cur.ID),
+						components.WithEntryMenuItemIcon(icons.Star("16")),
+						components.WithEntryMenuItemConfirmMessage(fmt.Sprintf("Make %s your default currency? Your balance and rates will be shown in it.", cur.String))),
+				})
 			</div>
 		</div>
 	</div>

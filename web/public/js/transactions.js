@@ -88,7 +88,7 @@ document.addEventListener("alpine:init", () => {
         this.$refs.q?.select();
         return;
       }
-      if (t.closest?.("input, textarea, select, [contenteditable], form, [role=listbox]")) return;
+      if (t.closest?.("input, textarea, select, [contenteditable], form, [role=listbox], [role=menu]")) return;
 
       // Edit forms are data-tx too, without an id.
       const row = t.closest?.("[data-tx][data-id]");

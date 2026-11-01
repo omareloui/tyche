@@ -213,11 +213,6 @@ templ Counterparty(cp *models.Counterparty) {
 		data-search={ strings.ToLower(cp.Name + " " + strings.Join(cp.Aliases, " ")) }
 		x-show="matches($el)"
 	>
-		@components.EntryMenu("openMenu", []templ.Component{
-			components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/counterparties/%s/edit", cp.ID)),
-			components.EntryMenuAnchorItem("Merge into…", "get", fmt.Sprintf("/counterparties/%s/merge", cp.ID)),
-			components.EntryMenuDeleteItem(fmt.Sprintf("/counterparties/%s", cp.ID)),
-		})
 		<div class="flex items-center gap-4 h-full p-4 rounded-2xl bg-zinc-700/20">
 			<div class="grid place-items-center shrink-0 w-12 h-12 rounded-xl bg-zinc-700/40">
 				@components.CounterpartyIcon(cp.Name, cp.Icon, cp.Color, "w-7 h-7 text-sm")
@@ -250,13 +245,13 @@ templ Counterparty(cp *models.Counterparty) {
 					</div>
 				}
 			</div>
-			<button
-				@click="openMenu = !openMenu"
-				aria-label="Counterparty actions"
-				class="cursor-pointer grid place-items-center shrink-0 w-6 h-6"
-			>
-				<img src="/icons/dots-menu.svg" class="h-5"/>
-			</button>
+			@components.EntryMenuAnchored("openMenu", "Counterparty actions", []templ.Component{
+				components.EntryMenuEditItem(fmt.Sprintf("/counterparties/%s/edit", cp.ID)),
+				components.EntryMenuAnchorItem("Merge into…", "get", fmt.Sprintf("/counterparties/%s/merge", cp.ID),
+					components.WithEntryMenuItemIcon(icons.Merge("16"))),
+				components.EntryMenuSeparator(),
+				components.EntryMenuDeleteItem(fmt.Sprintf("/counterparties/%s", cp.ID)),
+			})
 		</div>
 	</div>
 }

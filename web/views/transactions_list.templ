@@ -313,7 +313,7 @@ templ transaction(tx *models.Transaction, def *models.Currency) {
 		class="relative"
 		x-data="txRow"
 	>
-		@components.EntryMenu("openMenu", getTransactionMenuItems(tx))
+		@components.EntryMenuAt("openMenu", txMenuBig, getTransactionMenuItems(tx))
 		<div
 			data-tx-row
 			tabindex="0"
@@ -378,13 +378,7 @@ templ transaction(tx *models.Transaction, def *models.Currency) {
 					Fulfill
 				</button>
 			}
-			<button
-				@click="openMenu = !openMenu"
-				aria-label="Transaction actions"
-				class="cursor-pointer grid place-items-center shrink-0 w-6 h-6"
-			>
-				<img src="/icons/dots-menu.svg" class="h-5"/>
-			</button>
+			@components.EntryMenuTrigger("openMenu", "Transaction actions")
 		</div>
 		if tx.NeedsReview {
 			@txReviewStrip(tx)
@@ -600,8 +594,8 @@ templ transferPair(out *models.Transaction, def *models.Currency) {
 		class="relative"
 		x-data="txRow"
 	>
-		@components.EntryMenu("openMenu", []templ.Component{
-			components.EntryMenuAnchorItem("Unlink transfer", "delete", fmt.Sprintf("/transactions/%s/transfer-pair", out.ID)),
+		@components.EntryMenuAt("openMenu", txMenuBig, []templ.Component{
+			txMenuItem("Unlink transfer", "delete", fmt.Sprintf("/transactions/%s/transfer-pair", out.ID), icons.Unlink("16")),
 		})
 		<div
 			data-tx-row
@@ -653,13 +647,7 @@ templ transferPair(out *models.Transaction, def *models.Currency) {
 				</div>
 			</div>
 			<p class="shrink-0 text-right tabular-nums font-semibold font-(family-name:--font-biorhyme-expanded) text-[15px] text-zinc-400">{ v.amount }</p>
-			<button
-				@click="openMenu = !openMenu"
-				aria-label="Transfer actions"
-				class="cursor-pointer grid place-items-center shrink-0 w-6 h-6"
-			>
-				<img src="/icons/dots-menu.svg" class="h-5"/>
-			</button>
+			@components.EntryMenuTrigger("openMenu", "Transfer actions")
 		</div>
 		<div x-cloak x-show="openTransferPair" x-transition class="ml-6 md:ml-16 mt-2 grid gap-2 border-l-2 border-sky-400/20 pl-4">
 			@transferLeg(out, def)
@@ -686,7 +674,7 @@ templ transferLeg(tx *models.Transaction, def *models.Currency) {
 		class="relative"
 		x-data="txRow"
 	>
-		@components.EntryMenu("openMenu", getTransferLegMenuItems(tx))
+		@components.EntryMenuAt("openMenu", txMenuSmall, getTransferLegMenuItems(tx))
 		<div
 			data-tx-row
 			tabindex="0"
@@ -743,13 +731,7 @@ templ transferLeg(tx *models.Transaction, def *models.Currency) {
 					<p class="text-xs text-zinc-500">{ conv }</p>
 				}
 			</div>
-			<button
-				@click="openMenu = !openMenu"
-				aria-label="Transfer side actions"
-				class="cursor-pointer grid place-items-center shrink-0 w-6 h-6"
-			>
-				<img src="/icons/dots-menu.svg" class="h-5"/>
-			</button>
+			@components.EntryMenuTrigger("openMenu", "Transfer side actions")
 		</div>
 		if tx.NeedsReview {
 			@txReviewStrip(tx)
@@ -768,7 +750,7 @@ templ reimbursement(tx *models.Transaction, def *models.Currency) {
 		class="relative"
 		x-data="txRow"
 	>
-		@components.EntryMenu("openMenu", getReimbursementMenuItems(tx))
+		@components.EntryMenuAt("openMenu", txMenuSmall, getReimbursementMenuItems(tx))
 		<div
 			data-tx-row
 			tabindex="0"
@@ -794,13 +776,7 @@ templ reimbursement(tx *models.Transaction, def *models.Currency) {
 					<p class="text-xs text-zinc-500">{ conv }</p>
 				}
 			</div>
-			<button
-				@click="openMenu = !openMenu"
-				aria-label="Reimbursement actions"
-				class="cursor-pointer grid place-items-center shrink-0 w-6 h-6"
-			>
-				<img src="/icons/dots-menu.svg" class="h-5"/>
-			</button>
+			@components.EntryMenuTrigger("openMenu", "Reimbursement actions")
 		</div>
 		if tx.NeedsReview {
 			@txReviewStrip(tx)
@@ -825,61 +801,105 @@ templ txUndoToast() {
 	</div>
 }
 
+// The menus open under their trigger, right-aligned with it, on the regular
+// rows and on the smaller nested ones (transfer sides, reimbursements).
+const (
+	txMenuBig   = "top-13 right-2 sm:right-3 origin-top-right"
+	txMenuSmall = "top-11 right-3 origin-top-right"
+)
+
+func txMenuItem(label, action, url string, icon templ.Component, opts ...components.EntryMenuItemOpt) templ.Component {
+	return components.EntryMenuAnchorItem(label, action, url,
+		append([]components.EntryMenuItemOpt{components.WithEntryMenuItemIcon(icon)}, opts...)...)
+}
+
 // txMenuDelete deletes the transaction after a few seconds, offering an undo
 // meanwhile (transactions.js).
-templ txMenuDelete() {
-	<a @click="openMenu = false; $store.txs.remove($el.closest('[data-tx]'))" class="block text-red-500 transition-transform hover:translate-x-0.5">Delete</a>
+func txMenuDelete() templ.Component {
+	return components.EntryMenuItem("Delete",
+		templ.Attributes{"@click": "openMenu = false; $store.txs.remove($el.closest('[data-tx]'))"},
+		components.WithEntryMenuItemIcon(icons.Trash("16")),
+		components.WithEntryMenuItemShortcut("Del"),
+		components.WithEntryMenuItemDanger(),
+	)
 }
 
 // txMenuDuplicate opens the create form filled with the transaction, dated
 // today.
-templ txMenuDuplicate(id string) {
-	<a
-		hx-get={ fmt.Sprintf("/transactions/%s/duplicate", id) }
-		hx-target="#tx-create"
-		hx-swap="innerHTML"
-		@click="openMenu = false; openCreateForm = true"
-		class="block transition-transform hover:translate-x-0.5"
-	>Duplicate</a>
+func txMenuDuplicate(id string) templ.Component {
+	return components.EntryMenuItem("Duplicate",
+		templ.Attributes{
+			"hx-get":    fmt.Sprintf("/transactions/%s/duplicate", id),
+			"hx-target": "#tx-create",
+			"hx-swap":   "innerHTML",
+			"@click":    "openMenu = false; openCreateForm = true",
+		},
+		components.WithEntryMenuItemIcon(icons.Copy("16")),
+	)
 }
 
-func getTransactionMenuItems(tx *models.Transaction) []templ.Component {
+func txMenuFulfill(tx *models.Transaction) templ.Component {
+	return txMenuItem("Fulfill", "put", fmt.Sprintf("/transactions/%s/fulfill", tx.ID), icons.Check("16"),
+		components.WithEntryMenuItemShortcut("F"))
+}
+
+func txMenuReviewed(tx *models.Transaction) templ.Component {
+	return txMenuItem("Mark reviewed", "put", fmt.Sprintf("/transactions/%s/reviewed", tx.ID), icons.CheckCheck("16"),
+		components.WithEntryMenuItemShortcut("R"))
+}
+
+func txMenuEdit(tx *models.Transaction) templ.Component {
+	return txMenuItem("Edit", "get", fmt.Sprintf("/transactions/%s/edit", tx.ID), icons.Pencil("16"),
+		components.WithEntryMenuItemShortcut("E"))
+}
+
+// txMenuGroups joins non-empty groups of items with separators.
+func txMenuGroups(groups ...[]templ.Component) []templ.Component {
 	items := []templ.Component{}
+	for _, g := range groups {
+		if len(g) == 0 {
+			continue
+		}
+		if len(items) > 0 {
+			items = append(items, components.EntryMenuSeparator())
+		}
+		items = append(items, g...)
+	}
+	return items
+}
 
+// getTransactionMenuItems groups the status actions, the links to other
+// transactions, editing and deleting.
+func getTransactionMenuItems(tx *models.Transaction) []templ.Component {
+	status := []templ.Component{}
 	if tx.FulfilledAt.IsZero() {
-		items = append(items,
-			components.EntryMenuAnchorItem("Fulfill", "put", fmt.Sprintf("/transactions/%s/fulfill", tx.ID)))
+		status = append(status, txMenuFulfill(tx))
 	}
-
 	if tx.NeedsReview {
-		items = append(items,
-			components.EntryMenuAnchorItem("Mark reviewed", "put", fmt.Sprintf("/transactions/%s/reviewed", tx.ID)))
+		status = append(status, txMenuReviewed(tx))
 	}
 
+	links := []templ.Component{}
 	if tx.Kind == models.IncomeTxKind && !tx.IsTransferLeg() {
-		items = append(items,
-			components.EntryMenuAnchorItem("Reimburses…", "get", fmt.Sprintf("/transactions/%s/reimburses", tx.ID)))
+		links = append(links,
+			txMenuItem("Reimburses…", "get", fmt.Sprintf("/transactions/%s/reimburses", tx.ID), icons.RotateCcw("16")))
 	}
-
 	if tx.IsTransferLeg() {
-		items = append(items,
-			components.EntryMenuAnchorItem("Unlink transfer", "delete", fmt.Sprintf("/transactions/%s/transfer-pair", tx.ID)))
+		links = append(links,
+			txMenuItem("Unlink transfer", "delete", fmt.Sprintf("/transactions/%s/transfer-pair", tx.ID), icons.Unlink("16")))
 	} else if canPairTransfer(tx) {
-		items = append(items,
-			components.EntryMenuAnchorItem("Pair transfer…", "get", fmt.Sprintf("/transactions/%s/transfer-pair", tx.ID)))
+		links = append(links,
+			txMenuItem("Pair transfer…", "get", fmt.Sprintf("/transactions/%s/transfer-pair", tx.ID), icons.Transfer("16")))
 	}
 
 	// Adjustments are signed, which the form can't edit; fix the balance
 	// again instead.
-	if tx.Kind == models.AdjustmentTxKind {
-		return append(items, txMenuDelete())
+	edit := []templ.Component{}
+	if tx.Kind != models.AdjustmentTxKind {
+		edit = append(edit, txMenuEdit(tx), txMenuDuplicate(tx.ID))
 	}
 
-	return append(items,
-		components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/transactions/%s/edit", tx.ID)),
-		txMenuDuplicate(tx.ID),
-		txMenuDelete(),
-	)
+	return txMenuGroups(status, links, edit, []templ.Component{txMenuDelete()})
 }
 
 // canPairTransfer reports whether tx can be paired by hand with the other
@@ -890,37 +910,37 @@ func canPairTransfer(tx *models.Transaction) bool {
 }
 
 func getTransferLegMenuItems(tx *models.Transaction) []templ.Component {
-	items := []templ.Component{}
-
+	status := []templ.Component{}
 	if tx.NeedsReview {
-		items = append(items,
-			components.EntryMenuAnchorItem("Mark reviewed", "put", fmt.Sprintf("/transactions/%s/reviewed", tx.ID)))
+		status = append(status, txMenuReviewed(tx))
 	}
 
-	return append(items,
-		components.EntryMenuAnchorItem("Unlink transfer", "delete", fmt.Sprintf("/transactions/%s/transfer-pair", tx.ID)),
-		components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/transactions/%s/edit", tx.ID)),
-		txMenuDelete(),
+	return txMenuGroups(
+		status,
+		[]templ.Component{
+			txMenuItem("Unlink transfer", "delete", fmt.Sprintf("/transactions/%s/transfer-pair", tx.ID), icons.Unlink("16")),
+		},
+		[]templ.Component{txMenuEdit(tx)},
+		[]templ.Component{txMenuDelete()},
 	)
 }
 
 func getReimbursementMenuItems(tx *models.Transaction) []templ.Component {
-	items := []templ.Component{}
-
+	status := []templ.Component{}
 	if tx.FulfilledAt.IsZero() {
-		items = append(items,
-			components.EntryMenuAnchorItem("Fulfill", "put", fmt.Sprintf("/transactions/%s/fulfill", tx.ID)))
+		status = append(status, txMenuFulfill(tx))
 	}
-
 	if tx.NeedsReview {
-		items = append(items,
-			components.EntryMenuAnchorItem("Mark reviewed", "put", fmt.Sprintf("/transactions/%s/reviewed", tx.ID)))
+		status = append(status, txMenuReviewed(tx))
 	}
 
-	return append(items,
-		components.EntryMenuAnchorItem("Unlink reimbursement", "delete", fmt.Sprintf("/transactions/%s/reimburses", tx.ID)),
-		components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/transactions/%s/edit", tx.ID)),
-		txMenuDelete(),
+	return txMenuGroups(
+		status,
+		[]templ.Component{
+			txMenuItem("Unlink reimbursement", "delete", fmt.Sprintf("/transactions/%s/reimburses", tx.ID), icons.Unlink("16")),
+		},
+		[]templ.Component{txMenuEdit(tx)},
+		[]templ.Component{txMenuDelete()},
 	)
 }
 

@@ -212,8 +212,9 @@ templ RecurrentTx(rt *models.RecurrentTx) {
 		data-rtx
 		class={ "relative", templ.KV("opacity-60 hover:opacity-100 transition-opacity", ended) }
 		x-data="{openMenu: false}"
+		:class="{ 'z-30': openMenu }"
 	>
-		@components.EntryMenu("openMenu", getRecurrentTxMenuItems(rt))
+		@components.EntryMenuAt("openMenu", cardMenuPosition, getRecurrentTxMenuItems(rt))
 		<div class={ "relative flex flex-col gap-4 h-full p-4 rounded-2xl bg-zinc-700/20 overflow-hidden", rtxAccentClass(rt.Kind) }>
 			<div aria-hidden="true" class="pointer-events-none absolute -top-16 -right-16 size-40 rounded-full bg-(--accent)/10 blur-2xl"></div>
 			<div class="relative flex items-center gap-3 min-w-0">
@@ -231,13 +232,7 @@ templ RecurrentTx(rt *models.RecurrentTx) {
 						@txAccounts(&v)
 					</p>
 				</div>
-				<button
-					@click="openMenu = !openMenu"
-					aria-label="Recurring transaction actions"
-					class="cursor-pointer grid place-items-center shrink-0 w-6 h-6"
-				>
-					<img src="/icons/dots-menu.svg" class="h-5"/>
-				</button>
+				@components.EntryMenuTrigger("openMenu", "Recurring transaction actions")
 			</div>
 			<div class="relative flex items-end justify-between gap-3">
 				<p
@@ -450,11 +445,13 @@ func relDay(day, today time.Time) string {
 
 func getRecurrentTxMenuItems(rt *models.RecurrentTx) []templ.Component {
 	return []templ.Component{
-		components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/recurrent-tx/%s/edit", rt.ID)),
-		components.EntryMenuAnchorItem("Schedule more", "post", fmt.Sprintf("/recurrent-tx/%s/generate-txs", rt.ID)),
-		components.EntryMenuAnchorItem("Delete", "delete", fmt.Sprintf("/recurrent-tx/%s", rt.ID),
+		components.EntryMenuAnchorItem("Schedule more", "post", fmt.Sprintf("/recurrent-tx/%s/generate-txs", rt.ID),
+			components.WithEntryMenuItemIcon(icons.Calendar("16"))),
+		components.EntryMenuSeparator(),
+		components.EntryMenuEditItem(fmt.Sprintf("/recurrent-tx/%s/edit", rt.ID)),
+		components.EntryMenuSeparator(),
+		components.EntryMenuDeleteItem(fmt.Sprintf("/recurrent-tx/%s", rt.ID),
 			components.WithEntryMenuItemConfirmMessage("Delete it with its upcoming scheduled transactions? Past ones are kept."),
-			components.WithEntryMenuItemClasses("text-red-500"),
 		),
 	}
 }

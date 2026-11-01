@@ -108,10 +108,6 @@ templ categoriesEmpty() {
 templ Category(cat *models.Category) {
 	{{ hex := models.CategoryColorToHex(cat.Color) }}
 	<div hx-target="this" hx-swap="outerHTML" class="relative" x-data="{openMenu: false}">
-		@components.EntryMenu("openMenu", []templ.Component{
-			components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/categories/%s/edit", cat.ID)),
-			components.EntryMenuDeleteItem(fmt.Sprintf("/categories/%s", cat.ID)),
-		})
 		<div class="flex items-center gap-4 h-full px-4 py-4 rounded-2xl bg-zinc-700/20">
 			<div
 				class="grid place-items-center shrink-0 w-12 h-12 rounded-xl"
@@ -135,13 +131,11 @@ templ Category(cat *models.Category) {
 					<p class="text-sm text-zinc-600">No budget</p>
 				}
 			</div>
-			<button
-				@click="openMenu = !openMenu"
-				aria-label="Category actions"
-				class="cursor-pointer grid place-items-center shrink-0 w-6 h-6"
-			>
-				<img src="/icons/dots-menu.svg" class="h-5"/>
-			</button>
+			@components.EntryMenuAnchored("openMenu", "Category actions", []templ.Component{
+				components.EntryMenuEditItem(fmt.Sprintf("/categories/%s/edit", cat.ID)),
+				components.EntryMenuSeparator(),
+				components.EntryMenuDeleteItem(fmt.Sprintf("/categories/%s", cat.ID)),
+			})
 		</div>
 	</div>
 }

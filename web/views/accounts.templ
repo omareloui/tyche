@@ -378,8 +378,9 @@ templ Account(a *models.Account) {
 		data-account
 		class={ "relative", templ.KV("opacity-60 hover:opacity-100 transition-opacity", a.IsArchive) }
 		x-data="{openMenu: false}"
+		:class="{ 'z-30': openMenu }"
 	>
-		@components.EntryMenu("openMenu", getAccountMenuItems(a))
+		@components.EntryMenuAt("openMenu", cardMenuPosition, getAccountMenuItems(a))
 		<div
 			class={ "relative flex flex-col gap-4 h-full p-4 rounded-2xl bg-zinc-700/20 overflow-hidden", accKindAccentClass(a.Kind.Enum) }
 		>
@@ -407,13 +408,7 @@ templ Account(a *models.Account) {
 						{ accountSubtitle(a, cardLike) }
 					</p>
 				</div>
-				<button
-					@click="openMenu = !openMenu"
-					aria-label="Account actions"
-					class="cursor-pointer grid place-items-center shrink-0 w-6 h-6"
-				>
-					<img src="/icons/dots-menu.svg" class="h-5"/>
-				</button>
+				@components.EntryMenuTrigger("openMenu", "Account actions")
 			</div>
 			<div class="relative mt-auto">
 				if a.Kind.Enum == models.AccKindDebt {
@@ -686,23 +681,31 @@ func fdValue(fd *form.FDInput) string {
 	return fd.Value
 }
 
+// cardMenuPosition opens an entry card's menu under its trigger, on cards
+// (accounts, recurrent txs) whose header holds a 44px tile.
+const cardMenuPosition = "top-14 right-3 origin-top-right"
+
 func getAccountMenuItems(a *models.Account) []templ.Component {
 	items := []templ.Component{
-		components.EntryMenuAnchorItem("Edit", "get", fmt.Sprintf("/accounts/%s/edit", a.ID)),
+		components.EntryMenuEditItem(fmt.Sprintf("/accounts/%s/edit", a.ID)),
 	}
 
 	if !a.IsDefault && !a.IsArchive {
 		items = append(items,
-			components.EntryMenuAnchorItem("Set as default", "put", fmt.Sprintf("/accounts/%s/default", a.ID)))
+			components.EntryMenuAnchorItem("Set as default", "put", fmt.Sprintf("/accounts/%s/default", a.ID),
+				components.WithEntryMenuItemIcon(icons.Star("16"))))
 	}
 
 	if a.IsArchive {
-		items = append(items, components.EntryMenuAnchorItem("Unarchive", "put", fmt.Sprintf("/accounts/%s/archive", a.ID)))
+		items = append(items, components.EntryMenuAnchorItem("Unarchive", "put", fmt.Sprintf("/accounts/%s/archive", a.ID),
+			components.WithEntryMenuItemIcon(icons.RotateCcw("16"))))
 	} else if !a.IsDefault {
-		items = append(items, components.EntryMenuAnchorItem("Archive", "put", fmt.Sprintf("/accounts/%s/archive", a.ID)))
+		items = append(items, components.EntryMenuAnchorItem("Archive", "put", fmt.Sprintf("/accounts/%s/archive", a.ID),
+			components.WithEntryMenuItemIcon(icons.Archive("16"))))
 	}
 
-	items = append(items, components.EntryMenuDeleteItem(fmt.Sprintf("/accounts/%s", a.ID)))
-
-	return items
+	return append(items,
+		components.EntryMenuSeparator(),
+		components.EntryMenuDeleteItem(fmt.Sprintf("/accounts/%s", a.ID)),
+	)
 }
