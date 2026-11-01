@@ -52,6 +52,12 @@ builds are signed with different keys, so switching needs one uninstall.
    with a new token, the old one stops working.
 2. `SmsReceiver` queues SMS from the allowed senders (default HSBC, CIB, AAIB)
    in a local SQLite queue and `UploadWorker` uploads them when online.
+   `CatchUpWorker` runs every 6 hours (and on opening the app or signing in)
+   to queue the bank SMS the receiver missed (app force stopped, killed by the
+   battery saver, signed out) from the inbox since its last run, leaving out
+   the ones already uploaded (`sent_sms`, kept 30 days), then restarts the
+   upload if anything waits. After SMS access, the app asks once to be left
+   out of battery optimization; the status card keeps asking while it isn't.
 3. Everything the app does (SMS queued or ignored, uploads and what Tyche did
    with each message, failures with their cause) goes to an activity log on the
    main screen, also in logcat under the `Tyche` tag. The status card on top

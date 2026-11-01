@@ -59,7 +59,7 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                 logResults(log, batch, results)
                 // Every message is stored server side whatever its status, so
                 // they're all done.
-                queue.remove(batch.map { it.id })
+                queue.markSent(batch.map { it.id })
                 sent += batch.size
                 settings.sentTotal += batch.size
             }

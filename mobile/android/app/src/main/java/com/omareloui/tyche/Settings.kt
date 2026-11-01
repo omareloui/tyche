@@ -57,6 +57,16 @@ class Settings(context: Context) {
         get() = prefs.getLong(KEY_LAST_ERROR_AT, 0)
         set(value) = prefs.edit().putLong(KEY_LAST_ERROR_AT, value).apply()
 
+    /** Up to when (inbox received time) the catch-up looked for missed SMS, 0 if never. */
+    var lastScanAt: Long
+        get() = prefs.getLong(KEY_LAST_SCAN_AT, 0)
+        set(value) = prefs.edit().putLong(KEY_LAST_SCAN_AT, value).apply()
+
+    /** Whether the app asked once to be left out of battery optimization. */
+    var batteryAsked: Boolean
+        get() = prefs.getBoolean(KEY_BATTERY_ASKED, false)
+        set(value) = prefs.edit().putBoolean(KEY_BATTERY_ASKED, value).apply()
+
     /** The server as host[:port], for messages. */
     val serverHost: String
         get() = runCatching {
@@ -125,6 +135,8 @@ class Settings(context: Context) {
         private const val KEY_LAST_ERROR_AT = "last_error_at"
         private const val KEY_TOKEN = "device_token"
         private const val KEY_INSTALL_ID = "install_id"
+        private const val KEY_LAST_SCAN_AT = "last_scan_at"
+        private const val KEY_BATTERY_ASKED = "battery_asked"
 
         private const val KEYSTORE = "AndroidKeyStore"
         private const val KEY_ALIAS = "tyche_token_key"

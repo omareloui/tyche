@@ -29,7 +29,11 @@ class SmsReceiver : BroadcastReceiver() {
                 log.add(
                     LogLevel.WARN,
                     "SMS from $sender not queued, signed out",
-                    ActivityLog.snippet(body) + "\n→ Import it from the inbox after signing in.",
+                    ActivityLog.snippet(body) + if (settings.lastScanAt > 0) {
+                        "\n→ Picked up from the inbox after signing in again."
+                    } else {
+                        "\n→ Import it from the inbox after signing in."
+                    },
                 )
                 return@forEach
             }
@@ -42,5 +46,7 @@ class SmsReceiver : BroadcastReceiver() {
         }
 
         if (queued) UploadWorker.enqueue(context)
+        // After an app update nothing else may have scheduled it yet.
+        CatchUpWorker.schedule(context)
     }
 }

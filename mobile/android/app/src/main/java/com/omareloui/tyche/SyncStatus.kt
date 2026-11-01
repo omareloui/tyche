@@ -4,7 +4,7 @@ import androidx.work.WorkInfo
 
 enum class Tone { OK, BUSY, WAITING, WARN, ERROR }
 
-enum class StatusAction { NONE, GRANT_SMS, SENDERS, SIGN_IN_AGAIN }
+enum class StatusAction { NONE, GRANT_SMS, SENDERS, SIGN_IN_AGAIN, ALLOW_BACKGROUND }
 
 /** The headline of the main screen: whether SMS reach Tyche, and if not why. */
 data class SyncStatus(
@@ -29,6 +29,8 @@ data class SyncState(
     val work: WorkInfo?,
     /** Why Tyche's health check fails, null when it's up or unchecked. */
     val serverDown: String?,
+    /** Whether battery optimization may stop the app from getting SMS. */
+    val batteryRestricted: Boolean = false,
 )
 
 object SyncStatusResolver {
@@ -65,6 +67,12 @@ object SyncStatusResolver {
                 s.serverDown != null -> SyncStatus(
                     Tone.WARN, "Server down", "Tyche is unreachable",
                     "${s.serverDown}. New bank SMS wait here and are sent once it's back.",
+                )
+                s.batteryRestricted -> SyncStatus(
+                    Tone.WARN, "Needs permission", "Battery saver may block SMS",
+                    "The phone can stop the app in the background and drop new bank SMS until it's opened. " +
+                        "Allow it to run in the background.",
+                    StatusAction.ALLOW_BACKGROUND,
                 )
                 else -> SyncStatus(
                     Tone.OK, "All good", "All synced",

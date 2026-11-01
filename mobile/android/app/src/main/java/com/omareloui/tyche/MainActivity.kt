@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.Button
@@ -52,6 +53,10 @@ class MainActivity : AppCompatActivity() {
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
             if (granted.values.all { it }) {
                 log.add(LogLevel.SUCCESS, "SMS access allowed", "New bank SMS are forwarded as they arrive.")
+                if (!settings.batteryAsked && batteryRestricted()) {
+                    settings.batteryAsked = true
+                    askToRunInBackground()
+                }
             } else {
                 log.add(LogLevel.WARN, "SMS access denied", "New bank SMS won't be forwarded.")
             }
@@ -111,6 +116,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         handleAuthRedirect(intent)
+        CatchUpWorker.schedule(this)
+        // Covers what got missed while the app was force stopped.
+        if (settings.isSignedIn) CatchUpWorker.runNow(this)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -174,6 +182,8 @@ class MainActivity : AppCompatActivity() {
                     settings.lastError = null
                     log.add(LogLevel.SUCCESS, "Signed in to ${settings.serverHost}")
                     UploadWorker.enqueue(this@MainActivity)
+                    // Picks up what arrived while signed out.
+                    CatchUpWorker.runNow(this@MainActivity)
                     askForSmsPermissions()
                 }
                 .onFailure {
@@ -212,6 +222,18 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    /** Opens the system prompt to leave the app out of battery optimization. */
+    private fun askToRunInBackground() {
+        val ask = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))
+        // Some OEMs drop the direct prompt, fall back to the list.
+        runCatching { startActivity(ask) }
+            .recoverCatching { startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
+            .onFailure { toast("Allow Tyche to run in the background from the battery settings.") }
+    }
+
+    private fun batteryRestricted() =
+        !getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
+
     private fun hasPermission(permission: String) =
         ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
 
@@ -246,6 +268,7 @@ class MainActivity : AppCompatActivity() {
                     lastErrorAt = settings.lastErrorAt,
                     work = work,
                     serverDown = (health as? Health.Down)?.reason,
+                    batteryRestricted = batteryRestricted(),
                 ),
             )
             kickIfStalled(pending, now)
@@ -351,6 +374,7 @@ class MainActivity : AppCompatActivity() {
             StatusAction.GRANT_SMS -> "Allow SMS" to { askForSmsPermissions() }
             StatusAction.SENDERS -> "Pick senders" to { openSenders() }
             StatusAction.SIGN_IN_AGAIN -> "Sign out" to { signOut() }
+            StatusAction.ALLOW_BACKGROUND -> "Allow" to { askToRunInBackground() }
             StatusAction.NONE -> null to {}
         }
         action.visibility = if (label == null) View.GONE else View.VISIBLE
