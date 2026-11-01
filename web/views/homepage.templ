@@ -1,11 +1,395 @@
 package views
 
-import "github.com/omareloui/tyche/internal/models"
-import "github.com/omareloui/tyche/internal/jwt"
-import "github.com/omareloui/tyche/web/views/layouts"
+import (
+	"strconv"
+	"time"
+
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+type landingIcon = func(size string, attrs ...*templ.Attributes) templ.Component
+
+// landingFeature is a card of the landing page's feature grid. Tile and Glow
+// are full class names so Tailwind picks them up.
+type landingFeature struct {
+	Icon  landingIcon
+	Title string
+	Body  string
+	Tile  string
+	Glow  string
+}
+
+var landingFeatures = []landingFeature{
+	{icons.Bank, "Accounts & cards", "Banks, cash, wallets and credit cards with their limits, all in one balance sheet.", "bg-violet-400/15 text-violet-300", "bg-violet-400/10"},
+	{icons.ArrowUpDown, "Every kind of money move", "Expenses, income, transfers, debts and refunds. Split bills and track who paid you back.", "bg-emerald-400/15 text-emerald-300", "bg-emerald-400/10"},
+	{icons.Repeat, "Recurring transactions", "Rent, salary, subscriptions: set them once and Tyche schedules every one ahead.", "bg-sky-400/15 text-sky-300", "bg-sky-400/10"},
+	{icons.Tag, "Budgets that keep pace", "Give categories a budget and see how fast you're spending before the month runs out.", "bg-amber-400/15 text-amber-300", "bg-amber-400/10"},
+	{icons.Target, "Savings goals", "Put money aside for what matters and watch the progress bar fill up.", "bg-rose-400/15 text-rose-300", "bg-rose-400/10"},
+	{icons.Coins, "Multi-currency", "Hold any currency. Exchange rates refresh on their own, totals show in yours.", "bg-yellow-400/15 text-yellow-300", "bg-yellow-400/10"},
+	{icons.Users, "Merchants, recognized", "Brand icons, aliases and default categories, so a coffee is filed as coffee.", "bg-fuchsia-400/15 text-fuchsia-300", "bg-fuchsia-400/10"},
+	{icons.PiggyBank, "Gam'yaas", "Join a rotating savings group and get every installment and payout scheduled for you.", "bg-teal-400/15 text-teal-300", "bg-teal-400/10"},
+	{icons.Scale, "Can I afford it?", "Check a purchase against your balances and goals, its cost in work hours, and the true APR of installment plans.", "bg-indigo-400/15 text-indigo-300", "bg-indigo-400/10"},
+}
+
+// landingTx is a sample transaction of the landing page's mock dashboard.
+type landingTx struct {
+	Icon   landingIcon
+	Tile   string
+	Title  string
+	Sub    string
+	Amount string
+	Color  string
+}
+
+var landingTxs = []landingTx{
+	{icons.Banknote, "bg-emerald-400/15 text-emerald-300", "Salary", "Income · Today", "+42,000", "text-emerald-300"},
+	{icons.Card, "bg-violet-400/15 text-violet-300", "Groceries", "Expense · Yesterday", "−1,240", "text-zinc-100"},
+	{icons.Transfer, "bg-sky-400/15 text-sky-300", "To savings", "Transfer · Oct 28", "5,000", "text-sky-300"},
+}
 
 // HomePage is the homepage when signed out, the dashboard (Dashboard)
 // otherwise.
 templ HomePage(claims *jwt.AccessClaims, balances []models.Balance) {
-	@layouts.WithTitle(claims, "Tyche: Fortune Builder", balances)
+	@layouts.Main(claims, "Tyche: Fortune Builder", balances) {
+		<div class="relative -mt-6 overflow-x-clip">
+			@landingHero()
+			@landingFeatureGrid()
+			@landingSMS()
+			@landingPrivacy()
+			@landingInsights()
+			@landingCTA()
+			@landingFooter()
+		</div>
+	}
+}
+
+templ landingWrap() {
+	<div class="mx-auto max-w-6xl px-5">
+		{ children... }
+	</div>
+}
+
+templ landingSignIn(label string) {
+	<a href="/oauth" hx-boost="false" class="btn-primary h-12! px-7! text-lg">
+		{ label }
+		@icons.ArrowRight("18")
+	</a>
+}
+
+templ landingSectionHeader(eyebrow, title, sub string) {
+	<div class="mx-auto max-w-2xl text-center">
+		<p class="text-sm font-semibold uppercase tracking-[.2em] text-violet-300">{ eyebrow }</p>
+		<h2 class="mt-3 text-3xl sm:text-4xl font-bold leading-tight font-(family-name:--font-biorhyme-expanded)">{ title }</h2>
+		<p class="mt-4 text-zinc-400">{ sub }</p>
+	</div>
+}
+
+templ landingHero() {
+	<section class="relative pt-14 pb-24 sm:pt-20 sm:pb-32">
+		<div aria-hidden="true" class="landing-grid pointer-events-none absolute inset-0"></div>
+		<div aria-hidden="true" class="pointer-events-none absolute -top-40 left-1/2 size-[36rem] -translate-x-[70%] rounded-full bg-violet-500/20 blur-3xl"></div>
+		<div aria-hidden="true" class="pointer-events-none absolute top-20 left-1/2 size-[28rem] translate-x-[10%] rounded-full bg-emerald-400/10 blur-3xl"></div>
+		@landingWrap() {
+			<div class="relative grid items-center gap-14 lg:grid-cols-[1.1fr_1fr]">
+				<div class="text-center lg:text-left">
+					<span class="inline-flex items-center gap-2 rounded-full bg-zinc-800/60 px-3.5 py-1 text-sm text-zinc-300 ring-1 ring-zinc-700/70">
+						@icons.ShieldCheck("15", &templ.Attributes{"class": "text-emerald-300"})
+						Personal finance, private by design
+					</span>
+					<h1 class="mt-6 text-4xl sm:text-5xl lg:text-6xl font-bold leading-[1.1] font-(family-name:--font-biorhyme-expanded)">
+						Build your <span class="landing-gradient-text">fortune</span>, one transaction at a time
+					</h1>
+					<p class="mx-auto lg:mx-0 mt-6 max-w-xl text-xl text-zinc-400">
+						Tyche brings your accounts, budgets, goals and bank messages together, so you always know where your money is and where it's going.
+					</p>
+					<div class="mt-9 flex flex-wrap items-center justify-center lg:justify-start gap-3">
+						@landingSignIn("Get started with Google")
+						<a href="#features" class="btn-ghost h-12! text-lg">See what it does</a>
+					</div>
+					<p class="mt-5 text-sm text-zinc-500">Free · No password to remember · Your data in its own database</p>
+				</div>
+				<div class="relative mx-auto w-full max-w-md lg:max-w-none">
+					@landingMockDashboard()
+				</div>
+			</div>
+		}
+	</section>
+}
+
+templ landingMockDashboard() {
+	<div aria-hidden="true" class="landing-float relative">
+		@components.GlassCard("p-6", "bg-violet-400/20", "bg-emerald-400/15", "bg-sky-400/10") {
+			<div class="flex items-start justify-between">
+				<div>
+					<p class="text-sm text-zinc-400">Net worth</p>
+					<p class="mt-1 text-3xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">EGP 284,560</p>
+				</div>
+				<span class="rounded-full bg-emerald-400/15 px-2.5 py-0.5 text-sm font-semibold text-emerald-300">+12.4%</span>
+			</div>
+			<svg viewBox="0 0 300 90" class="mt-5 h-24 w-full" preserveAspectRatio="none">
+				<defs>
+					<linearGradient id="landing-area" x1="0" x2="0" y1="0" y2="1">
+						<stop offset="0" stop-color="var(--color-violet-400)" stop-opacity=".45"></stop>
+						<stop offset="1" stop-color="var(--color-violet-400)" stop-opacity="0"></stop>
+					</linearGradient>
+				</defs>
+				<path d="M0 72 C30 68 45 58 70 60 S115 44 140 48 S185 30 210 34 S255 14 300 10 V90 H0 Z" fill="url(#landing-area)"></path>
+				<path d="M0 72 C30 68 45 58 70 60 S115 44 140 48 S185 30 210 34 S255 14 300 10" fill="none" stroke="var(--color-violet-300)" stroke-width="2.5" vector-effect="non-scaling-stroke"></path>
+			</svg>
+			<div class="mt-5 grid grid-cols-2 gap-3">
+				<div class="rounded-2xl bg-zinc-900/60 p-3 ring-1 ring-zinc-800">
+					<p class="text-xs text-zinc-500">Income</p>
+					<p class="text-lg font-semibold tabular-nums text-emerald-300">+48,200</p>
+				</div>
+				<div class="rounded-2xl bg-zinc-900/60 p-3 ring-1 ring-zinc-800">
+					<p class="text-xs text-zinc-500">Expenses</p>
+					<p class="text-lg font-semibold tabular-nums text-rose-300">−21,930</p>
+				</div>
+			</div>
+			<ul class="mt-5 space-y-3">
+				for _, tx := range landingTxs {
+					<li class="flex items-center gap-3">
+						<span class={ "grid size-9 shrink-0 place-items-center rounded-xl", tx.Tile }>
+							@tx.Icon("17")
+						</span>
+						<div class="min-w-0 flex-1">
+							<p class="truncate text-base leading-tight">{ tx.Title }</p>
+							<p class="text-xs text-zinc-500">{ tx.Sub }</p>
+						</div>
+						<span class={ "text-base font-semibold tabular-nums", tx.Color }>{ tx.Amount }</span>
+					</li>
+				}
+			</ul>
+		}
+		<div class="absolute -bottom-6 -left-4 sm:-left-10 hidden sm:flex items-center gap-3 rounded-2xl bg-zinc-900/90 px-4 py-3 ring-1 ring-zinc-700/70 shadow-2xl shadow-black/50 backdrop-blur">
+			<span class="grid size-9 place-items-center rounded-xl bg-amber-400/15 text-amber-300">
+				@icons.Target("17")
+			</span>
+			<div>
+				<p class="text-sm leading-tight">New laptop</p>
+				<div class="mt-1.5 h-1.5 w-32 overflow-hidden rounded-full bg-zinc-800">
+					<div class="h-full w-[72%] rounded-full bg-amber-300"></div>
+				</div>
+			</div>
+			<span class="text-sm font-semibold text-amber-300">72%</span>
+		</div>
+	</div>
+}
+
+templ landingFeatureGrid() {
+	<section id="features" class="scroll-mt-20 py-20 sm:py-28">
+		@landingWrap() {
+			@landingSectionHeader("Everything in one place", "All your money, finally making sense", "From the coffee you bought this morning to the house you're saving for, Tyche keeps track of it all.")
+			<div class="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+				for _, f := range landingFeatures {
+					@landingFeatureCard(f)
+				}
+			</div>
+		}
+	</section>
+}
+
+templ landingFeatureCard(f landingFeature) {
+	<div class="group transition duration-300 hover:-translate-y-1">
+		@components.GlassCard("p-6", f.Glow) {
+			<span class={ "grid size-12 place-items-center rounded-2xl transition-transform duration-300 group-hover:scale-110", f.Tile }>
+				@f.Icon("22")
+			</span>
+			<h3 class="mt-5 text-xl font-semibold">{ f.Title }</h3>
+			<p class="mt-2 text-base text-zinc-400">{ f.Body }</p>
+		}
+	</div>
+}
+
+// landingSpotlight lays out a highlighted feature: copy on one side, a demo
+// on the other (flipped puts the demo first on wide screens).
+templ landingSpotlight(flipped bool) {
+	<section class="py-16 sm:py-24">
+		@landingWrap() {
+			<div class={ "grid items-center gap-12 lg:grid-cols-2", templ.KV("lg:[&>*:first-child]:order-2", flipped) }>
+				{ children... }
+			</div>
+		}
+	</section>
+}
+
+templ landingSpotlightCopy(icon landingIcon, tile, eyebrow, title, body string, points []string) {
+	<div>
+		<span class={ "grid size-12 place-items-center rounded-2xl", tile }>
+			@icon("22")
+		</span>
+		<p class="mt-6 text-sm font-semibold uppercase tracking-[.2em] text-zinc-400">{ eyebrow }</p>
+		<h2 class="mt-2 text-3xl sm:text-4xl font-bold leading-tight font-(family-name:--font-biorhyme-expanded)">{ title }</h2>
+		<p class="mt-4 text-zinc-400">{ body }</p>
+		<ul class="mt-6 space-y-3">
+			for _, p := range points {
+				<li class="flex items-start gap-3 text-zinc-300">
+					<span class="mt-1 grid size-5 shrink-0 place-items-center rounded-full bg-emerald-400/15 text-emerald-300">
+						@icons.Check("12")
+					</span>
+					{ p }
+				</li>
+			}
+		</ul>
+	</div>
+}
+
+templ landingSMS() {
+	@landingSpotlight(false) {
+		@landingSpotlightCopy(icons.Message, "bg-sky-400/15 text-sky-300", "Automatic", "Your bank texts you. Tyche does the bookkeeping.",
+			"The Android companion app forwards bank SMS to Tyche, which reads them into transactions. No typing, no spreadsheets, just a quick review.",
+			[]string{
+				"Templates for HSBC, CIB, AAIB, QNB and Arab Bank, or write your own",
+				"Merchants and categories filled in for you",
+				"Both sides of a transfer between your accounts matched together",
+			})
+		<div aria-hidden="true" class="relative">
+			<div class="pointer-events-none absolute inset-0 -z-10 m-auto size-72 rounded-full bg-sky-400/10 blur-3xl"></div>
+			<div class="mx-auto max-w-sm space-y-4">
+				<div class="mr-10 rounded-3xl rounded-bl-md bg-zinc-800/80 p-4 ring-1 ring-zinc-700/60">
+					<p class="flex items-center gap-2 text-xs font-semibold text-zinc-400">
+						@icons.Message("13")
+						BANK · now
+					</p>
+					<p class="mt-2 text-base text-zinc-200">Your card ending 4821 was charged EGP 186.50 at STARBUCKS ZAMALEK on 01/11 09:42.</p>
+				</div>
+				<div class="flex justify-center text-sky-300">
+					<span class="grid size-10 place-items-center rounded-full bg-sky-400/15 ring-1 ring-sky-400/30 rotate-90">
+						@icons.ArrowRight("18")
+					</span>
+				</div>
+				<div class="ml-10">
+					@components.GlassCard("p-4", "bg-sky-400/15") {
+						<div class="flex items-center gap-3">
+							@components.CounterpartyIcon("Starbucks", "starbucks", "006241", "size-11")
+							<div class="min-w-0 flex-1">
+								<p class="truncate leading-tight">Starbucks</p>
+								<p class="mt-1 flex flex-wrap gap-1.5 text-xs">
+									<span class="rounded-full bg-amber-400/15 px-2 py-0.5 text-amber-300">Coffee</span>
+									<span class="rounded-full bg-violet-400/15 px-2 py-0.5 text-violet-300">Needs review</span>
+								</p>
+							</div>
+							<span class="font-semibold tabular-nums">−186.50</span>
+						</div>
+					}
+				</div>
+			</div>
+		</div>
+	}
+}
+
+templ landingPrivacy() {
+	@landingSpotlight(true) {
+		@landingSpotlightCopy(icons.Lock, "bg-emerald-400/15 text-emerald-300", "Private", "Your finances stay yours",
+			"Every user gets a database of their own, never shared with anyone else's. Lock it with a password and not even the server can read it.",
+			[]string{
+				"Optional encryption with a password only you know",
+				"A recovery code in case you forget it",
+				"Sign in with Google, no extra password to leak",
+			})
+		<div aria-hidden="true" class="relative mx-auto w-full max-w-sm">
+			<div class="pointer-events-none absolute inset-0 -z-10 m-auto size-72 rounded-full bg-emerald-400/10 blur-3xl"></div>
+			@components.GlassCard("p-8 text-center", "bg-emerald-400/15", "bg-violet-400/10") {
+				<div class="relative mx-auto grid size-28 place-items-center">
+					<span class="absolute inset-0 rounded-full ring-1 ring-emerald-400/20 landing-pulse"></span>
+					<span class="absolute inset-3 rounded-full ring-1 ring-emerald-400/30"></span>
+					<span class="grid size-16 place-items-center rounded-2xl bg-emerald-400/15 text-emerald-300">
+						@icons.ShieldCheck("32")
+					</span>
+				</div>
+				<p class="mt-6 text-xl font-semibold">Database encrypted</p>
+				<p class="mt-1 text-sm text-zinc-400">AES-256 · unlocked only in your browser</p>
+				<div class="mt-6 flex justify-center gap-1.5 font-mono text-sm text-zinc-500">
+					for _, c := range []string{"9f", "3a", "c1", "7e", "b4", "02", "d8"} {
+						<span class="rounded-md bg-zinc-900/70 px-1.5 py-0.5 ring-1 ring-zinc-800">{ c }</span>
+					}
+				</div>
+			}
+		</div>
+	}
+}
+
+// landingBar is a bar of the landing page's spending chart.
+type landingBar struct {
+	Label string
+	Pct   int
+	Color string
+}
+
+var landingBars = []landingBar{
+	{"Groceries", 82, "bg-violet-400"},
+	{"Dining out", 64, "bg-amber-300"},
+	{"Transport", 45, "bg-sky-400"},
+	{"Bills", 38, "bg-emerald-400"},
+	{"Shopping", 24, "bg-rose-400"},
+}
+
+templ landingInsights() {
+	@landingSpotlight(false) {
+		@landingSpotlightCopy(icons.Sparkles, "bg-violet-400/15 text-violet-300", "Insights", "See where it all goes",
+			"A dashboard that answers the questions you actually ask: am I spending more than I earn, where does my money go, and will I make it to the end of the month?",
+			[]string{
+				"Income vs expenses and your daily spending pace",
+				"Spending by category and by merchant",
+				"Upcoming payments before they surprise you",
+			})
+		<div aria-hidden="true" class="relative mx-auto w-full max-w-md">
+			<div class="pointer-events-none absolute inset-0 -z-10 m-auto size-72 rounded-full bg-violet-500/15 blur-3xl"></div>
+			@components.GlassCard("p-6", "bg-violet-400/15", "bg-amber-400/10") {
+				<div class="flex items-center justify-between">
+					<p class="font-semibold">Spending this month</p>
+					<p class="text-sm text-zinc-400">October</p>
+				</div>
+				<ul class="mt-5 space-y-4">
+					for _, b := range landingBars {
+						<li>
+							<div class="flex justify-between text-sm">
+								<span class="text-zinc-300">{ b.Label }</span>
+								<span class="tabular-nums text-zinc-500">{ b.Pct }%</span>
+							</div>
+							<div class="mt-1.5 h-2 overflow-hidden rounded-full bg-zinc-800">
+								<div class={ "h-full rounded-full", b.Color } style={ templ.SafeCSS("width:" + strconv.Itoa(b.Pct) + "%") }></div>
+							</div>
+						</li>
+					}
+				</ul>
+			}
+		</div>
+	}
+}
+
+templ landingCTA() {
+	<section class="py-20 sm:py-28">
+		@landingWrap() {
+			<div class="relative overflow-hidden rounded-[2rem] bg-zinc-900/60 px-6 py-16 text-center ring-1 ring-zinc-800 sm:px-16 sm:py-20">
+				<div aria-hidden="true" class="pointer-events-none absolute -top-24 left-1/4 size-80 rounded-full bg-violet-500/25 blur-3xl"></div>
+				<div aria-hidden="true" class="pointer-events-none absolute -bottom-24 right-1/4 size-80 rounded-full bg-emerald-400/15 blur-3xl"></div>
+				<div aria-hidden="true" class="landing-grid pointer-events-none absolute inset-0"></div>
+				<div class="relative">
+					<h2 class="mx-auto max-w-2xl text-3xl sm:text-5xl font-bold leading-tight font-(family-name:--font-biorhyme-expanded)">
+						Start building your <span class="landing-gradient-text">fortune</span>
+					</h2>
+					<p class="mx-auto mt-5 max-w-xl text-zinc-400">Your accounts, categories and a cash wallet are ready the moment you sign in.</p>
+					<div class="mt-9 flex justify-center">
+						@landingSignIn("Sign in with Google")
+					</div>
+				</div>
+			</div>
+		}
+	</section>
+}
+
+templ landingFooter() {
+	<footer class="border-t border-zinc-800/60 py-10">
+		@landingWrap() {
+			<div class="flex flex-col items-center justify-between gap-3 text-center sm:flex-row sm:text-left">
+				<p class="text-xl font-bold font-(family-name:--font-biorhyme-expanded)">tyche</p>
+				<p class="text-sm text-zinc-500">Named after the Greek goddess of fortune · © { time.Now().Format("2006") }</p>
+			</div>
+		}
+	</footer>
 }

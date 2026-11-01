@@ -328,3 +328,53 @@ input[type="number"] {
     backdrop-filter: blur(0);
   }
 }
+
+/* ============ LANDING ============ */
+.landing-gradient-text {
+  @apply bg-linear-to-r from-violet-300 via-fuchsia-300 to-emerald-300 bg-clip-text text-transparent;
+}
+
+/* Faint grid fading out from the center. */
+.landing-grid {
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at center, black 20%, transparent 70%);
+}
+
+@keyframes landing-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-1deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(-1deg);
+  }
+}
+
+@keyframes landing-pulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
+.landing-float {
+  animation: landing-float 7s ease-in-out infinite;
+}
+
+.landing-pulse {
+  animation: landing-pulse 2.4s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-float,
+  .landing-pulse {
+    animation: none;
+  }
+}
