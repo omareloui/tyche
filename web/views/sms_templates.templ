@@ -60,7 +60,7 @@ templ SMSTemplates(claims *jwt.AccessClaims, balances []models.Balance, lists SM
 					class="grid gap-10 min-w-0"
 				>
 					@smsTemplatesSearch()
-					@smsTemplateList(models.SMSTemplateMine, "Mine", "Only for you, tried before the shared ones.", lists.Mine, claims.IsAdmin())
+					@smsTemplateList(models.SMSTemplateMine, "Mine", "Only for you, tried before the shared ones.", lists.Mine, true)
 					if claims.IsAdmin() {
 						@smsTemplateList(models.SMSTemplateShared, "Shared", "Used for every user. Seeded ones keep your edits.", lists.Shared, true)
 					} else {
