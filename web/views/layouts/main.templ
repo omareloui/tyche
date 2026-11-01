@@ -45,6 +45,7 @@ templ Main(
 			<main class="pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-10">
 				{ children... }
 			</main>
+			@components.ConfirmDialog()
 			<script>
 				document.body.addEventListener("htmx:beforeSwap", function (ev) {
 					const status = ev.detail.xhr.status;

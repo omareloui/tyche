@@ -233,7 +233,8 @@ templ WishlistItem(item *models.WishlistItem, ws *models.WorkSettings) {
 							hx-target="#decide-sheet"
 							hx-swap="innerHTML"
 							if !ready {
-								hx-confirm="It's still cooling off. Buy it anyway?"
+								hx-confirm="Buy it anyway? It's still cooling off."
+								data-confirm-label="Buy anyway"
 							}
 							class={ "wl-action", templ.KV("wl-action-primary", ready) }
 						>

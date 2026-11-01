@@ -63,6 +63,8 @@ templ MergeCounterparty(from *models.Counterparty, fd *MergeCounterpartyFD, cps 
 		hx-swap="outerHTML"
 		hx-disinherit="hx-confirm"
 		hx-confirm={ fmt.Sprintf("Merge %q into the selected counterparty? %q will be deleted.", from.Name, from.Name) }
+		data-confirm-label="Merge"
+		data-confirm-danger
 		class="grid gap-5 sm:col-span-2 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-5 sm:p-6"
 	>
 		<header class="flex items-center gap-3 min-w-0">

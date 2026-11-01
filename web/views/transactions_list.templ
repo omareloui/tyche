@@ -193,6 +193,7 @@ templ txReviewBanner(count int, f *models.TxFilter) {
 				hx-target="#tx-list"
 				hx-swap="outerHTML"
 				hx-confirm={ fmt.Sprintf("Mark all %d as reviewed?", count) }
+				data-confirm-label="Mark reviewed"
 				class="h-9 px-4 rounded-full text-sm text-zinc-300 cursor-pointer transition-colors hover:bg-white/5 hover:text-white"
 			>Mark all reviewed</button>
 		</div>

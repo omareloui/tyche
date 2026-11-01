@@ -281,3 +281,50 @@ input[type="number"] {
 [data-rtx]:target > div:last-child {
   @apply ring-2 ring-(--accent);
 }
+
+/* ============ CONFIRM DIALOG ============ */
+.confirm-dialog {
+  opacity: 0;
+  scale: 0.95;
+  transition:
+    opacity 120ms ease-in,
+    scale 120ms ease-in,
+    overlay 120ms allow-discrete,
+    display 120ms allow-discrete;
+}
+
+.confirm-dialog[open] {
+  opacity: 1;
+  scale: 1;
+  transition-timing-function: ease-out;
+  transition-duration: 160ms;
+}
+
+@starting-style {
+  .confirm-dialog[open] {
+    opacity: 0;
+    scale: 0.95;
+  }
+}
+
+.confirm-dialog::backdrop {
+  background-color: rgb(0 0 0 / 0);
+  backdrop-filter: blur(0);
+  transition:
+    background-color 160ms,
+    backdrop-filter 160ms,
+    overlay 160ms allow-discrete,
+    display 160ms allow-discrete;
+}
+
+.confirm-dialog[open]::backdrop {
+  background-color: rgb(0 0 0 / 0.6);
+  backdrop-filter: blur(4px);
+}
+
+@starting-style {
+  .confirm-dialog[open]::backdrop {
+    background-color: rgb(0 0 0 / 0);
+    backdrop-filter: blur(0);
+  }
+}

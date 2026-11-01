@@ -1,0 +1,45 @@
+package components
+
+import "github.com/omareloui/tyche/web/views/icons"
+
+// ConfirmDialog replaces the browser's confirm() for hx-confirm (main.js).
+// The question is split at its first "? ", the rest shown as details. On the
+// confirming element, data-confirm-label names the confirm button (else
+// "Delete" for hx-delete, "Confirm" otherwise) and data-confirm-danger makes
+// it red (always for hx-delete, which also shows a trash icon).
+templ ConfirmDialog() {
+	<dialog
+		id="confirm-dialog"
+		aria-labelledby="confirm-title"
+		aria-describedby="confirm-details"
+		class="confirm-dialog group m-auto w-[calc(100%-2rem)] max-w-sm p-0 rounded-2xl border border-white/10 bg-zinc-900/90 text-zinc-100 shadow-2xl shadow-black/60 backdrop-blur-xl"
+	>
+		<form method="dialog" class="p-5 sm:p-6">
+			<div class="flex items-start gap-4">
+				<div class="grid place-items-center shrink-0 w-11 h-11 rounded-xl bg-violet-400/12 text-violet-300 group-data-danger:bg-red-500/12 group-data-danger:text-red-400">
+					<span class="group-data-delete:hidden">
+						@icons.Warning("22")
+					</span>
+					<span class="hidden group-data-delete:inline">
+						@icons.Trash("22")
+					</span>
+				</div>
+				<div class="flex-1 min-w-0 pt-0.5">
+					<h2 id="confirm-title" class="text-lg font-semibold leading-snug text-balance"></h2>
+					<p id="confirm-details" class="mt-1 text-base text-zinc-400 empty:hidden"></p>
+				</div>
+			</div>
+			<div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 mt-6">
+				<button
+					value="cancel"
+					class="h-10 px-5 rounded-full text-base text-zinc-300 cursor-pointer transition-colors hover:bg-white/8 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60"
+				>Cancel</button>
+				<button
+					id="confirm-ok"
+					value="ok"
+					class="h-10 px-5 rounded-full text-base font-semibold cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 bg-violet-500 text-white hover:bg-violet-400 focus-visible:ring-violet-400 group-data-danger:bg-red-500 group-data-danger:hover:bg-red-400 group-data-danger:focus-visible:ring-red-400"
+				></button>
+			</div>
+		</form>
+	</dialog>
+}

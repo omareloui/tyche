@@ -32,6 +32,10 @@ templ EntryMenuItem(label string, attrs templ.Attributes, opts ...EntryMenuItemO
 		}
 		if o.confirmMessage != "" {
 			hx-confirm={ o.confirmMessage }
+			data-confirm-label={ label }
+			if o.danger {
+				data-confirm-danger
+			}
 		}
 		{ attrs... }
 		if o.attrs != nil {
