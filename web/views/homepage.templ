@@ -73,10 +73,27 @@ templ landingWrap() {
 	</div>
 }
 
+// landingSignIn shows it's on its way to google once clicked (reset when
+// coming back to the page with the back button).
 templ landingSignIn(label string) {
-	<a href="/oauth" hx-boost="false" class="btn-primary h-12! px-7! text-lg">
-		{ label }
-		@icons.ArrowRight("18")
+	<a
+		href="/oauth"
+		hx-boost="false"
+		x-data="{ busy: false }"
+		@click="busy = true"
+		@pageshow.window="busy = false"
+		:aria-busy="busy"
+		:class="busy && 'pointer-events-none opacity-80'"
+		class="btn-primary h-12! px-7! text-lg"
+	>
+		<span x-show="!busy" class="contents">
+			{ label }
+			@icons.ArrowRight("18")
+		</span>
+		<span x-show="busy" x-cloak class="contents">
+			<span class="size-4 rounded-full border-2 border-current border-t-transparent animate-spin"></span>
+			Redirecting to Google…
+		</span>
 	</a>
 }
 

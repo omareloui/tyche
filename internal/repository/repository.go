@@ -51,6 +51,11 @@ func New(vaults *vault.Store) *Repository {
 	return &Repository{tm: newTenantManager(), vaults: vaults}
 }
 
+// TenantExists reports whether the tenant's database was already created.
+func (r *Repository) TenantExists(tenantID string) bool {
+	return r.tm.Exists(tenantID)
+}
+
 // Vaults holds the keys of the encrypted tenant databases.
 func (r *Repository) Vaults() *vault.Store {
 	return r.vaults
@@ -107,12 +112,25 @@ func (tm *TenantManager) GetTenant(provider models.OAuthProvider, oauthID string
 		}
 
 		ctx := logger.WithContext(context.Background(), l)
-		tenant.seeder.Seed(ctx, tenant.queries, oauthID)
+		tenant.seeder.Seed(ctx, db, oauthID)
 		l.Info("ensured user database seeded", zap.String("oauthID", oauthID), zap.String("tenantID", tenantID))
 	})
 
 	tm.connections[tenantID] = tenant
 	return tenant.db, tenant.queries, nil
+}
+
+// Exists reports whether the tenant's database was already created, false on
+// their first sign in.
+func (tm *TenantManager) Exists(tenantID string) bool {
+	tm.mu.RLock()
+	_, open := tm.connections[tenantID]
+	tm.mu.RUnlock()
+	if open {
+		return true
+	}
+	_, err := os.Stat(tm.dbPath(tenantID))
+	return err == nil
 }
 
 func (tm *TenantManager) dbPath(tenantID string) string {
@@ -258,7 +276,7 @@ func syncFile(path string) error {
 // Reseed seeds the tenant's database again, e.g. after a reset cleared its
 // seeded_at to get the default categories and accounts back.
 func (tm *TenantManager) Reseed(ctx context.Context, provider models.OAuthProvider, oauthID string, key []byte) error {
-	_, q, err := tm.GetTenant(provider, oauthID, key)
+	db, _, err := tm.GetTenant(provider, oauthID, key)
 	if err != nil {
 		return err
 	}
@@ -270,7 +288,7 @@ func (tm *TenantManager) Reseed(ctx context.Context, provider models.OAuthProvid
 		return fmt.Errorf("tenant connection not found")
 	}
 
-	tenant.seeder.Seed(ctx, q, oauthID)
+	tenant.seeder.Seed(ctx, db, oauthID)
 	return nil
 }
 

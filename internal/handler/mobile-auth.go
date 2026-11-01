@@ -69,6 +69,17 @@ func (s *oauthStateStore) add(state string, mobile *mobileLogin) {
 	s.states[state] = oauthState{mobile: mobile, expires: now.Add(oauthStateTTL)}
 }
 
+// peek is pop without removing the state.
+func (s *oauthStateStore) peek(state string) (*mobileLogin, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	st, ok := s.states[state]
+	if !ok || time.Now().After(st.expires) {
+		return nil, false
+	}
+	return st.mobile, true
+}
+
 // pop removes the state and returns its mobile login (nil for web sign ins).
 func (s *oauthStateStore) pop(state string) (*mobileLogin, bool) {
 	s.mu.Lock()

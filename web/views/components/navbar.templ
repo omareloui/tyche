@@ -69,7 +69,19 @@ templ Navbar(claims *jwt.AccessClaims, balances []models.Balance) {
 						@navUser(claims)
 					</div>
 				} else {
-					<a href="/oauth" hx-boost="false" class="ml-auto btn-ghost h-9! text-base">Sign in</a>
+					<a
+						href="/oauth"
+						hx-boost="false"
+						x-data="{ busy: false }"
+						@click="busy = true"
+						@pageshow.window="busy = false"
+						:aria-busy="busy"
+						:class="busy && 'pointer-events-none opacity-80'"
+						class="ml-auto btn-ghost h-9! text-base"
+					>
+						<span x-show="busy" x-cloak class="size-3.5 rounded-full border-2 border-current border-t-transparent animate-spin"></span>
+						Sign in
+					</a>
 				}
 			</div>
 		}

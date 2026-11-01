@@ -2,11 +2,14 @@ package handler
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/a-h/templ"
@@ -17,6 +20,7 @@ import (
 	"github.com/omareloui/tyche/internal/middleware"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/repository"
+	"github.com/omareloui/tyche/web/views"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -39,7 +43,25 @@ func (h *Handler) OAuth(w http.ResponseWriter, r *http.Request) (templ.Component
 	return nil, nil
 }
 
+// OAuthCB is google's redirect. A web sign in gets the signing in page right
+// away, which posts the code to OAuthFinish, as signing in (and setting up the
+// database on the first one) takes a while. The mobile app's is finished now:
+// opening the app needs a redirect, not a script.
 func (h *Handler) OAuthCB(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	if mobile, ok := oauthStates.peek(r.FormValue("state")); ok && mobile != nil {
+		return h.finishOAuth(w, r)
+	}
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	return views.SigningIn(r.FormValue("state"), r.FormValue("code")), nil
+}
+
+// OAuthFinish finishes the web sign in started by OAuthCB. On the first sign
+// in it only shows the setting up step, OAuthSetup creates the user.
+func (h *Handler) OAuthFinish(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	return h.finishOAuth(w, r)
+}
+
+func (h *Handler) finishOAuth(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	l := logger.FromCtx(r.Context())
 
 	state := r.FormValue("state")
@@ -75,6 +97,16 @@ func (h *Handler) OAuthCB(w http.ResponseWriter, r *http.Request) (templ.Compone
 		ctx = context.WithValue(ctx, middleware.VaultKeyCtxKey{}, key)
 	}
 
+	// First sign in from the web: the setting up step creates the database.
+	if mobile == nil && !h.repo.TenantExists(tenantID) {
+		id, err := pendingSignups.add(gUsr)
+		if err != nil {
+			return nil, err
+		}
+		http.SetCookie(w, newCookie(signupPendingCookieName, id, time.Now().Add(pendingSignupTTL)))
+		return views.SettingUpAccount(), nil
+	}
+
 	usr, err := h.signInUser(ctx, gUsr)
 	if err != nil {
 		return nil, err
@@ -92,22 +124,66 @@ func (h *Handler) OAuthCB(w http.ResponseWriter, r *http.Request) (templ.Compone
 		return nil, nil
 	}
 
+	return nil, signInBrowser(w, r, usr, encrypted)
+}
+
+// OAuthSetup creates the database and the user of a first sign in, kept by
+// finishOAuth.
+func (h *Handler) OAuthSetup(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	c, err := r.Cookie(signupPendingCookieName)
+	if err != nil {
+		redirect(w, r, "/oauth")
+		return nil, nil
+	}
+	unsetCookie(w, signupPendingCookieName)
+	gUsr, ok := pendingSignups.pop(c.Value)
+	if !ok {
+		redirect(w, r, "/oauth")
+		return nil, nil
+	}
+
+	ctx := context.WithValue(r.Context(), middleware.AccessClaimsCtxKey{}, &jwt.AccessClaims{
+		OAuthID:       gUsr.OAuthID,
+		OAuthProvider: models.Google,
+	})
+	usr, err := h.signInUser(ctx, gUsr)
+	if err != nil {
+		return nil, err
+	}
+	h.syncPicture(ctx, usr, gUsr.Picture)
+
+	return nil, signInBrowser(w, r, usr, false)
+}
+
+// signInBrowser sets the user's cookies and sends them on: to the dashboard,
+// or the encryption prompt (asked once) when their database isn't encrypted.
+func signInBrowser(w http.ResponseWriter, r *http.Request, usr *models.User, encrypted bool) error {
+	l := logger.FromCtx(r.Context())
 	l.Debug("generating cookies for the user", zap.Any("user", usr))
 
 	if _, err := setJWTCookies(w, usr); err != nil {
 		l.Error("error generating jwt cookies", zap.Error(err), zap.Any("user", usr))
-		return nil, err
+		return err
 	}
 
 	l.Info("new user singed", zap.Any("user", usr))
 
-	// Asked once whether to encrypt their database.
 	next := "/"
 	if !usr.EncryptionPrompted && !encrypted {
 		next = "/security?welcome"
 	}
-	http.Redirect(w, r, next, http.StatusTemporaryRedirect)
-	return nil, nil
+	redirect(w, r, next)
+	return nil
+}
+
+// redirect sends the browser to url, with HX-Redirect for htmx requests (an
+// htmx request would follow a plain redirect and swap the page in).
+func redirect(w http.ResponseWriter, r *http.Request, url string) {
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("HX-Redirect", url)
+		return
+	}
+	http.Redirect(w, r, url, http.StatusSeeOther)
 }
 
 // googleUser exchanges the oauth code and gets the user's google info.
@@ -296,4 +372,57 @@ func unsetCookie(w http.ResponseWriter, name string) {
 		Expires:  time.Unix(0, 0),
 		Path:     "/",
 	})
+}
+
+const (
+	signupPendingCookieName = "signup_pending"
+	pendingSignupTTL        = 10 * time.Minute
+)
+
+var pendingSignups = &pendingSignupStore{users: make(map[string]pendingSignup)}
+
+// pendingSignup is a first sign in's google user, kept from the code exchange
+// until the setting up step creates them.
+type pendingSignup struct {
+	usr     *models.User
+	expires time.Time
+}
+
+type pendingSignupStore struct {
+	mu    sync.Mutex
+	users map[string]pendingSignup
+}
+
+func (s *pendingSignupStore) add(usr *models.User) (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	id := base64.RawURLEncoding.EncodeToString(b)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now()
+	for k, v := range s.users {
+		if now.After(v.expires) {
+			delete(s.users, k)
+		}
+	}
+	s.users[id] = pendingSignup{usr: usr, expires: now.Add(pendingSignupTTL)}
+	return id, nil
+}
+
+// pop removes the sign up so it's only set up once.
+func (s *pendingSignupStore) pop(id string) (*models.User, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.users[id]
+	if !ok {
+		return nil, false
+	}
+	delete(s.users, id)
+	if time.Now().After(p.expires) {
+		return nil, false
+	}
+	return p.usr, true
 }

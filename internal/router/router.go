@@ -135,6 +135,8 @@ func New(h *handler.Handler) Router {
 
 	mux.Handle("GET /oauth", handlePub(h.OAuth))
 	mux.Handle("GET /oauth/cb", handlePub(h.OAuthCB))
+	mux.Handle("POST /oauth/finish", handlePub(h.OAuthFinish))
+	mux.Handle("POST /oauth/setup", handlePub(h.OAuthSetup))
 	mux.Handle("GET /oauth/refresh-tokens", handlePub(h.RefreshTokens))
 	mux.Handle("GET /oauth/mobile", handlePub(h.OAuthMobile))
 

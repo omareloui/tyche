@@ -1,0 +1,88 @@
+package views
+
+import (
+	"strconv"
+
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+// SigningIn is google's redirect page: it shows right away and posts the code
+// to /oauth/finish, which redirects when signed in or swaps in
+// SettingUpAccount on the first sign in. On errors it offers to start over.
+templ SigningIn(state, code string) {
+	@layouts.Main(nil, "Signing in", nil) {
+		<script>history.replaceState(null, "", "/oauth/cb")</script>
+		@components.Container() {
+			<div
+				class="max-w-md mx-auto mt-10"
+				hx-on::response-error="htmx.find('#signin-progress').hidden = true; htmx.find('#signin-error').hidden = false"
+				hx-on::send-error="htmx.find('#signin-progress').hidden = true; htmx.find('#signin-error').hidden = false"
+			>
+				@components.GlassCard("p-6 sm:p-8", "bg-violet-400/10", "bg-emerald-400/10") {
+					<div id="signin-progress" aria-live="polite">
+						<form hx-post="/oauth/finish" hx-trigger="load" hx-target="#signin-progress" hx-swap="innerHTML" class="grid justify-items-center gap-4 text-center">
+							<input type="hidden" name="state" value={ state }/>
+							<input type="hidden" name="code" value={ code }/>
+							@signinSpinner()
+							<h1 class="text-2xl font-(family-name:--font-biorhyme-expanded)">Signing you in…</h1>
+							<p class="text-zinc-400 text-base">Just a moment.</p>
+						</form>
+					</div>
+					<div id="signin-error" hidden class="grid justify-items-center gap-4 text-center">
+						<span class="grid size-16 place-items-center rounded-2xl bg-red-400/15 text-red-300">
+							@icons.Lock("28")
+						</span>
+						<h1 class="text-2xl font-(family-name:--font-biorhyme-expanded)">Couldn’t sign you in</h1>
+						<p class="text-zinc-400 text-base">Something went wrong, try signing in again.</p>
+						<a href="/oauth" hx-boost="false" class="btn-primary">Try again</a>
+					</div>
+				}
+			</div>
+		}
+	}
+}
+
+// SettingUpAccount replaces SigningIn's progress on the first sign in, while
+// /oauth/setup creates the user's database. Its steps tick on a timer, they
+// only give an idea of what's happening.
+templ SettingUpAccount() {
+	<div
+		hx-post="/oauth/setup"
+		hx-trigger="load"
+		hx-swap="none"
+		x-data="{ step: 0 }"
+		x-init="const t = setInterval(() => step < 2 ? step++ : clearInterval(t), 900)"
+		class="grid justify-items-center gap-4 text-center"
+	>
+		@signinSpinner()
+		<h1 class="text-2xl font-(family-name:--font-biorhyme-expanded)">Setting up your account</h1>
+		<p class="text-zinc-400 text-base">Welcome to tyche! Getting everything ready, this only happens once.</p>
+		<ul class="mt-2 grid gap-3 text-left text-base">
+			@setupStep(0, "Creating your private database")
+			@setupStep(1, "Adding currencies and categories")
+			@setupStep(2, "Preparing your accounts")
+		</ul>
+	</div>
+}
+
+templ setupStep(i int, label string) {
+	<li class="flex items-center gap-3 transition-opacity duration-300" :class={ "step < " + strconv.Itoa(i) + " && 'opacity-40'" }>
+		<span class="grid size-6 place-items-center rounded-full bg-zinc-800 ring-1 ring-zinc-700">
+			<span x-show={ "step > " + strconv.Itoa(i) } class="text-emerald-300">
+				@icons.Check("13")
+			</span>
+			<span x-show={ "step === " + strconv.Itoa(i) } class="size-3 rounded-full border-2 border-violet-300 border-t-transparent animate-spin"></span>
+		</span>
+		<span class="text-zinc-300">{ label }</span>
+	</li>
+}
+
+templ signinSpinner() {
+	<span class="relative grid size-16 place-items-center">
+		<span class="absolute inset-0 rounded-full border-4 border-zinc-800"></span>
+		<span class="absolute inset-0 rounded-full border-4 border-violet-400 border-t-transparent animate-spin"></span>
+		@icons.Sparkles("22", &templ.Attributes{"class": "text-violet-300"})
+	</span>
+}

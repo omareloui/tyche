@@ -200,7 +200,7 @@ func (h *Handler) startPendingUnlock(w http.ResponseWriter, r *http.Request, p p
 		return err
 	}
 	http.SetCookie(w, newCookie(vaultPendingCookieName, id, time.Now().Add(pendingUnlockTTL)))
-	http.Redirect(w, r, middleware.UnlockPath, http.StatusSeeOther)
+	redirect(w, r, middleware.UnlockPath)
 	return nil
 }
 

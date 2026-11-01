@@ -2,9 +2,9 @@ package seeder
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"slices"
-	"sync"
 
 	_ "github.com/omareloui/tyche/internal/sqlite"
 	"go.uber.org/zap"
@@ -23,10 +23,18 @@ func NewSeeder() *Seeder {
 	return &Seeder{}
 }
 
-func (s *Seeder) Seed(ctx context.Context, q *queries.Queries, oauthID string) {
-	wg := new(sync.WaitGroup)
-
+// Seed seeds the tenant's database in one transaction: committing each of the
+// hundreds of rows on its own takes tens of seconds on the first sign in.
+func (s *Seeder) Seed(ctx context.Context, db *sql.DB, oauthID string) {
 	l := logger.FromCtx(ctx)
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		l.Error("starting the seed transaction", zap.String("oauthID", oauthID), zap.Error(err))
+		return
+	}
+	defer tx.Rollback()
+	q := queries.New(tx)
 
 	var _user *queries.GetUserByOAuthIDRow
 
@@ -37,27 +45,22 @@ func (s *Seeder) Seed(ctx context.Context, q *queries.Queries, oauthID string) {
 		_user = &user
 	}
 
-	defer s.updateSeededAt(ctx, q, oauthID, _user)
-
-	go s.currencies(ctx, wg, q)
-	go s.accountKinds(ctx, wg, q)
-	wg.Add(2)
-
-	wg.Wait()
+	s.currencies(ctx, q)
+	s.accountKinds(ctx, q)
 
 	l.Debug("ensured seeding currencies, account kinds, and transaction kinds", zap.String("oauthID", oauthID))
 
-	if _user != nil && !user.User.SeededAt.Time.IsZero() {
-		return
+	if _user == nil || user.User.SeededAt.Time.IsZero() {
+		s.categories(ctx, q)
+		s.accounts(ctx, q)
+		l.Debug("seeded categories, and accounts", zap.String("oauthID", oauthID))
 	}
 
-	go s.categories(ctx, wg, q)
-	go s.accounts(ctx, wg, q)
-	wg.Add(2)
+	s.updateSeededAt(ctx, q, oauthID, _user)
 
-	l.Debug("seeded categories, and accounts", zap.String("oauthID", oauthID))
-
-	wg.Wait()
+	if err := tx.Commit(); err != nil {
+		l.Error("committing the seed transaction", zap.String("oauthID", oauthID), zap.Error(err))
+	}
 }
 
 func (s *Seeder) updateSeededAt(ctx context.Context, q *queries.Queries, oauthID string, user *queries.GetUserByOAuthIDRow) {
@@ -71,9 +74,7 @@ func (s *Seeder) updateSeededAt(ctx context.Context, q *queries.Queries, oauthID
 	}
 }
 
-func (s *Seeder) accounts(ctx context.Context, wg *sync.WaitGroup, q *queries.Queries) {
-	defer wg.Done()
-
+func (s *Seeder) accounts(ctx context.Context, q *queries.Queries) {
 	l := logger.FromCtx(ctx)
 
 	kinds, err := q.GetAccountKinds(ctx)
@@ -116,9 +117,7 @@ func (s *Seeder) accounts(ctx context.Context, wg *sync.WaitGroup, q *queries.Qu
 		func(e queries.GetAccountsRow) string { return e.Account.Name + e.AccountKind.ID + e.Currency.ID })
 }
 
-func (s *Seeder) categories(ctx context.Context, wg *sync.WaitGroup, q *queries.Queries) {
-	defer wg.Done()
-
+func (s *Seeder) categories(ctx context.Context, q *queries.Queries) {
 	expensesKind := []models.TxKind{models.ExpenseTxKind}
 	incomeKind := []models.TxKind{models.IncomeTxKind}
 
@@ -145,17 +144,13 @@ func (s *Seeder) categories(ctx context.Context, wg *sync.WaitGroup, q *queries.
 		func(e queries.GetCategoriesRow) string { return e.Category.Name })
 }
 
-func (s *Seeder) currencies(ctx context.Context, wg *sync.WaitGroup, q *queries.Queries) {
-	defer wg.Done()
-
+func (s *Seeder) currencies(ctx context.Context, q *queries.Queries) {
 	seedFn(ctx, q.GetAllCurrencies, currSeed, q.CreateCurrency,
 		func(s queries.CreateCurrencyParams) string { return s.String },
 		func(e queries.GetAllCurrenciesRow) string { return e.Currency.String })
 }
 
-func (s *Seeder) accountKinds(ctx context.Context, wg *sync.WaitGroup, q *queries.Queries) {
-	defer wg.Done()
-
+func (s *Seeder) accountKinds(ctx context.Context, q *queries.Queries) {
 	seed := []queries.CreateAccountKindParams{
 		{ID: idgen.New(), Enum: int64(models.AccKindCreditCard)},
 		{ID: idgen.New(), Enum: int64(models.AccKindBankAcc)},
