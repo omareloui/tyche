@@ -37,6 +37,17 @@ VALUES (
 )
 ON CONFLICT (seed_key) DO NOTHING;
 
+-- name: AdoptSMSTemplateSeed :execrows
+UPDATE sms_templates
+SET seed_key = sqlc.arg(seed_key)
+WHERE id = (
+    SELECT t.id FROM sms_templates AS t
+    WHERE t.seed_key IS NULL AND t.body = sqlc.arg(body)
+    ORDER BY t.created_at, t.id
+    LIMIT 1
+)
+AND NOT EXISTS (SELECT 1 FROM sms_templates AS k WHERE k.seed_key = sqlc.arg(seed_key));
+
 -- name: UpdateSMSTemplate :exec
 UPDATE sms_templates
 SET

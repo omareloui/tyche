@@ -37,7 +37,8 @@ func New(q *sharedqueries.Queries) *Store {
 
 // Seed adds the templates of smsparser.Seeds missing by seed key when the
 // seeds are newer than the database's. Edited seeded templates are kept, the
-// deleted ones come back only on a new seed version.
+// deleted ones come back only on a new seed version. A template written by an
+// admin with the body of a new seed becomes that seed instead of a duplicate.
 func (s *Store) Seed(ctx context.Context) error {
 	l := logger.FromCtx(ctx)
 
@@ -54,6 +55,16 @@ func (s *Store) Seed(ctx context.Context) error {
 	}
 
 	for _, t := range smsparser.Seeds() {
+		adopted, err := s.q.AdoptSMSTemplateSeed(ctx, sharedqueries.AdoptSMSTemplateSeedParams{
+			SeedKey: sql.NullString{String: t.SeedKey, Valid: true}, Body: t.Body,
+		})
+		if err != nil {
+			return fmt.Errorf("adopting sms template %q: %w", t.SeedKey, err)
+		}
+		if adopted > 0 {
+			continue
+		}
+
 		t.ID = idgen.New()
 		p := ParamsOf(&t)
 		if err := s.q.CreateSMSTemplate(ctx, sharedqueries.CreateSMSTemplateParams{
