@@ -53,7 +53,7 @@ func newTestJob(t *testing.T, srv *httptest.Server, codes []string) *Job {
 	}
 	t.Cleanup(func() { db.Close() })
 
-	schema, err := os.ReadFile("../../sql/shared/schema/20261031120000_fx_rates.sql")
+	schema, err := os.ReadFile("../../sql/shared/schema/20261031120000_create_tables.sql")
 	if err != nil {
 		t.Fatal(err)
 	}

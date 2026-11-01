@@ -14,6 +14,21 @@ CREATE TABLE user (
     start_of_period INT NOT NULL DEFAULT 1 CHECK (start_of_period BETWEEN 1 AND 31),
     seeded_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- What an hour of work earns, to price things in work hours. NULL salary =
+    -- not set.
+    monthly_salary FLOAT,
+    salary_currency_id VARCHAR REFERENCES currencies (id),
+    work_hours_per_week FLOAT NOT NULL DEFAULT 40,
+    -- The time zone of the dates and times in the user's bank sms.
+    timezone VARCHAR NOT NULL DEFAULT 'Africa/Cairo',
+    -- When the user was asked whether to encrypt their database (with a
+    -- password), asked once on signing in while NULL.
+    encryption_prompted_at TIMESTAMP,
+    -- The profile picture, downloaded on signing in and served from /avatar (the
+    -- provider's url is rate limited). picture_hash versions its url.
+    picture_data BLOB,
+    picture_type TEXT,
+    picture_hash TEXT,
     FOREIGN KEY (default_account_id) REFERENCES accounts (id) ON DELETE SET NULL,
     FOREIGN KEY (default_currency_id) REFERENCES currencies (id)
 );
@@ -45,6 +60,8 @@ CREATE TABLE accounts (
     exclude_from_balance BOOL NOT NULL DEFAULT FALSE,
     expiration_date DATE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- The ways bank sms refer to the account (account number, card, ...).
+    sms_refs JSON NOT NULL DEFAULT '[]',
     FOREIGN KEY (currency_id) REFERENCES currencies (id),
     FOREIGN KEY (counterparty_id) REFERENCES counterparties (id),
     FOREIGN KEY (kind_id) REFERENCES account_kinds (id)
@@ -64,6 +81,15 @@ CREATE TABLE transactions (
     fulfilled_at DATE,
     scheduled_to DATE NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    needs_review BOOLEAN NOT NULL DEFAULT FALSE,
+    -- An income paying back (part of) an expense, e.g. a friend's share of a
+    -- bill. The expense is analysed net of its reimbursements and the
+    -- reimbursements themselves count as 0.
+    reimburses_id VARCHAR REFERENCES transactions (id) ON DELETE SET NULL,
+    -- The two legs (an expense and an income) of a transfer between the user's
+    -- own accounts that came as two SMS, each pointing at the other. Both are
+    -- left out of every analysis; the income is shown nested under the expense.
+    transfer_pair_id VARCHAR REFERENCES transactions (id) ON DELETE SET NULL,
     FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE,
     FOREIGN KEY (to_account_id) REFERENCES accounts (id) ON DELETE CASCADE,
     FOREIGN KEY (counterparty_id) REFERENCES counterparties (id) ON DELETE SET NULL,
@@ -114,8 +140,115 @@ CREATE TABLE categories (
 CREATE TABLE counterparties (
     id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
     name VARCHAR UNIQUE NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    aliases JSON NOT NULL DEFAULT '[]',
+    -- NULL means the icon was never detected, '' means no icon.
+    icon VARCHAR,
+    -- The brand color of the icon, or a random one for the letter placeholder.
+    color VARCHAR,
+    -- Only merchants get their brand icon auto-detected.
+    is_merchant BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Used for new transactions with the counterparty and no category.
+    default_category_id VARCHAR REFERENCES categories (id) ON DELETE SET NULL
 );
+CREATE TABLE devices (
+    id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
+    name VARCHAR NOT NULL,
+    last_seen_at TIMESTAMP,
+    revoked_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- Stable per app install id, signing in again from the same install reuses
+    -- the device row.
+    install_id VARCHAR,
+    -- Id of the device's current token, rotated on signing in again so older
+    -- tokens stop working. NULL for devices registered before this.
+    token_id VARCHAR
+);
+CREATE TABLE sms_messages (
+    id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
+    sender VARCHAR NOT NULL,
+    body VARCHAR NOT NULL,
+    received_at TIMESTAMP NOT NULL,
+    hash VARCHAR UNIQUE NOT NULL,
+    status VARCHAR NOT NULL,
+    error VARCHAR,
+    transaction_id VARCHAR,
+    device_id VARCHAR,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- The template that read it, no foreign key as it can be a shared one.
+    template_id VARCHAR,
+    FOREIGN KEY (transaction_id) REFERENCES transactions (id) ON DELETE SET NULL,
+    FOREIGN KEY (device_id) REFERENCES devices (id) ON DELETE SET NULL
+);
+-- The user's own templates reading bank sms, tried before the shared ones.
+CREATE TABLE sms_templates (
+    id VARCHAR NOT NULL PRIMARY KEY,
+    name VARCHAR NOT NULL,
+    bank VARCHAR NOT NULL DEFAULT '',
+    senders JSON NOT NULL DEFAULT '[]',
+    action VARCHAR NOT NULL,
+    tx_kind INTEGER,
+    body VARCHAR NOT NULL,
+    fixed JSON NOT NULL DEFAULT '{}',
+    sample VARCHAR NOT NULL DEFAULT '',
+    priority INTEGER NOT NULL DEFAULT 0,
+    is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+-- A gam'yaa (rotating savings group) held as an account of kind 5: its
+-- installments are transfers into it and its payouts transfers out of it, so
+-- its balance is what's paid in (positive) or still owed (negative).
+CREATE TABLE gamyaas (
+    account_id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
+    -- A full share's monthly installment.
+    installment FLOAT NOT NULL,
+    -- Members, which is also its number of months.
+    members INT NOT NULL,
+    shares FLOAT NOT NULL DEFAULT 1,
+    -- The 1-based months the pot is received in, e.g. [3] or [2, 9].
+    turns JSON NOT NULL,
+    starts_on DATE NOT NULL,
+    pay_from_account_id VARCHAR,
+    recurrent_tx_id VARCHAR,
+    FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE,
+    FOREIGN KEY (pay_from_account_id) REFERENCES accounts (id) ON DELETE SET NULL,
+    FOREIGN KEY (recurrent_tx_id) REFERENCES recurrent_txs (id) ON DELETE SET NULL
+);
+-- Things to buy after a cooling-off period. status: 0 waiting, 1 bought,
+-- 2 abandoned. installments = 0 means paying cash.
+CREATE TABLE wishlist_items (
+    id VARCHAR UNIQUE NOT NULL PRIMARY KEY,
+    name VARCHAR NOT NULL,
+    price FLOAT NOT NULL,
+    currency_id VARCHAR NOT NULL,
+    installments INT NOT NULL DEFAULT 0,
+    installment_amount FLOAT NOT NULL DEFAULT 0,
+    url VARCHAR NOT NULL DEFAULT '',
+    note VARCHAR NOT NULL DEFAULT '',
+    cooling_days INT NOT NULL CHECK (cooling_days IN (7, 30)),
+    status INT NOT NULL DEFAULT 0,
+    decided_at TIMESTAMP,
+    transaction_id VARCHAR,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- How a wishlist item is paid in installments (models.InstallmentPlan:
+    -- strategy, rate, down payment, fees, ...), NULL when paid cash or for items
+    -- from before plans, which only have installments and installment_amount.
+    installment_plan JSON,
+    FOREIGN KEY (currency_id) REFERENCES currencies (id),
+    FOREIGN KEY (transaction_id) REFERENCES transactions (id) ON DELETE SET NULL
+);
+
+-------------------------------------------
+----------------- INDEXES -----------------
+-------------------------------------------
+
+CREATE UNIQUE INDEX devices_install_id_idx ON devices (install_id);
+CREATE INDEX transactions_reimburses_id ON transactions (reimburses_id);
+CREATE INDEX transactions_transfer_pair_id ON transactions (transfer_pair_id);
+CREATE INDEX transactions_scheduled_to ON transactions (scheduled_to, created_at);
+-- Transaction lists look up each row's sms (body, from-sms filter).
+CREATE INDEX sms_messages_transaction_id ON sms_messages (transaction_id);
 
 -------------------------------------------
 ------------------ VIEWS ------------------
@@ -211,6 +344,14 @@ LEFT JOIN currencies AS gc ON g.currency_id = gc.id;
 
 -- +goose Down
 -- +goose StatementBegin
+-- Views
+DROP VIEW IF EXISTS recurrent_txs_details;
+
+DROP TABLE wishlist_items;
+DROP TABLE gamyaas;
+DROP TABLE sms_templates;
+DROP TABLE sms_messages;
+DROP TABLE devices;
 DROP TABLE user;
 DROP TABLE currencies;
 DROP TABLE transactions;
@@ -220,7 +361,4 @@ DROP TABLE accounts;
 DROP TABLE account_kinds;
 DROP TABLE categories;
 DROP TABLE counterparties;
-
--- Views
-DROP VIEW IF EXISTS recurrent_transactions_detail;
 -- +goose StatementEnd
