@@ -427,9 +427,10 @@ templ txTile(tx *models.Transaction, v *txView) {
 }
 
 templ txChips(tx *models.Transaction, v *txView) {
-	{{ hasChips := v.isScheduled || tx.FromSMS || tx.RecurrentTx != nil || tx.Goal != nil || len(tx.Reimbursements) > 0 }}
+	{{ hasChips := tx.Category != nil || v.isScheduled || tx.FromSMS || tx.RecurrentTx != nil || tx.Goal != nil || len(tx.Reimbursements) > 0 }}
 	if hasChips {
 		<div class="flex flex-wrap items-center gap-1.5 mt-1.5">
+			@txCategoryChip(tx)
 			if v.isOverdue {
 				<span class="chip bg-red-400/10 text-red-400">
 					@icons.Calendar("12")
@@ -485,6 +486,21 @@ templ txChips(tx *models.Transaction, v *txView) {
 				</button>
 			}
 		</div>
+	}
+}
+
+templ txCategoryChip(tx *models.Transaction) {
+	if tx.Category != nil {
+		// Under review, the review strip's picker shows the category.
+		<span
+			class="chip max-w-48"
+			if tx.NeedsReview {
+				x-show="!reviewOnly"
+			}
+		>
+			@categoryDot(tx.Category.Color)
+			<span class="truncate">{ tx.Category.Name }</span>
+		</span>
 	}
 }
 
@@ -769,6 +785,11 @@ templ reimbursement(tx *models.Transaction, def *models.Currency) {
 				<p class="text-xs text-zinc-500 truncate">
 					{ formatTxDay(tx.ScheduledTo) } · { v.account }
 				</p>
+				if tx.Category != nil {
+					<div class="flex mt-1">
+						@txCategoryChip(tx)
+					</div>
+				}
 			</div>
 			<div class="shrink-0 text-right tabular-nums">
 				<p class="font-semibold text-emerald-400">{ v.amount }</p>
@@ -1199,10 +1220,6 @@ func newTxView(tx *models.Transaction) txView {
 			v.subtitle = tx.Description
 		}
 		return v
-	}
-
-	if v.title == "" && tx.Category != nil {
-		v.title = tx.Category.Name
 	}
 
 	if tx.Counterparty != nil {

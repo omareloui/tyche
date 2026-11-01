@@ -359,6 +359,14 @@ templ ReimbursePicker(tx *models.Transaction, exps []models.ReimbursableExpense,
 								}
 								{ formatTxDay(e.ScheduledTo) } · { e.Account }
 							</p>
+							if e.Category != "" {
+								<div class="flex mt-1">
+									<span class="chip max-w-48">
+										@categoryDot(e.CategoryColor)
+										<span class="truncate">{ e.Category }</span>
+									</span>
+								</div>
+							}
 						</div>
 						<div class="shrink-0 text-right tabular-nums">
 							<p class="font-semibold">{ "-" + e.ViewAmount() }</p>

@@ -21,6 +21,8 @@ type ReimbursableExpense struct {
 	ID             string
 	Title          string
 	Subtitle       string
+	Category       string
+	CategoryColor  string
 	Account        string
 	Amount         float64
 	Reimbursed     float64

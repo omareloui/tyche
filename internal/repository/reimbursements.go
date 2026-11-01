@@ -121,14 +121,13 @@ func (r *Repository) GetReimbursableExpenses(ctx context.Context, income *models
 		e := models.ReimbursableExpense{
 			ID:             row.ID,
 			Title:          row.Description.String,
+			Category:       row.CategoryName.String,
+			CategoryColor:  row.CategoryColor.String,
 			Account:        row.AccountName,
 			Amount:         row.Amount,
 			Reimbursed:     row.Reimbursed,
 			CurrencySymbol: row.CurrencySymbol,
 			ScheduledTo:    row.ScheduledTo,
-		}
-		if e.Title == "" {
-			e.Title = row.CategoryName.String
 		}
 		if row.CounterpartyName.Valid {
 			if e.Title == "" {
