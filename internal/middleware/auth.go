@@ -6,10 +6,11 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/omareloui/tyche/internal/errpage"
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/logger"
-	"github.com/omareloui/tyche/internal/resperr"
 	"github.com/omareloui/tyche/internal/slicesutils"
+	"github.com/omareloui/tyche/web/views"
 	"go.uber.org/zap"
 )
 
@@ -92,15 +93,28 @@ func Auth(refresh TokenRefresher) func(http.Handler) http.Handler {
 	}
 }
 
+// ClaimsFromCtx are the access claims of the signed in user, nil without.
+func ClaimsFromCtx(ctx context.Context) *jwt.AccessClaims {
+	claims, _ := ctx.Value(AccessClaimsCtxKey{}).(*jwt.AccessClaims)
+	return claims
+}
+
+// WriteError responds with the error page of code (the plain message for
+// HTMX requests), with the request's claims and correlation ID.
+func WriteError(w http.ResponseWriter, r *http.Request, code int, msg string) {
+	errpage.Write(w, r, views.ErrorPageData{
+		Claims: ClaimsFromCtx(r.Context()),
+		Code:   code,
+		Detail: msg,
+		Ref:    CorrelationIDFromCtx(r.Context()),
+	})
+}
+
 func Protected(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if accessClaims := r.Context().Value(AccessClaimsCtxKey{}); accessClaims == nil {
-			l := logger.FromCtx(r.Context())
-
-			httperr := resperr.New(http.StatusUnauthorized, "")
-			w.Header().Set("Content-Type", "text/html")
-			l.Error("trying to access protected route", zap.String("path", r.URL.Path))
-			http.Error(w, httperr.Message, httperr.Code)
+			logger.FromCtx(r.Context()).Error("trying to access protected route", zap.String("path", r.URL.Path))
+			WriteError(w, r, http.StatusUnauthorized, "")
 			return
 		}
 

@@ -17,3 +17,9 @@ func CorrelationID(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
+
+// CorrelationIDFromCtx is the request's correlation ID, "" without one.
+func CorrelationIDFromCtx(ctx context.Context) string {
+	id, _ := ctx.Value(correlationIDCtxKey{}).(string)
+	return id
+}

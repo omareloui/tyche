@@ -17,11 +17,7 @@ import (
 var nonDigitRegexp *regexp.Regexp = regexp.MustCompile(`[^0-9\.]`)
 
 func getClaims(ctx context.Context) *jwt.AccessClaims {
-	v := ctx.Value(middleware.AccessClaimsCtxKey{})
-	if v == nil {
-		return nil
-	}
-	return v.(*jwt.AccessClaims)
+	return middleware.ClaimsFromCtx(ctx)
 }
 
 func renderToBody(w http.ResponseWriter, r *http.Request, template templ.Component) error {

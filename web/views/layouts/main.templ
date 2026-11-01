@@ -50,7 +50,8 @@ templ Main(
 				document.body.addEventListener("htmx:beforeSwap", function (ev) {
 					const status = ev.detail.xhr.status;
 					const statusesToShowResponseOn = [401, 403, 409, 422];
-					if (statusesToShowResponseOn.includes(status)) {
+					// Boosted navigations swap the error page in, like a full load.
+					if (statusesToShowResponseOn.includes(status) || (ev.detail.boosted && status >= 400)) {
 						ev.detail.shouldSwap = true;
 						ev.detail.isError = false;
 					}

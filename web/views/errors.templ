@@ -1,0 +1,142 @@
+package views
+
+import (
+	"net/http"
+	"strconv"
+
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+// ErrorPageData is what an error page shows. Detail is the specific message
+// of a 4xx (e.g. "sms template not found"), Ref the request's correlation ID
+// (shown on 5xx to find it in the logs), UnlockURL set when the error is a
+// locked database.
+type ErrorPageData struct {
+	Claims    *jwt.AccessClaims
+	Code      int
+	Detail    string
+	Ref       string
+	UnlockURL string
+}
+
+type errorCopy struct {
+	Title, Body string
+	Icon        func(size string, attrs ...*templ.Attributes) templ.Component
+	// Tile is the icon tile's classes, Number the status number's gradient,
+	// Hues the card's glows.
+	Tile, Number string
+	Hues         []string
+}
+
+var (
+	calmNumber   = "from-violet-300 via-fuchsia-300 to-emerald-300"
+	dangerNumber = "from-red-300 via-orange-300 to-amber-200"
+)
+
+func errorCopyFor(d ErrorPageData) errorCopy {
+	switch {
+	case d.UnlockURL != "":
+		return errorCopy{"Your data is locked", "Unlock it with its password to keep going.", icons.Lock, "bg-violet-400/15 text-violet-300", calmNumber, []string{"bg-violet-400/12", "bg-emerald-400/8"}}
+	case d.Code == http.StatusUnauthorized:
+		return errorCopy{"Sign in to continue", "This page is only for signed in users. Sign in and you'll be right back on track.", icons.Lock, "bg-violet-400/15 text-violet-300", calmNumber, []string{"bg-violet-400/12", "bg-emerald-400/8"}}
+	case d.Code == http.StatusForbidden:
+		return errorCopy{"You can't do that", "You don't have access to this. If you think you should, try again from the app.", icons.Ban, "bg-amber-400/15 text-amber-300", "from-amber-200 via-orange-300 to-rose-300", []string{"bg-amber-400/10", "bg-rose-400/8"}}
+	case d.Code == http.StatusNotFound:
+		return errorCopy{"This page wandered off", "We couldn't find what you're looking for. It may have been moved or deleted.", icons.Search, "bg-sky-400/15 text-sky-300", "from-sky-300 via-violet-300 to-fuchsia-300", []string{"bg-sky-400/10", "bg-violet-400/10"}}
+	case d.Code == http.StatusTooManyRequests:
+		return errorCopy{"Slow down a bit", "Too many requests in a short time. Wait a moment, then try again.", icons.Hourglass, "bg-amber-400/15 text-amber-300", "from-amber-200 via-yellow-200 to-emerald-300", []string{"bg-amber-400/10", "bg-emerald-400/8"}}
+	case d.Code >= 500:
+		return errorCopy{"Something broke on our side", "It's not you, it's us. Try again in a moment; if it keeps happening, share the reference below.", icons.Warning, "bg-red-400/15 text-red-300", dangerNumber, []string{"bg-red-400/10", "bg-amber-400/8"}}
+	default:
+		return errorCopy{http.StatusText(d.Code), "Something about this request didn't work out.", icons.Warning, "bg-zinc-400/15 text-zinc-300", calmNumber, []string{"bg-violet-400/10"}}
+	}
+}
+
+// ErrorPage is the full page of an error, for browser navigations (HTMX
+// requests get the plain message, see internal/errpage).
+templ ErrorPage(d ErrorPageData) {
+	{{ c := errorCopyFor(d) }}
+	@layouts.Main(d.Claims, c.Title, nil) {
+		@components.Container() {
+			<div class="max-w-lg mx-auto mt-6 sm:mt-14">
+				@components.GlassCard("px-6 py-10 sm:px-10 sm:py-12 grid justify-items-center gap-5 text-center", c.Hues...) {
+					<span class={ "grid size-16 place-items-center rounded-2xl ring-1 ring-white/5", c.Tile }>
+						@c.Icon("28")
+					</span>
+					<p
+						aria-hidden="true"
+						class={ "text-7xl sm:text-8xl font-bold leading-none tracking-tight bg-linear-to-br bg-clip-text text-transparent font-(family-name:--font-biorhyme-expanded)", c.Number }
+					>
+						{ strconv.Itoa(d.Code) }
+					</p>
+					<div class="grid gap-2">
+						<h1 class="text-2xl sm:text-3xl font-(family-name:--font-biorhyme-expanded)">{ c.Title }</h1>
+						<p class="text-zinc-400 text-base max-w-sm">{ c.Body }</p>
+						if d.Detail != "" {
+							<p class="mx-auto mt-1 w-fit rounded-lg bg-zinc-800/60 px-3 py-1 text-sm text-zinc-300 ring-1 ring-zinc-700/60">{ d.Detail }</p>
+						}
+					</div>
+					<div class="mt-2 flex flex-wrap items-center justify-center gap-2">
+						@errorActions(d)
+					</div>
+					if d.Code >= 500 && d.Ref != "" {
+						<p class="text-xs text-zinc-500">
+							Reference <code class="font-mono text-zinc-400 select-all">{ d.Ref }</code>
+						</p>
+					}
+				}
+			</div>
+		}
+	}
+}
+
+templ errorActions(d ErrorPageData) {
+	switch {
+		case d.UnlockURL != "":
+			<a href={ templ.SafeURL(d.UnlockURL) } hx-boost="false" class="btn-primary">
+				@icons.Lock("16")
+				Unlock
+			</a>
+			@errorHomeLink(false)
+		case d.Code == http.StatusUnauthorized:
+			<a
+				href="/oauth"
+				hx-boost="false"
+				x-data="{ busy: false }"
+				@click="busy = true"
+				@pageshow.window="busy = false"
+				:aria-busy="busy"
+				:class="busy && 'pointer-events-none opacity-80'"
+				class="btn-primary"
+			>
+				<span x-show="!busy" class="contents">
+					Sign in
+					@icons.ArrowRight("16")
+				</span>
+				<span x-show="busy" x-cloak class="contents">
+					<span class="size-4 rounded-full border-2 border-current border-t-transparent animate-spin"></span>
+					Redirecting to Google…
+				</span>
+			</a>
+			@errorHomeLink(false)
+		case d.Code >= 500:
+			<button type="button" onclick="location.reload()" class="btn-primary">
+				@icons.RotateCcw("16")
+				Try again
+			</button>
+			@errorHomeLink(false)
+		default:
+			@errorHomeLink(true)
+			<button type="button" onclick="history.length > 1 ? history.back() : location.assign('/')" class="btn-ghost">Go back</button>
+	}
+}
+
+templ errorHomeLink(primary bool) {
+	<a href="/" class={ templ.KV("btn-primary", primary), templ.KV("btn-ghost", !primary) }>
+		@icons.Home("16")
+		Home
+	</a>
+}

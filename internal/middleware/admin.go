@@ -19,7 +19,7 @@ func Admin(next http.Handler) http.Handler {
 		isSafe := r.Method == http.MethodGet || r.Method == http.MethodHead
 		if !claims.IsAdmin() || (!isSafe && r.Header.Get("HX-Request") != "true") {
 			logger.FromCtx(r.Context()).Warn("non admin trying to access an admin route", zap.String("path", r.URL.Path))
-			http.NotFound(w, r)
+			WriteError(w, r, http.StatusNotFound, "")
 			return
 		}
 

@@ -6,7 +6,11 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/omareloui/tyche/internal/errpage"
+	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/slicesutils"
+	"github.com/omareloui/tyche/web/views"
+	"go.uber.org/zap"
 )
 
 // VaultKeyCtxKey holds the key of the tenant's encrypted database.
@@ -37,7 +41,8 @@ func Vault(open VaultOpener) func(http.Handler) http.Handler {
 
 			key, encrypted, err := open(r)
 			if err != nil {
-				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+				logger.FromCtx(ctx).Error("opening the vault", zap.Error(err))
+				WriteError(w, r, http.StatusInternalServerError, "")
 				return
 			}
 			if !encrypted {
@@ -71,7 +76,12 @@ func RedirectToUnlock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method != http.MethodGet {
-		http.Error(w, "the database is locked", http.StatusUnauthorized)
+		errpage.Write(w, r, views.ErrorPageData{
+			Claims:    ClaimsFromCtx(r.Context()),
+			Code:      http.StatusUnauthorized,
+			Ref:       CorrelationIDFromCtx(r.Context()),
+			UnlockURL: UnlockPath,
+		})
 		return
 	}
 	http.Redirect(w, r, UnlockURL(r.URL.RequestURI()), http.StatusSeeOther)
@@ -92,7 +102,7 @@ func HTMXOnly(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		isSafe := r.Method == http.MethodGet || r.Method == http.MethodHead
 		if !isSafe && r.Header.Get("HX-Request") != "true" {
-			http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+			WriteError(w, r, http.StatusForbidden, "")
 			return
 		}
 		next.ServeHTTP(w, r)
