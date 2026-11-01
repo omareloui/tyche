@@ -6,7 +6,7 @@ import (
 	"slices"
 	"sync"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/omareloui/tyche/internal/sqlite"
 	"go.uber.org/zap"
 
 	"github.com/omareloui/tyche/internal/idgen"

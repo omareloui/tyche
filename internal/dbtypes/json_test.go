@@ -4,8 +4,8 @@ import (
 	"database/sql"
 	"testing"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/omareloui/tyche/internal/dbtypes"
+	_ "github.com/omareloui/tyche/internal/sqlite"
 )
 
 func TestJSONScansTextAndBlob(t *testing.T) {

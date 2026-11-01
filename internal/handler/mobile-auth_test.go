@@ -29,7 +29,7 @@ func TestPKCE(t *testing.T) {
 
 func TestMobileCodeIsSingleUse(t *testing.T) {
 	store := &mobileCodeStore{codes: make(map[string]mobileCode)}
-	code, err := store.add(&models.User{ID: "u"}, &mobileLogin{challenge: "c", deviceName: "d"})
+	code, err := store.add(&models.User{ID: "u"}, &mobileLogin{challenge: "c", deviceName: "d"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

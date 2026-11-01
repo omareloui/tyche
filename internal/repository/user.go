@@ -79,8 +79,9 @@ func dbUserToUser(dbU *queries.User, dfltCur *queries.Currency, dfltAcc *queries
 		DefaultCurrency: models.Currency{
 			ID: dbU.DefaultCurrencyID,
 		},
-		SeededAt:  dbU.SeededAt.Time,
-		CreatedAt: dbU.CreatedAt,
+		SeededAt:           dbU.SeededAt.Time,
+		EncryptionPrompted: dbU.EncryptionPromptedAt.Valid,
+		CreatedAt:          dbU.CreatedAt,
 	}
 
 	if dfltCur != nil {
@@ -143,4 +144,13 @@ func (r *Repository) SetTimezone(ctx context.Context, loc *time.Location) error 
 		return err
 	}
 	return q.SetTimezone(ctx, loc.String())
+}
+
+// SetEncryptionPrompted records the user was asked to encrypt their database.
+func (r *Repository) SetEncryptionPrompted(ctx context.Context) error {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+	return q.SetEncryptionPrompted(ctx)
 }

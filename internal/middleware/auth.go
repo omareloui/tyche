@@ -80,7 +80,9 @@ func Auth(refresh TokenRefresher) func(http.Handler) http.Handler {
 			claims, err = refresh(w, r.WithContext(ctx))
 			if err != nil {
 				logger.FromCtx(ctx).Warn("refreshing tokens", zap.Error(err))
-				next.ServeHTTP(w, r)
+				// Keeps the refresh claims, e.g. for the Vault middleware to
+				// send the user to unlock their database when that's why.
+				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 

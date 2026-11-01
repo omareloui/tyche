@@ -75,7 +75,11 @@ func (r *Repository) Reset(ctx context.Context, opts models.ResetOptions) error 
 	if err != nil {
 		return err
 	}
-	if err := r.tm.Reseed(ctx, provider, oauthID); err != nil {
+	key, err := r.tenantKey(ctx, provider, oauthID)
+	if err != nil {
+		return err
+	}
+	if err := r.tm.Reseed(ctx, provider, oauthID, key); err != nil {
 		l.Error("reseeding after reset", zap.Error(err))
 		return err
 	}

@@ -12,9 +12,11 @@ import (
 
 type DeviceIDCtxKey struct{}
 
-// DeviceVerifier checks the device is still allowed and tokenID is its current
-// token, the context already has the device owner's access claims.
-type DeviceVerifier func(ctx context.Context, deviceID, tokenID string) error
+// DeviceVerifier checks the device is still allowed and its token is the
+// current one, the context already has the device owner's access claims. It
+// returns the context to go on with (e.g. with the key of an encrypted
+// database).
+type DeviceVerifier func(ctx context.Context, claims *jwt.DeviceClaims) (context.Context, error)
 
 // DeviceAuth authenticates mobile devices using the bearer device token, then
 // sets the access claims so the tenant database can be resolved.
@@ -43,7 +45,8 @@ func DeviceAuth(verify DeviceVerifier) func(http.Handler) http.Handler {
 			})
 			ctx = context.WithValue(ctx, DeviceIDCtxKey{}, claims.DeviceID)
 
-			if err := verify(ctx, claims.DeviceID, claims.TokenID); err != nil {
+			ctx, err = verify(ctx, claims)
+			if err != nil {
 				l.Warn("device not allowed", zap.String("device_id", claims.DeviceID), zap.Error(err))
 				jsonUnauthorized(w)
 				return

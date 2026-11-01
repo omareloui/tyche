@@ -3,8 +3,11 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,13 +15,20 @@ import (
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/queries"
 	"github.com/omareloui/tyche/internal/seeder"
+	"github.com/omareloui/tyche/internal/vault"
 	"github.com/pressly/goose/v3"
 	"go.uber.org/zap"
 )
 
 type Repository struct {
-	tm *TenantManager
+	tm     *TenantManager
+	vaults *vault.Store
 }
+
+// ErrTenantLocked is returned when the tenant's database is encrypted and the
+// context has no key for it (middleware.VaultKeyCtxKey), the user has to
+// unlock it first.
+var ErrTenantLocked = errors.New("the tenant's database is locked")
 
 const migrationsDir = "./sql/schema"
 
@@ -37,8 +47,13 @@ type TenantManager struct {
 	maxIdle     time.Duration
 }
 
-func New() *Repository {
-	return &Repository{tm: newTenantManager()}
+func New(vaults *vault.Store) *Repository {
+	return &Repository{tm: newTenantManager(), vaults: vaults}
+}
+
+// Vaults holds the keys of the encrypted tenant databases.
+func (r *Repository) Vaults() *vault.Store {
+	return r.vaults
 }
 
 func newTenantManager() *TenantManager {
@@ -51,7 +66,9 @@ func newTenantManager() *TenantManager {
 	return tm
 }
 
-func (tm *TenantManager) GetTenant(provider models.OAuthProvider, oauthID string) (*sql.DB, *queries.Queries, error) {
+// GetTenant gets the tenant's database, opening it when it's not already.
+// key is its encryption key, nil when it's not encrypted.
+func (tm *TenantManager) GetTenant(provider models.OAuthProvider, oauthID string, key []byte) (*sql.DB, *queries.Queries, error) {
 	tenantID := models.TenantID(provider, oauthID)
 
 	tm.mu.RLock()
@@ -71,15 +88,10 @@ func (tm *TenantManager) GetTenant(provider models.OAuthProvider, oauthID string
 		return tenant.db, tenant.queries, nil
 	}
 
-	dbPath := filepath.Join(tm.baseDir, fmt.Sprintf("%s.sqlite", tenantID))
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := tm.open(tm.dbPath(tenantID), key)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to open database: %w", err)
+		return nil, nil, err
 	}
-
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
-	_, _ = db.Exec("PRAGMA foreign_keys = ON;")
 
 	tenant := &TenantDB{
 		db:         db,
@@ -103,10 +115,150 @@ func (tm *TenantManager) GetTenant(provider models.OAuthProvider, oauthID string
 	return tenant.db, tenant.queries, nil
 }
 
+func (tm *TenantManager) dbPath(tenantID string) string {
+	return filepath.Join(tm.baseDir, fmt.Sprintf("%s.sqlite", tenantID))
+}
+
+// open opens the database, with its key when it's encrypted. An encrypted
+// tenant's database still in plain text (the server stopped while encrypting
+// it, after its vault was created) is encrypted now.
+func (tm *TenantManager) open(path string, key []byte) (*sql.DB, error) {
+	db, err := openDB(path, key)
+	if err == nil || key == nil || !isNotADatabase(err) {
+		return db, err
+	}
+
+	plain, plainErr := openDB(path, nil)
+	if plainErr != nil {
+		return nil, err
+	}
+	plain.Close()
+
+	logger.Get().Warn("encrypting a database left in plain text", zap.String("path", path))
+	if err := exportDB(path, nil, key); err != nil {
+		return nil, fmt.Errorf("failed to encrypt the database: %w", err)
+	}
+	return openDB(path, key)
+}
+
+// openDB opens the database and checks it can be read (with the right key).
+func openDB(path string, key []byte) (*sql.DB, error) {
+	dsn := path
+	if key != nil {
+		dsn += "?_key=" + vault.SQLCipherKey(key)
+	}
+	db, err := sql.Open("sqlite3", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	_, _ = db.Exec("PRAGMA foreign_keys = ON;")
+
+	if _, err := db.Exec("SELECT count(*) FROM sqlite_master"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to read the database: %w", err)
+	}
+	return db, nil
+}
+
+func isNotADatabase(err error) bool {
+	return strings.Contains(err.Error(), "file is not a database")
+}
+
+// Encrypt encrypts the tenant's database with the key, in place.
+func (tm *TenantManager) Encrypt(provider models.OAuthProvider, oauthID string, key []byte) error {
+	return tm.export(models.TenantID(provider, oauthID), nil, key, nil)
+}
+
+// Decrypt writes the tenant's encrypted database back in plain text, then
+// runs done (deleting its vault) before the database can be opened again, as
+// it would be encrypted again if opened with the key meanwhile.
+func (tm *TenantManager) Decrypt(provider models.OAuthProvider, oauthID string, key []byte, done func() error) error {
+	return tm.export(models.TenantID(provider, oauthID), key, nil, done)
+}
+
+// export closes the tenant's connection, as its key changes, and rewrites
+// its database from the from key to the to key, then runs done (if any),
+// all without the database being opened meanwhile.
+func (tm *TenantManager) export(tenantID string, from, to []byte, done func() error) error {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+
+	if tenant, ok := tm.connections[tenantID]; ok {
+		tenant.db.Close()
+		delete(tm.connections, tenantID)
+	}
+	if err := exportDB(tm.dbPath(tenantID), from, to); err != nil {
+		return err
+	}
+	if done != nil {
+		return done()
+	}
+	return nil
+}
+
+// exportDB rewrites the database at path, read with the from key, with the to
+// key (nil for plain text) through sqlcipher_export, then replaces it.
+func exportDB(path string, from, to []byte) error {
+	tmp := path + ".export"
+	_ = os.Remove(tmp)
+
+	db, err := openDB(path, from)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	toKey := "''"
+	if to != nil {
+		toKey = `"` + vault.SQLCipherKey(to) + `"`
+	}
+	if _, err := conn.ExecContext(ctx, "ATTACH DATABASE ? AS export KEY "+toKey, tmp); err != nil {
+		return fmt.Errorf("attaching the export database: %w", err)
+	}
+	if _, err := conn.ExecContext(ctx, "SELECT sqlcipher_export('export')"); err != nil {
+		_, _ = conn.ExecContext(ctx, "DETACH DATABASE export")
+		_ = os.Remove(tmp)
+		return fmt.Errorf("exporting the database: %w", err)
+	}
+	if _, err := conn.ExecContext(ctx, "DETACH DATABASE export"); err != nil {
+		return fmt.Errorf("detaching the export database: %w", err)
+	}
+	conn.Close()
+	db.Close()
+
+	if err := syncFile(tmp); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("replacing the database: %w", err)
+	}
+	_ = os.Remove(path + "-journal")
+	return syncFile(filepath.Dir(path))
+}
+
+func syncFile(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return f.Sync()
+}
+
 // Reseed seeds the tenant's database again, e.g. after a reset cleared its
 // seeded_at to get the default categories and accounts back.
-func (tm *TenantManager) Reseed(ctx context.Context, provider models.OAuthProvider, oauthID string) error {
-	_, q, err := tm.GetTenant(provider, oauthID)
+func (tm *TenantManager) Reseed(ctx context.Context, provider models.OAuthProvider, oauthID string, key []byte) error {
+	_, q, err := tm.GetTenant(provider, oauthID, key)
 	if err != nil {
 		return err
 	}

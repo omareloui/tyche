@@ -6,6 +6,7 @@ import (
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/repository"
 	"github.com/omareloui/tyche/internal/resperr"
 	"github.com/omareloui/tyche/web/views"
 )
@@ -33,6 +34,15 @@ func (h *Handler) Reset(w http.ResponseWriter, r *http.Request) (templ.Component
 
 	if err := h.repo.Reset(r.Context(), opts); err != nil {
 		return nil, err
+	}
+	if opts.Has(models.ResetDevices) {
+		tenantID, err := repository.TenantIDFromCtx(r.Context())
+		if err != nil {
+			return nil, err
+		}
+		if err := h.vaults.DeleteDevices(r.Context(), tenantID); err != nil {
+			return nil, err
+		}
 	}
 
 	// The access token carries the default currency and account, get a new

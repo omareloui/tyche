@@ -85,8 +85,11 @@ func (s *oauthStateStore) pop(state string) (*mobileLogin, bool) {
 }
 
 type mobileCode struct {
-	usr     *models.User
-	login   mobileLogin
+	usr   *models.User
+	login mobileLogin
+	// key is the user's database key when it's encrypted, for the device's
+	// vault slot.
+	key     []byte
 	expires time.Time
 }
 
@@ -95,7 +98,7 @@ type mobileCodeStore struct {
 	codes map[string]mobileCode
 }
 
-func (s *mobileCodeStore) add(usr *models.User, login *mobileLogin) (string, error) {
+func (s *mobileCodeStore) add(usr *models.User, login *mobileLogin, key []byte) (string, error) {
 	b := make([]byte, mobileCodeEntropyB)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
@@ -110,7 +113,7 @@ func (s *mobileCodeStore) add(usr *models.User, login *mobileLogin) (string, err
 			delete(s.codes, k)
 		}
 	}
-	s.codes[code] = mobileCode{usr: usr, login: *login, expires: now.Add(mobileCodeTTL)}
+	s.codes[code] = mobileCode{usr: usr, login: *login, key: key, expires: now.Add(mobileCodeTTL)}
 	return code, nil
 }
 
@@ -186,6 +189,9 @@ func (h *Handler) MobileToken(w http.ResponseWriter, r *http.Request) ([]byte, e
 		OAuthID:       code.usr.OAuthID,
 		OAuthProvider: code.usr.OAuthProvider,
 	})
+	if code.key != nil {
+		ctx = context.WithValue(ctx, middleware.VaultKeyCtxKey{}, code.key)
+	}
 
 	device := &models.Device{
 		ID:        idgen.New(),
@@ -197,7 +203,19 @@ func (h *Handler) MobileToken(w http.ResponseWriter, r *http.Request) ([]byte, e
 		return nil, err
 	}
 
-	token, err := jwt.NewDeviceToken(code.usr, device.ID, device.TokenID)
+	// The device unlocks the encrypted database with its own slot, to send
+	// sms while the user isn't signed in.
+	var vaultSecret string
+	if code.key != nil {
+		tenantID := models.TenantID(code.usr.OAuthProvider, code.usr.OAuthID)
+		var err error
+		if vaultSecret, err = h.vaults.NewDeviceSlot(ctx, tenantID, device.ID, code.key); err != nil {
+			l.Error("creating the device vault slot", zap.Error(err))
+			return nil, err
+		}
+	}
+
+	token, err := jwt.NewDeviceToken(code.usr, device.ID, device.TokenID, vaultSecret)
 	if err != nil {
 		l.Error("generating device token", zap.Error(err))
 		return nil, err

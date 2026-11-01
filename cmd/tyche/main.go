@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/omareloui/tyche/internal/sqlite"
 	"go.uber.org/zap"
 
 	"github.com/omareloui/tyche/internal/config"
@@ -26,6 +26,7 @@ import (
 	"github.com/omareloui/tyche/internal/shareddb"
 	"github.com/omareloui/tyche/internal/smstemplates"
 	"github.com/omareloui/tyche/internal/valid"
+	"github.com/omareloui/tyche/internal/vault"
 )
 
 // initialFxFetchTimeout bounds the blocking fetch on a fresh shared database.
@@ -63,7 +64,12 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	repo := repository.New()
+	vaults := vault.New(sharedDB, sharedQ, vault.DefaultKDFParams)
+	if err := vaults.Load(ctx); err != nil {
+		log.Fatalln(err)
+	}
+
+	repo := repository.New(vaults)
 	valid := valid.New()
 	sani := sanitizer.New()
 	h := handler.New(repo, valid, sani, fxJob, smsTemplates)

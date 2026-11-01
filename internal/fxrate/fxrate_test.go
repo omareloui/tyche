@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/omareloui/tyche/internal/sharedqueries"
+	_ "github.com/omareloui/tyche/internal/sqlite"
 )
 
 func TestGetFxRate(t *testing.T) {

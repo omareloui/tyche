@@ -13,7 +13,7 @@ func TestDeviceToken(t *testing.T) {
 
 	usr := &models.User{ID: "user", OAuthID: "123", OAuthProvider: models.Google}
 
-	token, err := jwt.NewDeviceToken(usr, "device", "token")
+	token, err := jwt.NewDeviceToken(usr, "device", "token", "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -53,7 +53,10 @@ type User struct {
 	DefaultAccount  *Account `validate:"required"`
 	StartOfPeriod   uint8    `validate:"required,min=1,max=31"`
 	SeededAt        time.Time
-	CreatedAt       time.Time
+	// EncryptionPrompted is whether the user was asked to encrypt their
+	// database (asked once on signing in).
+	EncryptionPrompted bool
+	CreatedAt          time.Time
 }
 
 func (u *User) FullName() string {

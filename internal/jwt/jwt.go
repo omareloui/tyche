@@ -72,8 +72,11 @@ const (
 )
 
 type DeviceClaims struct {
-	DeviceID      string
-	TokenID       string
+	DeviceID string
+	TokenID  string
+	// VaultSecret unwraps the key of the user's encrypted database, "" when
+	// it wasn't when the device signed in.
+	VaultSecret   string
 	UserID        string
 	OAuthID       string
 	OAuthProvider models.OAuthProvider
@@ -151,9 +154,10 @@ func ParseRefreshClaims(token string) (*RefreshClaims, error) {
 
 // NewDeviceToken creates a non-expiring token for a mobile device. Revoking is
 // done by revoking the device in the user's database, or replacing its token
-// id there.
-func NewDeviceToken(usr *models.User, deviceID, tokenID string) (string, error) {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+// id there. vaultSecret is the secret of the device's vault slot when the
+// user's database is encrypted, else "".
+func NewDeviceToken(usr *models.User, deviceID, tokenID, vaultSecret string) (string, error) {
+	claims := jwt.MapClaims{
 		typClaim:         deviceTokenType,
 		"device_id":      deviceID,
 		"token_id":       tokenID,
@@ -161,7 +165,11 @@ func NewDeviceToken(usr *models.User, deviceID, tokenID string) (string, error) 
 		"oauth_id":       usr.OAuthID,
 		"oauth_provider": uint64(usr.OAuthProvider),
 		"iat":            time.Now().Unix(),
-	})
+	}
+	if vaultSecret != "" {
+		claims["vault_secret"] = vaultSecret
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(config.GetJWTSecret())
 }
 
@@ -176,6 +184,7 @@ func ParseDeviceClaims(token string) (*DeviceClaims, error) {
 
 	deviceID, _ := (*claims)["device_id"].(string)
 	tokenID, _ := (*claims)["token_id"].(string)
+	vaultSecret, _ := (*claims)["vault_secret"].(string)
 	userID, _ := (*claims)["id"].(string)
 	oauthID, _ := (*claims)["oauth_id"].(string)
 	oauthProvider, ok := (*claims)["oauth_provider"].(float64)
@@ -186,6 +195,7 @@ func ParseDeviceClaims(token string) (*DeviceClaims, error) {
 	return &DeviceClaims{
 		DeviceID:      deviceID,
 		TokenID:       tokenID,
+		VaultSecret:   vaultSecret,
 		UserID:        userID,
 		OAuthID:       oauthID,
 		OAuthProvider: models.OAuthProvider(oauthProvider),

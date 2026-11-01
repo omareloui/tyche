@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/omareloui/tyche/internal/sqlite"
 
 	"github.com/omareloui/tyche/internal/handler"
 	"github.com/omareloui/tyche/internal/jwt"
@@ -28,6 +28,7 @@ import (
 	"github.com/omareloui/tyche/internal/shareddb"
 	"github.com/omareloui/tyche/internal/smstemplates"
 	"github.com/omareloui/tyche/internal/valid"
+	"github.com/omareloui/tyche/internal/vault"
 )
 
 const hsbcSMS = "From HSBC: 26AUG25 PAYPRO-*SHOP FOR GOODS Purchase from 123-456***-789 EGP 220.00- Your available balance is EGP 4,554.36"
@@ -64,7 +65,19 @@ func setupTenant(t *testing.T) (*repository.Repository, context.Context, *models
 	ctx := context.WithValue(context.Background(), middleware.AccessClaimsCtxKey{}, &jwt.AccessClaims{
 		ID: usr.ID, OAuthID: usr.OAuthID, OAuthProvider: usr.OAuthProvider,
 	})
-	return repository.New(), ctx, usr
+	return repository.New(testVaults(t)), ctx, usr
+}
+
+// testVaults opens the vaults in the shared database, from the temp dir of
+// setupTenant, with a cheap key derivation.
+func testVaults(t *testing.T) *vault.Store {
+	t.Helper()
+	db, q, err := shareddb.Open("data/shared.sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	return vault.New(db, q, vault.KDFParams{Time: 1, Memory: 1024, Threads: 1})
 }
 
 // sharedTemplates opens a seeded shared database, from the temp dir of
@@ -119,7 +132,7 @@ func TestIngestSMS(t *testing.T) {
 	if err := repo.RegisterDevice(ctx, device); err != nil {
 		t.Fatal(err)
 	}
-	token, err := jwt.NewDeviceToken(usr, device.ID, device.TokenID)
+	token, err := jwt.NewDeviceToken(usr, device.ID, device.TokenID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -452,7 +465,7 @@ func TestIngestSMS(t *testing.T) {
 			t.Fatalf("unexpected devices %+v", devices)
 		}
 
-		newToken, err := jwt.NewDeviceToken(usr, again.ID, again.TokenID)
+		newToken, err := jwt.NewDeviceToken(usr, again.ID, again.TokenID, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -469,7 +482,7 @@ func TestIngestSMS(t *testing.T) {
 		if err := repo.CreateDevice(ctx, legacy); err != nil {
 			t.Fatal(err)
 		}
-		legacyToken, err := jwt.NewDeviceToken(usr, legacy.ID, "")
+		legacyToken, err := jwt.NewDeviceToken(usr, legacy.ID, "", "")
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -64,7 +64,7 @@ func TestTransferPairs(t *testing.T) {
 	if err := repo.RegisterDevice(ctx, device); err != nil {
 		t.Fatal(err)
 	}
-	token, err := jwt.NewDeviceToken(usr, device.ID, device.TokenID)
+	token, err := jwt.NewDeviceToken(usr, device.ID, device.TokenID, "")
 	if err != nil {
 		t.Fatal(err)
 	}

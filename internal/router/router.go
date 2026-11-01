@@ -14,12 +14,14 @@ type Router interface {
 	http.Handler
 }
 
-// auth is the Auth middleware wrapping every route, set by New as it refreshes
-// the tokens through the handler.
-var auth func(http.Handler) http.Handler
+// auth and vault are the Auth and Vault middlewares wrapping every route, set
+// by New as they go through the handler (refreshing the tokens, unlocking the
+// encrypted databases).
+var auth, vault func(http.Handler) http.Handler
 
 func New(h *handler.Handler) Router {
 	auth = middleware.Auth(h.RefreshSession)
+	vault = middleware.Vault(h.OpenVault)
 	mux := http.NewServeMux()
 
 	mux.Handle("GET /{$}", handlePub(h.HomePage))
@@ -156,10 +158,22 @@ func New(h *handler.Handler) Router {
 	mux.Handle("PUT /sms/templates/{scope}/{id}", handle(h.UpdateSMSTemplate))
 	mux.Handle("DELETE /sms/templates/{scope}/{id}", handle(h.DeleteSMSTemplate))
 
+	mux.Handle("GET /unlock", handlePub(h.UnlockPage))
+	mux.Handle("POST /unlock", handlePub(h.Unlock))
+	mux.Handle("GET /security", handle(h.Security))
+	mux.Handle("POST /security/encryption", handle(h.EnableEncryption, middleware.HTMXOnly))
+	mux.Handle("POST /security/encryption/skip", handle(h.SkipEncryption, middleware.HTMXOnly))
+	mux.Handle("POST /security/encryption/disable", handle(h.DisableEncryption, middleware.HTMXOnly))
+	mux.Handle("POST /security/password", handle(h.ChangeVaultPassword, middleware.HTMXOnly))
+	mux.Handle("POST /security/recovery-code", handle(h.RegenerateRecoveryCode, middleware.HTMXOnly))
+	mux.Handle("POST /security/sessions/lock-others", handle(h.LockOtherSessions, middleware.HTMXOnly))
+	mux.Handle("POST /security/lock", handle(h.Lock, middleware.HTMXOnly))
+
 	mux.Handle("PUT /devices/{id}/revoke", handle(h.RevokeDevice))
 	mux.Handle("GET /reset", handle(h.ResetPage))
 	mux.Handle("POST /reset", handle(h.Reset))
-	mux.Handle("GET /signout", handle(h.Signout))
+	// Public: signing out of a locked database has no access token.
+	mux.Handle("GET /signout", handlePub(h.Signout))
 
 	mux.Handle("GET /admin/fx-rates", handle(h.AdminFxRates, middleware.Admin))
 	mux.Handle("GET /admin/fx-rates/status", handle(h.AdminFxRatesStatus, middleware.Admin))
@@ -203,6 +217,7 @@ func handlePubJSON(h handler.HandlerJSONMethod, appendMiddlewares ...(func(http.
 		handler = appendMiddlewares[i](handler)
 	}
 
+	handler = vault(handler)
 	handler = auth(handler)
 	handler = middleware.RequestLogger(handler)
 	handler = middleware.CorrelationID(handler)
@@ -227,6 +242,7 @@ func handlePub(h handler.HandlerMethod, appendMiddlewares ...(func(http.Handler)
 		handler = appendMiddlewares[i](handler)
 	}
 
+	handler = vault(handler)
 	handler = auth(handler)
 	handler = middleware.RequestLogger(handler)
 	handler = middleware.CorrelationID(handler)

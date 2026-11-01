@@ -45,13 +45,41 @@ func (r *Repository) dbFromCtx(ctx context.Context) (*sql.DB, *queries.Queries, 
 		return nil, nil, err
 	}
 
-	db, q, err := r.tm.GetTenant(oauthProvider, oauthId)
+	key, err := r.tenantKey(ctx, oauthProvider, oauthId)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	db, q, err := r.tm.GetTenant(oauthProvider, oauthId, key)
 	if err != nil {
 		l := logger.FromCtx(ctx)
 		l.Error("getting db from context", zap.Error(err))
 		return nil, nil, err
 	}
 	return db, q, nil
+}
+
+// tenantKey is the key of the tenant's database in the context, nil when it's
+// not encrypted, ErrTenantLocked when it is and the context has none.
+func (r *Repository) tenantKey(ctx context.Context, provider models.OAuthProvider, oauthID string) ([]byte, error) {
+	if r.vaults == nil || !r.vaults.IsEncrypted(models.TenantID(provider, oauthID)) {
+		return nil, nil
+	}
+	key, _ := ctx.Value(middleware.VaultKeyCtxKey{}).([]byte)
+	if key == nil {
+		return nil, ErrTenantLocked
+	}
+	return key, nil
+}
+
+// TenantIDFromCtx is the tenant of the access or refresh claims in the
+// context (models.TenantID).
+func TenantIDFromCtx(ctx context.Context) (string, error) {
+	provider, oauthID, err := tenantFromCtx(ctx)
+	if err != nil {
+		return "", err
+	}
+	return models.TenantID(provider, oauthID), nil
 }
 
 // tenantFromCtx gets who the tenant is from the access or refresh claims.

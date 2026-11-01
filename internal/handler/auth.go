@@ -16,6 +16,7 @@ import (
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/middleware"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/repository"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -49,13 +50,38 @@ func (h *Handler) OAuthCB(w http.ResponseWriter, r *http.Request) (templ.Compone
 		return nil, err
 	}
 
-	usr, err := h.signInGoogleUser(r.Context(), r.FormValue("code"))
+	gUsr, err := h.googleUser(r.Context(), r.FormValue("code"))
+	if err != nil {
+		return nil, err
+	}
+
+	ctx := context.WithValue(r.Context(), middleware.AccessClaimsCtxKey{}, &jwt.AccessClaims{
+		OAuthID:       gUsr.OAuthID,
+		OAuthProvider: models.Google,
+	})
+
+	// An encrypted database: the user is in it, so it's unlocked first,
+	// from the browser's session or else on the unlock page.
+	tenantID := models.TenantID(models.Google, gUsr.OAuthID)
+	key, encrypted, err := h.vaultKey(r, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	if encrypted && key == nil {
+		l.Info("signing in to a locked database", zap.String("tenantID", tenantID))
+		return nil, h.startPendingUnlock(w, r, pendingUnlock{provider: models.Google, oauthID: gUsr.OAuthID, mobile: mobile})
+	}
+	if key != nil {
+		ctx = context.WithValue(ctx, middleware.VaultKeyCtxKey{}, key)
+	}
+
+	usr, err := h.signInUser(ctx, gUsr)
 	if err != nil {
 		return nil, err
 	}
 
 	if mobile != nil {
-		code, err := mobileCodes.add(usr, mobile)
+		code, err := mobileCodes.add(usr, mobile, key)
 		if err != nil {
 			l.Error("generating mobile code", zap.Error(err))
 			return nil, err
@@ -74,13 +100,17 @@ func (h *Handler) OAuthCB(w http.ResponseWriter, r *http.Request) (templ.Compone
 
 	l.Info("new user singed", zap.Any("user", usr))
 
-	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+	// Asked once whether to encrypt their database.
+	next := "/"
+	if !usr.EncryptionPrompted && !encrypted {
+		next = "/security?welcome"
+	}
+	http.Redirect(w, r, next, http.StatusTemporaryRedirect)
 	return nil, nil
 }
 
-// signInGoogleUser exchanges the oauth code and gets the user, creating them
-// if it's their first sign in.
-func (h *Handler) signInGoogleUser(ctx context.Context, code string) (*models.User, error) {
+// googleUser exchanges the oauth code and gets the user's google info.
+func (h *Handler) googleUser(ctx context.Context, code string) (*models.User, error) {
 	l := logger.FromCtx(ctx)
 	conf := getOAuth2Conf()
 
@@ -104,13 +134,15 @@ func (h *Handler) signInGoogleUser(ctx context.Context, code string) (*models.Us
 		return nil, err
 	}
 	l.Debug("user info", zap.Any("user", _usr))
+	return _usr, nil
+}
 
-	accessCtx := context.WithValue(ctx, middleware.AccessClaimsCtxKey{}, &jwt.AccessClaims{
-		OAuthID:       _usr.OAuthID,
-		OAuthProvider: models.Google,
-	})
+// signInUser gets the user of the google info, creating them if it's their
+// first sign in. The context has their (access) claims.
+func (h *Handler) signInUser(ctx context.Context, _usr *models.User) (*models.User, error) {
+	l := logger.FromCtx(ctx)
 
-	usr, err := h.repo.GetUserByOAuthID(accessCtx, _usr.OAuthID)
+	usr, err := h.repo.GetUserByOAuthID(ctx, _usr.OAuthID)
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
@@ -118,7 +150,7 @@ func (h *Handler) signInGoogleUser(ctx context.Context, code string) (*models.Us
 
 		l.Debug("didn't find the user, creating a new one")
 
-		if err = h.initUser(accessCtx, _usr); err != nil {
+		if err = h.initUser(ctx, _usr); err != nil {
 			l.Error("error initing user", zap.Error(err))
 			return nil, err
 		}
@@ -132,6 +164,10 @@ func (h *Handler) RefreshTokens(w http.ResponseWriter, r *http.Request) (templ.C
 	if _, err := h.RefreshSession(w, r); err != nil {
 		if errors.Is(err, jwt.ErrExpiredToken) {
 			return nil, err
+		}
+		if errors.Is(err, repository.ErrTenantLocked) {
+			http.Redirect(w, r, middleware.UnlockURL(safeNext(r.URL.Query().Get("next"))), http.StatusSeeOther)
+			return nil, nil
 		}
 		logger.FromCtx(r.Context()).Info("signing out.")
 		return h.Signout(w, r)
@@ -161,7 +197,14 @@ func (h *Handler) RefreshSession(w http.ResponseWriter, r *http.Request) (*jwt.A
 
 	l.Debug("refreshing tokens for user", zap.String("id", claims.ID), zap.String("oauth_id", claims.OAuthID))
 
-	usr, err := h.repo.GetUserByOAuthID(r.Context(), claims.OAuthID)
+	// An encrypted database is read with the browser's session, the Vault
+	// middleware sends the user to unlock it when it's locked.
+	ctx, err := h.withVaultKey(r.Context(), r, models.TenantID(claims.OAuthProvider, claims.OAuthID))
+	if err != nil {
+		return nil, err
+	}
+
+	usr, err := h.repo.GetUserByOAuthID(ctx, claims.OAuthID)
 	if err != nil || usr == nil {
 		l.Error("refreshing token. can't get the user to refresh the token.", zap.String("oauth_id", claims.OAuthID), zap.Error(err))
 		unsetCookie(w, refreshTokenCookieName)
@@ -179,6 +222,7 @@ func (h *Handler) RefreshSession(w http.ResponseWriter, r *http.Request) (*jwt.A
 }
 
 func (h *Handler) Signout(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	h.endVaultSession(r.Context(), w, r)
 	unsetCookie(w, refreshTokenCookieName)
 	unsetCookie(w, accessTokenCookieName)
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)

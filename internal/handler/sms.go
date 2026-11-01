@@ -15,9 +15,11 @@ import (
 	"github.com/omareloui/tyche/internal/errs"
 	"github.com/omareloui/tyche/internal/fxrate"
 	"github.com/omareloui/tyche/internal/idgen"
+	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/middleware"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/repository"
 	"github.com/omareloui/tyche/internal/resperr"
 	"github.com/omareloui/tyche/internal/smsingest"
 	"github.com/omareloui/tyche/internal/smsparser"
@@ -402,6 +404,11 @@ func (h *Handler) RevokeDevice(w http.ResponseWriter, r *http.Request) (templ.Co
 	if err := h.repo.RevokeDevice(r.Context(), id); err != nil {
 		return nil, err
 	}
+	if tenantID, err := repository.TenantIDFromCtx(r.Context()); err == nil {
+		if err := h.vaults.DeleteDevice(r.Context(), tenantID, id); err != nil {
+			return nil, err
+		}
+	}
 	logger.FromCtx(r.Context()).Info("revoked device", zap.String("id", id))
 
 	devices, err := h.repo.GetDevices(r.Context())
@@ -468,7 +475,16 @@ func (h *Handler) smsRegistry(ctx context.Context) (*smsparser.Registry, error) 
 	return r, nil
 }
 
-// VerifyDevice is used by the device auth middleware.
-func (h *Handler) VerifyDevice(ctx context.Context, deviceID, tokenID string) error {
-	return h.repo.VerifyDevice(ctx, deviceID, tokenID)
+// VerifyDevice is the device auth middleware's middleware.DeviceVerifier. An
+// encrypted database is unlocked with the device's slot.
+func (h *Handler) VerifyDevice(ctx context.Context, claims *jwt.DeviceClaims) (context.Context, error) {
+	tenantID := models.TenantID(claims.OAuthProvider, claims.OAuthID)
+	if h.vaults.IsEncrypted(tenantID) {
+		key, err := h.vaults.OpenDevice(ctx, tenantID, claims.DeviceID, claims.VaultSecret)
+		if err != nil {
+			return ctx, err
+		}
+		ctx = context.WithValue(ctx, middleware.VaultKeyCtxKey{}, key)
+	}
+	return ctx, h.repo.VerifyDevice(ctx, claims.DeviceID, claims.TokenID)
 }

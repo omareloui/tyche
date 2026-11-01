@@ -1,0 +1,298 @@
+package views
+
+import (
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/vault"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+// SecurityData is the database encryption settings.
+type SecurityData struct {
+	Encrypted bool
+	// Welcome asks whether to encrypt, on the first sign in.
+	Welcome bool
+	// JustEnabled is right after encrypting, to tell about the devices.
+	JustEnabled bool
+	// RecoveryCode is shown once, after it's (re)generated.
+	RecoveryCode     string
+	Notice           string
+	Sessions         []vault.Session
+	CurrentSessionID string
+}
+
+const minVaultPasswordLen = "8"
+
+templ Security(claims *jwt.AccessClaims, balances []models.Balance, data *SecurityData) {
+	@layouts.WithTitle(claims, "Security", balances) {
+		<div id="security-body" class="max-w-2xl grid gap-6">
+			@SecurityBody(data)
+		</div>
+	}
+}
+
+templ SecurityBody(data *SecurityData) {
+	if data.RecoveryCode != "" {
+		@recoveryCodeCard(data.RecoveryCode, data.JustEnabled)
+	}
+	if data.Notice != "" {
+		<p class="text-emerald-400">{ data.Notice }</p>
+	}
+	if data.Encrypted {
+		@encryptedSettings(data)
+	} else {
+		@enableEncryption(data.Welcome)
+	}
+}
+
+templ enableEncryption(welcome bool) {
+	@components.GlassCard("p-5 sm:p-6 grid gap-6", "bg-violet-400/10") {
+		<div class="flex gap-3 text-zinc-300">
+			@icons.Lock("22", &templ.Attributes{"class": "shrink-0 mt-0.5 text-violet-400"})
+			<div class="grid gap-2">
+				if welcome {
+					<p class="text-white font-semibold">Encrypt your data with a password?</p>
+				} else {
+					<p class="text-white font-semibold">Your data isn't encrypted</p>
+				}
+				<p>
+					Your database file will be unreadable without your password, even to whoever runs the server or has its backups.
+					You'll enter it when you sign in, and every 12 hours you're away.
+				</p>
+				<p class="text-zinc-400 text-base">
+					You get a recovery code in case you forget it. Lose both and your data is gone for good: nobody can recover it.
+				</p>
+			</div>
+		</div>
+		<form
+			hx-post="/security/encryption"
+			hx-target="#encrypt-error"
+			hx-swap="innerHTML"
+			hx-disabled-elt="find button[type=submit]"
+			class="grid gap-4"
+		>
+			@passwordFields("encrypt", "Password", true)
+			<label class="flex gap-3 text-base text-zinc-300 cursor-pointer select-none">
+				<input type="checkbox" name="understood" value="1" required class="w-4 h-4 mt-1 shrink-0 accent-violet-400"/>
+				I understand that without my password or recovery code my data can't be recovered.
+			</label>
+			<p id="encrypt-error" class="text-sm text-red-400 empty:hidden"></p>
+			<div class="flex flex-wrap justify-end gap-2">
+				if welcome {
+					<button type="button" class="btn-ghost" hx-post="/security/encryption/skip" hx-target="#encrypt-error" hx-disabled-elt="this">
+						Not now
+					</button>
+				}
+				<button type="submit" class="btn-primary">Encrypt my data</button>
+			</div>
+		</form>
+		if welcome {
+			<p class="text-sm text-zinc-500">You can turn it on or off anytime from Security in your menu.</p>
+		}
+	}
+}
+
+templ encryptedSettings(data *SecurityData) {
+	@components.GlassCard("p-5 sm:p-6 grid gap-4", "bg-emerald-400/10") {
+		<div class="flex gap-3 text-zinc-300">
+			@icons.ShieldCheck("22", &templ.Attributes{"class": "shrink-0 mt-0.5 text-emerald-400"})
+			<div class="grid gap-1">
+				<p class="text-white font-semibold">Your data is encrypted</p>
+				<p>Unlocked in this browser for 12 hours of inactivity, at most 30 days.</p>
+			</div>
+		</div>
+		<div class="flex flex-wrap gap-2">
+			<button type="button" class="btn-ghost ring-1 ring-zinc-700" hx-post="/security/lock">
+				@icons.Lock("18")
+				Lock now
+			</button>
+		</div>
+	}
+	@components.GlassCard("p-5 sm:p-6 grid gap-4") {
+		<h2 class="font-semibold">Unlocked browsers</h2>
+		<ul class="grid gap-2">
+			for _, s := range data.Sessions {
+				<li class="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 p-3 rounded-2xl bg-zinc-800/30">
+					<span class="min-w-0 truncate text-base text-zinc-200">
+						if s.UserAgent != "" {
+							{ s.UserAgent }
+						} else {
+							Unknown browser
+						}
+					</span>
+					if s.ID == data.CurrentSessionID {
+						<span class="text-sm text-emerald-400">this browser</span>
+					}
+					<span class="ml-auto text-sm text-zinc-500">last used { s.LastUsedAt.Local().Format("Jan 2, 15:04") }</span>
+				</li>
+			}
+		</ul>
+		if len(data.Sessions) > 1 {
+			<div class="flex justify-end">
+				<button type="button" class="btn-ghost ring-1 ring-zinc-700" hx-post="/security/sessions/lock-others">
+					Lock the other browsers
+				</button>
+			</div>
+		}
+		<p class="text-sm text-zinc-500">Phones sending SMS have their own key, revoked with the device on the SMS page.</p>
+	}
+	@components.GlassCard("p-5 sm:p-6 grid gap-4") {
+		<h2 class="font-semibold">Change password</h2>
+		<form
+			hx-post="/security/password"
+			hx-target="#password-error"
+			hx-swap="innerHTML"
+			hx-disabled-elt="find button[type=submit]"
+			class="grid gap-4"
+		>
+			<div>
+				<label for="password-current" class="input-label">Current password or recovery code</label>
+				<input id="password-current" name="current" type="password" autocomplete="current-password" required class="input-field"/>
+			</div>
+			@passwordFields("password", "New password", true)
+			<p id="password-error" class="text-sm text-red-400 empty:hidden"></p>
+			<div class="flex justify-end">
+				<button type="submit" class="btn-primary">Change password</button>
+			</div>
+		</form>
+	}
+	@components.GlassCard("p-5 sm:p-6 grid gap-4") {
+		<h2 class="font-semibold">New recovery code</h2>
+		<p class="text-base text-zinc-400">The current one stops working.</p>
+		<form
+			hx-post="/security/recovery-code"
+			hx-target="#recovery-error"
+			hx-swap="innerHTML"
+			hx-disabled-elt="find button[type=submit]"
+			class="grid gap-4"
+		>
+			@passwordFields("recovery", "Password", false)
+			<p id="recovery-error" class="text-sm text-red-400 empty:hidden"></p>
+			<div class="flex justify-end">
+				<button type="submit" class="btn-primary">Get a new code</button>
+			</div>
+		</form>
+	}
+	<div style="--accent: var(--color-red-400)">
+		@components.GlassCard("p-5 sm:p-6 grid gap-4", "bg-red-400/10") {
+			<h2 class="font-semibold">Turn off encryption</h2>
+			<p class="text-base text-zinc-400">Your database is written back unencrypted, and every browser and phone stays signed in without a password.</p>
+			<form
+				hx-post="/security/encryption/disable"
+				hx-target="#disable-error"
+				hx-swap="innerHTML"
+				hx-disabled-elt="find button[type=submit]"
+				hx-confirm="Turn off the encryption of your data?"
+				class="grid gap-4"
+			>
+				@passwordFields("disable", "Password", false)
+				<p id="disable-error" class="text-sm text-red-400 empty:hidden"></p>
+				<div class="flex justify-end">
+					<button type="submit" class="btn-primary">Turn off encryption</button>
+				</div>
+			</form>
+		}
+	</div>
+}
+
+// passwordFields is a password input, with its confirmation for a new one.
+templ passwordFields(id, label string, isNew bool) {
+	<div class="grid gap-4 sm:grid-cols-2">
+		<div class={ templ.KV("sm:col-span-2", !isNew) }>
+			<label for={ id + "-password" } class="input-label">{ label }</label>
+			<input
+				id={ id + "-password" }
+				name="password"
+				type="password"
+				required
+				if isNew {
+					autocomplete="new-password"
+					minlength={ minVaultPasswordLen }
+				} else {
+					autocomplete="current-password"
+				}
+				class="input-field"
+			/>
+		</div>
+		if isNew {
+			<div>
+				<label for={ id + "-confirm" } class="input-label">Confirm it</label>
+				<input id={ id + "-confirm" } name="confirm" type="password" autocomplete="new-password" required minlength={ minVaultPasswordLen } class="input-field"/>
+			</div>
+		}
+	</div>
+}
+
+templ recoveryCodeCard(code string, justEnabled bool) {
+	<div style="--accent: var(--color-amber-400)">
+		@components.GlassCard("p-5 sm:p-6 grid gap-4", "bg-amber-400/10") {
+			if justEnabled {
+				<p class="text-white font-semibold">Your data is encrypted</p>
+			}
+			<p class="text-zinc-300">
+				Save your recovery code somewhere safe, like a password manager. It's the only way in if you forget your password, and it won't be shown again.
+			</p>
+			<div x-data="{ copied: false }" class="flex flex-wrap items-center gap-3">
+				<code class="px-4 py-3 rounded-xl bg-zinc-900 ring-1 ring-zinc-700 font-mono text-base sm:text-lg tracking-wider text-amber-200 select-all break-all">{ code }</code>
+				<button
+					type="button"
+					class="btn-ghost ring-1 ring-zinc-700"
+					data-code={ code }
+					@click="navigator.clipboard.writeText($el.dataset.code); copied = true"
+					x-text="copied ? 'Copied' : 'Copy'"
+				>
+					Copy
+				</button>
+			</div>
+			if justEnabled {
+				<p class="text-base text-zinc-400">
+					Phones forwarding your SMS need to sign in again from the app, and your other browsers will ask for the password.
+				</p>
+			}
+		}
+	</div>
+}
+
+// Unlock asks for the password of the encrypted database.
+templ Unlock(next, errMsg string) {
+	@layouts.Main(nil, "Unlock", nil) {
+		@components.Container() {
+			<div class="max-w-md mx-auto mt-10">
+				@components.GlassCard("p-6 sm:p-8 grid gap-6", "bg-violet-400/10") {
+					<div class="grid justify-items-center gap-3 text-center">
+						@icons.Lock("32", &templ.Attributes{"class": "text-violet-400"})
+						<h1 class="text-2xl font-(family-name:--font-biorhyme-expanded)">Unlock your data</h1>
+						<p class="text-zinc-400 text-base">Your data is encrypted, enter its password.</p>
+					</div>
+					<form method="post" action="/unlock" class="grid gap-4">
+						<input type="hidden" name="next" value={ next }/>
+						<div>
+							<label for="unlock-password" class="input-label">Password or recovery code</label>
+							<input
+								id="unlock-password"
+								name="password"
+								type="password"
+								autocomplete="current-password"
+								required
+								autofocus
+								class="input-field"
+								if errMsg != "" {
+									aria-invalid="true"
+								}
+							/>
+						</div>
+						if errMsg != "" {
+							<p class="text-sm text-red-400">{ errMsg }</p>
+						}
+						<button type="submit" class="btn-primary w-full">Unlock</button>
+					</form>
+					<p class="text-center text-sm text-zinc-500">
+						Not you? <a href="/signout" hx-boost="false" class="text-zinc-300 underline underline-offset-2">Sign out</a>
+					</p>
+				}
+			</div>
+		}
+	}
+}

@@ -1,3 +1,11 @@
+# sqlcipher: the sqlite3 driver is built with SQLCipher (see internal/sqlite),
+# linking OpenSSL's libcrypto (headers found through pkg-config when there).
+comma := ,
+export GOFLAGS := -tags=sqlcipher
+export CGO_CFLAGS := $(shell pkg-config --cflags libcrypto 2>/dev/null)
+libcrypto_dir := $(shell pkg-config --variable=libdir libcrypto 2>/dev/null)
+export CGO_LDFLAGS := $(if $(libcrypto_dir),-L$(libcrypto_dir) -Wl$(comma)-rpath$(comma)$(libcrypto_dir))
+
 run:
 	@air -c internal/config/.air.toml
 
@@ -5,9 +13,12 @@ build: prebuild
 	@go build -o ./tmp/main ./cmd/tyche
 
 release: prebuild
-	@go build -v -ldflags="-linkmode external -extldflags -static" -tags netgo -o ./bin/main ./cmd/tyche
+	@go build -v -ldflags="-linkmode external -extldflags -static" -tags netgo,sqlcipher -o ./bin/main ./cmd/tyche
 
 prebuild: templ css sqlgen
+
+test:
+	@go test ./...
 
 start:
 	@./tmp/main
