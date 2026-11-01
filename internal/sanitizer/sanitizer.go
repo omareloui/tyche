@@ -3,6 +3,7 @@ package sanitizer
 import (
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/leebenson/conform"
 )
@@ -14,6 +15,7 @@ func New() *Sanitizer {
 		re := regexp.MustCompile(`\s`)
 		return re.ReplaceAllString(in, "")
 	})
+	conform.AddSanitizer("titlecase", Title)
 	return new(Sanitizer)
 }
 
@@ -39,4 +41,18 @@ func (s *Sanitizer) Lower(str string) string {
 
 func (s *Sanitizer) Upper(str string) string {
 	return strings.ToUpper(str)
+}
+
+// Title uppercases the first letter of every word, like strings.Title but
+// without treating apostrophes as word breaks ("chili's" → "Chili's", not "Chili'S").
+func Title(s string) string {
+	prev := ' '
+	return strings.Map(func(r rune) rune {
+		inWord := unicode.IsLetter(prev) || unicode.IsDigit(prev) || unicode.IsMark(prev) || prev == '\'' || prev == '’'
+		prev = r
+		if inWord {
+			return r
+		}
+		return unicode.ToTitle(r)
+	}, s)
 }

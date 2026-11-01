@@ -12,7 +12,7 @@ import (
 
 type Goal struct {
 	ID           string  `validate:"required"`
-	Name         string  `validate:"required" conform:"trim,title"`
+	Name         string  `validate:"required" conform:"trim,titlecase"`
 	Price        float64 `validate:"required,gt=0"`
 	Currency     Currency
 	FulfilledAt  time.Time
@@ -22,7 +22,7 @@ type Goal struct {
 
 type createGoal struct {
 	ID         string  `validate:"required"`
-	Name       string  `validate:"required" conform:"trim,title"`
+	Name       string  `validate:"required" conform:"trim,titlecase"`
 	Price      float64 `validate:"required,gt=0"`
 	CurrencyID string  `validate:"required"`
 }

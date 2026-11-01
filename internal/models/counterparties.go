@@ -12,7 +12,7 @@ import (
 
 type Counterparty struct {
 	ID      string   `validate:"required"`
-	Name    string   `validate:"required,not_blank" conform:"trim,title"`
+	Name    string   `validate:"required,not_blank" conform:"trim,titlecase"`
 	Aliases []string `validate:"dive,not_blank"`
 	Icon    string   `conform:"trim,lower"`
 	Color   string

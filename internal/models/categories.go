@@ -48,7 +48,7 @@ func CategoryColorToHex(color string) string {
 
 type Category struct {
 	ID             string
-	Name           string    `validate:"required" conform:"trim,title"`
+	Name           string    `validate:"required" conform:"trim,titlecase"`
 	Color          string    `validate:"required"`
 	BudgetAmount   float64   `validate:"required_with=BudgetCurrency"`
 	BudgetCurrency *Currency `validate:"required_with=BudgetAmount"`
@@ -58,7 +58,7 @@ type Category struct {
 
 type createCategory struct {
 	ID               string   `validate:"required"`
-	Name             string   `validate:"required" conform:"trim,title"`
+	Name             string   `validate:"required" conform:"trim,titlecase"`
 	Color            string   `validate:"required"`
 	BudgetAmount     float64  `validate:"required_with=BudgetCurrency"`
 	BudgetCurrencyID string   `validate:"required_with=BudgetAmount"`
