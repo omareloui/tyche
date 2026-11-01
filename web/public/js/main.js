@@ -84,3 +84,26 @@ document.addEventListener("click", (e) => {
   }
   addEventListener("pageshow", done);
 })();
+
+// components.HoverPopup hangs right-aligned under its group, so on narrow
+// screens it can overflow the left edge (or the right one): shift it back in
+// when its group is hovered or focused.
+(() => {
+  const margin = 8;
+  const fit = (e) => {
+    const group = e.target.closest?.(".group");
+    const popup = group?.querySelector(":scope [data-hover-popup]");
+    if (!popup || popup.closest(".group") !== group) return;
+    popup.style.translate = "";
+    // Measured unscaled: it may be mid scale-in, pinned at its top-right.
+    const right = popup.getBoundingClientRect().right;
+    const left = right - popup.offsetWidth;
+    const vw = document.documentElement.clientWidth;
+    let dx = 0;
+    if (left < margin) dx = margin - left;
+    else if (right > vw - margin) dx = vw - margin - right;
+    if (dx) popup.style.translate = `${dx}px 0`;
+  };
+  document.addEventListener("mouseover", fit);
+  document.addEventListener("focusin", fit);
+})();
