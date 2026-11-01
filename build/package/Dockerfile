@@ -2,8 +2,14 @@ FROM golang:1.25-bookworm AS build
 
 WORKDIR /usr/src/
 
-RUN go install github.com/pressly/goose/v3/cmd/goose@latest && \
-  go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+# libssl-dev: libcrypto (static too) for the SQLCipher sqlite3 driver.
+RUN apt-get update && \
+  apt-get install -y --no-install-recommends libssl-dev pkg-config && \
+  rm -rf /var/lib/apt/lists/*
+
+# Pinned to the version generating internal/queries locally; it needs a newer
+# Go than the image's, GOTOOLCHAIN=auto fetches it for this install only.
+RUN GOTOOLCHAIN=auto go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
 
 RUN useradd -u 1001 nonroot
 
@@ -21,7 +27,7 @@ COPY Makefile Makefile
 RUN make templ sqlgen && \
   go build \
   -ldflags="-linkmode external -extldflags -static" \
-  -tags netgo \
+  -tags netgo,sqlcipher \
   -o /usr/src/bin/tyche \
   ./cmd/tyche && \
   mkdir data logs
