@@ -9,7 +9,8 @@ on:
 jobs:
   deploy:
     name: Deploy
-    runs-on: ubuntu-latest
+    # The ECS host is a t4g (arm64).
+    runs-on: ubuntu-24.04-arm
     environment: Production
 
     steps:
@@ -60,4 +61,5 @@ jobs:
           task-definition: ${{ steps.task-def.outputs.task-definition }}
           service: ${{ vars.ECS_SERVICE }}
           cluster: ${{ vars.ECS_CLUSTER }}
+          desired-count: 1
           wait-for-service-stability: true

@@ -1,0 +1,22 @@
+{
+  "PolicyType": "EBS_SNAPSHOT_MANAGEMENT",
+  "ResourceTypes": ["VOLUME"],
+  "TargetTags": [{ "Key": "Backup", "Value": "tyche" }],
+  "Schedules": [
+    {
+      "Name": "daily",
+      "CopyTags": true,
+      "TagsToAdd": [{ "Key": "Name", "Value": "tyche-data-daily" }],
+      "CreateRule": { "Interval": 24, "IntervalUnit": "HOURS", "Times": ["03:00"] },
+      "RetainRule": { "Count": 14 },
+      "CrossRegionCopyRules": [
+        {
+          "TargetRegion": "__COPY_REGION__",
+          "Encrypted": true,
+          "CopyTags": true,
+          "RetainRule": { "Interval": 7, "IntervalUnit": "DAYS" }
+        }
+      ]
+    }
+  ]
+}

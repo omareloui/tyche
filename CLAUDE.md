@@ -89,6 +89,9 @@ make docker-dev
 make docker-prod
 ```
 
+### Deployment
+Pushing to `main` deploys to AWS (`.github/workflows/deploy.yml`, arm64 runner → ECR → ECS). One `t4g.micro` ECS host, no load balancer: the task (`aws/infra/task-definition.json`, host networking) runs the app + Caddy (TLS), the DBs live on a separate EBS volume mounted at `/srv/tyche` (→ `/app/data`) with daily DLM snapshots, secrets come from SSM (`/tyche/*`). `aws/infra/up.sh` creates/completes it; see `aws/README.md` (restore, costs)
+
 ## Architecture
 
 ### Multi-Tenant Database Architecture

@@ -1,0 +1,70 @@
+{
+  "family": "tyche-task",
+  "requiresCompatibilities": ["EC2"],
+  "networkMode": "host",
+  "runtimePlatform": {
+    "cpuArchitecture": "ARM64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "executionRoleArn": "arn:aws:iam::__ACCOUNT__:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "tyche-container",
+      "image": "__IMAGE__",
+      "essential": true,
+      "memoryReservation": 384,
+      "stopTimeout": 30,
+      "environment": [
+        { "name": "APP_ENV", "value": "production" },
+        { "name": "PORT", "value": "3333" },
+        { "name": "LOG_LEVEL", "value": "0" },
+        { "name": "OAUTH_CB_ORIGIN", "value": "https://__DOMAIN__" },
+        { "name": "FX_RATE_FETCH_INTERVAL_HOURS", "value": "6" }
+      ],
+      "secrets": [
+        { "name": "JWT_SECRET", "valueFrom": "arn:aws:ssm:__REGION__:__ACCOUNT__:parameter/tyche/JWT_SECRET" },
+        { "name": "GOOGLE_CLIENT_ID", "valueFrom": "arn:aws:ssm:__REGION__:__ACCOUNT__:parameter/tyche/GOOGLE_CLIENT_ID" },
+        { "name": "GOOGLE_CLIENT_SECRET", "valueFrom": "arn:aws:ssm:__REGION__:__ACCOUNT__:parameter/tyche/GOOGLE_CLIENT_SECRET" },
+        { "name": "ADMIN_TENANT_IDS", "valueFrom": "arn:aws:ssm:__REGION__:__ACCOUNT__:parameter/tyche/ADMIN_TENANT_IDS" }
+      ],
+      "mountPoints": [
+        { "sourceVolume": "data", "containerPath": "/app/data" },
+        { "sourceVolume": "logs", "containerPath": "/app/logs" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/tyche",
+          "awslogs-region": "__REGION__",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    },
+    {
+      "name": "caddy",
+      "image": "public.ecr.aws/docker/library/caddy:2-alpine",
+      "essential": true,
+      "memoryReservation": 64,
+      "command": ["caddy", "reverse-proxy", "--from", "__DOMAIN__", "--to", "localhost:3333"],
+      "dependsOn": [{ "containerName": "tyche-container", "condition": "START" }],
+      "mountPoints": [
+        { "sourceVolume": "caddy-data", "containerPath": "/data" },
+        { "sourceVolume": "caddy-config", "containerPath": "/config" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/tyche",
+          "awslogs-region": "__REGION__",
+          "awslogs-stream-prefix": "caddy"
+        }
+      }
+    }
+  ],
+  "volumes": [
+    { "name": "data", "host": { "sourcePath": "/srv/tyche/data" } },
+    { "name": "logs", "host": { "sourcePath": "/srv/tyche/logs" } },
+    { "name": "caddy-data", "host": { "sourcePath": "/srv/tyche/caddy/data" } },
+    { "name": "caddy-config", "host": { "sourcePath": "/srv/tyche/caddy/config" } }
+  ]
+}
