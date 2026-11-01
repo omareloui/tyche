@@ -17,7 +17,7 @@ import (
 type AccountFD struct {
 	AccountPartialFD   AccountPartialFD
 	Note               form.FDInput
-	SmsRef             form.FDInput
+	SmsRefs            form.FDInput
 	IsArchive          form.FDInput
 	ExcludeFromBalance form.FDInput
 }
@@ -98,10 +98,10 @@ templ EditAccount(id string, fd *AccountFD, aknds []models.AccountKind, curs []m
 templ accountFormBody(id string, fd *AccountFD, aknds []models.AccountKind, curs []models.Currency, cps []models.Counterparty, defaultCur *models.Currency) {
 	@AccountInputs(id, &fd.AccountPartialFD, aknds, curs, cps, defaultCur)
 	<div class="grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-800/20 p-4">
-		@form.Field("SMS reference", "sms_ref", id, icons.Message("15"), fd.SmsRef.Error) {
-			@form.Control("text", "sms_ref", "As in bank SMS, e.g. 123-456***-789 or 1234", id, fd.SmsRef, templ.Attributes{"autocomplete": "off"})
+		@form.Field("SMS references", "sms_refs", id, icons.Message("15"), fd.SmsRefs.Error) {
+			@form.TagsInput("sms_refs", "As in bank SMS, e.g. 123-456***-789 or 1234", id, fd.SmsRefs)
 		}
-		<p class="-mt-2 text-sm text-zinc-500">Bank SMS mentioning it (or the card / IBAN's last digits) land in this account.</p>
+		<p class="-mt-2 text-sm text-zinc-500">Bank SMS mentioning any of them (e.g. the account and its debit card), or the card / IBAN's last digits, land in this account.</p>
 	</div>
 	@form.Field("Note", "note", id, icons.Pencil("15"), fd.Note.Error) {
 		@form.Control("text", "note", "Anything to remember about it", id, fd.Note, nil)

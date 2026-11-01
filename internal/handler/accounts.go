@@ -515,7 +515,7 @@ func (h *Handler) mapFDToAcc(r *http.Request) (*models.Account, error) {
 		CardLimit:          cardLimit,
 		NameOnCard:         r.FormValue("name_on_card"),
 		Note:               r.FormValue("note"),
-		SmsRef:             strings.TrimSpace(r.FormValue("sms_ref")),
+		SmsRefs:            parseAliases(r.FormValue("sms_refs")),
 		Currency:           models.Currency{ID: r.FormValue("currency_id")},
 		Counterparty:       cp,
 		IsArchive:          parseBoolean(r.FormValue("is_archive")),
@@ -580,7 +580,7 @@ func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, de
 			ExpirationDate: exp,
 		},
 		Note:               form.FDInput{Value: acc.Note, Error: errs.Errors.MsgFor("Note")},
-		SmsRef:             form.FDInput{Value: acc.SmsRef, Error: errs.Errors.MsgFor("SmsRef")},
+		SmsRefs:            form.FDInput{Value: strings.Join(acc.SmsRefs, ", "), Error: errs.Errors.MsgFor("SmsRefs")},
 		IsArchive:          form.FDInput{Value: formatBooleanIfNonZero(acc.IsArchive), Error: errs.Errors.MsgFor("IsArchive")},
 		ExcludeFromBalance: form.FDInput{Value: formatBooleanIfNonZero(acc.ExcludeFromBalance), Error: errs.Errors.MsgFor("ExcludeFromBalance")},
 	}

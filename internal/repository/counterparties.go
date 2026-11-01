@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 
 	"github.com/omareloui/tyche/internal/brandicons"
 	"github.com/omareloui/tyche/internal/logger"
@@ -37,7 +36,7 @@ func (r *Repository) GetCounterparties(ctx context.Context) ([]models.Counterpar
 		if !dbIt.Icon.Valid {
 			icon := ""
 			if dbIt.IsMerchant {
-				aliases, _ := unmarshalAliases(dbIt.Aliases)
+				aliases, _ := unmarshalStrings(dbIt.Aliases)
 				icon = icons.Detect(dbIt.Name, aliases)
 			}
 			dbIt.Icon = sql.NullString{String: icon, Valid: true}
@@ -129,7 +128,7 @@ func (r *Repository) MergeCounterparties(ctx context.Context, fromID, intoID str
 }
 
 func updateCounterpartyParams(it *models.Counterparty) (queries.UpdateCounterpartyParams, error) {
-	aliases, err := marshalAliases(it.Aliases)
+	aliases, err := marshalStrings(it.Aliases)
 	if err != nil {
 		return queries.UpdateCounterpartyParams{}, err
 	}
@@ -150,7 +149,7 @@ func (r *Repository) CreateCounterparty(ctx context.Context, it *models.Counterp
 		return err
 	}
 
-	aliases, err := marshalAliases(it.Aliases)
+	aliases, err := marshalStrings(it.Aliases)
 	if err != nil {
 		return err
 	}
@@ -176,7 +175,7 @@ func (r *Repository) DeleteCounterparty(ctx context.Context, id string) error {
 }
 
 func dbCounterpartyToCounterparty(dbP *queries.Counterparty) *models.Counterparty {
-	aliases, _ := unmarshalAliases(dbP.Aliases)
+	aliases, _ := unmarshalStrings(dbP.Aliases)
 	return &models.Counterparty{
 		ID:         dbP.ID,
 		Name:       dbP.Name,
@@ -207,31 +206,6 @@ func defaultCategoryID(cp *models.Counterparty) sql.NullString {
 		return sql.NullString{}
 	}
 	return sql.NullString{String: cp.DefaultCategory.ID, Valid: true}
-}
-
-func marshalAliases(aliases []string) ([]byte, error) {
-	if aliases == nil {
-		aliases = []string{}
-	}
-	marshaled, err := json.Marshal(aliases)
-	if err != nil {
-		logger.Get().Error("error on marshaling counterparty aliases for db", zap.Error(err))
-		return nil, err
-	}
-	return marshaled, nil
-}
-
-func unmarshalAliases(dbAliases []byte) ([]string, error) {
-	if dbAliases == nil {
-		return []string{}, nil
-	}
-
-	aliases := []string{}
-	if err := json.Unmarshal(dbAliases, &aliases); err != nil {
-		logger.Get().Error("error on unmarshaling counterparty aliases from db", zap.Error(err))
-		return []string{}, err
-	}
-	return aliases, nil
 }
 
 func dbCounterpartiesRowToCounterparties(dbCps []queries.GetCounterpartiesRow) []models.Counterparty {

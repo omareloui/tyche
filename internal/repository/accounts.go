@@ -32,6 +32,11 @@ func (r *Repository) createAccountWithTxn(q *queries.Queries, ctx context.Contex
 		cpId = a.Counterparty.ID
 	}
 
+	smsRefs, err := marshalStrings(a.SmsRefs)
+	if err != nil {
+		return err
+	}
+
 	if err := q.CreateAccount(ctx, queries.CreateAccountParams{
 		ID:             a.ID,
 		Name:           a.Name,
@@ -42,7 +47,7 @@ func (r *Repository) createAccountWithTxn(q *queries.Queries, ctx context.Contex
 		NameOnCard:     sql.NullString{String: a.NameOnCard, Valid: a.NameOnCard != ""},
 		CounterpartyID: sql.NullString{String: cpId, Valid: cpId != ""},
 		Iban:           sql.NullString{String: a.Iban, Valid: a.Iban != ""},
-		SmsRef:         sql.NullString{String: a.SmsRef, Valid: a.SmsRef != ""},
+		SmsRefs:        smsRefs,
 		CardNumber:     sql.NullString{String: a.CardNumber, Valid: a.CardNumber != ""},
 
 		Note:               sql.NullString{String: a.Note, Valid: a.Note != ""},
@@ -129,6 +134,11 @@ func (r *Repository) UpdateAccount(ctx context.Context, a *models.Account) error
 		cpId = a.Counterparty.ID
 	}
 
+	smsRefs, err := marshalStrings(a.SmsRefs)
+	if err != nil {
+		return err
+	}
+
 	if err := q.UpdateAccount(ctx, queries.UpdateAccountParams{
 		ID:                 a.ID,
 		Name:               a.Name,
@@ -136,7 +146,7 @@ func (r *Repository) UpdateAccount(ctx context.Context, a *models.Account) error
 		CurrencyID:         a.Currency.ID,
 		CounterpartyID:     sql.NullString{String: cpId, Valid: cpId != ""},
 		Iban:               sql.NullString{String: a.Iban, Valid: a.Iban != ""},
-		SmsRef:             sql.NullString{String: a.SmsRef, Valid: a.SmsRef != ""},
+		SmsRefs:            smsRefs,
 		CardNumber:         sql.NullString{String: a.CardNumber, Valid: a.CardNumber != ""},
 		NameOnCard:         sql.NullString{String: a.NameOnCard, Valid: a.NameOnCard != ""},
 		CardLimit:          a.CardLimit,
@@ -354,6 +364,7 @@ func dbAccountToAccount(
 	cur *queries.Currency, k *queries.AccountKind,
 	cpName *sql.NullString, isDefault bool,
 ) *models.Account {
+	smsRefs, _ := unmarshalStrings(dbAcc.SmsRefs)
 	acc := &models.Account{
 		ID:                 dbAcc.ID,
 		Name:               dbAcc.Name,
@@ -363,7 +374,7 @@ func dbAccountToAccount(
 		NameOnCard:         dbAcc.NameOnCard.String,
 		CardLimit:          dbAcc.CardLimit,
 		Iban:               dbAcc.Iban.String,
-		SmsRef:             dbAcc.SmsRef.String,
+		SmsRefs:            smsRefs,
 		CardNumber:         dbAcc.CardNumber.String,
 		Note:               dbAcc.Note.String,
 		IsArchive:          dbAcc.IsArchived,

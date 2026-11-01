@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	"github.com/omareloui/tyche/internal/jwt"
@@ -76,4 +77,31 @@ func tenantFromCtx(ctx context.Context) (models.OAuthProvider, string, error) {
 		return 0, "", fmt.Errorf("no access nor refresh claims in the context to get the tenant")
 	}
 	return oauthProvider, oauthId, nil
+}
+
+// marshalStrings encodes a JSON list column (counterparty aliases, account
+// sms refs), nil as an empty list.
+func marshalStrings(strs []string) ([]byte, error) {
+	if strs == nil {
+		strs = []string{}
+	}
+	marshaled, err := json.Marshal(strs)
+	if err != nil {
+		logger.Get().Error("error on marshaling strings for db", zap.Error(err))
+		return nil, err
+	}
+	return marshaled, nil
+}
+
+func unmarshalStrings(dbStrs []byte) ([]string, error) {
+	if dbStrs == nil {
+		return []string{}, nil
+	}
+
+	strs := []string{}
+	if err := json.Unmarshal(dbStrs, &strs); err != nil {
+		logger.Get().Error("error on unmarshaling strings from db", zap.Error(err))
+		return []string{}, err
+	}
+	return strs, nil
 }

@@ -15,8 +15,8 @@ var (
 	egp = models.Currency{ID: "egp", String: "EGP", Symbol: "E£"}
 	usd = models.Currency{ID: "usd", String: "USD", Symbol: "US$"}
 
-	hsbcEGP = models.Account{ID: "hsbc-egp", Currency: egp, Kind: models.AccountKind{Enum: models.AccKindBankAcc}, SmsRef: "123-456***-789"}
-	hsbcUSD = models.Account{ID: "hsbc-usd", Currency: usd, Kind: models.AccountKind{Enum: models.AccKindBankAcc}, SmsRef: "123-456***-790"}
+	hsbcEGP = models.Account{ID: "hsbc-egp", Currency: egp, Kind: models.AccountKind{Enum: models.AccKindBankAcc}, SmsRefs: []string{"123-456***-789", "9876"}}
+	hsbcUSD = models.Account{ID: "hsbc-usd", Currency: usd, Kind: models.AccountKind{Enum: models.AccKindBankAcc}, SmsRefs: []string{"123-456***-790"}}
 	cibCard = models.Account{ID: "cib-card", Currency: egp, Kind: models.AccountKind{Enum: models.AccKindCreditCard}, CardNumber: "4111111111111234"}
 	cash    = models.Account{ID: "cash", Currency: egp, Kind: models.AccountKind{Enum: models.AccKindCash}}
 	oldCard = models.Account{ID: "old", Currency: egp, Kind: models.AccountKind{Enum: models.AccKindCreditCard}, CardNumber: "5500000000005678", IsArchive: true}
@@ -56,6 +56,20 @@ func TestBuildTransaction(t *testing.T) {
 			wantAcc:     "hsbc-egp",
 			wantAmount:  220,
 			wantDescrip: "PAYPRO-*SHOP",
+		},
+		{
+			name:       "expense by the account's other sms ref",
+			sms:        smsparser.SMS{TxKind: models.ExpenseTxKind, AccountID: "9876", Currency: "EGP", Amount: 75},
+			wantKind:   models.ExpenseTxKind,
+			wantAcc:    "hsbc-egp",
+			wantAmount: 75,
+		},
+		{
+			name:       "other sms ref by its last digits",
+			sms:        smsparser.SMS{TxKind: models.ExpenseTxKind, AccountID: "****9876", Currency: "EGP", Amount: 75},
+			wantKind:   models.ExpenseTxKind,
+			wantAcc:    "hsbc-egp",
+			wantAmount: 75,
 		},
 		{
 			name:       "card last digits and known counterparty",

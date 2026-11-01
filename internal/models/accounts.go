@@ -13,15 +13,16 @@ import (
 var ErrDuplicateAccountName = errors.New("duplicate account name")
 
 type Account struct {
-	ID                 string
-	Name               string
-	Amount             float64
-	ActualAmount       float64
-	Currency           Currency
-	Kind               AccountKind
-	Counterparty       *Counterparty
-	Iban               string
-	SmsRef             string
+	ID           string
+	Name         string
+	Amount       float64
+	ActualAmount float64
+	Currency     Currency
+	Kind         AccountKind
+	Counterparty *Counterparty
+	Iban         string
+	// SmsRefs are how bank sms refer to it (account number, card, ...).
+	SmsRefs            []string
 	CardNumber         string
 	CardLimit          float64
 	NameOnCard         string

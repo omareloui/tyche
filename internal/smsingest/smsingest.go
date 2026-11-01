@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -209,7 +210,7 @@ func matchAccount(ref, cur string, accounts []models.Account) *models.Account {
 
 	nref := normalize(ref)
 	if acc := pick(accounts, cur, func(a *models.Account) bool {
-		return a.SmsRef != "" && normalize(a.SmsRef) == nref
+		return slices.ContainsFunc(a.SmsRefs, func(r string) bool { return normalize(r) == nref })
 	}); acc != nil {
 		return acc
 	}
@@ -220,7 +221,7 @@ func matchAccount(ref, cur string, accounts []models.Account) *models.Account {
 	}
 
 	return pick(accounts, cur, func(a *models.Account) bool {
-		for _, s := range []string{a.SmsRef, a.CardNumber, a.Iban} {
+		for _, s := range append(slices.Clone(a.SmsRefs), a.CardNumber, a.Iban) {
 			if s != "" && strings.HasSuffix(digits(s), tail) {
 				return true
 			}

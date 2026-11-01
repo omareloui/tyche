@@ -106,7 +106,7 @@ func TestIngestSMS(t *testing.T) {
 
 	acc := &models.Account{
 		ID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZB", Name: "HSBC e2e", Amount: 1000,
-		Currency: *egp, Kind: bankKind, SmsRef: "123-456***-789",
+		Currency: *egp, Kind: bankKind, SmsRefs: []string{"123-456***-789"},
 	}
 	if err := repo.CreateAccount(ctx, acc); err != nil {
 		t.Fatal(err)
@@ -244,7 +244,7 @@ func TestIngestSMS(t *testing.T) {
 	t.Run("retries unmatched sms after setting the sms ref", func(t *testing.T) {
 		other := &models.Account{
 			ID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZD", Name: "Other e2e", Amount: 10,
-			Currency: *egp, Kind: bankKind, SmsRef: "999-999***-111",
+			Currency: *egp, Kind: bankKind, SmsRefs: []string{"999-999***-111"},
 		}
 		if err := repo.CreateAccount(ctx, other); err != nil {
 			t.Fatal(err)
@@ -286,7 +286,7 @@ func TestIngestSMS(t *testing.T) {
 	t.Run("refunds add to the account with the merchant's expense category", func(t *testing.T) {
 		card := &models.Account{
 			ID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZH", Name: "CIB e2e", Amount: 100,
-			Currency: *egp, Kind: bankKind, SmsRef: "5678",
+			Currency: *egp, Kind: bankKind, SmsRefs: []string{"5678"},
 		}
 		if err := repo.CreateAccount(ctx, card); err != nil {
 			t.Fatal(err)
@@ -333,7 +333,7 @@ func TestIngestSMS(t *testing.T) {
 	t.Run("uses the sms date in the user's time zone and their own templates first", func(t *testing.T) {
 		card := &models.Account{
 			ID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZM", Name: "CIB debit e2e", Amount: 100,
-			Currency: *egp, Kind: bankKind, SmsRef: "4321",
+			Currency: *egp, Kind: bankKind, SmsRefs: []string{"4321"},
 		}
 		if err := repo.CreateAccount(ctx, card); err != nil {
 			t.Fatal(err)
