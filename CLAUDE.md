@@ -145,6 +145,7 @@ The app uses a **per-user database model** where each authenticated user gets th
   - `smstemplates/` - In-memory store of the shared templates (`Seed` on startup, `Load`, CRUD reloading them) + `Row`/`Params` converting the sqlc rows of both DBs
   - `smsingest/` - Builds transactions from parsed SMS (account matching via `accounts.sms_refs` / card / iban suffix, fx conversion, `TxTime`: the SMS date/time in the user's time zone)
   - `brandicons/` - Indexes the simple-icons submodule (`third_party/simple-icons`) plus local extras in `web/brand-icons/` (brands simple-icons lacks or forbids, takes precedence) to detect counterparty icons from name/aliases; both served at `/brand-icons/`
+  - `avatar/` - Downloads the Google profile picture on sign in (also after unlocking a pending one) into the tenant `user` row (`picture_data`/`picture_type`/`picture_hash`), served at `/avatar?v=<hash>` (immutable cache, ETag) as Google's url is rate limited; claims' `picture` is `User.AvatarURL()` (the Google url until downloaded)
   - `idgen/` - ULID generation
   - `formatters/`, `numsutils/`, `slicesutils/`, `structutils/` - Helpers
 - `mobile/android/` - Kotlin app forwarding bank SMS to `POST /api/sms` (see its README)

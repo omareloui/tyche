@@ -89,3 +89,14 @@ UPDATE user SET timezone = sqlc.arg(timezone);
 
 -- name: SetEncryptionPrompted :exec
 UPDATE user SET encryption_prompted_at = DATETIME('now') WHERE encryption_prompted_at IS NULL;
+
+-- name: SetUserPicture :exec
+UPDATE user SET
+    picture = sqlc.arg(picture),
+    picture_data = sqlc.arg(picture_data),
+    picture_type = sqlc.arg(picture_type),
+    picture_hash = sqlc.arg(picture_hash);
+
+-- name: GetUserPicture :one
+SELECT picture_data, picture_type, picture_hash FROM user
+WHERE picture_data IS NOT NULL LIMIT 1;

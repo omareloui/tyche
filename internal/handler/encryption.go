@@ -51,6 +51,7 @@ var (
 type pendingUnlock struct {
 	provider models.OAuthProvider
 	oauthID  string
+	picture  string
 	mobile   *mobileLogin
 	expires  time.Time
 }
@@ -286,6 +287,7 @@ func (h *Handler) Unlock(w http.ResponseWriter, r *http.Request) (templ.Componen
 		if err != nil {
 			return nil, err
 		}
+		h.syncPicture(ctx, usr, pending.picture)
 		code, err := mobileCodes.add(usr, pending.mobile, key)
 		if err != nil {
 			return nil, err
@@ -303,6 +305,9 @@ func (h *Handler) Unlock(w http.ResponseWriter, r *http.Request) (templ.Componen
 		usr, err := h.repo.GetUserByOAuthID(ctx, oauthID)
 		if err != nil {
 			return nil, err
+		}
+		if pending != nil {
+			h.syncPicture(ctx, usr, pending.picture)
 		}
 		if _, err := setJWTCookies(w, usr); err != nil {
 			return nil, err

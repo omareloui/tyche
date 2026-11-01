@@ -253,7 +253,7 @@ func newToken(kind TokenType, usr *models.User) (string, time.Time, error) {
 			"email":      usr.Email,
 			"first_name": usr.FirstName,
 			"last_name":  usr.LastName,
-			"picture":    usr.Picture,
+			"picture":    usr.AvatarURL(),
 
 			"default_currency_id":          usr.DefaultCurrency.ID,
 			"default_currency_string":      usr.DefaultCurrency.String,

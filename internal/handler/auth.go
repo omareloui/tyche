@@ -69,7 +69,7 @@ func (h *Handler) OAuthCB(w http.ResponseWriter, r *http.Request) (templ.Compone
 	}
 	if encrypted && key == nil {
 		l.Info("signing in to a locked database", zap.String("tenantID", tenantID))
-		return nil, h.startPendingUnlock(w, r, pendingUnlock{provider: models.Google, oauthID: gUsr.OAuthID, mobile: mobile})
+		return nil, h.startPendingUnlock(w, r, pendingUnlock{provider: models.Google, oauthID: gUsr.OAuthID, picture: gUsr.Picture, mobile: mobile})
 	}
 	if key != nil {
 		ctx = context.WithValue(ctx, middleware.VaultKeyCtxKey{}, key)
@@ -79,6 +79,7 @@ func (h *Handler) OAuthCB(w http.ResponseWriter, r *http.Request) (templ.Compone
 	if err != nil {
 		return nil, err
 	}
+	h.syncPicture(ctx, usr, gUsr.Picture)
 
 	if mobile != nil {
 		code, err := mobileCodes.add(usr, mobile, key)

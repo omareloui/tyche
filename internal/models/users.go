@@ -41,14 +41,17 @@ func (p OAuthProvider) Prefix() string {
 }
 
 type User struct {
-	ID              string
-	OAuthID         string        `validate:"required"`
-	OAuthProvider   OAuthProvider `validate:"required"`
-	Email           string        `validate:"required,email"`
-	VerifiedEmail   bool
-	FirstName       string   `validate:"required,min=2"`
-	LastName        string   `validate:"required,min=2"`
-	Picture         string   `validate:"required,url"`
+	ID            string
+	OAuthID       string        `validate:"required"`
+	OAuthProvider OAuthProvider `validate:"required"`
+	Email         string        `validate:"required,email"`
+	VerifiedEmail bool
+	FirstName     string `validate:"required,min=2"`
+	LastName      string `validate:"required,min=2"`
+	Picture       string `validate:"required,url"`
+	// PictureHash versions the downloaded picture served at /avatar, "" when
+	// it wasn't downloaded.
+	PictureHash     string
 	DefaultCurrency Currency `validate:"required"`
 	DefaultAccount  *Account `validate:"required"`
 	StartOfPeriod   uint8    `validate:"required,min=1,max=31"`
@@ -57,6 +60,15 @@ type User struct {
 	// database (asked once on signing in).
 	EncryptionPrompted bool
 	CreatedAt          time.Time
+}
+
+// AvatarURL is the url of the user's picture: the downloaded one, else the
+// provider's.
+func (u *User) AvatarURL() string {
+	if u.PictureHash != "" {
+		return "/avatar?v=" + u.PictureHash
+	}
+	return u.Picture
 }
 
 func (u *User) FullName() string {

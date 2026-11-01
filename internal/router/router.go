@@ -174,6 +174,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("POST /reset", handle(h.Reset))
 	// Public: signing out of a locked database has no access token.
 	mux.Handle("GET /signout", handlePub(h.Signout))
+	mux.Handle("GET /avatar", handle(h.Avatar))
 
 	mux.Handle("GET /admin/fx-rates", handle(h.AdminFxRates, middleware.Admin))
 	mux.Handle("GET /admin/fx-rates/status", handle(h.AdminFxRatesStatus, middleware.Admin))

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/omareloui/tyche/internal/avatar"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/queries"
@@ -75,6 +76,7 @@ func dbUserToUser(dbU *queries.User, dfltCur *queries.Currency, dfltAcc *queries
 		FirstName:     dbU.FirstName,
 		LastName:      dbU.LastName,
 		Picture:       dbU.Picture.String,
+		PictureHash:   dbU.PictureHash.String,
 		StartOfPeriod: uint8(dbU.StartOfPeriod),
 		DefaultCurrency: models.Currency{
 			ID: dbU.DefaultCurrencyID,
@@ -153,4 +155,32 @@ func (r *Repository) SetEncryptionPrompted(ctx context.Context) error {
 		return err
 	}
 	return q.SetEncryptionPrompted(ctx)
+}
+
+// SetUserPicture stores the user's downloaded picture, from the url.
+func (r *Repository) SetUserPicture(ctx context.Context, url string, pic *avatar.Picture) error {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+	return q.SetUserPicture(ctx, queries.SetUserPictureParams{
+		Picture:     sql.NullString{String: url, Valid: url != ""},
+		PictureData: pic.Data,
+		PictureType: sql.NullString{String: pic.ContentType, Valid: true},
+		PictureHash: sql.NullString{String: pic.Hash, Valid: true},
+	})
+}
+
+// GetUserPicture is the user's downloaded picture, sql.ErrNoRows when there's
+// none.
+func (r *Repository) GetUserPicture(ctx context.Context) (*avatar.Picture, error) {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	row, err := q.GetUserPicture(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &avatar.Picture{Data: row.PictureData, ContentType: row.PictureType.String, Hash: row.PictureHash.String}, nil
 }
