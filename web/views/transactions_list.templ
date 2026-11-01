@@ -18,6 +18,16 @@ type TxListData struct {
 	Page   *models.TxPage
 	Filter models.TxFilter
 	Def    *models.Currency
+	// Summary is what the filter matches as a whole, nil when unfiltered.
+	Summary *models.TxSummary
+	// Chips are the filters set, removable one by one.
+	Chips []TxFilterChip
+}
+
+// TxFilterChip is a filter that's set: its label and the query string
+// without it.
+type TxFilterChip struct {
+	Label, Without string
 }
 
 // TxList is the whole list loaded so far: the review banner, upcoming
@@ -49,9 +59,12 @@ templ txList(d TxListData, oob bool) {
 			if d.Filter.IsZero() {
 				@txEmptyState()
 			} else {
-				@txNoMatches(&d.Filter)
+				@txNoMatches(d.Chips)
 			}
 		} else {
+			if d.Summary != nil {
+				@txSummary(d.Summary, d.Chips, d.Def)
+			}
 			if len(l.Upcoming) > 0 {
 				@txUpcoming(&l, d.Def)
 			}
@@ -107,13 +120,18 @@ templ txUntil(p *models.TxPage, oob bool) {
 	></span>
 }
 
-templ txNoMatches(f *models.TxFilter) {
+templ txNoMatches(chips []TxFilterChip) {
 	<div class="grid justify-items-center gap-3 py-16 text-center">
 		<div class="grid place-items-center w-16 h-16 rounded-2xl bg-zinc-800/70 text-zinc-400">
 			@icons.Search("30")
 		</div>
 		<p class="text-xl font-semibold">No transactions match</p>
 		<p class="max-w-sm text-zinc-500">Try another search or fewer filters.</p>
+		if len(chips) > 0 {
+			<div class="flex flex-wrap justify-center gap-1.5 max-w-lg">
+				@txFilterChips(chips)
+			</div>
+		}
 		@txFilterLink("/transactions", "btn-primary mt-2") {
 			@icons.X("18")
 			Clear filters
@@ -200,6 +218,62 @@ templ txReviewBanner(count int, f *models.TxFilter) {
 	</div>
 }
 
+// txSummary answers what the filters ask: how many transactions match and
+// what they earn and spend, all of them, not just the months loaded.
+templ txSummary(s *models.TxSummary, chips []TxFilterChip, def *models.Currency) {
+	<div class="flex flex-wrap items-center gap-x-6 gap-y-3 p-4 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800">
+		<div class="flex-1 min-w-40">
+			<p class="font-semibold">
+				{ fmt.Sprint(s.Count) } { plural(s.Count, "transaction", "transactions") }
+			</p>
+			<p class="text-sm text-zinc-500">
+				Matching the filters
+				if s.Scheduled > 0 {
+					· { fmt.Sprint(s.Scheduled) } scheduled, not counted
+				}
+				if s.Partial {
+					· some currencies have no rate
+				}
+			</p>
+		</div>
+		<dl class="flex gap-6 tabular-nums">
+			if s.In > 0 {
+				<div>
+					<dt class="text-xs text-zinc-500">Earned</dt>
+					<dd class="font-semibold text-emerald-400">{ "+" + formatters.FormatAmount(s.In, def.Symbol) }</dd>
+				</div>
+			}
+			if s.Out != 0 {
+				<div>
+					<dt class="text-xs text-zinc-500">Spent</dt>
+					<dd class="font-semibold">{ formatSignedAmount(-s.Out, def.Symbol) }</dd>
+				</div>
+			}
+			if s.In > 0 && s.Out != 0 {
+				<div>
+					<dt class="text-xs text-zinc-500">Net</dt>
+					<dd class={ "font-semibold", templ.KV("text-emerald-400", s.In >= s.Out) }>{ formatSignedAmount(s.In-s.Out, def.Symbol) }</dd>
+				</div>
+			}
+		</dl>
+		if len(chips) > 0 {
+			<div class="basis-full flex flex-wrap gap-1.5">
+				@txFilterChips(chips)
+			</div>
+		}
+	</div>
+}
+
+// txFilterChips removes a filter each, keeping the others.
+templ txFilterChips(chips []TxFilterChip) {
+	for _, c := range chips {
+		@txFilterLink(txFilterURL(c.Without), "chip max-w-56 cursor-pointer transition-colors hover:bg-zinc-700 hover:text-zinc-200") {
+			<span class="truncate">{ c.Label }</span>
+			@icons.X("12", &templ.Attributes{"class": "shrink-0", "aria-label": "Remove filter"})
+		}
+	}
+}
+
 templ txUpcoming(l *txListView, def *models.Currency) {
 	<details
 		class="group rounded-2xl ring-1 ring-zinc-800"
@@ -235,7 +309,16 @@ templ txMonthSection(m *txMonth, def *models.Currency) {
 	<section class="grid gap-5">
 		<header class="sticky top-16 z-10 -mx-2 px-2 py-2 bg-zinc-950/85 backdrop-blur-md">
 			<div class="flex items-baseline justify-between gap-4">
-				<h2 class="text-xl font-bold font-(family-name:--font-biorhyme-expanded)">{ formatTxMonth(m.Month) }</h2>
+				<h2 class="text-xl font-bold font-(family-name:--font-biorhyme-expanded)">
+					<button
+						type="button"
+						@click={ fmt.Sprintf("filterBy({%q: %q, %q: %q})",
+							models.TxFilterFrom, m.Month.Format(time.DateOnly),
+							models.TxFilterTo, m.Month.AddDate(0, 1, -1).Format(time.DateOnly)) }
+						title={ "Show only " + formatTxMonth(m.Month) }
+						class="cursor-pointer transition-colors hover:text-(--accent)"
+					>{ formatTxMonth(m.Month) }</button>
+				</h2>
 				@txFlowTotals(m.In, m.Out, def)
 			</div>
 			if m.In > 0 || m.Out > 0 {
@@ -340,7 +423,12 @@ templ transaction(tx *models.Transaction, def *models.Currency) {
 				</p>
 				@txChips(tx, &v)
 			</div>
-			<div class="hidden md:flex items-center gap-2 w-44 shrink-0 min-w-0 text-sm text-zinc-400">
+			<button
+				type="button"
+				{ txFilterBy(models.TxFilterAccount, v.accountID)... }
+				title={ "Show only " + v.account }
+				class="hidden md:flex items-center gap-2 w-44 shrink-0 min-w-0 text-left text-sm text-zinc-400 cursor-pointer transition-colors hover:text-zinc-200"
+			>
 				<span class="shrink-0 text-zinc-500">
 					@accKindIcon(v.accKind, "18")
 				</span>
@@ -352,7 +440,7 @@ templ transaction(tx *models.Transaction, def *models.Currency) {
 				} else {
 					<span class="truncate">{ v.account }</span>
 				}
-			</div>
+			</button>
 			<div class="shrink-0 text-right tabular-nums">
 				if v.original != "" {
 					<p class="text-xs text-zinc-500 line-through">{ v.original }</p>
@@ -373,10 +461,11 @@ templ transaction(tx *models.Transaction, def *models.Currency) {
 				<button
 					hx-put={ fmt.Sprintf("/transactions/%s/fulfill", tx.ID) }
 					title="Mark as done, applying it to the account"
-					class="hidden sm:inline-flex shrink-0 items-center gap-1 h-8 px-3 rounded-full border border-zinc-700 text-sm text-zinc-300 cursor-pointer transition-colors hover:border-emerald-400 hover:text-emerald-400"
+					aria-label="Fulfill"
+					class="inline-flex shrink-0 items-center justify-center gap-1 w-8 sm:w-auto h-8 sm:px-3 rounded-full border border-zinc-700 text-sm text-zinc-300 cursor-pointer transition-colors hover:border-emerald-400 hover:text-emerald-400"
 				>
 					@icons.Check("14")
-					Fulfill
+					<span class="hidden sm:inline">Fulfill</span>
 				</button>
 			}
 			@components.EntryMenuTrigger("openMenu", "Transaction actions")
@@ -396,9 +485,14 @@ templ txTile(tx *models.Transaction, v *txView) {
 			@icons.Transfer("22")
 		</div>
 	} else if v.counterparty != nil {
-		<div class="grid place-items-center shrink-0 w-11 h-11 rounded-xl bg-zinc-800/70">
+		<button
+			type="button"
+			{ txFilterBy(models.TxFilterCounterparty, v.counterparty.ID)... }
+			title={ "Show only " + v.counterparty.Name }
+			class="grid place-items-center shrink-0 w-11 h-11 rounded-xl bg-zinc-800/70 cursor-pointer transition hover:ring-2 hover:ring-zinc-600"
+		>
 			@components.CounterpartyIcon(v.counterparty.Name, v.counterparty.Icon, v.counterparty.Color, "w-7 h-7 text-sm")
-		</div>
+		</button>
 	} else if tx.Kind == models.TransferTxKind {
 		<div class="grid place-items-center shrink-0 w-11 h-11 rounded-xl bg-sky-400/12 text-sky-400">
 			@icons.Transfer("22")
@@ -427,9 +521,16 @@ templ txTile(tx *models.Transaction, v *txView) {
 }
 
 templ txChips(tx *models.Transaction, v *txView) {
-	{{ hasChips := tx.Category != nil || v.isScheduled || tx.FromSMS || tx.RecurrentTx != nil || tx.Goal != nil || len(tx.Reimbursements) > 0 }}
+	{{ isRefund := tx.Kind == models.RefundTxKind }}
+	{{ hasChips := isRefund || tx.Category != nil || v.isScheduled || tx.FromSMS || tx.RecurrentTx != nil || tx.Goal != nil || len(tx.Reimbursements) > 0 }}
 	if hasChips {
 		<div class="flex flex-wrap items-center gap-1.5 mt-1.5">
+			if isRefund {
+				<span class="chip bg-teal-400/10 text-teal-300" title="Money back from a merchant, netted against spending">
+					@icons.RotateCcw("12")
+					Refund
+				</span>
+			}
 			@txCategoryChip(tx)
 			if v.isOverdue {
 				<span class="chip bg-red-400/10 text-red-400">
@@ -492,15 +593,18 @@ templ txChips(tx *models.Transaction, v *txView) {
 templ txCategoryChip(tx *models.Transaction) {
 	if tx.Category != nil {
 		// Under review, the review strip's picker shows the category.
-		<span
-			class="chip max-w-48"
+		<button
+			type="button"
+			{ txFilterBy(models.TxFilterCategory, tx.Category.ID)... }
+			title={ "Show only " + tx.Category.Name }
+			class="chip max-w-48 cursor-pointer transition-colors hover:bg-zinc-700 hover:text-zinc-200"
 			if tx.NeedsReview {
 				x-show="!reviewOnly"
 			}
 		>
 			@categoryDot(tx.Category.Color)
 			<span class="truncate">{ tx.Category.Name }</span>
-		</span>
+		</button>
 	}
 }
 
@@ -966,6 +1070,12 @@ func getReimbursementMenuItems(tx *models.Transaction) []templ.Component {
 	)
 }
 
+// txFilterBy narrows the list to key's value on click (txPage.filterBy in
+// transactions.js), keeping the other filters.
+func txFilterBy(key, value string) templ.Attributes {
+	return templ.Attributes{"@click": fmt.Sprintf("filterBy({%q: %q})", key, value)}
+}
+
 func TxRowID(id string) string {
 	return "tx-" + id
 }
@@ -1093,6 +1203,36 @@ func formatTxDay(day time.Time) string {
 	return day.Format("Mon, Jan 2")
 }
 
+// FormatTxRange is a filter's days, either bound maybe open.
+func FormatTxRange(from, to time.Time) string {
+	day := func(d time.Time) string {
+		if d.Year() != time.Now().Year() {
+			return d.Format("Jan 2 2006")
+		}
+		return d.Format("Jan 2")
+	}
+	switch {
+	case to.IsZero():
+		return "From " + day(from)
+	case from.IsZero():
+		return "Until " + day(to)
+	case from.Equal(to):
+		return day(from)
+	}
+	return day(from) + " → " + day(to)
+}
+
+// FormatAmountRange is a filter's amounts, either bound maybe open.
+func FormatAmountRange(min, max *float64) string {
+	switch {
+	case max == nil:
+		return "≥ " + formatters.FormatNum(*min)
+	case min == nil:
+		return "≤ " + formatters.FormatNum(*max)
+	}
+	return formatters.FormatNum(*min) + " – " + formatters.FormatNum(*max)
+}
+
 func formatTxMonth(month time.Time) string {
 	if month.Year() != time.Now().Year() {
 		return month.Format("January 2006")
@@ -1131,6 +1271,8 @@ type txView struct {
 	// destination of a transfer, e.g. "Wallet".
 	account   string
 	toAccount string
+	// accountID is account's, to filter by it.
+	accountID string
 	accKind models.AccKind
 	amount  string
 	// original is the amount before reimbursements, shown struck through.
@@ -1144,6 +1286,7 @@ func newTxView(tx *models.Transaction) txView {
 	v := txView{
 		title:       tx.Description,
 		account:     tx.Account.Name,
+		accountID:   tx.Account.ID,
 		accKind:     tx.Account.Kind.Enum,
 		amount:      "-" + tx.ViewAmount(),
 		tone:        txToneOut,
@@ -1207,6 +1350,7 @@ func newTxView(tx *models.Transaction) txView {
 			if tx.Account.Kind.Enum == models.AccKindDebt {
 				v.title = debtPartyName(&tx.Account)
 				v.account = tx.ToAccount.Name
+				v.accountID = tx.ToAccount.ID
 				v.accKind = tx.ToAccount.Kind.Enum
 				v.amount = "+" + tx.ViewToAmount()
 				v.tone = txToneIn

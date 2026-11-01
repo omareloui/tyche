@@ -78,6 +78,17 @@ document.addEventListener("alpine:init", () => {
       this.reviewOnly = form.elements.status?.value === "review";
     },
 
+    // filterBy narrows the list to what got clicked in it (a category, an
+    // account, a month…), keeping the other filters set.
+    filterBy(set) {
+      const params = new URLSearchParams(location.search);
+      for (const [k, v] of Object.entries(set)) params.set(k, v);
+      const url = `/transactions?${params}`;
+      htmx
+        .ajax("GET", url, { target: "#tx-body", swap: "innerHTML show:window:top" })
+        .then(() => history.replaceState({ htmx: true }, "", url));
+    },
+
     onKey(e) {
       if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
       const t = e.target;

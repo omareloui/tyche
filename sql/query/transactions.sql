@@ -134,13 +134,84 @@ WHERE
         SELECT 1 FROM sms_messages AS sm WHERE sm.transaction_id = t.id
     ) = sqlc.narg(from_sms))
     AND (sqlc.narg(from_date) IS NULL OR t.scheduled_to >= sqlc.narg(from_date))
-    AND (sqlc.narg(to_date) IS NULL OR t.scheduled_to <= sqlc.narg(to_date))
+    AND (sqlc.narg(to_date) IS NULL OR t.scheduled_to < sqlc.narg(to_date))
     AND (sqlc.narg(min_amount) IS NULL OR t.amount >= sqlc.narg(min_amount))
     AND (sqlc.narg(max_amount) IS NULL OR t.amount <= sqlc.narg(max_amount))
     AND (sqlc.narg(before) IS NULL OR t.scheduled_to < sqlc.narg(before))
     AND (sqlc.narg(after) IS NULL OR t.scheduled_to >= sqlc.narg(after))
 ORDER BY t.scheduled_to DESC, t.created_at DESC
 LIMIT sqlc.arg(lim) OFFSET sqlc.arg(off);
+
+-- name: GetTransactionsSummary :many
+-- What the transactions list's filter matches as a whole, per account
+-- currency and fulfilled or not: how many rows the list shows, what they
+-- earn and spend following the analysis rule (expenses net of their
+-- reimbursements, refunds netted against spending, transfer pairs left out).
+-- Keep the WHERE in sync with GetTransactions'.
+SELECT
+    sqlc.embed(c),
+    CAST(t.fulfilled_at IS NOT NULL AS BOOLEAN) AS fulfilled,
+    COUNT(*) AS count,
+    CAST(TOTAL(IIF(t.kind = 2 AND t.transfer_pair_id IS NULL, t.amount, 0)) AS FLOAT) AS income,
+    CAST(TOTAL(CASE WHEN t.transfer_pair_id IS NOT NULL THEN 0 ELSE CASE t.kind
+        WHEN 1 THEN t.amount - (
+            SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id
+        )
+        WHEN 5 THEN -t.amount
+        ELSE 0
+    END END) AS FLOAT) AS expenses
+FROM transactions AS t
+JOIN accounts AS a ON t.account_id = a.id
+JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
+LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
+LEFT JOIN categories AS cat ON t.category_id = cat.id
+WHERE
+    t.reimburses_id IS NULL
+    AND NOT (t.transfer_pair_id IS NOT NULL AND t.kind = 2)
+    AND (sqlc.narg(q) IS NULL
+        OR INSTR(LOWER(t.description), sqlc.narg(q)) > 0
+        OR INSTR(LOWER(cp.name), sqlc.narg(q)) > 0
+        OR INSTR(LOWER(cp.aliases), sqlc.narg(q)) > 0
+        OR INSTR(LOWER(cat.name), sqlc.narg(q)) > 0
+        OR INSTR(LOWER(a.name), sqlc.narg(q)) > 0
+        OR INSTR(LOWER(ta.name), sqlc.narg(q)) > 0
+        OR EXISTS (
+            SELECT 1 FROM transactions AS rt
+            LEFT JOIN counterparties AS rcp ON rt.counterparty_id = rcp.id
+            WHERE rt.reimburses_id = t.id
+                AND (INSTR(LOWER(rt.description), sqlc.narg(q)) > 0 OR INSTR(LOWER(rcp.name), sqlc.narg(q)) > 0)
+        )
+        OR EXISTS (
+            SELECT 1 FROM transactions AS pt
+            JOIN accounts AS pa ON pt.account_id = pa.id
+            WHERE pt.id = t.transfer_pair_id
+                AND (INSTR(LOWER(pt.description), sqlc.narg(q)) > 0 OR INSTR(LOWER(pa.name), sqlc.narg(q)) > 0)
+        ))
+    AND (sqlc.narg(kind) IS NULL
+        OR (t.transfer_pair_id IS NULL AND t.kind = sqlc.narg(kind))
+        OR (t.transfer_pair_id IS NOT NULL AND sqlc.narg(kind) = 3))
+    AND (sqlc.narg(account_id) IS NULL OR t.account_id = sqlc.narg(account_id) OR t.to_account_id = sqlc.narg(account_id)
+        OR EXISTS (
+            SELECT 1 FROM transactions AS pt WHERE pt.id = t.transfer_pair_id AND pt.account_id = sqlc.narg(account_id)
+        ))
+    AND (sqlc.narg(category_id) IS NULL OR t.category_id = sqlc.narg(category_id))
+    AND (sqlc.narg(counterparty_id) IS NULL OR t.counterparty_id = sqlc.narg(counterparty_id))
+    AND (sqlc.narg(goal_id) IS NULL OR t.goal_id = sqlc.narg(goal_id))
+    AND (sqlc.narg(fulfilled) IS NULL OR (t.fulfilled_at IS NOT NULL) = sqlc.narg(fulfilled))
+    AND (sqlc.narg(needs_review) IS NULL OR (t.needs_review OR EXISTS (
+        SELECT 1 FROM transactions AS rt WHERE rt.reimburses_id = t.id AND rt.needs_review
+    ) OR EXISTS (
+        SELECT 1 FROM transactions AS pt WHERE pt.id = t.transfer_pair_id AND pt.needs_review
+    )) = sqlc.narg(needs_review))
+    AND (sqlc.narg(from_sms) IS NULL OR EXISTS (
+        SELECT 1 FROM sms_messages AS sm WHERE sm.transaction_id = t.id
+    ) = sqlc.narg(from_sms))
+    AND (sqlc.narg(from_date) IS NULL OR t.scheduled_to >= sqlc.narg(from_date))
+    AND (sqlc.narg(to_date) IS NULL OR t.scheduled_to < sqlc.narg(to_date))
+    AND (sqlc.narg(min_amount) IS NULL OR t.amount >= sqlc.narg(min_amount))
+    AND (sqlc.narg(max_amount) IS NULL OR t.amount <= sqlc.narg(max_amount))
+GROUP BY c.id, fulfilled;
 
 -- name: CountTransactionsNeedingReview :one
 SELECT COUNT(*) FROM transactions WHERE needs_review;

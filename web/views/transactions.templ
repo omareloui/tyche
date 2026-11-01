@@ -10,6 +10,7 @@ import (
 	"github.com/omareloui/tyche/web/views/icons"
 	"github.com/omareloui/tyche/web/views/layouts"
 	"strings"
+	"time"
 )
 
 type TransactionFD struct {
@@ -215,6 +216,7 @@ templ txFilterBar(f *models.TxFilter, accs []models.Account,
 					{Value: string(models.TxSourceManual), Label: "Added by hand", Leading: icons.Pencil("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 				})
 				@txDateRangeFilter(f)
+				@txDatePresets(f)
 				@txAmountFilter(models.TxFilterMin, "Min amount", f.MinAmount)
 				<span class="text-zinc-600">–</span>
 				@txAmountFilter(models.TxFilterMax, "Max amount", f.MaxAmount)
@@ -236,6 +238,24 @@ templ txFilterBar(f *models.TxFilter, accs []models.Account,
 }
 
 templ txShortcuts() {
+	// Swiping has no visible cue on touch screens, told once.
+	<p
+		x-data="{ hint: false }"
+		x-init="try { hint = !localStorage.getItem('tx-swipe-hint') } catch {}"
+		x-cloak
+		x-show="hint"
+		class="sm:hidden flex items-center gap-2 text-xs text-zinc-500"
+	>
+		<span class="flex-1">Swipe a transaction right to fulfill or mark it reviewed, left to delete it.</span>
+		<button
+			type="button"
+			@click="hint = false; try { localStorage.setItem('tx-swipe-hint', '1') } catch {}"
+			aria-label="Dismiss"
+			class="shrink-0 grid place-items-center w-7 h-7 rounded-full cursor-pointer hover:bg-white/5 hover:text-zinc-300"
+		>
+			@icons.X("14")
+		</button>
+	</p>
 	<p class="hidden sm:flex flex-wrap justify-end gap-x-4 gap-y-1 text-xs text-zinc-600">
 		<span><kbd class="kbd">/</kbd> search</span>
 		<span><kbd class="kbd">j</kbd> <kbd class="kbd">k</kbd> move</span>
@@ -274,9 +294,49 @@ templ txDateRangeFilter(f *models.TxFilter) {
 			if from != "" || to != "" {
 				value={ from + " → " + to }
 			}
-			class="combo-chip w-52 pl-9 placeholder:text-zinc-500"
+			class="combo-chip w-52 pl-9! placeholder:text-zinc-500"
 		/>
 	</div>
+}
+
+// txDatePresets set the date range to common periods in one click.
+templ txDatePresets(f *models.TxFilter) {
+	<div class="flex flex-wrap gap-1">
+		for _, p := range txDatePresetRanges(time.Now()) {
+			{{ active := f.From.Equal(p.from) && f.To.Equal(p.to) }}
+			{{ v := f.Values() }}
+			{{ v.Set(models.TxFilterFrom, p.from.Format(time.DateOnly)) }}
+			{{ v.Set(models.TxFilterTo, p.to.Format(time.DateOnly)) }}
+			@txFilterLink(txFilterURL(v.Encode()), txDatePresetClass(active)) {
+				{ p.label }
+			}
+		}
+	</div>
+}
+
+func txDatePresetClass(active bool) string {
+	c := "h-8 px-3 rounded-full text-sm cursor-pointer transition-colors "
+	if active {
+		return c + "bg-zinc-700 text-white"
+	}
+	return c + "text-zinc-400 hover:bg-white/5 hover:text-white"
+}
+
+type txDatePreset struct {
+	label    string
+	from, to time.Time
+}
+
+// txDatePresetRanges are the periods offered as presets, up to today.
+func txDatePresetRanges(now time.Time) []txDatePreset {
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	month := time.Date(today.Year(), today.Month(), 1, 0, 0, 0, 0, time.UTC)
+	return []txDatePreset{
+		{"This month", month, today},
+		{"Last month", month.AddDate(0, -1, 0), month.AddDate(0, 0, -1)},
+		{"Last 30 days", today.AddDate(0, 0, -29), today},
+		{"This year", time.Date(today.Year(), 1, 1, 0, 0, 0, 0, time.UTC), today},
+	}
 }
 
 templ txAmountFilter(name, label string, value *float64) {

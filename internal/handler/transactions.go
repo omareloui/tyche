@@ -76,7 +76,79 @@ func (h Handler) txListData(r *http.Request, f models.TxFilter, before time.Time
 		logger.FromCtx(r.Context()).Error("fetch transactions from db", zap.Error(err))
 		return nil, err
 	}
-	return &views.TxListData{Page: page, Filter: f, Def: &getClaims(r.Context()).DefaultCurrency}, nil
+	d := &views.TxListData{Page: page, Filter: f, Def: &getClaims(r.Context()).DefaultCurrency}
+	// Only the first chunk (or a re-render) shows the summary.
+	if !f.IsZero() && before.IsZero() {
+		if d.Summary, err = h.repo.GetTransactionsSummary(r.Context(), f, d.Def); err != nil {
+			return nil, err
+		}
+		d.Chips = h.txFilterChips(r.Context(), &f)
+	}
+	return d, nil
+}
+
+// txFilterChips are the filters set, each removable on its own.
+func (h Handler) txFilterChips(ctx context.Context, f *models.TxFilter) []views.TxFilterChip {
+	chips := []views.TxFilterChip{}
+	add := func(label string, keys ...string) {
+		chips = append(chips, views.TxFilterChip{Label: label, Without: f.Without(keys...)})
+	}
+	if f.Q != "" {
+		add("“"+f.Q+"”", models.TxFilterQ)
+	}
+	if f.Kind != models.NilTxKind {
+		add(f.Kind.String(), models.TxFilterKind)
+	}
+	// The ids' names, "Unknown" when gone.
+	if f.AccountID != "" {
+		label := "Unknown"
+		if acc, err := h.repo.GetAccount(ctx, f.AccountID); err == nil {
+			label = acc.Name
+		}
+		add(label, models.TxFilterAccount)
+	}
+	if f.CategoryID != "" {
+		label := "Unknown"
+		if cat, err := h.repo.GetCategory(ctx, f.CategoryID); err == nil {
+			label = cat.Name
+		}
+		add(label, models.TxFilterCategory)
+	}
+	if f.CounterpartyID != "" {
+		label := "Unknown"
+		if cp, err := h.repo.GetCounterparty(ctx, f.CounterpartyID); err == nil {
+			label = cp.Name
+		}
+		add(label, models.TxFilterCounterparty)
+	}
+	if f.GoalID != "" {
+		label := "Unknown"
+		if gl, err := h.repo.GetGoal(ctx, f.GoalID); err == nil {
+			label = gl.Name
+		}
+		add(label, models.TxFilterGoal)
+	}
+	switch f.Status {
+	case models.TxStatusFulfilled:
+		add("Fulfilled", models.TxFilterStatus)
+	case models.TxStatusScheduled:
+		add("Scheduled", models.TxFilterStatus)
+	case models.TxStatusReview:
+		add("Needs review", models.TxFilterStatus)
+	}
+	switch f.Source {
+	case models.TxSourceSMS:
+		add("From SMS", models.TxFilterSource)
+	case models.TxSourceManual:
+		add("Added by hand", models.TxFilterSource)
+	}
+	if !f.From.IsZero() || !f.To.IsZero() {
+		add(views.FormatTxRange(f.From, f.To), models.TxFilterFrom, models.TxFilterTo)
+	}
+	if f.MinAmount != nil || f.MaxAmount != nil {
+		add(views.FormatAmountRange(f.MinAmount, f.MaxAmount), models.TxFilterMin, models.TxFilterMax)
+	}
+	return chips
 }
 
 // loadedTxListData is the list as the page shows it, to re-render it after

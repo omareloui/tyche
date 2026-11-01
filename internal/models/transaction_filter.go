@@ -214,3 +214,16 @@ type TxPage struct {
 	// NeedsReview counts all the transactions to review, unfiltered.
 	NeedsReview int
 }
+
+// TxSummary is what a filter of the transactions list matches as a whole,
+// in the default currency.
+type TxSummary struct {
+	// Count is how many rows the list shows; Scheduled of them aren't
+	// fulfilled yet.
+	Count, Scheduled int
+	// In and Out are what the fulfilled ones earn and spend, following the
+	// analysis rule.
+	In, Out float64
+	// Partial tells some currencies had no fx rate, left out of In and Out.
+	Partial bool
+}

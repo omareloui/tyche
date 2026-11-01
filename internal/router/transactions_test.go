@@ -215,6 +215,19 @@ func TestTransactionsPage(t *testing.T) {
 		}
 	})
 
+	t.Run("summary follows the analysis rule", func(t *testing.T) {
+		sum, err := repo.GetTransactionsSummary(ctx, models.TxFilter{AccountID: bank.ID}, egp)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// 6 months of 1..20, net of the 1 paid back; the reimbursement isn't
+		// income and the scheduled rent isn't spent yet.
+		want := models.TxSummary{Count: 121, Scheduled: 1, In: 0, Out: 6*210 - 1}
+		if *sum != want {
+			t.Errorf("summary = %+v, want %+v", *sum, want)
+		}
+	})
+
 	t.Run("filters", func(t *testing.T) {
 		min, max := 5.0, 6.0
 		tests := []struct {
@@ -245,7 +258,77 @@ func TestTransactionsPage(t *testing.T) {
 				if got := len(page.Upcoming) + len(page.History); got != tt.want {
 					t.Errorf("got %d transactions, want %d", got, tt.want)
 				}
+				sum, err := repo.GetTransactionsSummary(ctx, tt.f, egp)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if sum.Count != tt.want {
+					t.Errorf("summary counts %d transactions, want %d", sum.Count, tt.want)
+				}
 			})
 		}
 	})
+}
+
+func TestTxFilterToIncludesTheWholeDay(t *testing.T) {
+	repo, ctx, _ := setupTenant(t)
+
+	egp, err := repo.GetCurrencyByString(ctx, "EGP")
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds, err := repo.GetAccountKinds(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bankKind models.AccountKind
+	for _, k := range kinds {
+		if k.Enum == models.AccKindBankAcc {
+			bankKind = k
+		}
+	}
+	bank := &models.Account{ID: idgen.New(), Name: "Bank", Amount: 1000, Currency: *egp, Kind: bankKind}
+	if err := repo.CreateAccount(ctx, bank); err != nil {
+		t.Fatal(err)
+	}
+
+	// Late on the last day, as SMS transactions carry their time.
+	at := time.Date(2026, time.March, 12, 23, 30, 0, 0, time.UTC)
+	tx := &models.Transaction{
+		ID: idgen.New(), Account: *bank, Kind: models.ExpenseTxKind, Amount: 10,
+		ScheduledTo: at, FulfilledAt: at,
+	}
+	if err := repo.CreateTransaction(ctx, tx, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	day := func(d int) time.Time { return time.Date(2026, time.March, d, 0, 0, 0, 0, time.UTC) }
+	tests := []struct {
+		name string
+		f    models.TxFilter
+		want int
+	}{
+		{"ending that day", models.TxFilter{From: day(10), To: day(12)}, 1},
+		{"only that day", models.TxFilter{From: day(12), To: day(12)}, 1},
+		{"ending the day before", models.TxFilter{From: day(10), To: day(11)}, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			all := time.Time{}
+			page, err := repo.GetTransactionsPage(ctx, tt.f, time.Time{}, &all)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := len(page.History); got != tt.want {
+				t.Errorf("got %d transactions, want %d", got, tt.want)
+			}
+			sum, err := repo.GetTransactionsSummary(ctx, tt.f, egp)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if sum.Count != tt.want {
+				t.Errorf("summary counts %d, want %d", sum.Count, tt.want)
+			}
+		})
+	}
 }

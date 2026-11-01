@@ -217,6 +217,53 @@ func (r *Repository) GetTransactionsPage(ctx context.Context, f models.TxFilter,
 	return page, nil
 }
 
+// GetTransactionsSummary is what the filter matches as a whole, in def.
+func (r *Repository) GetTransactionsSummary(ctx context.Context, f models.TxFilter, def *models.Currency) (*models.TxSummary, error) {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	lp := txFilterParams(&f)
+	p := queries.GetTransactionsSummaryParams{
+		Q: lp.Q, Kind: lp.Kind, AccountID: lp.AccountID, CategoryID: lp.CategoryID,
+		CounterpartyID: lp.CounterpartyID, GoalID: lp.GoalID, NeedsReview: lp.NeedsReview,
+		FromSms: lp.FromSms, FromDate: lp.FromDate, ToDate: lp.ToDate,
+		MinAmount: lp.MinAmount, MaxAmount: lp.MaxAmount,
+	}
+	switch f.Status {
+	case models.TxStatusFulfilled:
+		p.Fulfilled = true
+	case models.TxStatusScheduled:
+		p.Fulfilled = false
+	}
+
+	rows, err := q.GetTransactionsSummary(ctx, p)
+	if err != nil {
+		logger.FromCtx(ctx).Error("querying transactions summary", zap.Error(err))
+		return nil, err
+	}
+
+	s := &models.TxSummary{}
+	for _, row := range rows {
+		s.Count += int(row.Count)
+		if !row.Fulfilled {
+			s.Scheduled += int(row.Count)
+			continue
+		}
+		cur := dbCurrencyToCurrency(&row.Currency, false)
+		in, okIn := models.Convert(row.Income, cur, def.String)
+		out, okOut := models.Convert(row.Expenses, cur, def.String)
+		if !okIn || !okOut {
+			s.Partial = true
+			continue
+		}
+		s.In += in
+		s.Out += out
+	}
+	return s, nil
+}
+
 // txFilterParams is the list query for the filter, all of it (no limit).
 func txFilterParams(f *models.TxFilter) queries.GetTransactionsParams {
 	p := queries.GetTransactionsParams{Lim: -1}
@@ -251,7 +298,9 @@ func txFilterParams(f *models.TxFilter) queries.GetTransactionsParams {
 		p.FromDate = f.From.UTC()
 	}
 	if !f.To.IsZero() {
-		p.ToDate = f.To.UTC()
+		// Up to the end of the day: the next one, exclusive, as transactions
+		// may have a time of day (e.g. from SMS).
+		p.ToDate = f.To.UTC().AddDate(0, 0, 1)
 	}
 	if f.MinAmount != nil {
 		p.MinAmount = *f.MinAmount
