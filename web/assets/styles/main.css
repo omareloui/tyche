@@ -378,3 +378,114 @@ input[type="number"] {
     animation: none;
   }
 }
+
+/* Page switch loading (main.js): bar at once, blur + spinner when slow. */
+#nav-progress {
+  position: fixed;
+  top: 0;
+  inset-inline: 0;
+  z-index: 60;
+  height: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+  transform-origin: left;
+  transform: scaleX(0);
+  opacity: 0;
+  pointer-events: none;
+}
+
+[data-navigating] #nav-progress {
+  opacity: 1;
+  animation: nav-progress 8s cubic-bezier(0.1, 0.7, 0.2, 1) forwards;
+}
+
+@keyframes nav-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(0.9);
+  }
+}
+
+main {
+  transition: filter 0.2s;
+}
+
+[data-navigating="slow"] main {
+  filter: blur(10px);
+  pointer-events: none;
+  user-select: none;
+}
+
+#nav-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: none;
+  place-content: center;
+  justify-items: center;
+  gap: 0.75rem;
+  color: var(--color-zinc-400);
+  pointer-events: none;
+}
+
+[data-navigating="slow"] #nav-loading {
+  display: grid;
+}
+
+/* A gradient arc with a fading tail and a glowing head, spinning. */
+.nav-spinner {
+  position: relative;
+  width: 2.75rem;
+  height: 2.75rem;
+  filter: drop-shadow(0 0 10px color-mix(in oklab, var(--accent) 60%, transparent));
+  animation: spin 0.9s linear infinite;
+}
+
+/* The ring's mask is on a child: a filter applies before the mask, so on
+   the same element the glow would be cut off. */
+.nav-spinner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: conic-gradient(from 0deg, transparent 0deg, color-mix(in oklab, var(--accent) 15%, transparent) 90deg, var(--accent) 300deg, white 360deg);
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+}
+
+.nav-loading-text {
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  padding-left: 0.25em;
+  color: var(--color-zinc-400);
+  animation: nav-breathe 1.8s ease-in-out infinite;
+}
+
+@keyframes nav-breathe {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+a.nav-pending {
+  color: white;
+  background: rgb(255 255 255 / 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-navigating] #nav-progress {
+    animation: none;
+    transform: scaleX(0.9);
+  }
+
+  .nav-spinner {
+    animation-duration: 2.5s;
+  }
+
+  .nav-loading-text {
+    animation: none;
+  }
+}
