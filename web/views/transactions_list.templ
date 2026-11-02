@@ -308,9 +308,9 @@ templ txUpcoming(l *txListView, def *models.Currency) {
 templ txMonthSection(m *txMonth, def *models.Currency) {
 	<section class="grid grid-cols-1 gap-5">
 		<header class="sticky top-16 z-10 -mx-2 px-2 py-2">
-			<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 rounded-2xl bg-zinc-900/60 ring-1 ring-zinc-800 backdrop-blur-sm">
+			<div class="flex items-center justify-between gap-3 sm:gap-4 px-3 py-2.5 sm:px-4 sm:py-3 rounded-2xl bg-zinc-900/60 ring-1 ring-zinc-800 backdrop-blur-sm">
 				<div class="min-w-0">
-					<h2 class="text-lg font-bold leading-tight font-(family-name:--font-biorhyme-expanded)">
+					<h2 class="text-base sm:text-lg font-bold leading-tight truncate font-(family-name:--font-biorhyme-expanded)">
 						<button
 							type="button"
 							@click={ fmt.Sprintf("filterBy({%q: %q, %q: %q})",
@@ -320,18 +320,31 @@ templ txMonthSection(m *txMonth, def *models.Currency) {
 							class="cursor-pointer transition-colors hover:text-(--accent)"
 						>{ formatTxMonth(m.Month) }</button>
 					</h2>
-					<p class="text-xs text-zinc-500">{ fmt.Sprint(m.Count) } { plural(m.Count, "transaction", "transactions") }</p>
+					<p class="hidden sm:block text-xs text-zinc-500">{ fmt.Sprint(m.Count) } { plural(m.Count, "transaction", "transactions") }</p>
+					// Mobile: in/out on one line under the month, the net stays on the right.
+					if m.In > 0 || m.Out != 0 {
+						<p class="sensitive sm:hidden flex gap-2 text-xs tabular-nums whitespace-nowrap overflow-hidden">
+							if m.In > 0 {
+								<span class="text-emerald-400" title="In">{ "+" + formatters.FormatAmount(m.In, def.Symbol) }</span>
+							}
+							if m.Out != 0 {
+								<span class="text-zinc-400" title="Out">{ formatSignedAmount(-m.Out, def.Symbol) }</span>
+							}
+						</p>
+					} else {
+						<p class="sm:hidden text-xs text-zinc-500">{ fmt.Sprint(m.Count) } { plural(m.Count, "transaction", "transactions") }</p>
+					}
 				</div>
 				if m.In > 0 || m.Out != 0 {
-					<dl class="sensitive flex items-center gap-4 tabular-nums">
+					<dl class="sensitive flex shrink-0 items-center gap-4 tabular-nums whitespace-nowrap">
 						if m.In > 0 {
-							<div class="text-right">
+							<div class="hidden sm:block text-right">
 								<dt class="text-[0.65rem] uppercase tracking-wider text-zinc-500">In</dt>
 								<dd class="text-sm font-medium text-emerald-400">{ "+" + formatters.FormatAmount(m.In, def.Symbol) }</dd>
 							</div>
 						}
 						if m.Out != 0 {
-							<div class="text-right">
+							<div class="hidden sm:block text-right">
 								<dt class="text-[0.65rem] uppercase tracking-wider text-zinc-500">Out</dt>
 								<dd class="text-sm font-medium text-zinc-300">{ formatSignedAmount(-m.Out, def.Symbol) }</dd>
 							</div>
@@ -341,7 +354,7 @@ templ txMonthSection(m *txMonth, def *models.Currency) {
 							<dd
 								title="Net"
 								class={
-									"px-2.5 py-1 rounded-full text-sm font-semibold",
+									"px-2.5 py-1 rounded-full text-xs sm:text-sm font-semibold",
 									templ.KV("bg-emerald-400/10 text-emerald-400 ring-1 ring-emerald-400/20", m.In >= m.Out),
 									templ.KV("bg-red-400/10 text-red-400 ring-1 ring-red-400/20", m.In < m.Out),
 								}
