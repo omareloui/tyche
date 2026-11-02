@@ -52,6 +52,15 @@ func (a *Account) ViewAmount() string {
 	return formatters.FormatAmount(a.Amount, a.Currency.Symbol)
 }
 
+// ViewAmountIn is the balance converted to cur, "" when there's no rate.
+func (a *Account) ViewAmountIn(cur *Currency) string {
+	rate := a.Currency.FxRate(cur.String)
+	if rate == 0 {
+		return ""
+	}
+	return formatters.FormatAmount(rate*a.Amount, cur.Symbol)
+}
+
 func (a *Account) ViewActualAmount() string {
 	return formatters.FormatAmount(a.ActualAmount, a.Currency.Symbol)
 }

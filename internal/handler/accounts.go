@@ -57,7 +57,7 @@ func (h *Handler) Account(w http.ResponseWriter, r *http.Request) (templ.Compone
 	}
 	l.Info("fetched account")
 
-	return views.Account(a), nil
+	return views.Account(a, &getClaims(r.Context()).DefaultCurrency), nil
 }
 
 func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -118,7 +118,7 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 		}
 	}
 
-	if err := renderToBody(w, r, views.AccountOOB(a)); err != nil {
+	if err := renderToBody(w, r, views.AccountOOB(a, &getClaims(r.Context()).DefaultCurrency)); err != nil {
 		l.Error("rendering account oob", zap.Error(err))
 		return nil, err
 	}
@@ -247,14 +247,14 @@ func (h *Handler) renderUpdatedAccount(w http.ResponseWriter, r *http.Request, p
 	}
 
 	if !moved {
-		return views.Account(a), nil
+		return views.Account(a, &getClaims(r.Context()).DefaultCurrency), nil
 	}
 
 	if err := renderToBody(w, r, views.AccountDeleteOOB(a.ID)); err != nil {
 		l.Error("rendering account delete oob", zap.Error(err))
 		return nil, err
 	}
-	if err := renderToBody(w, r, views.AccountOOB(a)); err != nil {
+	if err := renderToBody(w, r, views.AccountOOB(a, &getClaims(r.Context()).DefaultCurrency)); err != nil {
 		l.Error("rendering account oob", zap.Error(err))
 		return nil, err
 	}
@@ -327,7 +327,7 @@ func (h *Handler) SetDefaultAccount(w http.ResponseWriter, r *http.Request) (tem
 
 	if prevDefault != nil && prevDefault.ID != id {
 		prevDefault.IsDefault = false
-		if err := renderToBody(w, r, views.AccountReplaceOOB(prevDefault)); err != nil {
+		if err := renderToBody(w, r, views.AccountReplaceOOB(prevDefault, &getClaims(r.Context()).DefaultCurrency)); err != nil {
 			l.Error("rendering previous default account oob", zap.Error(err))
 			return nil, err
 		}
@@ -338,7 +338,7 @@ func (h *Handler) SetDefaultAccount(w http.ResponseWriter, r *http.Request) (tem
 		l.Error("fetching account", zap.Error(err))
 		return nil, err
 	}
-	return views.Account(a), nil
+	return views.Account(a, &getClaims(r.Context()).DefaultCurrency), nil
 }
 
 func (h Handler) AccountInputs(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

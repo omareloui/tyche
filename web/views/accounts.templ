@@ -69,7 +69,7 @@ templ Accounts(
 				</a>
 			</div>
 		}
-		@accountsList(accounts)
+		@accountsList(accounts, &claims.DefaultCurrency)
 	}
 }
 
@@ -320,7 +320,7 @@ var accountSections = []accountSection{
 	{ID: "archived", Title: "Archived"},
 }
 
-templ accountsList(accounts []models.Account) {
+templ accountsList(accounts []models.Account, defaultCur *models.Currency) {
 	<div id="accounts-list" class="grid gap-8">
 		for _, s := range accountSections {
 			{{ accs := accountsInSection(accounts, s.ID) }}
@@ -331,7 +331,7 @@ templ accountsList(accounts []models.Account) {
 						<h2 class="text-sm font-semibold uppercase tracking-wider">{ s.Title }</h2>
 						@icons.ChevronDown("16", &templ.Attributes{"class": "transition-transform group-open:rotate-180"})
 					</summary>
-					@accountSectionGrid(s.ID, accs)
+					@accountSectionGrid(s.ID, accs, defaultCur)
 				</details>
 			} else {
 				<section class="hidden has-[[data-account]]:block">
@@ -339,7 +339,7 @@ templ accountsList(accounts []models.Account) {
 						@accKindIcon(s.Kind, "16")
 						{ s.Title }
 					</h2>
-					@accountSectionGrid(s.ID, accs)
+					@accountSectionGrid(s.ID, accs, defaultCur)
 				</section>
 			}
 		}
@@ -362,15 +362,15 @@ templ accountsEmpty() {
 	</div>
 }
 
-templ accountSectionGrid(sectionID string, accs []models.Account) {
+templ accountSectionGrid(sectionID string, accs []models.Account, defaultCur *models.Currency) {
 	<div id={ AccountSectionID(sectionID) } class="grid sm:grid-cols-2 gap-4">
 		for _, a := range accs {
-			@accountWrapper(&a)
+			@accountWrapper(&a, defaultCur)
 		}
 	</div>
 }
 
-templ Account(a *models.Account) {
+templ Account(a *models.Account, defaultCur *models.Currency) {
 	{{ cardLike := a.Kind.Enum == models.AccKindCreditCard || a.Kind.Enum == models.AccKindBankAcc }}
 	<div
 		hx-target="this"
@@ -422,6 +422,11 @@ templ Account(a *models.Account) {
 						templ.KV("text-red-400", a.Amount < 0 && a.Kind.Enum != models.AccKindDebt && a.Kind.Enum != models.AccKindGamyaa),
 					}
 				>{ a.ViewAmount() }</p>
+				if defaultCur != nil && a.Currency.String != defaultCur.String {
+					if v := a.ViewAmountIn(defaultCur); v != "" {
+						<p title={ "In " + defaultCur.String } class="sensitive text-sm text-zinc-500 tabular-nums">≈ { v }</p>
+					}
+				}
 				if a.ActualAmount != a.Amount {
 					<p title="Including money set aside for goals" class="sensitive text-sm text-zinc-500 tabular-nums">
 						{ a.ViewActualAmount() } with goals
@@ -504,23 +509,23 @@ templ expiryChip(exp time.Time) {
 	</span>
 }
 
-templ AccountOOB(a *models.Account) {
+templ AccountOOB(a *models.Account, defaultCur *models.Currency) {
 	<div id={ AccountSectionID(accountSectionOf(a)) } hx-swap-oob="afterbegin">
-		@accountWrapper(a)
+		@accountWrapper(a, defaultCur)
 	</div>
 }
 
 // accountWrapper gives the card a stable target, as the edit form replaces
 // the card itself.
-templ accountWrapper(a *models.Account) {
+templ accountWrapper(a *models.Account, defaultCur *models.Currency) {
 	<div id={ AccountWrapperID(a.ID) } class="contents">
-		@Account(a)
+		@Account(a, defaultCur)
 	</div>
 }
 
-templ AccountReplaceOOB(a *models.Account) {
+templ AccountReplaceOOB(a *models.Account, defaultCur *models.Currency) {
 	<div id={ AccountWrapperID(a.ID) } class="contents" hx-swap-oob="innerHTML">
-		@Account(a)
+		@Account(a, defaultCur)
 	</div>
 }
 
