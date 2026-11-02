@@ -11,9 +11,12 @@ import (
 	"github.com/omareloui/tyche/web/views/layouts"
 )
 
+// RepoURL is the source repository, linked from the landing footer.
+const RepoURL = "https://github.com/omareloui/tyche"
+
 // AndroidReleaseURL is where the Android app is downloaded from: the latest
 // non-prerelease GitHub release, built from main by the mobile-release workflow.
-const AndroidReleaseURL = "https://github.com/omareloui/tyche/releases/latest"
+const AndroidReleaseURL = RepoURL + "/releases/latest"
 
 type landingIcon = func(size string, attrs ...*templ.Attributes) templ.Component
 
@@ -415,7 +418,13 @@ templ landingFooter() {
 		@landingWrap() {
 			<div class="flex flex-col items-center justify-between gap-3 text-center sm:flex-row sm:text-left">
 				<p class="text-xl font-bold font-(family-name:--font-biorhyme-expanded)">tyche</p>
-				<p class="text-sm text-zinc-500">Named after the Greek goddess of fortune · © { time.Now().Format("2006") }</p>
+				<div class="flex items-center gap-4 text-sm text-zinc-500">
+					<p>© { time.Now().Format("2006") }</p>
+					<a href={ templ.SafeURL(RepoURL) } target="_blank" rel="noopener" aria-label="Tyche on GitHub" class="inline-flex items-center gap-1.5 transition-colors hover:text-zinc-200">
+						@icons.GitHub("18")
+						GitHub
+					</a>
+				</div>
 			</div>
 		}
 	</footer>
