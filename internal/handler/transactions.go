@@ -245,6 +245,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		return nil, err
 	}
 	l.Info("created transaction")
+	drawerCreated(w)
 
 	if wishlistID != "" {
 		if err := h.repo.SetWishlistItemStatus(r.Context(), wishlistID, models.WishlistBought, tx.ID); err != nil {
@@ -366,13 +367,13 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 	}
 	l.Info("updated transaction")
 
-	// The drawer shows the saved transaction (or closes, on tx-saved, when
+	// The drawer shows the saved transaction (or closes, on drawer-saved, when
 	// opened from the row); the list behind it re-renders out of band.
 	d, err := h.txDetails(r.Context(), id)
 	if err != nil {
 		return nil, err
 	}
-	w.Header().Set("HX-Trigger", "tx-saved")
+	addHXTrigger(w, drawerSavedEvent)
 	if err := h.renderTransactionsListOOB(w, r); err != nil {
 		return nil, err
 	}

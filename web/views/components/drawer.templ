@@ -1,0 +1,79 @@
+package components
+
+import "github.com/omareloui/tyche/web/views/icons"
+
+// DrawerSlot is where drawers fetched on demand (e.g. an entry's edit form,
+// hx-target="#drawer") open.
+const DrawerSlot = "drawer"
+
+type DrawerProps struct {
+	Label string
+	// XData is the drawer's Alpine component: "drawer" (the default) or one
+	// built on drawerBase (drawer.js), e.g. the transaction details.
+	XData string
+	// PanelID is the id of the content swapped in place, if any.
+	PanelID string
+	// Bind, for a drawer kept in the page (e.g. a create form), is the Alpine
+	// variable showing it, e.g. openCreateForm. Empty for one swapped in (into
+	// #drawer), removed on closing.
+	Bind string
+	// Attrs go on the drawer's root, e.g. a data attribute to find it by.
+	Attrs templ.Attributes
+}
+
+// Drawer is the panel the add and edit forms (and the transaction details)
+// open in: from the right on wide screens, a bottom sheet on phones. Escape
+// and clicking outside close it, asking first when its form has changes;
+// a drawer-saved event (HX-Trigger of a form's answer) closes it.
+templ Drawer(p DrawerProps) {
+	<div
+		if p.XData != "" {
+			x-data={ p.XData }
+		} else {
+			x-data="drawer"
+		}
+		data-drawer
+		if p.Attrs != nil {
+			{ p.Attrs... }
+		}
+		if p.Bind != "" {
+			data-drawer-static
+			x-modelable="shown"
+			x-model={ p.Bind }
+			x-show="shown"
+			x-cloak
+		}
+		@keyup.escape.window="escape($event)"
+		@drawer-saved="saved()"
+		class="drawer-root fixed inset-0 z-55 flex items-end sm:items-stretch sm:justify-end"
+	>
+		<div class="drawer-backdrop absolute inset-0 bg-zinc-950/60 backdrop-blur-sm" @click="backdrop()"></div>
+		<aside
+			role="dialog"
+			aria-modal="true"
+			aria-label={ p.Label }
+			class="drawer-sheet relative flex flex-col w-full sm:w-[32rem] max-h-[92dvh] sm:max-h-none sm:h-dvh rounded-t-3xl sm:rounded-none sm:rounded-l-3xl bg-zinc-900 ring-1 ring-zinc-800 shadow-2xl shadow-black/50"
+		>
+			if p.PanelID != "" {
+				<div id={ p.PanelID } class="contents">
+					{ children... }
+				</div>
+			} else {
+				{ children... }
+			}
+		</aside>
+	</div>
+}
+
+// DrawerClose closes the drawer it's in (asking first if its form changed).
+templ DrawerClose() {
+	<button
+		type="button"
+		x-ref="close"
+		@click="requestClose()"
+		aria-label="Close"
+		class="grid place-items-center shrink-0 w-9 h-9 -mr-2 rounded-full text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white"
+	>
+		@icons.X("20")
+	</button>
+}

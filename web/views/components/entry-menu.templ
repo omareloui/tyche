@@ -63,9 +63,20 @@ templ EntryMenuAnchorItem(label string, action string, url string, opts ...Entry
 	@EntryMenuItem(label, templ.Attributes{"hx-" + action: url, "hx-swap": "outerHTML"}, opts...)
 }
 
-// EntryMenuEditItem gets the entry's edit form at url.
+// EntryMenuDrawerItem opens the drawer (Drawer) url answers with, e.g. an
+// edit form, closing the menu.
+templ EntryMenuDrawerItem(label, url string, opts ...EntryMenuItemOpt) {
+	@EntryMenuItem(label, templ.Attributes{
+		"hx-get":            url,
+		"hx-target":         "#" + DrawerSlot,
+		"hx-swap":           "innerHTML",
+		"data-opens-drawer": true,
+	}, opts...)
+}
+
+// EntryMenuEditItem opens the entry's edit form at url, in a drawer.
 templ EntryMenuEditItem(url string, opts ...EntryMenuItemOpt) {
-	@EntryMenuAnchorItem("Edit", "get", url,
+	@EntryMenuDrawerItem("Edit", url,
 		append([]EntryMenuItemOpt{WithEntryMenuItemIcon(icons.Pencil("16"))}, opts...)...,
 	)
 }
@@ -96,6 +107,7 @@ templ EntryMenuAt(showKey string, position string, entries []templ.Component) {
 		x-show={ showKey }
 		x-effect={ "if (" + showKey + ") $nextTick(() => $el.querySelector('[role=menuitem]')?.focus())" }
 		@click.away={ showKey + " = false" }
+		@click={ "if ($event.target.closest('[data-opens-drawer]')) " + showKey + " = false" }
 		@keydown.escape.window={ showKey + " = false" }
 		@keydown.arrow-down.prevent="entryMenuMove($el, 1)"
 		@keydown.arrow-up.prevent="entryMenuMove($el, -1)"

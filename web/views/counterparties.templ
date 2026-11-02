@@ -41,36 +41,45 @@ templ CreateCounterpartyForm(fd *CounterpartyFD, cats []models.Category) {
 	}
 }
 
+// EditCounterparty is the counterparty's edit form, in a drawer.
 templ EditCounterparty(id string, fd *CounterpartyFD, cats []models.Category) {
-	<form
-		hx-put={ string(templ.SafeURL(fmt.Sprintf("/counterparties/%s", id))) }
-		hx-target="this"
-		hx-swap="outerHTML"
-		class="grid gap-5 sm:col-span-2 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-5 sm:p-6"
-	>
-		<header class="flex items-baseline justify-between gap-4">
-			<h3 class="text-lg font-semibold">Edit counterparty</h3>
-		</header>
-		@counterpartyFormBody(id, false, fd, cats)
-		@form.SheetFormButtons("Save changes", fmt.Sprintf("/counterparties/%s", id))
-	</form>
+	@components.Drawer(components.DrawerProps{Label: "Edit counterparty"}) {
+		@EditCounterpartyForm(id, fd, cats)
+	}
 }
 
+// EditCounterpartyForm is EditCounterparty's form alone, answered with its
+// errors.
+templ EditCounterpartyForm(id string, fd *CounterpartyFD, cats []models.Category) {
+	@form.DrawerForm(form.DrawerFormProps{
+		Title: "Edit counterparty", Method: "put", URL: fmt.Sprintf("/counterparties/%s", id),
+		Submit: "Save changes",
+	}) {
+		@counterpartyFormBody(id, false, fd, cats)
+	}
+}
+
+// MergeCounterparty is the form merging from into another counterparty, in
+// a drawer.
 templ MergeCounterparty(from *models.Counterparty, fd *MergeCounterpartyFD, cps []models.Counterparty) {
-	<form
-		hx-post={ string(templ.SafeURL(fmt.Sprintf("/counterparties/%s/merge", from.ID))) }
-		hx-target="this"
-		hx-swap="outerHTML"
-		hx-disinherit="hx-confirm"
-		hx-confirm={ fmt.Sprintf("Merge %q into the selected counterparty? %q will be deleted.", from.Name, from.Name) }
-		data-confirm-label="Merge"
-		data-confirm-danger
-		class="grid gap-5 sm:col-span-2 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-5 sm:p-6"
-	>
-		<header class="flex items-center gap-3 min-w-0">
-			@components.CounterpartyIcon(from.Name, from.Icon, from.Color, "w-8 h-8 text-sm")
-			<h3 class="text-lg font-semibold truncate">Merge { from.Name }</h3>
-		</header>
+	@components.Drawer(components.DrawerProps{Label: "Merge " + from.Name}) {
+		@MergeCounterpartyForm(from, fd, cps)
+	}
+}
+
+// MergeCounterpartyForm is MergeCounterparty's form alone, answered with its
+// errors.
+templ MergeCounterpartyForm(from *models.Counterparty, fd *MergeCounterpartyFD, cps []models.Counterparty) {
+	@form.DrawerForm(form.DrawerFormProps{
+		Header: mergeCounterpartyHeader(from), Method: "post", URL: fmt.Sprintf("/counterparties/%s/merge", from.ID),
+		Submit: "Merge",
+		Attrs: templ.Attributes{
+			"hx-disinherit":       "hx-confirm",
+			"hx-confirm":          fmt.Sprintf("Merge %q into the selected counterparty? %q will be deleted.", from.Name, from.Name),
+			"data-confirm-label":  "Merge",
+			"data-confirm-danger": true,
+		},
+	}) {
 		<p class="text-sm text-zinc-400">
 			Its transactions, recurrent transactions and accounts move to the counterparty you pick, and its name and aliases become that counterparty's aliases. { from.Name } is then deleted.
 		</p>
@@ -80,8 +89,14 @@ templ MergeCounterparty(from *models.Counterparty, fd *MergeCounterpartyFD, cps 
 				Options: counterpartyComboOptions(cps), Data: fd.IntoID, Searchable: true,
 			})
 		}
-		@form.SheetFormButtons("Merge", fmt.Sprintf("/counterparties/%s", from.ID))
-	</form>
+	}
+}
+
+templ mergeCounterpartyHeader(from *models.Counterparty) {
+	<div class="flex items-center gap-3 min-w-0">
+		@components.CounterpartyIcon(from.Name, from.Icon, from.Color, "w-8 h-8 text-sm")
+		<h2 class="text-lg font-bold truncate">Merge { from.Name }</h2>
+	</div>
 }
 
 templ counterpartyFormBody(id string, isNew bool, fd *CounterpartyFD, cats []models.Category) {
@@ -249,7 +264,7 @@ templ Counterparty(cp *models.Counterparty) {
 			</div>
 			@components.EntryMenuAnchored("openMenu", "Counterparty actions", []templ.Component{
 				components.EntryMenuEditItem(fmt.Sprintf("/counterparties/%s/edit", cp.ID)),
-				components.EntryMenuAnchorItem("Merge into…", "get", fmt.Sprintf("/counterparties/%s/merge", cp.ID),
+				components.EntryMenuDrawerItem("Merge into…", fmt.Sprintf("/counterparties/%s/merge", cp.ID),
 					components.WithEntryMenuItemIcon(icons.Merge("16"))),
 				components.EntryMenuSeparator(),
 				components.EntryMenuDeleteItem(fmt.Sprintf("/counterparties/%s", cp.ID)),

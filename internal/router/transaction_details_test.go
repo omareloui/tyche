@@ -195,10 +195,10 @@ func TestEditTransactionInDetails(t *testing.T) {
 		if res.StatusCode != http.StatusOK {
 			t.Fatalf("status %d: %s", res.StatusCode, body)
 		}
-		if got := res.Header.Get("HX-Trigger"); got != "tx-saved" {
-			t.Errorf("HX-Trigger = %q, want tx-saved", got)
+		if got := res.Header.Get("HX-Trigger"); got != "drawer-saved" {
+			t.Errorf("HX-Trigger = %q, want drawer-saved", got)
 		}
-		for _, want := range []string{`hx-swap-oob`, "Dinner", "txd-panel flex"} {
+		for _, want := range []string{`hx-swap-oob`, "Dinner", "drawer-panel flex"} {
 			if !strings.Contains(body, want) {
 				t.Errorf("missing %q", want)
 			}
@@ -220,7 +220,7 @@ func TestEditTransactionInDetails(t *testing.T) {
 		bad.Set("amount", "")
 		bad.Set("from", "menu")
 		res, body := do("PUT", "/transactions/"+tx.ID, "txd-panel", bad)
-		if res.Header.Get("HX-Trigger") == "tx-saved" || !strings.Contains(body, `value="menu"`) {
+		if res.Header.Get("HX-Trigger") == "drawer-saved" || !strings.Contains(body, `value="menu"`) {
 			t.Fatalf("status %d, trigger %q: %s", res.StatusCode, res.Header.Get("HX-Trigger"), body)
 		}
 	})

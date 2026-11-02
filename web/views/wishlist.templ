@@ -25,28 +25,28 @@ type WishlistItemFD struct {
 const WorkSettingsChangedEvent = "work-settings-changed"
 
 templ CreateWishlistItemForm(fd *WishlistItemFD, curs []models.Currency, defaultCur *models.Currency) {
-	@form.SheetForm("Add to wishlist", "/wishlist", "Add", "", templ.Attributes{
-		"@wishlist-created.window": "openCreateForm = false",
-	}) {
+	@form.SheetForm("Add to wishlist", "/wishlist", "Add", "") {
 		@wishlistItemFormBody("wl", fd, curs, defaultCur)
 	}
 }
 
-// EditWishlistItem replaces the item's card; saving re-renders the whole
-// wishlist.
+// EditWishlistItem is the wish's edit form, in a drawer; saving re-renders
+// the whole wishlist.
 templ EditWishlistItem(id string, fd *WishlistItemFD, curs []models.Currency, defaultCur *models.Currency) {
-	<form
-		id={ WishlistItemID(id) }
-		hx-put={ string(templ.SafeURL(fmt.Sprintf("/wishlist/%s", id))) }
-		hx-target="#wishlist"
-		hx-swap="outerHTML"
-		data-wl
-		class="grid gap-5 sm:col-span-2 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-5 sm:p-6"
-	>
-		<h3 class="text-lg font-semibold">Edit wish</h3>
+	@components.Drawer(components.DrawerProps{Label: "Edit wish"}) {
+		@EditWishlistItemForm(id, fd, curs, defaultCur)
+	}
+}
+
+// EditWishlistItemForm is EditWishlistItem's form alone, answered with its
+// errors.
+templ EditWishlistItemForm(id string, fd *WishlistItemFD, curs []models.Currency, defaultCur *models.Currency) {
+	@form.DrawerForm(form.DrawerFormProps{
+		Title: "Edit wish", Method: "put", URL: fmt.Sprintf("/wishlist/%s", id),
+		Submit: "Save changes",
+	}) {
 		@wishlistItemFormBody(id, fd, curs, defaultCur)
-		@form.SheetFormButtons("Save changes", "/wishlist")
-	</form>
+	}
 }
 
 templ wishlistItemFormBody(id string, fd *WishlistItemFD, curs []models.Currency, defaultCur *models.Currency) {

@@ -109,6 +109,7 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 		return nil, err
 	}
 	l.Info("created account", zap.Any("account", a))
+	drawerCreated(w)
 
 	// Refetched for a gam'yaa's progress.
 	if a.Gamyaa != nil {
@@ -202,7 +203,7 @@ func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Com
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("validating account", zap.Any("errors", valerr.Errors))
-			return views.EditAccount(id, h.mapAccToFD(a, &valerr, deps), deps.knds, deps.shownCurs, deps.cps, &claims.DefaultCurrency), nil
+			return views.EditAccountForm(id, h.mapAccToFD(a, &valerr, deps), deps.knds, deps.shownCurs, deps.cps, &claims.DefaultCurrency), nil
 		}
 		l.Error("sanitizing account", zap.Error(err))
 		return nil, err
@@ -214,7 +215,7 @@ func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Com
 	var valerr *errs.ValidationError
 	if err != nil && errors.As(err, &valerr) {
 		l.Error("duplication error", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-		return views.EditAccount(id, h.mapAccToFD(a, valerr, deps), deps.knds, deps.shownCurs, deps.cps, &claims.DefaultCurrency), nil
+		return views.EditAccountForm(id, h.mapAccToFD(a, valerr, deps), deps.knds, deps.shownCurs, deps.cps, &claims.DefaultCurrency), nil
 	} else if err != nil {
 		l.Error("updating account", zap.Error(err), zap.Any("account", a))
 		return nil, err
@@ -236,10 +237,12 @@ func (h *Handler) renderUpdatedAccount(w http.ResponseWriter, r *http.Request, p
 		return nil, err
 	}
 
+	// Before anything is written, as headers go out with the body.
 	moved := views.AccountSectionChanged(prev, a)
 	if moved {
-		// Before anything is written, as headers go out with the body.
-		w.Header().Set("HX-Reswap", "none")
+		drawerSaved(w, "#"+views.AccountWrapperID(a.ID), "none")
+	} else {
+		drawerSaved(w, "#"+views.AccountWrapperID(a.ID), "innerHTML")
 	}
 
 	if err := h.getAndRenderBalancesOOB(w, r); err != nil {

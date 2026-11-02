@@ -79,20 +79,21 @@ templ CreateAccountForm(fd *AccountFD, aknds []models.AccountKind, curs []models
 	}
 }
 
+// EditAccount is the account's edit form, in a drawer.
 templ EditAccount(id string, fd *AccountFD, aknds []models.AccountKind, curs []models.Currency, cps []models.Counterparty, defaultCur *models.Currency) {
-	<form
-		hx-put={ string(templ.SafeURL(fmt.Sprintf("/accounts/%s", id))) }
-		hx-target="this"
-		hx-swap="outerHTML"
-		data-account
-		class="acc-form grid gap-5 sm:col-span-2 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-5 sm:p-6"
-	>
-		<header class="flex items-baseline justify-between gap-4">
-			<h3 class="text-lg font-semibold">Edit account</h3>
-		</header>
+	@components.Drawer(components.DrawerProps{Label: "Edit account"}) {
+		@EditAccountForm(id, fd, aknds, curs, cps, defaultCur)
+	}
+}
+
+// EditAccountForm is EditAccount's form alone, answered with its errors.
+templ EditAccountForm(id string, fd *AccountFD, aknds []models.AccountKind, curs []models.Currency, cps []models.Counterparty, defaultCur *models.Currency) {
+	@form.DrawerForm(form.DrawerFormProps{
+		Title: "Edit account", Method: "put", URL: fmt.Sprintf("/accounts/%s", id),
+		Submit: "Save changes", Class: "acc-form",
+	}) {
 		@accountFormBody(id, fd, aknds, curs, cps, defaultCur)
-		@form.SheetFormButtons("Save changes", fmt.Sprintf("/accounts/%s", id))
-	</form>
+	}
 }
 
 templ accountFormBody(id string, fd *AccountFD, aknds []models.AccountKind, curs []models.Currency, cps []models.Counterparty, defaultCur *models.Currency) {

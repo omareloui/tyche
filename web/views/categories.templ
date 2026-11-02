@@ -38,20 +38,21 @@ templ CreateCategoryForm(fd *CategoryFD, knds []models.TxKind, curs []models.Cur
 	}
 }
 
+// EditCategory is the category's edit form, in a drawer.
 templ EditCategory(fd *CategoryFD, id string, knds []models.TxKind, curs []models.Currency, defaultCur *models.Currency) {
-	<form
-		hx-put={ string(templ.SafeURL(fmt.Sprintf("/categories/%s", id))) }
-		hx-target="this"
-		hx-swap="outerHTML"
-		{ categoryAccentAttrs(fd)... }
-		class="grid gap-5 sm:col-span-2 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-5 sm:p-6"
-	>
-		<header class="flex items-baseline justify-between gap-4">
-			<h3 class="text-lg font-semibold">Edit category</h3>
-		</header>
+	@components.Drawer(components.DrawerProps{Label: "Edit category"}) {
+		@EditCategoryForm(fd, id, knds, curs, defaultCur)
+	}
+}
+
+// EditCategoryForm is EditCategory's form alone, answered with its errors.
+templ EditCategoryForm(fd *CategoryFD, id string, knds []models.TxKind, curs []models.Currency, defaultCur *models.Currency) {
+	@form.DrawerForm(form.DrawerFormProps{
+		Title: "Edit category", Method: "put", URL: fmt.Sprintf("/categories/%s", id),
+		Submit: "Save changes", Attrs: categoryAccentAttrs(fd),
+	}) {
 		@categoryFormBody(fd, id, knds, curs, defaultCur)
-		@form.SheetFormButtons("Save changes", fmt.Sprintf("/categories/%s", id))
-	</form>
+	}
 }
 
 templ categoryFormBody(fd *CategoryFD, id string, knds []models.TxKind, curs []models.Currency, defaultCur *models.Currency) {
@@ -108,7 +109,7 @@ templ categoriesEmpty() {
 
 templ Category(cat *models.Category) {
 	{{ hex := models.CategoryColorToHex(cat.Color) }}
-	<div hx-target="this" hx-swap="outerHTML" class="relative" x-data="{openMenu: false}">
+	<div id={ CategoryID(cat.ID) } hx-target="this" hx-swap="outerHTML" class="relative" x-data="{openMenu: false}">
 		<div class="flex items-center gap-4 h-full px-4 py-4 rounded-2xl bg-zinc-700/20">
 			<div
 				class="grid place-items-center shrink-0 w-12 h-12 rounded-xl"
@@ -145,4 +146,9 @@ templ CategoryOOB(cat *models.Category) {
 	<div id="categories-list" hx-swap-oob="afterbegin">
 		@Category(cat)
 	</div>
+}
+
+// CategoryID is the id of the category's card.
+func CategoryID(id string) string {
+	return "category-" + id
 }

@@ -135,7 +135,7 @@ document.addEventListener("alpine:init", () => {
     onKey(e) {
       if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
       const t = e.target;
-      if (this.openCreateForm || document.querySelector("[data-tx-details]")) return;
+      if (this.openCreateForm || document.querySelector("[data-tx-details], #drawer [data-drawer]")) return;
       if (e.key === "/" && !t.closest?.("input, textarea, select, [contenteditable]")) {
         e.preventDefault();
         this.$refs.q?.focus();
@@ -201,124 +201,94 @@ document.addEventListener("alpine:init", () => {
     },
   }));
 
-  // txDetails is the details drawer of a transaction (views.txDrawer). Its
-  // content (#txd-panel) is the transaction's details or its edit form, each
-  // calling show() as it's swapped in. Deleting acts on the transaction's
-  // row in the list, for its undo.
-  Alpine.data("txDetails", () => ({
-    id: null,
-    // mode is "view" or "edit"; from is where the edit form was opened from:
-    // "details" goes back to them, "menu" (a row) closes the drawer.
-    mode: "view",
-    from: null,
-    // pristine is the edit form's values when it opened.
-    pristine: null,
-    // opener is what had the focus before opening, given back on closing.
-    opener: null,
+  // txDetails is the details drawer of a transaction (views.txDrawer), a
+  // drawer (drawerBase, drawer.js) whose content (#txd-panel) is the
+  // transaction's details or its edit form, each calling show() as it's
+  // swapped in. Deleting acts on the transaction's row in the list, for its
+  // undo.
+  Alpine.data("txDetails", () => {
+    const base = drawerBase();
+    return {
+      ...base,
+      id: null,
+      // mode is "view" or "edit"; from is where the edit form was opened
+      // from: "details" goes back to them, "menu" (a row) closes the drawer.
+      mode: "view",
+      from: null,
 
-    init() {
-      if (!this.$root.contains(document.activeElement)) this.opener = document.activeElement;
-    },
+      // The panels' show() does what base.init would.
+      init() {
+        if (!this.drawerRoot().contains(document.activeElement)) this.opener = document.activeElement;
+      },
 
-    show(id, mode, from = null) {
-      // A form answered with its errors keeps the values it was opened with.
-      const opening = mode === "edit" && this.mode !== "edit";
-      this.id = id;
-      this.mode = mode;
-      this.from = from;
-      setTxParam(id);
-      this.$nextTick(() => {
-        if (opening) this.pristine = this.formState();
-        const panel = this.$root.querySelector(".txd-panel");
-        const first =
-          mode === "edit" &&
-          panel?.querySelector("input:not([type=hidden]):not([disabled]), select, textarea, [role=combobox]");
-        (first || this.$refs.close)?.focus({ preventScroll: true });
-      });
-    },
-
-    row() {
-      return this.id && document.getElementById(`tx-${this.id}`);
-    },
-
-    panel(url) {
-      return htmx.ajax("GET", url, { target: "#txd-panel", swap: "innerHTML" });
-    },
-
-    close() {
-      if (this.$root.hasAttribute("data-closing")) return;
-      setTxParam(null);
-      const back = this.row()?.querySelector("[data-tx-row]") ?? this.opener;
-      this.$root.setAttribute("data-closing", "");
-      let done = false;
-      const remove = () => {
-        if (done) return;
-        done = true;
-        this.$root.remove();
-        back?.focus?.({ preventScroll: true });
-      };
-      this.$root.querySelector(".txd-drawer")?.addEventListener("animationend", remove, { once: true });
-      setTimeout(remove, 250);
-    },
-
-    cancel() {
-      if (this.from === "menu") this.close();
-      else this.panel(txDetailsURL(this.id));
-    },
-
-    // escape (on keyup, after an open combobox stopped it for closing itself)
-    // cancels editing or closes, unless the datepicker is open.
-    escape(e) {
-      if (e.defaultPrevented || confirmJustClosed()) return;
-      if ([...document.querySelectorAll(".litepicker")].some((p) => p.offsetParent !== null)) return;
-      if (this.mode === "edit") this.cancel();
-      else this.close();
-    },
-
-    // formState is the edit form's values, to tell if they changed.
-    formState() {
-      const form = this.$root.querySelector("form.txd-panel");
-      return form ? new URLSearchParams(new FormData(form)).toString() : null;
-    },
-
-    // Clicking outside closes, asking first when the form has changes.
-    async backdrop() {
-      if (this.mode === "edit" && this.formState() !== this.pristine) {
-        const ok = await askConfirm("Discard your changes? The edits to this transaction won't be saved.", {
-          label: "Discard",
-          danger: true,
+      show(id, mode, from = null) {
+        // A form answered with its errors keeps the values it was opened with.
+        const opening = mode === "edit" && this.mode !== "edit";
+        this.id = id;
+        this.mode = mode;
+        this.from = from;
+        setTxParam(id);
+        this.$nextTick(() => {
+          if (opening) this.pristine = this.formState();
+          if (mode === "edit") this.focusFirst();
+          else this.drawerRoot().querySelector("[x-ref=close]")?.focus({ preventScroll: true });
         });
-        if (!ok) return;
-      }
-      this.close();
-    },
+      },
 
-    // saved is the edit form's answer: back to the details, or closing when
-    // opened from the row.
-    saved() {
-      if (this.from === "menu") this.close();
-    },
+      row() {
+        return this.id && document.getElementById(`tx-${this.id}`);
+      },
 
-    // reload gets the details again after an action changed them.
-    reload(e) {
-      if (e.detail.successful) this.panel(txDetailsURL(this.id));
-    },
+      panel(url) {
+        return htmx.ajax("GET", url, { target: "#txd-panel", swap: "innerHTML" });
+      },
 
-    // remove deletes with undo when the row is loaded, else right away.
-    async remove() {
-      const id = this.id;
-      const row = this.row();
-      if (row) {
+      close() {
+        setTxParam(null);
+        this.opener = this.row()?.querySelector("[data-tx-row]") ?? this.opener;
+        base.close.call(this);
+      },
+
+      // cancel leaves the edit form: back to the details, or closing when
+      // opened from the row.
+      async cancel() {
+        if (!(await this.confirmDiscard())) return;
+        if (this.from === "menu") this.close();
+        else this.panel(txDetailsURL(this.id));
+      },
+
+      escape(e) {
+        if (e.defaultPrevented || confirmJustClosed() || datepickerOpen()) return;
+        if (this.mode === "edit") this.cancel();
+        else this.close();
+      },
+
+      saved() {
+        if (this.from === "menu") this.close();
+      },
+
+      // reload gets the details again after an action changed them.
+      reload(e) {
+        if (e.detail.successful) this.panel(txDetailsURL(this.id));
+      },
+
+      // remove deletes with undo when the row is loaded, else right away.
+      async remove() {
+        const id = this.id;
+        const row = this.row();
+        if (row) {
+          this.close();
+          Alpine.store("txs").remove(row);
+          return;
+        }
+        // Not in the loaded list, so no undo: ask first.
+        if (!(await askConfirm("Delete this transaction? This can't be undone.", { label: "Delete", del: true })))
+          return;
         this.close();
-        Alpine.store("txs").remove(row);
-        return;
-      }
-      // Not in the loaded list, so no undo: ask first.
-      if (!(await askConfirm("Delete this transaction? This can't be undone.", { label: "Delete", del: true }))) return;
-      this.close();
-      txRequest("DELETE", txURL(id), "#tx-list");
-    },
-  }));
+        txRequest("DELETE", txURL(id), "#tx-list");
+      },
+    };
+  });
 
   // txRow is a transaction row; swiping it right fulfills it (or marks it
   // reviewed), left deletes it.

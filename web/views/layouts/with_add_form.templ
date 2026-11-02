@@ -9,14 +9,13 @@ templ WithCreateForm(
 	form templ.Component,
 ) {
 	@Main(claims, pageTitle, balances) {
-		<div x-data="{openCreateForm:false}" @keyup.escape.document="openCreateForm=false">
+		// The form is a drawer (form.SheetForm) shown by openCreateForm.
+		<div x-data="{openCreateForm:false}">
 			@components.Container() {
 				@components.HeaderWithAddButton(pageTitle, "openCreateForm=true")
 				{ children... }
 			}
-			<div x-cloak x-show="openCreateForm" @click.away="openCreateForm=false">
-				@form
-			</div>
+			@form
 		</div>
 	}
 }

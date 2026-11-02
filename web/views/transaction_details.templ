@@ -5,6 +5,7 @@ import (
 	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
 	"net/url"
 )
@@ -30,28 +31,15 @@ templ txDetailsSlot(openTx string) {
 	></div>
 }
 
-// txDrawer is the details drawer (a bottom sheet on phones) around a panel,
-// the transaction's details or its edit form, swapped in place (#txd-panel).
+// txDrawer is the details drawer around a panel, the transaction's details
+// or its edit form, swapped in place (#txd-panel).
 templ txDrawer() {
-	<div
-		x-data="txDetails"
-		data-tx-details
-		@keyup.escape.window="escape($event)"
-		@tx-saved.window="saved()"
-		class="txd-root fixed inset-0 z-55 flex items-end sm:items-stretch sm:justify-end"
-	>
-		<div class="txd-backdrop absolute inset-0 bg-zinc-950/60 backdrop-blur-sm" @click="backdrop()"></div>
-		<aside
-			role="dialog"
-			aria-modal="true"
-			aria-label="Transaction details"
-			class="txd-drawer relative flex flex-col w-full sm:w-[30rem] max-h-[92dvh] sm:max-h-none sm:h-dvh rounded-t-3xl sm:rounded-none sm:rounded-l-3xl bg-zinc-900 ring-1 ring-zinc-800 shadow-2xl shadow-black/50"
-		>
-			<div id="txd-panel" class="contents">
-				{ children... }
-			</div>
-		</aside>
-	</div>
+	@components.Drawer(components.DrawerProps{
+		Label: "Transaction details", XData: "txDetails", PanelID: "txd-panel",
+		Attrs: templ.Attributes{"data-tx-details": true},
+	}) {
+		{ children... }
+	}
 }
 
 // TxDetails is a transaction in full, in the drawer: its fields, actions,
@@ -67,7 +55,7 @@ templ TxDetails(d *models.TxDetails, def *models.Currency) {
 templ TxDetailsPanel(d *models.TxDetails, def *models.Currency) {
 	{{ tx := d.Tx }}
 	{{ v := newTxView(tx) }}
-	<div class="txd-panel flex flex-col flex-1 min-h-0" x-init={ fmt.Sprintf("show(%q, 'view')", tx.ID) }>
+	<div class="drawer-panel flex flex-col flex-1 min-h-0" x-init={ fmt.Sprintf("show(%q, 'view')", tx.ID) }>
 		<header class="flex items-start gap-3 px-5 sm:px-6 pt-5 pb-4">
 			@txTile(tx, &v)
 			<div class="flex-1 min-w-0">
@@ -79,7 +67,7 @@ templ TxDetailsPanel(d *models.TxDetails, def *models.Currency) {
 					}
 				</p>
 			</div>
-			@txDrawerClose()
+			@components.DrawerClose()
 		</header>
 		<div class="flex-1 grid grid-cols-1 content-start gap-6 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
 			@txDetailsHero(tx, &v, def)
@@ -116,18 +104,6 @@ templ TxDetailsPanel(d *models.TxDetails, def *models.Currency) {
 	</div>
 }
 
-templ txDrawerClose() {
-	<button
-		type="button"
-		x-ref="close"
-		@click="close()"
-		aria-label="Close"
-		class="grid place-items-center shrink-0 w-9 h-9 -mr-2 rounded-full text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white"
-	>
-		@icons.X("20")
-	</button>
-}
-
 // Where an edit form was opened from: the open details, going back to them
 // on saving or canceling, or the row (its menu, "e"), closing the drawer.
 const (
@@ -153,26 +129,15 @@ templ TxEditPanel(tx *models.Transaction, fd *TransactionFD,
 	accs []models.Account, knds []models.TxKind,
 	cats []models.Category, cps []models.Counterparty,
 	gls []models.Goal, def *models.Currency, from string) {
-	<form
-		hx-put={ fmt.Sprintf("/transactions/%s", url.PathEscape(tx.ID)) }
-		hx-target="#txd-panel"
-		hx-swap="innerHTML"
-		x-init={ fmt.Sprintf("show(%q, 'edit', %q)", tx.ID, from) }
-		class="txd-panel tx-form flex flex-col flex-1 min-h-0"
-	>
+	@form.DrawerForm(form.DrawerFormProps{
+		Title: "Edit transaction", Method: "put", URL: fmt.Sprintf("/transactions/%s", url.PathEscape(tx.ID)),
+		Submit: "Save changes", Target: "#txd-panel", Swap: "innerHTML", CancelClick: "cancel()",
+		Class: "tx-form",
+		Attrs: templ.Attributes{"x-init": fmt.Sprintf("show(%q, 'edit', %q)", tx.ID, from)},
+	}) {
 		<input type="hidden" name="from" value={ from }/>
-		<header class="flex items-center justify-between gap-4 px-5 sm:px-6 pt-5 pb-4">
-			<h2 class="text-lg font-bold">Edit transaction</h2>
-			@txDrawerClose()
-		</header>
-		<div class="flex-1 grid grid-cols-1 content-start gap-5 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
-			@transactionFormBody(fd, tx.ID, accs, knds, cats, cps, gls, def)
-		</div>
-		<footer class="flex justify-end gap-2 px-5 sm:px-6 py-4 border-t border-zinc-800">
-			<button type="button" @click="cancel()" class="btn-ghost">Cancel</button>
-			<button type="submit" class="btn-primary">Save changes</button>
-		</footer>
-	</form>
+		@transactionFormBody(fd, tx.ID, accs, knds, cats, cps, gls, def)
+	}
 }
 
 templ txDetailsHero(tx *models.Transaction, v *txView, def *models.Currency) {

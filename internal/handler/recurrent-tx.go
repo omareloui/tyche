@@ -133,7 +133,7 @@ func (h Handler) EditRecurrentTx(w http.ResponseWriter, r *http.Request) (templ.
 		if errors.As(err, &valerr) {
 			l.Error("validating recurrent transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
 			claims := getClaims(r.Context())
-			return views.EditRecurrentTx(rt, h.mapRecurrentTxToFD(rt, &valerr, knds),
+			return views.EditRecurrentTxForm(rt, h.mapRecurrentTxToFD(rt, &valerr, knds),
 				accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
 		}
 		l.Error("sanitizing recurrent transaction", zap.Error(err))
@@ -147,6 +147,7 @@ func (h Handler) EditRecurrentTx(w http.ResponseWriter, r *http.Request) (templ.
 		return nil, err
 	}
 	l.Info("updated recurrent tx", zap.Any("recurrent_tx", rt))
+	drawerSaved(w, "#"+views.RecurrentTxID(id), "outerHTML")
 
 	rt, err = h.repo.GetRecurrentTx(r.Context(), id)
 	if err != nil {

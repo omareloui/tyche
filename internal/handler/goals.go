@@ -101,6 +101,7 @@ func (h Handler) CreateGoal(w http.ResponseWriter, r *http.Request) (templ.Compo
 		return nil, err
 	}
 	l.Info("created goal", zap.Any("goal", gl))
+	drawerCreated(w)
 
 	if err = renderToBody(w, r, views.GoalOOB(gl)); err != nil {
 		l.Error("rendering OOB to body", zap.Error(err))
@@ -220,7 +221,7 @@ func (h Handler) CreateGoalProgress(w http.ResponseWriter, r *http.Request) (tem
 	fd, err := h.prepareCreatingTx(r, tx, accs, knds, cats, cps, gls)
 	if fd != nil {
 		claims := getClaims(r.Context())
-		return views.GoalProgressForm(gl, fd, accs, &claims.DefaultCurrency), nil
+		return views.GoalProgressFormFields(gl, fd, accs, &claims.DefaultCurrency), nil
 	}
 	if err != nil {
 		return nil, err
@@ -230,6 +231,7 @@ func (h Handler) CreateGoalProgress(w http.ResponseWriter, r *http.Request) (tem
 		l.Error("creating transaction for goal", zap.Any("tx", tx), zap.Any("goal", gl), zap.Error(err))
 		return nil, err
 	}
+	drawerSaved(w, "#"+views.GoalID(id), "outerHTML")
 
 	if !tx.FulfilledAt.IsZero() {
 		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
@@ -277,7 +279,7 @@ func (h Handler) EditGoal(w http.ResponseWriter, r *http.Request) (templ.Compone
 			l.Error("update goal validation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
 			claims := getClaims(r.Context())
 			fd := h.mapGlToFD(gl, &valerr)
-			return views.EditGoal(id, fd, shownCurs, &claims.DefaultCurrency), nil
+			return views.EditGoalForm(id, fd, shownCurs, &claims.DefaultCurrency), nil
 		}
 		l.Error("sanitizing goal", zap.Error(err))
 		return nil, err
@@ -288,6 +290,7 @@ func (h Handler) EditGoal(w http.ResponseWriter, r *http.Request) (templ.Compone
 		return nil, err
 	}
 	l.Info("updated goal", zap.Any("goal", gl))
+	drawerSaved(w, "#"+views.GoalID(id), "outerHTML")
 
 	if err := h.renderGoalsSummaryOOB(w, r); err != nil {
 		return nil, err

@@ -130,7 +130,8 @@ func (h Handler) CreateCategory(w http.ResponseWriter, r *http.Request) (templ.C
 		return nil, err
 	}
 	l.Info("created category")
-	w.Header().Set("HX-Trigger", views.BudgetChangedEvent)
+	addHXTrigger(w, views.BudgetChangedEvent)
+	drawerCreated(w)
 
 	if err = renderToBody(w, r, views.CategoryOOB(cat)); err != nil {
 		l.Error("rendering category oob", zap.Error(err))
@@ -257,7 +258,7 @@ func (h Handler) EditCategory(w http.ResponseWriter, r *http.Request) (templ.Com
 		if errors.As(err, &valerr) {
 			knds := getAllowedKindsForCategories()
 			l.Error("update category validation", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-			return views.EditCategory(h.mapCategoryToFD(cat, knds, &valerr), id, knds, currs, &claims.DefaultCurrency), nil
+			return views.EditCategoryForm(h.mapCategoryToFD(cat, knds, &valerr), id, knds, currs, &claims.DefaultCurrency), nil
 		}
 		l.Error("sanitizing category", zap.Error(err))
 		return nil, err
@@ -270,7 +271,8 @@ func (h Handler) EditCategory(w http.ResponseWriter, r *http.Request) (templ.Com
 		return nil, err
 	}
 	l.Info("updated category")
-	w.Header().Set("HX-Trigger", views.BudgetChangedEvent)
+	addHXTrigger(w, views.BudgetChangedEvent)
+	drawerSaved(w, "#"+views.CategoryID(id), "outerHTML")
 
 	return h.Category(w, r)
 }

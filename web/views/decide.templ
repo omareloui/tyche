@@ -7,6 +7,7 @@ import (
 	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
 	"github.com/omareloui/tyche/web/views/layouts"
@@ -242,12 +243,13 @@ templ AffordHint(msg string) {
 
 // WorkSettingsCard shows what an hour of work is worth, with a form to set
 // the salary behind it.
+// WorkSettingsCard shows the hourly rate prices are counted in, edited in a
+// drawer kept in the page (editing). The form's answer is the whole card, of
+// which only the form is swapped in while it has errors.
 templ WorkSettingsCard(ws *models.WorkSettings, fd *WorkSettingsFD, curs []models.Currency, defaultCur *models.Currency, editing bool) {
 	<section
 		id="work-settings"
-		x-data={ fmt.Sprintf("{editing: %t}", editing || !ws.IsSet()) }
-		hx-target="this"
-		hx-swap="outerHTML"
+		x-data={ fmt.Sprintf("{editing: %t}", editing) }
 		class="grid gap-4 p-5 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800 [--accent:var(--color-amber-300)]"
 	>
 		<header class="flex items-start justify-between gap-3">
@@ -270,7 +272,6 @@ templ WorkSettingsCard(ws *models.WorkSettings, fd *WorkSettingsFD, curs []model
 			if ws.IsSet() {
 				<button
 					type="button"
-					x-show="!editing"
 					@click="editing = true"
 					aria-label="Edit salary"
 					class="grid place-items-center shrink-0 w-8 h-8 rounded-full text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white"
@@ -279,30 +280,32 @@ templ WorkSettingsCard(ws *models.WorkSettings, fd *WorkSettingsFD, curs []model
 				</button>
 			}
 		</header>
-		<form
-			hx-put="/decide/work-settings"
-			x-show="editing"
-			x-cloak
-			x-data={ moneyInputsData(curs, fd.Salary.CurrencyID.Value, defaultCur, PayCash, "") }
-			@change="onChange($event)"
-			class="grid gap-4"
-		>
-			<div>
-				@plainAmountInputs("Monthly salary / income", icons.Banknote("15"), fd.Salary, "salary", curs, defaultCur)
-				<p class="mt-1.5 text-sm text-zinc-500">What lands in your account each month, after tax.</p>
-			</div>
-			@form.Field("Hours you work a week", "work_hours_per_week", "salary", icons.Clock("15"), fd.HoursPerWeek.Error) {
-				@form.Control("text", "work_hours_per_week", "40", "salary", fd.HoursPerWeek, templ.Attributes{
-					"inputmode": "decimal", "autocomplete": "off",
-				})
-			}
-			<div class="flex justify-end gap-2">
-				if ws.IsSet() {
-					<button type="button" @click="editing = false" class="btn-ghost">Cancel</button>
+		if !ws.IsSet() {
+			<button type="button" @click="editing = true" class="btn-primary justify-self-start">
+				@icons.Banknote("18")
+				Set your salary
+			</button>
+		}
+		@components.Drawer(components.DrawerProps{Label: "Cost in work hours", Bind: "editing"}) {
+			@form.DrawerForm(form.DrawerFormProps{
+				Title: "Cost in work hours", Method: "put", URL: "/decide/work-settings", Submit: "Save",
+				Select: true, Class: "[--accent:var(--color-amber-300)]",
+				Attrs: templ.Attributes{
+					"x-data":    moneyInputsData(curs, fd.Salary.CurrencyID.Value, defaultCur, PayCash, ""),
+					"@change":   "onChange($event)",
+				},
+			}) {
+				<div>
+					@plainAmountInputs("Monthly salary / income", icons.Banknote("15"), fd.Salary, "salary", curs, defaultCur)
+					<p class="mt-1.5 text-sm text-zinc-500">What lands in your account each month, after tax.</p>
+				</div>
+				@form.Field("Hours you work a week", "work_hours_per_week", "salary", icons.Clock("15"), fd.HoursPerWeek.Error) {
+					@form.Control("text", "work_hours_per_week", "40", "salary", fd.HoursPerWeek, templ.Attributes{
+						"inputmode": "decimal", "autocomplete": "off",
+					})
 				}
-				<button type="submit" class="btn-primary">Save</button>
-			</div>
-		</form>
+			}
+		}
 	</section>
 }
 
@@ -320,10 +323,10 @@ func NewWorkSettingsFD(ws *models.WorkSettings) *WorkSettingsFD {
 	}
 }
 
-// WishlistBuySheet opens the prefilled transaction form in a sheet of its
-// own over the page.
+// WishlistBuySheet opens the prefilled transaction form (a form.SheetForm
+// drawer) of its own over the page, right away.
 templ WishlistBuySheet(f templ.Component) {
-	<div x-data="{openCreateForm: true}" x-show="openCreateForm" @keyup.escape.document="openCreateForm=false">
+	<div x-data="{openCreateForm: true}">
 		@f
 	</div>
 }

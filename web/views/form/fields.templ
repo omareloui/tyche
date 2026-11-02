@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/icons"
 )
 
@@ -117,56 +118,23 @@ templ SelectAccountChip(label, name, id string, accs []models.Account, data FDIn
 	})
 }
 
-// SheetForm is a create form in a dialog: a centered card on wide screens, a
-// bottom sheet on phones. Expects an Alpine openCreateForm in scope.
+// SheetForm is a create form in a drawer kept in the page, shown by the
+// Alpine openCreateForm in scope. The answer to it is the whole SheetForm
+// again (fresh after creating), of which only the form is swapped in; a
+// created one also closes the drawer (HX-Trigger drawer-saved).
 templ SheetForm(title, postTo, submitStr, class string, attrs ...templ.Attributes) {
-	<div
-		hx-target="this"
-		@click.self="openCreateForm=false"
-		class="fixed inset-0 z-55 grid items-end sm:place-items-center bg-zinc-950/70 backdrop-blur-sm"
-	>
-		<form
-			hx-post={ string(templ.SafeURL(postTo)) }
-			hx-swap="outerHTML"
-			if len(attrs) > 0 {
-				{ attrs[0]... }
-			}
-			class={ "flex flex-col w-full sm:w-[34rem] max-h-[92dvh] rounded-t-3xl sm:rounded-3xl bg-zinc-900 ring-1 ring-zinc-800 shadow-2xl shadow-black/50", class }
-		>
-			<header class="flex items-center justify-between gap-4 px-6 pt-5 pb-4">
-				<h2 class="text-xl font-bold font-(family-name:--font-biorhyme-expanded)">{ title }</h2>
-				<button
-					type="button"
-					@click="openCreateForm=false"
-					aria-label="Close"
-					class="grid place-items-center w-9 h-9 -mr-2 rounded-full text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white"
-				>
-					@icons.X("20")
-				</button>
-			</header>
-			<div class="grid grid-cols-1 gap-5 px-6 pb-6 overflow-y-auto">
-				{ children... }
-			</div>
-			<footer class="flex justify-end gap-2 px-6 py-4 border-t border-zinc-800">
-				<button type="button" @click="openCreateForm=false" class="btn-ghost">Cancel</button>
-				<button type="submit" class="btn-primary">{ submitStr }</button>
-			</footer>
-		</form>
-	</div>
-}
-
-// SheetFormButtons are an inline edit form's cancel and submit buttons;
-// cancelling (or Escape) gets the entry back from cancelUrl.
-templ SheetFormButtons(submitStr, cancelUrl string) {
-	<div class="flex justify-end gap-2 pt-4 border-t border-zinc-800">
-		<button
-			type="button"
-			class="btn-ghost"
-			hx-get={ string(templ.SafeURL(cancelUrl)) }
-			hx-trigger="click, keyup[key === 'Escape'] from:body"
-		>Cancel</button>
-		<button type="submit" class="btn-primary">{ submitStr }</button>
-	</div>
+	{{ var a templ.Attributes }}
+	if len(attrs) > 0 {
+		{{ a = attrs[0] }}
+	}
+	@components.Drawer(components.DrawerProps{Label: title, Bind: "openCreateForm"}) {
+		@DrawerForm(DrawerFormProps{
+			Title: title, Method: "post", URL: postTo, Submit: submitStr,
+			Select: true, Class: class, Attrs: a,
+		}) {
+			{ children... }
+		}
+	}
 }
 
 func AccountComboOptions(accs []models.Account) []ComboOption {

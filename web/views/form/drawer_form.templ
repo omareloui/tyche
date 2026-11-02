@@ -1,0 +1,78 @@
+package form
+
+import "github.com/omareloui/tyche/web/views/components"
+
+type DrawerFormProps struct {
+	Title string
+	// Header replaces the title in the header (e.g. a goal's ring and
+	// progress), next to the close button.
+	Header templ.Component
+	// Method ("post", "put") and URL the form is sent to.
+	Method, URL string
+	Submit      string
+	// Target and Swap default to the form itself, outerHTML: an answer with
+	// errors is the form again, a saved one retargets (HX-Retarget) to what
+	// changed.
+	Target, Swap string
+	// Select takes only the form out of an answer that's the whole drawer
+	// (a create form's), so the drawer stays in place.
+	Select bool
+	// CancelClick replaces what Cancel does, closing the drawer by default.
+	CancelClick string
+	Class       string
+	Attrs       templ.Attributes
+}
+
+// DrawerForm is an add or edit form in a components.Drawer: a header with
+// its title and close button, its fields scrolling, Cancel and submit in a
+// footer.
+templ DrawerForm(p DrawerFormProps) {
+	<form
+		{ templ.Attributes{"hx-" + p.Method: p.URL}... }
+		if p.Target != "" {
+			hx-target={ p.Target }
+		} else {
+			hx-target="this"
+		}
+		if p.Swap != "" {
+			hx-swap={ p.Swap }
+		} else {
+			hx-swap="outerHTML"
+		}
+		if p.Select {
+			hx-select="[data-drawer-form]"
+			hx-disinherit="hx-select"
+		}
+		data-drawer-form
+		if p.Attrs != nil {
+			{ p.Attrs... }
+		}
+		class={ "drawer-panel flex flex-col flex-1 min-h-0", p.Class }
+	>
+		<header class="flex items-center justify-between gap-4 px-5 sm:px-6 pt-5 pb-4">
+			if p.Header != nil {
+				<div class="flex-1 min-w-0">
+					@p.Header
+				</div>
+			} else {
+				<h2 class="text-lg font-bold">{ p.Title }</h2>
+			}
+			@components.DrawerClose()
+		</header>
+		<div class="flex-1 grid grid-cols-1 content-start gap-5 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
+			{ children... }
+		</div>
+		<footer class="flex justify-end gap-2 px-5 sm:px-6 py-4 border-t border-zinc-800">
+			<button
+				type="button"
+				if p.CancelClick != "" {
+					@click={ p.CancelClick }
+				} else {
+					@click="requestClose()"
+				}
+				class="btn-ghost"
+			>Cancel</button>
+			<button type="submit" class="btn-primary">{ p.Submit }</button>
+		</footer>
+	</form>
+}

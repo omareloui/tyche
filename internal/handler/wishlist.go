@@ -18,8 +18,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// wishlistCreatedEvent closes the create form.
-const wishlistCreatedEvent = "wishlist-created"
 
 // Wishlist renders the whole wishlist, which every change on it re-renders.
 func (h Handler) Wishlist(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -72,6 +70,7 @@ func (h Handler) CreateWishlistItem(w http.ResponseWriter, r *http.Request) (tem
 		return nil, err
 	}
 	l.Info("created wishlist item", zap.String("id", item.ID))
+	drawerCreated(w)
 
 	list, err := h.wishlist(r, true)
 	if err != nil {
@@ -81,7 +80,6 @@ func (h Handler) CreateWishlistItem(w http.ResponseWriter, r *http.Request) (tem
 		return nil, err
 	}
 
-	w.Header().Set("HX-Trigger", wishlistCreatedEvent)
 	return views.CreateWishlistItemForm(mapWishlistItemToFD(dfltWishlistItem(&claims.DefaultCurrency), &errs.ValidationError{}), curs, &claims.DefaultCurrency), nil
 }
 
@@ -127,10 +125,8 @@ func (h Handler) EditWishlistItem(w http.ResponseWriter, r *http.Request) (templ
 	if err := item.SanitizeAndValidate(h.sani, h.valid); err != nil {
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
-			// The form targets the whole wishlist, the errors go in its place.
-			w.Header().Set("HX-Retarget", "#"+views.WishlistItemID(id))
 			claims := getClaims(r.Context())
-			return views.EditWishlistItem(id, mapWishlistItemToFD(item, &valerr), curs, &claims.DefaultCurrency), nil
+			return views.EditWishlistItemForm(id, mapWishlistItemToFD(item, &valerr), curs, &claims.DefaultCurrency), nil
 		}
 		return nil, err
 	}
@@ -140,6 +136,7 @@ func (h Handler) EditWishlistItem(w http.ResponseWriter, r *http.Request) (templ
 		return nil, err
 	}
 	l.Info("updated wishlist item", zap.String("id", id))
+	drawerSaved(w, "#wishlist", "outerHTML")
 
 	return h.wishlist(r, false)
 }

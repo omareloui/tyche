@@ -87,26 +87,35 @@ templ recurrenceFormBody(id string, fd *RecurrenceFD) {
 	</div>
 }
 
+// EditRecurrentTx is the recurrent transaction's edit form, in a drawer.
 templ EditRecurrentTx(
 	rtx *models.RecurrentTx, fd *RecurrentTxFD,
 	accs []models.Account, knds []models.TxKind,
 	cats []models.Category, cps []models.Counterparty,
 	gls []models.Goal, defaultCur *models.Currency) {
-	<form
-		id={ RecurrentTxID(rtx.ID) }
-		hx-put={ string(templ.SafeURL(fmt.Sprintf("/recurrent-tx/%s", rtx.ID))) }
-		hx-target="this"
-		hx-swap="outerHTML"
-		data-rtx
-		class="tx-form grid gap-5 sm:col-span-2 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-5 sm:p-6"
-	>
-		<header class="grid gap-1">
-			<h3 class="text-lg font-semibold">Edit recurring transaction</h3>
-			<p class="text-sm text-zinc-500">Its upcoming scheduled transactions get replaced, starting from today.</p>
-		</header>
+	@components.Drawer(components.DrawerProps{Label: "Edit recurring transaction"}) {
+		@EditRecurrentTxForm(rtx, fd, accs, knds, cats, cps, gls, defaultCur)
+	}
+}
+
+// EditRecurrentTxForm is EditRecurrentTx's form alone, answered with its
+// errors.
+templ EditRecurrentTxForm(
+	rtx *models.RecurrentTx, fd *RecurrentTxFD,
+	accs []models.Account, knds []models.TxKind,
+	cats []models.Category, cps []models.Counterparty,
+	gls []models.Goal, defaultCur *models.Currency) {
+	@form.DrawerForm(form.DrawerFormProps{
+		Header: rtxEditHeader(), Method: "put", URL: fmt.Sprintf("/recurrent-tx/%s", rtx.ID),
+		Submit: "Save changes", Class: "tx-form",
+	}) {
 		@rtxFormBody(rtx.ID, fd, accs, knds, cats, cps, gls, defaultCur)
-		@form.SheetFormButtons("Save changes", fmt.Sprintf("/recurrent-tx/%s", rtx.ID))
-	</form>
+	}
+}
+
+templ rtxEditHeader() {
+	<h2 class="text-lg font-bold">Edit recurring transaction</h2>
+	<p class="text-sm text-zinc-500">Its upcoming scheduled transactions get replaced, starting from today.</p>
 }
 
 templ rtxsList(rtxs []models.RecurrentTx, def *models.Currency) {

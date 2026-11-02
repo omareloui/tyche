@@ -238,7 +238,10 @@ func (h Handler) EditWorkSettings(w http.ResponseWriter, r *http.Request) (templ
 	}
 	l.Info("saved work settings")
 
-	w.Header().Set("HX-Trigger", views.WorkSettingsChangedEvent)
+	// The whole card, in place of the one the drawer is in, once it slid out.
+	addHXTrigger(w, views.WorkSettingsChangedEvent)
+	drawerSaved(w, "#work-settings", "outerHTML swap:200ms")
+	w.Header().Set("HX-Reselect", "#work-settings")
 	return views.WorkSettingsCard(ws, views.NewWorkSettingsFD(ws), curs, &claims.DefaultCurrency, false), nil
 }
 

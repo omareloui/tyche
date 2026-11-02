@@ -108,6 +108,7 @@ func (h Handler) CreateCounterparty(w http.ResponseWriter, r *http.Request) (tem
 		return nil, err
 	}
 	l.Info("created counterparty")
+	drawerCreated(w)
 
 	if err = renderToBody(w, r, views.CounterpartyOOB(cp)); err != nil {
 		l.Error("rendering counterparty oob", zap.Error(err))
@@ -208,7 +209,7 @@ func (h Handler) EditCounterparty(w http.ResponseWriter, r *http.Request) (templ
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("validating counterparty", zap.Error(err), zap.Any("errors", valerr.Errors))
-			return views.EditCounterparty(id, h.mapCounterpartyToFD(cp, &valerr), cats), nil
+			return views.EditCounterpartyForm(id, h.mapCounterpartyToFD(cp, &valerr), cats), nil
 		}
 		l.Error("sanitizing counterparty", zap.Error(err))
 		return nil, err
@@ -217,11 +218,11 @@ func (h Handler) EditCounterparty(w http.ResponseWriter, r *http.Request) (templ
 	clearNonMerchantFields(cp)
 
 	if valerr := resolveCounterpartyDefaultCategory(cp, cats); valerr != nil {
-		return views.EditCounterparty(id, h.mapCounterpartyToFD(cp, valerr), cats), nil
+		return views.EditCounterpartyForm(id, h.mapCounterpartyToFD(cp, valerr), cats), nil
 	}
 
 	if valerr := validateCounterpartyIcon(cp); valerr != nil {
-		return views.EditCounterparty(id, h.mapCounterpartyToFD(cp, valerr), cats), nil
+		return views.EditCounterpartyForm(id, h.mapCounterpartyToFD(cp, valerr), cats), nil
 	}
 
 	prev, err := h.repo.GetCounterparty(r.Context(), id)
@@ -244,6 +245,7 @@ func (h Handler) EditCounterparty(w http.ResponseWriter, r *http.Request) (templ
 	}
 	l.Info("updated counterparty")
 
+	drawerSaved(w, "#"+views.CounterpartyWrapperID(id), "innerHTML")
 	return views.Counterparty(cp), nil
 }
 
@@ -297,7 +299,7 @@ func (h Handler) MergeCounterparty(w http.ResponseWriter, r *http.Request) (temp
 	intoID := r.FormValue("into_id")
 	if !slices.ContainsFunc(cps, func(cp models.Counterparty) bool { return cp.ID == intoID }) {
 		fd := &views.MergeCounterpartyFD{IntoID: form.FDInput{Value: intoID, Error: "Select a counterparty to merge into"}}
-		return views.MergeCounterparty(from, fd, cps), nil
+		return views.MergeCounterpartyForm(from, fd, cps), nil
 	}
 
 	into, err := h.repo.MergeCounterparties(r.Context(), id, intoID)
@@ -308,8 +310,7 @@ func (h Handler) MergeCounterparty(w http.ResponseWriter, r *http.Request) (temp
 	l.Info("merged counterparties", zap.String("from", id), zap.String("into", intoID))
 
 	// Drop the merged counterparty's card, and update the one merged into.
-	w.Header().Set("HX-Retarget", "#"+views.CounterpartyWrapperID(id))
-	w.Header().Set("HX-Reswap", "outerHTML")
+	drawerSaved(w, "#"+views.CounterpartyWrapperID(id), "outerHTML")
 	return views.CounterpartyReplaceOOB(into), nil
 }
 

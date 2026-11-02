@@ -35,20 +35,21 @@ templ CreateGoalForm(fd *GoalFD, curs []models.Currency, defaultCur *models.Curr
 	}
 }
 
+// EditGoal is the goal's edit form, in a drawer.
 templ EditGoal(id string, fd *GoalFD, curs []models.Currency, defaultCur *models.Currency) {
-	<form
-		hx-put={ string(templ.SafeURL(fmt.Sprintf("/goals/%s", id))) }
-		hx-target="this"
-		hx-swap="outerHTML"
-		data-goal
-		class="grid gap-5 sm:col-span-2 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-5 sm:p-6"
-	>
-		<header class="flex items-baseline justify-between gap-4">
-			<h3 class="text-lg font-semibold">Edit goal</h3>
-		</header>
+	@components.Drawer(components.DrawerProps{Label: "Edit goal"}) {
+		@EditGoalForm(id, fd, curs, defaultCur)
+	}
+}
+
+// EditGoalForm is EditGoal's form alone, answered with its errors.
+templ EditGoalForm(id string, fd *GoalFD, curs []models.Currency, defaultCur *models.Currency) {
+	@form.DrawerForm(form.DrawerFormProps{
+		Title: "Edit goal", Method: "put", URL: fmt.Sprintf("/goals/%s", id),
+		Submit: "Save changes",
+	}) {
 		@goalFormBody(id, fd, curs, defaultCur)
-		@form.SheetFormButtons("Save changes", fmt.Sprintf("/goals/%s", id))
-	</form>
+	}
 }
 
 templ goalFormBody(id string, fd *GoalFD, curs []models.Currency, defaultCur *models.Currency) {
@@ -65,24 +66,20 @@ templ goalFormBody(id string, fd *GoalFD, curs []models.Currency, defaultCur *mo
 }
 
 // GoalProgressForm puts money from an account towards the goal, as an
-// expense linked to it.
+// expense linked to it, in a drawer.
 templ GoalProgressForm(gl *models.Goal, fd *TransactionFD, accs []models.Account, defaultCur *models.Currency) {
-	<form
-		hx-post={ string(templ.SafeURL(fmt.Sprintf("/goals/%s/progress", gl.ID))) }
-		hx-target="this"
-		hx-swap="outerHTML"
-		data-goal
-		class="grid gap-5 sm:col-span-2 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-5 sm:p-6 [--accent:var(--color-emerald-400)]"
-	>
-		<header class="flex items-center gap-3">
-			@goalRing(gl.ProgressPercentage(), goalActive, "size-11", "text-[0.65rem]")
-			<div class="min-w-0">
-				<h3 class="text-lg font-semibold truncate">Add to { gl.Name }</h3>
-				<p class="sensitive text-sm text-zinc-500 tabular-nums">
-					{ gl.ViewProgress() } of { gl.ViewAmount() } saved
-				</p>
-			</div>
-		</header>
+	@components.Drawer(components.DrawerProps{Label: "Add to " + gl.Name}) {
+		@GoalProgressFormFields(gl, fd, accs, defaultCur)
+	}
+}
+
+// GoalProgressFormFields is GoalProgressForm's form alone, answered with its
+// errors.
+templ GoalProgressFormFields(gl *models.Goal, fd *TransactionFD, accs []models.Account, defaultCur *models.Currency) {
+	@form.DrawerForm(form.DrawerFormProps{
+		Header: goalProgressHeader(gl), Method: "post", URL: fmt.Sprintf("/goals/%s/progress", gl.ID),
+		Submit: "Add money", Class: "[--accent:var(--color-emerald-400)]",
+	}) {
 		@GoalProgressInputs(gl, &fd.AccountIFD, accs, defaultCur)
 		<div x-data>
 			@form.Field("Date", "scheduled_to", gl.ID, icons.Calendar("15"), fd.ScheduledTo.Error) {
@@ -101,8 +98,19 @@ templ GoalProgressForm(gl *models.Goal, fd *TransactionFD, accs []models.Account
 			}
 			<p class="mt-1.5 text-sm text-zinc-500">A future date schedules it, counting once it's fulfilled.</p>
 		</div>
-		@form.SheetFormButtons("Add money", fmt.Sprintf("/goals/%s", gl.ID))
-	</form>
+	}
+}
+
+templ goalProgressHeader(gl *models.Goal) {
+	<div class="flex items-center gap-3">
+		@goalRing(gl.ProgressPercentage(), goalActive, "size-11", "text-[0.65rem]")
+		<div class="min-w-0">
+			<h2 class="text-lg font-bold truncate">Add to { gl.Name }</h2>
+			<p class="sensitive text-sm text-zinc-500 tabular-nums">
+				{ gl.ViewProgress() } of { gl.ViewAmount() } saved
+			</p>
+		</div>
+	</div>
 }
 
 // GoalProgressInputs is the amount and the account it comes from, rendered
@@ -338,6 +346,8 @@ templ Goal(gl *models.Goal) {
 templ goalAddButton(id string) {
 	<button
 		hx-get={ fmt.Sprintf("/goals/%s/progress-form", id) }
+		hx-target={ "#" + components.DrawerSlot }
+		hx-swap="innerHTML"
 		class="inline-flex shrink-0 items-center gap-1.5 h-9 pl-3 pr-4 rounded-full bg-(--accent)/15 text-sm font-medium text-(--accent) cursor-pointer transition-colors hover:bg-(--accent)/25"
 	>
 		@icons.Plus("16")

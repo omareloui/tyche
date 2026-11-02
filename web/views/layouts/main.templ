@@ -36,6 +36,7 @@ templ Main(
 			<script defer src="/js/vendor/alpine.collapse.lib.js"></script>
 			<script defer src="/js/combobox.js"></script>
 			<script defer src="/js/tags-input.js"></script>
+			<script defer src="/js/drawer.js"></script>
 			<script defer src="/js/transactions.js"></script>
 			<script defer src="/js/money-inputs.js"></script>
 			<script defer src="/js/vendor/alpine.lib.js"></script>
@@ -45,6 +46,8 @@ templ Main(
 			<main class="pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-10">
 				{ children... }
 			</main>
+			// Drawers fetched on demand (components.DrawerSlot) open here.
+			<div id="drawer" class="contents"></div>
 			@components.ConfirmDialog()
 			<script>
 				document.body.addEventListener("htmx:beforeSwap", function (ev) {

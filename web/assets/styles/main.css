@@ -219,63 +219,63 @@ input[type="number"] {
   background-color: #141417;
 }
 
-/* The transaction details drawer slides in (up on phones, from the right
-   on wider screens) and out (data-closing, txDetails.close in
-   transactions.js); each of its panels (details, edit form) fades in. */
-@keyframes txd-fade-in {
+/* Drawers (components.Drawer) slide in (up on phones, from the right on
+   wider screens) and out (data-closing, drawer.js); each of their panels (a
+   form, the transaction details) fades in. */
+@keyframes drawer-fade-in {
   from { opacity: 0; }
 }
-@keyframes txd-fade-out {
+@keyframes drawer-fade-out {
   to { opacity: 0; }
 }
-@keyframes txd-up-in {
+@keyframes drawer-up-in {
   from { transform: translateY(100%); }
 }
-@keyframes txd-up-out {
+@keyframes drawer-up-out {
   to { transform: translateY(100%); }
 }
-@keyframes txd-left-in {
+@keyframes drawer-left-in {
   from { transform: translateX(100%); }
 }
-@keyframes txd-left-out {
+@keyframes drawer-left-out {
   to { transform: translateX(100%); }
 }
-@keyframes txd-panel-in {
+@keyframes drawer-panel-in {
   from { opacity: 0; transform: translateY(4px); }
 }
 
-.txd-backdrop {
-  animation: txd-fade-in 200ms ease-out;
+.drawer-backdrop {
+  animation: drawer-fade-in 200ms ease-out;
 }
-.txd-drawer {
-  animation: txd-up-in 260ms cubic-bezier(0.32, 0.72, 0, 1);
+.drawer-sheet {
+  animation: drawer-up-in 260ms cubic-bezier(0.32, 0.72, 0, 1);
 }
-.txd-panel {
-  animation: txd-panel-in 160ms ease-out;
+.drawer-panel {
+  animation: drawer-panel-in 160ms ease-out;
 }
-.txd-root[data-closing] {
+.drawer-root[data-closing] {
   pointer-events: none;
 }
-.txd-root[data-closing] .txd-backdrop {
-  animation: txd-fade-out 180ms ease-in forwards;
+.drawer-root[data-closing] .drawer-backdrop {
+  animation: drawer-fade-out 180ms ease-in forwards;
 }
-.txd-root[data-closing] .txd-drawer {
-  animation: txd-up-out 180ms ease-in forwards;
+.drawer-root[data-closing] .drawer-sheet {
+  animation: drawer-up-out 180ms ease-in forwards;
 }
 @media (min-width: 40rem) {
-  .txd-drawer {
-    animation-name: txd-left-in;
+  .drawer-sheet {
+    animation-name: drawer-left-in;
   }
-  .txd-root[data-closing] .txd-drawer {
-    animation-name: txd-left-out;
+  .drawer-root[data-closing] .drawer-sheet {
+    animation-name: drawer-left-out;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .txd-backdrop,
-  .txd-drawer,
-  .txd-panel,
-  .txd-root[data-closing] .txd-backdrop,
-  .txd-root[data-closing] .txd-drawer {
+  .drawer-backdrop,
+  .drawer-sheet,
+  .drawer-panel,
+  .drawer-root[data-closing] .drawer-backdrop,
+  .drawer-root[data-closing] .drawer-sheet {
     animation-duration: 1ms;
   }
 }
