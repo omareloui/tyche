@@ -234,6 +234,23 @@ input[type="number"] {
     @apply flex flex-wrap items-center gap-2 mt-1.5 ml-3 sm:ml-[4.25rem] mr-3 px-3 py-2 rounded-xl bg-amber-400/6 ring-1 ring-amber-400/15;
   }
 
+  /* The transaction details drawer (transaction_details.templ). */
+  .txd-action {
+    @apply inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full border border-zinc-700 text-sm text-zinc-300 cursor-pointer transition-colors hover:border-violet-400 hover:text-violet-300;
+  }
+
+  .txd-link {
+    @apply min-w-0 text-left cursor-pointer underline-offset-2 decoration-zinc-600 transition-colors hover:text-violet-300 hover:underline;
+  }
+
+  .txd-card {
+    @apply block w-full px-4 py-3 rounded-xl bg-zinc-800/40 ring-1 ring-zinc-800;
+  }
+
+  .txd-more {
+    @apply inline-flex items-center gap-1 justify-self-start px-1 text-sm text-violet-300 cursor-pointer hover:underline underline-offset-2;
+  }
+
   .tx-review-ok {
     @apply ml-auto h-8 px-3 rounded-full text-sm text-amber-300 cursor-pointer transition-colors hover:bg-amber-400/10;
   }

@@ -556,6 +556,7 @@ func dbTransactionToTransaction(
 
 		ReimbursesID:   dbTx.ReimbursesID.String,
 		TransferPairID: dbTx.TransferPairID.String,
+		RecurrentTxID:  dbTx.RecurrentID.String,
 	}
 
 	if acc != nil {

@@ -37,13 +37,14 @@ templ Transactions(
 	list TxListData,
 	fd *TransactionFD, accounts []models.Account,
 	knds []models.TxKind, cats []models.Category,
-	cps []models.Counterparty, gls []models.Goal) {
+	cps []models.Counterparty, gls []models.Goal, openTx string) {
 	@layouts.WithCreateForm(claims, "Transactions", balances,
 		txCreateSlot(CreateTransactionForm(fd, accounts, knds, cats, cps, gls, &claims.DefaultCurrency))) {
-		<div x-data="txPage" @keydown.window="onKey($event)">
+		<div x-data="txPage" @keydown.window="onKey($event)" @click="onClick($event)">
 			<div id="tx-body" class="contents">
 				@TxBody(list, accounts, knds, cats, cps, gls)
 			</div>
+			@txDetailsSlot(openTx)
 			@txUndoToast()
 		</div>
 	}

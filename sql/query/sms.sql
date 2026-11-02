@@ -38,6 +38,14 @@ FROM sms_messages
 WHERE id = sqlc.arg(id)
 LIMIT 1;
 
+-- name: GetSMSMessageOfTransaction :one
+SELECT
+    sqlc.embed(sms_messages)
+FROM sms_messages
+WHERE transaction_id = sqlc.arg(transaction_id)
+ORDER BY received_at
+LIMIT 1;
+
 -- name: GetSMSMessagesByStatus :many
 SELECT
     sqlc.embed(sms_messages)

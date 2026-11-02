@@ -137,6 +137,8 @@ WHERE
     AND (sqlc.narg(to_date) IS NULL OR t.scheduled_to < sqlc.narg(to_date))
     AND (sqlc.narg(min_amount) IS NULL OR t.amount >= sqlc.narg(min_amount))
     AND (sqlc.narg(max_amount) IS NULL OR t.amount <= sqlc.narg(max_amount))
+    -- Not a filter of the list, for the details' other occurrences.
+    AND (sqlc.narg(recurrent_tx_id) IS NULL OR t.recurrent_id = sqlc.narg(recurrent_tx_id))
     AND (sqlc.narg(before) IS NULL OR t.scheduled_to < sqlc.narg(before))
     AND (sqlc.narg(after) IS NULL OR t.scheduled_to >= sqlc.narg(after))
 ORDER BY t.scheduled_to DESC, t.created_at DESC

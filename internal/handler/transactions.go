@@ -54,7 +54,10 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 	}
 	l.Debug("fetched balances")
 
-	return views.Transactions(getClaims(r.Context()), balances, *list, fd, accs, knds, cats, cps, gls), nil
+	// ?tx= opens the transaction's details, e.g. when reloading the page.
+	openTx := r.URL.Query().Get(views.TxDetailsParam)
+
+	return views.Transactions(getClaims(r.Context()), balances, *list, fd, accs, knds, cats, cps, gls, openTx), nil
 }
 
 // TransactionsMore is the chunk of the list older than ?before=.

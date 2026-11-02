@@ -1,0 +1,564 @@
+package views
+
+import (
+	"fmt"
+	"github.com/omareloui/tyche/internal/formatters"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
+	"net/url"
+)
+
+// TxDetailsParam is the transactions page's query param holding the
+// transaction whose details are open, so reloading the page opens them again.
+const TxDetailsParam = "tx"
+
+func txDetailsURL(id string) string {
+	return fmt.Sprintf("/transactions/%s/details", url.PathEscape(id))
+}
+
+// txDetailsSlot is where the details drawer opens (txPage.openDetails in
+// transactions.js), openTx's right away.
+templ txDetailsSlot(openTx string) {
+	<div
+		id="tx-details"
+		class="contents"
+		if openTx != "" {
+			hx-get={ txDetailsURL(openTx) }
+			hx-trigger="load"
+		}
+	></div>
+}
+
+// TxDetails is a transaction in full, in a drawer (a bottom sheet on
+// phones): its fields, actions, SMS, the transactions related to it and the
+// stats of its month.
+templ TxDetails(d *models.TxDetails, def *models.Currency) {
+	{{ tx := d.Tx }}
+	{{ v := newTxView(tx) }}
+	<div
+		x-data="txDetails"
+		data-tx-details
+		data-id={ tx.ID }
+		@keydown.escape.window="close()"
+		@click.self="close()"
+		class="fixed inset-0 z-55 flex items-end sm:items-stretch sm:justify-end bg-zinc-950/60 backdrop-blur-sm"
+	>
+		<aside
+			role="dialog"
+			aria-modal="true"
+			aria-label="Transaction details"
+			class="flex flex-col w-full sm:w-[30rem] max-h-[92dvh] sm:max-h-none sm:h-dvh rounded-t-3xl sm:rounded-none sm:rounded-l-3xl bg-zinc-900 ring-1 ring-zinc-800 shadow-2xl shadow-black/50"
+		>
+			<header class="flex items-start gap-3 px-5 sm:px-6 pt-5 pb-4">
+				@txTile(tx, &v)
+				<div class="flex-1 min-w-0">
+					<h2 class="text-lg font-bold leading-snug break-words">{ v.title }</h2>
+					<p class="text-sm text-zinc-400 truncate">
+						{ txDetailsKind(tx) }
+						if v.subtitle != "" {
+							· { v.subtitle }
+						}
+					</p>
+				</div>
+				<button
+					type="button"
+					x-ref="close"
+					@click="close()"
+					aria-label="Close"
+					class="grid place-items-center shrink-0 w-9 h-9 -mr-2 rounded-full text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white"
+				>
+					@icons.X("20")
+				</button>
+			</header>
+			<div class="flex-1 grid content-start gap-6 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
+				@txDetailsHero(tx, &v, def)
+				@txDetailsActions(tx)
+				@txDetailsFields(d, &v)
+				@txDetailsMonth(d, def)
+				@txDetailsLinked(d, def)
+				@txDetailsSMS(d)
+				if len(d.RecurrentTxs) > 0 {
+					@txDetailsSection("Other occurrences") {
+						for _, rt := range d.RecurrentTxs {
+							@txDetailsMini(&rt)
+						}
+						if d.Recurrent != nil {
+							<a href={ templ.SafeURL("/recurrent-tx#" + RecurrentTxID(d.Recurrent.ID)) } class="txd-more">
+								See the recurring transaction
+								@icons.ArrowRight("14")
+							</a>
+						}
+					}
+				}
+				if len(d.CounterpartyTxs) > 0 {
+					@txDetailsSection("Latest with " + tx.Counterparty.Name) {
+						for _, ct := range d.CounterpartyTxs {
+							@txDetailsMini(&ct)
+						}
+						<button type="button" { txFilterBy(models.TxFilterCounterparty, tx.Counterparty.ID)... } class="txd-more">
+							See all
+							@icons.ArrowRight("14")
+						</button>
+					}
+				}
+			</div>
+		</aside>
+	</div>
+}
+
+templ txDetailsHero(tx *models.Transaction, v *txView, def *models.Currency) {
+	<div class="grid gap-3">
+		<div>
+			if v.original != "" {
+				<p class="text-sm text-zinc-500 line-through tabular-nums">{ v.original }</p>
+			}
+			<p
+				class={
+					"text-3xl font-semibold font-(family-name:--font-biorhyme-expanded) tabular-nums break-words",
+					templ.KV("text-emerald-400", v.tone == txToneIn),
+					templ.KV("text-zinc-300", v.tone == txToneNeutral),
+				}
+			>{ v.amount }</p>
+			if conv := txConverted(tx, def); conv != "" {
+				<p class="text-sm text-zinc-500 tabular-nums">{ conv }</p>
+			}
+		</div>
+		<div class="flex flex-wrap items-center gap-1.5">
+			if v.isOverdue {
+				<span class="chip bg-red-400/10 text-red-400">
+					@icons.Calendar("12")
+					Overdue
+				</span>
+			} else if v.isScheduled {
+				<span class="chip bg-sky-400/10 text-sky-300">
+					@icons.Calendar("12")
+					Scheduled
+				</span>
+			} else {
+				<span class="chip bg-emerald-400/10 text-emerald-300">
+					@icons.Check("12")
+					Fulfilled
+				</span>
+			}
+			if tx.NeedsReview {
+				<span class="chip bg-amber-400/10 text-amber-300">Needs review</span>
+			}
+			if tx.Kind == models.RefundTxKind {
+				<span class="chip bg-teal-400/10 text-teal-300">
+					@icons.RotateCcw("12")
+					Refund
+				</span>
+			}
+			if tx.FromSMS {
+				<span class="chip">
+					@icons.Message("12")
+					From SMS
+				</span>
+			}
+			if tx.RecurrentTxID != "" {
+				<span class="chip">
+					@icons.Repeat("12")
+					Recurring
+				</span>
+			}
+		</div>
+	</div>
+}
+
+// txDetailsActions are the row's actions. Fulfilling and reviewing answer the
+// list, then the details reload; editing and deleting happen on the row
+// (txDetails in transactions.js).
+templ txDetailsActions(tx *models.Transaction) {
+	<div class="flex flex-wrap gap-2">
+		if tx.FulfilledAt.IsZero() {
+			<button
+				type="button"
+				hx-put={ fmt.Sprintf("/transactions/%s/fulfill", tx.ID) }
+				hx-target="#tx-list"
+				hx-swap="outerHTML"
+				@htmx:after-request="reload($event)"
+				class="txd-action"
+			>
+				@icons.Check("14")
+				Fulfill
+			</button>
+		}
+		if tx.NeedsReview {
+			<button
+				type="button"
+				hx-put={ fmt.Sprintf("/transactions/%s/reviewed", tx.ID) }
+				hx-target="#tx-list"
+				hx-swap="outerHTML"
+				@htmx:after-request="reload($event)"
+				class="txd-action"
+			>
+				@icons.CheckCheck("14")
+				Mark reviewed
+			</button>
+		}
+		// Adjustments are signed, which the form can't edit.
+		if tx.Kind != models.AdjustmentTxKind {
+			<button type="button" x-cloak x-show="hasRow" @click="edit()" class="txd-action">
+				@icons.Pencil("14")
+				Edit
+			</button>
+			if !tx.IsTransferLeg() {
+				<button
+					type="button"
+					hx-get={ fmt.Sprintf("/transactions/%s/duplicate", tx.ID) }
+					hx-target="#tx-create"
+					hx-swap="innerHTML"
+					@click="openCreateForm = true"
+					@htmx:after-request="close()"
+					class="txd-action"
+				>
+					@icons.Copy("14")
+					Duplicate
+				</button>
+			}
+		}
+		<button type="button" @click="remove()" class="txd-action text-red-300 hover:border-red-400/60! hover:text-red-300!">
+			@icons.Trash("14")
+			Delete
+		</button>
+	</div>
+}
+
+templ txDetailsFields(d *models.TxDetails, v *txView) {
+	{{ tx := d.Tx }}
+	<dl class="grid gap-px overflow-hidden rounded-2xl bg-zinc-800/60 ring-1 ring-zinc-800">
+		@txDetailsRow("Account", icons.Wallet("15")) {
+			<button
+				type="button"
+				{ txFilterBy(models.TxFilterAccount, tx.Account.ID)... }
+				title={ "Show only " + tx.Account.Name }
+				class="txd-link"
+			>{ tx.Account.Name }</button>
+			if tx.ToAccount != nil && tx.ToAccount.Name != "" {
+				<span class="text-zinc-500">→</span>
+				<button
+					type="button"
+					{ txFilterBy(models.TxFilterAccount, tx.ToAccount.ID)... }
+					title={ "Show only " + tx.ToAccount.Name }
+					class="txd-link"
+				>{ tx.ToAccount.Name }</button>
+			}
+		}
+		if tx.ToAccount != nil && tx.ToAmount != 0 && (tx.Kind == models.TransferTxKind || tx.Kind == models.DebtTxKind) {
+			@txDetailsRow("Sent", icons.ArrowUpDown("15")) {
+				<span class="tabular-nums">{ tx.ViewAmount() }</span>
+				<span class="text-zinc-500">→</span>
+				<span class="tabular-nums">{ tx.ViewToAmount() }</span>
+			}
+		}
+		if tx.Category != nil {
+			@txDetailsRow("Category", icons.Tag("15")) {
+				<button
+					type="button"
+					{ txFilterBy(models.TxFilterCategory, tx.Category.ID)... }
+					title={ "Show only " + tx.Category.Name }
+					class="txd-link inline-flex items-center gap-1.5"
+				>
+					@categoryDot(tx.Category.Color)
+					{ tx.Category.Name }
+				</button>
+			}
+		}
+		if tx.Counterparty != nil {
+			@txDetailsRow("Counterparty", icons.User("15")) {
+				<button
+					type="button"
+					{ txFilterBy(models.TxFilterCounterparty, tx.Counterparty.ID)... }
+					title={ "Show only " + tx.Counterparty.Name }
+					class="txd-link inline-flex items-center gap-1.5"
+				>
+					@components.CounterpartyIcon(tx.Counterparty.Name, tx.Counterparty.Icon, tx.Counterparty.Color, "w-5 h-5 text-[10px]")
+					{ tx.Counterparty.Name }
+				</button>
+			}
+		}
+		if tx.Goal != nil {
+			@txDetailsRow("Goal", icons.Target("15")) {
+				<a href={ templ.SafeURL("/goals") } class="txd-link">{ tx.Goal.Name }</a>
+				<span class="sensitive text-zinc-500 tabular-nums">
+					{ formatters.FormatNum(tx.GoalPercentage) }% of it · { formatters.FormatNum(tx.Goal.ProgressPercentage()) }% saved
+				</span>
+			}
+		}
+		if tx.Description != "" && tx.Description != v.title {
+			@txDetailsRow("Description", icons.Pencil("15")) {
+				<span class="break-words">{ tx.Description }</span>
+			}
+		}
+		@txDetailsRow("Date", icons.Calendar("15")) {
+			<span>{ tx.ScheduledTo.Format("Monday, January 2 2006") }</span>
+		}
+		@txDetailsRow("Fulfilled", icons.Check("15")) {
+			if tx.FulfilledAt.IsZero() {
+				<span class="text-zinc-500">Not yet</span>
+			} else {
+				<span>{ tx.FulfilledAt.Format("Jan 2 2006, 3:04pm") }</span>
+			}
+		}
+		if d.Recurrent != nil {
+			@txDetailsRow("Repeats", icons.Repeat("15")) {
+				<a href={ templ.SafeURL("/recurrent-tx#" + RecurrentTxID(d.Recurrent.ID)) } class="txd-link">{ d.Recurrent.ViewRecurrence() }</a>
+			}
+		}
+		@txDetailsRow("Added", icons.Clock("15")) {
+			<span class="text-zinc-400">{ tx.CreatedAt.Format("Jan 2 2006, 3:04pm") }</span>
+		}
+	</dl>
+}
+
+templ txDetailsRow(label string, icon templ.Component) {
+	<div class="flex items-start gap-3 px-4 py-3 bg-zinc-900">
+		<dt class="flex items-center gap-2 w-28 shrink-0 text-sm text-zinc-500">
+			@icon
+			{ label }
+		</dt>
+		<dd class="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0 text-sm">
+			{ children... }
+		</dd>
+	</div>
+}
+
+templ txDetailsSection(title string) {
+	<section class="grid gap-2">
+		<h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ title }</h3>
+		{ children... }
+	</section>
+}
+
+// txDetailsMonth is how the transaction's month went for its category,
+// counterparty and account.
+templ txDetailsMonth(d *models.TxDetails, def *models.Currency) {
+	{{ tx := d.Tx }}
+	@txDetailsSection("In " + formatTxMonth(d.Month)) {
+		<div class="grid gap-2">
+			if b := d.Budget; b != nil {
+				<div class="txd-card">
+					<div class="flex items-baseline justify-between gap-3">
+						<p class="flex items-center gap-1.5 min-w-0 text-sm">
+							@categoryDot(b.Color)
+							<span class="truncate">{ b.Name }</span>
+						</p>
+						if b.HasBudget() {
+							<p class={ "shrink-0 text-xs tabular-nums", templ.KV("text-red-400", b.Over()), templ.KV("text-zinc-400", !b.Over()) }>
+								{ formatters.FormatNum(b.Pct()) }%
+							</p>
+						}
+					</div>
+					if b.HasBudget() {
+						<div class="h-1.5 mt-2 rounded-full bg-zinc-800 overflow-hidden">
+							<div
+								class={ "h-full rounded-full", templ.KV("bg-red-400", b.Over()), templ.KV("bg-violet-400", !b.Over()) }
+								style={ fmt.Sprintf("width: %.1f%%", min(b.Pct(), 100)) }
+							></div>
+						</div>
+						<p class="sensitive mt-2 text-xs text-zinc-400 tabular-nums">
+							{ formatters.FormatAmount(b.Spent, def.Symbol) } of { formatters.FormatAmount(b.Budget, def.Symbol) } ·
+							if b.Over() {
+								<span class="text-red-400">{ formatters.FormatAmount(-b.Left(), def.Symbol) } over</span>
+							} else {
+								{ formatters.FormatAmount(b.Left(), def.Symbol) } left
+							}
+						</p>
+					} else {
+						<p class="sensitive mt-1 text-xs text-zinc-400 tabular-nums">
+							{ formatters.FormatAmount(b.Spent, def.Symbol) } spent, no budget
+						</p>
+					}
+				</div>
+			}
+			if s := d.CounterpartyMonth; s != nil && tx.Counterparty != nil {
+				<button
+					type="button"
+					@click={ fmt.Sprintf("filterBy({%q: %q, %q: %q, %q: %q})",
+						models.TxFilterCounterparty, tx.Counterparty.ID,
+						models.TxFilterFrom, d.Month.Format("2006-01-02"),
+						models.TxFilterTo, d.Month.AddDate(0, 1, -1).Format("2006-01-02")) }
+					title={ "Show " + tx.Counterparty.Name + "'s transactions of the month" }
+					class="txd-card text-left cursor-pointer transition-colors hover:bg-zinc-800/70"
+				>
+					<p class="flex items-center justify-between gap-3 text-sm">
+						<span class="truncate">{ tx.Counterparty.Name }</span>
+						<span class="shrink-0 text-xs text-zinc-400">{ fmt.Sprint(s.Count) } { plural(s.Count, "transaction", "transactions") }</span>
+					</p>
+					<p class="sensitive mt-1 flex flex-wrap gap-x-3 text-xs tabular-nums text-zinc-400">
+						if s.Out != 0 {
+							<span>{ formatters.FormatAmount(s.Out, def.Symbol) } spent</span>
+						}
+						if s.In != 0 {
+							<span class="text-emerald-400">{ formatters.FormatAmount(s.In, def.Symbol) } earned</span>
+						}
+						if s.Out == 0 && s.In == 0 {
+							<span>Nothing fulfilled yet</span>
+						}
+					</p>
+				</button>
+			}
+			<div class="txd-card flex items-center justify-between gap-3 text-sm">
+				<span class="flex items-center gap-2 min-w-0">
+					<span class="shrink-0 text-zinc-500">
+						@accKindIcon(tx.Account.Kind.Enum, "16")
+					</span>
+					<span class="truncate">{ tx.Account.Name } now</span>
+				</span>
+				<span class="sensitive shrink-0 tabular-nums">{ tx.Account.ViewAmount() }</span>
+			</div>
+			if tx.ToAccount != nil && tx.ToAccount.Name != "" {
+				<div class="txd-card flex items-center justify-between gap-3 text-sm">
+					<span class="flex items-center gap-2 min-w-0">
+						<span class="shrink-0 text-zinc-500">
+							@accKindIcon(tx.ToAccount.Kind.Enum, "16")
+						</span>
+						<span class="truncate">{ tx.ToAccount.Name } now</span>
+					</span>
+					<span class="sensitive shrink-0 tabular-nums">{ tx.ToAccount.ViewAmount() }</span>
+				</div>
+			}
+		</div>
+	}
+}
+
+// txDetailsLinked are the transactions linked to this one: its
+// reimbursements, the expense it reimburses, its transfer pair's other side.
+templ txDetailsLinked(d *models.TxDetails, def *models.Currency) {
+	{{ tx := d.Tx }}
+	if len(tx.Reimbursements) > 0 {
+		@txDetailsSection("Paid back") {
+			<div class="flex justify-between px-3 text-sm text-zinc-400">
+				<span>Paid</span>
+				<span class="tabular-nums">{ "-" + tx.ViewAmount() }</span>
+			</div>
+			for _, rt := range tx.Reimbursements {
+				@txDetailsMini(&rt)
+			}
+			<div class="flex justify-between px-3 text-sm font-semibold">
+				<span>Net</span>
+				<span class="tabular-nums">{ "-" + tx.ViewNetAmount() }</span>
+			</div>
+		}
+	}
+	if d.Reimburses != nil {
+		@txDetailsSection("Pays back") {
+			@txDetailsMini(d.Reimburses)
+		}
+	}
+	if d.Pair != nil {
+		@txDetailsSection("Other side of the transfer") {
+			@txDetailsMini(d.Pair)
+			if out := txPairOut(d); out != nil {
+				if fee := out.TransferFee(); fee >= 0.01 {
+					<div class="flex justify-between px-3 text-sm text-zinc-400">
+						<span>Fees</span>
+						<span class="tabular-nums">{ "-" + formatters.FormatAmount(fee, out.Account.Currency.Symbol) }</span>
+					</div>
+				}
+			}
+		}
+	}
+}
+
+templ txDetailsSMS(d *models.TxDetails) {
+	if d.SMS != nil || d.Tx.FromSMS {
+		@txDetailsSection("SMS") {
+			<div class="txd-card grid gap-2">
+				if m := d.SMS; m != nil {
+					<p class="flex flex-wrap items-center justify-between gap-x-3 text-xs text-zinc-400">
+						<span class="font-semibold text-zinc-300">{ m.Sender }</span>
+						<span>{ m.ReceivedAt.Format("Jan 2 2006, 3:04pm") }</span>
+					</p>
+				}
+				<p class="whitespace-pre-wrap break-words text-sm text-zinc-200">
+					if d.SMS != nil {
+						{ d.SMS.Body }
+					} else {
+						{ d.Tx.SMSBody }
+					}
+				</p>
+				if d.SMS != nil && d.SMS.TemplateID != "" {
+					<p class="flex items-center gap-1.5 text-xs text-zinc-500">
+						@icons.Hash("12")
+						if d.SMSTemplate != "" {
+							Read by <a href={ templ.SafeURL("/sms/templates") } class="txd-link">{ d.SMSTemplate }</a>
+						} else {
+							Read by a deleted template
+						}
+					</p>
+				}
+			</div>
+		}
+	}
+}
+
+// txDetailsMini is a related transaction, opening its own details on click.
+templ txDetailsMini(tx *models.Transaction) {
+	{{ v := txMiniView(tx) }}
+	<button
+		type="button"
+		hx-get={ txDetailsURL(tx.ID) }
+		hx-target="#tx-details"
+		hx-swap="innerHTML"
+		class="flex items-center gap-3 w-full px-3 py-2 rounded-xl bg-tx-row text-left cursor-pointer transition hover:ring-1 hover:ring-zinc-700"
+	>
+		<div class="flex-1 min-w-0">
+			<p class="truncate text-sm">{ v.title }</p>
+			<p class="truncate text-xs text-zinc-500">
+				{ formatTxDay(tx.ScheduledTo) } · { v.account }
+				if v.isScheduled {
+					· Scheduled
+				}
+			</p>
+		</div>
+		<p
+			class={
+				"shrink-0 text-sm font-semibold tabular-nums",
+				templ.KV("text-emerald-400", v.tone == txToneIn),
+				templ.KV("text-zinc-400", v.tone == txToneNeutral),
+			}
+		>{ v.amount }</p>
+	</button>
+}
+
+// txMiniView is a related transaction's view, a transfer pair's side as
+// what it sent or received (instead of the whole transfer).
+func txMiniView(tx *models.Transaction) txView {
+	if !tx.IsTransferLeg() {
+		return newTxView(tx)
+	}
+	leg := *tx
+	leg.TransferPair = nil
+	v := newTxView(&leg)
+	if tx.Kind == models.ExpenseTxKind {
+		v.title = "Sent from " + tx.Account.Name
+	} else {
+		v.title = "Received in " + tx.Account.Name
+	}
+	return v
+}
+
+// txDetailsKind names the transaction's kind, a transfer pair's as a
+// transfer.
+func txDetailsKind(tx *models.Transaction) string {
+	switch {
+	case tx.IsTransferLeg():
+		if tx.Kind == models.ExpenseTxKind {
+			return "Transfer, sent"
+		}
+		return "Transfer, received"
+	case tx.IsReimbursement():
+		return "Reimbursement"
+	}
+	return tx.Kind.String()
+}
+
+// txPairOut is the outgoing side of the transfer pair the details are of.
+func txPairOut(d *models.TxDetails) *models.Transaction {
+	if d.Tx.Kind == models.ExpenseTxKind {
+		return d.Tx
+	}
+	return d.Pair
+}

@@ -435,10 +435,11 @@ templ transaction(tx *models.Transaction, def *models.Currency) {
 		@components.EntryMenuAt("openMenu", txMenuBig, getTransactionMenuItems(tx))
 		<div
 			data-tx-row
+			data-details={ tx.ID }
 			tabindex="0"
 			x-bind="swipe"
 			class={
-				"relative flex items-center gap-3 sm:gap-4 px-3 sm:px-4 py-3 rounded-2xl touch-pan-y outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60",
+				"relative flex items-center gap-3 sm:gap-4 px-3 sm:px-4 py-3 rounded-2xl touch-pan-y cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60",
 				templ.KV("bg-tx-row", !v.isScheduled),
 				templ.KV("bg-zinc-950 border border-dashed border-zinc-700", v.isScheduled),
 			}
@@ -751,12 +752,15 @@ templ transferPair(out *models.Transaction, def *models.Currency) {
 		x-data="txRow"
 	>
 		@components.EntryMenuAt("openMenu", txMenuBig, []templ.Component{
+			txMenuDetails(out.ID),
+			components.EntryMenuSeparator(),
 			txMenuItem("Unlink transfer", "delete", fmt.Sprintf("/transactions/%s/transfer-pair", out.ID), icons.Unlink("16")),
 		})
 		<div
 			data-tx-row
+			data-details={ out.ID }
 			tabindex="0"
-			class="relative flex items-center gap-3 sm:gap-4 px-3 sm:px-4 py-3 rounded-2xl bg-tx-row outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60"
+			class="relative flex items-center gap-3 sm:gap-4 px-3 sm:px-4 py-3 rounded-2xl bg-tx-row cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60"
 		>
 			@txTile(out, &v)
 			<div class="flex-1 min-w-0">
@@ -833,8 +837,9 @@ templ transferLeg(tx *models.Transaction, def *models.Currency) {
 		@components.EntryMenuAt("openMenu", txMenuSmall, getTransferLegMenuItems(tx))
 		<div
 			data-tx-row
+			data-details={ tx.ID }
 			tabindex="0"
-			class="flex items-center gap-3 px-4 py-2 rounded-xl bg-tx-row outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60"
+			class="flex items-center gap-3 px-4 py-2 rounded-xl bg-tx-row cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60"
 		>
 			<div class="grid place-items-center shrink-0 w-9 h-9 rounded-lg bg-sky-400/10 text-sky-400">
 				@accKindIcon(tx.Account.Kind.Enum, "18")
@@ -909,8 +914,9 @@ templ reimbursement(tx *models.Transaction, def *models.Currency) {
 		@components.EntryMenuAt("openMenu", txMenuSmall, getReimbursementMenuItems(tx))
 		<div
 			data-tx-row
+			data-details={ tx.ID }
 			tabindex="0"
-			class={ "flex items-center gap-3 px-4 py-2 rounded-xl bg-tx-row outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60", templ.KV("opacity-70", v.isScheduled) }
+			class={ "flex items-center gap-3 px-4 py-2 rounded-xl bg-tx-row cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60", templ.KV("opacity-70", v.isScheduled) }
 		>
 			<div class="grid place-items-center shrink-0 w-9 h-9 rounded-lg bg-emerald-400/10 text-emerald-400">
 				if v.counterparty != nil {
@@ -999,6 +1005,16 @@ func txMenuDuplicate(id string) templ.Component {
 	)
 }
 
+// txMenuDetails opens the transaction's details drawer (txPage.openDetails
+// in transactions.js).
+func txMenuDetails(id string) templ.Component {
+	return components.EntryMenuItem("Details",
+		templ.Attributes{"@click": fmt.Sprintf("openMenu = false; openDetails(%q)", id)},
+		components.WithEntryMenuItemIcon(icons.ExternalLink("16")),
+		components.WithEntryMenuItemShortcut("↵"),
+	)
+}
+
 func txMenuFulfill(tx *models.Transaction) templ.Component {
 	return txMenuItem("Fulfill", "put", fmt.Sprintf("/transactions/%s/fulfill", tx.ID), icons.Check("16"),
 		components.WithEntryMenuItemShortcut("F"))
@@ -1060,7 +1076,7 @@ func getTransactionMenuItems(tx *models.Transaction) []templ.Component {
 		edit = append(edit, txMenuEdit(tx), txMenuDuplicate(tx.ID))
 	}
 
-	return txMenuGroups(status, links, edit, []templ.Component{txMenuDelete()})
+	return txMenuGroups([]templ.Component{txMenuDetails(tx.ID)}, status, links, edit, []templ.Component{txMenuDelete()})
 }
 
 // canPairTransfer reports whether tx can be paired by hand with the other
@@ -1077,6 +1093,7 @@ func getTransferLegMenuItems(tx *models.Transaction) []templ.Component {
 	}
 
 	return txMenuGroups(
+		[]templ.Component{txMenuDetails(tx.ID)},
 		status,
 		[]templ.Component{
 			txMenuItem("Unlink transfer", "delete", fmt.Sprintf("/transactions/%s/transfer-pair", tx.ID), icons.Unlink("16")),
@@ -1096,6 +1113,7 @@ func getReimbursementMenuItems(tx *models.Transaction) []templ.Component {
 	}
 
 	return txMenuGroups(
+		[]templ.Component{txMenuDetails(tx.ID)},
 		status,
 		[]templ.Component{
 			txMenuItem("Unlink reimbursement", "delete", fmt.Sprintf("/transactions/%s/reimburses", tx.ID), icons.Unlink("16")),

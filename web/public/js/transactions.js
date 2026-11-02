@@ -13,6 +13,29 @@ function txRequest(verb, url, el) {
   return htmx.ajax(verb, url, { target: el, swap: "outerHTML" });
 }
 
+function txDetailsURL(id) {
+  return `/transactions/${encodeURIComponent(id)}/details`;
+}
+
+// setTxParam keeps the open details in the url (?tx=), so reloading the page
+// opens them again.
+function setTxParam(id) {
+  const u = new URL(location.href);
+  if (id) u.searchParams.set("tx", id);
+  else u.searchParams.delete("tx");
+  if (u.href !== location.href) history.replaceState(history.state, "", u);
+}
+
+// closeTxDetails closes the open details drawer, if any.
+function closeTxDetails() {
+  const el = document.querySelector("[data-tx-details]");
+  if (el) Alpine.$data(el).close();
+}
+
+// Clicks on these, in a row, do their own thing instead of opening the
+// row's details.
+const TX_ROW_CONTROLS = "button, a, input, select, textarea, label, [role=menu], [tabindex]:not([data-tx-row])";
+
 document.addEventListener("alpine:init", () => {
   // txs holds the deletes waiting out their undo delay. Their rows stay in
   // the DOM, hidden, so undoing is instant.
@@ -81,7 +104,9 @@ document.addEventListener("alpine:init", () => {
     // filterBy narrows the list to what got clicked in it (a category, an
     // account, a month…), keeping the other filters set.
     filterBy(set) {
+      closeTxDetails();
       const params = new URLSearchParams(location.search);
+      params.delete("tx");
       for (const [k, v] of Object.entries(set)) params.set(k, v);
       const url = `/transactions?${params}`;
       htmx
@@ -89,10 +114,23 @@ document.addEventListener("alpine:init", () => {
         .then(() => history.replaceState({ htmx: true }, "", url));
     },
 
+    openDetails(id) {
+      htmx.ajax("GET", txDetailsURL(id), { target: "#tx-details", swap: "innerHTML" });
+    },
+
+    // onClick opens the details of the row clicked, unless on one of its
+    // controls, selecting its text or ending a swipe.
+    onClick(e) {
+      const row = e.target.closest?.("[data-tx-row][data-details]");
+      if (!row || e.target.closest(TX_ROW_CONTROLS) || getSelection()?.toString()) return;
+      if (Date.now() - Number(row.parentElement.dataset.swipedAt ?? 0) < 500) return;
+      this.openDetails(row.dataset.details);
+    },
+
     onKey(e) {
       if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
       const t = e.target;
-      if (this.openCreateForm) return;
+      if (this.openCreateForm || document.querySelector("[data-tx-details]")) return;
       if (e.key === "/" && !t.closest?.("input, textarea, select, [contenteditable]")) {
         e.preventDefault();
         this.$refs.q?.focus();
@@ -106,6 +144,10 @@ document.addEventListener("alpine:init", () => {
       const d = row?.dataset ?? {};
 
       switch (e.key) {
+        case "Enter":
+          if (!t.matches?.("[data-tx-row][data-details]")) return;
+          this.openDetails(t.dataset.details);
+          break;
         case "n":
           this.openCreateForm = true;
           break;
@@ -151,6 +193,63 @@ document.addEventListener("alpine:init", () => {
       next.focus({ preventScroll: true });
       next.scrollIntoView({ block: "center", behavior: "smooth" });
       return true;
+    },
+  }));
+
+  // txDetails is the details drawer of a transaction (views.TxDetails). Its
+  // edit and delete act on the transaction's row in the list, as the row's
+  // own actions do.
+  Alpine.data("txDetails", () => ({
+    hasRow: false,
+    // opener is what had the focus before opening, given back on closing.
+    opener: null,
+
+    init() {
+      const id = this.$root.dataset.id;
+      this.hasRow = !!this.row();
+      if (!this.$root.contains(document.activeElement)) this.opener = document.activeElement;
+      setTxParam(id);
+      this.$nextTick(() => this.$refs.close?.focus({ preventScroll: true }));
+    },
+
+    row() {
+      return document.getElementById(`tx-${this.$root.dataset.id}`);
+    },
+
+    close() {
+      setTxParam(null);
+      const back = this.row()?.querySelector("[data-tx-row]") ?? this.opener;
+      this.$root.remove();
+      back?.focus?.({ preventScroll: true });
+    },
+
+    // reload gets the details again after an action changed them.
+    reload(e) {
+      if (!e.detail.successful) return;
+      htmx.ajax("GET", txDetailsURL(this.$root.dataset.id), { target: "#tx-details", swap: "innerHTML" });
+    },
+
+    edit() {
+      const row = this.row();
+      this.close();
+      if (!row) return;
+      // A transfer side or reimbursement is nested, folded, under its row.
+      for (let el = row.parentElement?.closest("[x-data=txRow]"); el; el = el.parentElement?.closest("[x-data=txRow]")) {
+        const d = Alpine.$data(el);
+        d.openTransferPair = true;
+        d.openReimbursements = true;
+      }
+      txRequest("GET", txURL(row.dataset.id, "edit"), row);
+      row.scrollIntoView({ block: "center", behavior: "smooth" });
+    },
+
+    // remove deletes with undo when the row is loaded, else right away.
+    remove() {
+      const id = this.$root.dataset.id;
+      const row = this.row();
+      this.close();
+      if (row) Alpine.store("txs").remove(row);
+      else if (confirm("Delete this transaction?")) txRequest("DELETE", txURL(id), "#tx-list");
     },
   }));
 
@@ -255,6 +354,8 @@ document.addEventListener("alpine:init", () => {
 
     up() {
       if (this.x0 === null) return;
+      // The click ending a swipe doesn't open the details (txPage.onClick).
+      if (this.swiping) this.$root.dataset.swipedAt = Date.now();
       const dx = this.dx;
       this.cancel();
       if (dx <= -SWIPE_PX) {
