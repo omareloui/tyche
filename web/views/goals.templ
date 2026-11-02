@@ -346,32 +346,48 @@ templ goalAddButton(id string) {
 }
 
 // goalPlan is how much to put aside every month to reach the goal in a few
-// months, picked from pills.
+// months, picked from pills or typed in.
 templ goalPlan(gl *models.Goal) {
-	<div x-data="{m: 6}" class="relative flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-zinc-800/80 text-sm">
-		<p class="text-zinc-500">
-			for _, m := range goalPlanMonths {
-				<span
-					x-show={ fmt.Sprintf("m === %d", m) }
-					if m != 6 {
-						x-cloak
-					}
-					class="tabular-nums"
-				>
-					<span class="sensitive text-zinc-200">{ formatters.FormatAmount(gl.Plan(m), gl.Currency.Symbol) }</span>/mo
+	<div
+		x-data={ fmt.Sprintf("{m: 6, c: '', rem: %v}", gl.Remaining()) }
+		class="relative flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-zinc-800/80 text-sm"
+	>
+		<p class="text-zinc-500 tabular-nums">
+			<span class="sensitive text-zinc-200">
+				if gl.Currency.Symbol != "" {
+					{ gl.Currency.Symbol + " " }
+				}
+				<span x-text="(rem / m).toLocaleString('en-US', {maximumFractionDigits: 2})">
+					{ formatters.FormatNum(gl.Plan(6)) }
 				</span>
-			}
-			to get there in
+			</span>/mo to get there in
 		</p>
-		<div role="group" aria-label="Months to reach the goal" class="flex gap-1 p-0.5 rounded-full bg-zinc-800/60">
+		<div role="group" aria-label="Months to reach the goal" class="flex items-center gap-1 p-0.5 rounded-full bg-zinc-800/60">
 			for _, m := range goalPlanMonths {
 				<button
 					type="button"
-					@click={ fmt.Sprintf("m = %d", m) }
-					:class={ fmt.Sprintf("m === %d ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'", m) }
+					@click={ fmt.Sprintf("m = %d; c = ''", m) }
+					:class={ fmt.Sprintf("c === '' && m === %d ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'", m) }
 					class="h-6 px-2 rounded-full text-xs tabular-nums cursor-pointer transition-colors"
 				>{ fmt.Sprintf("%dmo", m) }</button>
 			}
+			<label
+				:class="c !== '' ? 'bg-zinc-700 text-white' : 'text-zinc-500'"
+				class="flex items-center h-6 px-1.5 rounded-full text-xs tabular-nums transition-colors"
+			>
+				<input
+					type="number"
+					min="1"
+					max="600"
+					step="1"
+					inputmode="numeric"
+					placeholder="#"
+					aria-label="Custom number of months"
+					x-model="c"
+					@input="const n = parseInt($event.target.value, 10); m = n >= 1 ? Math.min(n, 600) : 6"
+					class="w-[3ch] bg-transparent text-right outline-none placeholder:text-zinc-600 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+				/>mo
+			</label>
 		</div>
 	</div>
 }
@@ -430,7 +446,7 @@ const (
 	goalSectionAchieved = "achieved"
 )
 
-var goalPlanMonths = []int{3, 6, 12, 18}
+var goalPlanMonths = []int{3, 6, 12}
 
 func GoalID(id string) string {
 	return "goal-" + id
