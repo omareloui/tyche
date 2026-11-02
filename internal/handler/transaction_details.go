@@ -9,6 +9,7 @@ import (
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/errs"
 	"github.com/omareloui/tyche/internal/logger"
+	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/resperr"
 	"github.com/omareloui/tyche/web/views"
 	"go.uber.org/zap"
@@ -22,10 +23,24 @@ func (h Handler) TransactionDetails(w http.ResponseWriter, r *http.Request) (tem
 		return nil, errs.ErrInvalidID
 	}
 
-	ctx := r.Context()
-	def := &getClaims(ctx).DefaultCurrency
+	d, err := h.txDetails(r.Context(), id)
+	if err != nil {
+		return nil, err
+	}
 
-	d, err := h.repo.GetTransactionDetails(ctx, id, def)
+	def := &getClaims(r.Context()).DefaultCurrency
+	// With the drawer open, only its content is swapped.
+	if r.Header.Get("HX-Target") == txDetailsPanel {
+		return views.TxDetailsPanel(d, def), nil
+	}
+	return views.TxDetails(d, def), nil
+}
+
+// txDetailsPanel is the id of the open drawer's content.
+const txDetailsPanel = "txd-panel"
+
+func (h Handler) txDetails(ctx context.Context, id string) (*models.TxDetails, error) {
+	d, err := h.repo.GetTransactionDetails(ctx, id, &getClaims(ctx).DefaultCurrency)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, resperr.New(http.StatusNotFound, "transaction not found")
 	}
@@ -37,8 +52,7 @@ func (h Handler) TransactionDetails(w http.ResponseWriter, r *http.Request) (tem
 	if d.SMS != nil && d.SMS.TemplateID != "" {
 		d.SMSTemplate = h.smsTemplateName(ctx, d.SMS.TemplateID)
 	}
-
-	return views.TxDetails(d, def), nil
+	return d, nil
 }
 
 // smsTemplateName is the name of the template of id, the user's own or a

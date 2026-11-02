@@ -1025,9 +1025,14 @@ func txMenuReviewed(tx *models.Transaction) templ.Component {
 		components.WithEntryMenuItemShortcut("R"))
 }
 
+// txMenuEdit opens the drawer right in the edit form (txPage.openEdit in
+// transactions.js).
 func txMenuEdit(tx *models.Transaction) templ.Component {
-	return txMenuItem("Edit", "get", fmt.Sprintf("/transactions/%s/edit", tx.ID), icons.Pencil("16"),
-		components.WithEntryMenuItemShortcut("E"))
+	return components.EntryMenuItem("Edit",
+		templ.Attributes{"@click": fmt.Sprintf("openMenu = false; openEdit(%q)", tx.ID)},
+		components.WithEntryMenuItemIcon(icons.Pencil("16")),
+		components.WithEntryMenuItemShortcut("E"),
+	)
 }
 
 // txMenuGroups joins non-empty groups of items with separators.

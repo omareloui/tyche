@@ -269,31 +269,6 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 	return views.CreateTransactionForm(fd, accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
 }
 
-func (h Handler) Transaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	id := r.PathValue("id")
-	if id == "" {
-		return nil, errs.ErrInvalidID
-	}
-
-	l := logger.FromCtx(r.Context())
-
-	tx, err := h.repo.GetTransaction(r.Context(), id)
-	if err != nil {
-		l.Error("fetching transaction", zap.Error(err))
-		return nil, err
-	}
-	l.Info("fetched transaction", zap.Any("tx", tx))
-
-	// A side of a transfer pair lives in its pair's group, re-render the list
-	// to put it back there (e.g. canceling its edit).
-	if tx.IsTransferLeg() {
-		hxRetargetTxList(w)
-		return h.transactionsList(r)
-	}
-
-	return views.Transaction(tx, &getClaims(r.Context()).DefaultCurrency), nil
-}
-
 func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	id := r.PathValue("id")
 	if id == "" {
@@ -322,8 +297,21 @@ func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (tem
 	fd := h.mapTransactionToFD(tx, new(errs.ValidationError))
 	fd.RecurrenceFD = nil
 
-	claims := getClaims(r.Context())
-	return views.EditTransaction(tx, fd, accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
+	def := &getClaims(r.Context()).DefaultCurrency
+	// From the open details the form swaps in their place, else (a row's
+	// menu, "e") it opens the drawer.
+	if r.Header.Get("HX-Target") == txDetailsPanel {
+		return views.TxEditPanel(tx, fd, accs, knds, cats, cps, gls, def, views.TxEditFromDetails), nil
+	}
+	return views.TxEditDrawer(tx, fd, accs, knds, cats, cps, gls, def), nil
+}
+
+// txEditFrom is where the edit form posted was opened from.
+func txEditFrom(r *http.Request) string {
+	if r.FormValue("from") == views.TxEditFromRow {
+		return views.TxEditFromRow
+	}
+	return views.TxEditFromDetails
 }
 
 func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -344,10 +332,10 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 	if err != nil {
 		return nil, err
 	}
+	def := &getClaims(r.Context()).DefaultCurrency
 	fd, err := h.prepareTx(r, tx, accs, knds, cats, cps, gls)
 	if fd != nil {
-		claims := getClaims(r.Context())
-		return views.EditTransaction(tx, fd, accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
+		return views.TxEditPanel(tx, fd, accs, knds, cats, cps, gls, def, txEditFrom(r)), nil
 	}
 	if err != nil {
 		return nil, err
@@ -369,23 +357,32 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 	if err := h.repo.UpdateTransaction(r.Context(), oldTx, tx); err != nil {
 		var valerr *errs.ValidationError
 		if errors.As(err, &valerr) {
-			claims := getClaims(r.Context())
-			return views.EditTransaction(tx, h.mapTransactionToFD(tx, valerr), accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
+			fd := h.mapTransactionToFD(tx, valerr)
+			fd.RecurrenceFD = nil
+			return views.TxEditPanel(tx, fd, accs, knds, cats, cps, gls, def, txEditFrom(r)), nil
 		}
 		l.Error("updating transaction", zap.Error(err))
 		return nil, err
 	}
 	l.Info("updated transaction")
 
-	hxRetargetTxList(w)
-
+	// The drawer shows the saved transaction (or closes, on tx-saved, when
+	// opened from the row); the list behind it re-renders out of band.
+	d, err := h.txDetails(r.Context(), id)
+	if err != nil {
+		return nil, err
+	}
+	w.Header().Set("HX-Trigger", "tx-saved")
+	if err := h.renderTransactionsListOOB(w, r); err != nil {
+		return nil, err
+	}
 	if !oldTx.FulfilledAt.IsZero() {
 		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
 			return nil, err
 		}
 	}
 
-	return h.transactionsList(r)
+	return views.TxDetailsPanel(d, def), nil
 }
 
 func (h Handler) FulfillTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

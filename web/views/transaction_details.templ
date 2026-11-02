@@ -30,81 +30,149 @@ templ txDetailsSlot(openTx string) {
 	></div>
 }
 
-// TxDetails is a transaction in full, in a drawer (a bottom sheet on
-// phones): its fields, actions, SMS, the transactions related to it and the
-// stats of its month.
-templ TxDetails(d *models.TxDetails, def *models.Currency) {
-	{{ tx := d.Tx }}
-	{{ v := newTxView(tx) }}
+// txDrawer is the details drawer (a bottom sheet on phones) around a panel,
+// the transaction's details or its edit form, swapped in place (#txd-panel).
+templ txDrawer() {
 	<div
 		x-data="txDetails"
 		data-tx-details
-		data-id={ tx.ID }
-		@keydown.escape.window="close()"
-		@click.self="close()"
-		class="fixed inset-0 z-55 flex items-end sm:items-stretch sm:justify-end bg-zinc-950/60 backdrop-blur-sm"
+		@keyup.escape.window="escape($event)"
+		@tx-saved.window="saved()"
+		class="txd-root fixed inset-0 z-55 flex items-end sm:items-stretch sm:justify-end"
 	>
+		<div class="txd-backdrop absolute inset-0 bg-zinc-950/60 backdrop-blur-sm" @click="backdrop()"></div>
 		<aside
 			role="dialog"
 			aria-modal="true"
 			aria-label="Transaction details"
-			class="flex flex-col w-full sm:w-[30rem] max-h-[92dvh] sm:max-h-none sm:h-dvh rounded-t-3xl sm:rounded-none sm:rounded-l-3xl bg-zinc-900 ring-1 ring-zinc-800 shadow-2xl shadow-black/50"
+			class="txd-drawer relative flex flex-col w-full sm:w-[30rem] max-h-[92dvh] sm:max-h-none sm:h-dvh rounded-t-3xl sm:rounded-none sm:rounded-l-3xl bg-zinc-900 ring-1 ring-zinc-800 shadow-2xl shadow-black/50"
 		>
-			<header class="flex items-start gap-3 px-5 sm:px-6 pt-5 pb-4">
-				@txTile(tx, &v)
-				<div class="flex-1 min-w-0">
-					<h2 class="text-lg font-bold leading-snug break-words">{ v.title }</h2>
-					<p class="text-sm text-zinc-400 truncate">
-						{ txDetailsKind(tx) }
-						if v.subtitle != "" {
-							· { v.subtitle }
-						}
-					</p>
-				</div>
-				<button
-					type="button"
-					x-ref="close"
-					@click="close()"
-					aria-label="Close"
-					class="grid place-items-center shrink-0 w-9 h-9 -mr-2 rounded-full text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white"
-				>
-					@icons.X("20")
-				</button>
-			</header>
-			<div class="flex-1 grid content-start gap-6 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
-				@txDetailsHero(tx, &v, def)
-				@txDetailsActions(tx)
-				@txDetailsFields(d, &v)
-				@txDetailsMonth(d, def)
-				@txDetailsLinked(d, def)
-				@txDetailsSMS(d)
-				if len(d.RecurrentTxs) > 0 {
-					@txDetailsSection("Other occurrences") {
-						for _, rt := range d.RecurrentTxs {
-							@txDetailsMini(&rt)
-						}
-						if d.Recurrent != nil {
-							<a href={ templ.SafeURL("/recurrent-tx#" + RecurrentTxID(d.Recurrent.ID)) } class="txd-more">
-								See the recurring transaction
-								@icons.ArrowRight("14")
-							</a>
-						}
-					}
-				}
-				if len(d.CounterpartyTxs) > 0 {
-					@txDetailsSection("Latest with " + tx.Counterparty.Name) {
-						for _, ct := range d.CounterpartyTxs {
-							@txDetailsMini(&ct)
-						}
-						<button type="button" { txFilterBy(models.TxFilterCounterparty, tx.Counterparty.ID)... } class="txd-more">
-							See all
-							@icons.ArrowRight("14")
-						</button>
-					}
-				}
+			<div id="txd-panel" class="contents">
+				{ children... }
 			</div>
 		</aside>
 	</div>
+}
+
+// TxDetails is a transaction in full, in the drawer: its fields, actions,
+// SMS, the transactions related to it and the stats of its month.
+templ TxDetails(d *models.TxDetails, def *models.Currency) {
+	@txDrawer() {
+		@TxDetailsPanel(d, def)
+	}
+}
+
+// TxDetailsPanel is the drawer's content showing the transaction, swapped in
+// alone when the drawer is already open.
+templ TxDetailsPanel(d *models.TxDetails, def *models.Currency) {
+	{{ tx := d.Tx }}
+	{{ v := newTxView(tx) }}
+	<div class="txd-panel flex flex-col flex-1 min-h-0" x-init={ fmt.Sprintf("show(%q, 'view')", tx.ID) }>
+		<header class="flex items-start gap-3 px-5 sm:px-6 pt-5 pb-4">
+			@txTile(tx, &v)
+			<div class="flex-1 min-w-0">
+				<h2 class="text-lg font-bold leading-snug break-words">{ v.title }</h2>
+				<p class="text-sm text-zinc-400 truncate">
+					{ txDetailsKind(tx) }
+					if v.subtitle != "" {
+						· { v.subtitle }
+					}
+				</p>
+			</div>
+			@txDrawerClose()
+		</header>
+		<div class="flex-1 grid grid-cols-1 content-start gap-6 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
+			@txDetailsHero(tx, &v, def)
+			@txDetailsActions(tx)
+			@txDetailsFields(d, &v)
+			@txDetailsMonth(d, def)
+			@txDetailsLinked(d, def)
+			@txDetailsSMS(d)
+			if len(d.RecurrentTxs) > 0 {
+				@txDetailsSection("Other occurrences") {
+					for _, rt := range d.RecurrentTxs {
+						@txDetailsMini(&rt)
+					}
+					if d.Recurrent != nil {
+						<a href={ templ.SafeURL("/recurrent-tx#" + RecurrentTxID(d.Recurrent.ID)) } class="txd-more">
+							See the recurring transaction
+							@icons.ArrowRight("14")
+						</a>
+					}
+				}
+			}
+			if len(d.CounterpartyTxs) > 0 {
+				@txDetailsSection("Latest with " + tx.Counterparty.Name) {
+					for _, ct := range d.CounterpartyTxs {
+						@txDetailsMini(&ct)
+					}
+					<button type="button" { txFilterBy(models.TxFilterCounterparty, tx.Counterparty.ID)... } class="txd-more">
+						See all
+						@icons.ArrowRight("14")
+					</button>
+				}
+			}
+		</div>
+	</div>
+}
+
+templ txDrawerClose() {
+	<button
+		type="button"
+		x-ref="close"
+		@click="close()"
+		aria-label="Close"
+		class="grid place-items-center shrink-0 w-9 h-9 -mr-2 rounded-full text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white"
+	>
+		@icons.X("20")
+	</button>
+}
+
+// Where an edit form was opened from: the open details, going back to them
+// on saving or canceling, or the row (its menu, "e"), closing the drawer.
+const (
+	TxEditFromDetails = "details"
+	TxEditFromRow     = "menu"
+)
+
+// TxEditDrawer is the drawer opened right in the edit form, from a row.
+templ TxEditDrawer(tx *models.Transaction, fd *TransactionFD,
+	accs []models.Account, knds []models.TxKind,
+	cats []models.Category, cps []models.Counterparty,
+	gls []models.Goal, def *models.Currency) {
+	@txDrawer() {
+		@TxEditPanel(tx, fd, accs, knds, cats, cps, gls, def, TxEditFromRow)
+	}
+}
+
+// TxEditPanel is the drawer's content editing the transaction. Saving
+// answers the details (and the list, out of band); canceling goes back to
+// them or closes the drawer, depending on from (txDetails in
+// transactions.js).
+templ TxEditPanel(tx *models.Transaction, fd *TransactionFD,
+	accs []models.Account, knds []models.TxKind,
+	cats []models.Category, cps []models.Counterparty,
+	gls []models.Goal, def *models.Currency, from string) {
+	<form
+		hx-put={ fmt.Sprintf("/transactions/%s", url.PathEscape(tx.ID)) }
+		hx-target="#txd-panel"
+		hx-swap="innerHTML"
+		x-init={ fmt.Sprintf("show(%q, 'edit', %q)", tx.ID, from) }
+		class="txd-panel tx-form flex flex-col flex-1 min-h-0"
+	>
+		<input type="hidden" name="from" value={ from }/>
+		<header class="flex items-center justify-between gap-4 px-5 sm:px-6 pt-5 pb-4">
+			<h2 class="text-lg font-bold">Edit transaction</h2>
+			@txDrawerClose()
+		</header>
+		<div class="flex-1 grid grid-cols-1 content-start gap-5 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
+			@transactionFormBody(fd, tx.ID, accs, knds, cats, cps, gls, def)
+		</div>
+		<footer class="flex justify-end gap-2 px-5 sm:px-6 py-4 border-t border-zinc-800">
+			<button type="button" @click="cancel()" class="btn-ghost">Cancel</button>
+			<button type="submit" class="btn-primary">Save changes</button>
+		</footer>
+	</form>
 }
 
 templ txDetailsHero(tx *models.Transaction, v *txView, def *models.Currency) {
@@ -167,8 +235,8 @@ templ txDetailsHero(tx *models.Transaction, v *txView, def *models.Currency) {
 }
 
 // txDetailsActions are the row's actions. Fulfilling and reviewing answer the
-// list, then the details reload; editing and deleting happen on the row
-// (txDetails in transactions.js).
+// list, then the details reload; editing swaps the form in; deleting
+// happens on the row, for its undo (txDetails in transactions.js).
 templ txDetailsActions(tx *models.Transaction) {
 	<div class="flex flex-wrap gap-2">
 		if tx.FulfilledAt.IsZero() {
@@ -199,7 +267,13 @@ templ txDetailsActions(tx *models.Transaction) {
 		}
 		// Adjustments are signed, which the form can't edit.
 		if tx.Kind != models.AdjustmentTxKind {
-			<button type="button" x-cloak x-show="hasRow" @click="edit()" class="txd-action">
+			<button
+				type="button"
+				hx-get={ fmt.Sprintf("/transactions/%s/edit", tx.ID) }
+				hx-target="#txd-panel"
+				hx-swap="innerHTML"
+				class="txd-action"
+			>
 				@icons.Pencil("14")
 				Edit
 			</button>
@@ -500,7 +574,7 @@ templ txDetailsMini(tx *models.Transaction) {
 	<button
 		type="button"
 		hx-get={ txDetailsURL(tx.ID) }
-		hx-target="#tx-details"
+		hx-target="#txd-panel"
 		hx-swap="innerHTML"
 		class="flex items-center gap-3 w-full px-3 py-2 rounded-xl bg-tx-row text-left cursor-pointer transition hover:ring-1 hover:ring-zinc-700"
 	>

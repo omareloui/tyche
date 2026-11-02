@@ -219,6 +219,67 @@ input[type="number"] {
   background-color: #141417;
 }
 
+/* The transaction details drawer slides in (up on phones, from the right
+   on wider screens) and out (data-closing, txDetails.close in
+   transactions.js); each of its panels (details, edit form) fades in. */
+@keyframes txd-fade-in {
+  from { opacity: 0; }
+}
+@keyframes txd-fade-out {
+  to { opacity: 0; }
+}
+@keyframes txd-up-in {
+  from { transform: translateY(100%); }
+}
+@keyframes txd-up-out {
+  to { transform: translateY(100%); }
+}
+@keyframes txd-left-in {
+  from { transform: translateX(100%); }
+}
+@keyframes txd-left-out {
+  to { transform: translateX(100%); }
+}
+@keyframes txd-panel-in {
+  from { opacity: 0; transform: translateY(4px); }
+}
+
+.txd-backdrop {
+  animation: txd-fade-in 200ms ease-out;
+}
+.txd-drawer {
+  animation: txd-up-in 260ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.txd-panel {
+  animation: txd-panel-in 160ms ease-out;
+}
+.txd-root[data-closing] {
+  pointer-events: none;
+}
+.txd-root[data-closing] .txd-backdrop {
+  animation: txd-fade-out 180ms ease-in forwards;
+}
+.txd-root[data-closing] .txd-drawer {
+  animation: txd-up-out 180ms ease-in forwards;
+}
+@media (min-width: 40rem) {
+  .txd-drawer {
+    animation-name: txd-left-in;
+  }
+  .txd-root[data-closing] .txd-drawer {
+    animation-name: txd-left-out;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .txd-backdrop,
+  .txd-drawer,
+  .txd-panel,
+  .txd-root[data-closing] .txd-backdrop,
+  .txd-root[data-closing] .txd-drawer {
+    animation-duration: 1ms;
+  }
+}
+
 /* In the components layer so utilities (e.g. a chip's colors) override it. */
 @layer components {
   /* Frosted chart tooltip, the chart showing through blurred. */

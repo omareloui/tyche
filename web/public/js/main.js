@@ -7,34 +7,59 @@ function entryMenuMove(menu, dir) {
   items[(i + dir + items.length) % items.length].focus();
 }
 
-// hx-confirm asks through components.ConfirmDialog instead of the browser's
-// confirm().
+// askConfirm asks question through components.ConfirmDialog instead of the
+// browser's confirm(), resolving to whether it got confirmed. The question
+// is split at its first "? ", the rest shown as details. label names the
+// confirm button, danger makes it red, del shows a trash icon.
+function askConfirm(question, { label = "Confirm", danger = false, del = false } = {}) {
+  const dialog = document.getElementById("confirm-dialog");
+  if (!dialog?.showModal) return Promise.resolve(confirm(question));
+
+  const i = question.indexOf("? ");
+  dialog.querySelector("#confirm-title").textContent = i === -1 ? question : question.slice(0, i + 1);
+  dialog.querySelector("#confirm-details").textContent = i === -1 ? "" : question.slice(i + 2);
+  dialog.querySelector("#confirm-ok").textContent = label;
+  dialog.toggleAttribute("data-danger", danger || del);
+  dialog.toggleAttribute("data-delete", del);
+
+  dialog.returnValue = "";
+  return new Promise((resolve) => {
+    dialog.addEventListener(
+      "close",
+      () => {
+        // Escape closing it shouldn't reach what's under it on keyup (e.g.
+        // the transaction drawer, cancelling its edit form).
+        dialog.dataset.closedAt = Date.now();
+        resolve(dialog.returnValue === "ok");
+      },
+      { once: true },
+    );
+    dialog.showModal();
+    dialog.querySelector("#confirm-ok").focus();
+  });
+}
+
+// confirmJustClosed reports if the confirm dialog closed a moment ago.
+function confirmJustClosed() {
+  const at = Number(document.getElementById("confirm-dialog")?.dataset.closedAt ?? 0);
+  return Date.now() - at < 300;
+}
+
+// hx-confirm asks through askConfirm. On the confirming element,
+// data-confirm-label names the confirm button (else "Delete" for hx-delete,
+// "Confirm" otherwise) and data-confirm-danger makes it red.
 document.addEventListener("htmx:confirm", (e) => {
   const question = e.detail.question;
-  const dialog = document.getElementById("confirm-dialog");
-  if (!question || !dialog?.showModal) return;
+  if (!question || !document.getElementById("confirm-dialog")?.showModal) return;
   e.preventDefault();
 
   const elt = e.detail.elt;
   const del = e.detail.verb === "delete";
-  const i = question.indexOf("? ");
-  dialog.querySelector("#confirm-title").textContent = i === -1 ? question : question.slice(0, i + 1);
-  dialog.querySelector("#confirm-details").textContent = i === -1 ? "" : question.slice(i + 2);
-  dialog.querySelector("#confirm-ok").textContent =
-    elt.dataset.confirmLabel || (del ? "Delete" : "Confirm");
-  dialog.toggleAttribute("data-danger", del || "confirmDanger" in elt.dataset);
-  dialog.toggleAttribute("data-delete", del);
-
-  dialog.returnValue = "";
-  dialog.addEventListener(
-    "close",
-    () => {
-      if (dialog.returnValue === "ok") e.detail.issueRequest(true);
-    },
-    { once: true },
-  );
-  dialog.showModal();
-  dialog.querySelector("#confirm-ok").focus();
+  askConfirm(question, {
+    label: elt.dataset.confirmLabel || (del ? "Delete" : "Confirm"),
+    danger: "confirmDanger" in elt.dataset,
+    del,
+  }).then((ok) => ok && e.detail.issueRequest(true));
 });
 
 // Clicking the backdrop (outside the dialog's box) cancels.

@@ -1,11 +1,20 @@
 package router_test
 
 import (
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/omareloui/tyche/internal/handler"
+	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/router"
+	"github.com/omareloui/tyche/internal/sanitizer"
+	"github.com/omareloui/tyche/internal/valid"
 	"github.com/omareloui/tyche/web/views"
 )
 
@@ -95,4 +104,124 @@ func TestTransactionDetails(t *testing.T) {
 			t.Errorf("details don't show %q", want)
 		}
 	}
+}
+
+func TestEditTransactionInDetails(t *testing.T) {
+	repo, ctx, usr := setupTenant(t)
+
+	egp, err := repo.GetCurrencyByString(ctx, "EGP")
+	if err != nil {
+		t.Fatal(err)
+	}
+	usr.Email, usr.DefaultCurrency = "e2e@example.com", *egp
+	if err := repo.CreateUser(ctx, usr); err != nil {
+		t.Fatal(err)
+	}
+	pair, err := jwt.NewPair(usr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	kinds, err := repo.GetAccountKinds(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bankKind models.AccountKind
+	for _, k := range kinds {
+		if k.Enum == models.AccKindBankAcc {
+			bankKind = k
+		}
+	}
+	bank := &models.Account{ID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZA", Name: "Bank", Amount: 1000, Currency: *egp, Kind: bankKind}
+	if err := repo.CreateAccount(ctx, bank); err != nil {
+		t.Fatal(err)
+	}
+	tx := &models.Transaction{
+		ID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZD", Account: *bank, Amount: 100, Kind: models.ExpenseTxKind,
+		Description: "Lunch", ScheduledTo: time.Now(), FulfilledAt: time.Now(),
+	}
+	if err := repo.CreateTransaction(ctx, tx, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := httptest.NewServer(router.New(handler.New(repo, valid.New(), sanitizer.New(), nil, sharedTemplates(t))))
+	t.Cleanup(srv.Close)
+
+	do := func(method, path, target string, form url.Values) (*http.Response, string) {
+		t.Helper()
+		req, _ := http.NewRequest(method, srv.URL+path, strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("HX-Request", "true")
+		if target != "" {
+			req.Header.Set("HX-Target", target)
+		}
+		req.AddCookie(&http.Cookie{Name: "access_token", Value: pair.Access.Encoded})
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return res, string(b)
+	}
+	editURL := "/transactions/" + tx.ID + "/edit"
+
+	t.Run("from a row, the drawer opens in the form", func(t *testing.T) {
+		res, body := do("GET", editURL, "tx-details", nil)
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("status %d: %s", res.StatusCode, body)
+		}
+		for _, want := range []string{"data-tx-details", `value="menu"`, `hx-target="#txd-panel"`} {
+			if !strings.Contains(body, want) {
+				t.Errorf("missing %q", want)
+			}
+		}
+	})
+
+	t.Run("from the details, only the form is swapped in", func(t *testing.T) {
+		res, body := do("GET", editURL, "txd-panel", nil)
+		if res.StatusCode != http.StatusOK || strings.Contains(body, "data-tx-details") || !strings.Contains(body, `value="details"`) {
+			t.Fatalf("status %d: %s", res.StatusCode, body)
+		}
+	})
+
+	form := url.Values{
+		"from": {"details"}, "account_id": {bank.ID}, "kind": {"Expense"},
+		"amount": {"120"}, "description": {"Dinner"}, "scheduled_to": {time.Now().Format("2006-01-02")},
+	}
+
+	t.Run("saving answers the details and the list", func(t *testing.T) {
+		res, body := do("PUT", "/transactions/"+tx.ID, "txd-panel", form)
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("status %d: %s", res.StatusCode, body)
+		}
+		if got := res.Header.Get("HX-Trigger"); got != "tx-saved" {
+			t.Errorf("HX-Trigger = %q, want tx-saved", got)
+		}
+		for _, want := range []string{`hx-swap-oob`, "Dinner", "txd-panel flex"} {
+			if !strings.Contains(body, want) {
+				t.Errorf("missing %q", want)
+			}
+		}
+		saved, err := repo.GetTransaction(ctx, tx.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if saved.Amount != 120 || saved.Description != "Dinner" {
+			t.Errorf("saved %v %q, want 120 Dinner", saved.Amount, saved.Description)
+		}
+	})
+
+	t.Run("an invalid form stays open with its errors", func(t *testing.T) {
+		bad := url.Values{}
+		for k, v := range form {
+			bad[k] = v
+		}
+		bad.Set("amount", "")
+		bad.Set("from", "menu")
+		res, body := do("PUT", "/transactions/"+tx.ID, "txd-panel", bad)
+		if res.Header.Get("HX-Trigger") == "tx-saved" || !strings.Contains(body, `value="menu"`) {
+			t.Fatalf("status %d, trigger %q: %s", res.StatusCode, res.Header.Get("HX-Trigger"), body)
+		}
+	})
 }

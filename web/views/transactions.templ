@@ -119,27 +119,6 @@ templ txDateChip(label string, daysAgo int) {
 	>{ label }</button>
 }
 
-templ EditTransaction(
-	tx *models.Transaction, fd *TransactionFD,
-	accounts []models.Account, knds []models.TxKind,
-	cats []models.Category, cps []models.Counterparty,
-	gls []models.Goal, defaultCur *models.Currency) {
-	// data-tx keeps the day section visible while editing.
-	<form
-		hx-put={ string(templ.SafeURL(fmt.Sprintf("/transactions/%s", tx.ID))) }
-		hx-target="this"
-		hx-swap="outerHTML"
-		data-tx
-		class="tx-form grid gap-5 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-5 sm:p-6"
-	>
-		<header class="flex items-baseline justify-between gap-4">
-			<h3 class="text-lg font-semibold">Edit transaction</h3>
-		</header>
-		@transactionFormBody(fd, tx.ID, accounts, knds, cats, cps, gls, defaultCur)
-		@form.SheetFormButtons("Save changes", fmt.Sprintf("/transactions/%s", tx.ID))
-	</form>
-}
-
 // txFilterBar narrows the list: changing it swaps the list and keeps the
 // query string in the URL. The search is focused with "/" (transactions.js).
 templ txFilterBar(f *models.TxFilter, accs []models.Account,
@@ -533,13 +512,15 @@ templ TransactionAmountsAndKindFormBody(
 		hx-sync="closest form:abort"
 	>
 		@form.SelectTxKind("kind", id, getTxKindsForAccounts(accs, knds), fd.Kind, onChange)
-		<div class="grid justify-items-center gap-3 py-2">
+		// One shrinkable column, so long account names truncate in their chips
+		// instead of widening the form past the screen.
+		<div class="grid grid-cols-1 justify-items-center gap-3 py-2">
 			@form.HeroMoneyInput("Amount", "amount", form.GetAccoutSym(accs, fd.AccountIFD.AccountID.Value, defaultCur), id,
 				fd.AccountIFD.Amount, templ.Attributes{
 					"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
 					"hx-trigger": "keyup changed delay:200ms",
 				})
-			<div class="flex items-center justify-center gap-2 max-w-full">
+			<div class="flex items-center justify-center gap-2 w-full min-w-0">
 				@form.SelectAccountChip(txAccountLabel(fd), "account_id", id, getTxAccs(accs, kind, switched), fd.AccountIFD.AccountID, onChange)
 				if fd.ToAccountIFD != nil {
 					<button

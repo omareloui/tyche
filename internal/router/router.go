@@ -60,7 +60,6 @@ func New(h *handler.Handler) Router {
 	mux.Handle("GET /transactions", handle(h.Transactions))
 	mux.Handle("POST /transactions", handle(h.CreateTransaction))
 	mux.Handle("GET /transactions/more", handle(h.TransactionsMore))
-	mux.Handle("GET /transactions/{id}", handle(h.Transaction))
 	mux.Handle("GET /transactions/{id}/details", handle(h.TransactionDetails))
 	mux.Handle("GET /transactions/{id}/edit", handle(h.GetEditTransaction))
 	mux.Handle("PUT /transactions/{id}", handle(h.EditTransaction))

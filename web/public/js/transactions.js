@@ -118,6 +118,11 @@ document.addEventListener("alpine:init", () => {
       htmx.ajax("GET", txDetailsURL(id), { target: "#tx-details", swap: "innerHTML" });
     },
 
+    // openEdit opens the drawer right in the transaction's edit form.
+    openEdit(id) {
+      htmx.ajax("GET", txURL(id, "edit"), { target: "#tx-details", swap: "innerHTML" });
+    },
+
     // onClick opens the details of the row clicked, unless on one of its
     // controls, selecting its text or ending a swipe.
     onClick(e) {
@@ -159,7 +164,7 @@ document.addEventListener("alpine:init", () => {
           break;
         case "e":
           if (!row) return;
-          txRequest("GET", txURL(d.id, "edit"), row);
+          this.openEdit(d.id);
           break;
         case "f":
           if (!("scheduled" in d)) return;
@@ -196,60 +201,122 @@ document.addEventListener("alpine:init", () => {
     },
   }));
 
-  // txDetails is the details drawer of a transaction (views.TxDetails). Its
-  // edit and delete act on the transaction's row in the list, as the row's
-  // own actions do.
+  // txDetails is the details drawer of a transaction (views.txDrawer). Its
+  // content (#txd-panel) is the transaction's details or its edit form, each
+  // calling show() as it's swapped in. Deleting acts on the transaction's
+  // row in the list, for its undo.
   Alpine.data("txDetails", () => ({
-    hasRow: false,
+    id: null,
+    // mode is "view" or "edit"; from is where the edit form was opened from:
+    // "details" goes back to them, "menu" (a row) closes the drawer.
+    mode: "view",
+    from: null,
+    // pristine is the edit form's values when it opened.
+    pristine: null,
     // opener is what had the focus before opening, given back on closing.
     opener: null,
 
     init() {
-      const id = this.$root.dataset.id;
-      this.hasRow = !!this.row();
       if (!this.$root.contains(document.activeElement)) this.opener = document.activeElement;
+    },
+
+    show(id, mode, from = null) {
+      // A form answered with its errors keeps the values it was opened with.
+      const opening = mode === "edit" && this.mode !== "edit";
+      this.id = id;
+      this.mode = mode;
+      this.from = from;
       setTxParam(id);
-      this.$nextTick(() => this.$refs.close?.focus({ preventScroll: true }));
+      this.$nextTick(() => {
+        if (opening) this.pristine = this.formState();
+        const panel = this.$root.querySelector(".txd-panel");
+        const first =
+          mode === "edit" &&
+          panel?.querySelector("input:not([type=hidden]):not([disabled]), select, textarea, [role=combobox]");
+        (first || this.$refs.close)?.focus({ preventScroll: true });
+      });
     },
 
     row() {
-      return document.getElementById(`tx-${this.$root.dataset.id}`);
+      return this.id && document.getElementById(`tx-${this.id}`);
+    },
+
+    panel(url) {
+      return htmx.ajax("GET", url, { target: "#txd-panel", swap: "innerHTML" });
     },
 
     close() {
+      if (this.$root.hasAttribute("data-closing")) return;
       setTxParam(null);
       const back = this.row()?.querySelector("[data-tx-row]") ?? this.opener;
-      this.$root.remove();
-      back?.focus?.({ preventScroll: true });
+      this.$root.setAttribute("data-closing", "");
+      let done = false;
+      const remove = () => {
+        if (done) return;
+        done = true;
+        this.$root.remove();
+        back?.focus?.({ preventScroll: true });
+      };
+      this.$root.querySelector(".txd-drawer")?.addEventListener("animationend", remove, { once: true });
+      setTimeout(remove, 250);
+    },
+
+    cancel() {
+      if (this.from === "menu") this.close();
+      else this.panel(txDetailsURL(this.id));
+    },
+
+    // escape (on keyup, after an open combobox stopped it for closing itself)
+    // cancels editing or closes, unless the datepicker is open.
+    escape(e) {
+      if (e.defaultPrevented || confirmJustClosed()) return;
+      if ([...document.querySelectorAll(".litepicker")].some((p) => p.offsetParent !== null)) return;
+      if (this.mode === "edit") this.cancel();
+      else this.close();
+    },
+
+    // formState is the edit form's values, to tell if they changed.
+    formState() {
+      const form = this.$root.querySelector("form.txd-panel");
+      return form ? new URLSearchParams(new FormData(form)).toString() : null;
+    },
+
+    // Clicking outside closes, asking first when the form has changes.
+    async backdrop() {
+      if (this.mode === "edit" && this.formState() !== this.pristine) {
+        const ok = await askConfirm("Discard your changes? The edits to this transaction won't be saved.", {
+          label: "Discard",
+          danger: true,
+        });
+        if (!ok) return;
+      }
+      this.close();
+    },
+
+    // saved is the edit form's answer: back to the details, or closing when
+    // opened from the row.
+    saved() {
+      if (this.from === "menu") this.close();
     },
 
     // reload gets the details again after an action changed them.
     reload(e) {
-      if (!e.detail.successful) return;
-      htmx.ajax("GET", txDetailsURL(this.$root.dataset.id), { target: "#tx-details", swap: "innerHTML" });
-    },
-
-    edit() {
-      const row = this.row();
-      this.close();
-      if (!row) return;
-      // A transfer side or reimbursement is nested, folded, under its row.
-      for (let el = row.parentElement?.closest("[x-data=txRow]"); el; el = el.parentElement?.closest("[x-data=txRow]")) {
-        const d = Alpine.$data(el);
-        d.openTransferPair = true;
-        d.openReimbursements = true;
-      }
-      txRequest("GET", txURL(row.dataset.id, "edit"), row);
-      row.scrollIntoView({ block: "center", behavior: "smooth" });
+      if (e.detail.successful) this.panel(txDetailsURL(this.id));
     },
 
     // remove deletes with undo when the row is loaded, else right away.
-    remove() {
-      const id = this.$root.dataset.id;
+    async remove() {
+      const id = this.id;
       const row = this.row();
+      if (row) {
+        this.close();
+        Alpine.store("txs").remove(row);
+        return;
+      }
+      // Not in the loaded list, so no undo: ask first.
+      if (!(await askConfirm("Delete this transaction? This can't be undone.", { label: "Delete", del: true }))) return;
       this.close();
-      if (row) Alpine.store("txs").remove(row);
-      else if (confirm("Delete this transaction?")) txRequest("DELETE", txURL(id), "#tx-list");
+      txRequest("DELETE", txURL(id), "#tx-list");
     },
   }));
 
