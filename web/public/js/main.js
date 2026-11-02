@@ -177,3 +177,18 @@ document.addEventListener("click", (e) => {
   } catch {}
   loadBudgetSummary(summary.dataset.month);
 });
+
+// Tooltips holding amounts (title) swap to their data-hidden-title while the
+// navbar's eye toggle hides the amounts, set on hover before they show.
+document.addEventListener(
+  "mouseover",
+  (e) => {
+    const el = e.target.closest?.("[data-hidden-title]");
+    if (!el) return;
+    el.dataset.shownTitle ??= el.title;
+    el.title = document.documentElement.hasAttribute("data-hide-amounts")
+      ? el.dataset.hiddenTitle
+      : el.dataset.shownTitle;
+  },
+  true,
+);

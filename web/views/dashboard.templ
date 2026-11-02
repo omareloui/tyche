@@ -166,6 +166,7 @@ templ dashDelta(label string, cur, prev float64, upIsGood bool, def *models.Curr
 	<p
 		class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-3 py-1.5 rounded-2xl sm:rounded-full bg-zinc-900/60 ring-1 ring-zinc-800 text-sm"
 		title={ fmt.Sprintf("%s by this day last month: %s", label, formatters.FormatAmount(prev, def.Symbol)) }
+		data-hidden-title={ label + " vs this day last month" }
 	>
 		<span class="text-zinc-400 whitespace-nowrap">{ label }</span>
 		if !ok {

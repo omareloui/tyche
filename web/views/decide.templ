@@ -169,19 +169,19 @@ templ AffordResult(a *models.Affordability, ws *models.WorkSettings) {
 				</div>
 			</div>
 			<dl class="grid grid-cols-2 sm:grid-cols-3 gap-2">
-				@affordStat("Balance now", formatters.FormatAmount(a.BalanceNow, sym), "")
+				@affordStat("Balance now", formatters.FormatAmount(a.BalanceNow, sym), "sensitive")
 				if a.Purchase.IsInstallments() {
 					if a.PaidOnDay > 0 {
 						@affordStat("Paid on the day", formatters.FormatAmount(a.PaidOnDay, sym), "")
 					}
-					@affordStat("After the 1st payment", formatters.FormatAmount(a.BalanceAfter, sym), amountClass(a.BalanceAfter))
-					@affordStat("After all of them", formatters.FormatAmount(a.BalanceAfterAll, sym), amountClass(a.BalanceAfterAll))
+					@affordStat("After the 1st payment", formatters.FormatAmount(a.BalanceAfter, sym), "sensitive "+amountClass(a.BalanceAfter))
+					@affordStat("After all of them", formatters.FormatAmount(a.BalanceAfterAll, sym), "sensitive "+amountClass(a.BalanceAfterAll))
 					@affordStat("In total", formatters.FormatAmount(a.TotalCost, sym), "")
 					if a.Extra > 0.005 {
 						@affordStat("Over the cash price", formatters.FormatAmount(a.Extra, sym), "text-amber-300")
 					}
 				} else {
-					@affordStat("After buying", formatters.FormatAmount(a.BalanceAfter, sym), amountClass(a.BalanceAfter))
+					@affordStat("After buying", formatters.FormatAmount(a.BalanceAfter, sym), "sensitive "+amountClass(a.BalanceAfter))
 				}
 				if a.SalaryShare > 0 {
 					@affordStat(salaryShareLabel(a), fmt.Sprintf("%.0f%%", a.SalaryShare*100), "")
@@ -223,7 +223,7 @@ templ goalImpact(g *models.GoalImpact) {
 		<div class="flex-1 min-w-0">
 			<p class="truncate">{ g.Goal.Name }</p>
 			<p class="text-xs text-zinc-500 tabular-nums">
-				{ formatters.FormatAmount(g.Remaining, g.Goal.Currency.Symbol) } left · this is { fmt.Sprintf("%.0f%%", g.PctOfRemaining) } of it
+				<span class="sensitive">{ formatters.FormatAmount(g.Remaining, g.Goal.Currency.Symbol) }</span> left · this is { fmt.Sprintf("%.0f%%", g.PctOfRemaining) } of it
 			</p>
 		</div>
 		<p class="shrink-0 text-sm text-right tabular-nums">
@@ -257,11 +257,11 @@ templ WorkSettingsCard(ws *models.WorkSettings, fd *WorkSettingsFD, curs []model
 					Cost in work hours
 				</p>
 				if ws.IsSet() {
-					<p class="mt-1 text-2xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">
+					<p class="sensitive mt-1 text-2xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">
 						{ formatters.FormatAmount(ws.HourlyRate(), ws.Currency.Symbol) }<span class="text-base font-normal text-zinc-500">/h</span>
 					</p>
 					<p class="text-sm text-zinc-500 tabular-nums">
-						{ formatters.FormatAmount(ws.MonthlySalary, ws.Currency.Symbol) }/mo · { fmt.Sprintf("%g", ws.HoursPerWeek) } h a week
+						<span class="sensitive">{ formatters.FormatAmount(ws.MonthlySalary, ws.Currency.Symbol) }/mo</span> · { fmt.Sprintf("%g", ws.HoursPerWeek) } h a week
 					</p>
 				} else {
 					<p class="mt-1 text-sm text-zinc-500">Enter what you earn a month and how long you work, to see prices as hours of your work.</p>

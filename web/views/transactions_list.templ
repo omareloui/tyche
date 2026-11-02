@@ -236,7 +236,7 @@ templ txSummary(s *models.TxSummary, chips []TxFilterChip, def *models.Currency)
 				}
 			</p>
 		</div>
-		<dl class="flex gap-6 tabular-nums">
+		<dl class="sensitive flex gap-6 tabular-nums">
 			if s.In > 0 {
 				<div>
 					<dt class="text-xs text-zinc-500">Earned</dt>
@@ -335,7 +335,7 @@ templ txMonthSection(m *txMonth, def *models.Currency) {
 				<h3 class="flex items-baseline justify-between gap-4 px-1 text-sm">
 					<span class="font-semibold text-zinc-300">{ formatTxDay(d.Day) }</span>
 					if d.In != 0 || d.Out != 0 {
-						<span class="tabular-nums text-zinc-500">{ formatSignedAmount(d.In-d.Out, def.Symbol) }</span>
+						<span class="sensitive tabular-nums text-zinc-500">{ formatSignedAmount(d.In-d.Out, def.Symbol) }</span>
 					}
 				</h3>
 				for _, t := range d.Txs {
@@ -347,7 +347,7 @@ templ txMonthSection(m *txMonth, def *models.Currency) {
 }
 
 templ txFlowTotals(in, out float64, def *models.Currency) {
-	<p class="shrink-0 flex gap-3 text-sm tabular-nums">
+	<p class="sensitive shrink-0 flex gap-3 text-sm tabular-nums">
 		if in > 0 {
 			<span class="text-emerald-400" title="Earned">{ "+" + formatters.FormatAmount(in, def.Symbol) }</span>
 		}

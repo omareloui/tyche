@@ -127,7 +127,7 @@ templ Category(cat *models.Category) {
 			<div class="shrink-0 text-right">
 				if cat.HasBudget() {
 					<p class="text-xs text-zinc-500">Budget</p>
-					<p class="font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">{ cat.ViewBudgetAmount() }</p>
+					<p class="sensitive font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">{ cat.ViewBudgetAmount() }</p>
 				} else {
 					<p class="text-sm text-zinc-600">No budget</p>
 				}

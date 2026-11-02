@@ -162,6 +162,7 @@ templ budgetTotalBar(bs *models.BudgetSummary) {
 								type="button"
 								data-budget-toggle={ it.Key() }
 								title={ fmt.Sprintf("%s: %s, click to hide", it.Name, formatters.FormatAmount(it.Spent, sym)) }
+								data-hidden-title={ it.Name + ", click to hide" }
 								class="h-full cursor-pointer hover:opacity-80"
 								style={ fmt.Sprintf("flex:%.4f 1 0;background-color:%s", it.Spent, budgetFill(models.CategoryColorToHex(it.Color), it.Over())) }
 							></button>

@@ -78,7 +78,7 @@ templ GoalProgressForm(gl *models.Goal, fd *TransactionFD, accs []models.Account
 			@goalRing(gl.ProgressPercentage(), goalActive, "size-11", "text-[0.65rem]")
 			<div class="min-w-0">
 				<h3 class="text-lg font-semibold truncate">Add to { gl.Name }</h3>
-				<p class="text-sm text-zinc-500 tabular-nums">
+				<p class="sensitive text-sm text-zinc-500 tabular-nums">
 					{ gl.ViewProgress() } of { gl.ViewAmount() } saved
 				</p>
 			</div>
@@ -133,7 +133,7 @@ templ GoalProgressInputs(gl *models.Goal, fd *form.AccountIFD, accs []models.Acc
 				class="inline-flex items-center gap-1.5 h-8 px-3 rounded-full border border-zinc-700 text-sm text-zinc-300 cursor-pointer transition-colors hover:border-(--accent) hover:text-(--accent)"
 			>
 				@icons.Sparkles("14")
-				Fill the rest · <span class="tabular-nums">{ formatters.FormatAmount(rest, sym) }</span>
+				Fill the rest · <span class="sensitive tabular-nums">{ formatters.FormatAmount(rest, sym) }</span>
 			</button>
 		}
 	</div>
@@ -215,11 +215,11 @@ templ goalsSummary(goals []models.Goal, defaultCur *models.Currency, oob bool) {
 								@icons.PiggyBank("14")
 								Saved so far
 							</p>
-							<p class="mt-1 text-3xl sm:text-4xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">
+							<p class="sensitive mt-1 text-3xl sm:text-4xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">
 								{ formatters.FormatAmount(s.Saved, defaultCur.Symbol) }
 							</p>
 							<p class="text-sm text-zinc-500 tabular-nums">
-								of { formatters.FormatAmount(s.Target, defaultCur.Symbol) } across { fmt.Sprint(s.Active) } { plural(s.Active, "goal", "goals") }
+								of <span class="sensitive">{ formatters.FormatAmount(s.Target, defaultCur.Symbol) }</span> across { fmt.Sprint(s.Active) } { plural(s.Active, "goal", "goals") }
 							</p>
 						</div>
 					} else {
@@ -281,7 +281,7 @@ templ Goal(gl *models.Goal) {
 				@goalRing(gl.ProgressPercentage(), st, "size-14", "text-xs")
 				<div class="flex-1 min-w-0">
 					<p class="text-lg leading-tight truncate">{ gl.Name }</p>
-					<p class="text-sm text-zinc-500 tabular-nums truncate">
+					<p class="sensitive text-sm text-zinc-500 tabular-nums truncate">
 						<span class="text-zinc-300">{ gl.ViewProgress() }</span> of { gl.ViewAmount() }
 					</p>
 				</div>
@@ -292,7 +292,7 @@ templ Goal(gl *models.Goal) {
 					<div class="relative flex items-end justify-between gap-3 mt-auto">
 						<div class="min-w-0">
 							<p class="text-xs text-zinc-500">Still to go</p>
-							<p class="text-xl font-bold tabular-nums truncate font-(family-name:--font-biorhyme-expanded)">{ gl.ViewRemaining() }</p>
+							<p class="sensitive text-xl font-bold tabular-nums truncate font-(family-name:--font-biorhyme-expanded)">{ gl.ViewRemaining() }</p>
 						</div>
 						@goalAddButton(gl.ID)
 					</div>
@@ -358,7 +358,7 @@ templ goalPlan(gl *models.Goal) {
 					}
 					class="tabular-nums"
 				>
-					<span class="text-zinc-200">{ formatters.FormatAmount(gl.Plan(m), gl.Currency.Symbol) }</span>/mo
+					<span class="sensitive text-zinc-200">{ formatters.FormatAmount(gl.Plan(m), gl.Currency.Symbol) }</span>/mo
 				</span>
 			}
 			to get there in
