@@ -149,6 +149,19 @@ func (l *unlockLimiter) reset(tenantID string) {
 	delete(l.tenants, tenantID)
 }
 
+// forgetUnlocks drops the failed unlocks and pending sign ins of a deleted
+// tenant.
+func forgetUnlocks(tenantID string) {
+	unlockAttempts.reset(tenantID)
+	pendingUnlocks.mu.Lock()
+	defer pendingUnlocks.mu.Unlock()
+	for k, p := range pendingUnlocks.logins {
+		if p.tenantID() == tenantID {
+			delete(pendingUnlocks.logins, k)
+		}
+	}
+}
+
 // OpenVault is the middleware.VaultOpener: the key of the request's tenant
 // database from its unlocked session cookie.
 func (h *Handler) OpenVault(r *http.Request) ([]byte, bool, error) {
@@ -238,7 +251,7 @@ func (h *Handler) UnlockPage(w http.ResponseWriter, r *http.Request) (templ.Comp
 		return nil, nil
 	}
 
-	return views.Unlock(next, ""), nil
+	return views.Unlock(next, "", tenantID), nil
 }
 
 func (h *Handler) Unlock(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -253,7 +266,7 @@ func (h *Handler) Unlock(w http.ResponseWriter, r *http.Request) (templ.Componen
 
 	if wait := unlockAttempts.wait(tenantID); wait > 0 {
 		w.WriteHeader(http.StatusTooManyRequests)
-		return views.Unlock(next, fmt.Sprintf("Too many wrong attempts, try again in %s.", roundWait(wait))), nil
+		return views.Unlock(next, fmt.Sprintf("Too many wrong attempts, try again in %s.", roundWait(wait)), tenantID), nil
 	}
 
 	key, err := h.vaults.Unlock(r.Context(), tenantID, r.FormValue("password"))
@@ -265,7 +278,7 @@ func (h *Handler) Unlock(w http.ResponseWriter, r *http.Request) (templ.Componen
 		unlockAttempts.fail(tenantID)
 		l.Warn("wrong vault password", zap.String("tenantID", tenantID))
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		return views.Unlock(next, "Wrong password or recovery code."), nil
+		return views.Unlock(next, "Wrong password or recovery code.", tenantID), nil
 	}
 	if err != nil {
 		return nil, err

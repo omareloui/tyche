@@ -15,6 +15,7 @@ import (
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/queries"
 	"github.com/omareloui/tyche/internal/seeder"
+	"github.com/omareloui/tyche/internal/sharedqueries"
 	"github.com/omareloui/tyche/internal/vault"
 	"github.com/pressly/goose/v3"
 	"go.uber.org/zap"
@@ -23,6 +24,13 @@ import (
 type Repository struct {
 	tm     *TenantManager
 	vaults *vault.Store
+	shared *sharedqueries.Queries
+
+	deletedMu sync.RWMutex
+	// deleted are the tenants whose account an admin deleted (shared DB's
+	// deleted_tenants), whose database mustn't be created again from their
+	// old cookies or device tokens.
+	deleted map[string]bool
 }
 
 // ErrTenantLocked is returned when the tenant's database is encrypted and the
@@ -47,8 +55,8 @@ type TenantManager struct {
 	maxIdle     time.Duration
 }
 
-func New(vaults *vault.Store) *Repository {
-	return &Repository{tm: newTenantManager(), vaults: vaults}
+func New(vaults *vault.Store, shared *sharedqueries.Queries) *Repository {
+	return &Repository{tm: newTenantManager(), vaults: vaults, shared: shared, deleted: make(map[string]bool)}
 }
 
 // TenantExists reports whether the tenant's database was already created.

@@ -14,13 +14,15 @@ type Router interface {
 	http.Handler
 }
 
-// auth and vault are the Auth and Vault middlewares wrapping every route, set
-// by New as they go through the handler (refreshing the tokens, unlocking the
+// auth, deleted and vault are the Auth, Deleted and Vault middlewares
+// wrapping every route, set by New as they go through the handler
+// (refreshing the tokens, signing out deleted accounts, unlocking the
 // encrypted databases).
-var auth, vault func(http.Handler) http.Handler
+var auth, deleted, vault func(http.Handler) http.Handler
 
 func New(h *handler.Handler) Router {
 	auth = middleware.Auth(h.RefreshSession)
+	deleted = middleware.Deleted(h.IsTenantDeleted, handler.SignOutDeleted)
 	vault = middleware.Vault(h.OpenVault)
 	mux := http.NewServeMux()
 
@@ -192,6 +194,8 @@ func New(h *handler.Handler) Router {
 	mux.Handle("GET /admin/fx-rates", handle(h.AdminFxRates, middleware.Admin))
 	mux.Handle("GET /admin/fx-rates/status", handle(h.AdminFxRatesStatus, middleware.Admin))
 	mux.Handle("POST /admin/fx-rates/refresh", handle(h.RefreshFxRates, middleware.Admin))
+	mux.Handle("GET /admin/tenants", handle(h.AdminTenants, middleware.Admin))
+	mux.Handle("POST /admin/tenants/{id}/delete", handle(h.DeleteTenant, middleware.Admin))
 
 	static(mux, []string{
 		"styles", "js", "images",
@@ -232,6 +236,7 @@ func handlePubJSON(h handler.HandlerJSONMethod, appendMiddlewares ...(func(http.
 	}
 
 	handler = vault(handler)
+	handler = deleted(handler)
 	handler = auth(handler)
 	handler = middleware.RequestLogger(handler)
 	handler = middleware.CorrelationID(handler)
@@ -257,6 +262,7 @@ func handlePub(h handler.HandlerMethod, appendMiddlewares ...(func(http.Handler)
 	}
 
 	handler = vault(handler)
+	handler = deleted(handler)
 	handler = auth(handler)
 	handler = middleware.RequestLogger(handler)
 	handler = middleware.CorrelationID(handler)

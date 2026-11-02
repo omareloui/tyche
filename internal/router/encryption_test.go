@@ -184,11 +184,11 @@ func TestEncryption(t *testing.T) {
 
 	outer := t
 	t.Run("reopens with the session after a restart", func(t *testing.T) {
-		vaults := testVaults(outer)
+		vaults, q := testVaults(outer)
 		if err := vaults.Load(ctx); err != nil {
 			t.Fatal(err)
 		}
-		srv = newServer(repository.New(vaults))
+		srv = newServer(repository.New(vaults, q))
 		res, _ := do("GET", "/accounts", reqOpts{cookies: []*http.Cookie{access, session}})
 		if res.StatusCode != http.StatusOK {
 			t.Fatalf("got %d", res.StatusCode)

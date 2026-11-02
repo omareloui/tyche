@@ -26,6 +26,7 @@ import (
 	"github.com/omareloui/tyche/internal/router"
 	"github.com/omareloui/tyche/internal/sanitizer"
 	"github.com/omareloui/tyche/internal/shareddb"
+	"github.com/omareloui/tyche/internal/sharedqueries"
 	"github.com/omareloui/tyche/internal/smstemplates"
 	"github.com/omareloui/tyche/internal/valid"
 	"github.com/omareloui/tyche/internal/vault"
@@ -65,19 +66,26 @@ func setupTenant(t *testing.T) (*repository.Repository, context.Context, *models
 	ctx := context.WithValue(context.Background(), middleware.AccessClaimsCtxKey{}, &jwt.AccessClaims{
 		ID: usr.ID, OAuthID: usr.OAuthID, OAuthProvider: usr.OAuthProvider,
 	})
-	return repository.New(testVaults(t)), ctx, usr
+	return testRepo(t), ctx, usr
+}
+
+// testRepo is a repository on the shared database of testVaults.
+func testRepo(t *testing.T) *repository.Repository {
+	t.Helper()
+	vaults, q := testVaults(t)
+	return repository.New(vaults, q)
 }
 
 // testVaults opens the vaults in the shared database, from the temp dir of
 // setupTenant, with a cheap key derivation.
-func testVaults(t *testing.T) *vault.Store {
+func testVaults(t *testing.T) (*vault.Store, *sharedqueries.Queries) {
 	t.Helper()
 	db, q, err := shareddb.Open("data/shared.sqlite")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	return vault.New(db, q, vault.KDFParams{Time: 1, Memory: 1024, Threads: 1})
+	return vault.New(db, q, vault.KDFParams{Time: 1, Memory: 1024, Threads: 1}), q
 }
 
 // sharedTemplates opens a seeded shared database, from the temp dir of

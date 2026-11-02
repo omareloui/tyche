@@ -44,3 +44,11 @@ DELETE FROM vault_slots WHERE tenant_id = sqlc.arg(tenant_id) AND kind = 'device
 -- name: TouchSessionSlot :exec
 UPDATE vault_slots SET last_used_at = sqlc.arg(now), expires_at = sqlc.arg(expires_at)
 WHERE id = sqlc.arg(id);
+
+-- name: ListVaults :many
+SELECT
+    v.tenant_id,
+    v.created_at,
+    (SELECT COUNT(*) FROM vault_slots AS s WHERE s.tenant_id = v.tenant_id AND s.kind = 'session') AS sessions,
+    (SELECT COUNT(*) FROM vault_slots AS s WHERE s.tenant_id = v.tenant_id AND s.kind = 'device') AS devices
+FROM tenant_vaults AS v;

@@ -44,6 +44,9 @@ func (r *Repository) dbFromCtx(ctx context.Context) (*sql.DB, *queries.Queries, 
 	if err != nil {
 		return nil, nil, err
 	}
+	if r.IsDeleted(models.TenantID(oauthProvider, oauthId)) {
+		return nil, nil, ErrTenantDeleted
+	}
 
 	key, err := r.tenantKey(ctx, oauthProvider, oauthId)
 	if err != nil {

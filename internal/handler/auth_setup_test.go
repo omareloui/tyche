@@ -58,7 +58,7 @@ func TestSetupKeepsTheVault(t *testing.T) {
 	})
 
 	// The first life: signed up, then encrypted.
-	repo := repository.New(vaults)
+	repo := repository.New(vaults, q)
 	h := New(repo, valid.New(), sanitizer.New(), nil, nil)
 	if err := h.initUser(ctx, gUsr()); err != nil {
 		t.Fatal(err)
@@ -73,7 +73,7 @@ func TestSetupKeepsTheVault(t *testing.T) {
 	}
 
 	// Signing in again, from a fresh server.
-	repo = repository.New(vaults)
+	repo = repository.New(vaults, q)
 	h = New(repo, valid.New(), sanitizer.New(), nil, nil)
 	id, err := pendingSignups.add(gUsr(), key)
 	if err != nil {

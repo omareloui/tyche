@@ -85,6 +85,10 @@ func (h *Handler) finishOAuth(w http.ResponseWriter, r *http.Request) (templ.Com
 	// An encrypted database: the user is in it, so it's unlocked first,
 	// from the browser's session or else on the unlock page.
 	tenantID := models.TenantID(models.Google, gUsr.OAuthID)
+	// A new sign in after an admin deleted the account: it starts over.
+	if err := h.repo.Undelete(r.Context(), tenantID); err != nil {
+		return nil, err
+	}
 	key, encrypted, err := h.vaultKey(r, tenantID)
 	if err != nil {
 		return nil, err
@@ -300,6 +304,21 @@ func (h *Handler) RefreshSession(w http.ResponseWriter, r *http.Request) (*jwt.A
 	}
 
 	return jwt.ParseAccessClaims(tokens.Access.Encoded)
+}
+
+// IsTenantDeleted tells the Deleted middleware whether an admin deleted the
+// tenant's account.
+func (h *Handler) IsTenantDeleted(tenantID string) bool {
+	return h.repo.IsDeleted(tenantID)
+}
+
+// SignOutDeleted drops the cookies of a deleted account, for the Deleted
+// middleware (its vault session is already gone).
+func SignOutDeleted(w http.ResponseWriter) {
+	unsetCookie(w, refreshTokenCookieName)
+	unsetCookie(w, accessTokenCookieName)
+	unsetCookie(w, vaultSessionCookieName)
+	unsetCookie(w, vaultPendingCookieName)
 }
 
 func (h *Handler) Signout(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

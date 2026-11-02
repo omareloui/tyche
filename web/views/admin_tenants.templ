@@ -1,0 +1,206 @@
+package views
+
+import (
+	"fmt"
+
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+type AdminTenantsData struct {
+	Tenants []models.TenantInfo
+	// Self is the admin's own tenant, which can't be deleted from here.
+	Self string
+	// Deleted is the tenant just deleted.
+	Deleted string
+}
+
+func (d AdminTenantsData) encrypted() int {
+	n := 0
+	for _, t := range d.Tenants {
+		if t.Encrypted {
+			n++
+		}
+	}
+	return n
+}
+
+templ AdminTenants(claims *jwt.AccessClaims, balances []models.Balance, data AdminTenantsData) {
+	@layouts.WithTitle(claims, "Tenants", balances) {
+		@AdminTenantsList(data)
+	}
+}
+
+// AdminTenantsList is every tenant database, filtered by the search box.
+templ AdminTenantsList(data AdminTenantsData) {
+	<section id="admin-tenants" x-data="{ q: '' }" class="grid gap-4">
+		<header class="flex flex-wrap items-end justify-between gap-3">
+			<div class="min-w-0">
+				<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+					@icons.Users("16")
+					Databases
+				</h2>
+				<p class="text-sm text-zinc-600">
+					{ fmt.Sprint(len(data.Tenants)) } accounts, { fmt.Sprint(data.encrypted()) } encrypted. Users find their ID in their profile menu and on the unlock page.
+				</p>
+			</div>
+			<input
+				type="search"
+				x-model="q"
+				placeholder="Search by account ID"
+				aria-label="Search by account ID"
+				class="input-field w-full sm:w-72 font-mono"
+			/>
+		</header>
+		if data.Deleted != "" {
+			<p class="flex items-center gap-2 p-3 rounded-xl bg-emerald-400/8 text-sm text-emerald-300">
+				@icons.Check("16")
+				Deleted <span class="font-mono">{ data.Deleted }</span>. They start over on their next sign in.
+			</p>
+		}
+		if len(data.Tenants) == 0 {
+			<p class="text-zinc-500">No databases yet.</p>
+		}
+		<ul class="grid gap-2">
+			for _, t := range data.Tenants {
+				@adminTenantRow(t, t.ID == data.Self)
+			}
+		</ul>
+	</section>
+}
+
+templ adminTenantRow(t models.TenantInfo, self bool) {
+	<li
+		x-data="{ deleting: false, confirm: '', copied: false }"
+		x-show={ fmt.Sprintf("!q || %q.toLowerCase().includes(q.trim().toLowerCase())", t.ID) }
+		class="grid gap-3 p-4 rounded-2xl bg-zinc-700/20"
+	>
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<div class="grid gap-1.5 min-w-0">
+				<div class="flex flex-wrap items-center gap-2">
+					<code class="font-mono text-zinc-200 break-all">{ t.ID }</code>
+					<button
+						type="button"
+						data-id={ t.ID }
+						@click="navigator.clipboard.writeText($el.dataset.id); copied = true; setTimeout(() => copied = false, 1500)"
+						:aria-label="copied ? 'Copied' : 'Copy the account ID'"
+						class="grid place-items-center w-7 h-7 rounded-md text-zinc-500 transition-colors hover:bg-white/5 hover:text-zinc-200"
+					>
+						<span x-show="!copied">
+							@icons.Copy("14")
+						</span>
+						<span x-cloak x-show="copied" class="text-emerald-400">
+							@icons.Check("14")
+						</span>
+					</button>
+					if self {
+						<span class="px-2 py-0.5 rounded-full bg-violet-400/15 text-xs text-violet-300">You</span>
+					}
+					if t.Encrypted {
+						<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-400/15 text-xs text-amber-300">
+							@icons.Lock("12")
+							Encrypted
+						</span>
+					} else {
+						<span class="px-2 py-0.5 rounded-full bg-zinc-700/60 text-xs text-zinc-400">Plain</span>
+					}
+					if t.Open {
+						<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-400/15 text-xs text-emerald-400">
+							<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+							Open
+						</span>
+					}
+					if t.HasBackup {
+						<span class="px-2 py-0.5 rounded-full bg-zinc-700/60 text-xs text-zinc-400">Import backup</span>
+					}
+					if t.FileMissing {
+						<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-400/15 text-xs text-red-400">
+							@icons.Warning("12")
+							Database file missing
+						</span>
+					}
+				</div>
+				<p class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500 tabular-nums">
+					if !t.FileMissing {
+						<span>{ fmtBytes(t.Size) }</span>
+						<span title={ fmtAbs(t.ModTime) }>Changed { fmtWhen(t.ModTime) }</span>
+					}
+					if t.Encrypted {
+						<span title={ fmtAbs(t.EncryptedAt) }>Encrypted { fmtWhen(t.EncryptedAt) }</span>
+						<span>{ fmt.Sprint(t.Sessions) } { plural(int(t.Sessions), "unlocked browser", "unlocked browsers") }, { fmt.Sprint(t.Devices) } { plural(int(t.Devices), "phone", "phones") }</span>
+					}
+				</p>
+			</div>
+			if !self {
+				<button
+					type="button"
+					x-show="!deleting"
+					@click="deleting = true; $nextTick(() => $refs.confirm.focus())"
+					class="btn-ghost h-9! inline-flex items-center gap-2 text-red-400 hover:bg-red-400/10"
+				>
+					@icons.Trash("16")
+					Delete
+				</button>
+			}
+		</div>
+		if !self {
+			<form
+				x-cloak
+				x-show="deleting"
+				hx-post={ "/admin/tenants/" + t.ID + "/delete" }
+				hx-target="next .tenant-error"
+				hx-swap="innerHTML"
+				hx-disabled-elt="find button[type=submit]"
+				class="grid gap-3 p-4 rounded-xl bg-red-400/8 ring-1 ring-red-400/20"
+			>
+				<p class="flex items-start gap-2 text-sm text-red-300">
+					@icons.Warning("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
+					<span>
+						Deletes this account's database, its import backup and vault, and signs it out everywhere. It can't be undone,
+						an encrypted one's data is gone for good. The user starts over on their next sign in.
+					</span>
+				</p>
+				<div>
+					<label for={ "confirm-" + t.ID } class="input-label">
+						Type <span class="font-mono text-red-300">{ t.ID }</span> to confirm
+					</label>
+					<input
+						id={ "confirm-" + t.ID }
+						name="confirm"
+						x-ref="confirm"
+						x-model="confirm"
+						autocomplete="off"
+						spellcheck="false"
+						class="input-field font-mono"
+					/>
+				</div>
+				<div class="flex flex-wrap justify-end gap-2">
+					<button type="button" @click="deleting = false; confirm = ''" class="btn-ghost">Cancel</button>
+					<button
+						type="submit"
+						:disabled={ fmt.Sprintf("confirm.trim() !== %q", t.ID) }
+						class="btn-primary bg-red-500! hover:bg-red-400! disabled:opacity-50 disabled:cursor-not-allowed"
+					>
+						Delete account
+					</button>
+				</div>
+			</form>
+			<p class="tenant-error text-sm text-red-400 empty:hidden"></p>
+		}
+	</li>
+}
+
+func fmtBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for m := n / unit; m >= unit; m /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGT"[exp])
+}

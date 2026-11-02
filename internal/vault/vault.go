@@ -124,6 +124,27 @@ func (s *Store) Create(ctx context.Context, tenantID, password string) (key []by
 	return key, recoveryCode, nil
 }
 
+// Info is an encrypted tenant's vault, as listed for the admins.
+type Info struct {
+	TenantID  string
+	CreatedAt time.Time
+	Sessions  int64
+	Devices   int64
+}
+
+// List lists every vault, with how many browsers and devices it unlocks.
+func (s *Store) List(ctx context.Context) ([]Info, error) {
+	rows, err := s.q.ListVaults(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("vault: listing: %w", err)
+	}
+	infos := make([]Info, len(rows))
+	for i, r := range rows {
+		infos[i] = Info{TenantID: r.TenantID, CreatedAt: r.CreatedAt, Sessions: r.Sessions, Devices: r.Devices}
+	}
+	return infos, nil
+}
+
 // Delete deletes the tenant's vault and all its slots, once its database is
 // decrypted.
 func (s *Store) Delete(ctx context.Context, tenantID string) error {

@@ -69,7 +69,10 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	repo := repository.New(vaults)
+	repo := repository.New(vaults, sharedQ)
+	if err := repo.LoadDeleted(ctx); err != nil {
+		log.Fatalln(err)
+	}
 	valid := valid.New()
 	sani := sanitizer.New()
 	h := handler.New(repo, valid, sani, fxJob, smsTemplates)

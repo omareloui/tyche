@@ -329,7 +329,7 @@ templ recoveryCodeCard(code string, justEnabled bool) {
 }
 
 // Unlock asks for the password of the encrypted database.
-templ Unlock(next, errMsg string) {
+templ Unlock(next, errMsg, tenantID string) {
 	@layouts.Main(nil, "Unlock", nil) {
 		@components.Container() {
 			<div class="max-w-md mx-auto mt-10">
@@ -361,6 +361,10 @@ templ Unlock(next, errMsg string) {
 						}
 						<button type="submit" class="btn-primary w-full">Unlock</button>
 					</form>
+					<div class="grid gap-2 p-4 rounded-xl bg-zinc-700/20 text-sm text-zinc-400">
+						<p>Forgot both your password and recovery code? Your data can't be recovered, but the admin can delete your account so you start over. Send them your account ID:</p>
+						@components.TenantID(tenantID, "")
+					</div>
 					<p class="text-center text-sm text-zinc-500">
 						Not you? <a href="/signout" hx-boost="false" class="text-zinc-300 underline underline-offset-2">Sign out</a>
 					</p>

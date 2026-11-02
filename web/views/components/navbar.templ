@@ -36,6 +36,7 @@ var (
 	// adminNav are appended to moreNav for the users in ADMIN_TENANT_IDS.
 	adminNav = []navLink{
 		{"/admin/fx-rates", "FX Rates", icons.Sparkles},
+		{"/admin/tenants", "Tenants", icons.Users},
 	}
 	mobileNav = []navLink{
 		{"/", "Home", icons.Home},
@@ -184,6 +185,7 @@ templ navUser(claims *jwt.AccessClaims) {
 						<p class="text-sm text-zinc-400 truncate">{ claims.Email }</p>
 					</div>
 				</div>
+				@TenantID(models.TenantID(claims.OAuthProvider, claims.OAuthID), "px-3 pb-2")
 				<div class="my-1 h-px bg-white/10"></div>
 				<a
 					href="/security"
@@ -216,6 +218,29 @@ templ navUser(claims *jwt.AccessClaims) {
 				</a>
 			}
 		</div>
+	</div>
+}
+
+// TenantID is the user's account ID, copyable, for them to tell the admin
+// which account is theirs.
+templ TenantID(id, class string) {
+	<div x-data="{ copied: false }" class={ "flex items-center gap-1.5 min-w-0 text-xs text-zinc-500", class }>
+		<span class="shrink-0">Account ID</span>
+		<code class="font-mono text-zinc-400 truncate" title={ id }>{ id }</code>
+		<button
+			type="button"
+			data-id={ id }
+			@click.stop="navigator.clipboard.writeText($el.dataset.id); copied = true; setTimeout(() => copied = false, 1500)"
+			:aria-label="copied ? 'Copied' : 'Copy the account ID'"
+			class="shrink-0 grid place-items-center w-6 h-6 rounded-md transition-colors hover:bg-white/5 hover:text-zinc-200"
+		>
+			<span x-show="!copied">
+				@icons.Copy("12")
+			</span>
+			<span x-cloak x-show="copied" class="text-emerald-400">
+				@icons.Check("12")
+			</span>
+		</button>
 	</div>
 }
 

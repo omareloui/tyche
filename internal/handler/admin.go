@@ -2,9 +2,14 @@ package handler
 
 import (
 	"net/http"
+	"slices"
+	"strings"
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/logger"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/repository"
+	"github.com/omareloui/tyche/internal/resperr"
 	"github.com/omareloui/tyche/web/views"
 	"go.uber.org/zap"
 )
@@ -66,5 +71,71 @@ func (h Handler) fxRatesStatus(r *http.Request) (views.FxRatesStatusData, error)
 		Info:     info,
 		Status:   h.fxJob.Status(),
 		Interval: h.fxJob.Interval(),
+	}, nil
+}
+
+func (h Handler) AdminTenants(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	b, err := h.repo.GetBalances(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	data, err := h.adminTenantsData(r)
+	if err != nil {
+		return nil, err
+	}
+	return views.AdminTenants(getClaims(r.Context()), b, data), nil
+}
+
+// DeleteTenant deletes a user's account, e.g. when they forgot the password
+// of their encrypted database (and its recovery code) or it's broken: they
+// start over by signing in again.
+func (h Handler) DeleteTenant(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	ctx := r.Context()
+	id := r.PathValue("id")
+	if !repository.ValidTenantID(id) {
+		return nil, resperr.New(http.StatusNotFound, "No such account.")
+	}
+
+	data, err := h.adminTenantsData(r)
+	if err != nil {
+		return nil, err
+	}
+	if !slices.ContainsFunc(data.Tenants, func(t models.TenantInfo) bool { return t.ID == id }) {
+		return nil, resperr.New(http.StatusNotFound, "No such account.")
+	}
+	if id == data.Self {
+		return nil, resperr.New(http.StatusUnprocessableEntity, "That's your own account, use Reset account instead.")
+	}
+	if strings.TrimSpace(r.FormValue("confirm")) != id {
+		return nil, resperr.New(http.StatusUnprocessableEntity, "Type the account ID to confirm.")
+	}
+
+	if err := h.repo.DeleteTenant(ctx, id); err != nil {
+		logger.FromCtx(ctx).Error("deleting a tenant", zap.String("tenantID", id), zap.Error(err))
+		return nil, err
+	}
+	forgetUnlocks(id)
+
+	data, err = h.adminTenantsData(r)
+	if err != nil {
+		return nil, err
+	}
+	data.Deleted = id
+	// The form targets its error message, the list replaces itself.
+	w.Header().Set("HX-Retarget", "#admin-tenants")
+	w.Header().Set("HX-Reswap", "outerHTML")
+	return views.AdminTenantsList(data), nil
+}
+
+func (h Handler) adminTenantsData(r *http.Request) (views.AdminTenantsData, error) {
+	tenants, err := h.repo.ListTenants(r.Context())
+	if err != nil {
+		logger.FromCtx(r.Context()).Error("listing the tenants", zap.Error(err))
+		return views.AdminTenantsData{}, err
+	}
+	claims := getClaims(r.Context())
+	return views.AdminTenantsData{
+		Tenants: tenants,
+		Self:    models.TenantID(claims.OAuthProvider, claims.OAuthID),
 	}, nil
 }
