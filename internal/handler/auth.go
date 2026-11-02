@@ -91,7 +91,7 @@ func (h *Handler) finishOAuth(w http.ResponseWriter, r *http.Request) (templ.Com
 	}
 	if encrypted && key == nil {
 		l.Info("signing in to a locked database", zap.String("tenantID", tenantID))
-		return nil, h.startPendingUnlock(w, r, pendingUnlock{provider: models.Google, oauthID: gUsr.OAuthID, picture: gUsr.Picture, mobile: mobile})
+		return nil, h.startPendingUnlock(w, r, pendingUnlock{provider: models.Google, oauthID: gUsr.OAuthID, gUsr: gUsr, mobile: mobile})
 	}
 	if key != nil {
 		ctx = context.WithValue(ctx, middleware.VaultKeyCtxKey{}, key)
@@ -99,7 +99,7 @@ func (h *Handler) finishOAuth(w http.ResponseWriter, r *http.Request) (templ.Com
 
 	// First sign in from the web: the setting up step creates the database.
 	if mobile == nil && !h.repo.TenantExists(tenantID) {
-		id, err := pendingSignups.add(gUsr)
+		id, err := pendingSignups.add(gUsr, key)
 		if err != nil {
 			return nil, err
 		}
@@ -124,7 +124,7 @@ func (h *Handler) finishOAuth(w http.ResponseWriter, r *http.Request) (templ.Com
 		return nil, nil
 	}
 
-	return nil, signInBrowser(w, r, usr, encrypted)
+	return nil, signInBrowser(w, r, usr)
 }
 
 // OAuthSetup creates the database and the user of a first sign in, kept by
@@ -136,28 +136,32 @@ func (h *Handler) OAuthSetup(w http.ResponseWriter, r *http.Request) (templ.Comp
 		return nil, nil
 	}
 	unsetCookie(w, signupPendingCookieName)
-	gUsr, ok := pendingSignups.pop(c.Value)
+	p, ok := pendingSignups.pop(c.Value)
 	if !ok {
 		redirect(w, r, "/oauth")
 		return nil, nil
 	}
+	gUsr := p.usr
 
 	ctx := context.WithValue(r.Context(), middleware.AccessClaimsCtxKey{}, &jwt.AccessClaims{
 		OAuthID:       gUsr.OAuthID,
 		OAuthProvider: models.Google,
 	})
+	if p.key != nil {
+		ctx = context.WithValue(ctx, middleware.VaultKeyCtxKey{}, p.key)
+	}
 	usr, err := h.signInUser(ctx, gUsr)
 	if err != nil {
 		return nil, err
 	}
 	h.syncPicture(ctx, usr, gUsr.Picture)
 
-	return nil, signInBrowser(w, r, usr, false)
+	return nil, signInBrowser(w, r, usr)
 }
 
 // signInBrowser sets the user's cookies and sends them on: to the dashboard,
-// or the encryption prompt (asked once) when their database isn't encrypted.
-func signInBrowser(w http.ResponseWriter, r *http.Request, usr *models.User, encrypted bool) error {
+// or the onboarding until they finish (or skip) it.
+func signInBrowser(w http.ResponseWriter, r *http.Request, usr *models.User) error {
 	l := logger.FromCtx(r.Context())
 	l.Debug("generating cookies for the user", zap.Any("user", usr))
 
@@ -169,8 +173,8 @@ func signInBrowser(w http.ResponseWriter, r *http.Request, usr *models.User, enc
 	l.Info("new user singed", zap.Any("user", usr))
 
 	next := "/"
-	if !usr.EncryptionPrompted && !encrypted {
-		next = "/security?welcome"
+	if !usr.Onboarded {
+		next = "/welcome"
 	}
 	redirect(w, r, next)
 	return nil
@@ -382,9 +386,12 @@ const (
 var pendingSignups = &pendingSignupStore{users: make(map[string]pendingSignup)}
 
 // pendingSignup is a first sign in's google user, kept from the code exchange
-// until the setting up step creates them.
+// until the setting up step creates them. key is the vault's key when the
+// tenant has one but no database file (e.g. it was deleted), unlocked by the
+// browser's session: the new database is encrypted with it.
 type pendingSignup struct {
 	usr     *models.User
+	key     []byte
 	expires time.Time
 }
 
@@ -393,7 +400,7 @@ type pendingSignupStore struct {
 	users map[string]pendingSignup
 }
 
-func (s *pendingSignupStore) add(usr *models.User) (string, error) {
+func (s *pendingSignupStore) add(usr *models.User, key []byte) (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
@@ -408,12 +415,12 @@ func (s *pendingSignupStore) add(usr *models.User) (string, error) {
 			delete(s.users, k)
 		}
 	}
-	s.users[id] = pendingSignup{usr: usr, expires: now.Add(pendingSignupTTL)}
+	s.users[id] = pendingSignup{usr: usr, key: key, expires: now.Add(pendingSignupTTL)}
 	return id, nil
 }
 
 // pop removes the sign up so it's only set up once.
-func (s *pendingSignupStore) pop(id string) (*models.User, bool) {
+func (s *pendingSignupStore) pop(id string) (*pendingSignup, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	p, ok := s.users[id]
@@ -424,5 +431,5 @@ func (s *pendingSignupStore) pop(id string) (*models.User, bool) {
 	if time.Now().After(p.expires) {
 		return nil, false
 	}
-	return p.usr, true
+	return &p, true
 }

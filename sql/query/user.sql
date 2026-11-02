@@ -87,8 +87,8 @@ SELECT timezone FROM user LIMIT 1;
 -- name: SetTimezone :exec
 UPDATE user SET timezone = sqlc.arg(timezone);
 
--- name: SetEncryptionPrompted :exec
-UPDATE user SET encryption_prompted_at = DATETIME('now') WHERE encryption_prompted_at IS NULL;
+-- name: SetOnboarded :exec
+UPDATE user SET onboarded_at = DATETIME('now') WHERE onboarded_at IS NULL;
 
 -- name: SetUserPicture :exec
 UPDATE user SET

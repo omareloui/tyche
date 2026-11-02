@@ -95,23 +95,10 @@ func TestEncryption(t *testing.T) {
 		return err == nil
 	}
 
-	t.Run("asks on the first sign in", func(t *testing.T) {
-		res, body := do("GET", "/security?welcome", reqOpts{cookies: []*http.Cookie{access}})
+	t.Run("asks on the onboarding", func(t *testing.T) {
+		res, body := do("GET", "/welcome?step=security", reqOpts{cookies: []*http.Cookie{access}})
 		if res.StatusCode != http.StatusOK || !strings.Contains(body, "Encrypt your data with a password?") || !strings.Contains(body, "Not now") {
 			t.Fatalf("got %d", res.StatusCode)
-		}
-	})
-
-	t.Run("not now", func(t *testing.T) {
-		if res, _ := do("POST", "/security/encryption/skip", reqOpts{htmx: true, cookies: []*http.Cookie{access}}); res.StatusCode != http.StatusOK || res.Header.Get("HX-Redirect") != "/" {
-			t.Fatalf("got %d, HX-Redirect %q", res.StatusCode, res.Header.Get("HX-Redirect"))
-		}
-		got, err := repo.GetUserByOAuthID(ctx, usr.OAuthID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !got.EncryptionPrompted {
-			t.Error("not marked as prompted")
 		}
 	})
 

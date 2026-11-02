@@ -56,10 +56,10 @@ type User struct {
 	DefaultAccount  *Account `validate:"required"`
 	StartOfPeriod   uint8    `validate:"required,min=1,max=31"`
 	SeededAt        time.Time
-	// EncryptionPrompted is whether the user was asked to encrypt their
-	// database (asked once on signing in).
-	EncryptionPrompted bool
-	CreatedAt          time.Time
+	// Onboarded is whether the user finished (or skipped) the onboarding at
+	// /welcome, shown on signing in until then.
+	Onboarded bool
+	CreatedAt time.Time
 }
 
 // AvatarURL is the url of the user's picture: the downloaded one, else the

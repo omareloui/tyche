@@ -160,11 +160,16 @@ func New(h *handler.Handler) Router {
 	mux.Handle("PUT /sms/templates/{scope}/{id}", handle(h.UpdateSMSTemplate))
 	mux.Handle("DELETE /sms/templates/{scope}/{id}", handle(h.DeleteSMSTemplate))
 
+	mux.Handle("GET /welcome", handle(h.Welcome))
+	mux.Handle("POST /welcome/region", handle(h.WelcomeRegion, middleware.HTMXOnly))
+	mux.Handle("POST /welcome/accounts", handle(h.WelcomeAddAccount, middleware.HTMXOnly))
+	mux.Handle("POST /welcome/balances", handle(h.WelcomeBalances, middleware.HTMXOnly))
+	mux.Handle("POST /welcome/finish", handle(h.FinishWelcome, middleware.HTMXOnly))
+
 	mux.Handle("GET /unlock", handlePub(h.UnlockPage))
 	mux.Handle("POST /unlock", handlePub(h.Unlock))
 	mux.Handle("GET /security", handle(h.Security))
 	mux.Handle("POST /security/encryption", handle(h.EnableEncryption, middleware.HTMXOnly))
-	mux.Handle("POST /security/encryption/skip", handle(h.SkipEncryption, middleware.HTMXOnly))
 	mux.Handle("POST /security/encryption/disable", handle(h.DisableEncryption, middleware.HTMXOnly))
 	mux.Handle("POST /security/password", handle(h.ChangeVaultPassword, middleware.HTMXOnly))
 	mux.Handle("POST /security/recovery-code", handle(h.RegenerateRecoveryCode, middleware.HTMXOnly))

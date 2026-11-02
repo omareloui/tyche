@@ -34,7 +34,7 @@ func invalidBackup(reason string) error {
 // database: who signs in to it, not what's in the backup.
 var userIdentityCols = []string{
 	"id", "email", "verified_email", "first_name", "last_name", "picture",
-	"picture_data", "picture_type", "picture_hash", "encryption_prompted_at",
+	"picture_data", "picture_type", "picture_hash", "onboarded_at",
 }
 
 // ExportDB writes a plain text copy of the tenant's database (decrypted when

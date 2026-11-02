@@ -363,6 +363,13 @@ templ ArrowRight(size string, attrs ...*templ.Attributes) {
 	}
 }
 
+templ ArrowLeft(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="M19 12H5"></path>
+		<path d="m12 19-7-7 7-7"></path>
+	}
+}
+
 // Ban marks an ignored or revoked entry.
 templ Ban(size string, attrs ...*templ.Attributes) {
 	@strokeIcon(size, attrs...) {

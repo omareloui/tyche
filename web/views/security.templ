@@ -13,8 +13,6 @@ import (
 // SecurityData is the database encryption settings.
 type SecurityData struct {
 	Encrypted bool
-	// Welcome asks whether to encrypt, on the first sign in.
-	Welcome bool
 	// JustEnabled is right after encrypting, to tell about the devices.
 	JustEnabled bool
 	// RecoveryCode is shown once, after it's (re)generated.
@@ -24,62 +22,43 @@ type SecurityData struct {
 	CurrentSessionID string
 }
 
-// welcoming is the first sign in's question, shown alone.
-func (d *SecurityData) welcoming() bool {
-	return d.Welcome && !d.Encrypted
-}
-
 const minVaultPasswordLen = "8"
 
 templ Security(claims *jwt.AccessClaims, balances []models.Balance, data *SecurityData) {
-	if data.welcoming() {
-		@layouts.Main(claims, "Security", balances) {
-			@components.Container() {
-				<div id="security-body" class="flex flex-col justify-center min-h-[calc(100dvh-12rem)] py-10">
-					@SecurityBody(data)
-				</div>
-			}
-		}
-	} else {
-		@layouts.WithTitle(claims, "Security", balances) {
-			<div id="security-body">
-				@SecurityBody(data)
-			</div>
-		}
+	@layouts.WithTitle(claims, "Security", balances) {
+		<div id="security-body">
+			@SecurityBody(data)
+		</div>
 	}
 }
 
-// SecurityBody is the content of #security-body: the welcome card, centered
-// by its wrapper, else the settings with their aside.
+// SecurityBody is the content of #security-body: the settings with their
+// aside.
 templ SecurityBody(data *SecurityData) {
-	if data.welcoming() {
-		@welcomeEncryption()
-	} else {
-		<div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
-			<div class="grid gap-6">
-				if data.RecoveryCode != "" {
-					@recoveryCodeCard(data.RecoveryCode, data.JustEnabled)
-				}
-				if data.Notice != "" {
-					<p class="flex items-center gap-1.5 text-emerald-400">
-						@icons.Check("16")
-						{ data.Notice }
-					</p>
-				}
-				if data.Encrypted {
-					@encryptedSettings(data)
-				} else {
-					@enableEncryption()
-				}
-			</div>
-			<div class="grid gap-10 lg:sticky lg:top-22">
-				if data.Encrypted {
-					@encryptionStatus()
-				}
-				@securityInfo(data.Encrypted)
-			</div>
+	<div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+		<div class="grid gap-6">
+			if data.RecoveryCode != "" {
+				@recoveryCodeCard(data.RecoveryCode, data.JustEnabled)
+			}
+			if data.Notice != "" {
+				<p class="flex items-center gap-1.5 text-emerald-400">
+					@icons.Check("16")
+					{ data.Notice }
+				</p>
+			}
+			if data.Encrypted {
+				@encryptedSettings(data)
+			} else {
+				@enableEncryption()
+			}
 		</div>
-	}
+		<div class="grid gap-10 lg:sticky lg:top-22">
+			if data.Encrypted {
+				@encryptionStatus()
+			}
+			@securityInfo(data.Encrypted)
+		</div>
+	</div>
 }
 
 // securitySection is a titled section of the aside.
@@ -151,27 +130,6 @@ templ securityInfo(encrypted bool) {
 	}
 }
 
-// welcomeEncryption asks whether to encrypt, on the first sign in.
-templ welcomeEncryption() {
-	<div class="w-full max-w-lg mx-auto">
-		@components.GlassCard("p-6 sm:p-8 grid gap-6", "bg-violet-400/10") {
-			<div class="grid justify-items-center gap-3 text-center">
-				@icons.Lock("32", &templ.Attributes{"class": "text-violet-400"})
-				<h1 class="text-2xl font-(family-name:--font-biorhyme-expanded)">Encrypt your data with a password?</h1>
-				<p class="text-zinc-400 text-base">
-					Your database file will be unreadable without your password, even to whoever runs the server or has its backups.
-					You'll enter it when you sign in, and every 12 hours you're away.
-				</p>
-				<p class="text-zinc-500 text-sm">
-					You get a recovery code in case you forget it. Lose both and your data is gone for good: nobody can recover it.
-				</p>
-			</div>
-			@encryptForm(true)
-			<p class="text-center text-sm text-zinc-500">You can turn it on or off anytime from Security in your menu.</p>
-		}
-	</div>
-}
-
 templ enableEncryption() {
 	@components.GlassCard("p-5 sm:p-6 grid gap-6", "bg-violet-400/10") {
 		<div class="flex gap-3">
@@ -185,6 +143,8 @@ templ enableEncryption() {
 	}
 }
 
+// encryptForm turns the encryption on. On the onboarding (welcome) "Not now"
+// moves on, and the response is its next step.
 templ encryptForm(welcome bool) {
 	<form
 		hx-post="/security/encryption"
@@ -193,6 +153,9 @@ templ encryptForm(welcome bool) {
 		hx-disabled-elt="find button[type=submit]"
 		class="grid gap-4"
 	>
+		if welcome {
+			<input type="hidden" name="welcome" value="1"/>
+		}
 		@passwordFields("encrypt", "Password", true)
 		<label class="flex gap-3 text-base text-zinc-300 cursor-pointer select-none">
 			<input type="checkbox" name="understood" value="1" required class="w-4 h-4 mt-1 shrink-0 accent-violet-400"/>
@@ -201,7 +164,7 @@ templ encryptForm(welcome bool) {
 		<p id="encrypt-error" class="text-sm text-red-400 empty:hidden"></p>
 		<div class={ "flex flex-wrap gap-2", templ.KV("justify-end", !welcome), templ.KV("*:flex-1", welcome) }>
 			if welcome {
-				<button type="button" class="btn-ghost ring-1 ring-zinc-700" hx-post="/security/encryption/skip" hx-target="#encrypt-error" hx-disabled-elt="this">
+				<button type="button" class="btn-ghost ring-1 ring-zinc-700" { welcomeNav(models.OnboardingSecurity.Next())... }>
 					Not now
 				</button>
 			}

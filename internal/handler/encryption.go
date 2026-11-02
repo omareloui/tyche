@@ -51,9 +51,11 @@ var (
 type pendingUnlock struct {
 	provider models.OAuthProvider
 	oauthID  string
-	picture  string
-	mobile   *mobileLogin
-	expires  time.Time
+	// gUsr is the google user, created once unlocked if the database has
+	// none (its file was deleted, the vault is kept).
+	gUsr    *models.User
+	mobile  *mobileLogin
+	expires time.Time
 }
 
 func (p *pendingUnlock) tenantID() string {
@@ -283,11 +285,11 @@ func (h *Handler) Unlock(w http.ResponseWriter, r *http.Request) (templ.Componen
 
 	// A sign in from the mobile app: its device gets its own slot.
 	if pending != nil && pending.mobile != nil {
-		usr, err := h.repo.GetUserByOAuthID(ctx, oauthID)
+		usr, err := h.signInUser(ctx, pending.gUsr)
 		if err != nil {
 			return nil, err
 		}
-		h.syncPicture(ctx, usr, pending.picture)
+		h.syncPicture(ctx, usr, pending.gUsr.Picture)
 		code, err := mobileCodes.add(usr, pending.mobile, key)
 		if err != nil {
 			return nil, err
@@ -302,12 +304,21 @@ func (h *Handler) Unlock(w http.ResponseWriter, r *http.Request) (templ.Componen
 	}
 
 	if pending != nil || getClaims(r.Context()) == nil {
-		usr, err := h.repo.GetUserByOAuthID(ctx, oauthID)
+		var usr *models.User
+		var err error
+		if pending != nil {
+			usr, err = h.signInUser(ctx, pending.gUsr)
+		} else {
+			usr, err = h.repo.GetUserByOAuthID(ctx, oauthID)
+		}
 		if err != nil {
 			return nil, err
 		}
 		if pending != nil {
-			h.syncPicture(ctx, usr, pending.picture)
+			h.syncPicture(ctx, usr, pending.gUsr.Picture)
+			if !usr.Onboarded {
+				next = "/welcome"
+			}
 		}
 		if _, err := setJWTCookies(w, usr); err != nil {
 			return nil, err
@@ -352,14 +363,12 @@ func (h *Handler) endVaultSession(ctx context.Context, w http.ResponseWriter, r 
 	}
 }
 
-// Security is the database encryption settings, also asking whether to
-// encrypt on the first sign in (?welcome).
+// Security is the database encryption settings.
 func (h *Handler) Security(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	data, err := h.securityData(r)
 	if err != nil {
 		return nil, err
 	}
-	data.Welcome = r.URL.Query().Has("welcome")
 	b, err := h.repo.GetBalances(r.Context())
 	if err != nil {
 		return nil, err
@@ -392,15 +401,6 @@ func (h *Handler) securityBody(w http.ResponseWriter, r *http.Request, data *vie
 	return views.SecurityBody(data)
 }
 
-// SkipEncryption answers "not now" to the first sign in's question.
-func (h *Handler) SkipEncryption(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	if err := h.repo.SetEncryptionPrompted(r.Context()); err != nil {
-		return nil, err
-	}
-	w.Header().Set("HX-Redirect", "/")
-	return nil, nil
-}
-
 func (h *Handler) EnableEncryption(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	ctx := r.Context()
 	password := r.FormValue("password")
@@ -409,11 +409,6 @@ func (h *Handler) EnableEncryption(w http.ResponseWriter, r *http.Request) (temp
 	}
 	if r.FormValue("understood") == "" {
 		return nil, resperr.New(http.StatusUnprocessableEntity, "Confirm you understand a lost password and recovery code can't be recovered.")
-	}
-
-	// Before encrypting, it's the last query without the key.
-	if err := h.repo.SetEncryptionPrompted(ctx); err != nil {
-		return nil, err
 	}
 
 	key, code, err := h.repo.EnableEncryption(ctx, password)
@@ -427,6 +422,10 @@ func (h *Handler) EnableEncryption(w http.ResponseWriter, r *http.Request) (temp
 	ctx = context.WithValue(ctx, middleware.VaultKeyCtxKey{}, key)
 	if err := h.startVaultSession(ctx, w, r, tenantID, key); err != nil {
 		return nil, err
+	}
+
+	if r.FormValue("welcome") != "" {
+		return welcomeStep(w, &views.WelcomeData{Step: models.OnboardingSecurity, Encrypted: true, RecoveryCode: code}), nil
 	}
 
 	data := &views.SecurityData{Encrypted: true, RecoveryCode: code, JustEnabled: true}

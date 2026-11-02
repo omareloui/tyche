@@ -160,6 +160,15 @@ SET
     amount = ROUND(sqlc.arg(amount), 2)
 WHERE id = sqlc.arg(id);
 
+-- name: SetCurrencyOfUnusedAccounts :exec
+UPDATE accounts
+SET currency_id = sqlc.arg(currency_id)
+WHERE
+    currency_id = sqlc.arg(from_currency_id)
+    AND NOT EXISTS (SELECT 1 FROM transactions AS t WHERE t.account_id = accounts.id OR t.to_account_id = accounts.id)
+    AND NOT EXISTS (SELECT 1 FROM recurrent_txs AS rt WHERE rt.account_id = accounts.id OR rt.to_account_id = accounts.id)
+    AND NOT EXISTS (SELECT 1 FROM gamyaas AS g WHERE g.account_id = accounts.id);
+
 -- name: GetBalances :many
 SELECT
     a.currency_id,
