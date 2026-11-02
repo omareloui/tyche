@@ -47,6 +47,32 @@ func (h Handler) Categories(w http.ResponseWriter, r *http.Request) (templ.Compo
 	return views.Categories(claims, b, h.mapCategoryToFD(dfltCategory(&claims.DefaultCurrency, knds), knds, &errs.ValidationError{}), knds, cats, currs), nil
 }
 
+func (h Handler) CategoriesBudget(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	claims := getClaims(r.Context())
+
+	month := time.Now()
+	if v := r.URL.Query().Get("month"); v != "" {
+		m, err := time.Parse("2006-01", v)
+		if err != nil {
+			return nil, resperr.New(http.StatusUnprocessableEntity, "invalid month")
+		}
+		month = m
+	}
+
+	var hidden []string
+	for id := range strings.SplitSeq(r.URL.Query().Get("hide"), ",") {
+		if id = strings.TrimSpace(id); id != "" {
+			hidden = append(hidden, id)
+		}
+	}
+
+	bs, err := h.repo.GetBudgetSummary(r.Context(), month, &claims.DefaultCurrency, hidden)
+	if err != nil {
+		return nil, err
+	}
+	return views.CategoriesBudget(bs), nil
+}
+
 func (h Handler) Category(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	id := r.PathValue("id")
 	if id == "" {
@@ -104,6 +130,7 @@ func (h Handler) CreateCategory(w http.ResponseWriter, r *http.Request) (templ.C
 		return nil, err
 	}
 	l.Info("created category")
+	w.Header().Set("HX-Trigger", views.BudgetChangedEvent)
 
 	if err = renderToBody(w, r, views.CategoryOOB(cat)); err != nil {
 		l.Error("rendering category oob", zap.Error(err))
@@ -243,6 +270,7 @@ func (h Handler) EditCategory(w http.ResponseWriter, r *http.Request) (templ.Com
 		return nil, err
 	}
 	l.Info("updated category")
+	w.Header().Set("HX-Trigger", views.BudgetChangedEvent)
 
 	return h.Category(w, r)
 }
@@ -259,6 +287,7 @@ func (h Handler) DeleteCategory(w http.ResponseWriter, r *http.Request) (templ.C
 		return nil, err
 	}
 	l.Info("deleted category")
+	w.Header().Set("HX-Trigger", views.BudgetChangedEvent)
 
 	return nil, nil
 }

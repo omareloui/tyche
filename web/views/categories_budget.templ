@@ -1,0 +1,431 @@
+package views
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/omareloui/tyche/internal/formatters"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+// BudgetChangedEvent re-renders the budget summary after a category changes.
+const BudgetChangedEvent = "budget-changed"
+
+// categoriesBudgetLazy loads the budget summary, with the categories hidden
+// in this browser (main.js).
+templ categoriesBudgetLazy() {
+	<div
+		id="categories-budget"
+		hx-get="/categories/budget"
+		hx-trigger="load"
+		hx-vals="js:{hide: budgetHidden().join(',')}"
+		hx-swap="outerHTML"
+		hx-on::response-error="this.classList.remove('animate-pulse'); this.classList.add('grid', 'place-items-center', 'text-sm', 'text-zinc-500'); this.textContent = 'Couldn’t load the budget summary, refresh to try again'"
+		aria-busy="true"
+		class="h-72 mb-6 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800 animate-pulse"
+	></div>
+}
+
+// CategoriesBudget is a month's spending of the expense categories against
+// their budgets. Clicking a category (its bar, slice or chip) hides it from
+// every chart, or shows it back (main.js).
+templ CategoriesBudget(bs *models.BudgetSummary) {
+	<div
+		id="categories-budget"
+		class="mb-6"
+		data-budget-summary
+		data-month={ bs.Month.Format("2006-01") }
+		hx-get={ "/categories/budget?month=" + bs.Month.Format("2006-01") }
+		hx-trigger={ BudgetChangedEvent + " from:body" }
+		hx-vals="js:{hide: budgetHidden().join(',')}"
+		hx-swap="outerHTML"
+	>
+		@components.GlassCard("grid content-start gap-5 p-5 sm:p-6", "bg-amber-400/10", "bg-violet-400/10") {
+			<div class="flex flex-wrap items-center justify-between gap-3">
+				<h2 class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-amber-300">
+					@icons.Coins("14")
+					Budget summary
+				</h2>
+				<div class="flex items-center gap-1 rounded-full bg-zinc-900/60 ring-1 ring-zinc-800 px-2 py-1 shrink-0 text-base">
+					@budgetMonthNav(bs.Prev, "Previous month", "M3.828 7l4.95 4.95-1.414 1.414L1 7 7.364.636 8.778 2.05z")
+					<span class="min-w-20 text-center">{ shortMonth(bs.Month) }</span>
+					@budgetMonthNav(bs.Next, "Next month", "M6.172 7L1.222 2.05 2.636.636 9 7l-6.364 6.364-1.414-1.414z")
+				</div>
+			</div>
+			if len(bs.Items) == 0 {
+				<div class="grid place-items-center gap-2 py-10 text-center">
+					<p class="text-zinc-400">No spending or budgets this month</p>
+					<p class="text-sm text-zinc-500">Set a budget on an expense category below.</p>
+				</div>
+			} else {
+				@budgetTotalBar(bs)
+				@budgetCollapse("details", budgetSummaryTitle("Pace and categories")) {
+					<div class="grid gap-6">
+						@budgetBurnUp(bs)
+						@budgetBullets(bs)
+					</div>
+				}
+				if hidden := bs.Hidden(); len(hidden) > 0 {
+					<div class="flex flex-wrap items-center gap-2 text-sm">
+						<span class="text-zinc-500">Hidden:</span>
+						for _, it := range hidden {
+							<button
+								type="button"
+								data-budget-toggle={ it.Key() }
+								title={ "Show " + it.Name + " again" }
+								class="flex items-center gap-1.5 rounded-full px-2.5 py-1 ring-1 ring-zinc-800 text-zinc-400 cursor-pointer hover:bg-zinc-800 hover:text-zinc-200"
+							>
+								<span class="size-2 rounded-full opacity-60" style={ "background-color:" + models.CategoryColorToHex(it.Color) }></span>
+								{ it.Name }
+								@icons.Plus("12")
+							</button>
+						}
+					</div>
+				}
+				if bs.Partial {
+					<p class="text-xs text-amber-300">Some rates are unavailable, those amounts aren’t counted.</p>
+				}
+			}
+		}
+	</div>
+}
+
+templ budgetMonthNav(month, label, path string) {
+	<button
+		type="button"
+		aria-label={ label }
+		title={ label }
+		class="p-1.5 rounded-full enabled:cursor-pointer enabled:hover:bg-zinc-700 disabled:opacity-30"
+		if month == "" {
+			disabled
+		} else {
+			data-budget-month={ month }
+		}
+	>
+		<svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor" aria-hidden="true">
+			<path d={ path }></path>
+		</svg>
+	</button>
+}
+
+// budgetTotalBar is the visible budgets as one bar, each category's spending
+// a segment, with the month's pace marked.
+templ budgetTotalBar(bs *models.BudgetSummary) {
+	{{ sym := bs.Currency.Symbol }}
+	{{ budget := bs.Budget() }}
+	{{ scale := max(budget, bs.BudgetedSpent()) }}
+	<div class="grid gap-2.5">
+		<div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+			if budget > 0 {
+				<p>
+					<span class="sensitive text-2xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">{ formatters.FormatAmount(bs.BudgetedSpent(), sym) }</span>
+					<span class="text-sm text-zinc-500">
+						of <span class="sensitive">{ formatters.FormatAmount(budget, sym) }</span>
+						{ fmt.Sprintf("· %.0f%% used", bs.Pct()) }
+						if bs.IsCurrent() {
+							{ fmt.Sprintf("· %.0f%% of the month", bs.MonthPct()) }
+						}
+					</span>
+				</p>
+			} else {
+				<p>
+					<span class="sensitive text-2xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">{ formatters.FormatAmount(bs.Spent(), sym) }</span>
+					<span class="text-sm text-zinc-500">spent, no budgets shown</span>
+				</p>
+			}
+			<div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+				if safe, ok := bs.SafePerDay(); ok && budget > 0 {
+					<span class="text-zinc-400">
+						<span class="sensitive text-zinc-200 tabular-nums">{ formatters.FormatAmount(safe, sym) }</span>
+						a day for { fmt.Sprint(bs.DaysLeft()) } { plural(bs.DaysLeft(), "day", "days") }
+					</span>
+				}
+				if budget > 0 {
+					@budgetStatus(bs.Left(), bs.Ahead(), sym)
+				}
+				if n := bs.Over(); n > 0 {
+					<span class="flex items-center gap-1 text-red-400">
+						@icons.Error("14")
+						{ fmt.Sprintf("%d over budget", n) }
+					</span>
+				}
+			</div>
+		</div>
+		if budget > 0 {
+			<div class="relative flex h-3 rounded-full bg-zinc-800" title={ fmt.Sprintf("%.0f%% used, %.0f%% of the month passed", bs.Pct(), bs.MonthPct()) }>
+				<div class="flex gap-0.5 h-full overflow-hidden rounded-full" style={ fmt.Sprintf("width:%.2f%%", bs.BudgetedSpent()/scale*100) }>
+					for _, it := range bs.Budgeted() {
+						if it.Spent > 0 {
+							<button
+								type="button"
+								data-budget-toggle={ it.Key() }
+								title={ fmt.Sprintf("%s: %s, click to hide", it.Name, formatters.FormatAmount(it.Spent, sym)) }
+								class="h-full cursor-pointer hover:opacity-80"
+								style={ fmt.Sprintf("flex:%.4f 1 0;background-color:%s", it.Spent, budgetFill(models.CategoryColorToHex(it.Color), it.Over())) }
+							></button>
+						}
+					}
+				</div>
+				if bs.MonthPct() > 0 && bs.MonthPct() < 100 {
+					<div aria-hidden="true" class="absolute -inset-y-1 w-0.5 rounded-full bg-zinc-300/70 pointer-events-none" style={ fmt.Sprintf("left:%.2f%%", budget*bs.MonthPct()/100/scale*100) }></div>
+				}
+				if scale > budget {
+					<div aria-hidden="true" class="absolute -inset-y-1 w-0.5 rounded-full bg-red-400 pointer-events-none" style={ fmt.Sprintf("left:%.2f%%", budget/scale*100) }></div>
+				}
+			</div>
+		}
+	</div>
+}
+
+templ budgetStatus(left float64, ahead bool, sym string) {
+	if left < 0 {
+		<span class="text-red-400"><span class="sensitive tabular-nums">{ formatters.FormatAmount(-left, sym) }</span> over</span>
+	} else {
+		<span class={ templ.KV("text-amber-300", ahead), templ.KV("text-zinc-400", !ahead) }>
+			<span class="sensitive tabular-nums">{ formatters.FormatAmount(left, sym) }</span> left
+			if ahead {
+				· ahead of the month
+			}
+		</span>
+	}
+}
+
+// budgetBurnUp is the running spending of the visible budgets against
+// spending them evenly over the month.
+templ budgetBurnUp(bs *models.BudgetSummary) {
+	{{ days := bs.Days() }}
+	{{ cum := bs.Cumulative() }}
+	{{ budget := bs.Budget() }}
+	{{ pace := budgetPaceLine(bs) }}
+	{{ axisMax := models.AxisMax(max(budget, last(cum)), dashAxisTicks) }}
+	{{ line := budgetLineClass(bs) }}
+	<div class="grid content-start gap-3 min-w-0">
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<h3 class="text-sm text-zinc-400">Budgeted spending vs on pace</h3>
+			if budget > 0 {
+				<div class="flex gap-3">
+					@dashLegendItem("Spent", line.dot, false)
+					@dashLegendItem("On pace", "border-zinc-500", true)
+				</div>
+			}
+		</div>
+		if budget == 0 {
+			<p class="grid h-48 place-items-center text-sm text-zinc-500">No budgets shown</p>
+		} else {
+			<div class="flex">
+				@dashYAxis(axisMax)
+				<div class="grow min-w-0">
+					<div class="relative h-48">
+						@dashGridLines(axisMax)
+						<div aria-hidden="true" class="absolute inset-x-0 border-t border-zinc-500/70 pointer-events-none" style={ components.BottomPct(axisPct(budget, axisMax)) }>
+							<span class="absolute right-0 -top-5 text-xs text-zinc-500">Budget</span>
+						</div>
+						<svg viewBox="0 0 100 100" preserveAspectRatio="none" class="absolute inset-0 size-full overflow-visible" aria-hidden="true">
+							<polygon points={ paceArea(cum, days, axisMax) } class={ line.area }></polygon>
+							<polyline points={ pacePoints(pace, days, axisMax) } fill="none" stroke-width="2" stroke-dasharray="4 4" vector-effect="non-scaling-stroke" class="stroke-zinc-500"></polyline>
+							<polyline points={ pacePoints(cum, days, axisMax) } fill="none" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke" class={ line.stroke }></polyline>
+						</svg>
+						if len(cum) > 0 {
+							<span
+								aria-hidden="true"
+								class={ "absolute size-2.5 -translate-x-1/2 translate-y-1/2 rounded-full ring-2 ring-zinc-900", line.dot }
+								style={ paceDotStyle(len(cum)-1, last(cum), days, axisMax) }
+							></span>
+						}
+						<div class="absolute inset-0 flex">
+							for i := range days {
+								@budgetDay(bs, i, cum, pace)
+							}
+						</div>
+					</div>
+					<div class="flex justify-between mt-2 text-xs text-zinc-500">
+						<span>1</span>
+						<span>15</span>
+						<span>{ fmt.Sprint(days) }</span>
+					</div>
+				</div>
+			</div>
+		}
+	</div>
+}
+
+// budgetDay is a day's hover target in the burn-up chart, with its tooltip.
+templ budgetDay(bs *models.BudgetSummary, i int, cum, pace []float64) {
+	{{ days := bs.Days() }}
+	{{ sym := bs.Currency.Symbol }}
+	<div class="group relative flex-1 h-full">
+		<div class="absolute inset-y-0 left-1/2 border-l border-zinc-500/60 hidden group-hover:block"></div>
+		<div class={ "absolute bottom-full mb-1 hidden group-hover:block z-10", tooltipSide(i, days) }>
+			<div class="glass-tooltip">
+				<p class="text-zinc-400">{ bs.Month.AddDate(0, 0, i).Format("Mon, Jan 2") }</p>
+				if i < len(cum) {
+					<p class="sensitive tabular-nums">Spent { formatters.FormatAmount(cum[i], sym) }</p>
+				}
+				<p class="sensitive tabular-nums text-zinc-400">On pace { formatters.FormatAmount(pace[i], sym) }</p>
+			</div>
+		</div>
+	</div>
+}
+
+// budgetBullets is a bar per visible category: its spending against its
+// budget and the month's pace, then the ones without a budget (only their
+// spending) collapsed.
+templ budgetBullets(bs *models.BudgetSummary) {
+	{{ maxSpent := budgetMaxUnbudgeted(bs) }}
+	{{ budgeted, unbudgeted := bs.Budgeted(), bs.Unbudgeted() }}
+	<div class="grid content-start gap-3">
+		<h3 class="text-sm text-zinc-400">By category</h3>
+		<div>
+			if len(budgeted) > 0 {
+				<ul class="grid gap-3.5 sm:grid-cols-2 sm:gap-x-8 mb-3.5">
+					for _, it := range budgeted {
+						@budgetBullet(bs, it, maxSpent)
+					}
+				</ul>
+			}
+			if len(unbudgeted) > 0 {
+				@budgetCollapse("unbudgeted", budgetUnbudgetedTitle(bs, len(unbudgeted))) {
+					<ul class="grid gap-3.5 sm:grid-cols-2 sm:gap-x-8">
+						for _, it := range unbudgeted {
+							@budgetBullet(bs, it, maxSpent)
+						}
+					</ul>
+				}
+			}
+		</div>
+	</div>
+}
+
+// budgetCollapse is a section of the budget summary, collapsed until opened,
+// then open or not as last left in this browser (main.js).
+templ budgetCollapse(key string, title templ.Component) {
+	<details
+		class="group/collapse"
+		x-data
+		x-init={ fmt.Sprintf("$el.open = budgetSectionOpen('%s')", key) }
+		@toggle.self={ fmt.Sprintf("setBudgetSectionOpen('%s', $el.open)", key) }
+	>
+		<summary class="flex items-center gap-2 w-fit text-sm text-zinc-400 cursor-pointer list-none select-none hover:text-zinc-200 [&::-webkit-details-marker]:hidden">
+			<span class="transition-transform -rotate-90 [details[open]>summary>&]:rotate-0">
+				@icons.ChevronDown("14")
+			</span>
+			@title
+		</summary>
+		<div class="mt-3.5">
+			{ children... }
+		</div>
+	</details>
+}
+
+templ budgetSummaryTitle(title string) {
+	{ title }
+}
+
+templ budgetUnbudgetedTitle(bs *models.BudgetSummary, n int) {
+	{ fmt.Sprintf("%d without a budget", n) }
+	<span class="text-zinc-500">·</span>
+	<span class="sensitive tabular-nums">{ formatters.FormatAmount(bs.UnbudgetedSpent(), bs.Currency.Symbol) }</span>
+	<span class="text-zinc-500">spent</span>
+}
+
+templ budgetBullet(bs *models.BudgetSummary, it models.BudgetSummaryItem, maxSpent float64) {
+	{{ hex := models.CategoryColorToHex(it.Color) }}
+	{{ sym := bs.Currency.Symbol }}
+	{{ ahead := bs.ItemAhead(it) }}
+	<li class="group grid gap-1.5">
+		<div class="flex items-baseline justify-between gap-3 text-sm">
+			<span class="flex items-center gap-2 min-w-0">
+				<span class="size-2.5 shrink-0 rounded-full" style={ "background-color:" + hex }></span>
+				if href := budgetTxsURL(bs, it); href != "" {
+					<a href={ templ.SafeURL(href) } class="truncate hover:underline">{ it.Name }</a>
+				} else {
+					<span class="truncate">{ it.Name }</span>
+				}
+				<button
+					type="button"
+					data-budget-toggle={ it.Key() }
+					aria-label={ "Hide " + it.Name }
+					title={ "Hide " + it.Name }
+					class="shrink-0 p-0.5 rounded text-zinc-500 cursor-pointer hover:text-zinc-200 hover:bg-zinc-800 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
+				>
+					@icons.EyeOff("13")
+				</button>
+			</span>
+			<span class="sensitive shrink-0 tabular-nums text-zinc-400">
+				{ formatters.FormatAmount(it.Spent, sym) }
+				if it.HasBudget() {
+					<span class="text-zinc-600">/ { formatters.FormatNum(it.Budget) }</span>
+				}
+			</span>
+		</div>
+		if it.HasBudget() {
+			<div class="relative h-2 rounded-full bg-zinc-800" title={ fmt.Sprintf("%.0f%% used, %.0f%% of the month passed", it.Pct(), bs.MonthPct()) }>
+				<div
+					class="absolute inset-y-0 left-0 rounded-full"
+					style={ fmt.Sprintf("width:%.2f%%;background-color:%s", min(100, max(0, it.Pct())), budgetFill(hex, it.Over())) }
+				></div>
+				if bs.MonthPct() > 0 && bs.MonthPct() < 100 {
+					<div aria-hidden="true" class="absolute -inset-y-1 w-0.5 rounded-full bg-zinc-300/70" style={ fmt.Sprintf("left:%.2f%%", bs.MonthPct()) }></div>
+				}
+			</div>
+			<p class="text-xs">
+				@budgetStatus(it.Left(), ahead, sym)
+			</p>
+		} else {
+			<div class="h-2 rounded-full bg-zinc-800/40">
+				<div class="h-full rounded-full opacity-70" style={ fmt.Sprintf("width:%.2f%%;background-color:%s", it.Spent/maxSpent*100, hex) }></div>
+			</div>
+			<p class="text-xs text-zinc-500">No budget</p>
+		}
+	</li>
+}
+
+type budgetLine struct {
+	stroke, area, dot string
+}
+
+// budgetLineClass colors the burn-up line by how the budgets are doing.
+func budgetLineClass(bs *models.BudgetSummary) budgetLine {
+	switch {
+	case bs.Left() < 0:
+		return budgetLine{"stroke-red-400", "fill-red-400/10", "bg-red-400"}
+	case bs.Ahead():
+		return budgetLine{"stroke-amber-300", "fill-amber-300/10", "bg-amber-300"}
+	}
+	return budgetLine{"stroke-violet-400", "fill-violet-400/10", "bg-violet-400"}
+}
+
+// budgetPaceLine is the visible budgets spent evenly, per day of the month.
+func budgetPaceLine(bs *models.BudgetSummary) []float64 {
+	res := make([]float64, bs.Days())
+	for i := range res {
+		res[i] = bs.PaceAt(i)
+	}
+	return res
+}
+
+// budgetMaxUnbudgeted is the full width of the unbudgeted categories' bars.
+func budgetMaxUnbudgeted(bs *models.BudgetSummary) float64 {
+	var top float64
+	for _, it := range bs.Visible() {
+		if !it.HasBudget() {
+			top = max(top, it.Spent)
+		}
+	}
+	return max(top, 1)
+}
+
+// budgetTxsURL lists the month's transactions of the item's category, empty
+// for uncategorized spending.
+func budgetTxsURL(bs *models.BudgetSummary, it models.BudgetSummaryItem) string {
+	if it.Category == nil {
+		return ""
+	}
+	end := bs.Month.AddDate(0, 1, -1)
+	return fmt.Sprintf("/transactions?%s=%s&%s=%s&%s=%s",
+		models.TxFilterCategory, it.Category.ID,
+		models.TxFilterFrom, bs.Month.Format(time.DateOnly),
+		models.TxFilterTo, end.Format(time.DateOnly))
+}

@@ -714,6 +714,33 @@ WHERE
     AND t.scheduled_to < sqlc.arg(to_date)
 GROUP BY t.category_id, cur.id;
 
+-- name: GetDailyCategorySpending :many
+-- GetCategorySpending per day (scheduled_to's) too, for the budget summary's
+-- burn-up chart.
+SELECT
+    CAST(SUBSTR(t.scheduled_to, 1, 10) AS TEXT) AS day,
+    CAST(IFNULL(t.category_id, '') AS TEXT) AS category_id,
+    sqlc.embed(cur),
+    CAST(TOTAL(IIF(
+        t.kind = 1,
+        t.amount - (
+            SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id
+        ),
+        -t.amount
+    )) AS FLOAT) AS total
+FROM transactions AS t
+JOIN accounts AS a ON t.account_id = a.id
+JOIN currencies AS cur ON a.currency_id = cur.id
+WHERE
+    t.kind IN (1, 5)
+    AND t.reimburses_id IS NULL
+    AND t.transfer_pair_id IS NULL
+    AND t.fulfilled_at IS NOT NULL
+    AND t.scheduled_to >= sqlc.arg(from_date)
+    AND t.scheduled_to < sqlc.arg(to_date)
+GROUP BY day, t.category_id, cur.id
+ORDER BY day;
+
 -- name: GetFirstFulfilledTransactionDate :one
 SELECT CAST(IFNULL(MIN(SUBSTR(scheduled_to, 1, 10)), '') AS TEXT)
 FROM transactions

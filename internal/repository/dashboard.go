@@ -112,6 +112,63 @@ func (r *Repository) GetCategorySpending(ctx context.Context, month time.Time, d
 	return cs, nil
 }
 
+// GetBudgetSummary is month's spending of the expense categories against
+// their budgets, in def, hidden ones (category IDs or
+// models.UncategorizedKey) left out of the totals.
+func (r *Repository) GetBudgetSummary(ctx context.Context, month time.Time, def *models.Currency, hidden []string) (*models.BudgetSummary, error) {
+	l := logger.FromCtx(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	month = models.MonthOf(month)
+	rows, err := q.GetDailyCategorySpending(ctx, queries.GetDailyCategorySpendingParams{
+		FromDate: month,
+		ToDate:   month.AddDate(0, 1, 0),
+	})
+	if err != nil {
+		l.Error("querying daily category spending", zap.Error(err))
+		return nil, err
+	}
+	totals := make([]models.DayCategoryTotal, 0, len(rows))
+	for _, row := range rows {
+		day, err := time.Parse(dayLayout, row.Day)
+		if err != nil {
+			continue
+		}
+		totals = append(totals, models.DayCategoryTotal{
+			Day: day,
+			CategoryTotal: models.CategoryTotal{
+				CategoryID: row.CategoryID,
+				Currency:   *dbCurrencyToCurrency(&row.Currency, false),
+				Amount:     row.Total,
+			},
+		})
+	}
+	cats, err := r.GetCategories(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+	bs := models.NewBudgetSummary(month, now, *def, cats, totals, hidden)
+
+	first, err := q.GetFirstFulfilledTransactionDate(ctx)
+	if err != nil {
+		l.Error("querying first transaction date", zap.Error(err))
+		return nil, err
+	}
+	if d, err := time.Parse(dayLayout, first); err == nil && models.MonthOf(d).Before(month) {
+		bs.Prev = month.AddDate(0, -1, 0).Format(monthLayout)
+	}
+	if next := month.AddDate(0, 1, 0); !next.After(now) {
+		bs.Next = next.Format(monthLayout)
+	}
+	return bs, nil
+}
+
 // GetBudgets is the current month's usage of the budgeted categories.
 func (r *Repository) GetBudgets(ctx context.Context, def *models.Currency) (*models.Budgets, error) {
 	_, q, err := r.dbFromCtx(ctx)

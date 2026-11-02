@@ -107,3 +107,73 @@ document.addEventListener("click", (e) => {
   document.addEventListener("mouseover", fit);
   document.addEventListener("focusin", fit);
 })();
+
+// The budget summary (categories page) hides categories per browser: their
+// ids (or "none" for uncategorized) are kept in localStorage and sent as
+// `hide` whenever it renders.
+const budgetHiddenKey = "tyche:budget-hidden";
+
+function budgetHidden() {
+  try {
+    const ids = JSON.parse(localStorage.getItem(budgetHiddenKey));
+    return Array.isArray(ids) ? ids : [];
+  } catch {
+    return [];
+  }
+}
+
+// The budget summary's sections (the burn-up + bars, the categories without
+// a budget) start collapsed, then stay as last left.
+const budgetOpenKey = "tyche:budget-open";
+
+function budgetOpenSections() {
+  try {
+    const keys = JSON.parse(localStorage.getItem(budgetOpenKey));
+    return Array.isArray(keys) ? keys : [];
+  } catch {
+    return [];
+  }
+}
+
+function budgetSectionOpen(key) {
+  return budgetOpenSections().includes(key);
+}
+
+function setBudgetSectionOpen(key, open) {
+  const keys = budgetOpenSections().filter((k) => k !== key);
+  if (open) keys.push(key);
+  try {
+    localStorage.setItem(budgetOpenKey, JSON.stringify(keys));
+  } catch {}
+}
+
+function loadBudgetSummary(month) {
+  const params = new URLSearchParams({ month, hide: budgetHidden().join(",") });
+  htmx.ajax("GET", `/categories/budget?${params}`, {
+    target: "#categories-budget",
+    swap: "outerHTML",
+  });
+}
+
+document.addEventListener("click", (e) => {
+  const summary = e.target.closest("[data-budget-summary]");
+  if (!summary) return;
+
+  const nav = e.target.closest("[data-budget-month]");
+  if (nav) {
+    loadBudgetSummary(nav.dataset.budgetMonth);
+    return;
+  }
+
+  const toggle = e.target.closest("[data-budget-toggle]");
+  if (!toggle) return;
+  const id = toggle.dataset.budgetToggle;
+  const ids = budgetHidden();
+  const i = ids.indexOf(id);
+  if (i === -1) ids.push(id);
+  else ids.splice(i, 1);
+  try {
+    localStorage.setItem(budgetHiddenKey, JSON.stringify(ids));
+  } catch {}
+  loadBudgetSummary(summary.dataset.month);
+});
