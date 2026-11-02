@@ -3,19 +3,21 @@
 # DBs on a separate EBS volume, Caddy for TLS, daily snapshots. Safe to re-run:
 # existing resources are looked up by name/tag and kept.
 #
-#   [ADMIN_TENANT_IDS=GL_123] aws/infra/up.sh [image]
+#   [ADMIN_TENANT_IDS=GL_123] [FROM_REGION=us-east-1] aws/infra/up.sh [image]
 #
-# Without an image the service is created with 0 tasks (the first arm64 image
-# comes from CI); with one, the task definition is registered with it and the
-# service runs 1 task.
+# With an image the task definition is registered with it and the service runs
+# 1 task; without one the existing task definition is kept (the first run needs
+# an image, CI then pushes the next ones).
 set -euo pipefail
 
 cd "$(dirname "$0")"
 
 IMAGE="${1:-}"
-REGION="${AWS_REGION:-us-east-1}"
-AZ="${AZ:-us-east-1a}"
-COPY_REGION="${COPY_REGION:-eu-central-1}"
+REGION="${AWS_REGION:-eu-central-1}"
+AZ="${AZ:-eu-central-1a}"
+COPY_REGION="${COPY_REGION:-eu-west-1}"
+# Region to copy the /tyche/* SSM params from when missing here (moving region).
+FROM_REGION="${FROM_REGION:-}"
 DOMAIN="${DOMAIN:-tyche.omareloui.com}"
 INSTANCE_TYPE="${INSTANCE_TYPE:-t4g.micro}"
 DATA_SIZE_GB="${DATA_SIZE_GB:-5}"
@@ -57,28 +59,25 @@ if none "$SG_ID"; then
     'IpProtocol=tcp,FromPort=443,ToPort=443,IpRanges=[{CidrIp=0.0.0.0/0}],Ipv6Ranges=[{CidrIpv6=::/0}]' >/dev/null
 fi
 
-# --- Secrets (copied once from the last task definition that had them) -----
-for name in JWT_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET; do
-  if ! aws ssm get-parameter --name "/tyche/$name" >/dev/null 2>&1; then
-    log "Moving $name to SSM"
-    value=$(aws ecs describe-task-definition --task-definition "$FAMILY:13" \
-      --query "taskDefinition.containerDefinitions[0].environment[?name=='$name'].value | [0]" --output text)
-    if none "$value"; then
-      echo "no $name in $FAMILY:13, put it with: aws ssm put-parameter --type SecureString --name /tyche/$name --value ..." >&2
-      exit 1
-    fi
-    aws ssm put-parameter --name "/tyche/$name" --type SecureString --value "$value" >/dev/null
-    unset value
-  fi
-done
-
-if ! aws ssm get-parameter --name /tyche/ADMIN_TENANT_IDS >/dev/null 2>&1; then
-  if [ -z "${ADMIN_TENANT_IDS:-}" ]; then
-    echo "set ADMIN_TENANT_IDS (comma separated tenant IDs, e.g. GL_123) for the first run" >&2
+# --- Secrets (copied once from FROM_REGION when moving region) -----------
+for name in JWT_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET ADMIN_TENANT_IDS; do
+  aws ssm get-parameter --name "/tyche/$name" >/dev/null 2>&1 && continue
+  type=SecureString
+  [ "$name" = ADMIN_TENANT_IDS ] && type=String
+  if [ -n "$FROM_REGION" ]; then
+    log "Copying $name from $FROM_REGION"
+    value=$(aws ssm get-parameter --region "$FROM_REGION" --name "/tyche/$name" --with-decryption \
+      --query Parameter.Value --output text)
+  elif [ "$name" = ADMIN_TENANT_IDS ] && [ -n "${ADMIN_TENANT_IDS:-}" ]; then
+    value="$ADMIN_TENANT_IDS"
+  else
+    echo "no /tyche/$name, put it with: aws ssm put-parameter --type $type --name /tyche/$name --value ..." >&2
+    echo "(or set FROM_REGION to copy it, ADMIN_TENANT_IDS for the admins)" >&2
     exit 1
   fi
-  aws ssm put-parameter --name /tyche/ADMIN_TENANT_IDS --type String --value "$ADMIN_TENANT_IDS" >/dev/null
-fi
+  aws ssm put-parameter --name "/tyche/$name" --type "$type" --value "$value" >/dev/null
+  unset value
+done
 
 # --- IAM -------------------------------------------------------------------
 aws iam put-role-policy --role-name ecsTaskExecutionRole --policy-name tyche-ssm-secrets \
@@ -168,6 +167,10 @@ aws ec2 associate-address --allocation-id "$ALLOC_ID" --instance-id "$INSTANCE_I
 PUBLIC_IP=$(aws ec2 describe-addresses --allocation-ids "$ALLOC_ID" --query 'Addresses[0].PublicIp' --output text)
 
 # --- ECR, logs, backups ----------------------------------------------------
+if ! aws ecr describe-repositories --repository-names tyche >/dev/null 2>&1; then
+  log "Creating the ECR repository"
+  aws ecr create-repository --repository-name tyche --image-scanning-configuration scanOnPush=true >/dev/null
+fi
 aws ecr put-lifecycle-policy --repository-name tyche --lifecycle-policy-text file://ecr-lifecycle.json >/dev/null
 aws logs create-log-group --log-group-name /ecs/tyche 2>/dev/null || true
 aws logs put-retention-policy --log-group-name /ecs/tyche --retention-in-days 30
@@ -191,16 +194,9 @@ fi
 aws ecs describe-clusters --clusters "$CLUSTER" --query 'clusters[?status==`ACTIVE`].clusterName' --output text | grep -q . ||
   aws ecs create-cluster --cluster-name "$CLUSTER" >/dev/null
 
-DESIRED=1
-CURRENT_COMPAT=$(aws ecs describe-task-definition --task-definition "$FAMILY" \
-  --query 'taskDefinition.requiresCompatibilities' --output text 2>/dev/null || true)
-if [ -z "$IMAGE" ] && [[ "$CURRENT_COMPAT" != *EC2* ]]; then
-  # The old Fargate definition can't run here, register the EC2 one with the
-  # latest (amd64) image but run nothing until CI pushes an arm64 one.
-  LATEST_TAG=$(aws ecr describe-images --repository-name tyche \
-    --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags[0]' --output text)
-  IMAGE="$ACCOUNT.dkr.ecr.$REGION.amazonaws.com/tyche:$LATEST_TAG"
-  DESIRED=0
+if [ -z "$IMAGE" ] && ! aws ecs describe-task-definition --task-definition "$FAMILY" >/dev/null 2>&1; then
+  echo "no $FAMILY yet, pass an image: aws/infra/up.sh $ACCOUNT.dkr.ecr.$REGION.amazonaws.com/tyche:<tag>" >&2
+  exit 1
 fi
 if [ -n "$IMAGE" ]; then
   log "Registering $FAMILY with $IMAGE"
@@ -215,13 +211,13 @@ TASK_DEF=$(aws ecs describe-task-definition --task-definition "$FAMILY" --query 
 
 SERVICE_STATUS=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --query 'services[0].status' --output text 2>/dev/null || true)
 if [ "$SERVICE_STATUS" != "ACTIVE" ]; then
-  log "Creating $SERVICE ($DESIRED task)"
+  log "Creating $SERVICE"
   aws ecs create-service --cluster "$CLUSTER" --service-name "$SERVICE" --task-definition "$TASK_DEF" \
-    --desired-count "$DESIRED" --launch-type EC2 \
+    --desired-count 1 --launch-type EC2 \
     --deployment-configuration 'minimumHealthyPercent=0,maximumPercent=100,deploymentCircuitBreaker={enable=true,rollback=true}' \
     >/dev/null
 elif [ -n "$IMAGE" ]; then
-  aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" --task-definition "$TASK_DEF" --desired-count "$DESIRED" >/dev/null
+  aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" --task-definition "$TASK_DEF" --desired-count 1 >/dev/null
 fi
 
 log "Done"
