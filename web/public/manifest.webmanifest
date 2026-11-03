@@ -1,0 +1,36 @@
+{
+  "id": "/",
+  "name": "Tyche",
+  "short_name": "Tyche",
+  "description": "Personal finance: accounts, transactions, budgets and goals.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "categories": ["finance"],
+  "icons": [
+    { "src": "/favicons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/favicons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/favicons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/favicons/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Add transaction",
+      "url": "/transactions?new",
+      "icons": [{ "src": "/favicons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Transactions",
+      "url": "/transactions",
+      "icons": [{ "src": "/favicons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "SMS",
+      "url": "/sms",
+      "icons": [{ "src": "/favicons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}

@@ -217,3 +217,45 @@ document.addEventListener(
   },
   true,
 );
+
+// createFormFromURL opens a page's create form (layouts.WithCreateForm) when
+// its url has ?new, e.g. from the PWA's shortcuts, then drops it from the url.
+function createFormFromURL(data) {
+  const url = new URL(location.href);
+  if (!url.searchParams.has("new")) return;
+  url.searchParams.delete("new");
+  history.replaceState(history.state, "", url);
+  data.openCreateForm = true;
+}
+
+// The service worker (sw.js) only caches static files and the offline page.
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+}
+
+// installPrompt is the browser's deferred install prompt, shown by the user
+// menu's "Install app" (components.Navbar) while the browser offers one.
+// Browsers without it (iOS, already installed) never show the item.
+let installPrompt = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  installPrompt = e;
+  window.dispatchEvent(new CustomEvent("install-available", { detail: true }));
+});
+window.addEventListener("appinstalled", () => {
+  installPrompt = null;
+  window.dispatchEvent(new CustomEvent("install-available", { detail: false }));
+});
+
+function canInstall() {
+  return installPrompt !== null;
+}
+
+async function installApp() {
+  if (!installPrompt) return;
+  const p = installPrompt;
+  installPrompt = null;
+  window.dispatchEvent(new CustomEvent("install-available", { detail: false }));
+  p.prompt();
+  await p.userChoice;
+}

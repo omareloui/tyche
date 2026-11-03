@@ -208,6 +208,19 @@ templ navUser(claims *jwt.AccessClaims) {
 					@icons.RotateCcw("18", &templ.Attributes{"class": "shrink-0 text-zinc-400"})
 					Reset account
 				</a>
+				// Only while the browser offers to install the PWA (installApp, main.js).
+				<button
+					type="button"
+					x-data="{ can: canInstall() }"
+					x-show="can"
+					x-cloak
+					@install-available.window="can = $event.detail"
+					@click="open = false; installApp()"
+					class="flex w-full items-center gap-3 h-10 px-3 rounded-md text-[15px] text-zinc-300 cursor-pointer transition-colors hover:bg-white/5 hover:text-white"
+				>
+					@icons.Smartphone("18", &templ.Attributes{"class": "shrink-0 text-zinc-400"})
+					Install app
+				</button>
 				<a
 					href="/signout"
 					hx-boost="false"

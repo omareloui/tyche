@@ -3,6 +3,7 @@ package router
 import (
 	"fmt"
 	"net/http"
+	"path/filepath"
 
 	"github.com/omareloui/tyche/internal/brandicons"
 	"github.com/omareloui/tyche/internal/handler"
@@ -222,6 +223,13 @@ func New(h *handler.Handler) Router {
 		"styles", "js", "images",
 		"fonts", "icons", "favicons",
 	}, "./web/public")
+	// The service worker's scope is its own path, so it and the manifest are
+	// served from the root.
+	rootFile(mux, "sw.js", "text/javascript; charset=utf-8", "./web/public")
+	rootFile(mux, "manifest.webmanifest", "application/manifest+json", "./web/public")
+	// Cached by the service worker for everyone: no auth/vault middlewares,
+	// which could answer it with a redirect to sign in or unlock.
+	mux.Handle("GET /offline", middleware.CorrelationID(middleware.RequestLogger(route_handler.RouteHandler(h.Offline))))
 
 	brandIcons := http.StripPrefix("/brand-icons/", http.FileServerFS(brandicons.IconsFS()))
 	mux.Handle("GET /brand-icons/{path...}", middleware.CorrelationID(middleware.RequestLogger(brandIcons)))
@@ -242,6 +250,17 @@ func static(mux *http.ServeMux, paths []string, fspath string) {
 	for _, prefix := range paths {
 		mux.Handle(fmt.Sprintf("GET /%s/{path...}", prefix), middleware.CorrelationID(middleware.RequestLogger(fs)))
 	}
+}
+
+// rootFile serves fspath/name at /name, revalidated like static.
+func rootFile(mux *http.ServeMux, name, contentType, fspath string) {
+	path := filepath.Join(fspath, name)
+	fs := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Content-Type", contentType)
+		http.ServeFile(w, r, path)
+	})
+	mux.Handle("GET /"+name, middleware.CorrelationID(middleware.RequestLogger(fs)))
 }
 
 func handle(h handler.HandlerMethod, appendMiddlewares ...(func(http.Handler) http.Handler)) http.Handler {

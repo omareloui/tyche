@@ -1,0 +1,32 @@
+package views
+
+import (
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+// OfflinePage is what the service worker (web/public/sw.js) answers a page
+// load with when the network is down. It's cached for everyone, so it must
+// never show anything of the user.
+templ OfflinePage() {
+	@layouts.Bare("Offline") {
+		@components.Container() {
+			<div class="max-w-lg mx-auto mt-6 sm:mt-14">
+				@components.GlassCard("px-6 py-10 sm:px-10 sm:py-12 grid justify-items-center gap-5 text-center", "bg-sky-400/10", "bg-violet-400/10") {
+					<span class="grid size-16 place-items-center rounded-2xl ring-1 ring-white/5 bg-sky-400/15 text-sky-300">
+						@icons.Warning("28")
+					</span>
+					<div class="grid gap-2">
+						<h1 class="text-2xl sm:text-3xl font-(family-name:--font-biorhyme-expanded)">You're offline</h1>
+						<p class="text-zinc-400 text-base max-w-sm">Tyche needs a connection to show your data. Check your network, then try again.</p>
+					</div>
+					<button type="button" onclick="location.reload()" class="btn-primary mt-2">
+						@icons.Retry("16")
+						Try again
+					</button>
+				}
+			</div>
+		}
+	}
+}

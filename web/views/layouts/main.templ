@@ -11,36 +11,7 @@ templ Main(
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
-			<meta charset="utf-8"/>
-			<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
-			<meta name="theme-color" content="#09090b"/>
-			<script>
-				// Before paint, so hidden amounts never flash.
-				try { if (localStorage.getItem("hideAmounts") === "1") document.documentElement.setAttribute("data-hide-amounts", "") } catch {}
-			</script>
-			<title>{ pageTitle } | tyche</title>
-			<link rel="stylesheet" href="/fonts/BioRhymeExpanded/BioRhymeExpanded.css"/>
-			<link rel="stylesheet" href="/fonts/Afacad/Afacad.css"/>
-			<link rel="icon" type="image/svg+xml" href="/favicons/favicon.svg"/>
-			<link rel="stylesheet" href="/styles/main.css"/>
-			<script src="/js/vendor/htmx.lib.js"></script>
-			<!--
-				Every page loads every script: the navbar's hx-boost swaps only
-				<body>, so scripts only some pages had in <head> would never load
-				when navigating to them from a page without them.
-			-->
-			<script src="/js/vendor/litepicker.lib.js"></script>
-			<script defer src="/js/datepickers.js"></script>
-			<script defer src="/js/main.js"></script>
-			<script defer src="/js/vendor/alpine.mask.lib.js"></script>
-			<script defer src="/js/vendor/alpine.collapse.lib.js"></script>
-			<script defer src="/js/combobox.js"></script>
-			<script defer src="/js/tags-input.js"></script>
-			<script defer src="/js/drawer.js"></script>
-			<script defer src="/js/transactions.js"></script>
-			<script defer src="/js/money-inputs.js"></script>
-			<script defer src="/js/passkeys.js"></script>
-			<script defer src="/js/vendor/alpine.lib.js"></script>
+			@head(pageTitle)
 		</head>
 		<body class="font-(family-name:--font-afacad) text-lg bg-zinc-950 text-white">
 			@components.Navbar(claims, balances)
@@ -61,6 +32,62 @@ templ Main(
 					}
 				});
 			</script>
+		</body>
+	</html>
+}
+
+// head is the <head> of every full page: Main and Bare.
+templ head(pageTitle string) {
+	<meta charset="utf-8"/>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+	<meta name="theme-color" content="#09090b"/>
+	<script>
+		// Before paint, so hidden amounts never flash.
+		try { if (localStorage.getItem("hideAmounts") === "1") document.documentElement.setAttribute("data-hide-amounts", "") } catch {}
+	</script>
+	<title>{ pageTitle } | tyche</title>
+	<link rel="stylesheet" href="/fonts/BioRhymeExpanded/BioRhymeExpanded.css"/>
+	<link rel="stylesheet" href="/fonts/Afacad/Afacad.css"/>
+	<link rel="icon" type="image/svg+xml" href="/favicons/favicon.svg"/>
+	<link rel="manifest" href="/manifest.webmanifest"/>
+	<link rel="apple-touch-icon" href="/favicons/apple-touch-icon.png"/>
+	<meta name="mobile-web-app-capable" content="yes"/>
+	<meta name="apple-mobile-web-app-capable" content="yes"/>
+	<meta name="apple-mobile-web-app-title" content="Tyche"/>
+	<meta name="apple-mobile-web-app-status-bar-style" content="black"/>
+	<link rel="stylesheet" href="/styles/main.css"/>
+	<script src="/js/vendor/htmx.lib.js"></script>
+	<!--
+		Every page loads every script: the navbar's hx-boost swaps only
+		<body>, so scripts only some pages had in <head> would never load
+		when navigating to them from a page without them.
+	-->
+	<script src="/js/vendor/litepicker.lib.js"></script>
+	<script defer src="/js/datepickers.js"></script>
+	<script defer src="/js/main.js"></script>
+	<script defer src="/js/vendor/alpine.mask.lib.js"></script>
+	<script defer src="/js/vendor/alpine.collapse.lib.js"></script>
+	<script defer src="/js/combobox.js"></script>
+	<script defer src="/js/tags-input.js"></script>
+	<script defer src="/js/drawer.js"></script>
+	<script defer src="/js/transactions.js"></script>
+	<script defer src="/js/money-inputs.js"></script>
+	<script defer src="/js/passkeys.js"></script>
+	<script defer src="/js/vendor/alpine.lib.js"></script>
+}
+
+// Bare is a full page without the navbar, for pages that must render
+// without the user (e.g. the offline page the service worker caches).
+templ Bare(pageTitle string) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			@head(pageTitle)
+		</head>
+		<body class="font-(family-name:--font-afacad) text-lg bg-zinc-950 text-white">
+			<main class="pt-[calc(1.5rem+env(safe-area-inset-top))] pb-[calc(2.5rem+env(safe-area-inset-bottom))]">
+				{ children... }
+			</main>
 		</body>
 	</html>
 }

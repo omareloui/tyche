@@ -9,8 +9,10 @@ templ WithCreateForm(
 	form templ.Component,
 ) {
 	@Main(claims, pageTitle, balances) {
-		// The form is a drawer (form.SheetForm) shown by openCreateForm.
-		<div x-data="{openCreateForm:false}">
+		// The form is a drawer (form.SheetForm) shown by openCreateForm,
+		// opened right away by ?new (the PWA's shortcuts), dropped from the
+		// url so a reload doesn't open it again.
+		<div x-data="{openCreateForm:false}" x-init="createFormFromURL($data)">
 			@components.Container() {
 				@components.HeaderWithAddButton(pageTitle, "openCreateForm=true")
 				{ children... }
