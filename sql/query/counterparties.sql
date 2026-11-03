@@ -8,7 +8,8 @@ INSERT INTO counterparties (
     is_merchant,
     default_category_id,
     rating,
-    note
+    note,
+    labels
 )
 VALUES (
     sqlc.arg(id),
@@ -19,7 +20,8 @@ VALUES (
     sqlc.arg(is_merchant),
     sqlc.arg(default_category_id),
     sqlc.narg(rating),
-    sqlc.arg(note)
+    sqlc.arg(note),
+    sqlc.arg(labels)
 );
 
 -- name: GetCounterparties :many
@@ -53,7 +55,8 @@ SET
     default_category_id = sqlc.arg(default_category_id),
     is_archived = sqlc.arg(is_archived),
     rating = sqlc.narg(rating),
-    note = sqlc.arg(note)
+    note = sqlc.arg(note),
+    labels = sqlc.arg(labels)
 WHERE id = sqlc.arg(id);
 
 -- name: SetCounterpartyAppearance :exec

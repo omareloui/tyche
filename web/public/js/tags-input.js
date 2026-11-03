@@ -29,6 +29,15 @@ document.addEventListener("alpine:init", () => {
       this.draft = "";
     },
 
+    has(tag) {
+      return this.tags.some((t) => t.toLowerCase() === tag.toLowerCase());
+    },
+
+    // pick adds a suggestion.
+    pick(tag) {
+      if (!this.has(tag)) this.tags.push(tag);
+    },
+
     remove(i) {
       this.tags.splice(i, 1);
       this.$refs.draft.focus();

@@ -26,7 +26,17 @@ type CounterpartyFD struct {
 	IsArchived        form.FDInput
 	Rating            form.FDInput
 	Note              form.FDInput
-	Locations         []CounterpartyLocationFD
+	Labels            form.FDInput
+	// LabelsInUse are the counterparties' labels, suggested with the
+	// default ones.
+	LabelsInUse []string
+	Locations   []CounterpartyLocationFD
+}
+
+// counterpartyLabelSuggestions are the labels in use then the default ones,
+// each once.
+func counterpartyLabelSuggestions(inUse []string) []string {
+	return models.CounterpartyLabels([]models.Counterparty{{Labels: inUse}, {Labels: models.CounterpartyLabelSuggestions}})
 }
 
 type CounterpartyLocationFD struct {
@@ -117,6 +127,9 @@ templ counterpartyFormBody(id string, isNew bool, fd *CounterpartyFD, cats []mod
 	}
 	@form.Field("SMS aliases", "aliases", id, icons.Message("15"), fd.Aliases.Error) {
 		@form.TagsInput("aliases", "Names as in bank SMS, e.g. UBER *TRIP", id, fd.Aliases)
+	}
+	@form.Field("Labels", "labels", id, icons.Tag("15"), fd.Labels.Error) {
+		@form.TagsInputSuggest("labels", "e.g. Restaurant, Online store", id, fd.Labels, counterpartyLabelSuggestions(fd.LabelsInUse))
 	}
 	@form.Field("Note", "note", id, icons.StickyNote("15"), fd.Note.Error) {
 		<textarea
@@ -299,17 +312,37 @@ const counterpartiesFilterData = `{
 	// stars. Both are remembered in localStorage.
 	sort: 'name',
 	stars: '',
+	// labels are the picked label filters (lowercase), a card matching any.
+	labels: [],
 	init() {
 		try {
 			const saved = JSON.parse(localStorage.getItem('counterpartiesView') || '{}')
 			this.sort = saved.sort === 'rating' ? 'rating' : 'name'
 			this.stars = ['', 'unrated', '3', '4', '5'].includes(saved.stars) ? saved.stars : ''
+			// Labels no counterparty has anymore are dropped.
+			const known = [...this.$el.querySelectorAll('[data-labels]')].flatMap(c => c.dataset.labels.split('|'))
+			this.labels = Array.isArray(saved.labels) ? saved.labels.filter(l => known.includes(l)) : []
 		} catch {}
 		this.$watch('sort', () => this.save())
 		this.$watch('stars', () => this.save())
+		this.$watch('labels', () => this.save())
 	},
 	save() {
-		try { localStorage.setItem('counterpartiesView', JSON.stringify({sort: this.sort, stars: this.stars})) } catch {}
+		try { localStorage.setItem('counterpartiesView', JSON.stringify({sort: this.sort, stars: this.stars, labels: this.labels})) } catch {}
+	},
+	toggleLabel(label) {
+		const l = label.toLowerCase()
+		this.labels = this.labels.includes(l) ? this.labels.filter(x => x !== l) : [...this.labels, l]
+	},
+	// unlistedLabels are the picked labels without a filter button.
+	unlistedLabels() {
+		const listed = [...this.$root.querySelectorAll('[data-label-filter]')].map(b => b.dataset.labelFilter)
+		return this.labels.filter(l => !listed.includes(l))
+	},
+	matchesLabels(el) {
+		if (!this.labels.length) return true
+		const own = el.dataset.labels ? el.dataset.labels.split('|') : []
+		return this.labels.some(l => own.includes(l))
 	},
 	matchesStars(el) {
 		if (!this.stars) return true
@@ -319,7 +352,7 @@ const counterpartiesFilterData = `{
 	},
 	matches(el) {
 		const q = this.q.trim().toLowerCase()
-		return (!q || el.dataset.search.includes(q)) && this.matchesStars(el)
+		return (!q || el.dataset.search.includes(q)) && this.matchesStars(el) && this.matchesLabels(el)
 	},
 	// openCounterpartyDetails opens the card's details on a click on it,
 	// unless on one of its controls or selecting its text, like a
@@ -337,6 +370,7 @@ const counterpartiesFilterData = `{
 	any(el) {
 		this.q
 		this.stars
+		this.labels
 		return [...el.querySelectorAll('[data-counterparty]')].some(c => this.matches(c))
 	},
 }`
@@ -354,13 +388,14 @@ templ counterpartiesList(counterparties []models.Counterparty) {
 				if slices.ContainsFunc(counterparties, func(cp models.Counterparty) bool { return cp.IsMerchant }) {
 					@counterpartiesRatingBar()
 				}
+				@counterpartiesLabelBar(models.CounterpartyLabels(counterparties))
 			</div>
 		}
 		@counterpartiesSection(counterpartiesMerchants, "Merchants", icons.Tag("16"), counterparties)
 		@counterpartiesSection(counterpartiesOthers, "People & others", icons.Users("16"), counterparties)
 		<details
 			class="group hidden has-[[data-counterparty]]:block"
-			x-effect="if ((q.trim() || stars) && any($el)) $el.open = true"
+			x-effect="if ((q.trim() || stars || labels.length) && any($el)) $el.open = true"
 		>
 			<summary class="flex items-center gap-2 mb-3 list-none cursor-pointer select-none text-zinc-500 hover:text-zinc-300 [&::-webkit-details-marker]:hidden">
 				@icons.Archive("16")
@@ -376,7 +411,7 @@ templ counterpartiesList(counterparties []models.Counterparty) {
 			</div>
 		</details>
 		@counterpartiesEmpty()
-		<p x-cloak x-show="(q.trim() || stars) && !any($root)" class="py-12 text-center text-zinc-500">No counterparties match</p>
+		<p x-cloak x-show="(q.trim() || stars || labels.length) && !any($root)" class="py-12 text-center text-zinc-500">No counterparties match</p>
 	</div>
 }
 
@@ -493,6 +528,48 @@ templ counterpartiesSortCheck(value string) {
 	</span>
 }
 
+// counterpartiesLabelBar filters the cards by label, a card showing when it
+// has any of the picked ones.
+// Picked labels it doesn't list (e.g. of a card just added) show too, so
+// they can be cleared.
+templ counterpartiesLabelBar(labels []string) {
+	<div
+		role="group"
+		aria-label="Filter by label"
+		x-show={ fmt.Sprintf("%t || labels.length", len(labels) > 0) }
+		x-cloak?={ len(labels) == 0 }
+		class="flex flex-wrap items-center gap-1.5"
+	>
+		@icons.Tag("14", &templ.Attributes{"class": "text-zinc-500 mr-0.5"})
+		for _, l := range labels {
+			<button
+				type="button"
+				data-label-filter={ strings.ToLower(l) }
+				@click="toggleLabel($el.dataset.labelFilter)"
+				:aria-pressed="labels.includes($el.dataset.labelFilter)"
+				:class="labels.includes($el.dataset.labelFilter) ? 'bg-violet-400/20 text-violet-200 ring-1 ring-violet-400/50' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'"
+				class="h-7 px-2.5 rounded-full text-xs cursor-pointer transition-colors"
+			>{ l }</button>
+		}
+		<template x-for="l in unlistedLabels()" :key="l">
+			<button
+				type="button"
+				@click="toggleLabel(l)"
+				aria-pressed="true"
+				class="h-7 px-2.5 rounded-full text-xs cursor-pointer bg-violet-400/20 text-violet-200 ring-1 ring-violet-400/50"
+				x-text="l"
+			></button>
+		</template>
+		<button
+			type="button"
+			x-show="labels.length"
+			x-cloak
+			@click="labels = []"
+			class="h-7 px-2 rounded-full text-xs text-zinc-500 cursor-pointer hover:text-zinc-300"
+		>Clear</button>
+	</div>
+}
+
 templ counterpartiesSearch() {
 	<label
 		class="flex items-center gap-3 h-12 px-4 rounded-2xl border-2 border-zinc-700 bg-zinc-800/40 focus-within:border-zinc-400 transition-colors"
@@ -523,7 +600,8 @@ templ Counterparty(cp *models.Counterparty) {
 		class={ "relative min-w-0", templ.KV("opacity-60 hover:opacity-100 transition-opacity", cp.IsArchived) }
 		x-data="{openMenu: false}"
 		data-counterparty
-		data-search={ strings.ToLower(cp.Name + " " + strings.Join(cp.Aliases, " ") + " " + cp.Note) }
+		data-search={ strings.ToLower(cp.Name + " " + strings.Join(cp.Aliases, " ") + " " + strings.Join(cp.Labels, " ") + " " + cp.Note) }
+		data-labels={ strings.ToLower(strings.Join(cp.Labels, "|")) }
 		data-rating={ fmt.Sprint(cp.Rating) }
 		data-merchant?={ cp.IsMerchant }
 		x-show="matches($el)"
@@ -567,6 +645,9 @@ templ Counterparty(cp *models.Counterparty) {
 							</span>
 						}
 					</div>
+				}
+				if len(cp.Labels) > 0 {
+					@counterpartyLabelChips(cp.Labels)
 				}
 				if cp.Note != "" {
 					<p title={ cp.Note } class="flex items-center gap-1.5 mt-1.5 min-w-0 text-sm text-zinc-400">
@@ -705,4 +786,23 @@ func counterpartyLocationLabels(cp *models.Counterparty) string {
 func firstLine(s string) string {
 	line, _, _ := strings.Cut(s, "\n")
 	return line
+}
+
+// counterpartyLabelChips are a counterparty's labels, each filtering the page
+// by it on click.
+templ counterpartyLabelChips(labels []string) {
+	<div class="flex flex-wrap gap-1 mt-1.5 min-w-0">
+		for _, l := range labels {
+			<button
+				type="button"
+				data-label-filter-chip={ strings.ToLower(l) }
+				@click.stop="labels.includes($el.dataset.labelFilterChip) || toggleLabel($el.dataset.labelFilterChip)"
+				title={ "Show only " + l }
+				class="inline-flex items-center gap-1 max-w-full truncate px-2 py-0.5 rounded-md bg-violet-400/10 text-xs text-violet-300 cursor-pointer transition-colors hover:bg-violet-400/20"
+			>
+				@icons.Tag("11", &templ.Attributes{"class": "shrink-0"})
+				<span class="truncate">{ l }</span>
+			</button>
+		}
+	</div>
 }

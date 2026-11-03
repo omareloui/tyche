@@ -218,8 +218,42 @@ func Options[T any](structs []T, val string) map[string]string {
 // TagsInput edits a comma separated list as removable chips. Behavior lives
 // in the "tagsInput" Alpine component (/js/tags-input.js).
 templ TagsInput(name, placeholder, id string, data FDInput) {
+	@TagsInputSuggest(name, placeholder, id, data, nil)
+}
+
+// TagsInputSuggest is a TagsInput offering suggestions as chips to add, the
+// ones already in the list hidden.
+templ TagsInputSuggest(name, placeholder, id string, data FDInput, suggestions []string) {
+	if len(suggestions) == 0 {
+		@tagsInput(name, placeholder, id, data, true)
+	} else {
+		<div x-data="tagsInput" class="grid gap-2">
+			@tagsInput(name, placeholder, id, data, false)
+			<div class="flex flex-wrap gap-1.5">
+				for _, sug := range suggestions {
+					<button
+						type="button"
+						data-tag={ sug }
+						x-show="!has($el.dataset.tag)"
+						@click="pick($el.dataset.tag)"
+						class="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg border border-dashed border-zinc-700 text-xs text-zinc-400 cursor-pointer transition-colors hover:border-zinc-500 hover:text-zinc-200"
+					>
+						@icons.Plus("11")
+						{ sug }
+					</button>
+				}
+			</div>
+		</div>
+	}
+}
+
+// tagsInput is TagsInput's field, its own tagsInput component when scoped,
+// else in its parent's.
+templ tagsInput(name, placeholder, id string, data FDInput, scoped bool) {
 	<div
-		x-data="tagsInput"
+		if scoped {
+			x-data="tagsInput"
+		}
 		@click="$refs.draft.focus()"
 		class="input-field tags-field flex! flex-wrap items-center gap-1.5 h-auto! min-h-11 py-1.5 cursor-text"
 		if data.Error != "" {

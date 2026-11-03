@@ -25,11 +25,54 @@ type Counterparty struct {
 	IsArchived bool
 	// Rating is a merchant's stars, 1 to 5, 0 when unrated.
 	Rating int `validate:"min=0,max=5"`
+	// Labels group it, e.g. Restaurant or Online store, to filter by.
+	Labels []string `validate:"max=20,dive,not_blank,max=40"`
 	// Note is free text about any counterparty.
 	Note string `validate:"max=1000" conform:"trim"`
 	// Locations are a merchant's branches, in order.
 	Locations []CounterpartyLocation `validate:"dive"`
 	CreatedAt time.Time
+}
+
+// CounterpartyLabelSuggestions are offered as labels besides the ones in use.
+var CounterpartyLabelSuggestions = []string{
+	"Online store", "Restaurant", "Cafe", "Supermarket", "Pharmacy", "Transport",
+	"Subscription", "Utilities", "Clothing", "Electronics", "Health", "Entertainment",
+	"Family", "Friend", "Work",
+}
+
+// CounterpartyLabels are the labels in use, sorted case-insensitively, each
+// once (with the casing it's first found with).
+func CounterpartyLabels(cps []Counterparty) []string {
+	seen := map[string]bool{}
+	labels := []string{}
+	for _, cp := range cps {
+		for _, l := range cp.Labels {
+			if key := strings.ToLower(l); !seen[key] {
+				seen[key] = true
+				labels = append(labels, l)
+			}
+		}
+	}
+	slices.SortFunc(labels, func(a, b string) int { return strings.Compare(strings.ToLower(a), strings.ToLower(b)) })
+	return labels
+}
+
+// MatchLabelCasing writes the labels as the known ones they match
+// case-insensitively, so "restaurant" filters with "Restaurant".
+func MatchLabelCasing(labels, known []string) []string {
+	byKey := make(map[string]string, len(known))
+	for _, k := range known {
+		byKey[strings.ToLower(k)] = k
+	}
+	out := make([]string, len(labels))
+	for i, l := range labels {
+		if k, ok := byKey[strings.ToLower(l)]; ok {
+			l = k
+		}
+		out[i] = l
+	}
+	return out
 }
 
 // MaxRating is the most stars a merchant can get.
@@ -70,7 +113,7 @@ func (cp *Counterparty) DefaultCategoryFor(kind TxKind) *Category {
 }
 
 // Absorb adds the other counterparty's name and aliases to the aliases,
-// skipping blanks and case-insensitive duplicates, appends its note, and takes
+// skipping blanks and case-insensitive duplicates, adds its labels and note, and takes
 // its default category and rating if this merchant has none. Locations are
 // moved separately.
 func (cp *Counterparty) Absorb(other *Counterparty) {
@@ -86,6 +129,12 @@ func (cp *Counterparty) Absorb(other *Counterparty) {
 		aliases = append(aliases, a)
 	}
 	cp.Aliases = aliases
+
+	for _, l := range other.Labels {
+		if !slices.ContainsFunc(cp.Labels, func(c string) bool { return strings.EqualFold(c, l) }) {
+			cp.Labels = append(cp.Labels, l)
+		}
+	}
 
 	switch {
 	case other.Note == "" || other.Note == cp.Note:

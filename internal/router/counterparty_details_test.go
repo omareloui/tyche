@@ -166,6 +166,41 @@ func TestCounterpartyRatingLocationsHTTP(t *testing.T) {
 		}
 	})
 
+	t.Run("labels take the casing in use and filter the page", func(t *testing.T) {
+		person, err := repo.GetCounterparty(ctx, "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZE")
+		if err != nil {
+			t.Fatal(err)
+		}
+		person.Labels = []string{"Family"}
+		if err := repo.UpdateCounterparty(ctx, person); err != nil {
+			t.Fatal(err)
+		}
+
+		res, body := do("PUT", "/counterparties/"+cafe.ID, url.Values{
+			"name": {"Cafe"}, "is_merchant": {"on"}, "labels": {"family, Cafe ,cafe"},
+			"location_label": {"Zamalek", "Maadi", "Heliopolis"},
+		})
+		if res.StatusCode != http.StatusOK || !strings.Contains(body, `data-labels="family|cafe"`) {
+			t.Fatalf("status %d: %s", res.StatusCode, body)
+		}
+		got, err := repo.GetCounterparty(ctx, cafe.ID)
+		if err != nil || strings.Join(got.Labels, ",") != "Family,Cafe" {
+			t.Errorf("stored labels = %q (%v), want Family,Cafe", got.Labels, err)
+		}
+
+		res, body = do("GET", "/counterparties", nil)
+		for _, want := range []string{`aria-label="Filter by label"`, `data-label-filter="cafe"`, `data-label-filter="family"`} {
+			if res.StatusCode != http.StatusOK || !strings.Contains(body, want) {
+				t.Errorf("page misses %q", want)
+			}
+		}
+
+		_, body = do("GET", "/counterparties/"+cafe.ID+"/edit", nil)
+		if !strings.Contains(body, `data-tag="Online store"`) || !strings.Contains(body, `data-tag="Family"`) {
+			t.Error("edit form doesn't suggest the labels in use and the default ones")
+		}
+	})
+
 	t.Run("page groups merchants and others", func(t *testing.T) {
 		res, body := do("GET", "/counterparties", nil)
 		if res.StatusCode != http.StatusOK || !strings.Contains(body, "Filter by rating") {

@@ -204,6 +204,10 @@ func updateCounterpartyParams(it *models.Counterparty) (queries.UpdateCounterpar
 	if err != nil {
 		return queries.UpdateCounterpartyParams{}, err
 	}
+	labels, err := marshalStrings(it.Labels)
+	if err != nil {
+		return queries.UpdateCounterpartyParams{}, err
+	}
 	return queries.UpdateCounterpartyParams{
 		ID:                it.ID,
 		Name:              it.Name,
@@ -215,12 +219,17 @@ func updateCounterpartyParams(it *models.Counterparty) (queries.UpdateCounterpar
 		IsArchived:        it.IsArchived,
 		Rating:            ratingParam(it.Rating),
 		Note:              it.Note,
+		Labels:            labels,
 	}, nil
 }
 
 // CreateCounterparty saves the counterparty with its locations.
 func (r *Repository) CreateCounterparty(ctx context.Context, it *models.Counterparty) error {
 	aliases, err := marshalStrings(it.Aliases)
+	if err != nil {
+		return err
+	}
+	labels, err := marshalStrings(it.Labels)
 	if err != nil {
 		return err
 	}
@@ -236,6 +245,7 @@ func (r *Repository) CreateCounterparty(ctx context.Context, it *models.Counterp
 			DefaultCategoryID: defaultCategoryID(it),
 			Rating:            ratingParam(it.Rating),
 			Note:              it.Note,
+			Labels:            labels,
 		}); err != nil {
 			return err
 		}
@@ -263,6 +273,7 @@ func (r *Repository) DeleteCounterparty(ctx context.Context, id string) error {
 
 func dbCounterpartyToCounterparty(dbP *queries.Counterparty) *models.Counterparty {
 	aliases, _ := unmarshalStrings(dbP.Aliases)
+	labels, _ := unmarshalStrings(dbP.Labels)
 	return &models.Counterparty{
 		ID:         dbP.ID,
 		Name:       dbP.Name,
@@ -273,6 +284,7 @@ func dbCounterpartyToCounterparty(dbP *queries.Counterparty) *models.Counterpart
 		IsArchived: dbP.IsArchived,
 		Rating:     int(dbP.Rating.Int64),
 		Note:       dbP.Note,
+		Labels:     labels,
 		CreatedAt:  dbP.CreatedAt,
 	}
 }

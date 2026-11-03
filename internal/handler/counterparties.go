@@ -44,7 +44,7 @@ func (h Handler) Counterparties(w http.ResponseWriter, r *http.Request) (templ.C
 		return nil, err
 	}
 
-	return views.Counterparties(getClaims(r.Context()), b, h.mapCounterpartyToFD(dfltCounterparty(), &errs.ValidationError{}), cp, cats), nil
+	return views.Counterparties(getClaims(r.Context()), b, h.mapCounterpartyToFD(dfltCounterparty(), &errs.ValidationError{}, models.CounterpartyLabels(cp)), cp, cats), nil
 }
 
 func (h Handler) Counterparty(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -120,12 +120,18 @@ func (h Handler) CreateCounterparty(w http.ResponseWriter, r *http.Request) (tem
 		l.Error("fetching categories", zap.Error(err))
 		return nil, err
 	}
+	labels, err := h.counterpartyLabels(r)
+	if err != nil {
+		l.Error("fetching counterparty labels", zap.Error(err))
+		return nil, err
+	}
+	cp.Labels = models.MatchLabelCasing(cp.Labels, labels)
 
 	if err := cp.SanitizeAndValidate(h.sani, h.valid); err != nil {
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("validating counterparty", zap.Error(err), zap.Any("errors", valerr.Errors))
-			return views.CreateCounterpartyForm(h.mapCounterpartyToFD(cp, &valerr), cats), nil
+			return views.CreateCounterpartyForm(h.mapCounterpartyToFD(cp, &valerr, labels), cats), nil
 		}
 		l.Error("sanitizing counterparty", zap.Error(err))
 		return nil, err
@@ -134,7 +140,7 @@ func (h Handler) CreateCounterparty(w http.ResponseWriter, r *http.Request) (tem
 	clearNonMerchantFields(cp)
 
 	if valerr := resolveCounterpartyDefaultCategory(cp, cats); valerr != nil {
-		return views.CreateCounterpartyForm(h.mapCounterpartyToFD(cp, valerr), cats), nil
+		return views.CreateCounterpartyForm(h.mapCounterpartyToFD(cp, valerr, labels), cats), nil
 	}
 
 	if cp.Icon == "" {
@@ -142,7 +148,7 @@ func (h Handler) CreateCounterparty(w http.ResponseWriter, r *http.Request) (tem
 			cp.Icon = brandicons.Default().Detect(cp.Name, cp.Aliases)
 		}
 	} else if valerr := validateCounterpartyIcon(cp); valerr != nil {
-		return views.CreateCounterpartyForm(h.mapCounterpartyToFD(cp, valerr), cats), nil
+		return views.CreateCounterpartyForm(h.mapCounterpartyToFD(cp, valerr, labels), cats), nil
 	}
 	cp.Color = brandicons.Default().ColorFor(cp.Icon, "")
 
@@ -159,7 +165,8 @@ func (h Handler) CreateCounterparty(w http.ResponseWriter, r *http.Request) (tem
 	}
 	l.Debug("rendered counterparty oob")
 
-	return views.CreateCounterpartyForm(h.mapCounterpartyToFD(dfltCounterparty(), &errs.ValidationError{}), cats), nil
+	labels = models.CounterpartyLabels([]models.Counterparty{{Labels: labels}, *cp})
+	return views.CreateCounterpartyForm(h.mapCounterpartyToFD(dfltCounterparty(), &errs.ValidationError{}, labels), cats), nil
 }
 
 // QuickCreateCounterparty creates a merchant (a person with the "person"
@@ -232,7 +239,13 @@ func (h Handler) GetEditCounterparty(w http.ResponseWriter, r *http.Request) (te
 		return nil, err
 	}
 
-	return views.EditCounterparty(id, h.mapCounterpartyToFD(cp, &errs.ValidationError{}), cats), nil
+	labels, err := h.counterpartyLabels(r)
+	if err != nil {
+		l.Error("fetching counterparty labels", zap.Error(err))
+		return nil, err
+	}
+
+	return views.EditCounterparty(id, h.mapCounterpartyToFD(cp, &errs.ValidationError{}, labels), cats), nil
 }
 
 func (h Handler) EditCounterparty(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -255,12 +268,18 @@ func (h Handler) EditCounterparty(w http.ResponseWriter, r *http.Request) (templ
 		l.Error("fetching categories", zap.Error(err))
 		return nil, err
 	}
+	labels, err := h.counterpartyLabels(r)
+	if err != nil {
+		l.Error("fetching counterparty labels", zap.Error(err))
+		return nil, err
+	}
+	cp.Labels = models.MatchLabelCasing(cp.Labels, labels)
 
 	if err := cp.SanitizeAndValidate(h.sani, h.valid); err != nil {
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("validating counterparty", zap.Error(err), zap.Any("errors", valerr.Errors))
-			return views.EditCounterpartyForm(id, h.mapCounterpartyToFD(cp, &valerr), cats), nil
+			return views.EditCounterpartyForm(id, h.mapCounterpartyToFD(cp, &valerr, labels), cats), nil
 		}
 		l.Error("sanitizing counterparty", zap.Error(err))
 		return nil, err
@@ -269,11 +288,11 @@ func (h Handler) EditCounterparty(w http.ResponseWriter, r *http.Request) (templ
 	clearNonMerchantFields(cp)
 
 	if valerr := resolveCounterpartyDefaultCategory(cp, cats); valerr != nil {
-		return views.EditCounterpartyForm(id, h.mapCounterpartyToFD(cp, valerr), cats), nil
+		return views.EditCounterpartyForm(id, h.mapCounterpartyToFD(cp, valerr, labels), cats), nil
 	}
 
 	if valerr := validateCounterpartyIcon(cp); valerr != nil {
-		return views.EditCounterpartyForm(id, h.mapCounterpartyToFD(cp, valerr), cats), nil
+		return views.EditCounterpartyForm(id, h.mapCounterpartyToFD(cp, valerr, labels), cats), nil
 	}
 
 	prev, err := h.repo.GetCounterparty(r.Context(), id)
@@ -499,7 +518,18 @@ func (h Handler) counterpartyAndMergeTargets(r *http.Request, id string) (*model
 	return from, cps, nil
 }
 
-func (h Handler) mapCounterpartyToFD(cp *models.Counterparty, err *errs.ValidationError) *views.CounterpartyFD {
+// counterpartyLabels are the labels in use by the counterparties.
+func (h Handler) counterpartyLabels(r *http.Request) ([]string, error) {
+	cps, err := h.repo.GetCounterparties(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	return models.CounterpartyLabels(cps), nil
+}
+
+// mapCounterpartyToFD maps the counterparty, its errors and the labels in
+// use (suggested in the form).
+func (h Handler) mapCounterpartyToFD(cp *models.Counterparty, err *errs.ValidationError, labels []string) *views.CounterpartyFD {
 	var defaultCategoryID string
 	if cp.DefaultCategory != nil {
 		defaultCategoryID = cp.DefaultCategory.ID
@@ -513,6 +543,8 @@ func (h Handler) mapCounterpartyToFD(cp *models.Counterparty, err *errs.Validati
 		IsArchived:        form.FDInput{Value: formatBooleanIfNonZero(cp.IsArchived), Error: err.Errors.MsgFor("IsArchived")},
 		Rating:            form.FDInput{Value: formatIntIfNonZero(cp.Rating), Error: err.Errors.MsgFor("Rating")},
 		Note:              form.FDInput{Value: cp.Note, Error: err.Errors.MsgFor("Note")},
+		Labels:            form.FDInput{Value: strings.Join(cp.Labels, ", "), Error: labelsError(err)},
+		LabelsInUse:       labels,
 		Locations:         mapLocationsToFD(cp.Locations, err, "Locations"),
 	}
 }
@@ -550,8 +582,22 @@ func (h Handler) mapFDToCounterparty(r *http.Request) (*models.Counterparty, err
 		IsArchived:      parseBoolean(r.FormValue("is_archived")),
 		Rating:          parseRating(r.FormValue("rating")),
 		Note:            r.FormValue("note"),
+		Labels:          parseAliases(r.FormValue("labels")),
 		Locations:       parseCounterpartyLocations(r),
 	}, nil
+}
+
+// labelsError is the first error of the labels, each label's included.
+func labelsError(err *errs.ValidationError) string {
+	if msg := err.Errors.MsgFor("Labels"); msg != "" {
+		return msg
+	}
+	for k, f := range err.Errors {
+		if strings.HasPrefix(k, "Labels[") {
+			return f.String()
+		}
+	}
+	return ""
 }
 
 // parseRating reads a rating, 0 (unrated) when blank or out of range.
@@ -626,7 +672,7 @@ func validateCounterpartyIcon(cp *models.Counterparty) *errs.ValidationError {
 	return nil
 }
 
-// parseAliases splits a comma separated list, dropping blanks and
+// parseAliases splits a comma separated list (aliases, labels), dropping blanks and
 // case-insensitive duplicates.
 func parseAliases(s string) []string {
 	aliases := []string{}

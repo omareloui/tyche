@@ -13,6 +13,10 @@ sql:
             go_type:
               import: github.com/omareloui/tyche/internal/dbtypes
               type: JSON
+          - column: counterparties.labels
+            go_type:
+              import: github.com/omareloui/tyche/internal/dbtypes
+              type: JSON
           - column: accounts.sms_refs
             go_type:
               import: github.com/omareloui/tyche/internal/dbtypes

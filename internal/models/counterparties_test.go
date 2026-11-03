@@ -136,3 +136,25 @@ func TestCounterpartyLocationMapsLink(t *testing.T) {
 		})
 	}
 }
+
+func TestCounterpartyLabels(t *testing.T) {
+	cps := []Counterparty{
+		{Labels: []string{"Restaurant", "online store"}},
+		{Labels: []string{"restaurant", "Cafe"}},
+		{},
+	}
+	if got, want := CounterpartyLabels(cps), []string{"Cafe", "online store", "Restaurant"}; !slices.Equal(got, want) {
+		t.Errorf("CounterpartyLabels = %q, want %q", got, want)
+	}
+
+	got := MatchLabelCasing([]string{"RESTAURANT", "Bakery"}, []string{"Restaurant", "Cafe"})
+	if want := []string{"Restaurant", "Bakery"}; !slices.Equal(got, want) {
+		t.Errorf("MatchLabelCasing = %q, want %q", got, want)
+	}
+
+	into := Counterparty{Name: "Uber", Labels: []string{"Transport"}}
+	into.Absorb(&Counterparty{Name: "Uber Eats", Labels: []string{"transport", "Restaurant"}})
+	if want := []string{"Transport", "Restaurant"}; !slices.Equal(into.Labels, want) {
+		t.Errorf("absorbed labels = %q, want %q", into.Labels, want)
+	}
+}

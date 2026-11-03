@@ -110,7 +110,7 @@ func tenantFromCtx(ctx context.Context) (models.OAuthProvider, string, error) {
 	return oauthProvider, oauthId, nil
 }
 
-// marshalStrings encodes a JSON list column (counterparty aliases, account
+// marshalStrings encodes a JSON list column (counterparty aliases and labels, account
 // sms refs), nil as an empty list.
 func marshalStrings(strs []string) ([]byte, error) {
 	if strs == nil {

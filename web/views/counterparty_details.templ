@@ -61,6 +61,16 @@ templ CounterpartyDetails(d *CounterpartyDetailsData) {
 			</header>
 			<div class="flex-1 grid grid-cols-1 content-start gap-6 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
 				@counterpartyDetailsActions(cp)
+				if len(cp.Labels) > 0 {
+					<div class="flex flex-wrap gap-1.5">
+						for _, l := range cp.Labels {
+							<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-violet-400/10 text-sm text-violet-300">
+								@icons.Tag("13")
+								{ l }
+							</span>
+						}
+					</div>
+				}
 				if cp.Note != "" {
 					@txDetailsSection("Note") {
 						<p class="whitespace-pre-line break-words text-sm text-zinc-300">{ cp.Note }</p>
