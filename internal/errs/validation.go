@@ -87,6 +87,12 @@ func (v ValidationField) String() string {
 		return "With the last payment, it's more than the price"
 	case "amount_too_low":
 		return "It doesn't pay off the price in these months"
+	case "goal_currency_used":
+		return "Money already moved in or out of it, so the currency can't change"
+	case "gt_goal_balance":
+		return fmt.Sprintf("More than what's in the goal (%s)", v.Param)
+	case "future_date":
+		return "Can't be in the future"
 	case "brand_icon":
 		return "Unknown icon, use a slug from simpleicons.org or leave it empty"
 	default:

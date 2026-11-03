@@ -30,6 +30,7 @@ func (r *Repository) Reset(ctx context.Context, opts models.ResetOptions) error 
 			{opts.Has(models.ResetTransactions) && !opts.Has(models.ResetAccounts), qtx.ResetZeroAccountBalances},
 			{opts.Has(models.ResetRecurrent), qtx.ResetDeleteRecurrentTxs},
 			{opts.Has(models.ResetGoals), qtx.ResetDeleteGoals},
+			{opts.Has(models.ResetGoals), qtx.ResetDeleteGoalAccounts},
 			{opts.Has(models.ResetCategories), qtx.ResetClearTxCategories},
 			{opts.Has(models.ResetCategories), qtx.ResetClearRecurrentTxCategories},
 			{opts.Has(models.ResetCategories), qtx.ResetDeleteCategories},

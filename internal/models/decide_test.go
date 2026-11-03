@@ -77,10 +77,9 @@ func TestSummarizeWishlist(t *testing.T) {
 }
 
 func goalWithSaved(id string, price, saved float64) models.Goal {
-	acc := models.Account{Currency: egp}
 	return models.Goal{
 		ID: id, Name: id, Price: price, Currency: egp,
-		Transactions: []models.Transaction{{Amount: saved, Account: acc, FulfilledAt: time.Now()}},
+		Account: &models.Account{Amount: saved, Currency: egp, Kind: models.AccountKind{Enum: models.AccKindGoal}},
 	}
 }
 

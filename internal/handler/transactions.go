@@ -37,8 +37,13 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 		return views.TxList(*list), nil
 	}
 
-	accs, knds, cats, cps, gls, err := h.getTxDeps(r.Context())
+	accs, knds, cats, cps, err := h.getTxDeps(r.Context())
 	if err != nil {
+		return nil, err
+	}
+	gls, err := h.repo.GetGoals(r.Context())
+	if err != nil {
+		l.Error("fetching goals", zap.Error(err))
 		return nil, err
 	}
 	if target == "tx-body" {
@@ -190,7 +195,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		tx.FulfilledAt = time.Now()
 	}
 
-	accs, knds, cats, cps, gls, err := h.getTxDeps(r.Context())
+	accs, knds, cats, cps, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -202,10 +207,10 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 	// Set when buying a wishlist item, which the transaction then marks bought.
 	wishlistID := r.FormValue("wishlist_id")
 
-	fd, err := h.prepareTx(r, tx, accs, knds, cats, cps, gls)
+	fd, err := h.prepareTx(r, tx, accs, knds, cats, cps)
 	if fd != nil {
 		fd.WishlistID = wishlistID
-		return views.CreateTransactionForm(fd, accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
+		return views.CreateTransactionForm(fd, accs, knds, cats, cps, &claims.DefaultCurrency), nil
 	}
 	if err != nil {
 		return nil, err
@@ -223,7 +228,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 				l.Error("validating recurrent transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
 				fd := h.mapTransactionToFD(tx, &valerr)
 				fd.WishlistID = wishlistID
-				return views.CreateTransactionForm(fd, accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
+				return views.CreateTransactionForm(fd, accs, knds, cats, cps, &claims.DefaultCurrency), nil
 			}
 			l.Error("sanitizing recurrent transaction", zap.Error(err))
 			return nil, err
@@ -267,7 +272,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 	}
 
 	fd = h.mapTransactionToFD(defaultTransaction(accs), new(errs.ValidationError))
-	return views.CreateTransactionForm(fd, accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
+	return views.CreateTransactionForm(fd, accs, knds, cats, cps, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -288,8 +293,11 @@ func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (tem
 	if tx.Kind == models.AdjustmentTxKind {
 		return nil, errAdjustmentNotEditable
 	}
+	if tx.IsLocked() {
+		return nil, errTxLocked
+	}
 
-	accs, knds, cats, cps, gls, err := h.getTxDeps(r.Context())
+	accs, knds, cats, cps, err := h.getTxDeps(r.Context())
 	if err != nil {
 		l.Error("fetching currencies and kinds")
 		return nil, err
@@ -302,9 +310,9 @@ func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (tem
 	// From the open details the form swaps in their place, else (a row's
 	// menu, "e") it opens the drawer.
 	if r.Header.Get("HX-Target") == txDetailsPanel {
-		return views.TxEditPanel(tx, fd, accs, knds, cats, cps, gls, def, views.TxEditFromDetails), nil
+		return views.TxEditPanel(tx, fd, accs, knds, cats, cps, def, views.TxEditFromDetails), nil
 	}
-	return views.TxEditDrawer(tx, fd, accs, knds, cats, cps, gls, def), nil
+	return views.TxEditDrawer(tx, fd, accs, knds, cats, cps, def), nil
 }
 
 // txEditFrom is where the edit form posted was opened from.
@@ -329,14 +337,14 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 	}
 	tx.ID = id
 
-	accs, knds, cats, cps, gls, err := h.getTxDeps(r.Context())
+	accs, knds, cats, cps, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
 	def := &getClaims(r.Context()).DefaultCurrency
-	fd, err := h.prepareTx(r, tx, accs, knds, cats, cps, gls)
+	fd, err := h.prepareTx(r, tx, accs, knds, cats, cps)
 	if fd != nil {
-		return views.TxEditPanel(tx, fd, accs, knds, cats, cps, gls, def, txEditFrom(r)), nil
+		return views.TxEditPanel(tx, fd, accs, knds, cats, cps, def, txEditFrom(r)), nil
 	}
 	if err != nil {
 		return nil, err
@@ -347,6 +355,9 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 	oldTx, err := h.repo.GetTransaction(r.Context(), tx.ID)
 	if err != nil {
 		return nil, err
+	}
+	if oldTx.IsLocked() {
+		return nil, errTxLocked
 	}
 
 	tx.FulfilledAt = oldTx.FulfilledAt
@@ -360,7 +371,7 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 		if errors.As(err, &valerr) {
 			fd := h.mapTransactionToFD(tx, valerr)
 			fd.RecurrenceFD = nil
-			return views.TxEditPanel(tx, fd, accs, knds, cats, cps, gls, def, txEditFrom(r)), nil
+			return views.TxEditPanel(tx, fd, accs, knds, cats, cps, def, txEditFrom(r)), nil
 		}
 		l.Error("updating transaction", zap.Error(err))
 		return nil, err
@@ -523,8 +534,11 @@ func (h Handler) DuplicateTransaction(w http.ResponseWriter, r *http.Request) (t
 	if tx.Kind == models.AdjustmentTxKind {
 		return nil, errAdjustmentNotEditable
 	}
+	if tx.IsLocked() {
+		return nil, errTxLocked
+	}
 
-	accs, knds, cats, cps, gls, err := h.getTxDeps(r.Context())
+	accs, knds, cats, cps, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -533,13 +547,10 @@ func (h Handler) DuplicateTransaction(w http.ResponseWriter, r *http.Request) (t
 	dup.ScheduledTo = time.Now()
 	dup.FulfilledAt = time.Time{}
 	dup.RecurrentTx = nil
-	if dup.Goal != nil && !slices.ContainsFunc(gls, func(gl models.Goal) bool { return gl.ID == dup.Goal.ID }) {
-		dup.Goal = nil
-	}
 
 	claims := getClaims(r.Context())
 	fd := h.mapTransactionToFD(&dup, new(errs.ValidationError))
-	return views.CreateTransactionForm(fd, accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
+	return views.CreateTransactionForm(fd, accs, knds, cats, cps, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -556,6 +567,10 @@ func (h Handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) (temp
 		return nil, err
 	}
 	l.Debug("fetched transaction", zap.Any("transaction", tx))
+
+	if tx.IsGoalPurchase() && tx.Goal != nil {
+		return nil, errGoalPurchaseDelete
+	}
 
 	if err := h.repo.DeleteTransaction(r.Context(), tx); err != nil {
 		l.Error("deleting transaction", zap.Error(err))
@@ -580,6 +595,14 @@ func (h Handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) (temp
 // errAdjustmentNotEditable is returned for forms of adjustments, as their
 // amount is signed; they come from fixing balances.
 var errAdjustmentNotEditable = resperr.New(http.StatusUnprocessableEntity, "Balance corrections can't be edited, fix the balance again instead.")
+
+// errTxLocked is returned for forms of a goal's transactions (made by the
+// goal's actions) and of a deleted account's.
+var errTxLocked = resperr.New(http.StatusUnprocessableEntity, "Transactions of goals and deleted accounts can't be edited, delete it instead.")
+
+// errGoalPurchaseDelete is returned deleting a goal's purchase, undone from
+// the goal.
+var errGoalPurchaseDelete = resperr.New(http.StatusUnprocessableEntity, "It's a goal's purchase, undo buying it from the goal instead.")
 
 func hxRetargetTxList(w http.ResponseWriter) {
 	w.Header().Set("HX-Retarget", "#tx-list")
@@ -625,31 +648,25 @@ func (h Handler) getAndRenderBalancesOOB(w http.ResponseWriter, r *http.Request)
 	return nil
 }
 
-func (h Handler) getTxDeps(ctx context.Context) ([]models.Account, []models.TxKind, []models.Category, []models.Counterparty, []models.Goal, error) {
+func (h Handler) getTxDeps(ctx context.Context) ([]models.Account, []models.TxKind, []models.Category, []models.Counterparty, error) {
 	l := logger.FromCtx(ctx)
 	accs, err := h.repo.GetAccounts(ctx)
 	if err != nil {
 		l.Error("error fetching accounts for dx deps", zap.Error(err))
-		return nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	cats, err := h.repo.GetCategories(ctx)
 	if err != nil {
 		l.Error("error fetching categories for dx deps", zap.Error(err))
-		return nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	cps, err := h.repo.GetCounterparties(ctx)
 	if err != nil {
 		l.Error("error fetching counterparties for dx deps", zap.Error(err))
-		return nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	l.Debug("fetched transactions dependencies")
-	gls, err := h.repo.GetUnfulfilledGoals(ctx)
-	if err != nil {
-		l.Error("error fetching unfulfilled goals for dx deps", zap.Error(err))
-		return nil, nil, nil, nil, nil, err
-	}
-	l.Debug("fetched transactions dependencies")
-	return accs, models.GetTxKinds(), cats, cps, gls, nil
+	return accs, models.GetTxKinds(), cats, cps, nil
 }
 
 func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationError) *views.TransactionFD {
@@ -667,7 +684,6 @@ func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationE
 	}
 
 	hasToAccount := t.Kind == models.DebtTxKind || t.Kind == models.TransferTxKind
-	hasGoal := t.Kind == models.ExpenseTxKind
 
 	if t.Category != nil {
 		fd.CategoryID = &form.FDInput{Value: t.Category.ID, Error: err.Errors.MsgFor("CategoryID")}
@@ -691,12 +707,6 @@ func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationE
 			Amount:    form.FDInput{Error: err.Errors.MsgFor("ToAmount")},
 			AccountID: form.FDInput{Error: err.Errors.MsgFor("ToAccountID")},
 		}
-	}
-
-	if t.Goal != nil {
-		fd.GoalID = &form.FDInput{Value: t.Goal.ID, Error: err.Errors.MsgFor("GoalID")}
-	} else if hasGoal {
-		fd.GoalID = &form.FDInput{Error: err.Errors.MsgFor("GoalID")}
 	}
 
 	if t.RecurrentTx != nil {
@@ -745,12 +755,6 @@ func (h Handler) mapFDToTransaction(r *http.Request, isRecurrent bool) (*models.
 		toAcc = &models.Account{ID: toAccId}
 	}
 
-	glId := r.FormValue("goal_id")
-	var gl *models.Goal
-	if glId != "" {
-		gl = &models.Goal{ID: glId}
-	}
-
 	var rt *models.RecurrentTx
 
 	tx := &models.Transaction{
@@ -761,7 +765,6 @@ func (h Handler) mapFDToTransaction(r *http.Request, isRecurrent bool) (*models.
 		Counterparty: cp,
 		ToAccount:    toAcc,
 		ToAmount:     toAmount,
-		Goal:         gl,
 		Description:  r.FormValue("description"),
 		ScheduledTo:  scheduledTo,
 	}
@@ -828,7 +831,6 @@ func (h Handler) mapFDAndTxToRecurrentTx(r *http.Request, tx *models.Transaction
 		Description:  tx.Description,
 		ToAccount:    tx.ToAccount,
 		ToAmount:     tx.ToAmount,
-		Goal:         tx.Goal,
 		Unit:         models.RecurrentUnit(unit),
 		Every:        uint(every),
 		StartsAt:     tx.ScheduledTo,
@@ -852,7 +854,6 @@ func applyCounterpartyDefaultCategory(tx *models.Transaction, cps []models.Count
 func (h Handler) prepareTx(r *http.Request, tx *models.Transaction,
 	accs []models.Account, knds []models.TxKind,
 	cats []models.Category, cps []models.Counterparty,
-	gls []models.Goal,
 ) (*views.TransactionFD, error) {
 	l := logger.FromCtx(r.Context())
 
@@ -881,17 +882,6 @@ func (h Handler) prepareTx(r *http.Request, tx *models.Transaction,
 		tx.Counterparty = cp
 	}
 
-	if tx.Goal != nil {
-		gl := slicesutils.Find(gls, func(gl models.Goal) bool { return gl.ID == tx.Goal.ID })
-		if gl == nil {
-			valerr := &errs.ValidationError{Errors: errs.ValidationErrors{}}
-			valerr.Errors["GoalID"] = errs.ValidationField{Tag: "required"}
-			l.Error("goal kind doesn't exist")
-			return h.mapTransactionToFD(tx, valerr), nil
-		}
-		tx.Goal = gl
-	}
-
 	if err := tx.SanitizeAndValidate(h.sani, h.valid); err != nil {
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
@@ -907,7 +897,6 @@ func (h Handler) prepareTx(r *http.Request, tx *models.Transaction,
 func (h Handler) prepareCreatingTx(r *http.Request, tx *models.Transaction,
 	accs []models.Account, knds []models.TxKind,
 	cats []models.Category, cps []models.Counterparty,
-	gls []models.Goal,
 ) (*views.TransactionFD, error) {
 	tx.ID = idgen.New()
 	tx.CreatedAt = time.Now()
@@ -917,7 +906,7 @@ func (h Handler) prepareCreatingTx(r *http.Request, tx *models.Transaction,
 		tx.FulfilledAt = tx.CreatedAt
 	}
 
-	return h.prepareTx(r, tx, accs, knds, cats, cps, gls)
+	return h.prepareTx(r, tx, accs, knds, cats, cps)
 }
 
 func (h Handler) parseTransactionAmountsAndKindFD(r *http.Request, accs []models.Account, knds []models.TxKind) (*views.TransactionAmountsAndKindFD, error) {
@@ -935,11 +924,6 @@ func (h Handler) parseTransactionAmountsAndKindFD(r *http.Request, accs []models
 	trigger := r.Header.Get("Hx-Trigger")
 
 	kind := models.GetTxKindFromString(kindString)
-
-	gl := r.FormValue("goal_id")
-	if gl != "" || kind == models.ExpenseTxKind {
-		fd.GoalID = &form.FDInput{Value: gl}
-	}
 
 	if kind == models.TransferTxKind || kind == models.DebtTxKind {
 		toAccId := r.FormValue("to_account_id")

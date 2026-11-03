@@ -9,7 +9,6 @@ INSERT INTO transactions (
     description,
     to_account_id,
     to_amount,
-    goal_id,
     recurrent_id,
     scheduled_to,
     fulfilled_at,
@@ -25,7 +24,6 @@ VALUES (
     sqlc.arg(description),
     sqlc.arg(to_account_id),
     IIF(sqlc.narg(to_amount) > 0.0, ROUND(sqlc.narg(to_amount), 2), NULL),
-    sqlc.arg(goal_id),
     sqlc.arg(recurrent_id),
     sqlc.arg(scheduled_to),
     sqlc.arg(fulfilled_at),
@@ -57,6 +55,7 @@ SELECT
     ta.exclude_from_balance AS to_account_exclude_from_balance,
     ta.expiration_date AS to_account_expiration_date,
     ta.created_at AS to_account_created_at,
+    ta.deleted_at AS to_account_deleted_at,
     tc.string AS to_account_currency_string,
     tc.symbol AS to_account_currency_symbol,
     cat.id AS category_id,
@@ -65,6 +64,7 @@ SELECT
     cat.budget_amount AS category_budget_amount,
     cat.budget_currency_id AS category_budget_currency_id,
     cat.created_at AS category_created_at,
+    g.id AS goal_id,
     g.name AS goal_name,
     g.price AS goal_price,
     g.currency_id AS goal_currency_id,
@@ -86,7 +86,8 @@ LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
 LEFT JOIN account_kinds AS tak ON ta.kind_id = tak.id
 LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
 LEFT JOIN categories AS cat ON t.category_id = cat.id
-LEFT JOIN goals AS g ON t.goal_id = g.id
+-- A goal's transactions are the ones in or out of its account.
+LEFT JOIN goals AS g ON g.account_id IN (t.account_id, t.to_account_id)
 LEFT JOIN currencies AS gc ON g.currency_id = gc.id
 -- Top-level transactions only: reimbursements come nested under their
 -- expense (GetReimbursementsOfMany) and the incoming leg of a transfer pair
@@ -123,7 +124,9 @@ WHERE
         ))
     AND (sqlc.narg(category_id) IS NULL OR t.category_id = sqlc.narg(category_id))
     AND (sqlc.narg(counterparty_id) IS NULL OR t.counterparty_id = sqlc.narg(counterparty_id))
-    AND (sqlc.narg(goal_id) IS NULL OR t.goal_id = sqlc.narg(goal_id))
+    AND (sqlc.narg(goal_id) IS NULL OR EXISTS (
+        SELECT 1 FROM goals AS fg WHERE fg.id = sqlc.narg(goal_id) AND fg.account_id IN (t.account_id, t.to_account_id)
+    ))
     AND (sqlc.narg(fulfilled) IS NULL OR (t.fulfilled_at IS NOT NULL) = sqlc.narg(fulfilled))
     AND (sqlc.narg(needs_review) IS NULL OR (t.needs_review OR EXISTS (
         SELECT 1 FROM transactions AS rt WHERE rt.reimburses_id = t.id AND rt.needs_review
@@ -199,7 +202,9 @@ WHERE
         ))
     AND (sqlc.narg(category_id) IS NULL OR t.category_id = sqlc.narg(category_id))
     AND (sqlc.narg(counterparty_id) IS NULL OR t.counterparty_id = sqlc.narg(counterparty_id))
-    AND (sqlc.narg(goal_id) IS NULL OR t.goal_id = sqlc.narg(goal_id))
+    AND (sqlc.narg(goal_id) IS NULL OR EXISTS (
+        SELECT 1 FROM goals AS fg WHERE fg.id = sqlc.narg(goal_id) AND fg.account_id IN (t.account_id, t.to_account_id)
+    ))
     AND (sqlc.narg(fulfilled) IS NULL OR (t.fulfilled_at IS NOT NULL) = sqlc.narg(fulfilled))
     AND (sqlc.narg(needs_review) IS NULL OR (t.needs_review OR EXISTS (
         SELECT 1 FROM transactions AS rt WHERE rt.reimburses_id = t.id AND rt.needs_review
@@ -243,6 +248,7 @@ SELECT
     ta.exclude_from_balance AS to_account_exclude_from_balance,
     ta.expiration_date AS to_account_expiration_date,
     ta.created_at AS to_account_created_at,
+    ta.deleted_at AS to_account_deleted_at,
     tc.string AS to_account_currency_string,
     tc.symbol AS to_account_currency_symbol,
     cat.id AS category_id,
@@ -251,6 +257,7 @@ SELECT
     cat.budget_amount AS category_budget_amount,
     cat.budget_currency_id AS category_budget_currency_id,
     cat.created_at AS category_created_at,
+    g.id AS goal_id,
     g.name AS goal_name,
     g.price AS goal_price,
     g.currency_id AS goal_currency_id,
@@ -272,7 +279,8 @@ LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
 LEFT JOIN account_kinds AS tak ON ta.kind_id = tak.id
 LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
 LEFT JOIN categories AS cat ON t.category_id = cat.id
-LEFT JOIN goals AS g ON t.goal_id = g.id
+-- A goal's transactions are the ones in or out of its account.
+LEFT JOIN goals AS g ON g.account_id IN (t.account_id, t.to_account_id)
 LEFT JOIN currencies AS gc ON g.currency_id = gc.id
 WHERE t.id = sqlc.arg(id) LIMIT 1;
 
@@ -288,7 +296,6 @@ SET
     to_account_id = sqlc.narg(to_account_id),
     to_amount = ROUND(sqlc.narg(to_amount), 2),
     scheduled_to = sqlc.arg(scheduled_to),
-    goal_id = sqlc.arg(goal_id),
     needs_review = FALSE
 WHERE id = sqlc.arg(id);
 
@@ -385,8 +392,8 @@ WHERE reimburses_id = sqlc.arg(id) AND id != sqlc.arg(exclude_id);
 
 -- name: GetReimbursableExpenses :many
 -- Expenses in the given currency scheduled in [since, until), newest first,
--- that still have at least min_left left to be reimbursed. Goal expenses are
--- savings, not spending, so they're not reimbursable.
+-- that still have at least min_left left to be reimbursed, not out of a goal's
+-- account (its purchase) nor a deleted one.
 SELECT
     t.id,
     t.amount,
@@ -407,7 +414,8 @@ LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
 LEFT JOIN categories AS cat ON t.category_id = cat.id
 WHERE
     t.kind = 1
-    AND t.goal_id IS NULL
+    AND a.kind_id NOT IN (SELECT id FROM account_kinds WHERE enum = 6) -- models.AccKindGoal
+    AND a.deleted_at IS NULL
     AND t.transfer_pair_id IS NULL
     AND a.currency_id = sqlc.arg(currency_id)
     AND t.scheduled_to >= sqlc.arg(since)
@@ -461,6 +469,7 @@ SELECT
     ta.exclude_from_balance AS to_account_exclude_from_balance,
     ta.expiration_date AS to_account_expiration_date,
     ta.created_at AS to_account_created_at,
+    ta.deleted_at AS to_account_deleted_at,
     tc.string AS to_account_currency_string,
     tc.symbol AS to_account_currency_symbol,
     cat.id AS category_id,
@@ -469,6 +478,7 @@ SELECT
     cat.budget_amount AS category_budget_amount,
     cat.budget_currency_id AS category_budget_currency_id,
     cat.created_at AS category_created_at,
+    g.id AS goal_id,
     g.name AS goal_name,
     g.price AS goal_price,
     g.currency_id AS goal_currency_id,
@@ -490,7 +500,8 @@ LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
 LEFT JOIN account_kinds AS tak ON ta.kind_id = tak.id
 LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
 LEFT JOIN categories AS cat ON t.category_id = cat.id
-LEFT JOIN goals AS g ON t.goal_id = g.id
+-- A goal's transactions are the ones in or out of its account.
+LEFT JOIN goals AS g ON g.account_id IN (t.account_id, t.to_account_id)
 LEFT JOIN currencies AS gc ON g.currency_id = gc.id
 WHERE t.reimburses_id IN (SELECT value FROM json_each(sqlc.arg(ids)))
 ORDER BY t.scheduled_to DESC, t.created_at DESC;
@@ -521,6 +532,7 @@ SELECT
     ta.exclude_from_balance AS to_account_exclude_from_balance,
     ta.expiration_date AS to_account_expiration_date,
     ta.created_at AS to_account_created_at,
+    ta.deleted_at AS to_account_deleted_at,
     tc.string AS to_account_currency_string,
     tc.symbol AS to_account_currency_symbol,
     cat.id AS category_id,
@@ -529,6 +541,7 @@ SELECT
     cat.budget_amount AS category_budget_amount,
     cat.budget_currency_id AS category_budget_currency_id,
     cat.created_at AS category_created_at,
+    g.id AS goal_id,
     g.name AS goal_name,
     g.price AS goal_price,
     g.currency_id AS goal_currency_id,
@@ -550,15 +563,16 @@ LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
 LEFT JOIN account_kinds AS tak ON ta.kind_id = tak.id
 LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
 LEFT JOIN categories AS cat ON t.category_id = cat.id
-LEFT JOIN goals AS g ON t.goal_id = g.id
+-- A goal's transactions are the ones in or out of its account.
+LEFT JOIN goals AS g ON g.account_id IN (t.account_id, t.to_account_id)
 LEFT JOIN currencies AS gc ON g.currency_id = gc.id
 WHERE t.transfer_pair_id IN (SELECT value FROM json_each(sqlc.arg(ids)));
 
 -- name: GetTransferPairCandidates :many
 -- Unpaired transactions of kind (1 expense, 2 income) out of account_id,
 -- fulfilled between since and until, that could be the other leg of a
--- transfer: no goal, not reimbursing nor reimbursed. With sms_only (auto
--- pairing), only SMS ones and no merchant.
+-- transfer: not a goal's nor a deleted account's, not reimbursing nor
+-- reimbursed. With sms_only (auto pairing), only SMS ones and no merchant.
 SELECT
     sqlc.embed(t),
     sqlc.embed(a),
@@ -583,6 +597,7 @@ SELECT
     ta.exclude_from_balance AS to_account_exclude_from_balance,
     ta.expiration_date AS to_account_expiration_date,
     ta.created_at AS to_account_created_at,
+    ta.deleted_at AS to_account_deleted_at,
     tc.string AS to_account_currency_string,
     tc.symbol AS to_account_currency_symbol,
     cat.id AS category_id,
@@ -591,6 +606,7 @@ SELECT
     cat.budget_amount AS category_budget_amount,
     cat.budget_currency_id AS category_budget_currency_id,
     cat.created_at AS category_created_at,
+    g.id AS goal_id,
     g.name AS goal_name,
     g.price AS goal_price,
     g.currency_id AS goal_currency_id,
@@ -612,7 +628,8 @@ LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
 LEFT JOIN account_kinds AS tak ON ta.kind_id = tak.id
 LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
 LEFT JOIN categories AS cat ON t.category_id = cat.id
-LEFT JOIN goals AS g ON t.goal_id = g.id
+-- A goal's transactions are the ones in or out of its account.
+LEFT JOIN goals AS g ON g.account_id IN (t.account_id, t.to_account_id)
 LEFT JOIN currencies AS gc ON g.currency_id = gc.id
 WHERE
     t.kind = sqlc.arg(kind)
@@ -620,7 +637,8 @@ WHERE
     AND t.id != sqlc.arg(id)
     AND t.transfer_pair_id IS NULL
     AND t.reimburses_id IS NULL
-    AND t.goal_id IS NULL
+    AND ak.enum != 6 -- models.AccKindGoal
+    AND a.deleted_at IS NULL
     AND t.fulfilled_at IS NOT NULL
     AND JULIANDAY(t.fulfilled_at) BETWEEN JULIANDAY(sqlc.arg(since)) AND JULIANDAY(sqlc.arg(until))
     AND NOT EXISTS (SELECT 1 FROM transactions AS rt WHERE rt.reimburses_id = t.id)
@@ -640,7 +658,6 @@ WHERE
     t.kind IN (1, 2)
     AND t.transfer_pair_id IS NULL
     AND t.reimburses_id IS NULL
-    AND t.goal_id IS NULL
     AND t.fulfilled_at IS NOT NULL
     AND cp.is_merchant IS NOT TRUE
     AND EXISTS (SELECT 1 FROM sms_messages AS sm WHERE sm.transaction_id = t.id)

@@ -28,7 +28,6 @@ type TransactionAmountsAndKindFD struct {
 	CategoryID     *form.FDInput
 	CounterpartyID *form.FDInput
 	ToAccountIFD   *form.AccountIFD
-	GoalID         *form.FDInput
 }
 
 templ Transactions(
@@ -39,7 +38,7 @@ templ Transactions(
 	knds []models.TxKind, cats []models.Category,
 	cps []models.Counterparty, gls []models.Goal, openTx string) {
 	@layouts.WithCreateForm(claims, "Transactions", balances,
-		txCreateSlot(CreateTransactionForm(fd, accounts, knds, cats, cps, gls, &claims.DefaultCurrency))) {
+		txCreateSlot(CreateTransactionForm(fd, accounts, knds, cats, cps, &claims.DefaultCurrency))) {
 		<div x-data="txPage" @keydown.window="onKey($event)" @click="onClick($event)">
 			<div id="tx-body" class="contents">
 				@TxBody(list, accounts, knds, cats, cps, gls)
@@ -70,22 +69,22 @@ templ txCreateSlot(f templ.Component) {
 templ CreateTransactionForm(
 	fd *TransactionFD, accounts []models.Account,
 	knds []models.TxKind, cats []models.Category,
-	cps []models.Counterparty, gls []models.Goal,
+	cps []models.Counterparty,
 	defaultCur *models.Currency) {
 	@form.SheetForm("New transaction", "/transactions", "Add transaction", "tx-form") {
-		@transactionFormBody(fd, "0", accounts, knds, cats, cps, gls, defaultCur)
+		@transactionFormBody(fd, "0", accounts, knds, cats, cps, defaultCur)
 	}
 }
 
 templ transactionFormBody(
 	fd *TransactionFD, id string, accs []models.Account,
 	knds []models.TxKind, cats []models.Category,
-	cps []models.Counterparty, gls []models.Goal,
+	cps []models.Counterparty,
 	defaultCur *models.Currency) {
 	if fd.WishlistID != "" {
 		<input type="hidden" name="wishlist_id" value={ fd.WishlistID }/>
 	}
-	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs, cps, gls, defaultCur)
+	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs, cps, defaultCur)
 	@form.Field("Description", "description", id, icons.Pencil("15"), fd.Description.Error) {
 		@form.Control("text", "description", "What was it for?", id, fd.Description, nil)
 	}
@@ -501,7 +500,7 @@ templ TransactionAmountsAndKindFormBody(
 	fd *TransactionAmountsAndKindFD, id string,
 	knds []models.TxKind, cats []models.Category,
 	accs []models.Account, cps []models.Counterparty,
-	gls []models.Goal, defaultCur *models.Currency) {
+	defaultCur *models.Currency) {
 	{{ kind := models.GetTxKindFromString(fd.Kind.Value) }}
 	{{ switched := isSwitched(accs, fd.AccountIFD.AccountID.Value) }}
 	{{ onChange := templ.Attributes{"hx-post": fmt.Sprintf("/tx-inputs/%s", id), "hx-trigger": "change"} }}
@@ -560,7 +559,7 @@ templ TransactionAmountsAndKindFormBody(
 				@form.ErrorMessage(fd.ToAccountIFD.AccountID.Error)
 			}
 		</div>
-		if fd.CategoryID != nil || fd.CounterpartyID != nil || fd.GoalID != nil {
+		if fd.CategoryID != nil || fd.CounterpartyID != nil {
 			<div class="grid gap-5 sm:grid-cols-2">
 				if fd.CategoryID != nil {
 					@form.Field("Category", "category_id", id, icons.Tag("15"), fd.CategoryID.Error) {
@@ -581,17 +580,6 @@ templ TransactionAmountsAndKindFormBody(
 							CreateURL: "/counterparties/quick",
 						})
 					}
-				}
-				if fd.GoalID != nil {
-					<div class="sm:col-span-2">
-						@form.Field("Goal", "goal_id", id, icons.Target("15"), fd.GoalID.Error) {
-							@form.Combobox(form.ComboboxProps{
-								Name: "goal_id", ID: id, Label: "Goal", Placeholder: "Select Goal",
-								Options: goalComboOptions(gls),
-								Data:    *fd.GoalID, Nullable: true, Searchable: true,
-							})
-						}
-					</div>
 				}
 			</div>
 		}

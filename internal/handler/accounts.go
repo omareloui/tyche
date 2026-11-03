@@ -16,6 +16,7 @@ import (
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/numsutils"
 	"github.com/omareloui/tyche/internal/resperr"
 	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views"
@@ -289,18 +290,140 @@ func (h *Handler) ToggleArchiveAccount(w http.ResponseWriter, r *http.Request) (
 	return h.renderUpdatedAccount(w, r, &prev)
 }
 
-func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	id := r.PathValue("id")
-	if id == "" {
-		return nil, errs.ErrInvalidID
+var errAccountNotFound = resperr.New(http.StatusNotFound, "Account not found")
+
+// LiveAccount guards next, a route of the account {id}: goals' and deleted
+// accounts are only touched by their own actions, so they're not found.
+func (h *Handler) LiveAccount(next HandlerMethod) HandlerMethod {
+	return func(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+		a, err := h.repo.GetAccount(r.Context(), r.PathValue("id"))
+		if err != nil || a.IsGoal() || a.IsDeleted() {
+			return nil, errAccountNotFound
+		}
+		return next(w, r)
 	}
+}
+
+// moveBalanceAccounts are the accounts a deleted account's balance can move
+// to.
+func moveBalanceAccounts(accs []models.Account, from string) []models.Account {
+	return slicesutils.Filter(accs, func(a models.Account) bool {
+		return a.ID != from && !a.IsArchive && a.Kind.Enum != models.AccKindDebt && a.Kind.Enum != models.AccKindGamyaa
+	})
+}
+
+// accountAndMoveTargets is the account {id} with the accounts its balance
+// can move to.
+func (h *Handler) accountAndMoveTargets(r *http.Request) (*models.Account, []models.Account, error) {
+	a, err := h.repo.GetAccount(r.Context(), r.PathValue("id"))
+	if err != nil {
+		return nil, nil, err
+	}
+	accs, err := h.repo.GetAccounts(r.Context())
+	if err != nil {
+		return nil, nil, err
+	}
+	return a, moveBalanceAccounts(accs, a.ID), nil
+}
+
+// GetAccountDeleteForm is the drawer deleting an account with money in it,
+// moving the balance to another account or leaving it out of the totals.
+func (h *Handler) GetAccountDeleteForm(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	a, accs, err := h.accountAndMoveTargets(r)
+	if err != nil {
+		return nil, err
+	}
+	fd := &views.AccountDeleteFD{}
+	if t := defaultGoalAccount(accs); t != nil {
+		fd.AccountID.Value = t.ID
+		fd.ToAmount.Value = convertedAmount(a, t)
+	}
+	return views.AccountDeleteForm(a, fd, accs), nil
+}
+
+// AccountDeleteInputs renders the delete form's target again for the picked
+// account (so currency).
+func (h *Handler) AccountDeleteInputs(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	a, accs, err := h.accountAndMoveTargets(r)
+	if err != nil {
+		return nil, err
+	}
+	fd := &views.AccountDeleteFD{AccountID: form.FDInput{Value: r.FormValue("account_id")}}
+	if t := slicesutils.Find(accs, func(t models.Account) bool { return t.ID == fd.AccountID.Value }); t != nil {
+		fd.ToAmount.Value = convertedAmount(a, t)
+	}
+	return views.AccountDeleteInputs(a, fd, accs), nil
+}
+
+// convertedAmount is a's balance in t's currency, for a form ("" without a
+// rate or when it's the same currency).
+func convertedAmount(a, t *models.Account) string {
+	if a.Currency.String == t.Currency.String {
+		return ""
+	}
+	rate := a.Currency.FxRate(t.Currency.String)
+	if rate == 0 {
+		return ""
+	}
+	return formatFloatIfNonZero(numsutils.Round(a.Amount * rate))
+}
+
+// DeleteAccount soft deletes the account: it's hidden but its transactions
+// stay. Its balance moves first to the picked account, if any.
+func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	l := logger.FromCtx(r.Context())
-	if err := h.repo.DeleteAccount(r.Context(), id); err != nil {
+	a, accs, err := h.accountAndMoveTargets(r)
+	if err != nil {
+		return nil, err
+	}
+
+	var move *models.Transaction
+	if toID := r.FormValue("account_id"); toID != "" && a.Amount > 0 {
+		fd := &views.AccountDeleteFD{
+			AccountID: form.FDInput{Value: toID},
+			ToAmount:  form.FDInput{Value: r.FormValue("to_amount")},
+		}
+		t := slicesutils.Find(accs, func(t models.Account) bool { return t.ID == toID })
+		if t == nil {
+			fd.AccountID.Error = "This field is required"
+			return views.AccountDeleteFormFields(a, fd, accs), nil
+		}
+		toAmount := a.Amount
+		if t.Currency.String != a.Currency.String {
+			if toAmount, err = parseFloatIfExists(fd.ToAmount.Value); err != nil || toAmount <= 0 {
+				fd.ToAmount.Error = "Value has to be more than 0"
+				return views.AccountDeleteFormFields(a, fd, accs), nil
+			}
+		}
+		now := time.Now()
+		move = &models.Transaction{
+			ID: idgen.New(), Kind: models.TransferTxKind,
+			Account: *a, ToAccount: t, Amount: a.Amount, ToAmount: toAmount,
+			Description: "Balance of " + a.Name + " (deleted)",
+			ScheduledTo: now, FulfilledAt: now, CreatedAt: now,
+		}
+	}
+
+	if err := h.repo.DeleteAccount(r.Context(), a.ID, move); err != nil {
 		l.Error("deleting account", zap.Error(err))
 		return nil, err
 	}
-	l.Info("deleted account", zap.String("id", id))
+	l.Info("deleted account", zap.String("id", a.ID))
 
+	if r.Method == http.MethodPost {
+		// From the delete drawer.
+		drawerSaved(w, "#"+views.AccountWrapperID(a.ID), "outerHTML")
+	}
+	if move != nil {
+		// The target's card shows its new balance.
+		t, err := h.repo.GetAccount(r.Context(), move.ToAccount.ID)
+		if err != nil {
+			return nil, err
+		}
+		if err := renderToBody(w, r, views.AccountReplaceOOB(t, &getClaims(r.Context()).DefaultCurrency)); err != nil {
+			return nil, err
+		}
+	}
 	if err := h.getAndRenderBalancesOOB(w, r); err != nil {
 		return nil, err
 	}

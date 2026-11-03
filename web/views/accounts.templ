@@ -428,9 +428,14 @@ templ Account(a *models.Account, defaultCur *models.Currency) {
 						<p title={ "In " + defaultCur.String } class="sensitive text-sm text-zinc-500 tabular-nums">≈ { v }</p>
 					}
 				}
-				if a.ActualAmount != a.Amount {
-					<p title="Including money set aside for goals" class="sensitive text-sm text-zinc-500 tabular-nums">
-						{ a.ViewActualAmount() } with goals
+				if a.SetAside > 0 {
+					<p title="Moved to goals in progress, still in the bank" class="sensitive flex items-center gap-1 text-sm text-zinc-500 tabular-nums">
+						@icons.Target("12")
+						+ { a.ViewSetAside() } set aside for goals
+					</p>
+					<p title="Its balance plus what's set aside for goals" class="sensitive flex items-center gap-1 text-sm text-zinc-400 tabular-nums">
+						@icons.Bank("12")
+						{ a.ViewInBank() } in the bank
 					</p>
 				}
 			</div>
@@ -710,8 +715,86 @@ func getAccountMenuItems(a *models.Account) []templ.Component {
 			components.WithEntryMenuItemIcon(icons.Archive("16"))))
 	}
 
-	return append(items,
-		components.EntryMenuSeparator(),
-		components.EntryMenuDeleteItem(fmt.Sprintf("/accounts/%s", a.ID)),
-	)
+	items = append(items, components.EntryMenuSeparator())
+	if a.Amount > 0 {
+		return append(items, components.EntryMenuDrawerItem("Delete", fmt.Sprintf("/accounts/%s/delete-form", a.ID),
+			components.WithEntryMenuItemIcon(icons.Trash("16")), components.WithEntryMenuItemDanger()))
+	}
+	return append(items, components.EntryMenuDeleteItem(fmt.Sprintf("/accounts/%s", a.ID),
+		components.WithEntryMenuItemConfirmMessage("Delete this account? Its transactions stay in the history.")))
+}
+
+// AccountDeleteFD is the form deleting an account with money in it: the
+// account its balance moves to (none leaves it out of the totals) and what
+// that one receives when their currencies differ.
+type AccountDeleteFD struct {
+	AccountID form.FDInput
+	ToAmount  form.FDInput
+}
+
+// AccountDeleteForm deletes an account with money in it, in a drawer.
+templ AccountDeleteForm(a *models.Account, fd *AccountDeleteFD, accs []models.Account) {
+	@components.Drawer(components.DrawerProps{Label: "Delete " + a.Name}) {
+		@AccountDeleteFormFields(a, fd, accs)
+	}
+}
+
+// AccountDeleteFormFields is AccountDeleteForm's form alone, answered with
+// its errors.
+templ AccountDeleteFormFields(a *models.Account, fd *AccountDeleteFD, accs []models.Account) {
+	@form.DrawerForm(form.DrawerFormProps{
+		Title: "Delete " + a.Name, Method: "post", URL: fmt.Sprintf("/accounts/%s/delete", a.ID),
+		Submit: "Delete account", Class: "[--accent:var(--color-red-400)]",
+	}) {
+		<p class="text-zinc-400">
+			It still has <span class="sensitive text-zinc-100 tabular-nums">{ a.ViewAmount() }</span>.
+			Move it to another account, or leave it and it drops out of your balance.
+			Its transactions stay in the history.
+		</p>
+		@AccountDeleteInputs(a, fd, accs)
+	}
+}
+
+// AccountDeleteInputs is where the balance moves, rendered again when the
+// account (so the currency) changes.
+templ AccountDeleteInputs(a *models.Account, fd *AccountDeleteFD, accs []models.Account) {
+	{{ toSym := form.GetAccoutSym(accs, fd.AccountID.Value, &a.Currency) }}
+	<div
+		hx-target="this"
+		hx-swap="outerHTML"
+		hx-sync="closest form:abort"
+		class="grid justify-items-center gap-3 py-2"
+	>
+		<div class="flex flex-wrap items-center justify-center gap-2 max-w-full">
+			<span class="text-sm text-zinc-500">Move it to</span>
+			@form.Combobox(form.ComboboxProps{
+				Name: "account_id", ID: a.ID, Label: "Move to", Placeholder: "Don't move it",
+				Options: form.AccountComboOptions(accs), Data: fd.AccountID,
+				Nullable: true, Chip: true, Searchable: len(accs) > 7,
+				InputAttrs: templ.Attributes{"hx-post": fmt.Sprintf("/accounts/%s/delete-inputs", a.ID), "hx-trigger": "change"},
+			})
+		</div>
+		@form.ErrorMessage(fd.AccountID.Error)
+		if fd.AccountID.Value != "" && toSym != a.Currency.Symbol {
+			<label class="flex items-center gap-2 text-sm text-zinc-400">
+				It receives
+				<input
+					id={ "to_amount-" + a.ID }
+					type="text"
+					name="to_amount"
+					value={ fd.ToAmount.Value }
+					placeholder={ toSym + " 0.00" }
+					autocomplete="off"
+					inputmode="decimal"
+					x-data
+					x-mask:dynamic={ fmt.Sprintf("'%s ' + $money($input, '.', ',')", toSym) }
+					class="input-field w-48! h-9! text-center tabular-nums font-(family-name:--font-biorhyme-expanded)"
+					if fd.ToAmount.Error != "" {
+						aria-invalid="true"
+					}
+				/>
+			</label>
+			@form.ErrorMessage(fd.ToAmount.Error)
+		}
+	</div>
 }

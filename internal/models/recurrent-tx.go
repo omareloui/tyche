@@ -41,7 +41,6 @@ type RecurrentTx struct {
 	ToAccount    *Account
 	Category     *Category
 	Counterparty *Counterparty
-	Goal         *Goal
 
 	StartsAt                   time.Time
 	StopsAt                    time.Time
@@ -101,7 +100,6 @@ func (rt *RecurrentTx) AsTransaction() *Transaction {
 		ToAccount:    rt.ToAccount,
 		ToAmount:     rt.ToAmount,
 		Description:  rt.Description,
-		Goal:         rt.Goal,
 		RecurrentTx:  rt,
 	}
 }
@@ -142,7 +140,7 @@ func (rt *RecurrentTx) ViewToAmount() string {
 }
 
 func (rt *RecurrentTx) toValidate() *createRecurrentTx {
-	var catId, toAccId, cpId, glId string
+	var catId, toAccId, cpId string
 
 	if cat := rt.Category; cat != nil {
 		catId = cat.ID
@@ -153,10 +151,6 @@ func (rt *RecurrentTx) toValidate() *createRecurrentTx {
 	if toAcc := rt.ToAccount; toAcc != nil {
 		toAccId = toAcc.ID
 	}
-	if gl := rt.Goal; gl != nil {
-		glId = gl.ID
-	}
-
 	return &createRecurrentTx{
 		commonFieldsForTxAndRtx: commonFieldsForTxAndRtx{
 			ID:             rt.ID,
@@ -168,7 +162,6 @@ func (rt *RecurrentTx) toValidate() *createRecurrentTx {
 			ToAccountID:    toAccId,
 			ToAmount:       rt.ToAmount,
 			Description:    rt.Description,
-			GoalID:         glId,
 		},
 		Unit:                       rt.Unit,
 		Every:                      rt.Every,

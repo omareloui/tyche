@@ -1,13 +1,4 @@
 -- name: GetAccounts :many
-WITH gls_amts AS (
-    SELECT
-        t.account_id,
-        SUM(t.amount) AS amount
-    FROM goals AS gl
-    LEFT JOIN transactions AS t ON gl.id = t.goal_id
-    WHERE gl.fulfilled_at IS NULL
-    GROUP BY t.account_id
-)
 SELECT
     sqlc.embed(a),
     sqlc.embed(k),
@@ -16,25 +7,29 @@ SELECT
     cp.color AS counterparty_color,
     sqlc.embed(c),
     (u.id IS NOT NULL) AS is_default,
-    IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
+    -- Money moved from the account to goals still in progress (net of what
+    -- came back), out of its balance though still in the bank.
+    CAST((
+        SELECT TOTAL(IIF(t.account_id = a.id, t.amount, -COALESCE(t.to_amount, t.amount)))
+        FROM transactions AS t
+        JOIN goals AS gl ON gl.account_id IN (t.account_id, t.to_account_id)
+        WHERE
+            t.kind = 3
+            AND t.fulfilled_at IS NOT NULL
+            AND gl.fulfilled_at IS NULL
+            AND a.id IN (t.account_id, t.to_account_id)
+            AND gl.account_id != a.id
+    ) AS FLOAT) AS set_aside
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
 LEFT JOIN counterparties AS cp ON a.counterparty_id = cp.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN user AS u ON u.default_account_id = a.id
-LEFT JOIN gls_amts AS gla ON a.id = gla.account_id
+-- Live accounts only: the deleted ones and the goals' are hidden.
+WHERE a.deleted_at IS NULL AND k.enum != 6 -- models.AccKindGoal
 ORDER BY a.created_at DESC;
 
 -- name: GetActiveAccounts :many
-WITH gls_amts AS (
-    SELECT
-        t.account_id,
-        SUM(t.amount) AS amount
-    FROM goals AS gl
-    LEFT JOIN transactions AS t ON gl.id = t.goal_id
-    WHERE gl.fulfilled_at IS NULL
-    GROUP BY t.account_id
-)
 SELECT
     sqlc.embed(a),
     sqlc.embed(k),
@@ -43,26 +38,28 @@ SELECT
     cp.color AS counterparty_color,
     sqlc.embed(c),
     (u.id IS NOT NULL) AS is_default,
-    IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
+    -- Money moved from the account to goals still in progress (net of what
+    -- came back), out of its balance though still in the bank.
+    CAST((
+        SELECT TOTAL(IIF(t.account_id = a.id, t.amount, -COALESCE(t.to_amount, t.amount)))
+        FROM transactions AS t
+        JOIN goals AS gl ON gl.account_id IN (t.account_id, t.to_account_id)
+        WHERE
+            t.kind = 3
+            AND t.fulfilled_at IS NOT NULL
+            AND gl.fulfilled_at IS NULL
+            AND a.id IN (t.account_id, t.to_account_id)
+            AND gl.account_id != a.id
+    ) AS FLOAT) AS set_aside
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
 LEFT JOIN counterparties AS cp ON a.counterparty_id = cp.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN user AS u ON u.default_account_id = a.id
-LEFT JOIN gls_amts AS gla ON a.id = gla.account_id
-WHERE a.is_archived IS FALSE
+WHERE a.is_archived IS FALSE AND a.deleted_at IS NULL AND k.enum != 6 -- models.AccKindGoal
 ORDER BY a.created_at DESC;
 
 -- name: GetAccount :one
-WITH gls_amts AS (
-    SELECT
-        t.account_id,
-        SUM(t.amount) AS amount
-    FROM goals AS gl
-    LEFT JOIN transactions AS t ON gl.id = t.goal_id
-    WHERE gl.fulfilled_at IS NULL
-    GROUP BY t.account_id
-)
 SELECT
     sqlc.embed(a),
     sqlc.embed(k),
@@ -71,13 +68,24 @@ SELECT
     cp.color AS counterparty_color,
     sqlc.embed(c),
     (u.id IS NOT NULL) AS is_default,
-    IFNULL(a.amount + gla.amount, a.amount) AS actual_amount
+    -- Money moved from the account to goals still in progress (net of what
+    -- came back), out of its balance though still in the bank.
+    CAST((
+        SELECT TOTAL(IIF(t.account_id = a.id, t.amount, -COALESCE(t.to_amount, t.amount)))
+        FROM transactions AS t
+        JOIN goals AS gl ON gl.account_id IN (t.account_id, t.to_account_id)
+        WHERE
+            t.kind = 3
+            AND t.fulfilled_at IS NOT NULL
+            AND gl.fulfilled_at IS NULL
+            AND a.id IN (t.account_id, t.to_account_id)
+            AND gl.account_id != a.id
+    ) AS FLOAT) AS set_aside
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
 LEFT JOIN counterparties AS cp ON a.counterparty_id = cp.id
 LEFT JOIN currencies AS c ON a.currency_id = c.id
 LEFT JOIN user AS u ON u.default_account_id = a.id
-LEFT JOIN gls_amts AS gla ON a.id = gla.account_id
 WHERE a.id = sqlc.arg(id);
 
 -- name: CreateAccount :exec
@@ -135,7 +143,9 @@ SET
 WHERE id = sqlc.arg(id);
 
 -- name: DeleteAccount :exec
-DELETE FROM accounts
+-- Soft deletes: the account stays for the history of its transactions.
+UPDATE accounts
+SET deleted_at = DATETIME('now')
 WHERE id = sqlc.arg(id);
 
 -- name: AddToAccount :exec
@@ -164,10 +174,11 @@ WHERE id = sqlc.arg(id);
 UPDATE accounts
 SET currency_id = sqlc.arg(currency_id)
 WHERE
-    currency_id = sqlc.arg(from_currency_id)
+    accounts.currency_id = sqlc.arg(from_currency_id)
     AND NOT EXISTS (SELECT 1 FROM transactions AS t WHERE t.account_id = accounts.id OR t.to_account_id = accounts.id)
     AND NOT EXISTS (SELECT 1 FROM recurrent_txs AS rt WHERE rt.account_id = accounts.id OR rt.to_account_id = accounts.id)
-    AND NOT EXISTS (SELECT 1 FROM gamyaas AS g WHERE g.account_id = accounts.id);
+    AND NOT EXISTS (SELECT 1 FROM gamyaas AS g WHERE g.account_id = accounts.id)
+    AND NOT EXISTS (SELECT 1 FROM goals AS gl WHERE gl.account_id = accounts.id);
 
 -- name: GetBalances :many
 SELECT
@@ -179,4 +190,20 @@ LEFT JOIN currencies AS c ON a.currency_id = c.id
 WHERE
     a.is_archived IS FALSE
     AND a.exclude_from_balance IS FALSE
+    AND a.deleted_at IS NULL
 GROUP BY a.currency_id ORDER BY c.string;
+
+-- name: DeleteRecurrentTxsOfAccount :exec
+-- Stops the recurrent transactions of a deleted account.
+DELETE FROM recurrent_txs
+WHERE account_id = sqlc.arg(id) OR to_account_id = sqlc.arg(id);
+
+-- name: DeleteScheduledTxsOfAccount :exec
+-- Unfulfilled ones never touched the balances, so they just go.
+DELETE FROM transactions
+WHERE (account_id = sqlc.arg(id) OR to_account_id = sqlc.arg(id)) AND fulfilled_at IS NULL;
+
+-- name: ClearDefaultAccount :exec
+UPDATE user
+SET default_account_id = NULL
+WHERE default_account_id = sqlc.arg(id);

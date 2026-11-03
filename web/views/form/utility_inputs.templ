@@ -132,10 +132,6 @@ templ SelectDefaultTxCat(name, id string, cats []models.Category, data FDInput, 
 	@SelectInput("Default Category", name, "No Default Category", id, idStructsToMap(cats, "Name"), data, true, inputAttrs, nil)
 }
 
-templ SelectGoal(name, id string, gls []models.Goal, data FDInput, inputAttrs templ.Attributes) {
-	@SelectInput("Goal", name, "Select Goal", id, idStructsToMap(gls, "Name"), data, true, inputAttrs, nil)
-}
-
 // SelectCategoryColor is a palette of color swatches. Picking one sets the
 // Alpine `accent` of the enclosing scope, if any.
 templ SelectCategoryColor(name, id string, data FDInput) {

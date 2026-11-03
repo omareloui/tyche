@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"slices"
 
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
@@ -24,7 +25,10 @@ func (r *Repository) GetAccountKinds(ctx context.Context) ([]models.AccountKind,
 	}
 	l.Debug("queried account kinds")
 
-	return dbAccountKindsToAccountKinds(dbKnds), nil
+	// Goals' accounts are only made by their goals.
+	return slices.DeleteFunc(dbAccountKindsToAccountKinds(dbKnds), func(k models.AccountKind) bool {
+		return k.Enum == models.AccKindGoal
+	}), nil
 }
 
 func (r *Repository) AccountKindsToMap(knds []models.AccountKind) map[string]string {

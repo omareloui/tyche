@@ -16,7 +16,6 @@ type Account struct {
 	ID           string
 	Name         string
 	Amount       float64
-	ActualAmount float64
 	Currency     Currency
 	Kind         AccountKind
 	Counterparty *Counterparty
@@ -32,6 +31,12 @@ type Account struct {
 	IsDefault          bool
 	ExpirationDate     time.Time
 	CreatedAt          time.Time
+	// DeletedAt is set on deleted accounts, kept for their transactions'
+	// history.
+	DeletedAt time.Time
+	// SetAside is the money moved from it to goals in progress, out of its
+	// balance though still in the bank.
+	SetAside float64
 	// Gamyaa is set on gam'yaa accounts.
 	Gamyaa *Gamyaa
 }
@@ -61,9 +66,29 @@ func (a *Account) ViewAmountIn(cur *Currency) string {
 	return formatters.FormatAmount(rate*a.Amount, cur.Symbol)
 }
 
-func (a *Account) ViewActualAmount() string {
-	return formatters.FormatAmount(a.ActualAmount, a.Currency.Symbol)
+func (a *Account) ViewSetAside() string {
+	return formatters.FormatAmount(a.SetAside, a.Currency.Symbol)
 }
+
+// InBank is what the bank shows: its balance plus what's set aside for goals.
+func (a *Account) InBank() float64 { return a.Amount + a.SetAside }
+
+func (a *Account) ViewInBank() string {
+	return formatters.FormatAmount(a.InBank(), a.Currency.Symbol)
+}
+
+func (a *Account) IsDeleted() bool { return !a.DeletedAt.IsZero() }
+
+// DisplayName is its name, marked when it's deleted.
+func (a *Account) DisplayName() string {
+	if a.IsDeleted() {
+		return a.Name + " (deleted)"
+	}
+	return a.Name
+}
+
+// IsGoal reports whether it's a goal's account.
+func (a *Account) IsGoal() bool { return a.Kind.Enum == AccKindGoal }
 
 func (a *Account) ViewCardLimit() string {
 	return formatters.FormatAmount(a.CardLimit, a.Currency.Symbol)

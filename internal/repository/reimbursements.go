@@ -45,7 +45,7 @@ func (r *Repository) LinkReimbursement(ctx context.Context, incomeID, expenseID 
 		if income.Transaction.TransferPairID.Valid || expense.Transaction.TransferPairID.Valid {
 			return models.ErrReimbursementTransferPair
 		}
-		if expense.Transaction.GoalID.Valid {
+		if expense.GoalID.Valid {
 			return models.ErrReimbursementGoal
 		}
 		if income.Account.CurrencyID != expense.Account.CurrencyID {

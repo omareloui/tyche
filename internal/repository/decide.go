@@ -67,23 +67,16 @@ func (r *Repository) GetGoalPaces(ctx context.Context, goals []models.Goal) (mod
 		return nil, err
 	}
 
-	curOf := map[string]*models.Currency{}
+	inProgress := map[string]bool{}
 	for i := range goals {
-		curOf[goals[i].ID] = &goals[i].Currency
+		inProgress[goals[i].ID] = true
 	}
 
 	paces := models.GoalPaces{}
 	for _, row := range rows {
-		cur, ok := curOf[row.GoalID.String]
-		if !ok {
-			continue
+		if inProgress[row.GoalID] {
+			paces[row.GoalID] = row.Amount / goalPaceMonths
 		}
-		from := models.Currency{String: row.CurrencyString}
-		rate := 1.0
-		if from.String != cur.String {
-			rate = from.FxRate(cur.String)
-		}
-		paces[row.GoalID.String] += row.Amount * rate / goalPaceMonths
 	}
 	return paces, nil
 }

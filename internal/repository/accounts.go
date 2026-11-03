@@ -174,20 +174,38 @@ func (r *Repository) UpdateAccount(ctx context.Context, a *models.Account) error
 	return nil
 }
 
-func (r *Repository) DeleteAccount(ctx context.Context, id string) error {
+// DeleteAccount soft deletes the account: it's hidden everywhere but in the
+// history of its transactions. Its balance is moved first with moveBalance
+// (if any); its recurrent and scheduled transactions go, and it stops being
+// the default account.
+func (r *Repository) DeleteAccount(ctx context.Context, id string, moveBalance *models.Transaction) error {
 	l := logger.FromCtx(ctx)
-
-	_, q, err := r.dbFromCtx(ctx)
-	if err != nil {
-		return err
-	}
-
-	if err := q.DeleteAccount(ctx, id); err != nil {
-		l.Error("deleting account", zap.Error(err))
-		return err
-	}
-	l.Debug("deleted account")
-	return nil
+	return r.transact(ctx, func(qtx *queries.Queries) error {
+		steps := []func(context.Context, string) error{
+			qtx.DeleteRecurrentTxsOfAccount,
+			qtx.DeleteScheduledTxsOfAccount,
+			func(ctx context.Context, id string) error {
+				return qtx.ClearDefaultAccount(ctx, sql.NullString{String: id, Valid: true})
+			},
+		}
+		for _, step := range steps {
+			if err := step(ctx, id); err != nil {
+				l.Error("deleting account", zap.Error(err), zap.String("id", id))
+				return err
+			}
+		}
+		if moveBalance != nil {
+			if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, moveBalance); err != nil {
+				return err
+			}
+		}
+		if err := qtx.DeleteAccount(ctx, id); err != nil {
+			l.Error("deleting account", zap.Error(err), zap.String("id", id))
+			return err
+		}
+		l.Debug("deleted account", zap.String("id", id))
+		return nil
+	})
 }
 
 // FixBalances sets each account's balance to its fix, recording the
@@ -360,7 +378,7 @@ func (r *Repository) GetBalances(ctx context.Context) ([]models.Balance, error) 
 }
 
 func dbAccountToAccount(
-	dbAcc *queries.Account, actualAmount float64,
+	dbAcc *queries.Account,
 	cur *queries.Currency, k *queries.AccountKind,
 	cpName *sql.NullString, isDefault bool,
 ) *models.Account {
@@ -369,7 +387,6 @@ func dbAccountToAccount(
 		ID:                 dbAcc.ID,
 		Name:               dbAcc.Name,
 		Amount:             dbAcc.Amount,
-		ActualAmount:       actualAmount,
 		IsDefault:          isDefault,
 		NameOnCard:         dbAcc.NameOnCard.String,
 		CardLimit:          dbAcc.CardLimit,
@@ -381,6 +398,7 @@ func dbAccountToAccount(
 		ExcludeFromBalance: dbAcc.ExcludeFromBalance,
 		ExpirationDate:     dbAcc.ExpirationDate.Time,
 		CreatedAt:          dbAcc.CreatedAt,
+		DeletedAt:          dbAcc.DeletedAt.Time,
 
 		Currency: models.Currency{ID: dbAcc.CurrencyID},
 		Kind:     models.AccountKind{ID: dbAcc.KindID},
@@ -406,11 +424,11 @@ func dbAccountRowToAccount[T queries.GetAccountRow | queries.GetAccountsRow](dbA
 	_dbAcc := queries.GetAccountRow(*dbAcc)
 	acc := dbAccountToAccount(
 		&_dbAcc.Account,
-		_dbAcc.ActualAmount.(float64),
 		&_dbAcc.Currency,
 		&_dbAcc.AccountKind,
 		&_dbAcc.CounterpartyName,
 		_dbAcc.IsDefault.(int64) == 1)
+	acc.SetAside = _dbAcc.SetAside
 	if acc.Counterparty != nil {
 		acc.Counterparty.Icon = _dbAcc.CounterpartyIcon.String
 		acc.Counterparty.Color = _dbAcc.CounterpartyColor.String

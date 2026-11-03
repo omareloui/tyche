@@ -16,6 +16,12 @@ DELETE FROM sms_templates;
 -- name: ResetDeleteGoals :exec
 DELETE FROM goals;
 
+-- Goals' accounts, deleted goals' ones included. Their transactions are
+-- reset too (ResetGoals requires it).
+-- name: ResetDeleteGoalAccounts :exec
+DELETE FROM accounts
+WHERE kind_id IN (SELECT id FROM account_kinds WHERE enum = 6); -- models.AccKindGoal
+
 -- name: ResetDeleteWishlistItems :exec
 DELETE FROM wishlist_items;
 

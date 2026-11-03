@@ -11,7 +11,6 @@ INSERT INTO recurrent_txs (
     description,
     to_account_id,
     to_amount,
-    goal_id,
     starts_at,
     stops_at,
     last_transaction_scheduled_to
@@ -28,7 +27,6 @@ VALUES (
     sqlc.arg(description),
     sqlc.arg(to_account_id),
     IIF(sqlc.narg(to_amount) > 0.0, ROUND(sqlc.narg(to_amount), 2), NULL),
-    sqlc.arg(goal_id),
     sqlc.arg(starts_at),
     sqlc.arg(stops_at),
     sqlc.arg(last_transaction_scheduled_to)
@@ -81,7 +79,6 @@ SET
     description = sqlc.arg(description),
     to_account_id = sqlc.arg(to_account_id),
     to_amount = IIF(sqlc.narg(to_amount) > 0.0, ROUND(sqlc.narg(to_amount), 2), NULL),
-    goal_id = sqlc.arg(goal_id),
     stops_at = sqlc.arg(stops_at),
     last_transaction_scheduled_to = sqlc.arg(last_transaction_scheduled_to)
 WHERE id = sqlc.arg(id);

@@ -91,7 +91,7 @@ func dbUserToUser(dbU *queries.User, dfltCur *queries.Currency, dfltAcc *queries
 	}
 
 	if dfltAcc != nil {
-		u.DefaultAccount = dbAccountToAccount(dfltAcc, 0, nil, nil, nil, true)
+		u.DefaultAccount = dbAccountToAccount(dfltAcc, nil, nil, nil, true)
 	}
 
 	return u

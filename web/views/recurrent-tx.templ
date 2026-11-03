@@ -52,8 +52,8 @@ templ rtxFormBody(
 	id string, fd *RecurrentTxFD,
 	accs []models.Account, knds []models.TxKind,
 	cats []models.Category, cps []models.Counterparty,
-	gls []models.Goal, defaultCur *models.Currency) {
-	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs, cps, gls, defaultCur)
+	defaultCur *models.Currency) {
+	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs, cps, defaultCur)
 	@form.Field("Description", "description", id, icons.Pencil("15"), fd.Description.Error) {
 		@form.Control("text", "description", "What is it for?", id, fd.Description, nil)
 	}
@@ -92,9 +92,9 @@ templ EditRecurrentTx(
 	rtx *models.RecurrentTx, fd *RecurrentTxFD,
 	accs []models.Account, knds []models.TxKind,
 	cats []models.Category, cps []models.Counterparty,
-	gls []models.Goal, defaultCur *models.Currency) {
+	defaultCur *models.Currency) {
 	@components.Drawer(components.DrawerProps{Label: "Edit recurring transaction"}) {
-		@EditRecurrentTxForm(rtx, fd, accs, knds, cats, cps, gls, defaultCur)
+		@EditRecurrentTxForm(rtx, fd, accs, knds, cats, cps, defaultCur)
 	}
 }
 
@@ -104,12 +104,12 @@ templ EditRecurrentTxForm(
 	rtx *models.RecurrentTx, fd *RecurrentTxFD,
 	accs []models.Account, knds []models.TxKind,
 	cats []models.Category, cps []models.Counterparty,
-	gls []models.Goal, defaultCur *models.Currency) {
+	defaultCur *models.Currency) {
 	@form.DrawerForm(form.DrawerFormProps{
 		Header: rtxEditHeader(), Method: "put", URL: fmt.Sprintf("/recurrent-tx/%s", rtx.ID),
 		Submit: "Save changes", Class: "tx-form",
 	}) {
-		@rtxFormBody(rtx.ID, fd, accs, knds, cats, cps, gls, defaultCur)
+		@rtxFormBody(rtx.ID, fd, accs, knds, cats, cps, defaultCur)
 	}
 }
 
@@ -331,12 +331,6 @@ templ rtxChips(rt *models.RecurrentTx, title string) {
 			<span class="chip">
 				@icons.Tag("12")
 				{ rt.Category.Name }
-			</span>
-		}
-		if rt.Goal != nil {
-			<span class="chip max-w-48">
-				@icons.Target("12")
-				<span class="truncate">{ rt.Goal.Name }</span>
 			</span>
 		}
 		if !rt.StopsAt.IsZero() {

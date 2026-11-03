@@ -79,7 +79,7 @@ func (h Handler) GetEditRecurrentTx(w http.ResponseWriter, r *http.Request) (tem
 
 	l := logger.FromCtx(r.Context())
 
-	accs, knds, cats, cps, gls, err := h.getTxDeps(r.Context())
+	accs, knds, cats, cps, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +95,7 @@ func (h Handler) GetEditRecurrentTx(w http.ResponseWriter, r *http.Request) (tem
 
 	return views.EditRecurrentTx(rt,
 		h.mapRecurrentTxToFD(rt, &errs.ValidationError{}, knds),
-		accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
+		accs, knds, cats, cps, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) EditRecurrentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -115,7 +115,7 @@ func (h Handler) EditRecurrentTx(w http.ResponseWriter, r *http.Request) (templ.
 	rt.ID = id
 	rt.LastTransactionScheduledTo = time.Now()
 
-	accs, knds, cats, cps, gls, err := h.getTxDeps(r.Context())
+	accs, knds, cats, cps, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +134,7 @@ func (h Handler) EditRecurrentTx(w http.ResponseWriter, r *http.Request) (templ.
 			l.Error("validating recurrent transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
 			claims := getClaims(r.Context())
 			return views.EditRecurrentTxForm(rt, h.mapRecurrentTxToFD(rt, &valerr, knds),
-				accs, knds, cats, cps, gls, &claims.DefaultCurrency), nil
+				accs, knds, cats, cps, &claims.DefaultCurrency), nil
 		}
 		l.Error("sanitizing recurrent transaction", zap.Error(err))
 		return nil, err
@@ -289,7 +289,6 @@ func (h Handler) mapRecurrentTxToFD(rt *models.RecurrentTx, valerr *errs.Validat
 	}
 
 	hasToAccount := rt.Kind == models.DebtTxKind || rt.Kind == models.TransferTxKind
-	hasGoal := rt.Kind == models.ExpenseTxKind
 
 	if rt.Category != nil {
 		fd.CategoryID = &form.FDInput{Value: rt.Category.ID, Error: valerr.Errors.MsgFor("CategoryID")}
@@ -313,12 +312,6 @@ func (h Handler) mapRecurrentTxToFD(rt *models.RecurrentTx, valerr *errs.Validat
 			Amount:    form.FDInput{Error: valerr.Errors.MsgFor("ToAmount")},
 			AccountID: form.FDInput{Error: valerr.Errors.MsgFor("ToAccountID")},
 		}
-	}
-
-	if rt.Goal != nil {
-		fd.GoalID = &form.FDInput{Value: rt.Goal.ID, Error: valerr.Errors.MsgFor("GoalID")}
-	} else if hasGoal {
-		fd.GoalID = &form.FDInput{Error: valerr.Errors.MsgFor("GoalID")}
 	}
 
 	return fd

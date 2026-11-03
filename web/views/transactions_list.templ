@@ -516,7 +516,11 @@ templ transaction(tx *models.Transaction, def *models.Currency) {
 }
 
 templ txTile(tx *models.Transaction, v *txView) {
-	if tx.IsTransferLeg() {
+	if tx.IsGoalTx() {
+		<div class="grid place-items-center shrink-0 w-11 h-11 rounded-xl bg-violet-400/12 text-violet-400">
+			@icons.Target("22")
+		</div>
+	} else if tx.IsTransferLeg() {
 		<div class="grid place-items-center shrink-0 w-11 h-11 rounded-xl bg-sky-400/12 text-sky-400">
 			@icons.Transfer("22")
 		</div>
@@ -714,7 +718,7 @@ templ txGoalPopup(gl *models.Goal) {
 			<p class="shrink-0 text-xs text-zinc-400">{ formatters.FormatNum(gl.ProgressPercentage()) }%</p>
 		</div>
 		<div class="mt-2">
-			@components.ProgressBar(gl.ProgressPercentage(), components.WithProgressBarSuccessStatus(gl.ProgressPercentage() >= 100 || !gl.FulfilledAt.IsZero()))
+			@goalProgressBar(gl)
 		</div>
 		<p class="mt-2 text-xs text-zinc-400">{ gl.ViewProgress() } / { gl.ViewAmount() }</p>
 	}
@@ -1075,9 +1079,9 @@ func getTransactionMenuItems(tx *models.Transaction) []templ.Component {
 	}
 
 	// Adjustments are signed, which the form can't edit; fix the balance
-	// again instead.
+	// again instead. Goals' and deleted accounts' transactions are locked.
 	edit := []templ.Component{}
-	if tx.Kind != models.AdjustmentTxKind {
+	if tx.Kind != models.AdjustmentTxKind && !tx.IsLocked() {
 		edit = append(edit, txMenuEdit(tx), txMenuDuplicate(tx.ID))
 	}
 
@@ -1088,7 +1092,7 @@ func getTransactionMenuItems(tx *models.Transaction) []templ.Component {
 // side of a transfer between the user's accounts.
 func canPairTransfer(tx *models.Transaction) bool {
 	return (tx.Kind == models.ExpenseTxKind || tx.Kind == models.IncomeTxKind) &&
-		!tx.FulfilledAt.IsZero() && tx.Goal == nil && !tx.IsReimbursement() && tx.Reimbursed == 0
+		!tx.FulfilledAt.IsZero() && !tx.IsLocked() && !tx.IsReimbursement() && tx.Reimbursed == 0
 }
 
 func getTransferLegMenuItems(tx *models.Transaction) []templ.Component {
@@ -1345,7 +1349,7 @@ type txView struct {
 func newTxView(tx *models.Transaction) txView {
 	v := txView{
 		title:       tx.Description,
-		account:     tx.Account.Name,
+		account:     tx.Account.DisplayName(),
 		accountID:   tx.Account.ID,
 		accKind:     tx.Account.Kind.Enum,
 		amount:      "-" + tx.ViewAmount(),
@@ -1363,7 +1367,7 @@ func newTxView(tx *models.Transaction) txView {
 	if in := tx.TransferPair; in != nil {
 		v.tone = txToneNeutral
 		v.title = "Transfer"
-		v.toAccount = in.Account.Name
+		v.toAccount = in.Account.DisplayName()
 		v.amount = in.ViewAmount()
 		if tx.Account.Currency.String != in.Account.Currency.String {
 			v.subtitle = "Sent " + tx.ViewAmount()
@@ -1395,7 +1399,7 @@ func newTxView(tx *models.Transaction) txView {
 			v.title = "Transfer"
 		}
 		if tx.ToAccount != nil {
-			v.toAccount = tx.ToAccount.Name
+			v.toAccount = tx.ToAccount.DisplayName()
 			v.amount = tx.ViewToAmount()
 			if tx.Account.Currency.ID != tx.ToAccount.Currency.ID {
 				v.subtitle = "Sent " + tx.ViewAmount()
@@ -1409,7 +1413,7 @@ func newTxView(tx *models.Transaction) txView {
 			// Borrowing: money comes from the debt account into a real one.
 			if tx.Account.Kind.Enum == models.AccKindDebt {
 				v.title = debtPartyName(&tx.Account)
-				v.account = tx.ToAccount.Name
+				v.account = tx.ToAccount.DisplayName()
 				v.accountID = tx.ToAccount.ID
 				v.accKind = tx.ToAccount.Kind.Enum
 				v.amount = "+" + tx.ViewToAmount()

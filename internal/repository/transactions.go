@@ -39,7 +39,7 @@ func (r *Repository) CreateTransaction(ctx context.Context, tx *models.Transacti
 func (r *Repository) createTransactionWithTxn(qtx *queries.Queries, ctx context.Context, tx *models.Transaction) error {
 	l := logger.FromCtx(ctx)
 
-	var catID, cpID, toAccID, goalID, recurrentID sql.NullString
+	var catID, cpID, toAccID, recurrentID sql.NullString
 
 	if tx.Category != nil {
 		catID.Valid = tx.Category.ID != ""
@@ -52,10 +52,6 @@ func (r *Repository) createTransactionWithTxn(qtx *queries.Queries, ctx context.
 	if tx.ToAccount != nil {
 		toAccID.Valid = tx.ToAccount.ID != ""
 		toAccID.String = tx.ToAccount.ID
-	}
-	if tx.Goal != nil {
-		goalID.Valid = tx.Goal.ID != ""
-		goalID.String = tx.Goal.ID
 	}
 	if tx.RecurrentTx != nil {
 		recurrentID.Valid = tx.RecurrentTx.ID != ""
@@ -72,7 +68,6 @@ func (r *Repository) createTransactionWithTxn(qtx *queries.Queries, ctx context.
 		Description:    sql.NullString{String: tx.Description, Valid: tx.Description != ""},
 		ToAccountID:    toAccID,
 		ToAmount:       sql.NullFloat64{Float64: tx.ToAmount, Valid: tx.ToAmount != 0},
-		GoalID:         goalID,
 		RecurrentID:    recurrentID,
 		ScheduledTo:    tx.ScheduledTo,
 		FulfilledAt:    sql.NullTime{Time: tx.FulfilledAt, Valid: !tx.FulfilledAt.IsZero()},
@@ -426,29 +421,35 @@ func (r *Repository) GetTransaction(ctx context.Context, id string) (*models.Tra
 
 func (r *Repository) DeleteTransaction(ctx context.Context, tx *models.Transaction) error {
 	return r.transact(ctx, func(qtx *queries.Queries) error {
-		l := logger.FromCtx(ctx)
-		if err := qtx.DeleteTransaction(ctx, tx.ID); err != nil {
-			l.Error("deleting transaction", zap.Error(err), zap.String("id", tx.ID))
+		return r.deleteTransactionWithTxn(ctx, qtx, tx)
+	})
+}
+
+// deleteTransactionWithTxn deletes tx, undoing it on its accounts if it was
+// fulfilled.
+func (r *Repository) deleteTransactionWithTxn(ctx context.Context, qtx *queries.Queries, tx *models.Transaction) error {
+	l := logger.FromCtx(ctx)
+	if err := qtx.DeleteTransaction(ctx, tx.ID); err != nil {
+		l.Error("deleting transaction", zap.Error(err), zap.String("id", tx.ID))
+		return err
+	}
+	l.Debug("deleted transaction", zap.String("id", tx.ID))
+
+	if !tx.FulfilledAt.IsZero() {
+		if err := r.undoTxToAccountWithTxn(qtx, ctx, tx); err != nil {
+			l.Error("undoing transaction after deletion", zap.Error(err))
 			return err
 		}
-		l.Debug("deleted transaction", zap.String("id", tx.ID))
-
-		if !tx.FulfilledAt.IsZero() {
-			if err := r.undoTxToAccountWithTxn(qtx, ctx, tx); err != nil {
-				l.Error("undoing transaction after deletion", zap.Error(err))
-				return err
-			}
-			l.Debug("undone transaction after deletion")
-		}
-		return nil
-	})
+		l.Debug("undone transaction after deletion")
+	}
+	return nil
 }
 
 func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transaction, tx *models.Transaction) error {
 	return r.transact(ctx, func(qtx *queries.Queries) error {
 		l := logger.FromCtx(ctx)
 
-		var catID, cpID, toAccID, goalID sql.NullString
+		var catID, cpID, toAccID sql.NullString
 
 		if tx.Category != nil {
 			catID.Valid = tx.Category.ID != ""
@@ -462,10 +463,6 @@ func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transa
 			toAccID.Valid = tx.ToAccount.ID != ""
 			toAccID.String = tx.ToAccount.ID
 		}
-		if tx.Goal != nil {
-			goalID.Valid = tx.Goal.ID != ""
-			goalID.String = tx.Goal.ID
-		}
 
 		if err := qtx.UpdateTransaction(ctx, queries.UpdateTransactionParams{
 			ID:             tx.ID,
@@ -476,7 +473,6 @@ func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transa
 			CounterpartyID: cpID,
 			ToAccountID:    toAccID,
 			ToAmount:       sql.NullFloat64{Float64: tx.ToAmount, Valid: tx.ToAmount != 0},
-			GoalID:         goalID,
 			Description:    sql.NullString{String: tx.Description, Valid: tx.Description != ""},
 			ScheduledTo:    tx.ScheduledTo,
 		}); err != nil {
@@ -560,11 +556,11 @@ func dbTransactionToTransaction(
 	}
 
 	if acc != nil {
-		tx.Account = *dbAccountToAccount(acc, 0, cur, nil, nil, false)
+		tx.Account = *dbAccountToAccount(acc, cur, nil, nil, false)
 	}
 
 	if toAcc != nil {
-		tx.ToAccount = dbAccountToAccount(toAcc, 0, toCur, nil, nil, false)
+		tx.ToAccount = dbAccountToAccount(toAcc, toCur, nil, nil, false)
 	} else if dbTx.ToAccountID.Valid {
 		tx.ToAccount = &models.Account{ID: dbTx.ToAccountID.String}
 	}
@@ -583,9 +579,6 @@ func dbTransactionToTransaction(
 
 	if gl != nil {
 		tx.Goal = dbGoalToGoal(gl, glCur)
-		tx.GoalPercentage = tx.Percentage(tx.Goal.Price, tx.Goal.Currency.String)
-	} else if dbTx.GoalID.Valid {
-		tx.Goal = &models.Goal{ID: dbTx.GoalID.String}
 	}
 
 	return &tx
@@ -601,9 +594,9 @@ func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTran
 
 	var gl *queries.Goal
 	var glCur *queries.Currency
-	if _dbTx.Transaction.GoalID.Valid {
+	if _dbTx.GoalID.Valid {
 		gl = &queries.Goal{
-			ID:          _dbTx.Transaction.GoalID.String,
+			ID:          _dbTx.GoalID.String,
 			Name:        _dbTx.GoalName.String,
 			CurrencyID:  _dbTx.GoalCurrencyID.String,
 			Price:       _dbTx.GoalPrice.Float64,
@@ -637,6 +630,7 @@ func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTran
 			ExcludeFromBalance: _dbTx.ToAccountExcludeFromBalance.Bool,
 			ExpirationDate:     _dbTx.ToAccountExpirationDate,
 			CreatedAt:          _dbTx.ToAccountCreatedAt.Time,
+			DeletedAt:          _dbTx.ToAccountDeletedAt,
 		}
 		if _dbTx.ToAccountCurrencyID.Valid {
 			toAccCurr = &queries.Currency{

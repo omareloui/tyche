@@ -115,9 +115,9 @@ const (
 templ TxEditDrawer(tx *models.Transaction, fd *TransactionFD,
 	accs []models.Account, knds []models.TxKind,
 	cats []models.Category, cps []models.Counterparty,
-	gls []models.Goal, def *models.Currency) {
+	def *models.Currency) {
 	@txDrawer() {
-		@TxEditPanel(tx, fd, accs, knds, cats, cps, gls, def, TxEditFromRow)
+		@TxEditPanel(tx, fd, accs, knds, cats, cps, def, TxEditFromRow)
 	}
 }
 
@@ -128,7 +128,7 @@ templ TxEditDrawer(tx *models.Transaction, fd *TransactionFD,
 templ TxEditPanel(tx *models.Transaction, fd *TransactionFD,
 	accs []models.Account, knds []models.TxKind,
 	cats []models.Category, cps []models.Counterparty,
-	gls []models.Goal, def *models.Currency, from string) {
+	def *models.Currency, from string) {
 	@form.DrawerForm(form.DrawerFormProps{
 		Title: "Edit transaction", Method: "put", URL: fmt.Sprintf("/transactions/%s", url.PathEscape(tx.ID)),
 		Submit: "Save changes", Target: "#txd-panel", Swap: "innerHTML", CancelClick: "cancel()",
@@ -136,7 +136,7 @@ templ TxEditPanel(tx *models.Transaction, fd *TransactionFD,
 		Attrs: templ.Attributes{"x-init": fmt.Sprintf("show(%q, 'edit', %q)", tx.ID, from)},
 	}) {
 		<input type="hidden" name="from" value={ from }/>
-		@transactionFormBody(fd, tx.ID, accs, knds, cats, cps, gls, def)
+		@transactionFormBody(fd, tx.ID, accs, knds, cats, cps, def)
 	}
 }
 
@@ -230,8 +230,9 @@ templ txDetailsActions(tx *models.Transaction) {
 				Mark reviewed
 			</button>
 		}
-		// Adjustments are signed, which the form can't edit.
-		if tx.Kind != models.AdjustmentTxKind {
+		// Adjustments are signed, which the form can't edit; goals' and
+		// deleted accounts' transactions are locked.
+		if tx.Kind != models.AdjustmentTxKind && !tx.IsLocked() {
 			<button
 				type="button"
 				hx-get={ fmt.Sprintf("/transactions/%s/edit", tx.ID) }
@@ -273,7 +274,7 @@ templ txDetailsFields(d *models.TxDetails, v *txView) {
 				{ txFilterBy(models.TxFilterAccount, tx.Account.ID)... }
 				title={ "Show only " + tx.Account.Name }
 				class="txd-link"
-			>{ tx.Account.Name }</button>
+			>{ tx.Account.DisplayName() }</button>
 			if tx.ToAccount != nil && tx.ToAccount.Name != "" {
 				<span class="text-zinc-500">→</span>
 				<button
@@ -281,7 +282,7 @@ templ txDetailsFields(d *models.TxDetails, v *txView) {
 					{ txFilterBy(models.TxFilterAccount, tx.ToAccount.ID)... }
 					title={ "Show only " + tx.ToAccount.Name }
 					class="txd-link"
-				>{ tx.ToAccount.Name }</button>
+				>{ tx.ToAccount.DisplayName() }</button>
 			}
 		}
 		if tx.ToAccount != nil && tx.ToAmount != 0 && (tx.Kind == models.TransferTxKind || tx.Kind == models.DebtTxKind) {
@@ -319,10 +320,7 @@ templ txDetailsFields(d *models.TxDetails, v *txView) {
 		}
 		if tx.Goal != nil {
 			@txDetailsRow("Goal", icons.Target("15")) {
-				<a href={ templ.SafeURL("/goals") } class="txd-link">{ tx.Goal.Name }</a>
-				<span class="sensitive text-zinc-500 tabular-nums">
-					{ formatters.FormatNum(tx.GoalPercentage) }% of it · { formatters.FormatNum(tx.Goal.ProgressPercentage()) }% saved
-				</span>
+				@txGoalProgress(tx)
 			}
 		}
 		if tx.Description != "" && tx.Description != v.title {
@@ -590,6 +588,12 @@ func txDetailsKind(tx *models.Transaction) string {
 		return "Transfer, received"
 	case tx.IsReimbursement():
 		return "Reimbursement"
+	case tx.IsGoalPurchase():
+		return "Goal purchase"
+	case tx.IsGoalTx() && tx.GoalAmount() > 0:
+		return "Goal deposit"
+	case tx.IsGoalTx():
+		return "Goal withdrawal"
 	}
 	return tx.Kind.String()
 }
@@ -600,4 +604,47 @@ func txPairOut(d *models.TxDetails) *models.Transaction {
 		return d.Tx
 	}
 	return d.Pair
+}
+
+// txGoalProgress is the goal of a goal transaction: how far it is, and what
+// this transaction put in (or took out) of it.
+templ txGoalProgress(tx *models.Transaction) {
+	{{ gl := tx.Goal }}
+	{{ pct := gl.ProgressPercentage() }}
+	<div class="grid gap-2 w-full min-w-0">
+		<div class="flex items-baseline justify-between gap-3">
+			<a href={ templ.SafeURL("/goals") } class="txd-link truncate">{ gl.Name }</a>
+			<span class="shrink-0 text-sm tabular-nums text-zinc-400">
+				if !gl.FulfilledAt.IsZero() {
+					Bought
+				} else {
+					{ fmt.Sprintf("%.0f%%", pct) }
+				}
+			</span>
+		</div>
+		@goalProgressBar(gl)
+		<p class="sensitive text-sm text-zinc-500 tabular-nums">
+			{ gl.ViewProgress() } of { gl.ViewAmount() } saved
+			if tx.IsGoalPurchase() {
+				· bought for { formatters.FormatAmount(tx.Amount, gl.Currency.Symbol) }
+			} else if amt := tx.GoalAmount(); amt > 0 {
+				· this one { "+" + formatters.FormatAmount(amt, gl.Currency.Symbol) } ({ formatters.FormatNum(tx.GoalPercentage()) }%)
+			} else if amt < 0 {
+				· this one { formatters.FormatAmount(amt, gl.Currency.Symbol) }
+			}
+		</p>
+	</div>
+}
+
+// goalProgressBar is a thin bar of the goal's progress, green once reached
+// or bought.
+templ goalProgressBar(gl *models.Goal) {
+	{{ pct := gl.ProgressPercentage() }}
+	{{ done := pct >= 100 || !gl.FulfilledAt.IsZero() }}
+	<div class="h-2 rounded-full bg-zinc-800 overflow-hidden">
+		<div
+			class={ "h-full rounded-full", templ.KV("bg-emerald-400", done), templ.KV("bg-violet-400", !done) }
+			style={ fmt.Sprintf("width: %.1f%%", min(100, max(0, pct))) }
+		></div>
+	</div>
 }

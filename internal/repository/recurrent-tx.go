@@ -13,7 +13,7 @@ import (
 func (r *Repository) createRecurrentTxWithTxn(qtx *queries.Queries, ctx context.Context, rt *models.RecurrentTx) error {
 	l := logger.FromCtx(ctx)
 
-	var catId, cpId, toAccId, goalId sql.NullString
+	var catId, cpId, toAccId sql.NullString
 
 	if rt.Category != nil {
 		catId.Valid = rt.Category.ID != ""
@@ -26,10 +26,6 @@ func (r *Repository) createRecurrentTxWithTxn(qtx *queries.Queries, ctx context.
 	if rt.ToAccount != nil {
 		toAccId.Valid = rt.ToAccount.ID != ""
 		toAccId.String = rt.ToAccount.ID
-	}
-	if rt.Goal != nil {
-		goalId.Valid = rt.Goal.ID != ""
-		goalId.String = rt.Goal.ID
 	}
 
 	if err := qtx.CreateRecurrentTx(ctx, queries.CreateRecurrentTxParams{
@@ -44,7 +40,6 @@ func (r *Repository) createRecurrentTxWithTxn(qtx *queries.Queries, ctx context.
 		Description:                sql.NullString{String: rt.Description, Valid: rt.Description != ""},
 		ToAccountID:                toAccId,
 		ToAmount:                   rt.ToAmount,
-		GoalID:                     goalId,
 		StartsAt:                   rt.StartsAt,
 		StopsAt:                    sql.NullTime{Time: rt.StopsAt, Valid: !rt.StopsAt.IsZero()},
 		LastTransactionScheduledTo: rt.LastTransactionScheduledTo,
@@ -130,7 +125,7 @@ func (r *Repository) UpdateRecurrentTx(ctx context.Context, rt *models.Recurrent
 		}
 		l.Debug("deleted scheduled transaction of transaction")
 
-		var catId, cpId, toAccId, goalId sql.NullString
+		var catId, cpId, toAccId sql.NullString
 
 		if rt.Category != nil {
 			catId.Valid = rt.Category.ID != ""
@@ -143,10 +138,6 @@ func (r *Repository) UpdateRecurrentTx(ctx context.Context, rt *models.Recurrent
 		if rt.ToAccount != nil {
 			toAccId.Valid = rt.ToAccount.ID != ""
 			toAccId.String = rt.ToAccount.ID
-		}
-		if rt.Goal != nil {
-			goalId.Valid = rt.Goal.ID != ""
-			goalId.String = rt.Goal.ID
 		}
 
 		if err := qtx.UpdateRecurrentTx(ctx, queries.UpdateRecurrentTxParams{
@@ -161,7 +152,6 @@ func (r *Repository) UpdateRecurrentTx(ctx context.Context, rt *models.Recurrent
 			Description:                sql.NullString{String: rt.Description, Valid: rt.Description != ""},
 			ToAccountID:                toAccId,
 			ToAmount:                   rt.ToAmount,
-			GoalID:                     goalId,
 			StopsAt:                    sql.NullTime{Time: rt.StopsAt, Valid: !rt.StopsAt.IsZero()},
 			LastTransactionScheduledTo: rt.LastTransactionScheduledTo,
 		}); err != nil {
@@ -342,22 +332,6 @@ func dbRecurrentTxDetailsToRecurrentTx(dbRtx queries.RecurrentTxsDetail) *models
 		if dbRtx.CategoryBudgetCurrencyID.Valid {
 			rt.Category.BudgetCurrency = &models.Currency{
 				ID: dbRtx.CategoryBudgetCurrencyID.String,
-			}
-		}
-	}
-
-	if dbRtx.RecurrentTxGoalID.Valid {
-		rt.Goal = &models.Goal{
-			ID:          dbRtx.RecurrentTxGoalID.String,
-			Name:        dbRtx.GoalName.String,
-			Price:       dbRtx.GoalPrice.Float64,
-			FulfilledAt: dbRtx.GoalFulfilledAt.Time,
-		}
-		if dbRtx.GoalCurrencyID.Valid {
-			rt.Goal.Currency = models.Currency{
-				ID:     dbRtx.GoalCurrencyID.String,
-				String: dbRtx.GoalCurrencyString.String,
-				Symbol: dbRtx.GoalCurrencySymbol.String,
 			}
 		}
 	}

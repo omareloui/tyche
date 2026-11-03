@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"slices"
+	"strings"
 
 	_ "github.com/omareloui/tyche/internal/sqlite"
 	"go.uber.org/zap"
@@ -47,6 +49,7 @@ func (s *Seeder) Seed(ctx context.Context, db *sql.DB, oauthID string) {
 
 	s.currencies(ctx, q)
 	s.accountKinds(ctx, q)
+	s.goalAccounts(ctx, q)
 
 	l.Debug("ensured seeding currencies, account kinds, and transaction kinds", zap.String("oauthID", oauthID))
 
@@ -157,6 +160,7 @@ func (s *Seeder) accountKinds(ctx context.Context, q *queries.Queries) {
 		{ID: idgen.New(), Enum: int64(models.AccKindCash)},
 		{ID: idgen.New(), Enum: int64(models.AccKindDebt)},
 		{ID: idgen.New(), Enum: int64(models.AccKindGamyaa)},
+		{ID: idgen.New(), Enum: int64(models.AccKindGoal)},
 	}
 
 	seedFn(ctx, q.GetAccountKinds, seed, q.CreateAccountKind,
@@ -198,4 +202,46 @@ func ShownCurrencies() []string {
 		}
 	}
 	return codes
+}
+
+// goalAccounts gives the goals without an account theirs (goals made before
+// they had one, or imported from such a backup).
+func (s *Seeder) goalAccounts(ctx context.Context, q *queries.Queries) {
+	l := logger.FromCtx(ctx)
+
+	gls, err := q.GetGoalsWithoutAccount(ctx)
+	if err != nil || len(gls) == 0 {
+		if err != nil {
+			l.Error("getting goals without an account", zap.Error(err))
+		}
+		return
+	}
+	kindID, err := q.GetAccountKindID(ctx, int64(models.AccKindGoal))
+	if err != nil {
+		l.Error("getting the goal account kind", zap.Error(err))
+		return
+	}
+
+	for _, gl := range gls {
+		id := idgen.New()
+		// Goals' names aren't unique, their accounts' are.
+		name := models.GoalAccountName(gl.Name)
+		for n := 2; ; n++ {
+			err = q.CreateAccount(ctx, queries.CreateAccountParams{
+				ID: id, Name: name, KindID: kindID, CurrencyID: gl.CurrencyID,
+				ExcludeFromBalance: true, SmsRefs: dbtypes.JSON("[]"),
+			})
+			if err == nil || !strings.Contains(err.Error(), "UNIQUE constraint failed: accounts.name") || n > 50 {
+				break
+			}
+			name = fmt.Sprintf("%s (%d)", models.GoalAccountName(gl.Name), n)
+		}
+		if err != nil {
+			l.Error("creating goal account", zap.String("goal", gl.ID), zap.Error(err))
+			continue
+		}
+		if err := q.SetGoalAccount(ctx, queries.SetGoalAccountParams{ID: gl.ID, AccountID: sql.NullString{String: id, Valid: true}}); err != nil {
+			l.Error("setting goal account", zap.String("goal", gl.ID), zap.Error(err))
+		}
+	}
 }

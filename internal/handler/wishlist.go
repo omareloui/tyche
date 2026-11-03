@@ -191,7 +191,7 @@ func (h Handler) BuyWishlistItem(w http.ResponseWriter, r *http.Request) (templ.
 		return nil, err
 	}
 
-	accs, knds, cats, cps, gls, err := h.getTxDeps(r.Context())
+	accs, knds, cats, cps, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +228,7 @@ func (h Handler) BuyWishlistItem(w http.ResponseWriter, r *http.Request) (templ.
 	fd.WishlistID = item.ID
 
 	claims := getClaims(r.Context())
-	return views.WishlistBuySheet(views.CreateTransactionForm(fd, accs, knds, cats, cps, gls, &claims.DefaultCurrency)), nil
+	return views.WishlistBuySheet(views.CreateTransactionForm(fd, accs, knds, cats, cps, &claims.DefaultCurrency)), nil
 }
 
 // wishlistFxRate converts the item's amounts to the account's currency,

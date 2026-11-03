@@ -65,22 +65,221 @@ templ goalFormBody(id string, fd *GoalFD, curs []models.Currency, defaultCur *mo
 	</div>
 }
 
-// GoalProgressForm puts money from an account towards the goal, as an
-// expense linked to it, in a drawer.
-templ GoalProgressForm(gl *models.Goal, fd *TransactionFD, accs []models.Account, defaultCur *models.Currency) {
-	@components.Drawer(components.DrawerProps{Label: "Add to " + gl.Name}) {
-		@GoalProgressFormFields(gl, fd, accs, defaultCur)
+// GoalMoneyDir is which way a goal's money form moves money.
+type GoalMoneyDir string
+
+const (
+	// GoalDeposit puts money from an account in the goal.
+	GoalDeposit GoalMoneyDir = "deposit"
+	// GoalWithdraw takes money out of the goal to an account.
+	GoalWithdraw GoalMoneyDir = "withdraw"
+	// GoalDeleteMove moves all that's left to an account, deleting the goal.
+	GoalDeleteMove GoalMoneyDir = "delete"
+)
+
+// GoalMoneyFD is a goal's money form: Amount in the side money leaves (the
+// account for a deposit, the goal else), OtherAmount what the other side
+// receives when their currencies differ.
+type GoalMoneyFD struct {
+	Amount      form.FDInput
+	AccountID   form.FDInput
+	OtherAmount form.FDInput
+	ScheduledTo form.FDInput
+}
+
+// GoalBuyFD is the form recording a goal's purchase.
+type GoalBuyFD struct {
+	Amount         form.FDInput
+	CategoryID     form.FDInput
+	CounterpartyID form.FDInput
+	Description    form.FDInput
+	ScheduledTo    form.FDInput
+}
+
+// GoalMoneyForm moves money between an account and the goal's, as a
+// transfer, in a drawer.
+templ GoalMoneyForm(gl *models.Goal, dir GoalMoneyDir, fd *GoalMoneyFD, accs []models.Account) {
+	@components.Drawer(components.DrawerProps{Label: goalMoneyTitle(gl, dir)}) {
+		@GoalMoneyFormFields(gl, dir, fd, accs)
 	}
 }
 
-// GoalProgressFormFields is GoalProgressForm's form alone, answered with its
+// GoalMoneyFormFields is GoalMoneyForm's form alone, answered with its
 // errors.
-templ GoalProgressFormFields(gl *models.Goal, fd *TransactionFD, accs []models.Account, defaultCur *models.Currency) {
+templ GoalMoneyFormFields(gl *models.Goal, dir GoalMoneyDir, fd *GoalMoneyFD, accs []models.Account) {
+	{{ p := form.DrawerFormProps{
+	Header: goalMoneyHeader(gl, dir), Method: "post", URL: fmt.Sprintf("/goals/%s/money?dir=%s", gl.ID, dir),
+	Submit: "Add money", Class: "[--accent:var(--color-emerald-400)]",
+} }}
+	switch dir {
+		case GoalWithdraw:
+			{{ p.Submit, p.Class = "Withdraw", "[--accent:var(--color-amber-300)]" }}
+		case GoalDeleteMove:
+			{{ p.URL, p.Submit, p.Class = fmt.Sprintf("/goals/%s/delete?dir=%s", gl.ID, dir), "Move and delete", "[--accent:var(--color-red-400)]" }}
+	}
+	@form.DrawerForm(p) {
+		@GoalMoneyInputs(gl, dir, fd, accs)
+		if dir == GoalDeposit {
+			<div x-data>
+				@form.Field("Date", "scheduled_to", gl.ID, icons.Calendar("15"), fd.ScheduledTo.Error) {
+					<div class="flex gap-2">
+						<div class="flex-1 min-w-0">
+							@form.Control("text", "scheduled_to", "yyyy-mm-dd", gl.ID, fd.ScheduledTo, templ.Attributes{
+								"autocomplete":    "off",
+								"x-mask":          "9999-99-99",
+								"data-datepicker": true,
+								"x-ref":           "date",
+							})
+						</div>
+						@txDateChip("Today", 0)
+						@txDateChip("Yesterday", 1)
+					</div>
+				}
+				<p class="mt-1.5 text-sm text-zinc-500">A transfer to the goal: it's saved, not spent. A future date schedules it, counting once it's fulfilled.</p>
+			</div>
+		}
+	}
+}
+
+func goalMoneyTitle(gl *models.Goal, dir GoalMoneyDir) string {
+	switch dir {
+	case GoalWithdraw:
+		return "Withdraw from " + gl.Name
+	case GoalDeleteMove:
+		return "Delete " + gl.Name
+	}
+	return "Add to " + gl.Name
+}
+
+templ goalMoneyHeader(gl *models.Goal, dir GoalMoneyDir) {
+	<div class="flex items-center gap-3">
+		@goalRing(gl.ProgressPercentage(), goalStateOf(gl), "size-11", "text-[0.65rem]")
+		<div class="min-w-0">
+			<h2 class="text-lg font-bold truncate">{ goalMoneyTitle(gl, dir) }</h2>
+			<p class="sensitive text-sm text-zinc-500 tabular-nums">
+				if dir == GoalDeposit {
+					{ gl.ViewProgress() } of { gl.ViewAmount() } saved
+				} else {
+					{ gl.ViewBalance() } in it
+				}
+			</p>
+		</div>
+	</div>
+}
+
+// GoalMoneyInputs is the amounts and the account, rendered again when the
+// account (so the currency) changes.
+templ GoalMoneyInputs(gl *models.Goal, dir GoalMoneyDir, fd *GoalMoneyFD, accs []models.Account) {
+	{{ accSym := form.GetAccoutSym(accs, fd.AccountID.Value, &gl.Currency) }}
+	{{ sym, otherSym := accSym, gl.Currency.Symbol }}
+	if dir != GoalDeposit {
+		{{ sym, otherSym = gl.Currency.Symbol, accSym }}
+	}
+	{{ rest := goalRestIn(gl, accs, fd.AccountID.Value) }}
+	{{ onChange := templ.Attributes{"hx-post": fmt.Sprintf("/goals/%s/money-inputs?dir=%s", gl.ID, dir), "hx-trigger": "change"} }}
+	<div
+		x-data
+		hx-target="this"
+		hx-swap="outerHTML"
+		hx-sync="closest form:abort"
+		class="grid justify-items-center gap-3 py-2"
+	>
+		if dir == GoalDeleteMove {
+			<p class="text-center text-zinc-400">
+				Move the <span class="sensitive text-zinc-100 tabular-nums">{ gl.ViewBalance() }</span> left in it to an account first. Its transactions stay in the history.
+			</p>
+		} else {
+			@form.HeroMoneyInput("Amount", "amount", sym, gl.ID, fd.Amount, templ.Attributes{
+				"x-ref":      "amount",
+				"hx-post":    fmt.Sprintf("/goals/%s/money-inputs?dir=%s", gl.ID, dir),
+				"hx-trigger": "keyup changed delay:300ms",
+			})
+		}
+		<div class="flex flex-wrap items-center justify-center gap-2 max-w-full">
+			<span class="text-sm text-zinc-500">
+				if dir == GoalDeposit {
+					from
+				} else {
+					to
+				}
+			</span>
+			@form.SelectAccountChip("Account", "account_id", gl.ID, accs, fd.AccountID, onChange)
+		</div>
+		@form.ErrorMessage(fd.AccountID.Error)
+		if otherSym != sym {
+			<label class="flex items-center gap-2 text-sm text-zinc-400">
+				if dir == GoalDeposit {
+					The goal receives
+				} else {
+					The account receives
+				}
+				<input
+					id={ "to_amount-" + gl.ID }
+					type="text"
+					name="to_amount"
+					value={ fd.OtherAmount.Value }
+					placeholder={ otherSym + " 0.00" }
+					autocomplete="off"
+					inputmode="decimal"
+					x-mask:dynamic={ fmt.Sprintf("'%s ' + $money($input, '.', ',')", otherSym) }
+					class="input-field w-48! h-9! text-center tabular-nums font-(family-name:--font-biorhyme-expanded)"
+					if fd.OtherAmount.Error != "" {
+						aria-invalid="true"
+					}
+				/>
+			</label>
+			@form.ErrorMessage(fd.OtherAmount.Error)
+		}
+		if dir == GoalDeposit && rest > 0 {
+			<button
+				type="button"
+				@click={ fmt.Sprintf("$refs.amount.value = '%s %.2f'; $refs.amount.dispatchEvent(new Event('input')); $refs.amount.dispatchEvent(new KeyboardEvent('keyup')); $refs.amount.focus()", sym, rest) }
+				class="inline-flex items-center gap-1.5 h-8 px-3 rounded-full border border-zinc-700 text-sm text-zinc-300 cursor-pointer transition-colors hover:border-(--accent) hover:text-(--accent)"
+			>
+				@icons.Sparkles("14")
+				Fill the rest · <span class="sensitive tabular-nums">{ formatters.FormatAmount(rest, sym) }</span>
+			</button>
+		}
+	</div>
+}
+
+// GoalBuyForm records buying the goal: an expense out of its account, the
+// money it saved becoming spent.
+templ GoalBuyForm(gl *models.Goal, fd *GoalBuyFD, cats []models.Category, cps []models.Counterparty) {
+	@components.Drawer(components.DrawerProps{Label: "Buy " + gl.Name}) {
+		@GoalBuyFormFields(gl, fd, cats, cps)
+	}
+}
+
+// GoalBuyFormFields is GoalBuyForm's form alone, answered with its errors.
+templ GoalBuyFormFields(gl *models.Goal, fd *GoalBuyFD, cats []models.Category, cps []models.Counterparty) {
 	@form.DrawerForm(form.DrawerFormProps{
-		Header: goalProgressHeader(gl), Method: "post", URL: fmt.Sprintf("/goals/%s/progress", gl.ID),
-		Submit: "Add money", Class: "[--accent:var(--color-emerald-400)]",
+		Header: goalBuyHeader(gl), Method: "put", URL: fmt.Sprintf("/goals/%s/fulfill", gl.ID),
+		Submit: "Mark as bought", Class: "[--accent:var(--color-emerald-400)]",
 	}) {
-		@GoalProgressInputs(gl, &fd.AccountIFD, accs, defaultCur)
+		<div class="grid justify-items-center gap-2 py-2">
+			@form.HeroMoneyInput("Price paid", "amount", gl.Currency.Symbol, gl.ID, fd.Amount, nil)
+			<p class="text-sm text-zinc-500">paid from the goal, it counts as spent today</p>
+		</div>
+		<div class="grid gap-5 sm:grid-cols-2">
+			@form.Field("Category", "category_id", gl.ID, icons.Tag("15"), fd.CategoryID.Error) {
+				@form.Combobox(form.ComboboxProps{
+					Name: "category_id", ID: gl.ID, Label: "Category", Placeholder: "Select Category",
+					Options: categoryComboOptions(cats),
+					Data:    fd.CategoryID, Nullable: true, Searchable: true,
+				})
+			}
+			@form.Field("Counterparty", "counterparty_id", gl.ID, icons.User("15"), fd.CounterpartyID.Error) {
+				@form.Combobox(form.ComboboxProps{
+					Name: "counterparty_id", ID: gl.ID, Label: "Counterparty", Placeholder: "Select Counterparty",
+					Options: counterpartyComboOptions(cps),
+					Data:    fd.CounterpartyID, Nullable: true, Searchable: true,
+				})
+			}
+		</div>
+		@form.Field("Description", "description", gl.ID, icons.Pencil("15"), fd.Description.Error) {
+			@form.Control("text", "description", "What was it?", gl.ID, fd.Description, nil)
+		}
 		<div x-data>
 			@form.Field("Date", "scheduled_to", gl.ID, icons.Calendar("15"), fd.ScheduledTo.Error) {
 				<div class="flex gap-2">
@@ -96,54 +295,17 @@ templ GoalProgressFormFields(gl *models.Goal, fd *TransactionFD, accs []models.A
 					@txDateChip("Yesterday", 1)
 				</div>
 			}
-			<p class="mt-1.5 text-sm text-zinc-500">A future date schedules it, counting once it's fulfilled.</p>
 		</div>
 	}
 }
 
-templ goalProgressHeader(gl *models.Goal) {
+templ goalBuyHeader(gl *models.Goal) {
 	<div class="flex items-center gap-3">
-		@goalRing(gl.ProgressPercentage(), goalActive, "size-11", "text-[0.65rem]")
+		@goalRing(gl.ProgressPercentage(), goalStateOf(gl), "size-11", "text-[0.65rem]")
 		<div class="min-w-0">
-			<h2 class="text-lg font-bold truncate">Add to { gl.Name }</h2>
-			<p class="sensitive text-sm text-zinc-500 tabular-nums">
-				{ gl.ViewProgress() } of { gl.ViewAmount() } saved
-			</p>
+			<h2 class="text-lg font-bold truncate">Buy { gl.Name }</h2>
+			<p class="sensitive text-sm text-zinc-500 tabular-nums">{ gl.ViewBalance() } saved in it</p>
 		</div>
-	</div>
-}
-
-// GoalProgressInputs is the amount and the account it comes from, rendered
-// again when the account (so the currency) changes.
-templ GoalProgressInputs(gl *models.Goal, fd *form.AccountIFD, accs []models.Account, defaultCur *models.Currency) {
-	{{ sym := form.GetAccoutSym(accs, fd.AccountID.Value, defaultCur) }}
-	{{ rest := goalRestIn(gl, accs, fd.AccountID.Value) }}
-	<div
-		x-data
-		hx-target="this"
-		hx-swap="outerHTML"
-		hx-sync="closest form:abort"
-		class="grid justify-items-center gap-3 py-2"
-	>
-		@form.HeroMoneyInput("Amount", "amount", sym, gl.ID, fd.Amount, templ.Attributes{"x-ref": "amount"})
-		<div class="flex flex-wrap items-center justify-center gap-2 max-w-full">
-			<span class="text-sm text-zinc-500">from</span>
-			@form.SelectAccountChip("From account", "account_id", gl.ID, accs, fd.AccountID, templ.Attributes{
-				"hx-post":    fmt.Sprintf("/goals/%s/progress-inputs", gl.ID),
-				"hx-trigger": "change",
-			})
-		</div>
-		@form.ErrorMessage(fd.AccountID.Error)
-		if rest > 0 {
-			<button
-				type="button"
-				@click={ fmt.Sprintf("$refs.amount.value = '%s %.2f'; $refs.amount.dispatchEvent(new Event('input')); $refs.amount.focus()", sym, rest) }
-				class="inline-flex items-center gap-1.5 h-8 px-3 rounded-full border border-zinc-700 text-sm text-zinc-300 cursor-pointer transition-colors hover:border-(--accent) hover:text-(--accent)"
-			>
-				@icons.Sparkles("14")
-				Fill the rest · <span class="sensitive tabular-nums">{ formatters.FormatAmount(rest, sym) }</span>
-			</button>
-		}
 	</div>
 }
 
@@ -310,15 +472,20 @@ templ Goal(gl *models.Goal) {
 						@icons.Sparkles("18", &templ.Attributes{"class": "shrink-0 text-(--accent)"})
 						<p class="flex-1 min-w-0 text-sm text-zinc-300">Target reached!</p>
 						<button
-							hx-put={ fmt.Sprintf("/goals/%s/fulfill", gl.ID) }
+							hx-get={ fmt.Sprintf("/goals/%s/fulfill-form", gl.ID) }
+							hx-target={ "#" + components.DrawerSlot }
+							hx-swap="innerHTML"
 							class="shrink-0 h-8 px-3 rounded-full bg-(--accent) text-sm font-semibold text-zinc-950 cursor-pointer transition hover:brightness-110 active:scale-[.98]"
-						>Mark achieved</button>
+						>Mark as bought</button>
 					</div>
 				case goalAchieved:
 					<div class="relative flex items-center gap-2 mt-auto text-sm text-(--accent)">
 						@icons.Trophy("16")
-						<span>Achieved { gl.FulfilledAt.Local().Format("Jan 2, 2006") }</span>
+						<span>Bought { gl.FulfilledAt.Local().Format("Jan 2, 2006") }</span>
 					</div>
+					if gl.Balance() > 0 {
+						<p class="relative text-sm text-zinc-500"><span class="sensitive tabular-nums">{ gl.ViewBalance() }</span> left in it</p>
+					}
 			}
 			if deposits > 0 || scheduled > 0 {
 				<div class="relative flex flex-wrap items-center gap-1.5">
@@ -345,7 +512,7 @@ templ Goal(gl *models.Goal) {
 
 templ goalAddButton(id string) {
 	<button
-		hx-get={ fmt.Sprintf("/goals/%s/progress-form", id) }
+		hx-get={ fmt.Sprintf("/goals/%s/money-form?dir=%s", id, GoalDeposit) }
 		hx-target={ "#" + components.DrawerSlot }
 		hx-swap="innerHTML"
 		class="inline-flex shrink-0 items-center gap-1.5 h-9 pl-3 pr-4 rounded-full bg-(--accent)/15 text-sm font-medium text-(--accent) cursor-pointer transition-colors hover:bg-(--accent)/25"
@@ -493,9 +660,12 @@ func goalAccentClass(st goalState) string {
 	return "[--accent:var(--color-violet-400)]"
 }
 
-// goalDeposits counts the goal's fulfilled and scheduled transactions.
+// goalDeposits counts the money put in the goal, fulfilled and scheduled.
 func goalDeposits(gl *models.Goal) (deposits, scheduled int) {
 	for _, tx := range gl.Transactions {
+		if tx.GoalAmount() <= 0 {
+			continue
+		}
 		if tx.FulfilledAt.IsZero() {
 			scheduled++
 		} else {
@@ -508,7 +678,7 @@ func goalDeposits(gl *models.Goal) (deposits, scheduled int) {
 func goalLastDeposit(gl *models.Goal) time.Time {
 	var last time.Time
 	for _, tx := range gl.Transactions {
-		if !tx.FulfilledAt.IsZero() && tx.ScheduledTo.After(last) {
+		if tx.GoalAmount() > 0 && !tx.FulfilledAt.IsZero() && tx.ScheduledTo.After(last) {
 			last = tx.ScheduledTo
 		}
 	}
@@ -567,25 +737,35 @@ func summarizeGoals(gls []models.Goal, defaultCur *models.Currency) goalsSummary
 
 func getGoalMenuItems(gl *models.Goal, st goalState) []templ.Component {
 	items := []templ.Component{}
+	moneyForm := func(dir GoalMoneyDir) string { return fmt.Sprintf("/goals/%s/money-form?dir=%s", gl.ID, dir) }
 
 	if st == goalAchieved {
-		items = append(items, components.EntryMenuAnchorItem("Reopen", "put", fmt.Sprintf("/goals/%s/unfulfill", gl.ID),
-			components.WithEntryMenuItemIcon(icons.RotateCcw("16"))))
+		items = append(items, components.EntryMenuAnchorItem("Undo bought", "put", fmt.Sprintf("/goals/%s/unfulfill", gl.ID),
+			components.WithEntryMenuItemIcon(icons.RotateCcw("16")),
+			components.WithEntryMenuItemConfirmMessage("Its purchase gets deleted and the money goes back in the goal.")))
 	} else {
 		items = append(items,
-			components.EntryMenuAnchorItem("Add money", "get", fmt.Sprintf("/goals/%s/progress-form", gl.ID),
+			components.EntryMenuDrawerItem("Add money", moneyForm(GoalDeposit),
 				components.WithEntryMenuItemIcon(icons.Plus("16"))),
-			components.EntryMenuAnchorItem("Mark achieved", "put", fmt.Sprintf("/goals/%s/fulfill", gl.ID),
+			components.EntryMenuDrawerItem("Mark as bought", fmt.Sprintf("/goals/%s/fulfill-form", gl.ID),
 				components.WithEntryMenuItemIcon(icons.Trophy("16"))),
 		)
 	}
+	if gl.Balance() > 0 {
+		items = append(items, components.EntryMenuDrawerItem("Withdraw", moneyForm(GoalWithdraw),
+			components.WithEntryMenuItemIcon(icons.Transfer("16"))))
+	}
 
-	return append(items,
+	items = append(items,
 		components.EntryMenuSeparator(),
 		components.EntryMenuEditItem(fmt.Sprintf("/goals/%s/edit", gl.ID)),
 		components.EntryMenuSeparator(),
-		components.EntryMenuDeleteItem(fmt.Sprintf("/goals/%s", gl.ID)),
 	)
+	if gl.Balance() > 0 {
+		return append(items, components.EntryMenuDrawerItem("Delete", fmt.Sprintf("/goals/%s/delete-form", gl.ID),
+			components.WithEntryMenuItemIcon(icons.Trash("16")), components.WithEntryMenuItemDanger()))
+	}
+	return append(items, components.EntryMenuDeleteItem(fmt.Sprintf("/goals/%s", gl.ID)))
 }
 
 // goalDay is a deposit's day, relative when recent.
