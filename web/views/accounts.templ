@@ -574,14 +574,32 @@ templ cardStatement(s *models.CardStatement) {
 					</span>
 			}
 		</p>
-		<p class="flex flex-wrap justify-between gap-x-3 gap-y-0.5 text-zinc-500">
-			<span>Next statement { s.NextClose().Format("Jan 2") }</span>
+		<div class="grid gap-0.5 px-2.5 py-1.5 rounded-xl bg-zinc-800/50" title={ projectedTitle }>
+			<p class="flex flex-wrap items-baseline justify-between gap-x-3 text-zinc-400">
+				<span>Next statement { s.NextClose().Format("Jan 2") } ({ dueIn(s.DaysToClose()) })</span>
+				<span class="sensitive font-semibold tabular-nums text-zinc-100">~{ s.ViewProjected() }</span>
+			</p>
+			if s.HasScheduled() || s.Carried() > 0 {
+				<p class="sensitive text-zinc-500 tabular-nums">
+					if s.HasScheduled() {
+						{ s.ViewSoFar() } so far { s.ViewScheduled() } scheduled
+					}
+					if s.Carried() > 0 {
+						<span class="block">incl. { s.ViewCarried() } still due from the { s.ClosedOn.Format("Jan 2") } statement</span>
+					}
+				</p>
+			}
+		</div>
+		<p class="flex flex-wrap justify-end gap-x-3 gap-y-0.5 text-zinc-500">
 			<span title="A purchase made today is due with the next statement">
 				Buy today → due { s.PurchaseDueOn().Format("Jan 2") } · { fmt.Sprint(s.InterestFreeDays()) } days interest-free
 			</span>
 		</p>
 	</div>
 }
+
+// projectedTitle explains a card's projected next statement.
+const projectedTitle = "What the card owes now plus its scheduled transactions due by the statement; paying the last statement lowers it"
 
 // dueIn is how far a due date is, in days.
 func dueIn(days int) string {

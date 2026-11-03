@@ -122,23 +122,23 @@ func (r *Repository) AttachCardStatements(ctx context.Context, accs []models.Acc
 			}
 			today = time.Now().In(loc)
 		}
-		since := a.Cycle.LastClose(today).AddDate(0, 0, 1)
 		act, err := q.GetCardActivitySince(ctx, queries.GetCardActivitySinceParams{
 			AccountID: sql.NullString{String: a.ID, Valid: true},
-			Since:     since,
+			Since:     a.Cycle.LastClose(today).AddDate(0, 0, 1),
+			Until:     a.Cycle.NextClose(today).AddDate(0, 0, 1),
 		})
 		if err != nil {
 			l.Error("querying card activity", zap.Error(err), zap.String("id", a.ID))
 			return err
 		}
-		a.Statement = models.NewCardStatement(a, today, act.Net, act.PaidIn)
+		a.Statement = models.NewCardStatement(a, today, act.Net, act.PaidIn, act.Scheduled)
 	}
 	return nil
 }
 
-// GetCardDues is the active credit cards whose last statement is left to pay,
-// with it, soonest due first.
-func (r *Repository) GetCardDues(ctx context.Context) ([]models.Account, error) {
+// GetCardStatements is the active credit cards with a statement cycle, with
+// their statements, the next to close first.
+func (r *Repository) GetCardStatements(ctx context.Context) ([]models.Account, error) {
 	accs, err := r.GetAccounts(ctx)
 	if err != nil {
 		return nil, err
@@ -149,11 +149,8 @@ func (r *Repository) GetCardDues(ctx context.Context) ([]models.Account, error) 
 	if err := r.AttachCardStatements(ctx, accs); err != nil {
 		return nil, err
 	}
-	accs = slices.DeleteFunc(accs, func(a models.Account) bool {
-		return a.Statement == nil || a.Statement.Due <= 0
-	})
 	slices.SortFunc(accs, func(a, b models.Account) int {
-		return a.Statement.DueOn.Compare(b.Statement.DueOn)
+		return a.Statement.NextClose().Compare(b.Statement.NextClose())
 	})
 	return accs, nil
 }

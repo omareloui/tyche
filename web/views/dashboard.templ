@@ -38,8 +38,9 @@ type DashboardData struct {
 	Currencies []models.Currency
 	// RatesAt is when the exchange rates were last fetched.
 	RatesAt time.Time
-	// CardDues are the credit cards with a statement left to pay.
-	CardDues []models.Account
+	// Cards are the credit cards with a statement cycle, with their
+	// statements.
+	Cards []models.Account
 }
 
 // Dashboard is the signed in homepage. What's cheap (balances, the flow and
@@ -52,7 +53,7 @@ templ Dashboard(d DashboardData) {
 				@dashGreeting(d.Claims)
 				@dashHero(d, def)
 				@dashFxRates(d.Currencies, def, d.RatesAt)
-				@dashAlerts(d.NeedsReview, d.SMSAttention, d.CardDues)
+				@dashAlerts(d.NeedsReview, d.SMSAttention, d.Cards)
 				<div class="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-2">
 					@dashFlowChart(d.Flow, def)
 					@dashPaceChart(d.Flow, def)
@@ -202,7 +203,12 @@ templ dashAlerts(review, sms int, cards []models.Account) {
 	if review > 0 || sms > 0 || len(cards) > 0 {
 		<div class="flex flex-wrap gap-2">
 			for _, a := range cards {
-				@dashCardDue(&a)
+				if a.Statement.Due > 0 {
+					@dashCardDue(&a)
+				}
+			}
+			for _, a := range cards {
+				@dashCardProjected(&a)
 			}
 			if review > 0 {
 				@dashAlert(fmt.Sprintf("/transactions?%s=%s", models.TxFilterStatus, models.TxStatusReview),
@@ -240,6 +246,25 @@ templ dashCardDue(a *models.Account) {
 			}
 		</span>
 		@icons.ArrowRight("14", &templ.Attributes{"class": "opacity-70"})
+	</a>
+}
+
+// dashCardProjected is what a credit card's next statement will be.
+templ dashCardProjected(a *models.Account) {
+	{{ s := a.Statement }}
+	<a
+		href={ templ.SafeURL("/accounts#" + AccountWrapperID(a.ID)) }
+		title={ projectedTitle }
+		class="flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-900/60 ring-1 ring-zinc-800 text-sm text-zinc-300 transition-colors hover:bg-zinc-800/60"
+	>
+		<span class="text-zinc-400">
+			@icons.Card("16")
+		</span>
+		<span>
+			{ fmt.Sprintf("%s · next statement %s (%s):", a.Name, s.NextClose().Format("Jan 2"), dueIn(s.DaysToClose())) }
+			<span class="sensitive font-semibold tabular-nums text-zinc-100">~{ s.ViewProjected() }</span>
+		</span>
+		@icons.ArrowRight("14", &templ.Attributes{"class": "text-zinc-500"})
 	</a>
 }
 

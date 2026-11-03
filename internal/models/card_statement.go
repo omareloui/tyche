@@ -131,16 +131,25 @@ type CardStatement struct {
 	// Paid is what was paid into the card since.
 	Paid float64
 	// Due is what's left to pay by DueOn to avoid interest.
-	Due      float64
-	Currency Currency
+	Due float64
+	// SoFar is what the card owes now, the last statement's Due included.
+	SoFar float64
+	// Scheduled is what the unfulfilled transactions due by the next close
+	// add to what it owes (negative for scheduled payments).
+	Scheduled float64
+	// Projected is what the next statement will be: SoFar plus Scheduled.
+	Projected float64
+	Currency  Currency
 	// Today is the day, in the user's time zone, it was worked out on.
 	Today time.Time
 }
 
-// NewCardStatement works out acc's last statement from its balance and what
-// the transactions fulfilled since it closed did to it: net their signed
-// total, paidIn only what they added. nil if acc has no cycle.
-func NewCardStatement(acc *Account, today time.Time, net, paidIn float64) *CardStatement {
+// NewCardStatement works out acc's last statement and projects the next one
+// from its balance and what its transactions did to it: net the signed total
+// of the ones fulfilled since the last statement closed, paidIn only what they
+// added, scheduled the signed total of the unfulfilled ones due by the next
+// close. nil if acc has no cycle.
+func NewCardStatement(acc *Account, today time.Time, net, paidIn, scheduled float64) *CardStatement {
 	if !acc.Cycle.IsSet() {
 		return nil
 	}
@@ -148,15 +157,19 @@ func NewCardStatement(acc *Account, today time.Time, net, paidIn float64) *CardS
 	cur := acc.Currency
 	// cards' balances are negative when they owe
 	owed := cur.Round(max(0, -(acc.Amount - net)))
+	soFar := cur.Round(max(0, -acc.Amount))
 	return &CardStatement{
-		Cycle:    acc.Cycle,
-		ClosedOn: closed,
-		DueOn:    acc.Cycle.DueOn(closed),
-		Balance:  owed,
-		Paid:     cur.Round(paidIn),
-		Due:      cur.Round(max(0, owed-paidIn)),
-		Currency: cur,
-		Today:    midnight(today),
+		Cycle:     acc.Cycle,
+		ClosedOn:  closed,
+		DueOn:     acc.Cycle.DueOn(closed),
+		Balance:   owed,
+		Paid:      cur.Round(paidIn),
+		Due:       cur.Round(max(0, owed-paidIn)),
+		SoFar:     soFar,
+		Scheduled: cur.Round(-scheduled),
+		Projected: cur.Round(max(0, soFar-scheduled)),
+		Currency:  cur,
+		Today:     midnight(today),
 	}
 }
 
@@ -187,8 +200,30 @@ func (s *CardStatement) ViewBalance() string { return s.Currency.Format(s.Balanc
 // NextClose is when the statement in progress closes.
 func (s *CardStatement) NextClose() time.Time { return s.Cycle.NextClose(s.Today) }
 
+// DaysToClose is the days until the next statement closes.
+func (s *CardStatement) DaysToClose() int { return daysBetween(s.Today, s.NextClose()) }
+
 // PurchaseDueOn is when a purchase made today is due.
 func (s *CardStatement) PurchaseDueOn() time.Time { return s.Cycle.PurchaseDueOn(s.Today) }
 
 // InterestFreeDays is how long a purchase made today stays free of interest.
 func (s *CardStatement) InterestFreeDays() int { return s.Cycle.InterestFreeDays(s.Today) }
+
+func (s *CardStatement) ViewSoFar() string { return s.Currency.Format(s.SoFar) }
+
+func (s *CardStatement) ViewProjected() string { return s.Currency.Format(s.Projected) }
+
+// ViewScheduled is Scheduled signed, e.g. "+ EGP 200".
+func (s *CardStatement) ViewScheduled() string {
+	if s.Scheduled < 0 {
+		return "− " + s.Currency.Format(-s.Scheduled)
+	}
+	return "+ " + s.Currency.Format(s.Scheduled)
+}
+
+func (s *CardStatement) HasScheduled() bool { return s.Scheduled != 0 }
+
+// Carried is what's left to pay of the last statement, in SoFar until paid.
+func (s *CardStatement) Carried() float64 { return s.Due }
+
+func (s *CardStatement) ViewCarried() string { return s.Currency.Format(s.Carried()) }

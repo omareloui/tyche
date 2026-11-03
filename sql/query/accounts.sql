@@ -158,14 +158,17 @@ SET deleted_at = DATETIME('now')
 WHERE id = sqlc.arg(id);
 
 -- name: GetCardActivitySince :one
--- What the fulfilled transactions since a credit card's statement closed did
--- to its balance: net is their signed total, paid_in only what they added
--- (payments, refunds).
+-- What a credit card's transactions did to its balance: net is the signed
+-- total of the ones fulfilled since its statement closed, paid_in only what
+-- they added (payments, refunds), and scheduled the signed total of the
+-- unfulfilled ones due before until (the end of the next statement's day).
 SELECT
-    CAST(TOTAL(e.effect) AS FLOAT) AS net,
-    CAST(TOTAL(MAX(e.effect, 0)) AS FLOAT) AS paid_in
+    CAST(TOTAL(IIF(e.fulfilled, e.effect, 0)) AS FLOAT) AS net,
+    CAST(TOTAL(IIF(e.fulfilled, MAX(e.effect, 0), 0)) AS FLOAT) AS paid_in,
+    CAST(TOTAL(IIF(e.fulfilled, 0, e.effect)) AS FLOAT) AS scheduled
 FROM (
     SELECT
+        t.fulfilled_at IS NOT NULL AS fulfilled,
         CASE
             WHEN t.kind = 3 AND t.to_account_id = sqlc.arg(account_id) THEN COALESCE(t.to_amount, t.amount)
             WHEN t.kind IN (2, 5, 6) THEN t.amount -- income, refund, adjustment
@@ -174,8 +177,10 @@ FROM (
     FROM transactions AS t
     WHERE
         (t.account_id = sqlc.arg(account_id) OR t.to_account_id = sqlc.arg(account_id))
-        AND t.fulfilled_at IS NOT NULL
-        AND JULIANDAY(t.fulfilled_at) >= JULIANDAY(sqlc.arg(since))
+        AND (
+            (t.fulfilled_at IS NOT NULL AND JULIANDAY(t.fulfilled_at) >= JULIANDAY(sqlc.arg(since)))
+            OR (t.fulfilled_at IS NULL AND JULIANDAY(t.scheduled_to) < JULIANDAY(sqlc.arg(until)))
+        )
 ) AS e;
 
 -- name: AddToAccount :exec

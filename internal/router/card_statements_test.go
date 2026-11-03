@@ -69,12 +69,42 @@ func TestCardStatement(t *testing.T) {
 		t.Errorf("balance %v paid %v due %v, want 1000 / 400 / 600", s.Balance, s.Paid, s.Due)
 	}
 
-	dues, err := repo.GetCardDues(ctx)
+	// the 50 scheduled in 3 days counts if the statement closes by then
+	wantSched := 0.0
+	if !time.Now().AddDate(0, 0, 3).In(loc).After(card.Cycle.NextClose(time.Now().In(loc)).AddDate(0, 0, 1)) {
+		wantSched = 50
+	}
+	if s.SoFar != 900 || s.Scheduled != wantSched || s.Projected != 900+wantSched {
+		t.Errorf("so far %v scheduled %v projected %v, want 900 / %v / %v", s.SoFar, s.Scheduled, s.Projected, wantSched, 900+wantSched)
+	}
+
+	next := card.Cycle.NextClose(time.Now().In(loc))
+	for _, tx := range []*models.Transaction{
+		// on the next statement's day: in it
+		{Amount: 200, Kind: models.ExpenseTxKind, ScheduledTo: next.Add(20 * time.Hour)},
+		// after it: not
+		{Amount: 70, Kind: models.ExpenseTxKind, ScheduledTo: next.AddDate(0, 0, 1).Add(time.Hour)},
+		// a scheduled payment
+		{Amount: 100, Kind: models.TransferTxKind, Account: *bank, ToAccount: card, ToAmount: 100, ScheduledTo: next.Add(time.Hour)},
+	} {
+		tx.ID = idgen.New()
+		if tx.Account.ID == "" {
+			tx.Account = *card
+		}
+		if err := repo.CreateTransaction(ctx, tx, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cards, err := repo.GetCardStatements(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(dues) != 1 || dues[0].ID != card.ID {
-		t.Fatalf("dues %v, want the card", dues)
+	if len(cards) != 1 || cards[0].ID != card.ID {
+		t.Fatalf("cards %v, want the card", cards)
+	}
+	if s := cards[0].Statement; s.Due != 600 || s.Scheduled != wantSched+100 || s.Projected != 1000+wantSched {
+		t.Errorf("due %v scheduled %v projected %v, want 600 / %v / %v", s.Due, s.Scheduled, s.Projected, wantSched+100, 1000+wantSched)
 	}
 
 	// paying the rest clears it
@@ -85,8 +115,8 @@ func TestCardStatement(t *testing.T) {
 	if err := repo.CreateTransaction(ctx, pay, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if dues, err = repo.GetCardDues(ctx); err != nil || len(dues) != 0 {
-		t.Errorf("dues %v (%v), want none once paid", dues, err)
+	if cards, err = repo.GetCardStatements(ctx); err != nil || len(cards) != 1 || cards[0].Statement.Due != 0 {
+		t.Errorf("cards %v (%v), want the card with nothing due once paid", cards, err)
 	}
 }
 

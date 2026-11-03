@@ -47,7 +47,7 @@ func (h Handler) HomePage(w http.ResponseWriter, r *http.Request) (templ.Compone
 	if err != nil {
 		return nil, err
 	}
-	dues, err := h.repo.GetCardDues(ctx)
+	cards, err := h.repo.GetCardStatements(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func (h Handler) HomePage(w http.ResponseWriter, r *http.Request) (templ.Compone
 		SMSAttention: sms,
 		Currencies:   curs,
 		RatesAt:      ratesAt,
-		CardDues:     dues,
+		Cards:        cards,
 	}), nil
 }
 

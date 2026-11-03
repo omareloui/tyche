@@ -105,7 +105,7 @@ func TestNewCardStatement(t *testing.T) {
 	today := ymd(2026, 12, 5)
 
 	// since the close: spent 1000, paid in 2500 → net +1500
-	s := NewCardStatement(acc, today, 1500, 2500)
+	s := NewCardStatement(acc, today, 1500, 2500, 0)
 	if !s.ClosedOn.Equal(ymd(2026, 11, 25)) || !s.DueOn.Equal(ymd(2026, 12, 20)) {
 		t.Fatalf("closed %v due %v", s.ClosedOn, s.DueOn)
 	}
@@ -116,17 +116,43 @@ func TestNewCardStatement(t *testing.T) {
 		t.Errorf("status %v days left %d", s.Status(), s.DaysLeft())
 	}
 
-	if s := NewCardStatement(acc, ymd(2026, 12, 18), 1500, 2500); s.Status() != StatementDueSoon {
+	if s := NewCardStatement(acc, ymd(2026, 12, 18), 1500, 2500, 0); s.Status() != StatementDueSoon {
 		t.Errorf("status %v, want soon", s.Status())
 	}
-	if s := NewCardStatement(acc, ymd(2026, 12, 21), 1500, 2500); s.Status() != StatementOverdue {
+	if s := NewCardStatement(acc, ymd(2026, 12, 21), 1500, 2500, 0); s.Status() != StatementOverdue {
 		t.Errorf("status %v, want overdue", s.Status())
 	}
 	// paid more than the statement (spent 5000 since, paid in 6000)
-	if s := NewCardStatement(acc, today, 1000, 6000); s.Due != 0 || s.Status() != StatementPaid {
+	if s := NewCardStatement(acc, today, 1000, 6000, 0); s.Due != 0 || s.Status() != StatementPaid {
 		t.Errorf("due %v status %v, want paid", s.Due, s.Status())
 	}
-	if NewCardStatement(&Account{}, today, 0, 0) != nil {
+	if NewCardStatement(&Account{}, today, 0, 0, 0) != nil {
 		t.Error("statement of a card without a cycle")
+	}
+}
+
+func TestCardStatementProjection(t *testing.T) {
+	cur := Currency{String: "EGP"}
+	acc := &Account{Amount: -1100, Currency: cur, Cycle: CardCycle{StatementDay: 25, DueDays: 25}}
+	today := ymd(2026, 12, 5)
+
+	tests := []struct {
+		name      string
+		scheduled float64
+		want      float64
+		wantSched float64
+	}{
+		{"nothing scheduled", 0, 1100, 0},
+		{"a scheduled expense", -200, 1300, 200},
+		{"a scheduled payment", 500, 600, -500},
+		{"paid off by a scheduled payment", 2000, 0, -2000},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := NewCardStatement(acc, today, 0, 0, tt.scheduled)
+			if s.SoFar != 1100 || s.Projected != tt.want || s.Scheduled != tt.wantSched {
+				t.Errorf("so far %v projected %v scheduled %v, want 1100 / %v / %v", s.SoFar, s.Projected, s.Scheduled, tt.want, tt.wantSched)
+			}
+		})
 	}
 }
