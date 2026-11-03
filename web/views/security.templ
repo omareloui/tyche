@@ -20,6 +20,7 @@ type SecurityData struct {
 	Notice           string
 	Sessions         []vault.Session
 	CurrentSessionID string
+	Passkeys         []vault.Passkey
 }
 
 const minVaultPasswordLen = "8"
@@ -109,6 +110,11 @@ templ securityInfo(encrypted bool) {
 			<p class="text-sm text-zinc-600">You'll enter your password when you sign in, and every 12 hours you're away.</p>
 		}
 	}
+	@securitySection("Passkeys", icons.Fingerprint("16")) {
+		<p class="text-sm text-zinc-600">
+			Unlock with a passkey (your fingerprint, face or screen lock) instead of typing the password. Passkeys sync to your devices on the same Google or Apple account; the others still use the password.
+		</p>
+	}
 	@securitySection("Recovery code", icons.Hash("16")) {
 		if encrypted {
 			<p class="text-sm text-zinc-600">The only way in if you forget your password. Getting a new one stops the current one.</p>
@@ -147,6 +153,7 @@ templ enableEncryption() {
 // moves on, and the response is its next step.
 templ encryptForm(welcome bool) {
 	<form
+		data-passkey-encrypt
 		hx-post="/security/encryption"
 		hx-target="#encrypt-error"
 		hx-swap="innerHTML"
@@ -157,12 +164,19 @@ templ encryptForm(welcome bool) {
 			<input type="hidden" name="welcome" value="1"/>
 		}
 		@passwordFields("encrypt", "Password", true)
+		<label data-passkey-support hidden class="flex gap-3 text-base text-zinc-300 cursor-pointer select-none">
+			<input type="checkbox" name="passkey" value="1" checked class="w-4 h-4 mt-1 shrink-0 accent-violet-400"/>
+			<span>
+				Also add a passkey to unlock with my fingerprint, face or screen lock
+				<span class="block text-sm text-zinc-500">Your password still unlocks it here and on your other devices.</span>
+			</span>
+		</label>
 		<label class="flex gap-3 text-base text-zinc-300 cursor-pointer select-none">
 			<input type="checkbox" name="understood" value="1" required class="w-4 h-4 mt-1 shrink-0 accent-violet-400"/>
 			I understand that without my password or recovery code my data can't be recovered.
 		</label>
 		<p id="encrypt-error" class="text-sm text-red-400 empty:hidden"></p>
-		<div class={ "flex flex-wrap gap-2", templ.KV("justify-end", !welcome), templ.KV("*:flex-1", welcome) }>
+		<div class={ "flex gap-2", templ.KV("flex-wrap justify-end", !welcome), templ.KV("flex-col-reverse sm:flex-row sm:*:flex-1", welcome) }>
 			if welcome {
 				<button type="button" class="btn-ghost ring-1 ring-zinc-700" { welcomeNav(models.OnboardingSecurity.Next())... }>
 					Not now
@@ -174,6 +188,7 @@ templ encryptForm(welcome bool) {
 }
 
 templ encryptedSettings(data *SecurityData) {
+	@PasskeysSection(data.Passkeys, "")
 	@components.GlassCard("p-5 sm:p-6 grid gap-4") {
 		<h2 class="font-semibold">Unlocked browsers</h2>
 		<ul class="grid gap-2">
@@ -320,6 +335,7 @@ templ recoveryCodeCard(code string, justEnabled bool) {
 				</button>
 			</div>
 			if justEnabled {
+				<p data-passkey-enroll class="text-base empty:hidden"></p>
 				<p class="text-base text-zinc-400">
 					Phones forwarding your SMS need to sign in again from the app, and your other browsers will ask for the password.
 				</p>
@@ -329,7 +345,7 @@ templ recoveryCodeCard(code string, justEnabled bool) {
 }
 
 // Unlock asks for the password of the encrypted database.
-templ Unlock(next, errMsg, tenantID string) {
+templ Unlock(next, errMsg, tenantID string, hasPasskeys bool) {
 	@layouts.Main(nil, "Unlock", nil) {
 		@components.Container() {
 			<div class="max-w-md mx-auto mt-10">
@@ -339,6 +355,19 @@ templ Unlock(next, errMsg, tenantID string) {
 						<h1 class="text-2xl font-(family-name:--font-biorhyme-expanded)">Unlock your data</h1>
 						<p class="text-zinc-400 text-base">Your data is encrypted, enter its password.</p>
 					</div>
+					if hasPasskeys {
+						<div data-passkey-support="any" hidden class="grid gap-4">
+							<div class="grid gap-1.5">
+								<button type="button" data-passkey-unlock data-next={ next } class="btn-primary w-full inline-flex items-center justify-center gap-2">
+									@icons.Fingerprint("20")
+									Unlock with a passkey
+								</button>
+								<p class="text-sm text-center text-zinc-500">Your fingerprint, face or screen lock, a passkey synced from another device, or your phone nearby.</p>
+							</div>
+							<p data-passkey-status class="text-sm text-center empty:hidden"></p>
+							<p class="flex items-center gap-3 text-sm text-zinc-500 before:h-px before:flex-1 before:bg-zinc-700 after:h-px after:flex-1 after:bg-zinc-700">or the password</p>
+						</div>
+					}
 					<form method="post" action="/unlock" class="grid gap-4">
 						<input type="hidden" name="next" value={ next }/>
 						<div>
@@ -372,4 +401,72 @@ templ Unlock(next, errMsg, tenantID string) {
 			</div>
 		}
 	}
+}
+
+// PasskeysSection lists the passkeys unlocking the database, adding this
+// device's (passkeys.js shows it when the browser supports them).
+templ PasskeysSection(passkeys []vault.Passkey, notice string) {
+	<div id="passkeys">
+		@components.GlassCard("p-5 sm:p-6 grid gap-4") {
+			<div class="grid gap-1">
+				<h2 class="flex items-center gap-2 font-semibold">
+					@icons.Fingerprint("18", &templ.Attributes{"class": "text-violet-400"})
+					Passkeys
+				</h2>
+				<p class="text-base text-zinc-400">A passkey unlocks with your fingerprint, face or screen lock instead of the password. It syncs to your devices on the same Google or Apple account, and works from your phone nearby too; elsewhere the password still works.</p>
+			</div>
+			if notice != "" {
+				<p class="flex items-center gap-1.5 text-emerald-400">
+					@icons.Check("16")
+					{ notice }
+				</p>
+			}
+			if len(passkeys) > 0 {
+				<ul class="grid gap-2">
+					for _, p := range passkeys {
+						<li class="flex items-center gap-3 p-3 rounded-2xl bg-zinc-800/30">
+							<div class="flex-1 min-w-0">
+								<p class="truncate text-base text-zinc-200">
+									if p.Name != "" {
+										{ p.Name }
+									} else {
+										Unknown device
+									}
+								</p>
+								<p class="text-sm text-zinc-500">
+									added { p.CreatedAt.Local().Format("Jan 2, 2006") }
+									if !p.LastUsedAt.IsZero() {
+										· last used { p.LastUsedAt.Local().Format("Jan 2, 15:04") }
+									}
+								</p>
+							</div>
+							<button
+								type="button"
+								class="shrink-0 p-2 rounded-full text-zinc-500 cursor-pointer transition-colors hover:text-red-400 hover:bg-red-400/10"
+								title="Remove"
+								aria-label="Remove"
+								hx-post={ "/security/passkeys/" + p.ID + "/delete" }
+								hx-target="#passkeys"
+								hx-swap="outerHTML"
+								hx-confirm="Stop unlocking with this passkey? The password keeps working."
+							>
+								@icons.Trash("16")
+							</button>
+						</li>
+					}
+				</ul>
+			}
+			<form data-passkey-add data-passkey-support hidden class="grid gap-4">
+				@passwordFields("passkey", "Password", false)
+				<p data-passkey-status class="text-sm empty:hidden"></p>
+				<div class="flex justify-end">
+					<button type="submit" class="btn-primary inline-flex items-center gap-2">
+						@icons.Fingerprint("16")
+						Add a passkey
+					</button>
+				</div>
+			</form>
+			<p data-passkey-unsupported hidden class="text-sm text-zinc-500">This device can't add a passkey (it needs a fingerprint, face or screen lock). Passkeys added on your other devices may still unlock here.</p>
+		}
+	</div>
 }

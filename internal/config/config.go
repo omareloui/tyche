@@ -23,8 +23,12 @@ func GetJWTSecret() []byte {
 }
 
 func GetOAuthCBEndpoint() string {
-	domain := getEnvironmentValue("OAUTH_CB_ORIGIN")
-	return fmt.Sprintf("%s/oauth/cb", domain)
+	return fmt.Sprintf("%s/oauth/cb", GetOrigin())
+}
+
+// GetOrigin is the site's origin (OAUTH_CB_ORIGIN), e.g. for the passkeys.
+func GetOrigin() string {
+	return getEnvironmentValue("OAUTH_CB_ORIGIN")
 }
 
 func GetGoogleOAuthClientID() string {

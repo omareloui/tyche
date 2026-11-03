@@ -52,3 +52,30 @@ SELECT
     (SELECT COUNT(*) FROM vault_slots AS s WHERE s.tenant_id = v.tenant_id AND s.kind = 'session') AS sessions,
     (SELECT COUNT(*) FROM vault_slots AS s WHERE s.tenant_id = v.tenant_id AND s.kind = 'device') AS devices
 FROM tenant_vaults AS v;
+
+-- name: CreateVaultPasskey :exec
+INSERT INTO vault_passkeys (slot_id, tenant_id, credential_id, credential, prf_salt, name)
+VALUES (sqlc.arg(slot_id), sqlc.arg(tenant_id), sqlc.arg(credential_id), sqlc.arg(credential), sqlc.arg(prf_salt), sqlc.arg(name));
+
+-- name: ListVaultPasskeys :many
+SELECT p.slot_id, p.credential_id, p.credential, p.prf_salt, p.name, s.created_at, s.last_used_at
+FROM vault_passkeys AS p
+JOIN vault_slots AS s ON s.id = p.slot_id
+WHERE p.tenant_id = sqlc.arg(tenant_id)
+ORDER BY s.created_at DESC;
+
+-- name: GetVaultPasskeySlot :one
+SELECT s.*, p.credential, p.prf_salt
+FROM vault_passkeys AS p
+JOIN vault_slots AS s ON s.id = p.slot_id
+WHERE p.tenant_id = sqlc.arg(tenant_id) AND p.credential_id = sqlc.arg(credential_id);
+
+-- name: TouchVaultPasskey :exec
+UPDATE vault_passkeys SET credential = sqlc.arg(credential) WHERE slot_id = sqlc.arg(slot_id);
+
+-- name: TouchVaultSlot :exec
+UPDATE vault_slots SET last_used_at = sqlc.arg(now) WHERE id = sqlc.arg(id);
+
+-- name: DeleteVaultPasskey :execrows
+DELETE FROM vault_slots
+WHERE id = sqlc.arg(slot_id) AND tenant_id = sqlc.arg(tenant_id) AND kind = 'passkey';

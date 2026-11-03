@@ -180,6 +180,8 @@ func New(h *handler.Handler) Router {
 
 	mux.Handle("GET /unlock", handlePub(h.UnlockPage))
 	mux.Handle("POST /unlock", handlePub(h.Unlock))
+	mux.Handle("POST /unlock/passkey/options", handlePubJSON(h.UnlockPasskeyOptions, middleware.HTMXOnly))
+	mux.Handle("POST /unlock/passkey", handlePubJSON(h.UnlockPasskey, middleware.HTMXOnly))
 	mux.Handle("GET /security", handle(h.Security))
 	mux.Handle("POST /security/encryption", handle(h.EnableEncryption, middleware.HTMXOnly))
 	mux.Handle("POST /security/encryption/disable", handle(h.DisableEncryption, middleware.HTMXOnly))
@@ -187,6 +189,9 @@ func New(h *handler.Handler) Router {
 	mux.Handle("POST /security/recovery-code", handle(h.RegenerateRecoveryCode, middleware.HTMXOnly))
 	mux.Handle("POST /security/sessions/lock-others", handle(h.LockOtherSessions, middleware.HTMXOnly))
 	mux.Handle("POST /security/lock", handle(h.Lock, middleware.HTMXOnly))
+	mux.Handle("POST /security/passkeys/options", handlePubJSON(h.PasskeyOptions, middleware.Protected, middleware.HTMXOnly))
+	mux.Handle("POST /security/passkeys", handle(h.AddPasskey, middleware.HTMXOnly))
+	mux.Handle("POST /security/passkeys/{id}/delete", handle(h.DeletePasskey, middleware.HTMXOnly))
 
 	mux.Handle("PUT /devices/{id}/revoke", handle(h.RevokeDevice))
 	mux.Handle("GET /reset", handle(h.ResetPage))

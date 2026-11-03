@@ -251,7 +251,7 @@ func (h *Handler) UnlockPage(w http.ResponseWriter, r *http.Request) (templ.Comp
 		return nil, nil
 	}
 
-	return views.Unlock(next, "", tenantID), nil
+	return h.unlockView(r, next, "", tenantID), nil
 }
 
 func (h *Handler) Unlock(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -266,7 +266,7 @@ func (h *Handler) Unlock(w http.ResponseWriter, r *http.Request) (templ.Componen
 
 	if wait := unlockAttempts.wait(tenantID); wait > 0 {
 		w.WriteHeader(http.StatusTooManyRequests)
-		return views.Unlock(next, fmt.Sprintf("Too many wrong attempts, try again in %s.", roundWait(wait)), tenantID), nil
+		return h.unlockView(r, next, fmt.Sprintf("Too many wrong attempts, try again in %s.", roundWait(wait)), tenantID), nil
 	}
 
 	key, err := h.vaults.Unlock(r.Context(), tenantID, r.FormValue("password"))
@@ -278,12 +278,26 @@ func (h *Handler) Unlock(w http.ResponseWriter, r *http.Request) (templ.Componen
 		unlockAttempts.fail(tenantID)
 		l.Warn("wrong vault password", zap.String("tenantID", tenantID))
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		return views.Unlock(next, "Wrong password or recovery code.", tenantID), nil
+		return h.unlockView(r, next, "Wrong password or recovery code.", tenantID), nil
 	}
 	if err != nil {
 		return nil, err
 	}
 	unlockAttempts.reset(tenantID)
+
+	to, err := h.finishUnlock(w, r, tenantID, pending, pendingID, key, next)
+	if err != nil {
+		return nil, err
+	}
+	http.Redirect(w, r, to, http.StatusSeeOther)
+	return nil, nil
+}
+
+// finishUnlock unlocks the database for the browser (or the mobile app of a
+// pending sign in), signing in a pending sign in, and returns where to go
+// next.
+func (h *Handler) finishUnlock(w http.ResponseWriter, r *http.Request, tenantID string, pending *pendingUnlock, pendingID string, key []byte, next string) (string, error) {
+	l := logger.FromCtx(r.Context())
 
 	ctx := context.WithValue(r.Context(), middleware.VaultKeyCtxKey{}, key)
 	var oauthID string
@@ -300,20 +314,19 @@ func (h *Handler) Unlock(w http.ResponseWriter, r *http.Request) (templ.Componen
 	if pending != nil && pending.mobile != nil {
 		usr, err := h.signInUser(ctx, pending.gUsr)
 		if err != nil {
-			return nil, err
+			return "", err
 		}
 		h.syncPicture(ctx, usr, pending.gUsr.Picture)
 		code, err := mobileCodes.add(usr, pending.mobile, key)
 		if err != nil {
-			return nil, err
+			return "", err
 		}
 		l.Info("unlocked the database to sign in from mobile", zap.String("tenantID", tenantID))
-		http.Redirect(w, r, mobileRedirectURI+"?code="+url.QueryEscape(code), http.StatusSeeOther)
-		return nil, nil
+		return mobileRedirectURI + "?code=" + url.QueryEscape(code), nil
 	}
 
 	if err := h.startVaultSession(ctx, w, r, tenantID, key); err != nil {
-		return nil, err
+		return "", err
 	}
 
 	if pending != nil || getClaims(r.Context()) == nil {
@@ -325,7 +338,7 @@ func (h *Handler) Unlock(w http.ResponseWriter, r *http.Request) (templ.Componen
 			usr, err = h.repo.GetUserByOAuthID(ctx, oauthID)
 		}
 		if err != nil {
-			return nil, err
+			return "", err
 		}
 		if pending != nil {
 			h.syncPicture(ctx, usr, pending.gUsr.Picture)
@@ -334,13 +347,12 @@ func (h *Handler) Unlock(w http.ResponseWriter, r *http.Request) (templ.Componen
 			}
 		}
 		if _, err := setJWTCookies(w, usr); err != nil {
-			return nil, err
+			return "", err
 		}
 	}
 
 	l.Info("unlocked the database", zap.String("tenantID", tenantID))
-	http.Redirect(w, r, next, http.StatusSeeOther)
-	return nil, nil
+	return next, nil
 }
 
 // startVaultSession unlocks the database for the browser.
@@ -399,6 +411,9 @@ func (h *Handler) securityData(r *http.Request) (*views.SecurityData, error) {
 		return data, nil
 	}
 	if data.Sessions, err = h.vaults.Sessions(r.Context(), tenantID); err != nil {
+		return nil, err
+	}
+	if data.Passkeys, err = h.vaults.Passkeys(r.Context(), tenantID); err != nil {
 		return nil, err
 	}
 	if c, err := r.Cookie(vaultSessionCookieName); err == nil {

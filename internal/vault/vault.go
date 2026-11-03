@@ -1,10 +1,11 @@
 // Package vault keeps the keys of the encrypted tenant databases. A tenant
 // database encrypted by its user (SQLCipher) has a random key (DEK), stored
 // only wrapped in the shared database, once per slot: the user's password,
-// their recovery code, every unlocked browser (session) and every signed in
-// mobile device. A slot's key is derived from a secret the server doesn't
-// keep (Argon2id for the password and recovery code, HKDF for the random
-// secrets of the sessions' cookies and the devices' tokens), so the database
+// their recovery code, every unlocked browser (session), every signed in
+// mobile device and every passkey (fingerprint or face unlock). A slot's key
+// is derived from a secret the server doesn't keep (Argon2id for the password
+// and recovery code, HKDF for the random secrets of the sessions' cookies and
+// the devices' tokens and for the passkeys' PRF outputs), so the database
 // files and the shared database alone can't be read.
 package vault
 
@@ -29,6 +30,7 @@ const (
 	KindRecovery Kind = "recovery"
 	KindSession  Kind = "session"
 	KindDevice   Kind = "device"
+	KindPasskey  Kind = "passkey"
 )
 
 const (
