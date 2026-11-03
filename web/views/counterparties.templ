@@ -2,14 +2,15 @@ package views
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
-	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/jwt"
-	"github.com/omareloui/tyche/web/views/layouts"
+	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
 )
 
 type MergeCounterpartyFD struct {
@@ -23,6 +24,16 @@ type CounterpartyFD struct {
 	IsMerchant        form.FDInput
 	DefaultCategoryID form.FDInput
 	IsArchived        form.FDInput
+	Rating            form.FDInput
+	Note              form.FDInput
+	Locations         []CounterpartyLocationFD
+}
+
+type CounterpartyLocationFD struct {
+	ID      string
+	Label   form.FDInput
+	Address form.FDInput
+	MapsURL form.FDInput
 }
 
 templ Counterparties(
@@ -107,6 +118,20 @@ templ counterpartyFormBody(id string, isNew bool, fd *CounterpartyFD, cats []mod
 	@form.Field("SMS aliases", "aliases", id, icons.Message("15"), fd.Aliases.Error) {
 		@form.TagsInput("aliases", "Names as in bank SMS, e.g. UBER *TRIP", id, fd.Aliases)
 	}
+	@form.Field("Note", "note", id, icons.StickyNote("15"), fd.Note.Error) {
+		<textarea
+			id={ "note-" + id }
+			name="note"
+			rows="2"
+			maxlength="1000"
+			dir="auto"
+			placeholder="Anything to remember, e.g. ask for the student discount"
+			class="input-field h-auto! min-h-11 py-2.5"
+			if fd.Note.Error != "" {
+				aria-invalid="true"
+			}
+		>{ fd.Note.Value }</textarea>
+	}
 	<div
 		x-data={ fmt.Sprintf("{isMerchant: %t}", fd.IsMerchant.Value != "") }
 		class="grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-800/20 p-4"
@@ -121,6 +146,8 @@ templ counterpartyFormBody(id string, isNew bool, fd *CounterpartyFD, cats []mod
 				})
 			}
 			@counterpartyIconField(id, isNew, fd.Icon)
+			@counterpartyRatingField(id, fd.Rating)
+			@counterpartyLocationsField(id, fd.Locations)
 		</div>
 	</div>
 	if !isNew {
@@ -129,6 +156,114 @@ templ counterpartyFormBody(id string, isNew bool, fd *CounterpartyFD, cats []mod
 			<p class="mt-1 text-sm text-zinc-500">Hidden from pickers, kept with its history.</p>
 		</div>
 	}
+}
+
+// counterpartyRatingField picks 1 to 5 stars, clicking the picked one again
+// clears it.
+templ counterpartyRatingField(id string, data form.FDInput) {
+	<div x-data="{rating: Number($el.dataset.rating) || 0, hover: 0}" data-rating={ data.Value }>
+		@form.Field("Rating", "rating", id, nil, data.Error) {
+			<input type="hidden" name="rating" :value="rating || ''" value={ data.Value }/>
+			<div class="flex items-center gap-1" @mouseleave="hover = 0">
+				for i := 1; i <= models.MaxRating; i++ {
+					<button
+						type="button"
+						@click={ fmt.Sprintf("rating = rating === %d ? 0 : %d", i, i) }
+						@mouseenter={ fmt.Sprintf("hover = %d", i) }
+						:class={ fmt.Sprintf("(hover || rating) >= %d ? 'text-amber-400 [&_svg]:fill-amber-400' : 'text-zinc-600'", i) }
+						:aria-pressed={ fmt.Sprintf("rating === %d", i) }
+						aria-label={ fmt.Sprintf("%d stars", i) }
+						class="grid place-items-center w-9 h-9 rounded-lg cursor-pointer transition-colors hover:bg-zinc-800"
+					>
+						@icons.Star("22")
+					</button>
+				}
+				<span x-show="rating" x-cloak class="ml-2 text-sm text-zinc-400" x-text="rating + ' of 5'"></span>
+			</div>
+		}
+	</div>
+}
+
+// counterpartyLocationsField edits the merchant's branches as rows, sent as
+// parallel location_* fields; blank rows are dropped.
+templ counterpartyLocationsField(id string, locs []CounterpartyLocationFD) {
+	<div x-data class="grid gap-2">
+		<p class="input-label">
+			@icons.MapPin("15")
+			Locations
+		</p>
+		<div x-ref="rows" class="grid gap-2">
+			for _, loc := range locs {
+				@counterpartyLocationRow(loc)
+			}
+		</div>
+		<template x-ref="row">
+			@counterpartyLocationRow(CounterpartyLocationFD{})
+		</template>
+		<button
+			type="button"
+			@click="$refs.rows.append($refs.row.content.cloneNode(true)); $nextTick(() => $refs.rows.lastElementChild.querySelector('input[name=location_label]').focus())"
+			class="justify-self-start inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm text-zinc-300 cursor-pointer transition-colors hover:bg-zinc-800"
+		>
+			@icons.Plus("15")
+			Add location
+		</button>
+	</div>
+}
+
+templ counterpartyLocationRow(loc CounterpartyLocationFD) {
+	<div data-location class="grid gap-2 p-3 rounded-xl border border-zinc-800 bg-zinc-900/40">
+		<input type="hidden" name="location_id" value={ loc.ID }/>
+		<div class="flex gap-2">
+			<input
+				type="text"
+				name="location_label"
+				value={ loc.Label.Value }
+				placeholder="Branch, e.g. Zamalek"
+				aria-label="Location name"
+				autocomplete="off"
+				class="input-field flex-1 min-w-0"
+				if loc.Label.Error != "" {
+					aria-invalid="true"
+				}
+			/>
+			<button
+				type="button"
+				@click="$el.closest('[data-location]').remove()"
+				aria-label="Remove location"
+				class="grid place-items-center shrink-0 w-11 h-11 rounded-xl text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white"
+			>
+				@icons.Trash("16")
+			</button>
+		</div>
+		@form.ErrorMessage(loc.Label.Error)
+		<input
+			type="text"
+			name="location_address"
+			value={ loc.Address.Value }
+			placeholder="Address (optional)"
+			aria-label="Address"
+			class="input-field"
+			if loc.Address.Error != "" {
+				aria-invalid="true"
+			}
+		/>
+		@form.ErrorMessage(loc.Address.Error)
+		<input
+			type="url"
+			inputmode="url"
+			name="location_maps_url"
+			value={ loc.MapsURL.Value }
+			placeholder="Maps link (optional), e.g. https://maps.app.goo.gl/…"
+			aria-label="Maps link"
+			autocomplete="off"
+			class="input-field"
+			if loc.MapsURL.Error != "" {
+				aria-invalid="true"
+			}
+		/>
+		@form.ErrorMessage(loc.MapsURL.Error)
+	</div>
 }
 
 // counterpartyIconField is the simple-icons slug input with a live preview.
@@ -160,12 +295,48 @@ templ counterpartyIconField(id string, isNew bool, data form.FDInput) {
 // when no card is left to match.
 const counterpartiesFilterData = `{
 	q: '',
+	// sort is 'name' or 'rating'; stars is '' (any), 'unrated' or the least
+	// stars. Both are remembered in localStorage.
+	sort: 'name',
+	stars: '',
+	init() {
+		try {
+			const saved = JSON.parse(localStorage.getItem('counterpartiesView') || '{}')
+			this.sort = saved.sort === 'rating' ? 'rating' : 'name'
+			this.stars = ['', 'unrated', '3', '4', '5'].includes(saved.stars) ? saved.stars : ''
+		} catch {}
+		this.$watch('sort', () => this.save())
+		this.$watch('stars', () => this.save())
+	},
+	save() {
+		try { localStorage.setItem('counterpartiesView', JSON.stringify({sort: this.sort, stars: this.stars})) } catch {}
+	},
+	matchesStars(el) {
+		if (!this.stars) return true
+		const r = Number(el.dataset.rating) || 0
+		if (this.stars === 'unrated') return el.dataset.merchant !== undefined && r === 0
+		return r >= Number(this.stars)
+	},
 	matches(el) {
 		const q = this.q.trim().toLowerCase()
-		return !q || el.dataset.search.includes(q)
+		return (!q || el.dataset.search.includes(q)) && this.matchesStars(el)
+	},
+	// openCounterpartyDetails opens the card's details on a click on it,
+	// unless on one of its controls or selecting its text, like a
+	// transaction's row.
+	openCounterpartyDetails(e, card) {
+		if (e.target !== card && e.target.closest('button, a, input, [role=menu]')) return
+		if (getSelection()?.toString()) return
+		htmx.ajax('GET', card.dataset.details, {target: '#drawer', swap: 'innerHTML'})
+	},
+	// order puts the best rated first when sorting by rating, unrated last,
+	// keeping the name order among equals.
+	order(el) {
+		return this.sort === 'rating' ? -(Number(el.dataset.rating) || 0) : 0
 	},
 	any(el) {
 		this.q
+		this.stars
 		return [...el.querySelectorAll('[data-counterparty]')].some(c => this.matches(c))
 	},
 }`
@@ -178,44 +349,71 @@ templ counterpartiesList(counterparties []models.Counterparty) {
 		class="grid gap-6"
 	>
 		if len(counterparties) > 0 {
-			@counterpartiesSearch()
-		}
-		@components.Grid2ColOnSMUp(CounterpartiesListID(false)) {
-			for _, cp := range counterparties {
-				if !cp.IsArchived {
-					@counterpartyWrapper(&cp)
+			<div class="grid gap-3">
+				@counterpartiesSearch()
+				if slices.ContainsFunc(counterparties, func(cp models.Counterparty) bool { return cp.IsMerchant }) {
+					@counterpartiesRatingBar()
 				}
-			}
+			</div>
 		}
+		@counterpartiesSection(counterpartiesMerchants, "Merchants", icons.Tag("16"), counterparties)
+		@counterpartiesSection(counterpartiesOthers, "People & others", icons.Users("16"), counterparties)
 		<details
 			class="group hidden has-[[data-counterparty]]:block"
-			x-effect="if (q.trim() && any($el)) $el.open = true"
+			x-effect="if ((q.trim() || stars) && any($el)) $el.open = true"
 		>
 			<summary class="flex items-center gap-2 mb-3 list-none cursor-pointer select-none text-zinc-500 hover:text-zinc-300 [&::-webkit-details-marker]:hidden">
 				@icons.Archive("16")
 				<h2 class="text-sm font-semibold uppercase tracking-wider">Archived</h2>
 				@icons.ChevronDown("16", &templ.Attributes{"class": "transition-transform group-open:rotate-180"})
 			</summary>
-			<div id={ CounterpartiesListID(true) } class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+			<div id={ counterpartiesArchived } class="grid grid-cols-1 sm:grid-cols-2 gap-4">
 				for _, cp := range counterparties {
-					if cp.IsArchived {
+					if CounterpartiesListID(&cp) == counterpartiesArchived {
 						@counterpartyWrapper(&cp)
 					}
 				}
 			</div>
 		</details>
 		@counterpartiesEmpty()
-		<p x-cloak x-show="q.trim() && !any($root)" class="py-12 text-center text-zinc-500">No counterparties match</p>
+		<p x-cloak x-show="(q.trim() || stars) && !any($root)" class="py-12 text-center text-zinc-500">No counterparties match</p>
 	</div>
 }
 
-// CounterpartiesListID is the list of the active counterparties, or of the
-// archived ones.
-func CounterpartiesListID(archived bool) string {
-	if archived {
-		return "counterparties-archived"
+const (
+	counterpartiesMerchants = "counterparties-merchants"
+	counterpartiesOthers    = "counterparties-others"
+	counterpartiesArchived  = "counterparties-archived"
+)
+
+// CounterpartiesListID is the list the counterparty's card is in: the active
+// merchants, the other active ones, or the archived ones.
+func CounterpartiesListID(cp *models.Counterparty) string {
+	switch {
+	case cp.IsArchived:
+		return counterpartiesArchived
+	case cp.IsMerchant:
+		return counterpartiesMerchants
 	}
-	return "counterparties-list"
+	return counterpartiesOthers
+}
+
+// counterpartiesSection is one list of active counterparties under a heading,
+// hidden while it has no card or none matches the search.
+templ counterpartiesSection(id, title string, icon templ.Component, counterparties []models.Counterparty) {
+	<section class="hidden has-[[data-counterparty]]:grid gap-3" x-show="any($el)">
+		<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+			@icon
+			{ title }
+		</h2>
+		<div id={ id } class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+			for _, cp := range counterparties {
+				if CounterpartiesListID(&cp) == id {
+					@counterpartyWrapper(&cp)
+				}
+			}
+		</div>
+	</section>
 }
 
 templ counterpartiesEmpty() {
@@ -231,6 +429,68 @@ templ counterpartiesEmpty() {
 			New counterparty
 		</button>
 	</div>
+}
+
+// counterpartiesRatingFilters are the star filter chips: value and label.
+var counterpartiesRatingFilters = [][2]string{{"", "Any"}, {"3", "3+"}, {"4", "4+"}, {"5", "5"}, {"unrated", "Unrated"}}
+
+// counterpartiesRatingBar sorts the cards by name or rating and filters them
+// by stars.
+templ counterpartiesRatingBar() {
+	<div class="flex flex-wrap items-center gap-2">
+		<div role="group" aria-label="Filter by rating" class="flex flex-wrap items-center gap-1.5">
+			for _, f := range counterpartiesRatingFilters {
+				<button
+					type="button"
+					@click={ fmt.Sprintf("stars = %q", f[0]) }
+					:aria-pressed={ fmt.Sprintf("stars === %q", f[0]) }
+					:class={ fmt.Sprintf("stars === %q ? 'bg-zinc-200 text-zinc-900' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'", f[0]) }
+					class="inline-flex items-center gap-1 h-8 px-3 rounded-full text-sm cursor-pointer transition-colors"
+				>
+					if f[0] != "" && f[0] != "unrated" {
+						@icons.Star("13", &templ.Attributes{"class": "fill-current"})
+					}
+					{ f[1] }
+				</button>
+			}
+		</div>
+		<div x-data="{openSort: false}" class="relative ml-auto">
+			<button
+				type="button"
+				@click="openSort = !openSort"
+				aria-haspopup="menu"
+				:aria-expanded="openSort"
+				:class="openSort ? 'bg-zinc-700 text-white' : 'bg-zinc-800 text-zinc-300 hover:text-white'"
+				class="inline-flex items-center gap-1.5 h-8 pl-3 pr-2 rounded-full text-sm cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60"
+			>
+				@icons.ArrowUpDown("14", &templ.Attributes{"class": "text-zinc-500"})
+				<span class="text-zinc-500">Sort:</span>
+				<span x-text="sort === 'rating' ? 'Rating' : 'Name'">Name</span>
+				@icons.ChevronDown("14", &templ.Attributes{"class": "text-zinc-500 transition-transform", ":class": "openSort && 'rotate-180'"})
+			</button>
+			@components.EntryMenuAt("openSort", "top-full mt-1 right-0 origin-top-right", []templ.Component{
+				counterpartiesSortItem("name", "Name"),
+				counterpartiesSortItem("rating", "Rating, best first"),
+			})
+		</div>
+	</div>
+}
+
+// counterpartiesSortItem picks the sort, checked while it's the current one.
+func counterpartiesSortItem(value, label string) templ.Component {
+	return components.EntryMenuItem(label,
+		templ.Attributes{
+			"@click":        fmt.Sprintf("sort = %q; openSort = false", value),
+			":aria-checked": fmt.Sprintf("sort === %q", value),
+			"role":          "menuitemradio",
+		},
+		components.WithEntryMenuItemIcon(counterpartiesSortCheck(value)))
+}
+
+templ counterpartiesSortCheck(value string) {
+	<span x-show={ fmt.Sprintf("sort === %q", value) } class="text-violet-400">
+		@icons.Check("15")
+	</span>
 }
 
 templ counterpartiesSearch() {
@@ -263,19 +523,42 @@ templ Counterparty(cp *models.Counterparty) {
 		class={ "relative min-w-0", templ.KV("opacity-60 hover:opacity-100 transition-opacity", cp.IsArchived) }
 		x-data="{openMenu: false}"
 		data-counterparty
-		data-search={ strings.ToLower(cp.Name + " " + strings.Join(cp.Aliases, " ")) }
+		data-search={ strings.ToLower(cp.Name + " " + strings.Join(cp.Aliases, " ") + " " + cp.Note) }
+		data-rating={ fmt.Sprint(cp.Rating) }
+		data-merchant?={ cp.IsMerchant }
 		x-show="matches($el)"
+		:style="{order: order($el)}"
 	>
-		<div class="flex items-center gap-4 h-full p-4 rounded-2xl bg-zinc-700/20">
+		<div
+			tabindex="0"
+			data-details={ counterpartyDetailsURL(cp.ID) }
+			@click="openCounterpartyDetails($event, $el)"
+			@keydown.enter.self="openCounterpartyDetails($event, $el)"
+			aria-label={ cp.Name + " details" }
+			class="flex items-center gap-4 h-full p-4 rounded-2xl bg-zinc-700/20 cursor-pointer transition hover:bg-zinc-700/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60"
+		>
 			<div class="grid place-items-center shrink-0 w-12 h-12 rounded-xl bg-zinc-700/40">
 				@components.CounterpartyIcon(cp.Name, cp.Icon, cp.Color, "w-7 h-7 text-sm")
 			</div>
 			<div class="flex-1 min-w-0">
 				<p class="text-lg truncate">{ cp.Name }</p>
-				if cp.IsMerchant || cp.DefaultCategory != nil {
+				if cp.IsMerchant {
+					@counterpartyStars(cp, "", "15")
+				}
+				if cp.IsMerchant || cp.DefaultCategory != nil || len(cp.Locations) > 0 {
 					<div class="flex flex-wrap items-center gap-1.5 mt-1">
 						if cp.IsMerchant {
 							<span class="px-2 py-0.5 rounded-full bg-zinc-800 text-xs text-zinc-400">Merchant</span>
+						}
+						if n := len(cp.Locations); n > 0 {
+							<span title={ counterpartyLocationLabels(cp) } class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800 text-xs text-zinc-400">
+								@icons.MapPin("12")
+								if n == 1 {
+									1 location
+								} else {
+									{ fmt.Sprint(n) } locations
+								}
+							</span>
 						}
 						if cp.DefaultCategory != nil {
 							<span title="Default category" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-zinc-800 text-xs text-zinc-300">
@@ -284,6 +567,12 @@ templ Counterparty(cp *models.Counterparty) {
 							</span>
 						}
 					</div>
+				}
+				if cp.Note != "" {
+					<p title={ cp.Note } class="flex items-center gap-1.5 mt-1.5 min-w-0 text-sm text-zinc-400">
+						@icons.StickyNote("13", &templ.Attributes{"class": "shrink-0 text-zinc-500"})
+						<span class="truncate">{ firstLine(cp.Note) }</span>
+					</p>
 				}
 				if len(cp.Aliases) > 0 {
 					<div title={ "aka " + strings.Join(cp.Aliases, ", ") } class="flex flex-wrap gap-1 mt-1.5 min-w-0">
@@ -311,6 +600,8 @@ func counterpartyMenuItems(cp *models.Counterparty) []templ.Component {
 			components.WithEntryMenuItemIcon(icons.RotateCcw("16")))
 	}
 	return []templ.Component{
+		components.EntryMenuDrawerItem("Details", counterpartyDetailsURL(cp.ID),
+			components.WithEntryMenuItemIcon(icons.Eye("16"))),
 		components.EntryMenuEditItem(fmt.Sprintf("/counterparties/%s/edit", cp.ID)),
 		components.EntryMenuDrawerItem("Merge into…", fmt.Sprintf("/counterparties/%s/merge", cp.ID),
 			components.WithEntryMenuItemIcon(icons.Merge("16"))),
@@ -320,9 +611,10 @@ func counterpartyMenuItems(cp *models.Counterparty) []templ.Component {
 	}
 }
 
-// CounterpartyOOB adds the card on top of its list (active or archived).
+// CounterpartyOOB adds the card on top of its list (merchants, others or
+// archived).
 templ CounterpartyOOB(cp *models.Counterparty) {
-	<div id={ CounterpartiesListID(cp.IsArchived) } hx-swap-oob="afterbegin">
+	<div id={ CounterpartiesListID(cp) } hx-swap-oob="afterbegin">
 		@counterpartyWrapper(cp)
 	</div>
 }
@@ -347,4 +639,70 @@ templ CounterpartyReplaceOOB(cp *models.Counterparty) {
 
 func CounterpartyWrapperID(id string) string {
 	return "counterparty-" + id
+}
+
+// counterpartyStars rates the merchant like the form's stars: hovering
+// previews, clicking a star sets it, clicking the current rating clears it.
+// From the card (from "") the answer replaces the card; from the details
+// ("details") it's swapped out of band, the stars keeping their state.
+// rating is the saved one, which hx-vals is computed from, only changed once
+// saved: changing it on click would reach hx-vals before htmx reads them.
+// shown is the clicked one meanwhile.
+templ counterpartyStars(cp *models.Counterparty, from, size string) {
+	<div
+		x-data={ fmt.Sprintf("{rating: %d, shown: null, hover: 0, get value() { return this.hover || (this.shown ?? this.rating) }}", cp.Rating) }
+		@mouseleave="hover = 0"
+		@htmx:after-request="if ($event.detail.successful && shown !== null) rating = shown; shown = null"
+		class="flex items-center -ml-1 mt-0.5"
+		role="group"
+		aria-label="Rating"
+	>
+		for i := 1; i <= models.MaxRating; i++ {
+			<button
+				type="button"
+				hx-put={ fmt.Sprintf("/counterparties/%s/rating", cp.ID) }
+				:hx-vals={ fmt.Sprintf(`JSON.stringify({rating: String(rating === %d ? 0 : %d), from: %q})`, i, i, from) }
+				hx-vals={ fmt.Sprintf(`{"rating": "%d", "from": %q}`, nextRating(cp.Rating, i), from) }
+				:aria-label={ fmt.Sprintf("rating === %d ? 'Clear the %d stars rating' : 'Rate %d stars'", i, i, i) }
+				aria-label={ fmt.Sprintf("Rate %d stars", i) }
+				:aria-pressed={ fmt.Sprintf("rating === %d", i) }
+				@mouseenter={ fmt.Sprintf("hover = %d", i) }
+				@click={ fmt.Sprintf("shown = rating === %d ? 0 : %d; hover = 0", i, i) }
+				:class={ fmt.Sprintf("{'text-amber-400 [&_svg]:fill-amber-400': value >= %d, 'text-zinc-600': value < %d}", i, i) }
+				class={ "grid place-items-center w-6 h-6 rounded cursor-pointer transition-colors hover:bg-zinc-800", starButtonClass(i <= cp.Rating) }
+			>
+				@icons.Star(size)
+			</button>
+		}
+	</div>
+}
+
+// nextRating is what clicking star i sets: i, or 0 when it's the current one.
+func nextRating(current, i int) int {
+	if current == i {
+		return 0
+	}
+	return i
+}
+
+// starButtonClass is a star button's color before Alpine starts (its
+// :class object then swaps them), its svg filled when on.
+func starButtonClass(on bool) string {
+	if on {
+		return "text-amber-400 [&_svg]:fill-amber-400"
+	}
+	return "text-zinc-600"
+}
+
+func counterpartyLocationLabels(cp *models.Counterparty) string {
+	labels := make([]string, len(cp.Locations))
+	for i, l := range cp.Locations {
+		labels[i] = l.Label
+	}
+	return strings.Join(labels, ", ")
+}
+
+func firstLine(s string) string {
+	line, _, _ := strings.Cut(s, "\n")
+	return line
 }

@@ -1,6 +1,7 @@
 package models
 
 import (
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -22,7 +23,37 @@ type Counterparty struct {
 	DefaultCategory *Category `validate:"-"`
 	// IsArchived hides it from the pickers, its transactions keep it.
 	IsArchived bool
-	CreatedAt  time.Time
+	// Rating is a merchant's stars, 1 to 5, 0 when unrated.
+	Rating int `validate:"min=0,max=5"`
+	// Note is free text about any counterparty.
+	Note string `validate:"max=1000" conform:"trim"`
+	// Locations are a merchant's branches, in order.
+	Locations []CounterpartyLocation `validate:"dive"`
+	CreatedAt time.Time
+}
+
+// MaxRating is the most stars a merchant can get.
+const MaxRating = 5
+
+// CounterpartyLocation is a merchant's branch.
+type CounterpartyLocation struct {
+	ID      string
+	Label   string `validate:"required,not_blank,max=100" conform:"trim"`
+	Address string `validate:"max=300" conform:"trim"`
+	MapsURL string `validate:"omitempty,http_url,max=2000" conform:"trim"`
+}
+
+// MapsLink is the location's maps url, else a maps search of its address
+// (or label).
+func (l *CounterpartyLocation) MapsLink() string {
+	if l.MapsURL != "" {
+		return l.MapsURL
+	}
+	q := l.Address
+	if q == "" {
+		q = l.Label
+	}
+	return "https://www.google.com/maps/search/?api=1&query=" + url.QueryEscape(q)
 }
 
 // DefaultCategoryFor returns the default category if it applies to the
@@ -39,8 +70,9 @@ func (cp *Counterparty) DefaultCategoryFor(kind TxKind) *Category {
 }
 
 // Absorb adds the other counterparty's name and aliases to the aliases,
-// skipping blanks and case-insensitive duplicates, and takes its default
-// category if this merchant has none.
+// skipping blanks and case-insensitive duplicates, appends its note, and takes
+// its default category and rating if this merchant has none. Locations are
+// moved separately.
 func (cp *Counterparty) Absorb(other *Counterparty) {
 	seen := map[string]bool{strings.ToLower(strings.TrimSpace(cp.Name)): true}
 	aliases := []string{}
@@ -55,8 +87,19 @@ func (cp *Counterparty) Absorb(other *Counterparty) {
 	}
 	cp.Aliases = aliases
 
+	switch {
+	case other.Note == "" || other.Note == cp.Note:
+	case cp.Note == "":
+		cp.Note = other.Note
+	default:
+		cp.Note += "\n\n" + other.Note
+	}
+
 	if cp.IsMerchant && cp.DefaultCategory == nil {
 		cp.DefaultCategory = other.DefaultCategory
+	}
+	if cp.IsMerchant && cp.Rating == 0 {
+		cp.Rating = other.Rating
 	}
 }
 

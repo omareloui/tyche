@@ -119,3 +119,106 @@ func TestArchiveCounterparty(t *testing.T) {
 		t.Errorf("unarchived counterparty = %+v (%v), want not archived", got, err)
 	}
 }
+
+func TestCounterpartyRatingNoteAndLocations(t *testing.T) {
+	repo, ctx, _ := setupTenant(t)
+
+	cp := &models.Counterparty{
+		ID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZJ", Name: "Cilantro", IsMerchant: true, Rating: 4, Note: "Good wifi",
+		Locations: []models.CounterpartyLocation{
+			{Label: "Zamalek", Address: "26 July St"},
+			{Label: "Maadi", MapsURL: "https://maps.app.goo.gl/x"},
+		},
+	}
+	if err := repo.CreateCounterparty(ctx, cp); err != nil {
+		t.Fatal(err)
+	}
+	got, err := repo.GetCounterparty(ctx, cp.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Rating != 4 || got.Note != "Good wifi" {
+		t.Errorf("rating, note = %d, %q, want 4, Good wifi", got.Rating, got.Note)
+	}
+	if labels := locationLabels(got.Locations); !slices.Equal(labels, []string{"Zamalek", "Maadi"}) {
+		t.Errorf("locations = %q, want Zamalek, Maadi", labels)
+	}
+
+	// Editing replaces the locations, in the new order.
+	got.Locations = []models.CounterpartyLocation{got.Locations[1], {Label: "Heliopolis"}}
+	if err := repo.UpdateCounterparty(ctx, got); err != nil {
+		t.Fatal(err)
+	}
+	cps, err := repo.GetCounterparties(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := slices.IndexFunc(cps, func(c models.Counterparty) bool { return c.ID == cp.ID })
+	if i < 0 {
+		t.Fatal("counterparty not listed")
+	}
+	if labels := locationLabels(cps[i].Locations); !slices.Equal(labels, []string{"Maadi", "Heliopolis"}) {
+		t.Errorf("listed locations = %q, want Maadi, Heliopolis", labels)
+	}
+
+	if err := repo.SetCounterpartyRating(ctx, cp.ID, 0); err != nil {
+		t.Fatal(err)
+	}
+	if got, err = repo.GetCounterparty(ctx, cp.ID); err != nil || got.Rating != 0 {
+		t.Errorf("cleared rating = %+v (%v), want 0", got, err)
+	}
+
+	// Deleting it drops its locations.
+	if err := repo.DeleteCounterparty(ctx, cp.ID); err != nil {
+		t.Fatal(err)
+	}
+	cps, err = repo.GetCounterparties(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range cps {
+		if len(c.Locations) > 0 {
+			t.Errorf("locations left after delete: %+v", c)
+		}
+	}
+}
+
+func TestMergeCounterpartiesLocations(t *testing.T) {
+	repo, ctx, _ := setupTenant(t)
+
+	from := &models.Counterparty{
+		ID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZK", Name: "Cilantro Cafe", IsMerchant: true, Rating: 5, Note: "Quiet",
+		Locations: []models.CounterpartyLocation{{Label: "Maadi"}},
+	}
+	into := &models.Counterparty{
+		ID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZM", Name: "Cilantro", IsMerchant: true, Note: "Good wifi",
+		Locations: []models.CounterpartyLocation{{Label: "Zamalek"}},
+	}
+	for _, cp := range []*models.Counterparty{from, into} {
+		if err := repo.CreateCounterparty(ctx, cp); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, err := repo.MergeCounterparties(ctx, from.ID, into.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, err := repo.GetCounterparty(ctx, into.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if labels := locationLabels(got.Locations); !slices.Equal(labels, []string{"Zamalek", "Maadi"}) {
+		t.Errorf("locations = %q, want Zamalek, Maadi", labels)
+	}
+	if got.Rating != 5 || got.Note != "Good wifi\n\nQuiet" {
+		t.Errorf("rating, note = %d, %q, want 5, joined notes", got.Rating, got.Note)
+	}
+}
+
+func locationLabels(locs []models.CounterpartyLocation) []string {
+	labels := make([]string, len(locs))
+	for i, l := range locs {
+		labels[i] = l.Label
+	}
+	return labels
+}

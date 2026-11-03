@@ -1,0 +1,289 @@
+package views
+
+import (
+	"fmt"
+	"net/url"
+	"strings"
+
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+// CounterpartyDetailsData is what a counterparty's details drawer shows.
+type CounterpartyDetailsData struct {
+	Counterparty *models.Counterparty
+	// AllTime and ThisMonth sum its fulfilled transactions, in Def.
+	AllTime, ThisMonth *models.TxSummary
+	// Recent are its last fulfilled transactions, newest first.
+	Recent []models.Transaction
+	Def    *models.Currency
+}
+
+func counterpartyDetailsURL(id string) string {
+	return fmt.Sprintf("/counterparties/%s/details", id)
+}
+
+func counterpartyTxsURL(id string) templ.SafeURL {
+	return templ.SafeURL("/transactions?" + url.Values{models.TxFilterCounterparty: {id}}.Encode())
+}
+
+// CounterpartyDetails is a counterparty in full, in a drawer like a goal's
+// details: its rating, note, locations, spending and last transactions.
+templ CounterpartyDetails(d *CounterpartyDetailsData) {
+	{{ cp := d.Counterparty }}
+	@components.Drawer(components.DrawerProps{Label: cp.Name + " details"}) {
+		<div class="drawer-panel flex flex-col flex-1 min-h-0">
+			<header class="flex items-start gap-3 px-5 sm:px-6 pt-5 pb-4">
+				<div class="grid place-items-center shrink-0 w-11 h-11 rounded-xl bg-zinc-700/40">
+					@components.CounterpartyIcon(cp.Name, cp.Icon, cp.Color, "w-7 h-7 text-sm")
+				</div>
+				<div class="flex-1 min-w-0">
+					<h2 class="text-lg font-bold leading-snug break-words">{ cp.Name }</h2>
+					<p class="text-sm text-zinc-400 truncate">
+						if cp.IsMerchant {
+							Merchant
+						} else {
+							Counterparty
+						}
+						if cp.IsArchived {
+							· Archived
+						}
+					</p>
+					if cp.IsMerchant {
+						<div class="mt-1.5">
+							@counterpartyStars(cp, CounterpartyFromDetails, "18")
+						</div>
+					}
+				</div>
+				@components.DrawerClose()
+			</header>
+			<div class="flex-1 grid grid-cols-1 content-start gap-6 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
+				@counterpartyDetailsActions(cp)
+				if cp.Note != "" {
+					@txDetailsSection("Note") {
+						<p class="whitespace-pre-line break-words text-sm text-zinc-300">{ cp.Note }</p>
+					}
+				}
+				@counterpartyDetailsSpending(d)
+				if cp.IsMerchant {
+					@CounterpartyDetailsLocations(cp, nil)
+				}
+				@counterpartyDetailsRecent(d)
+			</div>
+		</div>
+	}
+}
+
+templ counterpartyDetailsActions(cp *models.Counterparty) {
+	{{ slot := "#" + components.DrawerSlot }}
+	<div class="flex flex-wrap gap-2">
+		<button type="button" hx-get={ fmt.Sprintf("/counterparties/%s/edit", cp.ID) } hx-target={ slot } hx-swap="innerHTML" class="txd-action">
+			@icons.Pencil("14")
+			Edit
+		</button>
+		<a href={ counterpartyTxsURL(cp.ID) } class="txd-action">
+			@icons.Search("14")
+			Transactions
+		</a>
+	</div>
+}
+
+templ counterpartyDetailsSpending(d *CounterpartyDetailsData) {
+	@txDetailsSection("Money") {
+		<dl class="grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-zinc-800/60 ring-1 ring-zinc-800">
+			@counterpartyDetailsStat("Spent this month", d.Def.Format(d.ThisMonth.Out))
+			@counterpartyDetailsStat("Spent in all", d.Def.Format(d.AllTime.Out))
+			if d.AllTime.In > 0 {
+				@counterpartyDetailsStat("Received this month", d.Def.Format(d.ThisMonth.In))
+				@counterpartyDetailsStat("Received in all", d.Def.Format(d.AllTime.In))
+			}
+			@counterpartyDetailsStat("Transactions", fmt.Sprint(d.AllTime.Count))
+			if len(d.Recent) > 0 {
+				@counterpartyDetailsStat("Last one", formatTxDay(d.Recent[0].ScheduledTo))
+			} else {
+				@counterpartyDetailsStat("Last one", "Never")
+			}
+		</dl>
+		if d.AllTime.Partial {
+			<p class="text-xs text-zinc-500">Some currencies have no exchange rate yet and are left out.</p>
+		}
+	}
+}
+
+templ counterpartyDetailsStat(label, value string) {
+	<div class="px-4 py-3 bg-zinc-900 min-w-0">
+		<dt class="text-xs text-zinc-500">{ label }</dt>
+		<dd class="sensitive mt-0.5 truncate text-sm font-semibold tabular-nums">{ value }</dd>
+	</div>
+}
+
+// CounterpartyFromDetails is the `from` of a request made from a
+// counterparty's details, answered without closing or replacing them.
+const CounterpartyFromDetails = "details"
+
+func counterpartyLocationsID(id string) string {
+	return "cp-locations-" + id
+}
+
+// CounterpartyDetailsLocations is the details' locations with a form adding
+// one; add is the form's data, open with its errors, nil when closed.
+templ CounterpartyDetailsLocations(cp *models.Counterparty, add *CounterpartyLocationFD) {
+	<div id={ counterpartyLocationsID(cp.ID) } x-data={ fmt.Sprintf("{adding: %t}", add != nil) }>
+		@txDetailsSection("Locations") {
+			if len(cp.Locations) == 0 {
+				<p x-show="!adding" class="text-sm text-zinc-500">No locations yet.</p>
+			} else {
+				<ul class="grid gap-2">
+					for _, loc := range cp.Locations {
+						@counterpartyDetailsLocation(loc)
+					}
+				</ul>
+			}
+			<form
+				x-show="adding"
+				x-cloak?={ add == nil }
+				hx-post={ fmt.Sprintf("/counterparties/%s/locations", cp.ID) }
+				hx-target={ "#" + counterpartyLocationsID(cp.ID) }
+				hx-swap="outerHTML"
+				@keydown.escape.stop="adding = false"
+				class="grid gap-2 p-3 rounded-xl border border-zinc-800 bg-zinc-900/40"
+			>
+				{{ fd := add }}
+				if fd == nil {
+					{{ fd = &CounterpartyLocationFD{} }}
+				}
+				<input
+					type="text"
+					name="label"
+					value={ fd.Label.Value }
+					placeholder="Branch, e.g. Zamalek"
+					aria-label="Location name"
+					autocomplete="off"
+					x-effect="if (adding) $nextTick(() => $el.focus())"
+					class="input-field"
+					if fd.Label.Error != "" {
+						aria-invalid="true"
+					}
+				/>
+				@form.ErrorMessage(fd.Label.Error)
+				<input
+					type="text"
+					name="address"
+					value={ fd.Address.Value }
+					placeholder="Address (optional)"
+					aria-label="Address"
+					class="input-field"
+					if fd.Address.Error != "" {
+						aria-invalid="true"
+					}
+				/>
+				@form.ErrorMessage(fd.Address.Error)
+				<input
+					type="url"
+					inputmode="url"
+					name="maps_url"
+					value={ fd.MapsURL.Value }
+					placeholder="Maps link (optional), e.g. https://maps.app.goo.gl/…"
+					aria-label="Maps link"
+					autocomplete="off"
+					class="input-field"
+					if fd.MapsURL.Error != "" {
+						aria-invalid="true"
+					}
+				/>
+				@form.ErrorMessage(fd.MapsURL.Error)
+				<div class="flex justify-end gap-2">
+					<button type="button" @click="adding = false" class="btn-ghost h-9!">Cancel</button>
+					<button type="submit" class="btn-primary h-9!">Add</button>
+				</div>
+			</form>
+			<button type="button" x-show="!adding" @click="adding = true" class="txd-action justify-self-start">
+				@icons.Plus("14")
+				Add location
+			</button>
+		}
+	</div>
+}
+
+templ counterpartyDetailsLocation(loc models.CounterpartyLocation) {
+	<li class="flex items-center gap-3 px-3 py-2 rounded-xl bg-tx-row">
+		@icons.MapPin("16", &templ.Attributes{"class": "shrink-0 text-zinc-500"})
+		<div class="flex-1 min-w-0">
+			<p class="truncate text-sm">{ loc.Label }</p>
+			if loc.Address != "" {
+				<p class="truncate text-xs text-zinc-500" title={ loc.Address }>{ loc.Address }</p>
+			}
+		</div>
+		if loc.Address != "" {
+			<button
+				type="button"
+				x-data="{copied: false}"
+				data-address={ loc.Address }
+				@click="navigator.clipboard.writeText($el.dataset.address); copied = true; setTimeout(() => copied = false, 1500)"
+				:aria-label="copied ? 'Copied' : 'Copy address'"
+				title="Copy address"
+				class="grid place-items-center shrink-0 w-8 h-8 rounded-lg text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-700 hover:text-white"
+			>
+				<span x-show="!copied">
+					@icons.Copy("15")
+				</span>
+				<span x-show="copied" x-cloak class="text-emerald-400">
+					@icons.Check("15")
+				</span>
+			</button>
+		}
+		<a
+			href={ templ.URL(loc.MapsLink()) }
+			target="_blank"
+			rel="noopener"
+			title="Open in maps"
+			aria-label={ "Open " + loc.Label + " in maps" }
+			class="grid place-items-center shrink-0 w-8 h-8 rounded-lg text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-white"
+		>
+			@icons.ExternalLink("15")
+		</a>
+	</li>
+}
+
+templ counterpartyDetailsRecent(d *CounterpartyDetailsData) {
+	@txDetailsSection("Recent") {
+		if len(d.Recent) == 0 {
+			<p class="text-sm text-zinc-500">No transactions with { d.Counterparty.Name } yet.</p>
+		} else {
+			for _, tx := range d.Recent {
+				{{ v := txMiniView(&tx) }}
+				<a
+					href={ goalTxURL(&tx) }
+					class="flex items-center gap-3 w-full px-3 py-2 rounded-xl bg-tx-row text-left transition hover:ring-1 hover:ring-zinc-700"
+				>
+					<div class="flex-1 min-w-0">
+						<p class="truncate text-sm">{ counterpartyTxTitle(&tx, &v) }</p>
+						<p class="truncate text-xs text-zinc-500">{ formatTxDay(tx.ScheduledTo) } · { v.account }</p>
+					</div>
+					<p
+						class={
+							"sensitive shrink-0 text-sm font-semibold tabular-nums",
+							templ.KV("text-emerald-400", v.tone == txToneIn),
+							templ.KV("text-zinc-400", v.tone == txToneNeutral),
+						}
+					>{ v.amount }</p>
+				</a>
+			}
+			if d.AllTime.Count > len(d.Recent) {
+				<a href={ counterpartyTxsURL(d.Counterparty.ID) } class="justify-self-start text-sm text-sky-400 hover:text-sky-300">
+					See all { fmt.Sprint(d.AllTime.Count) }
+				</a>
+			}
+		}
+	}
+}
+
+// counterpartyTxTitle is the transaction's description, else its kind.
+func counterpartyTxTitle(tx *models.Transaction, v *txView) string {
+	if t := strings.TrimSpace(v.title); t != "" {
+		return t
+	}
+	return txDetailsKind(tx)
+}

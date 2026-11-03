@@ -5,6 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/omareloui/tyche/internal/brandicons"
+	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/queries"
@@ -47,7 +48,22 @@ func (r *Repository) GetCounterparties(ctx context.Context) ([]models.Counterpar
 		}
 	}
 
-	return dbCounterpartiesRowToCounterparties(dbCp), nil
+	cps := dbCounterpartiesRowToCounterparties(dbCp)
+
+	dbLocs, err := q.GetCounterpartyLocations(ctx)
+	if err != nil {
+		l.Error("fetching counterparty locations", zap.Error(err))
+		return nil, err
+	}
+	locs := map[string][]models.CounterpartyLocation{}
+	for _, loc := range dbLocs {
+		locs[loc.CounterpartyID] = append(locs[loc.CounterpartyID], dbLocationToLocation(loc))
+	}
+	for i := range cps {
+		cps[i].Locations = locs[cps[i].ID]
+	}
+
+	return cps, nil
 }
 
 func (r *Repository) GetCounterparty(ctx context.Context, id string) (*models.Counterparty, error) {
@@ -60,20 +76,60 @@ func (r *Repository) GetCounterparty(ctx context.Context, id string) (*models.Co
 	if err != nil {
 		return nil, err
 	}
-	return dbCounterpartyRowToCounterparty(queries.GetCounterpartiesRow(dbP)), nil
+	cp := dbCounterpartyRowToCounterparty(queries.GetCounterpartiesRow(dbP))
+
+	dbLocs, err := q.GetCounterpartyLocationsOf(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	for _, loc := range dbLocs {
+		cp.Locations = append(cp.Locations, dbLocationToLocation(loc))
+	}
+	return cp, nil
 }
 
+// UpdateCounterparty saves the counterparty and replaces its locations.
 func (r *Repository) UpdateCounterparty(ctx context.Context, it *models.Counterparty) error {
+	params, err := updateCounterpartyParams(it)
+	if err != nil {
+		return err
+	}
+	return r.transact(ctx, func(qtx *queries.Queries) error {
+		if err := qtx.UpdateCounterparty(ctx, params); err != nil {
+			return err
+		}
+		return replaceCounterpartyLocations(ctx, qtx, it)
+	})
+}
+
+// replaceCounterpartyLocations writes the counterparty's locations over its
+// saved ones, giving new ones an id.
+func replaceCounterpartyLocations(ctx context.Context, qtx *queries.Queries, it *models.Counterparty) error {
+	if err := qtx.DeleteCounterpartyLocations(ctx, it.ID); err != nil {
+		return err
+	}
+	for i := range it.Locations {
+		loc := &it.Locations[i]
+		if loc.ID == "" {
+			loc.ID = idgen.New()
+		}
+		if err := qtx.CreateCounterpartyLocation(ctx, queries.CreateCounterpartyLocationParams{
+			ID: loc.ID, CounterpartyID: it.ID, Label: loc.Label, Address: loc.Address,
+			MapsUrl: loc.MapsURL, Position: int64(i),
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *Repository) SetCounterpartyRating(ctx context.Context, id string, rating int) error {
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
 		return err
 	}
 
-	params, err := updateCounterpartyParams(it)
-	if err != nil {
-		return err
-	}
-	return q.UpdateCounterparty(ctx, params)
+	return q.SetCounterpartyRating(ctx, queries.SetCounterpartyRatingParams{ID: id, Rating: ratingParam(rating)})
 }
 
 // MergeCounterparties moves everything referencing the from counterparty to
@@ -118,6 +174,22 @@ func (r *Repository) MergeCounterparties(ctx context.Context, fromID, intoID str
 		if err := qtx.ReassignAccountsCounterparty(ctx, queries.ReassignAccountsCounterpartyParams{ToID: to, FromID: from}); err != nil {
 			return err
 		}
+		intoLocs, err := qtx.GetCounterpartyLocationsOf(ctx, intoID)
+		if err != nil {
+			return err
+		}
+		if err := qtx.ReassignCounterpartyLocations(ctx, queries.ReassignCounterpartyLocationsParams{
+			ToID: intoID, FromID: fromID, Offset: int64(len(intoLocs)),
+		}); err != nil {
+			return err
+		}
+		merged, err := qtx.GetCounterpartyLocationsOf(ctx, intoID)
+		if err != nil {
+			return err
+		}
+		for _, loc := range merged {
+			into.Locations = append(into.Locations, dbLocationToLocation(loc))
+		}
 
 		return qtx.DeleteCounterparty(ctx, fromID)
 	})
@@ -141,28 +213,33 @@ func updateCounterpartyParams(it *models.Counterparty) (queries.UpdateCounterpar
 		IsMerchant:        it.IsMerchant,
 		DefaultCategoryID: defaultCategoryID(it),
 		IsArchived:        it.IsArchived,
+		Rating:            ratingParam(it.Rating),
+		Note:              it.Note,
 	}, nil
 }
 
+// CreateCounterparty saves the counterparty with its locations.
 func (r *Repository) CreateCounterparty(ctx context.Context, it *models.Counterparty) error {
-	_, q, err := r.dbFromCtx(ctx)
-	if err != nil {
-		return err
-	}
-
 	aliases, err := marshalStrings(it.Aliases)
 	if err != nil {
 		return err
 	}
 
-	return q.CreateCounterparty(ctx, queries.CreateCounterpartyParams{
-		ID:                it.ID,
-		Name:              it.Name,
-		Aliases:           aliases,
-		Icon:              sql.NullString{String: it.Icon, Valid: true},
-		Color:             sql.NullString{String: it.Color, Valid: it.Color != ""},
-		IsMerchant:        it.IsMerchant,
-		DefaultCategoryID: defaultCategoryID(it),
+	return r.transact(ctx, func(qtx *queries.Queries) error {
+		if err := qtx.CreateCounterparty(ctx, queries.CreateCounterpartyParams{
+			ID:                it.ID,
+			Name:              it.Name,
+			Aliases:           aliases,
+			Icon:              sql.NullString{String: it.Icon, Valid: true},
+			Color:             sql.NullString{String: it.Color, Valid: it.Color != ""},
+			IsMerchant:        it.IsMerchant,
+			DefaultCategoryID: defaultCategoryID(it),
+			Rating:            ratingParam(it.Rating),
+			Note:              it.Note,
+		}); err != nil {
+			return err
+		}
+		return replaceCounterpartyLocations(ctx, qtx, it)
 	})
 }
 
@@ -194,8 +271,19 @@ func dbCounterpartyToCounterparty(dbP *queries.Counterparty) *models.Counterpart
 		Color:      dbP.Color.String,
 		IsMerchant: dbP.IsMerchant,
 		IsArchived: dbP.IsArchived,
+		Rating:     int(dbP.Rating.Int64),
+		Note:       dbP.Note,
 		CreatedAt:  dbP.CreatedAt,
 	}
+}
+
+func dbLocationToLocation(loc queries.CounterpartyLocation) models.CounterpartyLocation {
+	return models.CounterpartyLocation{ID: loc.ID, Label: loc.Label, Address: loc.Address, MapsURL: loc.MapsUrl}
+}
+
+// ratingParam is NULL for an unrated (0) counterparty.
+func ratingParam(rating int) sql.NullInt64 {
+	return sql.NullInt64{Int64: int64(rating), Valid: rating > 0}
 }
 
 func dbCounterpartyRowToCounterparty(dbP queries.GetCounterpartiesRow) *models.Counterparty {
@@ -225,4 +313,29 @@ func dbCounterpartiesRowToCounterparties(dbCps []queries.GetCounterpartiesRow) [
 		cps[i] = *dbCounterpartyRowToCounterparty(cp)
 	}
 	return cps
+}
+
+// GetCounterpartyRecentTransactions is the counterparty's last n fulfilled
+// transactions, newest first.
+func (r *Repository) GetCounterpartyRecentTransactions(ctx context.Context, id string, n int) ([]models.Transaction, error) {
+	p := txFilterParams(&models.TxFilter{CounterpartyID: id})
+	p.Fulfilled = true
+	p.Lim = int64(n)
+	return r.listTransactions(ctx, p)
+}
+
+// AddCounterpartyLocation appends a location to the counterparty's, giving it
+// an id.
+func (r *Repository) AddCounterpartyLocation(ctx context.Context, cpID string, loc *models.CounterpartyLocation) error {
+	return r.transact(ctx, func(qtx *queries.Queries) error {
+		locs, err := qtx.GetCounterpartyLocationsOf(ctx, cpID)
+		if err != nil {
+			return err
+		}
+		loc.ID = idgen.New()
+		return qtx.CreateCounterpartyLocation(ctx, queries.CreateCounterpartyLocationParams{
+			ID: loc.ID, CounterpartyID: cpID, Label: loc.Label, Address: loc.Address,
+			MapsUrl: loc.MapsURL, Position: int64(len(locs)),
+		})
+	})
 }

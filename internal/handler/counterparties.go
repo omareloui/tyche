@@ -2,9 +2,12 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/brandicons"
@@ -60,6 +63,46 @@ func (h Handler) Counterparty(w http.ResponseWriter, r *http.Request) (templ.Com
 	l.Info("fetched counterparty", zap.Any("counterparty", cp))
 
 	return views.Counterparty(cp), nil
+}
+
+// counterpartyRecentTxs is how many transactions a counterparty's details
+// list, the rest a link away.
+const counterpartyRecentTxs = 8
+
+// CounterpartyDetails is the counterparty in full, in a drawer: its rating,
+// note, locations, what was spent with it and its last transactions.
+func (h Handler) CounterpartyDetails(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+
+	cp, err := h.repo.GetCounterparty(r.Context(), id)
+	if err != nil {
+		l.Error("fetching counterparty", zap.Error(err))
+		return nil, err
+	}
+
+	d := &views.CounterpartyDetailsData{Counterparty: cp, Def: &getClaims(r.Context()).DefaultCurrency}
+	f := models.TxFilter{CounterpartyID: id, Status: models.TxStatusFulfilled}
+	if d.AllTime, err = h.repo.GetTransactionsSummary(r.Context(), f, d.Def); err != nil {
+		l.Error("summing counterparty transactions", zap.Error(err))
+		return nil, err
+	}
+	now := time.Now()
+	f.From = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	if d.ThisMonth, err = h.repo.GetTransactionsSummary(r.Context(), f, d.Def); err != nil {
+		l.Error("summing counterparty transactions of the month", zap.Error(err))
+		return nil, err
+	}
+	if d.Recent, err = h.repo.GetCounterpartyRecentTransactions(r.Context(), id, counterpartyRecentTxs); err != nil {
+		l.Error("fetching counterparty transactions", zap.Error(err))
+		return nil, err
+	}
+
+	return views.CounterpartyDetails(d), nil
 }
 
 func (h Handler) CreateCounterparty(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -253,12 +296,12 @@ func (h Handler) EditCounterparty(w http.ResponseWriter, r *http.Request) (templ
 	}
 	l.Info("updated counterparty")
 
-	if cp.IsArchived == prev.IsArchived {
+	if views.CounterpartiesListID(cp) == views.CounterpartiesListID(prev) {
 		drawerSaved(w, "#"+views.CounterpartyWrapperID(id), "innerHTML")
 		return views.Counterparty(cp), nil
 	}
 
-	// (Un)archived: move the card to the other list.
+	// (Un)archived or (un)marked as a merchant: move the card to its list.
 	drawerSaved(w, "#"+views.CounterpartyWrapperID(id), "none")
 	if err := renderToBody(w, r, views.CounterpartyDeleteOOB(id)); err != nil {
 		l.Error("rendering counterparty delete oob", zap.Error(err))
@@ -312,6 +355,84 @@ func (h Handler) ToggleArchiveCounterparty(w http.ResponseWriter, r *http.Reques
 		return nil, err
 	}
 	return views.CounterpartyOOB(cp), nil
+}
+
+// RateCounterparty sets a merchant's rating from its card's stars (0 clears
+// it) and answers the card.
+func (h Handler) RateCounterparty(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+
+	cp, err := h.repo.GetCounterparty(r.Context(), id)
+	if err != nil {
+		l.Error("fetching counterparty", zap.Error(err))
+		return nil, err
+	}
+	if !cp.IsMerchant {
+		return nil, resperr.New(http.StatusUnprocessableEntity, "Only merchants can be rated")
+	}
+
+	cp.Rating = parseRating(r.FormValue("rating"))
+	if err := h.repo.SetCounterpartyRating(r.Context(), id, cp.Rating); err != nil {
+		l.Error("rating counterparty", zap.Error(err))
+		return nil, err
+	}
+	l.Info("rated counterparty", zap.String("id", id), zap.Int("rating", cp.Rating))
+
+	// The details' stars keep their state, only the card is updated.
+	if r.FormValue("from") == views.CounterpartyFromDetails {
+		w.Header().Set("HX-Reswap", "none")
+		return views.CounterpartyReplaceOOB(cp), nil
+	}
+	return views.Counterparty(cp), nil
+}
+
+// AddCounterpartyLocation adds a location to a merchant from its details,
+// answering their locations (with the form's errors, if any) and its card out
+// of band.
+func (h Handler) AddCounterpartyLocation(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+
+	cp, err := h.repo.GetCounterparty(r.Context(), id)
+	if err != nil {
+		l.Error("fetching counterparty", zap.Error(err))
+		return nil, err
+	}
+	if !cp.IsMerchant {
+		return nil, resperr.New(http.StatusUnprocessableEntity, "Only merchants have locations")
+	}
+
+	loc := &models.CounterpartyLocation{
+		Label:   strings.TrimSpace(r.FormValue("label")),
+		Address: strings.TrimSpace(r.FormValue("address")),
+		MapsURL: strings.TrimSpace(r.FormValue("maps_url")),
+	}
+	if valerr := h.valid.Validate(loc); valerr != nil {
+		l.Info("invalid counterparty location", zap.Any("errors", valerr.Errors))
+		return views.CounterpartyDetailsLocations(cp, &mapLocationsToFD([]models.CounterpartyLocation{*loc}, valerr, "")[0]), nil
+	}
+
+	if err := h.repo.AddCounterpartyLocation(r.Context(), id, loc); err != nil {
+		l.Error("adding counterparty location", zap.Error(err))
+		return nil, err
+	}
+	l.Info("added counterparty location", zap.String("id", id))
+	cp.Locations = append(cp.Locations, *loc)
+
+	if err := renderToBody(w, r, views.CounterpartyReplaceOOB(cp)); err != nil {
+		l.Error("rendering counterparty oob", zap.Error(err))
+		return nil, err
+	}
+	return views.CounterpartyDetailsLocations(cp, nil), nil
 }
 
 func (h Handler) GetMergeCounterparty(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -390,7 +511,29 @@ func (h Handler) mapCounterpartyToFD(cp *models.Counterparty, err *errs.Validati
 		IsMerchant:        form.FDInput{Value: formatBooleanIfNonZero(cp.IsMerchant), Error: err.Errors.MsgFor("IsMerchant")},
 		DefaultCategoryID: form.FDInput{Value: defaultCategoryID, Error: err.Errors.MsgFor("DefaultCategoryID")},
 		IsArchived:        form.FDInput{Value: formatBooleanIfNonZero(cp.IsArchived), Error: err.Errors.MsgFor("IsArchived")},
+		Rating:            form.FDInput{Value: formatIntIfNonZero(cp.Rating), Error: err.Errors.MsgFor("Rating")},
+		Note:              form.FDInput{Value: cp.Note, Error: err.Errors.MsgFor("Note")},
+		Locations:         mapLocationsToFD(cp.Locations, err, "Locations"),
 	}
+}
+
+// mapLocationsToFD maps the locations and their errors, keyed by prefix and
+// index (e.g. "Locations[0]."), or by field alone for an empty prefix.
+func mapLocationsToFD(locs []models.CounterpartyLocation, err *errs.ValidationError, prefix string) []views.CounterpartyLocationFD {
+	fds := make([]views.CounterpartyLocationFD, len(locs))
+	for i, loc := range locs {
+		key := ""
+		if prefix != "" {
+			key = fmt.Sprintf("%s[%d].", prefix, i)
+		}
+		fds[i] = views.CounterpartyLocationFD{
+			ID:      loc.ID,
+			Label:   form.FDInput{Value: loc.Label, Error: err.Errors.MsgFor(key + "Label")},
+			Address: form.FDInput{Value: loc.Address, Error: err.Errors.MsgFor(key + "Address")},
+			MapsURL: form.FDInput{Value: loc.MapsURL, Error: err.Errors.MsgFor(key + "MapsURL")},
+		}
+	}
+	return fds
 }
 
 func (h Handler) mapFDToCounterparty(r *http.Request) (*models.Counterparty, error) {
@@ -405,7 +548,44 @@ func (h Handler) mapFDToCounterparty(r *http.Request) (*models.Counterparty, err
 		IsMerchant:      parseBoolean(r.FormValue("is_merchant")),
 		DefaultCategory: defaultCategory,
 		IsArchived:      parseBoolean(r.FormValue("is_archived")),
+		Rating:          parseRating(r.FormValue("rating")),
+		Note:            r.FormValue("note"),
+		Locations:       parseCounterpartyLocations(r),
 	}, nil
+}
+
+// parseRating reads a rating, 0 (unrated) when blank or out of range.
+func parseRating(s string) int {
+	n, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil || n < 0 || n > models.MaxRating {
+		return 0
+	}
+	return n
+}
+
+// parseCounterpartyLocations reads the location rows (parallel location_*
+// fields, one value per row), trimmed, dropping blank rows.
+func parseCounterpartyLocations(r *http.Request) []models.CounterpartyLocation {
+	_ = r.ParseForm()
+	ids, labels := r.PostForm["location_id"], r.PostForm["location_label"]
+	addrs, urls := r.PostForm["location_address"], r.PostForm["location_maps_url"]
+	at := func(vs []string, i int) string {
+		if i < len(vs) {
+			return strings.TrimSpace(vs[i])
+		}
+		return ""
+	}
+	locs := []models.CounterpartyLocation{}
+	for i := range max(len(labels), len(addrs), len(urls)) {
+		loc := models.CounterpartyLocation{
+			ID: at(ids, i), Label: at(labels, i), Address: at(addrs, i), MapsURL: at(urls, i),
+		}
+		if loc.Label == "" && loc.Address == "" && loc.MapsURL == "" {
+			continue
+		}
+		locs = append(locs, loc)
+	}
+	return locs
 }
 
 // clearNonMerchantFields drops the merchant only fields, as hidden form inputs
@@ -416,6 +596,8 @@ func clearNonMerchantFields(cp *models.Counterparty) {
 	}
 	cp.Icon = ""
 	cp.DefaultCategory = nil
+	cp.Rating = 0
+	cp.Locations = nil
 }
 
 // resolveCounterpartyDefaultCategory replaces the default category with the
