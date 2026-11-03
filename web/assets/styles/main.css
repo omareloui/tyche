@@ -313,7 +313,14 @@ input[type="number"] {
   }
 
   .tx-review-ok {
-    @apply ml-auto h-8 px-3 rounded-full text-sm text-amber-300 cursor-pointer transition-colors hover:bg-amber-400/10;
+    @apply ml-auto inline-flex items-center gap-1.5 h-8 pl-2.5 pr-3 rounded-full text-sm text-amber-300 cursor-pointer transition-colors hover:bg-amber-400/10;
+  }
+
+  /* icons.Check as a mask, so the many review strips carry no svg. */
+  .tx-review-ok::before {
+    content: "";
+    @apply size-4 shrink-0 bg-current;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center / contain no-repeat;
   }
 
   .wl-action {

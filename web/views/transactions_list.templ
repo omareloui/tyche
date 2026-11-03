@@ -652,7 +652,8 @@ templ txCategoryChip(tx *models.Transaction) {
 // mode: fix its category or confirm it as is.
 templ txReviewStrip(tx *models.Transaction) {
 	{{ hasCategory := tx.Kind != models.TransferTxKind && tx.Kind != models.DebtTxKind && !tx.IsTransferLeg() }}
-	// Kept light (classes in main.css, no icons): there may be many to review.
+	// Kept light (classes in main.css, the check is a CSS mask): there may be many
+	// to review.
 	<div x-cloak x-show="reviewOnly" class="tx-review">
 		if hasCategory {
 			// The picker loads on demand.
@@ -673,7 +674,7 @@ templ txReviewStrip(tx *models.Transaction) {
 				<span class="text-zinc-400">▾</span>
 			</button>
 		}
-		<button type="button" hx-put={ fmt.Sprintf("/transactions/%s/reviewed", tx.ID) } class="tx-review-ok">✓ Looks good</button>
+		<button type="button" hx-put={ fmt.Sprintf("/transactions/%s/reviewed", tx.ID) } class="tx-review-ok">Looks good</button>
 	</div>
 }
 
