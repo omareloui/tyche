@@ -248,8 +248,9 @@ templ PlanPreview(s *models.InstallmentSchedule, sym, problem string) {
 	}
 }
 
-// planBreakdown is a plan's totals and its payment schedule.
-templ planBreakdown(s *models.InstallmentSchedule, sym string) {
+// planBreakdown is a plan's totals and its payment schedule, bought on
+// start.
+templ planBreakdown(s *models.InstallmentSchedule, sym string, start time.Time) {
 	<div class="grid gap-3">
 		<dl class="grid grid-cols-2 sm:grid-cols-4 gap-2">
 			@affordStat("Monthly", planMonthly(s, sym), "")
@@ -278,7 +279,7 @@ templ planBreakdown(s *models.InstallmentSchedule, sym string) {
 					<tbody class="divide-y divide-zinc-800/80">
 						if s.PaidOnDay() > 0 {
 							<tr>
-								<td class="px-3 py-1.5 text-zinc-400">Today</td>
+								<td class="px-3 py-1.5 text-zinc-400">{ planDayLabel(start) }</td>
 								<td class="px-3 py-1.5 text-right">{ formatters.FormatNum(s.PaidOnDay()) }</td>
 								<td class="px-3 py-1.5 text-right text-zinc-500">–</td>
 								<td class="px-3 py-1.5 text-right hidden sm:table-cell">{ formatters.FormatNum(s.DownPayment) }</td>
@@ -288,7 +289,7 @@ templ planBreakdown(s *models.InstallmentSchedule, sym string) {
 						}
 						for _, row := range s.Rows {
 							<tr>
-								<td class="px-3 py-1.5 text-zinc-400">{ time.Now().AddDate(0, row.Month, 0).Format("Jan 2006") }</td>
+								<td class="px-3 py-1.5 text-zinc-400">{ start.AddDate(0, row.Month, 0).Format("Jan 2006") }</td>
 								<td class="px-3 py-1.5 text-right">{ formatters.FormatNum(row.Payment) }</td>
 								<td class="px-3 py-1.5 text-right">{ formatters.FormatNum(row.Interest) }</td>
 								<td class="px-3 py-1.5 text-right hidden sm:table-cell">{ formatters.FormatNum(row.Principal) }</td>
@@ -302,6 +303,14 @@ templ planBreakdown(s *models.InstallmentSchedule, sym string) {
 			<p class="mt-1.5 text-xs text-zinc-500">In { sym }. Your bank's numbers may differ by rounding.</p>
 		</details>
 	</div>
+}
+
+// planDayLabel is the purchase day in a schedule: today, else its month.
+func planDayLabel(start time.Time) string {
+	if dateOf(start).Equal(dateOf(time.Now())) {
+		return "Today"
+	}
+	return start.Format("Jan 2006")
 }
 
 func planMonthly(s *models.InstallmentSchedule, sym string) string {

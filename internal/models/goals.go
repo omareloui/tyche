@@ -24,6 +24,45 @@ type Goal struct {
 	FulfilledAt  time.Time
 	CreatedAt    time.Time
 	Transactions []Transaction
+	// Plan is how it's saved for, nil without one.
+	Plan *GoalPlan
+	// Loan is the payments of the loan it was bought with, in its currency.
+	Loan GoalLoan
+}
+
+// GoalLoan is the payments of the loan a goal was bought with.
+type GoalLoan struct {
+	Payments, PaidPayments int
+	Total, Paid            float64
+}
+
+// HasLoan tells if it was bought with a loan, its payments scheduled.
+func (gl *Goal) HasLoan() bool {
+	return gl.Loan.Payments > 0
+}
+
+// PayingOff tells if it's bought with a loan not paid off yet.
+func (gl *Goal) PayingOff() bool {
+	return !gl.FulfilledAt.IsZero() && gl.HasLoan() && gl.Loan.PaidPayments < gl.Loan.Payments
+}
+
+// PayoffPercentage is how much of what buying it costs is paid: what it
+// took on the day and the loan's payments made, of those and the rest.
+func (gl *Goal) PayoffPercentage() float64 {
+	total := gl.Purchased + gl.Loan.Total
+	if total <= 0 {
+		return 0
+	}
+	return (gl.Purchased + gl.Loan.Paid) / total * 100
+}
+
+// ShownPercentage is the saving progress, or the paying off once bought
+// with a loan.
+func (gl *Goal) ShownPercentage() float64 {
+	if !gl.FulfilledAt.IsZero() && gl.HasLoan() {
+		return gl.PayoffPercentage()
+	}
+	return gl.ProgressPercentage()
 }
 
 // GoalAccountPrefix starts the name of the goals' accounts.
@@ -82,7 +121,9 @@ func (gl *Goal) ViewProgress() string {
 	return gl.Currency.Format(gl.Progress())
 }
 
-func (gl *Goal) Plan(numberOfMonths int) float64 {
+// MonthlyFor is what to put aside every month to get there in
+// numberOfMonths.
+func (gl *Goal) MonthlyFor(numberOfMonths int) float64 {
 	return numsutils.Round(gl.Remaining() / float64(numberOfMonths))
 }
 

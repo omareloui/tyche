@@ -85,6 +85,14 @@ func (h Handler) txListData(r *http.Request, f models.TxFilter, before time.Time
 		return nil, err
 	}
 	d := &views.TxListData{Page: page, Filter: f, Def: &getClaims(r.Context()).DefaultCurrency}
+	// The upcoming section stays as the page has it (transactions.js).
+	switch r.Header.Get("X-Tx-Upcoming") {
+	case "open":
+		d.UpcomingOpen = new(bool)
+		*d.UpcomingOpen = true
+	case "closed":
+		d.UpcomingOpen = new(bool)
+	}
 	// Only the first chunk (or a re-render) shows the summary.
 	if !f.IsZero() && before.IsZero() {
 		if d.Summary, err = h.repo.GetTransactionsSummary(r.Context(), f, d.Def); err != nil {

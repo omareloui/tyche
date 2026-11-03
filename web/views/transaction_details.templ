@@ -590,6 +590,8 @@ func txDetailsKind(tx *models.Transaction) string {
 		return "Reimbursement"
 	case tx.IsGoalPurchase():
 		return "Goal purchase"
+	case tx.IsLoanPayment():
+		return "Goal loan payment"
 	case tx.IsGoalTx() && tx.GoalAmount() > 0:
 		return "Goal deposit"
 	case tx.IsGoalTx():
@@ -615,7 +617,9 @@ templ txGoalProgress(tx *models.Transaction) {
 		<div class="flex items-baseline justify-between gap-3">
 			<a href={ templ.SafeURL("/goals") } class="txd-link truncate">{ gl.Name }</a>
 			<span class="shrink-0 text-sm tabular-nums text-zinc-400">
-				if !gl.FulfilledAt.IsZero() {
+				if gl.PayingOff() {
+					{ fmt.Sprintf("%.0f%% paid", gl.PayoffPercentage()) }
+				} else if !gl.FulfilledAt.IsZero() {
 					Bought
 				} else {
 					{ fmt.Sprintf("%.0f%%", pct) }
@@ -624,7 +628,11 @@ templ txGoalProgress(tx *models.Transaction) {
 		</div>
 		@goalProgressBar(gl)
 		<p class="sensitive text-sm text-zinc-500 tabular-nums">
-			{ gl.ViewProgress() } of { gl.ViewAmount() } saved
+			if tx.IsLoanPayment() {
+				{ gl.Currency.Format(gl.Purchased + gl.Loan.Paid) } of { gl.Currency.Format(gl.Purchased + gl.Loan.Total) } paid · { fmt.Sprint(gl.Loan.PaidPayments) }/{ fmt.Sprint(gl.Loan.Payments) } payments
+			} else {
+				{ gl.ViewProgress() } of { gl.ViewAmount() } saved
+			}
 			if tx.IsGoalPurchase() {
 				· bought for { gl.Currency.Format(tx.Amount) }
 			} else if amt := tx.GoalAmount(); amt > 0 {
@@ -639,8 +647,8 @@ templ txGoalProgress(tx *models.Transaction) {
 // goalProgressBar is a thin bar of the goal's progress, green once reached
 // or bought.
 templ goalProgressBar(gl *models.Goal) {
-	{{ pct := gl.ProgressPercentage() }}
-	{{ done := pct >= 100 || !gl.FulfilledAt.IsZero() }}
+	{{ pct := gl.ShownPercentage() }}
+	{{ done := (pct >= 100 || !gl.FulfilledAt.IsZero()) && !gl.PayingOff() }}
 	<div class="h-2 rounded-full bg-zinc-800 overflow-hidden">
 		<div
 			class={ "h-full rounded-full", templ.KV("bg-emerald-400", done), templ.KV("bg-violet-400", !done) }

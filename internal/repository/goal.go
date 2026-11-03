@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -170,13 +171,58 @@ func (r *Repository) UpdateGoal(ctx context.Context, gl *models.Goal) error {
 	})
 }
 
-// FulfillGoal records buying the goal, an expense out of its account, and
-// marks it achieved.
-func (r *Repository) FulfillGoal(ctx context.Context, id string, purchase *models.Transaction) error {
-	l := logger.FromCtx(ctx)
-	return r.transact(ctx, func(qtx *queries.Queries) error {
-		if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, purchase); err != nil {
+// SetGoalPlan saves how the goal is saved for, nil clearing it.
+func (r *Repository) SetGoalPlan(ctx context.Context, id string, plan *models.GoalPlan) error {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+	return setGoalPlanWithTxn(ctx, q, id, plan)
+}
+
+func setGoalPlanWithTxn(ctx context.Context, q *queries.Queries, id string, plan *models.GoalPlan) error {
+	var b []byte
+	if plan != nil {
+		var err error
+		if b, err = json.Marshal(plan); err != nil {
 			return err
+		}
+	}
+	if err := q.SetGoalPlan(ctx, queries.SetGoalPlanParams{ID: id, Plan: b}); err != nil {
+		logger.FromCtx(ctx).Error("saving goal plan", zap.Error(err), zap.String("id", id))
+		return err
+	}
+	return nil
+}
+
+// FulfillGoal records buying the goal, an expense out of its account, and
+// marks it achieved. A plan's loan payments are scheduled with it, linked to
+// the goal (loan_goal_id).
+func (r *Repository) FulfillGoal(ctx context.Context, gl *models.Goal, purchase *models.Transaction, loanTxs []models.Transaction) error {
+	l := logger.FromCtx(ctx)
+	id := gl.ID
+	return r.transact(ctx, func(qtx *queries.Queries) error {
+		if purchase != nil {
+			if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, purchase); err != nil {
+				return err
+			}
+		}
+		if len(loanTxs) > 0 {
+			ids := make([]string, len(loanTxs))
+			for i := range loanTxs {
+				if err := r.createTransactionWithTxn(qtx, ctx, &loanTxs[i]); err != nil {
+					return err
+				}
+				ids[i] = loanTxs[i].ID
+			}
+			b, err := json.Marshal(ids)
+			if err != nil {
+				return err
+			}
+			if err := qtx.LinkLoanPayments(ctx, queries.LinkLoanPaymentsParams{GoalID: sql.NullString{String: id, Valid: true}, Ids: b}); err != nil {
+				l.Error("linking loan payments", zap.Error(err))
+				return err
+			}
 		}
 		if err := qtx.FulfillGoal(ctx, id); err != nil {
 			l.Error("fulfilling goal", zap.Error(err))
@@ -188,10 +234,29 @@ func (r *Repository) FulfillGoal(ctx context.Context, id string, purchase *model
 }
 
 // UnfulfillGoal undoes buying the goal: its purchase is deleted, the money
-// going back to its account.
-func (r *Repository) UnfulfillGoal(ctx context.Context, id string) error {
+// going back to its account, with its loan's payments not paid yet (the paid
+// ones are unlinked, kept as plain expenses).
+func (r *Repository) UnfulfillGoal(ctx context.Context, gl *models.Goal) error {
 	l := logger.FromCtx(ctx)
+	id := gl.ID
 	return r.transact(ctx, func(qtx *queries.Queries) error {
+		unpaid, err := qtx.GetUnpaidLoanPayments(ctx, sql.NullString{String: id, Valid: true})
+		if err != nil {
+			return err
+		}
+		for _, txID := range unpaid {
+			row, err := qtx.GetTransaction(ctx, txID)
+			if err != nil {
+				return err
+			}
+			if err := r.deleteTransactionWithTxn(ctx, qtx, dbTransactionRowToTransaction(&row)); err != nil {
+				return err
+			}
+		}
+		// The ones paid stay, as expenses of their own.
+		if err := qtx.UnlinkLoanPayments(ctx, sql.NullString{String: id, Valid: true}); err != nil {
+			return err
+		}
 		purchaseID, err := qtx.GetGoalPurchaseID(ctx, id)
 		if err == nil {
 			row, err := qtx.GetTransaction(ctx, purchaseID)
@@ -254,6 +319,12 @@ func dbGoalToGoal(dbGl *queries.Goal, cur *queries.Currency) *models.Goal {
 	if dbGl.AccountID.Valid {
 		gl.Account = &models.Account{ID: dbGl.AccountID.String, Currency: gl.Currency}
 	}
+	if len(dbGl.Plan) > 0 {
+		var plan models.GoalPlan
+		if err := json.Unmarshal(dbGl.Plan, &plan); err == nil {
+			gl.Plan = &plan
+		}
+	}
 
 	return &gl
 }
@@ -290,6 +361,7 @@ func dbGoalRowsToGoals[T queries.GetGoalsRow | queries.GetGoalRow | queries.GetU
 			FulfilledAt:    dbGl.TransactionFulfilledAt,
 			ScheduledTo:    dbGl.TransactionScheduledTo.Time,
 			CreatedAt:      dbGl.TransactionCreatedAt.Time,
+			LoanGoalID:     dbGl.TransactionLoanGoalID,
 		}
 
 		acc := queries.Account{
@@ -326,6 +398,20 @@ func dbGoalRowsToGoals[T queries.GetGoalsRow | queries.GetGoalRow | queries.GetU
 		}
 		if tx.IsGoalPurchase() && !tx.FulfilledAt.IsZero() {
 			gl.Purchased += tx.Amount
+		}
+		if tx.IsLoanPayment() {
+			amount := tx.Amount
+			if tx.Account.Currency.String != gl.Currency.String {
+				if rate := tx.Account.Currency.FxRate(gl.Currency.String); rate > 0 {
+					amount *= rate
+				}
+			}
+			gl.Loan.Payments++
+			gl.Loan.Total += amount
+			if !tx.FulfilledAt.IsZero() {
+				gl.Loan.PaidPayments++
+				gl.Loan.Paid += amount
+			}
 		}
 		gl.Transactions = append(gl.Transactions, *tx)
 	}

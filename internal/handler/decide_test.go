@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/web/views"
@@ -109,4 +110,27 @@ func TestWishlistPlanTxs(t *testing.T) {
 			t.Errorf("txs = %+v", txs)
 		}
 	})
+}
+
+func TestGoalLoanTxs(t *testing.T) {
+	egp := models.Currency{ID: "egp", String: "EGP", Symbol: "E£"}
+	acc := models.Account{ID: "acc", Currency: egp}
+	cat := &models.Category{ID: "car"}
+	gl := &models.Goal{Name: "Car", Price: 1200, Currency: egp, Plan: &models.GoalPlan{
+		Mode: models.GoalPlanInstallments, Monthly: 300, Loan: &models.InstallmentPlan{DownPayment: 300},
+	}}
+
+	loan := goalLoan(gl)
+	if loan == nil || len(loan.Rows) != 3 {
+		t.Fatalf("loan = %+v", loan)
+	}
+	day := time.Date(2026, 11, 3, 0, 0, 0, 0, time.UTC)
+	txs := planPaymentTxs("Car", loan, &models.Transaction{Account: acc, Kind: models.ExpenseTxKind, Category: cat}, day, 0, 1)
+	if len(txs) != 3 || txs[0].Amount != 300 || txs[0].Category != cat || txs[2].Description != "Car (3/3)" || !txs[0].ScheduledTo.Equal(day.AddDate(0, 1, 0)) {
+		t.Errorf("txs = %+v", txs)
+	}
+
+	if goalLoan(&models.Goal{Price: 10, Plan: &models.GoalPlan{Monthly: 5}}) != nil {
+		t.Error("a saving plan has no loan")
+	}
 }

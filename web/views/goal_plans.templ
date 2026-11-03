@@ -1,0 +1,412 @@
+package views
+
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+// GoalPlanFD is the goal plan form: the monthly amount, the mode and the
+// loan of the installments mode.
+type GoalPlanFD struct {
+	// From is GoalFromDetails when opened from the goal's details.
+	From    string
+	Monthly form.FDInput
+	Mode    form.FDInput
+	Loan    InstallmentPlanFD
+}
+
+// GoalPlanOptions are the ways to pay for a goal at the plan's monthly
+// amount: saving the whole price, or a down payment and a loan.
+type GoalPlanOptions struct {
+	Mode    models.GoalPlanMode
+	Monthly float64
+	// Save and Loan are nil without a monthly amount, Loan also with a
+	// LoanProblem.
+	Save, Loan  *models.GoalProjection
+	LoanProblem string
+}
+
+// GoalPlanCard is a planned goal's projection and next deposit, on its card.
+type GoalPlanCard struct {
+	Projection *models.GoalProjection
+	// Problem is set when the plan doesn't work out anymore.
+	Problem string
+	// Next is the next deposit (0 once saved), on NextOn, from Source.
+	Next    float64
+	NextOn  time.Time
+	Source  models.GoalSource
+	NextURL string
+}
+
+// CanSaveNext tells if the accounts have the money for the next deposit.
+func (c *GoalPlanCard) CanSaveNext() bool {
+	return c.Source.Account != nil && c.Source.Available >= c.Next-0.005
+}
+
+func goalPlanURL(gl *models.Goal) string {
+	return fmt.Sprintf("/goals/%s/plan", gl.ID)
+}
+
+templ GoalPlanForm(gl *models.Goal, fd *GoalPlanFD, money models.GoalPlanMoney, opts GoalPlanOptions) {
+	@components.Drawer(components.DrawerProps{Label: "Plan " + gl.Name}) {
+		@GoalPlanFormFields(gl, fd, money, opts)
+	}
+}
+
+// GoalPlanFormFields is GoalPlanForm's form alone, answered with its errors.
+templ GoalPlanFormFields(gl *models.Goal, fd *GoalPlanFD, money models.GoalPlanMoney, opts GoalPlanOptions) {
+	{{ id := "plan-" + gl.ID }}
+	{{ mode := fd.Mode.Value }}
+	if mode == "" {
+		{{ mode = models.GoalPlanSave.String() }}
+	}
+	@form.DrawerForm(form.DrawerFormProps{
+		Header: goalPlanHeader(gl), Method: "put", URL: goalPlanURL(gl),
+		Submit: "Save plan", Class: "[--accent:var(--color-violet-400)]",
+		CancelClick: goalBackCancel(gl.ID, fd.From),
+	}) {
+		@goalFromInput(fd.From)
+		<div x-data={ goalPlanData(gl, mode, fd.Loan.strategy()) } @change="onChange($event)" class="grid gap-5">
+			@goalPlanMoney(money)
+			<div class="grid gap-2">
+				@form.Field("Put aside every month", "monthly", id, icons.PiggyBank("15"), fd.Monthly.Error) {
+					@form.Control("text", "monthly", "", id, fd.Monthly, templ.Attributes{
+						"autocomplete":   "off",
+						"inputmode":      "decimal",
+						"data-money":     true,
+						"x-mask:dynamic": moneyMask,
+						":placeholder":   "money(1000)",
+						"x-ref":          "monthly",
+					})
+				}
+				if money.Free() > 0 {
+					<button
+						type="button"
+						@click={ fmt.Sprintf("$refs.monthly.value = '%.2f'; $refs.monthly.dispatchEvent(new Event('input', {bubbles: true})); $refs.monthly.focus()", money.Free()) }
+						class="justify-self-start inline-flex items-center gap-1.5 h-8 px-3 rounded-full border border-zinc-700 text-sm text-zinc-300 cursor-pointer transition-colors hover:border-(--accent) hover:text-(--accent)"
+					>
+						@icons.Sparkles("14")
+						Use all that's free · <span class="sensitive tabular-nums">{ money.Currency.Format(money.Free()) }</span>
+					</button>
+				}
+			</div>
+			@form.SegmentedRadio("How to pay for it", "mode", id, []form.RadioOption{
+				{Value: models.GoalPlanSave.String(), Label: "Save it all"},
+				{Value: models.GoalPlanInstallments.String(), Label: "Down payment + loan"},
+			}, form.FDInput{Value: mode}, nil)
+			<div x-show={ fmt.Sprintf("mode === '%s'", models.GoalPlanInstallments) } x-cloak class="grid gap-2">
+				<p class="text-sm text-zinc-500">
+					Save the down payment (and the fees paid on the day), then the loan's payments come out of the same monthly amount. Leave the months empty to take the shortest loan it pays.
+				</p>
+				@installmentPlanInputs(&fd.Loan, id, false)
+			</div>
+			<div
+				hx-post={ goalPlanURL(gl) + "/preview" }
+				hx-trigger="input delay:400ms from:closest form, change from:closest form"
+				hx-target="this"
+				hx-swap="innerHTML"
+				hx-sync="this:replace"
+			>
+				@GoalPlanPreview(gl, money, opts)
+			</div>
+		</div>
+	}
+}
+
+// goalPlanData starts the form's moneyInputs scope in the goal's currency.
+func goalPlanData(gl *models.Goal, mode, strategy string) string {
+	symJSON, _ := json.Marshal(gl.Currency.Symbol)
+	modeJSON, _ := json.Marshal(mode)
+	strategyJSON, _ := json.Marshal(strategy)
+	return fmt.Sprintf("moneyInputs({}, %s, %s, %s)", symJSON, modeJSON, strategyJSON)
+}
+
+templ goalPlanHeader(gl *models.Goal) {
+	<div class="flex items-center gap-3">
+		@goalRing(gl.ShownPercentage(), goalStateOf(gl), "size-11", "text-[0.65rem]")
+		<div class="min-w-0">
+			<h2 class="text-lg font-bold truncate">Plan { gl.Name }</h2>
+			<p class="sensitive text-sm text-zinc-500 tabular-nums">{ gl.ViewProgress() } of { gl.ViewAmount() } saved</p>
+		</div>
+	</div>
+}
+
+// goalPlanMoney is what's free every month: the salary less the budgets and
+// the other goals' plans.
+templ goalPlanMoney(m models.GoalPlanMoney) {
+	if !m.HasSalary() {
+		<p class="flex items-start gap-2 px-4 py-3 rounded-2xl bg-zinc-800/30 ring-1 ring-zinc-800 text-sm text-zinc-400">
+			@icons.Wallet("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
+			<span>
+				Set your monthly salary in <a href="/decide" class="text-(--accent) underline-offset-2 hover:underline">Decide</a> to see what's free after your budgets. You can still type an amount.
+			</span>
+		</p>
+	} else {
+		<dl class="grid gap-1.5 px-4 py-3 rounded-2xl bg-zinc-800/30 ring-1 ring-zinc-800 text-sm tabular-nums">
+			@goalPlanMoneyRow("Salary", m.Currency.Format(m.Salary), "")
+			@goalPlanMoneyRow("Budgets", "− "+m.Currency.Format(m.Budgets), "")
+			if m.OtherPlans > 0 {
+				@goalPlanMoneyRow("Other goals' plans", "− "+m.Currency.Format(m.OtherPlans), "")
+			}
+			<div class="flex items-center justify-between gap-3 pt-1.5 border-t border-zinc-800">
+				<dt class="font-medium text-zinc-200">Free every month</dt>
+				<dd class="sensitive font-bold text-(--accent)">{ m.Currency.Format(m.Free()) }</dd>
+			</div>
+		</dl>
+	}
+}
+
+templ goalPlanMoneyRow(label, value, class string) {
+	<div class="flex items-center justify-between gap-3">
+		<dt class="text-zinc-500">{ label }</dt>
+		<dd class={ "sensitive text-zinc-300", class }>{ value }</dd>
+	</div>
+}
+
+templ GoalPlanHint(msg string) {
+	<p class="text-sm text-zinc-500">{ msg }</p>
+}
+
+// GoalPlanPreview compares saving the whole price with a down payment and a
+// loan, the picked one highlighted.
+templ GoalPlanPreview(gl *models.Goal, money models.GoalPlanMoney, opts GoalPlanOptions) {
+	if opts.Monthly <= 0 {
+		@GoalPlanHint("Enter how much to put aside every month to see when you'd get it.")
+	} else {
+		<div class="grid gap-3">
+			if money.HasSalary() && opts.Monthly > money.Free()+0.005 {
+				<p class="flex items-center gap-2 text-sm text-amber-300">
+					@icons.Warning("16", &templ.Attributes{"class": "shrink-0"})
+					<span>That's more than the <span class="sensitive tabular-nums">{ money.Currency.Format(money.Free()) }</span> free every month.</span>
+				</p>
+			}
+			<div class="grid sm:grid-cols-2 gap-3">
+				@goalOptionCard("Save it all", opts.Mode == models.GoalPlanSave) {
+					if opts.Save != nil {
+						{{ pr := opts.Save }}
+						@goalOptionOwn(pr)
+						<p class="text-sm text-zinc-400">
+							if pr.SaveMonths > 0 {
+								{ fmt.Sprint(pr.SaveMonths) } { plural(pr.SaveMonths, "month", "months") } of saving
+							} else {
+								Already saved
+							}
+						</p>
+						<p class="sensitive text-sm text-zinc-500 tabular-nums">{ gl.Currency.Format(pr.TotalCost) } in total, nothing extra</p>
+					}
+				}
+				@goalOptionCard("Down payment + loan", opts.Mode == models.GoalPlanInstallments) {
+					if opts.LoanProblem != "" {
+						<p class="text-sm text-zinc-500">{ opts.LoanProblem }</p>
+					} else if opts.Loan != nil {
+						{{ pr := opts.Loan }}
+						@goalOptionOwn(pr)
+						<p class="text-sm text-zinc-400">
+							<span class="sensitive tabular-nums">{ gl.Currency.Format(pr.Target) }</span> down
+							if pr.SaveMonths > 0 {
+								in { fmt.Sprint(pr.SaveMonths) } { plural(pr.SaveMonths, "month", "months") }
+							} else {
+								already saved
+							}
+						</p>
+						<p class="text-sm text-zinc-400">
+							then <span class="sensitive tabular-nums">{ planMonthly(pr.Loan, gl.Currency.Symbol) }</span> × { fmt.Sprint(len(pr.Loan.Rows)) } to { pr.DoneOn.Format("Jan 2006") }
+						</p>
+						<p class="sensitive text-sm text-zinc-500 tabular-nums">
+							{ gl.Currency.Format(pr.TotalCost) } in total
+							if pr.Extra > 0.005 {
+								· <span class="text-zinc-300">{ gl.Currency.Format(pr.Extra) }</span> extra · <span class={ aprClass(pr.Loan.APR) }>{ models.ViewRate(pr.Loan.APR) }</span> a year
+							}
+						</p>
+						if pr.LoanOverMonthly {
+							<p class="text-sm text-amber-300">Its payments are more than your monthly amount.</p>
+						}
+					}
+				}
+			</div>
+			if opts.Save != nil && opts.Loan != nil {
+				{{ sooner := monthsApart(opts.Loan.BuyOn, opts.Save.BuyOn) }}
+				if sooner > 0 {
+					<p class="text-sm text-zinc-400">
+						The loan gets it { fmt.Sprint(sooner) } { plural(sooner, "month", "months") } sooner
+						if opts.Loan.Extra > 0.005 {
+							and costs <span class="sensitive tabular-nums">{ gl.Currency.Format(opts.Loan.Extra) }</span> more
+						}
+					</p>
+					<p class="text-xs text-zinc-500">You'd be paying until { opts.Loan.DoneOn.Format("Jan 2006") } instead of owning it outright by { opts.Save.BuyOn.Format("Jan 2006") }</p>
+				}
+			}
+		</div>
+	}
+}
+
+templ goalOptionCard(title string, picked bool) {
+	<div
+		class={ "grid content-start gap-1.5 px-4 py-3 rounded-2xl ring-1 transition-colors",
+			templ.KV("bg-(--accent)/8 ring-(--accent)/40", picked),
+			templ.KV("bg-zinc-800/30 ring-zinc-800", !picked) }
+	>
+		<p class="flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+			{ title }
+			if picked {
+				@icons.Check("14", &templ.Attributes{"class": "text-(--accent)"})
+			}
+		</p>
+		{ children... }
+	</div>
+}
+
+templ goalOptionOwn(pr *models.GoalProjection) {
+	<p class="text-xs text-zinc-500">Yours by</p>
+	<p class="text-xl font-bold font-(family-name:--font-biorhyme-expanded)">
+		if pr.Left <= 0.005 {
+			Now
+		} else {
+			{ pr.BuyOn.Format("Jan 2006") }
+		}
+	</p>
+}
+
+// monthsApart is how many months from goes before to.
+func monthsApart(from, to time.Time) int {
+	return (to.Year()-from.Year())*12 + int(to.Month()) - int(from.Month())
+}
+
+// goalPlanSummary is a planned goal's projection on its card, with its next
+// deposit.
+templ goalPlanSummary(gl *models.Goal, card *GoalPlanCard, inDetails bool) {
+	<div class="relative grid gap-2 pt-3 border-t border-zinc-800/80 text-sm">
+		if card.Problem != "" || card.Projection == nil {
+			<p class="text-zinc-500">{ card.Problem }</p>
+		} else {
+			{{ pr := card.Projection }}
+			<div class="flex flex-wrap items-center justify-between gap-2">
+				<p class="text-zinc-500 tabular-nums">
+					<span class="sensitive text-zinc-200">{ gl.Currency.Format(pr.Plan.Monthly) }</span>/mo
+					if pr.Left > 0.005 {
+						· { goalPlanBuyLabel(pr) } { pr.BuyOn.Format("Jan 2006") }
+					}
+				</p>
+				@goalPlanStatus(gl, pr)
+			</div>
+			<div class="flex flex-wrap items-center gap-1.5">
+				<span class="chip">
+					@icons.Calendar("12")
+					if pr.Left > 0.005 {
+						Buy { goalInMonths(monthsApart(time.Now(), pr.BuyOn)) }
+					} else {
+						Ready to buy
+					}
+				</span>
+				if pr.Loan != nil {
+					<span class="chip">
+						@icons.Hourglass("12")
+						Paid off { goalInMonths(monthsApart(time.Now(), pr.DoneOn)) }
+					</span>
+				}
+			</div>
+			if pr.Loan != nil {
+				<p class="text-xs text-zinc-500 tabular-nums">
+					<span class="sensitive">{ gl.Currency.Format(pr.Target) }</span> down, then <span class="sensitive">{ planMonthly(pr.Loan, gl.Currency.Symbol) }</span> × { fmt.Sprint(len(pr.Loan.Rows)) } to { pr.DoneOn.Format("Jan 2006") }
+				</p>
+			}
+			if card.Next > 0 {
+				<div class="flex flex-wrap items-center gap-2">
+					if card.CanSaveNext() {
+						<button
+							if inDetails {
+								hx-get={ fromDetails(card.NextURL) }
+							} else {
+								hx-get={ card.NextURL }
+							}
+							hx-target={ "#" + components.DrawerSlot }
+							hx-swap="innerHTML"
+							class="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-(--accent) text-sm font-semibold text-zinc-950 cursor-pointer transition hover:brightness-110 active:scale-[.98]"
+						>
+							@icons.PiggyBank("14")
+							Save next · <span class="sensitive tabular-nums">{ gl.Currency.Format(card.Next) }</span>
+						</button>
+						<span class="text-xs text-zinc-500 truncate">
+							if card.NextOn.After(time.Now()) {
+								{ card.NextOn.Format("January") }'s ·
+							}
+							from { card.Source.Account.Name }
+						</span>
+					} else {
+						<button
+							type="button"
+							disabled
+							class="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-zinc-800 text-sm text-zinc-500 cursor-not-allowed"
+						>
+							@icons.PiggyBank("14")
+							Save next · <span class="sensitive tabular-nums">{ gl.Currency.Format(card.Next) }</span>
+						</button>
+						<span class="text-xs text-zinc-500">
+							Need <span class="sensitive tabular-nums">{ gl.Currency.Format(card.Next - card.Source.Available) }</span> more in your accounts
+						</span>
+					}
+				</div>
+			}
+		}
+	</div>
+}
+
+// goalInMonths is how far a month is from now, e.g. "in 5 months" or "this
+// month".
+func goalInMonths(n int) string {
+	switch {
+	case n <= 0:
+		return "this month"
+	case n == 1:
+		return "in 1 month"
+	}
+	return fmt.Sprintf("in %d months", n)
+}
+
+func goalPlanBuyLabel(pr *models.GoalProjection) string {
+	if pr.Loan != nil {
+		return "down payment by"
+	}
+	return "own it by"
+}
+
+// goalPlanStatus tells if the goal keeps up with its plan.
+templ goalPlanStatus(gl *models.Goal, pr *models.GoalProjection) {
+	if pr.Left <= 0.005 {
+		<span class="chip text-emerald-400">
+			@icons.Check("12")
+			Saved
+		</span>
+	} else if pr.Behind() > 0.005 {
+		<span class="chip text-amber-300">
+			<span class="sensitive tabular-nums">{ gl.Currency.Format(pr.Behind()) }</span> behind
+		</span>
+	} else if pr.Ahead() > 0.005 {
+		<span class="chip text-emerald-400">
+			<span class="sensitive tabular-nums">{ gl.Currency.Format(pr.Ahead()) }</span> ahead
+		</span>
+	} else {
+		<span class="chip">On track</span>
+	}
+}
+
+// goalBuyLoan schedules the plan's loan payments on buying the goal.
+templ goalBuyLoan(gl *models.Goal, fd *GoalBuyFD, loan *models.InstallmentSchedule, accs []models.Account) {
+	<div class="grid gap-3 px-4 py-3 rounded-2xl bg-zinc-800/30 ring-1 ring-zinc-800">
+		@form.Toggle("Schedule the loan's payments", "schedule_loan", gl.ID, icons.Calendar("15"), fd.ScheduleLoan, nil)
+		<p class="sensitive text-sm text-zinc-400 tabular-nums">
+			{ planMonthly(loan, gl.Currency.Symbol) } × { fmt.Sprint(len(loan.Rows)) }, from a month after the purchase, as expenses
+		</p>
+		<div class="flex flex-wrap items-center gap-2">
+			<span class="text-sm text-zinc-500">paid from</span>
+			@form.SelectAccountChip("Account", "loan_account_id", gl.ID, accs, fd.LoanAccountID, nil)
+		</div>
+		@form.ErrorMessage(fd.LoanAccountID.Error)
+	</div>
+}

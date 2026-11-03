@@ -95,6 +95,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("GET /goals", handle(h.Goals))
 	mux.Handle("POST /goals", handle(h.CreateGoal))
 	mux.Handle("GET /goals/{id}", handle(h.Goal))
+	mux.Handle("GET /goals/{id}/details", handle(h.GoalDetails))
 	mux.Handle("GET /goals/{id}/edit", handle(h.GetEditGoal))
 	mux.Handle("GET /goals/{id}/money-form", handle(h.GetGoalMoneyForm))
 	mux.Handle("POST /goals/{id}/money", handle(h.MoveGoalMoney))
@@ -105,6 +106,10 @@ func New(h *handler.Handler) Router {
 	mux.Handle("GET /goals/{id}/delete-form", handle(h.GetGoalDeleteForm))
 	mux.Handle("POST /goals/{id}/delete", handle(h.DeleteGoal))
 	mux.Handle("PUT /goals/{id}/unfulfill", handle(h.UnfulfillGoal))
+	mux.Handle("GET /goals/{id}/plan", handle(h.GetGoalPlanForm))
+	mux.Handle("POST /goals/{id}/plan/preview", handle(h.GoalPlanPreview))
+	mux.Handle("PUT /goals/{id}/plan", handle(h.SetGoalPlan))
+	mux.Handle("DELETE /goals/{id}/plan", handle(h.DeleteGoalPlan))
 	mux.Handle("DELETE /goals/{id}", handle(h.DeleteGoal))
 
 	mux.Handle("GET /decide", handle(h.Decide))

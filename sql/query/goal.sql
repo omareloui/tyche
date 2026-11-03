@@ -31,6 +31,7 @@ SELECT
     t.fulfilled_at AS transaction_fulfilled_at,
     t.scheduled_to AS transaction_scheduled_to,
     t.created_at AS transaction_created_at,
+    t.loan_goal_id AS transaction_loan_goal_id,
     a.id AS account_id,
     a.name AS account_name,
     a.kind_id AS account_kind_id,
@@ -53,7 +54,7 @@ SELECT
 FROM goals AS gl
 LEFT JOIN currencies AS c ON c.id = gl.currency_id
 JOIN accounts AS ga ON ga.id = gl.account_id
-LEFT JOIN transactions AS t ON gl.account_id IN (t.account_id, t.to_account_id) -- deposits, withdrawals, purchase
+LEFT JOIN transactions AS t ON gl.account_id IN (t.account_id, t.to_account_id) OR t.loan_goal_id = gl.id -- deposits, withdrawals, purchase, loan payments
 LEFT JOIN accounts AS a ON a.id = t.account_id
 LEFT JOIN currencies AS ac ON ac.id = a.currency_id
 ORDER BY gl.created_at DESC;
@@ -76,6 +77,7 @@ SELECT
     t.fulfilled_at AS transaction_fulfilled_at,
     t.scheduled_to AS transaction_scheduled_to,
     t.created_at AS transaction_created_at,
+    t.loan_goal_id AS transaction_loan_goal_id,
     a.id AS account_id,
     a.name AS account_name,
     a.kind_id AS account_kind_id,
@@ -98,7 +100,7 @@ SELECT
 FROM goals AS gl
 LEFT JOIN currencies AS c ON c.id = gl.currency_id
 JOIN accounts AS ga ON ga.id = gl.account_id
-LEFT JOIN transactions AS t ON gl.account_id IN (t.account_id, t.to_account_id) -- deposits, withdrawals, purchase
+LEFT JOIN transactions AS t ON gl.account_id IN (t.account_id, t.to_account_id) OR t.loan_goal_id = gl.id -- deposits, withdrawals, purchase, loan payments
 LEFT JOIN accounts AS a ON a.id = t.account_id
 LEFT JOIN currencies AS ac ON ac.id = a.currency_id
 WHERE gl.fulfilled_at IS NULL
@@ -122,6 +124,7 @@ SELECT
     t.fulfilled_at AS transaction_fulfilled_at,
     t.scheduled_to AS transaction_scheduled_to,
     t.created_at AS transaction_created_at,
+    t.loan_goal_id AS transaction_loan_goal_id,
     a.id AS account_id,
     a.name AS account_name,
     a.kind_id AS account_kind_id,
@@ -144,7 +147,7 @@ SELECT
 FROM goals AS gl
 LEFT JOIN currencies AS c ON c.id = gl.currency_id
 JOIN accounts AS ga ON ga.id = gl.account_id
-LEFT JOIN transactions AS t ON gl.account_id IN (t.account_id, t.to_account_id) -- deposits, withdrawals, purchase
+LEFT JOIN transactions AS t ON gl.account_id IN (t.account_id, t.to_account_id) OR t.loan_goal_id = gl.id -- deposits, withdrawals, purchase, loan payments
 LEFT JOIN accounts AS a ON a.id = t.account_id
 LEFT JOIN currencies AS ac ON ac.id = a.currency_id
 WHERE gl.id = sqlc.arg(id);
@@ -219,3 +222,22 @@ WHERE id = sqlc.arg(id);
 -- name: GetAccountKindID :one
 SELECT id FROM account_kinds
 WHERE enum = sqlc.arg(enum);
+
+-- name: SetGoalPlan :exec
+UPDATE goals
+SET plan = sqlc.arg(plan)
+WHERE id = sqlc.arg(id);
+
+-- name: LinkLoanPayments :exec
+UPDATE transactions
+SET loan_goal_id = sqlc.arg(goal_id)
+WHERE id IN (SELECT value FROM json_each(sqlc.arg(ids)));
+
+-- name: GetUnpaidLoanPayments :many
+SELECT id FROM transactions
+WHERE loan_goal_id = sqlc.arg(goal_id) AND fulfilled_at IS NULL;
+
+-- name: UnlinkLoanPayments :exec
+UPDATE transactions
+SET loan_goal_id = NULL
+WHERE loan_goal_id = sqlc.arg(goal_id);

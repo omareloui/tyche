@@ -14,8 +14,9 @@ templ Popup(class string) {
 	</div>
 }
 
-// HoverPopup shows a Popup below-right of the closest `group` ancestor while
-// it is hovered or focused, scaling in from its top-right corner (same timing
+// HoverPopup shows a Popup below-right of the closest `group/popup` ancestor
+// while it is hovered or focused (a named group, so an outer `group`, e.g. a
+// details of the list, doesn't show it), scaling in from its top-right corner (same timing
 // as Alpine's x-transition.scale). The ancestor needs `relative` positioning.
 // main.js shifts it back into the viewport when it would overflow (phones).
 templ HoverPopup(class string) {
@@ -24,8 +25,8 @@ templ HoverPopup(class string) {
 		class={
 			"absolute top-full right-0 z-20 pt-2 origin-top-right",
 			"invisible scale-95 transition-[scale,visibility] duration-75 ease-in",
-			"group-hover:visible group-hover:scale-100 group-hover:duration-150 group-hover:ease-out",
-			"group-focus-within:visible group-focus-within:scale-100 group-focus-within:duration-150 group-focus-within:ease-out",
+			"group-hover/popup:visible group-hover/popup:scale-100 group-hover/popup:duration-150 group-hover/popup:ease-out",
+			"group-focus-within/popup:visible group-focus-within/popup:scale-100 group-focus-within/popup:duration-150 group-focus-within/popup:ease-out",
 		}
 	>
 		@Popup(class) {

@@ -1,0 +1,428 @@
+package views
+
+import (
+	"fmt"
+	"net/url"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+func goalDetailsURL(gl *models.Goal) string {
+	return goalDetailsURLOf(gl.ID)
+}
+
+func goalDetailsURLOf(id string) string {
+	return fmt.Sprintf("/goals/%s/details", id)
+}
+
+// GoalFromDetails is the `from` of a goal's drawer opened from its details:
+// saving or canceling it goes back to them instead of closing.
+const GoalFromDetails = "details"
+
+// fromDetails adds from=details to a goal drawer's url.
+func fromDetails(u string) string {
+	sep := "?"
+	if strings.Contains(u, "?") {
+		sep = "&"
+	}
+	return u + sep + "from=" + GoalFromDetails
+}
+
+// goalBackCancel is the Cancel of a goal's drawer form: back to the goal's
+// details when opened from them (asking first if changed), else closing.
+func goalBackCancel(id, from string) string {
+	if from != GoalFromDetails {
+		return ""
+	}
+	return fmt.Sprintf("confirmDiscard().then((ok) => ok && htmx.ajax('GET', '%s', {target: '#%s', swap: 'innerHTML'}))",
+		goalDetailsURLOf(id), components.DrawerSlot)
+}
+
+// goalFromInput sends where a goal's drawer form was opened from.
+templ goalFromInput(from string) {
+	if from != "" {
+		<input type="hidden" name="from" value={ from }/>
+	}
+}
+
+// GoalCardOOB swaps a goal's card out of band, e.g. answering a form
+// opened from its details with them.
+templ GoalCardOOB(gl *models.Goal, plan *GoalPlanCard) {
+	@goalCard(gl, plan, true)
+}
+
+// GoalDetails is a goal in full, in a drawer like a transaction's details:
+// its progress, actions, plan and history. Its actions open their own drawer
+// in its place.
+templ GoalDetails(gl *models.Goal, plan *GoalPlanCard, pace float64, accNames map[string]string) {
+	{{ st := goalStateOf(gl) }}
+	@components.Drawer(components.DrawerProps{Label: gl.Name + " details"}) {
+		<div class={ "drawer-panel flex flex-col flex-1 min-h-0", goalAccentClass(st) }>
+			<header class="flex items-start gap-3 px-5 sm:px-6 pt-5 pb-4">
+				@goalRing(gl.ShownPercentage(), st, "size-11", "text-[0.65rem]")
+				<div class="flex-1 min-w-0">
+					<h2 class="text-lg font-bold leading-snug break-words">{ gl.Name }</h2>
+					<p class="text-sm text-zinc-400 truncate">Goal · { goalStateLabel(gl, st) }</p>
+				</div>
+				@components.DrawerClose()
+			</header>
+			<div class="flex-1 grid grid-cols-1 content-start gap-6 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
+				@goalDetailsHero(gl, st)
+				@goalDetailsActions(gl, st)
+				@goalDetailsFields(gl, st, pace)
+				@goalDetailsPlan(gl, plan, st)
+				@goalDetailsHistory(gl, accNames)
+			</div>
+		</div>
+	}
+}
+
+templ goalDetailsHero(gl *models.Goal, st goalState) {
+	<div class="grid gap-3">
+		if gl.HasLoan() && !gl.FulfilledAt.IsZero() {
+			<div>
+				<p class="sensitive text-3xl font-semibold font-(family-name:--font-biorhyme-expanded) tabular-nums break-words">{ gl.Currency.Format(gl.Purchased + gl.Loan.Paid) }</p>
+				<p class="sensitive text-sm text-zinc-500 tabular-nums">paid of { gl.Currency.Format(gl.Purchased + gl.Loan.Total) } · { fmt.Sprintf("%.0f%%", gl.PayoffPercentage()) }</p>
+			</div>
+		} else {
+		<div>
+			<p class="sensitive text-3xl font-semibold font-(family-name:--font-biorhyme-expanded) tabular-nums break-words">{ gl.ViewProgress() }</p>
+			<p class="sensitive text-sm text-zinc-500 tabular-nums">of { gl.ViewAmount() } · { fmt.Sprintf("%.0f%%", min(gl.ProgressPercentage(), 999)) }</p>
+		</div>
+		}
+		@goalProgressBar(gl)
+	</div>
+}
+
+// goalDetailsActions open the goal's drawers in place of the details.
+templ goalDetailsActions(gl *models.Goal, st goalState) {
+	{{ slot := "#" + components.DrawerSlot }}
+	<div class="flex flex-wrap gap-2">
+		if gl.FulfilledAt.IsZero() {
+			<button type="button" hx-get={ fromDetails(fmt.Sprintf("/goals/%s/money-form?dir=%s", gl.ID, GoalDeposit)) } hx-target={ slot } hx-swap="innerHTML" class="txd-action">
+				@icons.Plus("14")
+				Add money
+			</button>
+			<button type="button" hx-get={ fmt.Sprintf("/goals/%s/fulfill-form", gl.ID) } hx-target={ slot } hx-swap="innerHTML" class="txd-action">
+				@icons.Trophy("14")
+				Mark as bought
+			</button>
+			<button type="button" hx-get={ fromDetails(goalPlanURL(gl)) } hx-target={ slot } hx-swap="innerHTML" class="txd-action">
+				@icons.Calendar("14")
+				if gl.Plan != nil {
+					Edit plan
+				} else {
+					Plan it
+				}
+			</button>
+		}
+		if gl.Balance() > 0 {
+			<button type="button" hx-get={ fromDetails(fmt.Sprintf("/goals/%s/money-form?dir=%s", gl.ID, GoalWithdraw)) } hx-target={ slot } hx-swap="innerHTML" class="txd-action">
+				@icons.Transfer("14")
+				Withdraw
+			</button>
+		}
+		<button type="button" hx-get={ fromDetails(fmt.Sprintf("/goals/%s/edit", gl.ID)) } hx-target={ slot } hx-swap="innerHTML" class="txd-action">
+			@icons.Pencil("14")
+			Edit
+		</button>
+	</div>
+}
+
+templ goalDetailsFields(gl *models.Goal, st goalState, pace float64) {
+	<dl class="grid gap-px overflow-hidden rounded-2xl bg-zinc-800/60 ring-1 ring-zinc-800">
+		if gl.FulfilledAt.IsZero() {
+			@txDetailsRow("Still to go", icons.Target("15")) {
+				<span class="sensitive tabular-nums">{ gl.ViewRemaining() }</span>
+			}
+		}
+		@txDetailsRow("In the goal", icons.PiggyBank("15")) {
+			<span class="sensitive tabular-nums">{ gl.ViewBalance() }</span>
+		}
+		if gl.FulfilledAt.IsZero() {
+			@txDetailsRow("Lately", icons.Clock("15")) {
+				if pace > 0 {
+					<span class="sensitive tabular-nums">{ gl.Currency.Format(pace) }</span>
+					<span class="text-zinc-500">a month, last 3 months</span>
+				} else {
+					<span class="text-zinc-500">Nothing put in the last 3 months</span>
+				}
+			}
+		}
+		@txDetailsRow("Created", icons.Calendar("15")) {
+			<span>{ gl.CreatedAt.Local().Format("Jan 2, 2006") }</span>
+		}
+	</dl>
+}
+
+func goalStateLabel(gl *models.Goal, st goalState) string {
+	switch st {
+	case goalPaying:
+		return "Paying off, bought " + gl.FulfilledAt.Local().Format("Jan 2, 2006")
+	case goalAchieved:
+		if gl.HasLoan() {
+			return "Paid off"
+		}
+		return "Bought " + gl.FulfilledAt.Local().Format("Jan 2, 2006")
+	case goalReady:
+		if gl.Plan.IsInstallments() {
+			return "Down payment saved"
+		}
+		return "Target reached"
+	}
+	return "Saving"
+}
+
+// goalDetailsPlan is the goal's plan: where it leads, the next deposit, the
+// saving schedule and the loan; the loan it was bought with once bought;
+// an invite to make one without it.
+templ goalDetailsPlan(gl *models.Goal, card *GoalPlanCard, st goalState) {
+	{{ loan := goalBoughtLoan(gl) }}
+	if !gl.FulfilledAt.IsZero() {
+		if gl.HasLoan() {
+			@txDetailsSection("Loan") {
+				<div class="txd-card grid gap-2">
+					<div class="flex items-baseline justify-between gap-3 text-sm">
+						<p class="text-zinc-300">{ fmt.Sprint(gl.Loan.PaidPayments) } of { fmt.Sprint(gl.Loan.Payments) } payments made</p>
+						<p class="sensitive shrink-0 text-zinc-400 tabular-nums">{ gl.Currency.Format(gl.Loan.Paid) } / { gl.Currency.Format(gl.Loan.Total) }</p>
+					</div>
+					@goalProgressBar(gl)
+					{{ next := goalNextLoanPayment(gl) }}
+					if next != nil {
+						<p class="sensitive text-xs text-zinc-500 tabular-nums">Next { next.Account.Currency.Format(next.Amount) } { formatTxDay(next.ScheduledTo) } from { next.Account.Name }</p>
+					}
+				</div>
+				if loan != nil {
+					@planBreakdown(loan, gl.Currency.Symbol, gl.FulfilledAt)
+				}
+			}
+		}
+	} else if gl.Plan == nil {
+		@txDetailsSection("Plan") {
+			<div class="txd-card grid gap-3">
+				<p class="text-sm text-zinc-400">
+					No plan yet. Plan it to see when you'd get it from what's free of your salary each month, saving the whole price or a down payment with a loan.
+				</p>
+				@goalPlan(gl)
+			</div>
+		}
+	} else if card != nil {
+		@txDetailsSection(goalPlanTitle(gl.Plan)) {
+			if card.Projection == nil {
+				<p class="text-sm text-zinc-500">{ card.Problem }</p>
+			} else {
+				{{ pr := card.Projection }}
+				<div class="txd-card grid gap-4">
+					@goalPlanTimeline(gl, pr)
+					@goalPlanSummary(gl, card, true)
+				</div>
+				{{ deposits := pr.Deposits() }}
+				if len(deposits) > 0 {
+					@goalDepositsSchedule(gl, deposits)
+				}
+				if pr.Loan != nil {
+					<div class="grid gap-2 mt-2">
+						<p class="text-sm text-zinc-300">The loan, from { pr.BuyOn.Format("Jan 2006") }</p>
+						@planBreakdown(pr.Loan, gl.Currency.Symbol, pr.BuyOn)
+					</div>
+				}
+			}
+		}
+	}
+}
+
+func goalPlanTitle(p *models.GoalPlan) string {
+	if p.IsInstallments() {
+		return "Plan · down payment + loan"
+	}
+	return "Plan · saving it all"
+}
+
+// goalBoughtLoan is the loan a bought goal was paid with (its payments
+// scheduled on buying it), nil without one.
+func goalBoughtLoan(gl *models.Goal) *models.InstallmentSchedule {
+	if gl.Plan == nil || !gl.HasLoan() {
+		return nil
+	}
+	loan, err := gl.Plan.LoanSchedule(gl.Price)
+	if err != nil || loan == nil || len(loan.Rows) == 0 {
+		return nil
+	}
+	return loan
+}
+
+// goalMilestone is a step of a plan's timeline.
+type goalMilestone struct {
+	On    time.Time
+	Title string
+	Note  string
+	Done  bool
+}
+
+func goalMilestones(gl *models.Goal, pr *models.GoalProjection) []goalMilestone {
+	ms := []goalMilestone{
+		{On: pr.Plan.StartsOn, Title: "Plan started", Done: true, Note: gl.Currency.Format(pr.Plan.StartSaved) + " saved then"},
+		{On: time.Now(), Title: "Today", Done: true, Note: gl.Currency.Format(gl.Progress()) + " saved"},
+	}
+	saved := "Fully saved, buy it"
+	if pr.Loan != nil {
+		saved = "Down payment saved, buy it"
+	}
+	ms = append(ms, goalMilestone{On: pr.BuyOn, Title: saved, Note: gl.Currency.Format(pr.Target), Done: pr.Left <= 0.005})
+	if pr.Loan != nil {
+		ms = append(ms, goalMilestone{
+			On: pr.DoneOn, Title: "Loan paid off",
+			Note: fmt.Sprintf("%d payments, %s in total", len(pr.Loan.Rows), gl.Currency.Format(pr.TotalCost)),
+		})
+	}
+	return ms
+}
+
+templ goalPlanTimeline(gl *models.Goal, pr *models.GoalProjection) {
+	{{ ms := goalMilestones(gl, pr) }}
+	<ol class="grid">
+		for i, m := range ms {
+			<li class="relative grid grid-cols-[0.875rem_1fr_auto] gap-x-3 pb-3 last:pb-0">
+				if i < len(ms)-1 {
+					<span aria-hidden="true" class="absolute left-[0.4rem] top-4 bottom-0 w-px bg-zinc-700"></span>
+				}
+				<span
+					aria-hidden="true"
+					class={ "relative mt-1 size-3.5 rounded-full ring-2",
+						templ.KV("bg-(--accent) ring-(--accent)/30", m.Done),
+						templ.KV("bg-zinc-900 ring-zinc-600", !m.Done) }
+				></span>
+				<div class="min-w-0">
+					<p class={ "text-sm", templ.KV("text-zinc-200", m.Done), templ.KV("text-zinc-400", !m.Done) }>{ m.Title }</p>
+					<p class="sensitive text-xs text-zinc-500 tabular-nums truncate">{ m.Note }</p>
+				</div>
+				<p class="text-xs text-zinc-500 tabular-nums">{ goalMilestoneDay(m.On) }</p>
+			</li>
+		}
+	</ol>
+}
+
+func goalMilestoneDay(t time.Time) string {
+	if dateOf(t).Equal(dateOf(time.Now())) {
+		return "Now"
+	}
+	return t.Format("Jan 2006")
+}
+
+// goalDepositsSchedule lists the plan's deposits still to make.
+templ goalDepositsSchedule(gl *models.Goal, rows []models.GoalDeposit) {
+	<details class="group/sched" open?={ len(rows) <= 6 }>
+		<summary class="flex items-center gap-2 list-none cursor-pointer select-none text-sm text-zinc-400 hover:text-zinc-200 [&::-webkit-details-marker]:hidden">
+			@icons.PiggyBank("14")
+			Saving schedule · { fmt.Sprint(len(rows)) } { plural(len(rows), "deposit", "deposits") }
+			@icons.ChevronDown("14", &templ.Attributes{"class": "transition-transform group-open/sched:rotate-180"})
+		</summary>
+		<div class="mt-2 max-h-80 overflow-auto rounded-2xl ring-1 ring-zinc-800">
+			<table class="w-full text-sm tabular-nums">
+				<thead class="sticky top-0 bg-zinc-900 text-xs text-zinc-500">
+					<tr>
+						<th class="px-3 py-2 text-left font-medium">When</th>
+						<th class="px-3 py-2 text-right font-medium">Deposit</th>
+						<th class="px-3 py-2 text-right font-medium">Saved</th>
+					</tr>
+				</thead>
+				<tbody class="divide-y divide-zinc-800/80">
+					for _, row := range rows {
+						<tr>
+							<td class="px-3 py-1.5 text-zinc-400">{ goalDepositDay(row.On) }</td>
+							<td class="sensitive px-3 py-1.5 text-right">{ gl.Currency.Format(row.Amount) }</td>
+							<td class="sensitive px-3 py-1.5 text-right text-zinc-500">{ gl.Currency.Format(row.Saved) }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	</details>
+}
+
+func goalDepositDay(t time.Time) string {
+	if dateOf(t).Equal(dateOf(time.Now())) {
+		return "This month"
+	}
+	return t.Format("Jan 2006")
+}
+
+// goalHistory is the goal's transactions, the latest first.
+func goalHistory(gl *models.Goal) []models.Transaction {
+	txs := slices.Clone(gl.Transactions)
+	slices.SortStableFunc(txs, func(a, b models.Transaction) int { return b.ScheduledTo.Compare(a.ScheduledTo) })
+	return txs
+}
+
+// goalTxLabel says what the transaction did to the goal.
+func goalTxLabel(tx *models.Transaction, accNames map[string]string) string {
+	name := func(a *models.Account) string {
+		switch {
+		case a == nil:
+			return "an account"
+		case accNames[a.ID] != "":
+			return accNames[a.ID]
+		case a.Name != "":
+			return a.Name
+		}
+		return "an account"
+	}
+	switch {
+	case tx.IsLoanPayment():
+		return "Loan payment · " + name(&tx.Account)
+	case tx.IsGoalPurchase():
+		return "Bought it"
+	case tx.GoalAmount() >= 0:
+		return "From " + name(&tx.Account)
+	}
+	return "To " + name(tx.ToAccount)
+}
+
+// goalTxURL opens the transaction's details on the transactions page.
+func goalTxURL(tx *models.Transaction) templ.SafeURL {
+	return templ.SafeURL("/transactions?" + url.Values{TxDetailsParam: {tx.ID}}.Encode())
+}
+
+templ goalDetailsHistory(gl *models.Goal, accNames map[string]string) {
+	@txDetailsSection("History") {
+		if len(gl.Transactions) == 0 {
+			<p class="text-sm text-zinc-500">Nothing in it yet. Every deposit, withdrawal and the purchase shows up here.</p>
+		} else {
+			for _, tx := range goalHistory(gl) {
+				{{ amount := tx.GoalAmount() }}
+				<a
+					href={ goalTxURL(&tx) }
+					class="flex items-center gap-3 w-full px-3 py-2 rounded-xl bg-tx-row text-left transition hover:ring-1 hover:ring-zinc-700"
+				>
+					<div class="flex-1 min-w-0">
+						<p class="truncate text-sm">{ goalTxLabel(&tx, accNames) }</p>
+						<p class="truncate text-xs text-zinc-500">
+							{ formatTxDay(tx.ScheduledTo) }
+							if tx.FulfilledAt.IsZero() {
+								· Scheduled
+							}
+						</p>
+					</div>
+					<p
+						class={ "sensitive shrink-0 text-sm font-semibold tabular-nums",
+							templ.KV("text-emerald-400", amount >= 0 && !tx.FulfilledAt.IsZero() && !tx.IsLoanPayment()),
+							templ.KV("text-zinc-400", amount < 0 || tx.FulfilledAt.IsZero() || tx.IsLoanPayment()) }
+					>
+						if tx.IsLoanPayment() {
+							−{ tx.Account.Currency.Format(tx.Amount) }
+						} else if amount >= 0 {
+							+{ gl.Currency.Format(amount) }
+						} else {
+							−{ gl.Currency.Format(-amount) }
+						}
+					</p>
+				</a>
+			}
+		}
+	}
+}

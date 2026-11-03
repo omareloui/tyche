@@ -357,3 +357,106 @@ func TestDeleteAccountKeepsHistory(t *testing.T) {
 		t.Error("the deleted account is editable")
 	}
 }
+
+func TestGoalLoanPayments(t *testing.T) {
+	repo, ctx, usr := setupTenant(t)
+	h := handler.New(repo, valid.New(), sanitizer.New(), nil, nil)
+	egp, err := repo.GetCurrencyByString(ctx, "EGP")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Planning reads the salary, off the user.
+	usr.Email, usr.DefaultCurrency = "e2e@example.com", *egp
+	if err := repo.CreateUser(ctx, usr); err != nil {
+		t.Fatal(err)
+	}
+	bank := newTestAccount(t, repo, ctx, "Bank", "EGP", models.AccKindBankAcc, 10_000)
+	if _, err := callHandler(ctx, h.CreateGoal)(httptest.NewRecorder(), "POST", "/goals", "", url.Values{
+		"name": {"Car"}, "amount": {"1200"}, "currency_id": {egp.ID},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	goal := func() *models.Goal {
+		t.Helper()
+		gls, err := repo.GetGoals(ctx)
+		if err != nil || len(gls) != 1 {
+			t.Fatalf("goals %v, %v", gls, err)
+		}
+		return &gls[0]
+	}
+	gl := goal()
+
+	// 300 down, the rest in 3 interest-free payments.
+	plan := url.Values{"monthly": {"300"}, "mode": {"installments"}, "strategy": {"known"}, "down_payment": {"300"}, "down_payment_unit": {"amount"}}
+	if _, err := callHandler(ctx, h.SetGoalPlan)(httptest.NewRecorder(), "PUT", "/goals/x/plan", gl.ID, plan); err != nil {
+		t.Fatal(err)
+	}
+	today := time.Now().Format(time.DateOnly)
+	if _, err := callHandler(ctx, h.MoveGoalMoney)(httptest.NewRecorder(), "POST", "/goals/x/money?dir=deposit", gl.ID, url.Values{
+		"amount": {"300"}, "account_id": {bank.ID}, "scheduled_to": {today},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := callHandler(ctx, h.FulfillGoal)(httptest.NewRecorder(), "PUT", "/goals/x/fulfill", gl.ID, url.Values{
+		"amount": {"300"}, "scheduled_to": {today}, "description": {"Car"},
+		"schedule_loan": {"on"}, "loan_account_id": {bank.ID},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	gl = goal()
+	if gl.Loan.Payments != 3 || gl.Loan.Total != 900 || gl.Loan.Paid != 0 || !gl.PayingOff() || gl.PayoffPercentage() != 25 {
+		t.Fatalf("loan %+v, paying off %v, %v%%", gl.Loan, gl.PayingOff(), gl.PayoffPercentage())
+	}
+
+	// The payments are the goal's transactions, still editable expenses.
+	txs, err := repo.GetTransactions(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payments []models.Transaction
+	for _, tx := range txs {
+		if tx.IsLoanPayment() {
+			payments = append(payments, tx)
+		}
+	}
+	if len(payments) != 3 {
+		t.Fatalf("%d loan payments listed", len(payments))
+	}
+	for _, tx := range payments {
+		if tx.Goal == nil || tx.Goal.ID != gl.ID || tx.Kind != models.ExpenseTxKind || tx.IsLocked() {
+			t.Errorf("bad loan payment %+v", tx)
+		}
+	}
+
+	// Paying one pays the goal off further.
+	if _, err := callHandler(ctx, h.FulfillTransaction)(httptest.NewRecorder(), "PUT", "/transactions/x/fulfill", payments[0].ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	if gl = goal(); gl.Loan.PaidPayments != 1 || gl.Loan.Paid != 300 || gl.PayoffPercentage() != 50 {
+		t.Errorf("after a payment: loan %+v, %v%%", gl.Loan, gl.PayoffPercentage())
+	}
+
+	// Undoing the purchase deletes the unpaid ones, unlinks the paid one.
+	if _, err := callHandler(ctx, h.UnfulfillGoal)(httptest.NewRecorder(), "PUT", "/goals/x/unfulfill", gl.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	if gl = goal(); gl.HasLoan() || !gl.FulfilledAt.IsZero() {
+		t.Errorf("after undo: loan %+v", gl.Loan)
+	}
+	if txs, err = repo.GetTransactions(ctx); err != nil {
+		t.Fatal(err)
+	}
+	left := 0
+	for _, tx := range txs {
+		if tx.Description != "" && strings.HasPrefix(tx.Description, "Car (") {
+			left++
+			if tx.IsLoanPayment() || tx.FulfilledAt.IsZero() {
+				t.Errorf("left payment %+v", tx)
+			}
+		}
+	}
+	if left != 1 {
+		t.Errorf("%d payments left, want the paid one", left)
+	}
+}

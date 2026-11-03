@@ -263,13 +263,22 @@ func mapPurchaseToFD(p *models.Purchase, ve errs.ValidationErrors) *views.Purcha
 		fd.Mode.Value = views.PayInstallments
 	}
 
+	fd.Plan = mapPlanToFD(plan, ve)
+	if planProblem(ve) != "" {
+		fd.Mode.Value = views.PayInstallments
+	}
+	return fd
+}
+
+// mapPlanToFD fills an installment plan's fields, with its problems if any.
+func mapPlanToFD(plan *models.InstallmentPlan, ve errs.ValidationErrors) views.InstallmentPlanFD {
 	unit := func(pct bool) form.FDInput {
 		if pct {
 			return form.FDInput{Value: views.UnitPct}
 		}
 		return form.FDInput{Value: views.UnitAmount}
 	}
-	fd.Plan = views.InstallmentPlanFD{
+	return views.InstallmentPlanFD{
 		Strategy:          form.FDInput{Value: plan.Strategy.String()},
 		Installments:      form.FDInput{Value: formatIntIfNonZero(plan.Months), Error: ve.MsgFor("Installments")},
 		InstallmentAmount: form.FDInput{Value: formatFloatIfNonZero(plan.Amount), Error: ve.MsgFor("InstallmentAmount")},
@@ -285,10 +294,6 @@ func mapPurchaseToFD(p *models.Purchase, ve errs.ValidationErrors) *views.Purcha
 		BalloonPct:        form.FDInput{Value: formatFloatIfNonZero(plan.BalloonPct), Error: ve.MsgFor("BalloonPct")},
 		GraceMonths:       form.FDInput{Value: formatIntIfNonZero(plan.GraceMonths), Error: ve.MsgFor("GraceMonths")},
 	}
-	if planProblem(ve) != "" {
-		fd.Mode.Value = views.PayInstallments
-	}
-	return fd
 }
 
 // mapFDToPurchase reads a price, its currency and, when paying in

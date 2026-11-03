@@ -18,7 +18,6 @@ import (
 	"go.uber.org/zap"
 )
 
-
 // Wishlist renders the whole wishlist, which every change on it re-renders.
 func (h Handler) Wishlist(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	return h.wishlist(r, false)
@@ -286,25 +285,28 @@ func wishlistPlanTxs(item *models.WishlistItem, first *models.Transaction) []mod
 		return nil
 	}
 
-	rows := s.Rows
-	day := first.ScheduledTo
+	day, from := first.ScheduledTo, 0
 	if s.PaidOnDay() == 0 {
-		day = day.AddDate(0, -rows[0].Month, 0)
-		rows = rows[1:]
+		day, from = day.AddDate(0, -s.Rows[0].Month, 0), 1
 	}
+	return planPaymentTxs(item.Name, s, first, day, from, wishlistFxRate(item, &first.Account))
+}
 
-	rate := wishlistFxRate(item, &first.Account)
-
+// planPaymentTxs are the payments of a schedule bought on day, from its
+// from-th one, like tmpl (account, kind, category, counterparty), the
+// amounts converted with rate.
+func planPaymentTxs(name string, s *models.InstallmentSchedule, tmpl *models.Transaction, day time.Time, from int, rate float64) []models.Transaction {
+	rows := s.Rows[min(from, len(s.Rows)):]
 	txs := make([]models.Transaction, len(rows))
 	for i, row := range rows {
 		txs[i] = models.Transaction{
 			ID:           idgen.New(),
-			Account:      first.Account,
+			Account:      tmpl.Account,
 			Amount:       models.RoundCents(row.Payment * rate),
-			Kind:         first.Kind,
-			Category:     first.Category,
-			Counterparty: first.Counterparty,
-			Description:  fmt.Sprintf("%s (%d/%d)", item.Name, len(s.Rows)-len(rows)+i+1, len(s.Rows)),
+			Kind:         tmpl.Kind,
+			Category:     tmpl.Category,
+			Counterparty: tmpl.Counterparty,
+			Description:  fmt.Sprintf("%s (%d/%d)", name, from+i+1, len(s.Rows)),
 			ScheduledTo:  day.AddDate(0, row.Month, 0),
 			CreatedAt:    time.Now(),
 		}

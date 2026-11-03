@@ -90,6 +90,8 @@ document.addEventListener("alpine:init", () => {
     reviewOnly: false,
     filtersOpen: false,
     activeFilters: 0,
+    // lastG is when g was pressed, for gg.
+    lastG: 0,
 
     // syncFilters counts the filters set in the form (the search apart, the
     // date and amount ranges once each).
@@ -148,6 +150,10 @@ document.addEventListener("alpine:init", () => {
       const row = t.closest?.("[data-tx][data-id]");
       const d = row?.dataset ?? {};
 
+      // gg is the first row (a g, then another within a moment).
+      const gg = e.key === "g" && Date.now() - this.lastG < 600;
+      this.lastG = e.key === "g" && !gg ? Date.now() : 0;
+
       switch (e.key) {
         case "Enter":
           if (!t.matches?.("[data-tx-row][data-details]")) return;
@@ -161,6 +167,13 @@ document.addEventListener("alpine:init", () => {
           break;
         case "k":
           this.focusRow(t, -1);
+          break;
+        case "g":
+          if (!gg) return;
+          this.focusEdge(true);
+          break;
+        case "G":
+          this.focusEdge(false);
           break;
         case "e":
           if (!row) return;
@@ -186,13 +199,30 @@ document.addEventListener("alpine:init", () => {
       e.preventDefault();
     },
 
+    // focusEdge focuses the first row (the upcoming section's header when
+    // there's one), or the last one loaded.
+    focusEdge(first) {
+      const rows = [...this.$root.querySelectorAll(TX_STOPS)].filter(txShown);
+      const el = first ? rows[0] : rows.at(-1);
+      if (!el) return;
+      el.focus({ preventScroll: true });
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+    },
+
     // focusRow moves the focus step rows away from the one holding from (or
-    // to the first row), skipping hidden ones. Reports if it moved.
+    // to the first row), skipping hidden ones. The upcoming section's header
+    // (data-tx-stop) is one too, to open or fold it (Enter).
+    // Reports if it moved.
     focusRow(from, step) {
-      const rows = [...this.$root.querySelectorAll("[data-tx-row]")].filter(
-        (r) => r.offsetParent !== null,
-      );
-      const cur = rows.indexOf(from.closest?.("[data-tx-row]"));
+      const stops = TX_STOPS;
+      const rows = [...this.$root.querySelectorAll(stops)].filter(txShown);
+      let cur = rows.indexOf(from.closest?.(stops));
+      if (cur === -1 && from instanceof Node && this.$root.contains(from) && from !== this.$root) {
+        // Off the rows (e.g. a month's header): from the nearest one in the
+        // direction, going on from where the focus is.
+        const after = rows.findIndex((r) => from.compareDocumentPosition(r) & Node.DOCUMENT_POSITION_FOLLOWING);
+        cur = step > 0 ? (after === -1 ? rows.length : after) - 1 : after === -1 ? rows.length : after;
+      }
       const next = cur === -1 ? rows[0] : rows[cur + step];
       if (!next) return false;
       next.focus({ preventScroll: true });
@@ -277,7 +307,10 @@ document.addEventListener("alpine:init", () => {
         const id = this.id;
         const row = this.row();
         if (row) {
-          this.close();
+          // The focus goes on to the next row, as deleting with the key.
+          this.opener = txNeighbor(row.querySelector("[data-tx-row]")) ?? this.opener;
+          base.close.call(this);
+          setTxParam(null);
           Alpine.store("txs").remove(row);
           return;
         }
@@ -425,6 +458,9 @@ document.addEventListener("htmx:beforeHistorySave", () => Alpine.store("txs")?.f
 document.addEventListener("htmx:configRequest", (e) => {
   const until = document.getElementById("tx-until")?.dataset.until;
   if (until) e.detail.headers["X-Tx-Until"] = until;
+  // Re-rendered lists keep the upcoming section open or folded.
+  const upcoming = document.getElementById("tx-upcoming");
+  if (upcoming) e.detail.headers["X-Tx-Upcoming"] = upcoming.open ? "open" : "closed";
   // Keep the URL the filters go into short.
   if (e.detail.elt.id === "tx-filters") {
     for (const [k, v] of Object.entries(e.detail.parameters)) {
@@ -432,6 +468,28 @@ document.addEventListener("htmx:configRequest", (e) => {
     }
   }
 });
+
+// TX_STOPS are where j/k move the focus: the rows and the upcoming
+// section's header.
+const TX_STOPS = "[data-tx-row], [data-tx-stop]";
+
+// txNeighbor is the shown row (or stop) after the one of el, else the one
+// before, to give the focus to when el's goes.
+function txNeighbor(el) {
+  const rows = [...document.querySelectorAll(TX_STOPS)].filter(txShown);
+  const i = rows.indexOf(el?.closest?.(TX_STOPS));
+  if (i === -1) return null;
+  return rows[i + 1] ?? rows[i - 1] ?? null;
+}
+
+// txShown tells if a row (or the upcoming section's header) shows: not in a
+// hidden parent, nor in a folded details, whose content browsers may only
+// hide with content-visibility (so it still has an offsetParent).
+function txShown(el) {
+  if (el.offsetParent === null) return false;
+  const folded = el.closest("details:not([open])");
+  return !folded || el.closest("summary")?.parentElement === folded;
+}
 
 // Keep the keyboard focus on the same transaction across list re-renders.
 let txRefocusId = null;

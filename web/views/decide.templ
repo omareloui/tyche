@@ -3,6 +3,7 @@ package views
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/models"
@@ -187,7 +188,7 @@ templ AffordResult(a *models.Affordability, ws *models.WorkSettings) {
 				}
 			</dl>
 			if a.Schedule != nil {
-				@planBreakdown(a.Schedule, a.Purchase.Currency.Symbol)
+				@planBreakdown(a.Schedule, a.Purchase.Currency.Symbol, time.Now())
 			}
 			if a.WorkHours > 0 {
 				<p class="flex items-center gap-2 text-zinc-300">

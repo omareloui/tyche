@@ -14,6 +14,7 @@ import (
 	"github.com/omareloui/tyche/internal/numsutils"
 	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views"
+	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
 	"go.uber.org/zap"
 )
@@ -42,8 +43,13 @@ func (h Handler) Goals(w http.ResponseWriter, r *http.Request) (templ.Component,
 	}
 	l.Info("fetched goals", zap.Int("count", len(gls)))
 
+	cards, err := h.goalPlanCards(r, gls)
+	if err != nil {
+		return nil, err
+	}
+
 	claims := getClaims(r.Context())
-	return views.Goals(claims, b, h.mapGlToFD(dfltGoal(&claims.DefaultCurrency), &errs.ValidationError{}), gls, curs), nil
+	return views.Goals(claims, b, h.mapGlToFD(dfltGoal(&claims.DefaultCurrency), &errs.ValidationError{}), gls, cards, curs), nil
 }
 
 func (h Handler) Goal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -61,7 +67,83 @@ func (h Handler) Goal(w http.ResponseWriter, r *http.Request) (templ.Component, 
 	}
 	l.Info("fetched goal")
 
-	return views.Goal(gl), nil
+	cards, err := h.goalPlanCards(r, []models.Goal{*gl})
+	if err != nil {
+		return nil, err
+	}
+	return views.Goal(gl, cards[gl.ID]), nil
+}
+
+// goalFrom is where the request's goal drawer was opened from:
+// views.GoalFromDetails, or "" (the card).
+func goalFrom(r *http.Request) string {
+	if r.FormValue("from") == views.GoalFromDetails {
+		return views.GoalFromDetails
+	}
+	return ""
+}
+
+// goalSaved closes a goal's saved drawer form, the answer replacing the
+// card; opened from the goal's details, the answer is them again (see
+// goalAnswer), in place of the form. Like every header, before writing the
+// body.
+func goalSaved(w http.ResponseWriter, r *http.Request, id string) {
+	if goalFrom(r) != "" {
+		w.Header().Set("HX-Retarget", "#"+components.DrawerSlot)
+		w.Header().Set("HX-Reswap", "innerHTML")
+		return
+	}
+	drawerSaved(w, "#"+views.GoalID(id), "outerHTML")
+}
+
+// goalAnswer answers a goal's saved drawer form: its card, or its details
+// with the card out of band when opened from them.
+func (h Handler) goalAnswer(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	if goalFrom(r) == "" {
+		return h.Goal(w, r)
+	}
+	gl, err := h.repo.GetGoal(r.Context(), r.PathValue("id"))
+	if err != nil {
+		return nil, err
+	}
+	cards, err := h.goalPlanCards(r, []models.Goal{*gl})
+	if err != nil {
+		return nil, err
+	}
+	if err := renderToBody(w, r, views.GoalCardOOB(gl, cards[gl.ID])); err != nil {
+		return nil, err
+	}
+	return h.GoalDetails(w, r)
+}
+
+// GoalDetails is the goal in full, in a drawer: its progress, actions, plan
+// (where it leads, the saving schedule, the loan) and history.
+func (h Handler) GoalDetails(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+	gl, err := h.repo.GetGoal(r.Context(), id)
+	if err != nil {
+		return nil, err
+	}
+	cards, err := h.goalPlanCards(r, []models.Goal{*gl})
+	if err != nil {
+		return nil, err
+	}
+	paces, err := h.repo.GetGoalPaces(r.Context(), []models.Goal{*gl})
+	if err != nil {
+		return nil, err
+	}
+	accs, err := h.repo.GetAccounts(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	names := make(map[string]string, len(accs))
+	for _, a := range accs {
+		names[a.ID] = a.Name
+	}
+	return views.GoalDetails(gl, cards[gl.ID], paces[gl.ID], names), nil
 }
 
 func (h Handler) CreateGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -115,7 +197,7 @@ func (h Handler) CreateGoal(w http.ResponseWriter, r *http.Request) (templ.Compo
 	if gl, err = h.repo.GetGoal(r.Context(), gl.ID); err != nil {
 		return nil, err
 	}
-	if err = renderToBody(w, r, views.GoalOOB(gl)); err != nil {
+	if err = renderToBody(w, r, views.GoalOOB(gl, nil)); err != nil {
 		l.Error("rendering OOB to body", zap.Error(err))
 		return nil, err
 	}
@@ -151,7 +233,9 @@ func (h Handler) GetEditGoal(w http.ResponseWriter, r *http.Request) (templ.Comp
 	l.Info("fetched goal")
 
 	claims := getClaims(r.Context())
-	return views.EditGoal(id, h.mapGlToFD(gl, &errs.ValidationError{}), curs, &claims.DefaultCurrency), nil
+	fd := h.mapGlToFD(gl, &errs.ValidationError{})
+	fd.From = goalFrom(r)
+	return views.EditGoal(id, fd, curs, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) EditGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -184,7 +268,9 @@ func (h Handler) EditGoal(w http.ResponseWriter, r *http.Request) (templ.Compone
 
 	claims := getClaims(r.Context())
 	renderForm := func(valerr *errs.ValidationError) templ.Component {
-		return views.EditGoalForm(id, h.mapGlToFD(gl, valerr), shownCurs, &claims.DefaultCurrency)
+		fd := h.mapGlToFD(gl, valerr)
+		fd.From = goalFrom(r)
+		return views.EditGoalForm(id, fd, shownCurs, &claims.DefaultCurrency)
 	}
 
 	if err := gl.SanitizeAndValidate(h.sani, h.valid); err != nil {
@@ -206,13 +292,13 @@ func (h Handler) EditGoal(w http.ResponseWriter, r *http.Request) (templ.Compone
 		return nil, err
 	}
 	l.Info("updated goal", zap.Any("goal", gl))
-	drawerSaved(w, "#"+views.GoalID(id), "outerHTML")
+	goalSaved(w, r, id)
 
 	if err := h.renderGoalsSummaryOOB(w, r); err != nil {
 		return nil, err
 	}
 
-	return h.Goal(w, r)
+	return h.goalAnswer(w, r)
 }
 
 // goalMoneyDir reads which way money moves in a goal's money form.
@@ -257,15 +343,42 @@ func (h Handler) GetGoalMoneyForm(w http.ResponseWriter, r *http.Request) (templ
 		return nil, err
 	}
 	dir := goalMoneyDir(r)
-	fd := &views.GoalMoneyFD{ScheduledTo: form.FDInput{Value: time.Now().Format(time.DateOnly)}}
+	fd := &views.GoalMoneyFD{From: goalFrom(r), ScheduledTo: form.FDInput{Value: time.Now().Format(time.DateOnly)}}
 	if a := defaultGoalAccount(accs); a != nil {
 		fd.AccountID.Value = a.ID
+	}
+	if dir == views.GoalDeposit {
+		goalMoneyPrefill(r, gl, accs, fd)
 	}
 	if dir == views.GoalWithdraw {
 		fd.Amount.Value = formatFloatIfNonZero(gl.Balance())
 		fd.OtherAmount.Value = goalOtherAmount(gl, accs, fd.AccountID.Value, dir, gl.Balance())
 	}
 	return views.GoalMoneyForm(gl, dir, fd, accs), nil
+}
+
+// goalMoneyPrefill fills the deposit form from the query (a plan's next
+// deposit): the account and the amount the goal receives (goal_amount, in
+// its currency).
+func goalMoneyPrefill(r *http.Request, gl *models.Goal, accs []models.Account, fd *views.GoalMoneyFD) {
+	q := r.URL.Query()
+	if id := q.Get("account_id"); slicesutils.Find(accs, func(a models.Account) bool { return a.ID == id }) != nil {
+		fd.AccountID.Value = id
+	}
+	amount, err := parseFloatIfExists(q.Get("goal_amount"))
+	if err != nil || amount <= 0 {
+		return
+	}
+	fd.Amount.Value = formatFloatIfNonZero(amount)
+	a := slicesutils.Find(accs, func(a models.Account) bool { return a.ID == fd.AccountID.Value })
+	if a == nil || a.Currency.String == gl.Currency.String {
+		return
+	}
+	// The amount is the account's, the goal receiving the plan's.
+	if rate := gl.Currency.FxRate(a.Currency.String); rate > 0 {
+		fd.Amount.Value = formatFloatIfNonZero(models.RoundCents(amount * rate))
+		fd.OtherAmount.Value = formatFloatIfNonZero(amount)
+	}
 }
 
 func defaultGoalAccount(accs []models.Account) *models.Account {
@@ -321,6 +434,7 @@ func (h Handler) GoalMoneyInputs(w http.ResponseWriter, r *http.Request) (templ.
 // the goal). It answers the form's errors, if any.
 func (h Handler) goalMoneyTx(r *http.Request, gl *models.Goal, accs []models.Account, dir views.GoalMoneyDir) (*models.Transaction, *views.GoalMoneyFD) {
 	fd := &views.GoalMoneyFD{
+		From:        goalFrom(r),
 		Amount:      form.FDInput{Value: r.FormValue("amount")},
 		AccountID:   form.FDInput{Value: r.FormValue("account_id")},
 		OtherAmount: form.FDInput{Value: r.FormValue("to_amount")},
@@ -409,7 +523,7 @@ func (h Handler) MoveGoalMoney(w http.ResponseWriter, r *http.Request) (templ.Co
 		l.Error("moving goal money", zap.Any("tx", tx), zap.String("goal", gl.ID), zap.Error(err))
 		return nil, err
 	}
-	drawerSaved(w, "#"+views.GoalID(gl.ID), "outerHTML")
+	goalSaved(w, r, gl.ID)
 
 	if !tx.FulfilledAt.IsZero() {
 		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
@@ -419,7 +533,7 @@ func (h Handler) MoveGoalMoney(w http.ResponseWriter, r *http.Request) (templ.Co
 	if err := h.renderGoalsSummaryOOB(w, r); err != nil {
 		return nil, err
 	}
-	return h.Goal(w, r)
+	return h.goalAnswer(w, r)
 }
 
 // goalBuyDeps are the expense categories and the counterparties for the
@@ -439,8 +553,7 @@ func (h Handler) goalBuyDeps(r *http.Request) ([]models.Category, []models.Count
 
 // GetGoalFulfillForm is the drawer recording the goal's purchase.
 func (h Handler) GetGoalFulfillForm(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	id := r.PathValue("id")
-	gl, err := h.repo.GetGoal(r.Context(), id)
+	gl, accs, err := h.goalAndAccounts(r)
 	if err != nil {
 		return nil, err
 	}
@@ -453,18 +566,36 @@ func (h Handler) GetGoalFulfillForm(w http.ResponseWriter, r *http.Request) (tem
 		Description: form.FDInput{Value: gl.Name},
 		ScheduledTo: form.FDInput{Value: time.Now().Format(time.DateOnly)},
 	}
-	return views.GoalBuyForm(gl, fd, cats, cps), nil
+	loan := goalLoan(gl)
+	if loan != nil {
+		// The loan pays the rest: the goal pays what's due on the day.
+		fd.Amount.Value = formatFloatIfNonZero(numsutils.Round(min(gl.Balance(), loan.PaidOnDay())))
+		fd.ScheduleLoan.Value = "on"
+		if a := defaultGoalAccount(accs); a != nil {
+			fd.LoanAccountID.Value = a.ID
+		}
+	}
+	return views.GoalBuyForm(gl, fd, cats, cps, loan, accs), nil
+}
+
+// goalLoan is the loan of the goal's plan, nil without one.
+func goalLoan(gl *models.Goal) *models.InstallmentSchedule {
+	loan, err := gl.Plan.LoanSchedule(gl.Price)
+	if err != nil {
+		return nil
+	}
+	return loan
 }
 
 // FulfillGoal records buying the goal, an expense out of its account, and
 // marks it achieved.
 func (h Handler) FulfillGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	l := logger.FromCtx(r.Context())
-	id := r.PathValue("id")
-	gl, err := h.repo.GetGoal(r.Context(), id)
+	gl, accs, err := h.goalAndAccounts(r)
 	if err != nil {
 		return nil, err
 	}
+	id := gl.ID
 	if !gl.FulfilledAt.IsZero() {
 		return h.Goal(w, r)
 	}
@@ -479,10 +610,22 @@ func (h Handler) FulfillGoal(w http.ResponseWriter, r *http.Request) (templ.Comp
 		CounterpartyID: form.FDInput{Value: r.FormValue("counterparty_id")},
 		Description:    form.FDInput{Value: r.FormValue("description")},
 		ScheduledTo:    form.FDInput{Value: r.FormValue("scheduled_to")},
+		ScheduleLoan:   form.FDInput{Value: r.FormValue("schedule_loan")},
+		LoanAccountID:  form.FDInput{Value: r.FormValue("loan_account_id")},
 	}
+	loan := goalLoan(gl)
+	withLoan := loan != nil && parseBoolean(fd.ScheduleLoan.Value)
+	var loanAcc *models.Account
 	failed := false
+	if withLoan {
+		if loanAcc = slicesutils.Find(accs, func(a models.Account) bool { return a.ID == fd.LoanAccountID.Value }); loanAcc == nil {
+			fd.LoanAccountID.Error, failed = "This field is required", true
+		}
+	}
 	amount, err := parseFloatIfExists(fd.Amount.Value)
 	switch {
+	// A loan with nothing down needs no purchase out of the goal.
+	case withLoan && err == nil && amount == 0:
 	case err != nil || amount <= 0:
 		fd.Amount.Error, failed = "Value has to be more than 0", true
 	case amount > numsutils.Round(gl.Balance()):
@@ -496,7 +639,7 @@ func (h Handler) FulfillGoal(w http.ResponseWriter, r *http.Request) (templ.Comp
 		fd.ScheduledTo.Error, failed = errs.ValidationField{Tag: "future_date"}.String(), true
 	}
 	if failed {
-		return views.GoalBuyFormFields(gl, fd, cats, cps), nil
+		return views.GoalBuyFormFields(gl, fd, cats, cps, loan, accs), nil
 	}
 
 	purchase := &models.Transaction{
@@ -517,7 +660,26 @@ func (h Handler) FulfillGoal(w http.ResponseWriter, r *http.Request) (templ.Comp
 		applyCounterpartyDefaultCategory(purchase, cps)
 	}
 
-	if err := h.repo.FulfillGoal(r.Context(), id, purchase); err != nil {
+	var loanTxs []models.Transaction
+	if withLoan {
+		tmpl := &models.Transaction{Account: *loanAcc, Kind: models.ExpenseTxKind, Category: purchase.Category, Counterparty: purchase.Counterparty}
+		rate := 1.0
+		if loanAcc.Currency.String != gl.Currency.String {
+			if rate = gl.Currency.FxRate(loanAcc.Currency.String); rate == 0 {
+				rate = 1
+			}
+		}
+		name := fd.Description.Value
+		if name == "" {
+			name = gl.Name
+		}
+		loanTxs = planPaymentTxs(name, loan, tmpl, day, 0, rate)
+	}
+	if amount == 0 {
+		purchase = nil
+	}
+
+	if err := h.repo.FulfillGoal(r.Context(), gl, purchase, loanTxs); err != nil {
 		l.Error("fulfilling goal", zap.Error(err))
 		return nil, err
 	}
@@ -533,7 +695,11 @@ func (h Handler) UnfulfillGoal(w http.ResponseWriter, r *http.Request) (templ.Co
 	if id == "" {
 		return nil, errs.ErrInvalidID
 	}
-	if err := h.repo.UnfulfillGoal(r.Context(), id); err != nil {
+	gl, err := h.repo.GetGoal(r.Context(), id)
+	if err != nil {
+		return nil, err
+	}
+	if err := h.repo.UnfulfillGoal(r.Context(), gl); err != nil {
 		return nil, err
 	}
 	return h.moveGoal(w, r, id)
@@ -546,7 +712,11 @@ func (h Handler) moveGoal(w http.ResponseWriter, r *http.Request, id string) (te
 	if err != nil {
 		return nil, err
 	}
-	if err := renderToBody(w, r, views.GoalOOB(gl)); err != nil {
+	cards, err := h.goalPlanCards(r, []models.Goal{*gl})
+	if err != nil {
+		return nil, err
+	}
+	if err := renderToBody(w, r, views.GoalOOB(gl, cards[gl.ID])); err != nil {
 		return nil, err
 	}
 	if err := h.renderGoalsSummaryOOB(w, r); err != nil {

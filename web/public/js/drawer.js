@@ -12,6 +12,19 @@ function datepickerOpen() {
   return [...document.querySelectorAll(".litepicker")].some((p) => p.offsetParent !== null);
 }
 
+// standIn is el, or what replaced it when it got re-rendered meanwhile (e.g.
+// the list a drawer was opened from, re-rendered on saving): the element of
+// its id, or the same kind of element in its closest one with an id.
+function standIn(el) {
+  if (!el || el.isConnected) return el;
+  if (el.id) return document.getElementById(el.id);
+  const holder = el.closest("[id]");
+  const fresh = holder && document.getElementById(holder.id);
+  if (!fresh) return null;
+  const attrs = [...el.attributes].filter((a) => a.name.startsWith("data-")).map((a) => `[${a.name}]`);
+  return (attrs.length && fresh.querySelector(el.tagName.toLowerCase() + attrs.join(""))) || fresh;
+}
+
 // drawerBase is the "drawer" Alpine component, to spread into ones extending
 // it (txDetails). It has no getters, as spreading would evaluate them.
 function drawerBase() {
@@ -193,7 +206,7 @@ function drawerBase() {
         } else {
           root.remove();
         }
-        if (back?.isConnected) back.focus({ preventScroll: true });
+        standIn(back)?.focus({ preventScroll: true });
       };
       sheet?.addEventListener("animationend", (e) => e.target === sheet && finish());
       setTimeout(finish, 250);

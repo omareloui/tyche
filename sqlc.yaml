@@ -29,6 +29,10 @@ sql:
             go_type:
               import: github.com/omareloui/tyche/internal/dbtypes
               type: JSON
+          - column: goals.plan
+            go_type:
+              import: github.com/omareloui/tyche/internal/dbtypes
+              type: JSON
           - column: sms_templates.senders
             go_type:
               import: github.com/omareloui/tyche/internal/dbtypes
