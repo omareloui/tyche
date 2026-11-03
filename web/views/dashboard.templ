@@ -662,7 +662,7 @@ templ DashActivity(recent, upcoming []models.Transaction, def *models.Currency) 
 
 templ dashTxRow(tx *models.Transaction) {
 	{{ v := newTxView(tx) }}
-	<li class="flex items-center gap-3 px-2 py-2 -mx-2 rounded-2xl transition-colors hover:bg-white/3">
+	<li class="flex items-center gap-3 min-w-0 px-2 py-2 -mx-2 rounded-2xl transition-colors hover:bg-white/3">
 		@txTile(tx, &v)
 		<div class="flex-1 min-w-0">
 			<p class="truncate leading-snug">{ v.title }</p>
