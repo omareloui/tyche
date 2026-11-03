@@ -282,6 +282,10 @@ input[type="number"] {
 .drawer-root[data-closing] .drawer-sheet {
   animation: drawer-up-out 180ms ease-in forwards;
 }
+/* Swiped down (drawer.js), the sheet slides out from where it was left. */
+.drawer-root[data-dragged] .drawer-sheet {
+  animation: none;
+}
 @media (min-width: 40rem) {
   .drawer-sheet {
     animation-name: drawer-left-in;

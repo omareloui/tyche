@@ -22,8 +22,8 @@ type DrawerProps struct {
 }
 
 // Drawer is the panel the add and edit forms (and the transaction details)
-// open in: from the right on wide screens, a bottom sheet on phones. Escape
-// and clicking outside close it, asking first when its form has changes;
+// open in: from the right on wide screens, a bottom sheet on phones. Escape,
+// clicking outside and swiping the sheet down close it, asking first when its form has changes;
 // a drawer-saved event (HX-Trigger of a form's answer) closes it.
 templ Drawer(p DrawerProps) {
 	<div
@@ -53,7 +53,13 @@ templ Drawer(p DrawerProps) {
 			aria-modal="true"
 			aria-label={ p.Label }
 			class="drawer-sheet relative flex flex-col w-full sm:w-[32rem] max-h-[92dvh] sm:max-h-none sm:h-dvh rounded-t-3xl sm:rounded-none sm:rounded-l-3xl bg-zinc-900 ring-1 ring-zinc-800 shadow-2xl shadow-black/50"
+			@touchstart="dragStart($event)"
+			@touchmove="dragMove($event)"
+			@touchend="dragEnd()"
+			@touchcancel="dragEnd()"
 		>
+			// The handle hints the sheet can be swiped down (phones).
+			<div aria-hidden="true" class="sm:hidden absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-zinc-700"></div>
 			if p.PanelID != "" {
 				<div id={ p.PanelID } class="contents">
 					{ children... }
