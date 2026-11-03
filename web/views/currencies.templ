@@ -206,7 +206,7 @@ templ Currency(cur *models.Currency, defaultCur *models.Currency) {
 		data-kind={ currencyKindSlug(cur.Kind) }
 		data-search={ strings.ToLower(cur.String + " " + cur.Symbol) }
 		x-show="matches($el)"
-		class={ "relative", currencyKindAccentClass(cur.Kind), templ.KV("opacity-60 hover:opacity-100 transition-opacity", !cur.IsShown) }
+		class={ "relative min-w-0", currencyKindAccentClass(cur.Kind), templ.KV("opacity-60 hover:opacity-100 transition-opacity", !cur.IsShown) }
 		x-data="{openMenu: false}"
 		:class="{ 'z-30': openMenu }"
 	>
