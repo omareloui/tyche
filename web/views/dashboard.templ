@@ -34,6 +34,10 @@ type DashboardData struct {
 	NeedsReview int
 	// SMSAttention counts the sms that created no transaction.
 	SMSAttention int
+	// Currencies are the user's, for the exchange rates of the shown ones.
+	Currencies []models.Currency
+	// RatesAt is when the exchange rates were last fetched.
+	RatesAt time.Time
 }
 
 // Dashboard is the signed in homepage. What's cheap (balances, the flow and
@@ -45,6 +49,7 @@ templ Dashboard(d DashboardData) {
 			<div class="grid grid-cols-1 gap-4 sm:gap-5">
 				@dashGreeting(d.Claims)
 				@dashHero(d, def)
+				@dashFxRates(d.Currencies, def, d.RatesAt)
 				@dashAlerts(d.NeedsReview, d.SMSAttention)
 				<div class="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-2">
 					@dashFlowChart(d.Flow, def)
@@ -54,12 +59,13 @@ templ Dashboard(d DashboardData) {
 					@dashLazy("/dashboard/budgets", "h-72", "load")
 					@dashLazy("/dashboard/categories", "h-72", "load")
 				</div>
-				@dashLazy("/merchant-spending", "h-96", "revealed")
 				<div class="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-5 items-start">
-					<div class="lg:col-span-3">
+					<div class="grid grid-cols-1 gap-4 sm:gap-5 min-w-0 lg:col-span-3">
+						@dashLazy("/merchant-spending", "h-96", "revealed")
 						@dashLazy("/dashboard/activity", "h-96", "revealed")
 					</div>
 					<div class="grid grid-cols-1 gap-4 sm:gap-5 lg:col-span-2">
+						@dashLazy("/dashboard/glance", "h-64", "revealed")
 						@dashLazy("/dashboard/goals", "h-48", "revealed")
 						@dashLazy("/dashboard/accounts", "h-80", "revealed")
 					</div>
@@ -542,6 +548,41 @@ templ dashMonthNav(month, label, path string) {
 	</button>
 }
 
+// DashGlance is a few facts about this month's spending.
+templ DashGlance(g *DashGlanceData, def *models.Currency) {
+	@components.GlassCard("grid content-start gap-4 p-5", "bg-fuchsia-400/10") {
+		@dashCardHeader("This month at a glance", "text-fuchsia-300", "", icons.Sparkles("14"))
+		<div class="grid grid-cols-2 gap-2">
+			@dashGlanceStat(def.Format(g.dailyAvg), "a day on average", dailyAvgNote(g))
+			@dashGlanceStat(fmt.Sprint(g.noSpendDays), plural(g.noSpendDays, "no-spend day", "no-spend days"), fmt.Sprintf("of %d so far", g.daysPassed))
+			if g.busiestDay >= 0 {
+				@dashGlanceStat(time.Weekday(g.busiestDay).String()+"s", "you spend the most", "last 6 months")
+			}
+			if g.topMerchant != nil {
+				@dashGlanceStat(g.topMerchant.Counterparty.Name, "most visited", fmt.Sprintf("%d %s", g.topVisits, plural(g.topVisits, "time", "times")))
+			}
+		</div>
+		if g.biggest != nil {
+			<div class="grid gap-1">
+				<p class="text-xs text-zinc-500">Biggest expense</p>
+				<ul class="grid">
+					@dashTxRow(g.biggest)
+				</ul>
+			</div>
+		}
+	}
+}
+
+templ dashGlanceStat(value, label, note string) {
+	<div class="grid content-start gap-0.5 min-w-0 px-3 py-2.5 rounded-2xl bg-zinc-900/60 ring-1 ring-zinc-800">
+		<p class="sensitive text-base font-bold tabular-nums truncate font-(family-name:--font-biorhyme-expanded)" title={ value }>{ value }</p>
+		<p class="text-xs text-zinc-400 truncate">{ label }</p>
+		if note != "" {
+			<p class="text-xs text-zinc-500 truncate">{ note }</p>
+		}
+	</div>
+}
+
 // DashGoals is the closest unfulfilled goals.
 templ DashGoals(goals []models.Goal) {
 	@components.GlassCard("grid content-start gap-4 p-5", "bg-violet-400/10") {
@@ -645,11 +686,9 @@ templ dashTxRow(tx *models.Transaction) {
 	</li>
 }
 
-// DashAccounts is the biggest active accounts and the exchange rates of the
-// shown currencies.
-templ DashAccounts(accs []models.Account, curs []models.Currency, def *models.Currency, ratesAt time.Time) {
+// DashAccounts is the biggest active accounts.
+templ DashAccounts(accs []models.Account, def *models.Currency) {
 	{{ shown := topAccounts(accs, def) }}
-	{{ rates := fxCurrencies(curs, def) }}
 	@components.GlassCard("grid content-start gap-4 p-5", "bg-sky-400/10", "bg-teal-400/6") {
 		@dashCardHeader("Accounts", "text-sky-300", "/accounts", icons.Bank("14"))
 		if len(shown) == 0 {
@@ -689,31 +728,38 @@ templ DashAccounts(accs []models.Account, curs []models.Currency, def *models.Cu
 				<a href="/accounts" class="text-sm text-zinc-400 hover:text-white">{ fmt.Sprintf("+%d more", n) }</a>
 			}
 		}
-		if len(rates) > 0 {
-			<div class="grid gap-2.5 pt-4 border-t border-white/8">
-				<div class="flex items-center justify-between gap-3">
-					<h3 class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-teal-300">
-						@icons.Coins("14")
-						Exchange rates
-					</h3>
-					if !ratesAt.IsZero() {
-						<span class="text-xs text-zinc-500">updated { timeAgo(ratesAt) }</span>
-					}
-				</div>
-				<ul class="grid grid-cols-2 gap-2">
-					for _, cur := range rates {
-						{{ value := cur.ValueIn(def.String) }}
-						<li class="flex items-baseline justify-between gap-2 px-3 py-2 rounded-xl bg-zinc-900/60 ring-1 ring-zinc-800" title={ currencyRateTitle(&cur, def, value) }>
-							<span class="text-sm text-zinc-400">{ cur.String }</span>
+	}
+}
+
+// dashFxRates is what one unit of each shown currency (as shown, e.g. a gram
+// of gold) is worth in def.
+templ dashFxRates(curs []models.Currency, def *models.Currency, ratesAt time.Time) {
+	if rates := fxCurrencies(curs, def); len(rates) > 0 {
+		@components.GlassCard("grid gap-3 p-4 sm:px-5", "bg-teal-400/10") {
+			@dashCardHeader("Exchange rates", "text-teal-300", "/currencies", icons.Coins("14"))
+			<ul class="flex flex-wrap gap-2">
+				for _, cur := range rates {
+					{{ value := currencyRate(&cur, def) }}
+					<li class="flex grow sm:grow-0 items-center gap-2.5 px-3 py-2 rounded-2xl bg-zinc-900/60 ring-1 ring-zinc-800" title={ currencyRateTitle(&cur, def, value) }>
+						<div class="grid place-items-center shrink-0 size-8 rounded-xl bg-teal-400/10 text-teal-300">
+							@currencyKindIcon(cur.Kind, "16")
+						</div>
+						<div class="min-w-0">
+							<p class="text-xs text-zinc-500 whitespace-nowrap">1 { unitPrefix(&cur) }{ cur.String }</p>
 							if value > 0 {
-								<span class="text-sm font-semibold tabular-nums truncate">{ def.Symbol } { formatters.FormatRate(value) }</span>
+								<p class="text-sm font-bold tabular-nums whitespace-nowrap font-(family-name:--font-biorhyme-expanded)">
+									{ def.Symbol } { formatters.FormatRate(value) }
+								</p>
 							} else {
-								<span class="text-sm text-zinc-600">No rate</span>
+								<p class="text-sm text-zinc-600">No rate</p>
 							}
-						</li>
-					}
-				</ul>
-			</div>
+						</div>
+					</li>
+				}
+			</ul>
+			if !ratesAt.IsZero() {
+				<p class="text-xs text-zinc-500">Updated { timeAgo(ratesAt) }</p>
+			}
 		}
 	}
 }
@@ -903,6 +949,77 @@ func accountConverted(a *models.Account, def *models.Currency) string {
 		return ""
 	}
 	return "≈ " + def.Format(v)
+}
+
+// DashGlanceData is what DashGlance shows, from the flow and this month's
+// fulfilled expenses.
+type DashGlanceData struct {
+	dailyAvg, prevDailyAvg float64
+	noSpendDays, daysPassed int
+	// busiestDay is the weekday with the most spending, -1 without any.
+	busiestDay  int
+	topMerchant *models.Transaction
+	topVisits   int
+	biggest     *models.Transaction
+}
+
+// NewDashGlance sums up this month from the flow and its fulfilled expenses.
+func NewDashGlance(f *models.Flow, expenses []models.Transaction, def *models.Currency) *DashGlanceData {
+	g := &DashGlanceData{busiestDay: -1}
+	cur, prev := f.Current(), f.Prev()
+	g.dailyAvg = cur.Out / float64(f.Today.Day())
+	g.prevDailyAvg = prev.Out / float64(daysInMonth(prev.Month))
+
+	// Today isn't over, so only the days before it count as no-spend ones.
+	g.daysPassed = f.Today.Day() - 1
+	g.noSpendDays = g.daysPassed
+	var byWeekday [7]float64
+	for _, d := range f.Days {
+		if d.Out <= 0 {
+			continue
+		}
+		byWeekday[d.Day.Weekday()] += d.Out
+		if d.Day.Year() == cur.Month.Year() && d.Day.Month() == cur.Month.Month() && d.Day.Day() < f.Today.Day() {
+			g.noSpendDays--
+		}
+	}
+	for wd, out := range byWeekday {
+		if out > 0 && (g.busiestDay < 0 || out > byWeekday[g.busiestDay]) {
+			g.busiestDay = wd
+		}
+	}
+
+	var biggest float64
+	visits := map[string]int{}
+	for i := range expenses {
+		tx := &expenses[i]
+		if _, out := txFlow(tx, def); out > biggest {
+			biggest, g.biggest = out, tx
+		}
+		if cp := tx.Counterparty; cp != nil && cp.IsMerchant {
+			visits[cp.ID]++
+			if n := visits[cp.ID]; n > g.topVisits {
+				g.topVisits, g.topMerchant = n, tx
+			}
+		}
+	}
+	return g
+}
+
+// dailyAvgNote compares the daily average with last month's.
+func dailyAvgNote(g *DashGlanceData) string {
+	pct, ok := models.PctChange(g.dailyAvg, g.prevDailyAvg)
+	if !ok {
+		return ""
+	}
+	if math.Abs(pct) < 0.5 {
+		return "same as last month"
+	}
+	arrow := "▼ "
+	if pct > 0 {
+		arrow = "▲ "
+	}
+	return arrow + fmtPctChange(pct) + " vs last month"
 }
 
 // fxCurrencies are the shown currencies besides def.

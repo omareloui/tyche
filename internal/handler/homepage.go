@@ -43,13 +43,23 @@ func (h Handler) HomePage(w http.ResponseWriter, r *http.Request) (templ.Compone
 	if err != nil {
 		return nil, err
 	}
+	curs, err := h.repo.GetCurrencies(ctx)
+	if err != nil {
+		return nil, err
+	}
 
+	var ratesAt time.Time
+	if h.fxJob != nil {
+		ratesAt = h.fxJob.Status().LastSuccessAt
+	}
 	return views.Dashboard(views.DashboardData{
 		Claims:       claims,
 		Balances:     balances,
 		Flow:         flow,
 		NeedsReview:  review,
 		SMSAttention: sms,
+		Currencies:   curs,
+		RatesAt:      ratesAt,
 	}), nil
 }
 
@@ -89,6 +99,26 @@ func (h *Handler) DashboardGoals(w http.ResponseWriter, r *http.Request) (templ.
 	return views.DashGoals(goals), nil
 }
 
+func (h *Handler) DashboardGlance(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	ctx := r.Context()
+	def := &getClaims(ctx).DefaultCurrency
+
+	flow, err := h.repo.GetFlow(ctx, def)
+	if err != nil {
+		return nil, err
+	}
+	month := models.MonthOf(flow.Today)
+	page, err := h.repo.GetTransactionsPage(ctx, models.TxFilter{
+		Kind:   models.ExpenseTxKind,
+		Status: models.TxStatusFulfilled,
+		From:   month,
+	}, time.Time{}, &month)
+	if err != nil {
+		return nil, err
+	}
+	return views.DashGlance(views.NewDashGlance(flow, page.History, def), def), nil
+}
+
 func (h *Handler) DashboardActivity(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	ctx := r.Context()
 	claims := getClaims(ctx)
@@ -114,14 +144,5 @@ func (h *Handler) DashboardAccounts(w http.ResponseWriter, r *http.Request) (tem
 	if err != nil {
 		return nil, err
 	}
-	curs, err := h.repo.GetCurrencies(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	var ratesAt time.Time
-	if h.fxJob != nil {
-		ratesAt = h.fxJob.Status().LastSuccessAt
-	}
-	return views.DashAccounts(accs, curs, &claims.DefaultCurrency, ratesAt), nil
+	return views.DashAccounts(accs, &claims.DefaultCurrency), nil
 }
