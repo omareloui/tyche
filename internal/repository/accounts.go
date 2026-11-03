@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"math"
+	"slices"
 	"strings"
 	"time"
 
@@ -54,6 +55,9 @@ func (r *Repository) createAccountWithTxn(q *queries.Queries, ctx context.Contex
 		IsArchived:         a.IsArchive,
 		ExcludeFromBalance: a.ExcludeFromBalance,
 		ExpirationDate:     sql.NullTime{Time: a.ExpirationDate, Valid: !a.ExpirationDate.IsZero()},
+		StatementDay:       nullInt(a.Cycle.StatementDay),
+		DueDays:            nullInt(a.Cycle.DueDays),
+		DueDay:             nullInt(a.Cycle.DueDay),
 	}); err != nil {
 		l.Error("creating account", zap.Error(err))
 		if strings.Contains(err.Error(), "UNIQUE constraint failed: accounts.name") {
@@ -95,6 +99,65 @@ func (r *Repository) GetAccounts(ctx context.Context) ([]models.Account, error) 
 	return res, nil
 }
 
+// AttachCardStatements sets the last statement of accs' credit cards with a
+// statement cycle, as of today in the user's time zone.
+func (r *Repository) AttachCardStatements(ctx context.Context, accs []models.Account) error {
+	l := logger.FromCtx(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+
+	var today time.Time
+	for i := range accs {
+		a := &accs[i]
+		if a.Kind.Enum != models.AccKindCreditCard || !a.Cycle.IsSet() || a.IsDeleted() {
+			continue
+		}
+		if today.IsZero() {
+			loc, err := r.GetTimezone(ctx)
+			if err != nil {
+				return err
+			}
+			today = time.Now().In(loc)
+		}
+		since := a.Cycle.LastClose(today).AddDate(0, 0, 1)
+		act, err := q.GetCardActivitySince(ctx, queries.GetCardActivitySinceParams{
+			AccountID: sql.NullString{String: a.ID, Valid: true},
+			Since:     since,
+		})
+		if err != nil {
+			l.Error("querying card activity", zap.Error(err), zap.String("id", a.ID))
+			return err
+		}
+		a.Statement = models.NewCardStatement(a, today, act.Net, act.PaidIn)
+	}
+	return nil
+}
+
+// GetCardDues is the active credit cards whose last statement is left to pay,
+// with it, soonest due first.
+func (r *Repository) GetCardDues(ctx context.Context) ([]models.Account, error) {
+	accs, err := r.GetAccounts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	accs = slices.DeleteFunc(accs, func(a models.Account) bool {
+		return a.IsArchive || a.Kind.Enum != models.AccKindCreditCard || !a.Cycle.IsSet()
+	})
+	if err := r.AttachCardStatements(ctx, accs); err != nil {
+		return nil, err
+	}
+	accs = slices.DeleteFunc(accs, func(a models.Account) bool {
+		return a.Statement == nil || a.Statement.Due <= 0
+	})
+	slices.SortFunc(accs, func(a, b models.Account) int {
+		return a.Statement.DueOn.Compare(b.Statement.DueOn)
+	})
+	return accs, nil
+}
+
 func (r *Repository) GetAccount(ctx context.Context, id string) (*models.Account, error) {
 	l := logger.FromCtx(ctx)
 
@@ -114,6 +177,13 @@ func (r *Repository) GetAccount(ctx context.Context, id string) (*models.Account
 	if res.Kind.Enum == models.AccKindGamyaa {
 		accs := []models.Account{*res}
 		if err := r.attachGamyaas(ctx, q, accs); err != nil {
+			return nil, err
+		}
+		res = &accs[0]
+	}
+	if res.Cycle.IsSet() {
+		accs := []models.Account{*res}
+		if err := r.AttachCardStatements(ctx, accs); err != nil {
 			return nil, err
 		}
 		res = &accs[0]
@@ -154,6 +224,9 @@ func (r *Repository) UpdateAccount(ctx context.Context, a *models.Account) error
 		IsArchived:         a.IsArchive,
 		ExcludeFromBalance: a.ExcludeFromBalance,
 		ExpirationDate:     sql.NullTime{Time: a.ExpirationDate, Valid: !a.ExpirationDate.IsZero()},
+		StatementDay:       nullInt(a.Cycle.StatementDay),
+		DueDays:            nullInt(a.Cycle.DueDays),
+		DueDay:             nullInt(a.Cycle.DueDay),
 	}); err != nil {
 		l.Error("updating account", zap.Error(err))
 
@@ -400,6 +473,11 @@ func dbAccountToAccount(
 		ExpirationDate:     dbAcc.ExpirationDate.Time,
 		CreatedAt:          dbAcc.CreatedAt,
 		DeletedAt:          dbAcc.DeletedAt.Time,
+		Cycle: models.CardCycle{
+			StatementDay: int(dbAcc.StatementDay.Int64),
+			DueDays:      int(dbAcc.DueDays.Int64),
+			DueDay:       int(dbAcc.DueDay.Int64),
+		},
 
 		Currency: models.Currency{ID: dbAcc.CurrencyID},
 		Kind:     models.AccountKind{ID: dbAcc.KindID},
@@ -459,4 +537,8 @@ func dbBalancesToBalances(dbBs []queries.GetBalancesRow) []models.Balance {
 		}
 	}
 	return b
+}
+
+func nullInt(n int) sql.NullInt64 {
+	return sql.NullInt64{Int64: int64(n), Valid: n != 0}
 }

@@ -6,12 +6,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/jwt"
-	"github.com/omareloui/tyche/web/views/layouts"
+	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
 )
 
 type AccountFD struct {
@@ -32,8 +32,19 @@ type AccountPartialFD struct {
 	CardLimit      *form.FDInput
 	NameOnCard     *form.FDInput
 	ExpirationDate *form.FDInput
+	// Cycle is set for credit cards.
+	Cycle *CardCycleFD
 	// Gamyaa is set for gam'yaa accounts.
 	Gamyaa *GamyaaFD
+}
+
+// CardCycleFD is a credit card's statement cycle: the day it closes, then due
+// DueValue days after (DueMode "days") or on that day of the next month
+// ("day").
+type CardCycleFD struct {
+	StatementDay form.FDInput
+	DueMode      form.FDInput
+	DueValue     form.FDInput
 }
 
 type GamyaaFD struct {
@@ -230,6 +241,9 @@ templ AccountInputs(id string, fd *AccountPartialFD, aknds []models.AccountKind,
 							"x-mask:dynamic": fmt.Sprintf("'%s ' + $money($input, '.', ',')", sym),
 						})
 					}
+				}
+				if fd.Cycle != nil {
+					@cardCycleFields(fd.Cycle, id)
 				}
 				if fd.Iban != nil {
 					{{ prefix := form.GetCurOrDefaultIbanPrefix(curs, cur.Value, nil) }}
@@ -442,6 +456,9 @@ templ Account(a *models.Account, defaultCur *models.Currency) {
 			if a.Kind.Enum == models.AccKindCreditCard && a.CardLimit > 0 {
 				@creditUsage(a)
 			}
+			if a.Statement != nil {
+				@cardStatement(a.Statement)
+			}
 			if a.Gamyaa != nil {
 				@gamyaaProgress(a)
 			}
@@ -491,6 +508,91 @@ templ creditUsage(a *models.Account) {
 			<span class="truncate">{ a.ViewAvailableCredit() } of { a.ViewCardLimit() } left</span>
 		</div>
 	</div>
+}
+
+// cardCycleFields are a credit card's statement day and due date.
+templ cardCycleFields(fd *CardCycleFD, id string) {
+	<div x-data={ fmt.Sprintf("{ dueMode: '%s' }", fd.DueMode.Value) } class="grid gap-3">
+		<div class="grid grid-cols-2 gap-3">
+			@form.Field("Statement day", "statement_day", id, icons.Calendar("15"), fd.StatementDay.Error) {
+				@form.Control("text", "statement_day", "e.g. 25", id, fd.StatementDay, templ.Attributes{
+					"autocomplete": "off",
+					"inputmode":    "numeric",
+					"x-mask":       "99",
+				})
+			}
+			@form.Field("Due", "due_value", id, icons.Clock("15"), fd.DueValue.Error) {
+				@form.Control("text", "due_value", "e.g. 20", id, fd.DueValue, templ.Attributes{
+					"autocomplete": "off",
+					"inputmode":    "numeric",
+					"x-mask":       "99",
+				})
+			}
+		</div>
+		@form.SegmentedRadio("Due date", "due_mode", id, []form.RadioOption{
+			{Value: "days", Label: "Days after statement"},
+			{Value: "day", Label: "Day of next month"},
+		}, fd.DueMode, templ.Attributes{"x-on:change": "dueMode = $event.target.value"})
+		<p class="-mt-1 text-sm text-zinc-500">
+			<span x-show="dueMode === 'days'">The statement closes on that day each month and is due that many days later.</span>
+			<span x-show="dueMode === 'day'" x-cloak>The statement closes on that day each month and is due on the due day after it.</span>
+			Pay it in full by then to avoid interest. Leave empty if you don’t track it.
+		</p>
+	</div>
+}
+
+// cardStatement is a credit card's last statement: what's left to pay by when
+// to avoid interest, and how long a purchase made today stays free of it.
+templ cardStatement(s *models.CardStatement) {
+	{{ st := s.Status() }}
+	<div class="relative grid gap-1.5 text-xs">
+		<p
+			class={
+				"flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl",
+				templ.KV("bg-emerald-400/10 text-emerald-300", st == models.StatementPaid),
+				templ.KV("bg-amber-400/10 text-amber-200", st == models.StatementDue),
+				templ.KV("bg-red-400/10 text-red-300", st == models.StatementDueSoon || st == models.StatementOverdue),
+			}
+		>
+			switch st {
+				case models.StatementPaid:
+					@icons.Check("12")
+					if s.Balance > 0 {
+						<span>Statement of { s.ClosedOn.Format("Jan 2") } paid</span>
+					} else {
+						<span>Nothing due from the { s.ClosedOn.Format("Jan 2") } statement</span>
+					}
+				case models.StatementOverdue:
+					@icons.Warning("12")
+					<span>Pay <span class="sensitive font-semibold tabular-nums">{ s.ViewDue() }</span>, overdue since { s.DueOn.Format("Jan 2") }</span>
+				default:
+					@icons.Clock("12")
+					<span>
+						Pay <span class="sensitive font-semibold tabular-nums">{ s.ViewDue() }</span>
+						by { s.DueOn.Format("Jan 2") } to avoid interest
+						({ dueIn(s.DaysLeft()) })
+					</span>
+			}
+		</p>
+		<p class="flex flex-wrap justify-between gap-x-3 gap-y-0.5 text-zinc-500">
+			<span>Next statement { s.NextClose().Format("Jan 2") }</span>
+			<span title="A purchase made today is due with the next statement">
+				Buy today → due { s.PurchaseDueOn().Format("Jan 2") } · { fmt.Sprint(s.InterestFreeDays()) } days interest-free
+			</span>
+		</p>
+	</div>
+}
+
+// dueIn is how far a due date is, in days.
+func dueIn(days int) string {
+	switch days {
+	case 0:
+		return "today"
+	case 1:
+		return "tomorrow"
+	default:
+		return fmt.Sprintf("in %d days", days)
+	}
 }
 
 templ expiryChip(exp time.Time) {

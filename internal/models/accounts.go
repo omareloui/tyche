@@ -2,6 +2,7 @@ package models
 
 import (
 	"errors"
+	"maps"
 	"time"
 
 	"github.com/omareloui/tyche/internal/errs"
@@ -38,6 +39,10 @@ type Account struct {
 	SetAside float64
 	// Gamyaa is set on gam'yaa accounts.
 	Gamyaa *Gamyaa
+	// Cycle is a credit card's statement cycle.
+	Cycle CardCycle
+	// Statement is a credit card's last statement, set where it's shown.
+	Statement *CardStatement
 }
 
 type createAccount struct {
@@ -150,7 +155,16 @@ func (a *Account) SanitizeAndValidate(sani *sanitizer.Sanitizer, valid *valid.Va
 	if err := sani.SanitizeStruct(ac); err != nil {
 		return errs.ErrSanitizer
 	}
-	if valerr := valid.Validate(ac); valerr != nil {
+	valerr := valid.Validate(ac)
+	if a.Kind.Enum == AccKindCreditCard {
+		if ce := a.Cycle.Validate(); len(ce) > 0 {
+			if valerr == nil {
+				valerr = &errs.ValidationError{Errors: errs.ValidationErrors{}}
+			}
+			maps.Copy(valerr.Errors, ce)
+		}
+	}
+	if valerr != nil {
 		return *valerr
 	}
 	return nil

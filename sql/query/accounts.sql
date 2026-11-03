@@ -104,7 +104,10 @@ INSERT INTO accounts (
     exclude_from_balance,
     is_archived,
     expiration_date,
-    sms_refs
+    sms_refs,
+    statement_day,
+    due_days,
+    due_day
 )
 VALUES (
     sqlc.arg(id),
@@ -121,7 +124,10 @@ VALUES (
     sqlc.arg(exclude_from_balance),
     sqlc.arg(is_archived),
     sqlc.arg(expiration_date),
-    sqlc.arg(sms_refs)
+    sqlc.arg(sms_refs),
+    sqlc.narg(statement_day),
+    sqlc.narg(due_days),
+    sqlc.narg(due_day)
 );
 
 -- name: UpdateAccount :exec
@@ -139,7 +145,10 @@ SET
     is_archived = sqlc.arg(is_archived),
     exclude_from_balance = sqlc.arg(exclude_from_balance),
     expiration_date = sqlc.arg(expiration_date),
-    sms_refs = sqlc.arg(sms_refs)
+    sms_refs = sqlc.arg(sms_refs),
+    statement_day = sqlc.narg(statement_day),
+    due_days = sqlc.narg(due_days),
+    due_day = sqlc.narg(due_day)
 WHERE id = sqlc.arg(id);
 
 -- name: DeleteAccount :exec
@@ -147,6 +156,27 @@ WHERE id = sqlc.arg(id);
 UPDATE accounts
 SET deleted_at = DATETIME('now')
 WHERE id = sqlc.arg(id);
+
+-- name: GetCardActivitySince :one
+-- What the fulfilled transactions since a credit card's statement closed did
+-- to its balance: net is their signed total, paid_in only what they added
+-- (payments, refunds).
+SELECT
+    CAST(TOTAL(e.effect) AS FLOAT) AS net,
+    CAST(TOTAL(MAX(e.effect, 0)) AS FLOAT) AS paid_in
+FROM (
+    SELECT
+        CASE
+            WHEN t.kind = 3 AND t.to_account_id = sqlc.arg(account_id) THEN COALESCE(t.to_amount, t.amount)
+            WHEN t.kind IN (2, 5, 6) THEN t.amount -- income, refund, adjustment
+            ELSE -t.amount
+        END AS effect
+    FROM transactions AS t
+    WHERE
+        (t.account_id = sqlc.arg(account_id) OR t.to_account_id = sqlc.arg(account_id))
+        AND t.fulfilled_at IS NOT NULL
+        AND JULIANDAY(t.fulfilled_at) >= JULIANDAY(sqlc.arg(since))
+) AS e;
 
 -- name: AddToAccount :exec
 UPDATE accounts

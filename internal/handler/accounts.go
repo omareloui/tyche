@@ -38,6 +38,9 @@ func (h *Handler) Accounts(w http.ResponseWriter, r *http.Request) (templ.Compon
 		return nil, err
 	}
 	l.Info("fetched accounts", zap.Int("accounts_length", len(deps.accs)))
+	if err := h.repo.AttachCardStatements(r.Context(), deps.accs); err != nil {
+		return nil, err
+	}
 
 	claims := getClaims(r.Context())
 	fd := h.mapAccToFD(defaultAccount(claims, deps.knds), &errs.ValidationError{}, deps)
@@ -112,8 +115,8 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 	l.Info("created account", zap.Any("account", a))
 	drawerCreated(w)
 
-	// Refetched for a gam'yaa's progress.
-	if a.Gamyaa != nil {
+	// Refetched for a gam'yaa's progress or a card's statement.
+	if a.Gamyaa != nil || a.Cycle.IsSet() {
 		if a, err = h.repo.GetAccount(r.Context(), a.ID); err != nil {
 			l.Error("fetching created account", zap.Error(err))
 			return nil, err
@@ -453,6 +456,11 @@ func (h *Handler) SetDefaultAccount(w http.ResponseWriter, r *http.Request) (tem
 
 	if prevDefault != nil && prevDefault.ID != id {
 		prevDefault.IsDefault = false
+		prev := []models.Account{*prevDefault}
+		if err := h.repo.AttachCardStatements(r.Context(), prev); err != nil {
+			return nil, err
+		}
+		prevDefault = &prev[0]
 		if err := renderToBody(w, r, views.AccountReplaceOOB(prevDefault, &getClaims(r.Context()).DefaultCurrency)); err != nil {
 			l.Error("rendering previous default account oob", zap.Error(err))
 			return nil, err
@@ -553,6 +561,10 @@ func (d *accDeps) resolveAccount(a *models.Account) {
 		a.Kind = *k
 	}
 
+	if a.Kind.Enum != models.AccKindCreditCard {
+		a.Cycle = models.CardCycle{}
+	}
+
 	if a.Kind.Enum != models.AccKindGamyaa {
 		a.Gamyaa = nil
 	} else if g := a.Gamyaa; g != nil && g.PayFrom != nil {
@@ -606,6 +618,12 @@ func (h *Handler) validateAccount(a *models.Account) error {
 	return nil
 }
 
+// The due date modes of a credit card's statement (form's due_mode).
+const (
+	dueModeDays = "days"
+	dueModeDay  = "day"
+)
+
 func (h *Handler) mapFDToAcc(r *http.Request) (*models.Account, error) {
 	var cp *models.Counterparty
 	if cpId := r.FormValue("counterparty_id"); cpId != "" {
@@ -613,6 +631,14 @@ func (h *Handler) mapFDToAcc(r *http.Request) (*models.Account, error) {
 	}
 
 	cardLimit, _ := parseFloatIfExists(r.FormValue("card_limit"))
+	var cycle models.CardCycle
+	cycle.StatementDay, _ = parseIntIfExists(r.FormValue("statement_day"))
+	dueValue, _ := parseIntIfExists(r.FormValue("due_value"))
+	if r.FormValue("due_mode") == dueModeDay {
+		cycle.DueDay = dueValue
+	} else {
+		cycle.DueDays = dueValue
+	}
 	expirationDate := parseCardExpiry(r.FormValue("expiration_date"))
 
 	// Dropped by resolveAccount unless it's a gam'yaa.
@@ -648,6 +674,7 @@ func (h *Handler) mapFDToAcc(r *http.Request) (*models.Account, error) {
 		ExcludeFromBalance: parseBoolean(r.FormValue("exclude_from_balance")),
 		ExpirationDate:     expirationDate,
 		Gamyaa:             g,
+		Cycle:              cycle,
 	}, nil
 }
 
@@ -673,7 +700,17 @@ func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, de
 		noc = &form.FDInput{Value: acc.NameOnCard, Error: errs.Errors.MsgFor("NameOnCard")}
 	}
 
+	var cycle *views.CardCycleFD
 	if knd.Enum == models.AccKindCreditCard {
+		mode, due := dueModeDays, acc.Cycle.DueDays
+		if acc.Cycle.DueDay != 0 {
+			mode, due = dueModeDay, acc.Cycle.DueDay
+		}
+		cycle = &views.CardCycleFD{
+			StatementDay: form.FDInput{Value: formatIntIfNonZero(acc.Cycle.StatementDay), Error: errs.Errors.MsgFor("StatementDay")},
+			DueMode:      form.FDInput{Value: mode},
+			DueValue:     form.FDInput{Value: formatIntIfNonZero(due), Error: errs.Errors.MsgFor("DueValue")},
+		}
 		limit = &form.FDInput{Value: formatFloatIfNonZero(acc.CardLimit), Error: errs.Errors.MsgFor("CardLimit")}
 		exp = &form.FDInput{Value: formatCardExpiry(acc.ExpirationDate), Error: errs.Errors.MsgFor("ExpirationDate")}
 	}
@@ -704,6 +741,7 @@ func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, de
 			NameOnCard:     noc,
 			CardLimit:      limit,
 			ExpirationDate: exp,
+			Cycle:          cycle,
 		},
 		Note:               form.FDInput{Value: acc.Note, Error: errs.Errors.MsgFor("Note")},
 		SmsRefs:            form.FDInput{Value: strings.Join(acc.SmsRefs, ", "), Error: errs.Errors.MsgFor("SmsRefs")},
