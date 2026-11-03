@@ -120,7 +120,7 @@ templ defaultCurrencyHero(cur *models.Currency) {
 
 // metalUnitToggle switches the unit a metal's amounts are shown in, everywhere.
 templ metalUnitToggle(cur *models.Currency) {
-	<div role="group" aria-label={ "Show " + cur.String + " in" } class="flex shrink-0 p-0.5 mr-1 rounded-lg bg-zinc-800/80 text-xs">
+	<div role="group" aria-label={ "Show " + cur.String + " in" } class="inline-flex mt-0.5 p-0.5 rounded-md bg-zinc-800/80 text-[11px] leading-none">
 		for _, u := range []models.MetalUnit{models.MetalUnitOunce, models.MetalUnitGram} {
 			<button
 				type="button"
@@ -129,7 +129,7 @@ templ metalUnitToggle(cur *models.Currency) {
 				title={ metalUnitTitle(u) }
 				aria-pressed={ fmt.Sprint(cur.Unit() == u) }
 				disabled?={ cur.Unit() == u }
-				class="cursor-pointer h-7 px-2 rounded-md text-zinc-400 transition-colors hover:text-white aria-pressed:cursor-default aria-pressed:bg-(--accent)/15 aria-pressed:text-(--accent)"
+				class="cursor-pointer h-5 px-1.5 rounded text-zinc-400 transition-colors hover:text-white aria-pressed:cursor-default aria-pressed:bg-(--accent)/15 aria-pressed:text-(--accent)"
 			>
 				{ string(u) }
 			</button>
@@ -221,7 +221,11 @@ templ Currency(cur *models.Currency, defaultCur *models.Currency) {
 						<span class="shrink-0 text-sm text-zinc-500">{ cur.Symbol }</span>
 					}
 				</p>
-				<p class="text-xs text-zinc-500">{ cur.Kind.String() }</p>
+				if cur.IsMetal() {
+					@metalUnitToggle(cur)
+				} else {
+					<p class="text-xs text-zinc-500">{ cur.Kind.String() }</p>
+				}
 			</div>
 			<div class="shrink-0 min-w-0 max-w-[45%] text-right" title={ currencyRateTitle(cur, defaultCur, value) }>
 				if value > 0 {
@@ -237,9 +241,6 @@ templ Currency(cur *models.Currency, defaultCur *models.Currency) {
 				}
 			</div>
 			<div class="flex items-center shrink-0 -mr-1">
-				if cur.IsMetal() {
-					@metalUnitToggle(cur)
-				}
 				if cur.IsShown {
 					<button
 						hx-put={ fmt.Sprintf("/currencies/%s/hide", cur.ID) }
