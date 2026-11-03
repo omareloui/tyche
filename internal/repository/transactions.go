@@ -589,7 +589,7 @@ func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTran
 
 	var cp *queries.Counterparty
 	if _dbTx.Transaction.CounterpartyID.Valid {
-		cp = &queries.Counterparty{ID: _dbTx.Transaction.CounterpartyID.String, Name: _dbTx.CounterpartyName.String, Icon: _dbTx.CounterpartyIcon, Color: _dbTx.CounterpartyColor}
+		cp = &queries.Counterparty{ID: _dbTx.Transaction.CounterpartyID.String, Name: _dbTx.CounterpartyName.String, Icon: _dbTx.CounterpartyIcon, Color: _dbTx.CounterpartyColor, IsMerchant: _dbTx.CounterpartyIsMerchant}
 	}
 
 	var gl *queries.Goal

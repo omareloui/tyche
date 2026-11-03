@@ -39,6 +39,7 @@ SELECT
     cp.name AS counterparty_name,
     cp.icon AS counterparty_icon,
     cp.color AS counterparty_color,
+    CAST(COALESCE(cp.is_merchant, FALSE) AS BOOLEAN) AS counterparty_is_merchant,
     ta.id AS to_account_id,
     ta.name AS to_account_name,
     ta.kind_id AS to_account_kind_id,
@@ -234,6 +235,7 @@ SELECT
     cp.name AS counterparty_name,
     cp.icon AS counterparty_icon,
     cp.color AS counterparty_color,
+    CAST(COALESCE(cp.is_merchant, FALSE) AS BOOLEAN) AS counterparty_is_merchant,
     ta.id AS to_account_id,
     ta.name AS to_account_name,
     ta.kind_id AS to_account_kind_id,
@@ -342,6 +344,7 @@ SELECT
     cp.name AS counterparty_name,
     cp.icon AS counterparty_icon,
     cp.color AS counterparty_color,
+    CAST(COALESCE(cp.is_merchant, FALSE) AS BOOLEAN) AS counterparty_is_merchant,
     sqlc.embed(cur),
     TOTAL(IIF(
         t.kind = 1,
@@ -439,6 +442,7 @@ SELECT
     cp.name AS counterparty_name,
     cp.icon AS counterparty_icon,
     cp.color AS counterparty_color,
+    CAST(COALESCE(cp.is_merchant, FALSE) AS BOOLEAN) AS counterparty_is_merchant,
     cat.name AS category_name
 FROM transactions AS t
 JOIN accounts AS a ON t.account_id = a.id
@@ -458,6 +462,7 @@ SELECT
     cp.name AS counterparty_name,
     cp.icon AS counterparty_icon,
     cp.color AS counterparty_color,
+    CAST(COALESCE(cp.is_merchant, FALSE) AS BOOLEAN) AS counterparty_is_merchant,
     ta.id AS to_account_id,
     ta.name AS to_account_name,
     ta.kind_id AS to_account_kind_id,
@@ -523,6 +528,7 @@ SELECT
     cp.name AS counterparty_name,
     cp.icon AS counterparty_icon,
     cp.color AS counterparty_color,
+    CAST(COALESCE(cp.is_merchant, FALSE) AS BOOLEAN) AS counterparty_is_merchant,
     ta.id AS to_account_id,
     ta.name AS to_account_name,
     ta.kind_id AS to_account_kind_id,
@@ -590,6 +596,7 @@ SELECT
     cp.name AS counterparty_name,
     cp.icon AS counterparty_icon,
     cp.color AS counterparty_color,
+    CAST(COALESCE(cp.is_merchant, FALSE) AS BOOLEAN) AS counterparty_is_merchant,
     ta.id AS to_account_id,
     ta.name AS to_account_name,
     ta.kind_id AS to_account_kind_id,
