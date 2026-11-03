@@ -152,7 +152,7 @@ templ AccountInputs(id string, fd *AccountPartialFD, aknds []models.AccountKind,
 				@form.Field("Who", "counterparty_id", id, icons.User("15"), fd.CounterpartyID.Error) {
 					@form.Combobox(form.ComboboxProps{
 						Name: "counterparty_id", ID: id, Label: "Who", Placeholder: "Select person",
-						Options: counterpartyComboOptions(cps), Data: *fd.CounterpartyID, Searchable: true,
+						Options: counterpartyComboOptions(cps, fd.CounterpartyID.Value), Data: *fd.CounterpartyID, Searchable: true,
 						CreateURL: "/counterparties/quick?person",
 					})
 				}
@@ -183,7 +183,7 @@ templ AccountInputs(id string, fd *AccountPartialFD, aknds []models.AccountKind,
 				@form.Field("Organizer", "counterparty_id", id, icons.User("15"), fd.CounterpartyID.Error) {
 					@form.Combobox(form.ComboboxProps{
 						Name: "counterparty_id", ID: id, Label: "Organizer", Placeholder: "Who collects it (optional)",
-						Options: counterpartyComboOptions(cps), Data: *fd.CounterpartyID, Searchable: true, Nullable: true,
+						Options: counterpartyComboOptions(cps, fd.CounterpartyID.Value), Data: *fd.CounterpartyID, Searchable: true, Nullable: true,
 						CreateURL: "/counterparties/quick?person",
 					})
 				}

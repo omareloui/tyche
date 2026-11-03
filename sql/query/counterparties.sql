@@ -46,7 +46,8 @@ SET
     icon = sqlc.arg(icon),
     color = sqlc.arg(color),
     is_merchant = sqlc.arg(is_merchant),
-    default_category_id = sqlc.arg(default_category_id)
+    default_category_id = sqlc.arg(default_category_id),
+    is_archived = sqlc.arg(is_archived)
 WHERE id = sqlc.arg(id);
 
 -- name: SetCounterpartyAppearance :exec
@@ -54,6 +55,11 @@ UPDATE counterparties
 SET
     icon = sqlc.arg(icon),
     color = sqlc.arg(color)
+WHERE id = sqlc.arg(id);
+
+-- name: SetCounterpartyArchived :exec
+UPDATE counterparties
+SET is_archived = sqlc.arg(is_archived)
 WHERE id = sqlc.arg(id);
 
 -- name: DeleteCounterparty :exec

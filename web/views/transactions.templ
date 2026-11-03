@@ -181,7 +181,7 @@ templ txFilterBar(f *models.TxFilter, accs []models.Account,
 				@txFilterCombo(models.TxFilterKind, "Kind", "Any kind", f.KindValue(), false, txKindFilterOptions(knds))
 				@txFilterCombo(models.TxFilterAccount, "Account", "Any account", f.AccountID, true, txAccountFilterOptions(accs))
 				@txFilterCombo(models.TxFilterCategory, "Category", "Any category", f.CategoryID, true, categoryComboOptions(cats))
-				@txFilterCombo(models.TxFilterCounterparty, "Counterparty", "Any counterparty", f.CounterpartyID, true, counterpartyComboOptions(cps))
+				@txFilterCombo(models.TxFilterCounterparty, "Counterparty", "Any counterparty", f.CounterpartyID, true, counterpartyComboOptions(cps, f.CounterpartyID))
 				if len(gls) > 0 {
 					@txFilterCombo(models.TxFilterGoal, "Goal", "Any goal", f.GoalID, true, goalComboOptions(gls))
 				}
@@ -596,7 +596,7 @@ templ TransactionAmountsAndKindFormBody(
 					@form.Field("Counterparty", "counterparty_id", id, icons.User("15"), fd.CounterpartyID.Error) {
 						@form.Combobox(form.ComboboxProps{
 							Name: "counterparty_id", ID: id, Label: "Counterparty", Placeholder: "Select Counterparty",
-							Options: counterpartyComboOptions(cps),
+							Options: counterpartyComboOptions(cps, fd.CounterpartyID.Value),
 							Data:    *fd.CounterpartyID, Nullable: true, Searchable: true,
 							CreateURL: "/counterparties/quick",
 						})
@@ -642,10 +642,15 @@ func counterpartyComboOption(cp *models.Counterparty) form.ComboOption {
 	}
 }
 
-func counterpartyComboOptions(cps []models.Counterparty) []form.ComboOption {
-	opts := make([]form.ComboOption, len(cps))
+// counterpartyComboOptions leaves out the archived counterparties, but the
+// selected one.
+func counterpartyComboOptions(cps []models.Counterparty, selected string) []form.ComboOption {
+	opts := make([]form.ComboOption, 0, len(cps))
 	for i := range cps {
-		opts[i] = counterpartyComboOption(&cps[i])
+		if cps[i].IsArchived && cps[i].ID != selected {
+			continue
+		}
+		opts = append(opts, counterpartyComboOption(&cps[i]))
 	}
 	return form.SortComboOptions(opts)
 }

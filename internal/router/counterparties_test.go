@@ -78,3 +78,44 @@ func TestMergeCounterparties(t *testing.T) {
 		t.Errorf("account counterparty = %+v, want %s", gotAcc.Counterparty, into.ID)
 	}
 }
+
+func TestArchiveCounterparty(t *testing.T) {
+	repo, ctx, _ := setupTenant(t)
+
+	cp := &models.Counterparty{ID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZH", Name: "Old Gym", IsMerchant: true}
+	if err := repo.CreateCounterparty(ctx, cp); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repo.SetCounterpartyArchived(ctx, cp.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	got, err := repo.GetCounterparty(ctx, cp.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.IsArchived {
+		t.Error("counterparty not archived")
+	}
+
+	// Editing it keeps it archived.
+	got.Name = "Old Gym Club"
+	if err := repo.UpdateCounterparty(ctx, got); err != nil {
+		t.Fatal(err)
+	}
+	cps, err := repo.GetCounterparties(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := slices.IndexFunc(cps, func(c models.Counterparty) bool { return c.ID == cp.ID })
+	if i < 0 || !cps[i].IsArchived || cps[i].Name != "Old Gym Club" {
+		t.Errorf("listed counterparty = %+v, want archived Old Gym Club", cps)
+	}
+
+	if err := repo.SetCounterpartyArchived(ctx, cp.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	if got, err = repo.GetCounterparty(ctx, cp.ID); err != nil || got.IsArchived {
+		t.Errorf("unarchived counterparty = %+v (%v), want not archived", got, err)
+	}
+}

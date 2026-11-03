@@ -140,6 +140,7 @@ func updateCounterpartyParams(it *models.Counterparty) (queries.UpdateCounterpar
 		Color:             sql.NullString{String: it.Color, Valid: it.Color != ""},
 		IsMerchant:        it.IsMerchant,
 		DefaultCategoryID: defaultCategoryID(it),
+		IsArchived:        it.IsArchived,
 	}, nil
 }
 
@@ -165,6 +166,15 @@ func (r *Repository) CreateCounterparty(ctx context.Context, it *models.Counterp
 	})
 }
 
+func (r *Repository) SetCounterpartyArchived(ctx context.Context, id string, archived bool) error {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+
+	return q.SetCounterpartyArchived(ctx, queries.SetCounterpartyArchivedParams{ID: id, IsArchived: archived})
+}
+
 func (r *Repository) DeleteCounterparty(ctx context.Context, id string) error {
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
@@ -183,6 +193,7 @@ func dbCounterpartyToCounterparty(dbP *queries.Counterparty) *models.Counterpart
 		Icon:       dbP.Icon.String,
 		Color:      dbP.Color.String,
 		IsMerchant: dbP.IsMerchant,
+		IsArchived: dbP.IsArchived,
 		CreatedAt:  dbP.CreatedAt,
 	}
 }

@@ -22,6 +22,7 @@ type CounterpartyFD struct {
 	Icon              form.FDInput
 	IsMerchant        form.FDInput
 	DefaultCategoryID form.FDInput
+	IsArchived        form.FDInput
 }
 
 templ Counterparties(
@@ -86,7 +87,7 @@ templ MergeCounterpartyForm(from *models.Counterparty, fd *MergeCounterpartyFD, 
 		@form.Field("Merge into", "into_id", from.ID, icons.User("15"), fd.IntoID.Error) {
 			@form.Combobox(form.ComboboxProps{
 				Name: "into_id", ID: from.ID, Label: "Merge into", Placeholder: "Select Counterparty",
-				Options: counterpartyComboOptions(cps), Data: fd.IntoID, Searchable: true,
+				Options: counterpartyComboOptions(cps, fd.IntoID.Value), Data: fd.IntoID, Searchable: true,
 			})
 		}
 	}
@@ -122,6 +123,12 @@ templ counterpartyFormBody(id string, isNew bool, fd *CounterpartyFD, cats []mod
 			@counterpartyIconField(id, isNew, fd.Icon)
 		</div>
 	</div>
+	if !isNew {
+		<div class="rounded-2xl border border-zinc-800 bg-zinc-800/20 p-4">
+			@form.Toggle("Archived", "is_archived", id, icons.Archive("18"), fd.IsArchived, nil)
+			<p class="mt-1 text-sm text-zinc-500">Hidden from pickers, kept with its history.</p>
+		</div>
+	}
 }
 
 // counterpartyIconField is the simple-icons slug input with a live preview.
@@ -165,6 +172,7 @@ const counterpartiesFilterData = `{
 
 templ counterpartiesList(counterparties []models.Counterparty) {
 	<div
+		id="counterparties"
 		x-data={ counterpartiesFilterData }
 		@keydown.slash.window="if (!openCreateForm && !$event.target.closest('input, textarea, select, [contenteditable]')) { $event.preventDefault(); $refs.q.focus(); $refs.q.select() }"
 		class="grid gap-6"
@@ -172,14 +180,42 @@ templ counterpartiesList(counterparties []models.Counterparty) {
 		if len(counterparties) > 0 {
 			@counterpartiesSearch()
 		}
-		@components.Grid2ColOnSMUp("counterparties-list") {
+		@components.Grid2ColOnSMUp(CounterpartiesListID(false)) {
 			for _, cp := range counterparties {
-				@counterpartyWrapper(&cp)
+				if !cp.IsArchived {
+					@counterpartyWrapper(&cp)
+				}
 			}
 		}
+		<details
+			class="group hidden has-[[data-counterparty]]:block"
+			x-effect="if (q.trim() && any($el)) $el.open = true"
+		>
+			<summary class="flex items-center gap-2 mb-3 list-none cursor-pointer select-none text-zinc-500 hover:text-zinc-300 [&::-webkit-details-marker]:hidden">
+				@icons.Archive("16")
+				<h2 class="text-sm font-semibold uppercase tracking-wider">Archived</h2>
+				@icons.ChevronDown("16", &templ.Attributes{"class": "transition-transform group-open:rotate-180"})
+			</summary>
+			<div id={ CounterpartiesListID(true) } class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+				for _, cp := range counterparties {
+					if cp.IsArchived {
+						@counterpartyWrapper(&cp)
+					}
+				}
+			</div>
+		</details>
 		@counterpartiesEmpty()
 		<p x-cloak x-show="q.trim() && !any($root)" class="py-12 text-center text-zinc-500">No counterparties match</p>
 	</div>
+}
+
+// CounterpartiesListID is the list of the active counterparties, or of the
+// archived ones.
+func CounterpartiesListID(archived bool) string {
+	if archived {
+		return "counterparties-archived"
+	}
+	return "counterparties-list"
 }
 
 templ counterpartiesEmpty() {
@@ -224,7 +260,7 @@ templ Counterparty(cp *models.Counterparty) {
 	<div
 		hx-target="this"
 		hx-swap="outerHTML"
-		class="relative min-w-0"
+		class={ "relative min-w-0", templ.KV("opacity-60 hover:opacity-100 transition-opacity", cp.IsArchived) }
 		x-data="{openMenu: false}"
 		data-counterparty
 		data-search={ strings.ToLower(cp.Name + " " + strings.Join(cp.Aliases, " ")) }
@@ -262,21 +298,37 @@ templ Counterparty(cp *models.Counterparty) {
 					</div>
 				}
 			</div>
-			@components.EntryMenuAnchored("openMenu", "Counterparty actions", []templ.Component{
-				components.EntryMenuEditItem(fmt.Sprintf("/counterparties/%s/edit", cp.ID)),
-				components.EntryMenuDrawerItem("Merge into…", fmt.Sprintf("/counterparties/%s/merge", cp.ID),
-					components.WithEntryMenuItemIcon(icons.Merge("16"))),
-				components.EntryMenuSeparator(),
-				components.EntryMenuDeleteItem(fmt.Sprintf("/counterparties/%s", cp.ID)),
-			})
+			@components.EntryMenuAnchored("openMenu", "Counterparty actions", counterpartyMenuItems(cp))
 		</div>
 	</div>
 }
 
+func counterpartyMenuItems(cp *models.Counterparty) []templ.Component {
+	archive := components.EntryMenuAnchorItem("Archive", "put", fmt.Sprintf("/counterparties/%s/archive", cp.ID),
+		components.WithEntryMenuItemIcon(icons.Archive("16")))
+	if cp.IsArchived {
+		archive = components.EntryMenuAnchorItem("Unarchive", "put", fmt.Sprintf("/counterparties/%s/archive", cp.ID),
+			components.WithEntryMenuItemIcon(icons.RotateCcw("16")))
+	}
+	return []templ.Component{
+		components.EntryMenuEditItem(fmt.Sprintf("/counterparties/%s/edit", cp.ID)),
+		components.EntryMenuDrawerItem("Merge into…", fmt.Sprintf("/counterparties/%s/merge", cp.ID),
+			components.WithEntryMenuItemIcon(icons.Merge("16"))),
+		archive,
+		components.EntryMenuSeparator(),
+		components.EntryMenuDeleteItem(fmt.Sprintf("/counterparties/%s", cp.ID)),
+	}
+}
+
+// CounterpartyOOB adds the card on top of its list (active or archived).
 templ CounterpartyOOB(cp *models.Counterparty) {
-	<div id="counterparties-list" hx-swap-oob="afterbegin">
+	<div id={ CounterpartiesListID(cp.IsArchived) } hx-swap-oob="afterbegin">
 		@counterpartyWrapper(cp)
 	</div>
+}
+
+templ CounterpartyDeleteOOB(id string) {
+	<div id={ CounterpartyWrapperID(id) } hx-swap-oob="delete"></div>
 }
 
 // counterpartyWrapper gives the card a stable target, as edit and merge forms

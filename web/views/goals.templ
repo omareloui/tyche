@@ -293,7 +293,7 @@ templ GoalBuyFormFields(gl *models.Goal, fd *GoalBuyFD, cats []models.Category, 
 			@form.Field("Counterparty", "counterparty_id", gl.ID, icons.User("15"), fd.CounterpartyID.Error) {
 				@form.Combobox(form.ComboboxProps{
 					Name: "counterparty_id", ID: gl.ID, Label: "Counterparty", Placeholder: "Select Counterparty",
-					Options: counterpartyComboOptions(cps),
+					Options: counterpartyComboOptions(cps, fd.CounterpartyID.Value),
 					Data:    fd.CounterpartyID, Nullable: true, Searchable: true,
 				})
 			}

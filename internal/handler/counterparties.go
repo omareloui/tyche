@@ -143,6 +143,14 @@ func (h Handler) QuickCreateCounterparty(w http.ResponseWriter, r *http.Request)
 		return strings.EqualFold(c.Name, cp.Name) ||
 			slices.ContainsFunc(c.Aliases, func(a string) bool { return strings.EqualFold(a, cp.Name) })
 	}); existing != nil {
+		// Picked by name again, so it's in use: back in the pickers.
+		if existing.IsArchived {
+			if err := h.repo.SetCounterpartyArchived(r.Context(), existing.ID, false); err != nil {
+				l.Error("unarchiving counterparty", zap.Error(err))
+				return nil, err
+			}
+			l.Info("unarchived quick created counterparty", zap.String("id", existing.ID))
+		}
 		return views.CounterpartyComboOption(existing), nil
 	}
 
@@ -245,8 +253,18 @@ func (h Handler) EditCounterparty(w http.ResponseWriter, r *http.Request) (templ
 	}
 	l.Info("updated counterparty")
 
-	drawerSaved(w, "#"+views.CounterpartyWrapperID(id), "innerHTML")
-	return views.Counterparty(cp), nil
+	if cp.IsArchived == prev.IsArchived {
+		drawerSaved(w, "#"+views.CounterpartyWrapperID(id), "innerHTML")
+		return views.Counterparty(cp), nil
+	}
+
+	// (Un)archived: move the card to the other list.
+	drawerSaved(w, "#"+views.CounterpartyWrapperID(id), "none")
+	if err := renderToBody(w, r, views.CounterpartyDeleteOOB(id)); err != nil {
+		l.Error("rendering counterparty delete oob", zap.Error(err))
+		return nil, err
+	}
+	return views.CounterpartyOOB(cp), nil
 }
 
 func (h Handler) DeleteCounterparty(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -263,6 +281,37 @@ func (h Handler) DeleteCounterparty(w http.ResponseWriter, r *http.Request) (tem
 	l.Info("deleted counterparty")
 
 	return nil, nil
+}
+
+// ToggleArchiveCounterparty archives the counterparty, or unarchives an
+// archived one, moving its card to the other section of the list.
+func (h Handler) ToggleArchiveCounterparty(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+
+	cp, err := h.repo.GetCounterparty(r.Context(), id)
+	if err != nil {
+		l.Error("fetching counterparty", zap.Error(err))
+		return nil, err
+	}
+
+	cp.IsArchived = !cp.IsArchived
+	if err := h.repo.SetCounterpartyArchived(r.Context(), id, cp.IsArchived); err != nil {
+		l.Error("toggling counterparty archive", zap.Error(err))
+		return nil, err
+	}
+	l.Info("toggled counterparty archive", zap.String("id", id), zap.Bool("is_archived", cp.IsArchived))
+
+	w.Header().Set("HX-Reswap", "none")
+	if err := renderToBody(w, r, views.CounterpartyDeleteOOB(id)); err != nil {
+		l.Error("rendering counterparty delete oob", zap.Error(err))
+		return nil, err
+	}
+	return views.CounterpartyOOB(cp), nil
 }
 
 func (h Handler) GetMergeCounterparty(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -315,7 +364,7 @@ func (h Handler) MergeCounterparty(w http.ResponseWriter, r *http.Request) (temp
 }
 
 // counterpartyAndMergeTargets returns the counterparty and the others it can
-// be merged into.
+// be merged into, archived ones left out.
 func (h Handler) counterpartyAndMergeTargets(r *http.Request, id string) (*models.Counterparty, []models.Counterparty, error) {
 	from, err := h.repo.GetCounterparty(r.Context(), id)
 	if err != nil {
@@ -325,7 +374,7 @@ func (h Handler) counterpartyAndMergeTargets(r *http.Request, id string) (*model
 	if err != nil {
 		return nil, nil, err
 	}
-	cps = slices.DeleteFunc(cps, func(cp models.Counterparty) bool { return cp.ID == id })
+	cps = slices.DeleteFunc(cps, func(cp models.Counterparty) bool { return cp.ID == id || cp.IsArchived })
 	return from, cps, nil
 }
 
@@ -340,6 +389,7 @@ func (h Handler) mapCounterpartyToFD(cp *models.Counterparty, err *errs.Validati
 		Icon:              form.FDInput{Value: cp.Icon, Error: err.Errors.MsgFor("Icon")},
 		IsMerchant:        form.FDInput{Value: formatBooleanIfNonZero(cp.IsMerchant), Error: err.Errors.MsgFor("IsMerchant")},
 		DefaultCategoryID: form.FDInput{Value: defaultCategoryID, Error: err.Errors.MsgFor("DefaultCategoryID")},
+		IsArchived:        form.FDInput{Value: formatBooleanIfNonZero(cp.IsArchived), Error: err.Errors.MsgFor("IsArchived")},
 	}
 }
 
@@ -354,6 +404,7 @@ func (h Handler) mapFDToCounterparty(r *http.Request) (*models.Counterparty, err
 		Icon:            r.FormValue("icon"),
 		IsMerchant:      parseBoolean(r.FormValue("is_merchant")),
 		DefaultCategory: defaultCategory,
+		IsArchived:      parseBoolean(r.FormValue("is_archived")),
 	}, nil
 }
 

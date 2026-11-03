@@ -370,7 +370,7 @@ input[type="number"] {
   display: none;
 }
 #categories-list:not(:has(> *)) ~ .categories-empty,
-#counterparties-list:not(:has(> * > *)) ~ .counterparties-empty {
+#counterparties:not(:has([data-counterparty])) .counterparties-empty {
   display: grid;
 }
 

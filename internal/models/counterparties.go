@@ -20,7 +20,9 @@ type Counterparty struct {
 	IsMerchant bool
 	// DefaultCategory is used for new transactions without a category.
 	DefaultCategory *Category `validate:"-"`
-	CreatedAt       time.Time
+	// IsArchived hides it from the pickers, its transactions keep it.
+	IsArchived bool
+	CreatedAt  time.Time
 }
 
 // DefaultCategoryFor returns the default category if it applies to the
