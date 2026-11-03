@@ -353,7 +353,9 @@ document.addEventListener("alpine:init", () => {
         layer.dataset.swipeLayer = "";
         layer.className =
           "absolute inset-x-0 top-0 flex items-center justify-between px-5 rounded-2xl text-sm font-semibold transition-colors";
-        layer.innerHTML = `<span class="text-emerald-300">✓ ${right}</span><span class="text-red-300">Delete ✕</span>`;
+        layer.innerHTML =
+          `<span class="inline-flex items-center gap-1.5 text-emerald-300"><span class="icon-check"></span>${right}</span>` +
+          `<span class="inline-flex items-center gap-1.5 text-red-300">Delete<span class="icon-x"></span></span>`;
         this.$root.prepend(layer);
       }
       return layer;

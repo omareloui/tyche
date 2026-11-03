@@ -674,7 +674,7 @@ templ txReviewStrip(tx *models.Transaction) {
 				<span class="text-zinc-400">▾</span>
 			</button>
 		}
-		<button type="button" hx-put={ fmt.Sprintf("/transactions/%s/reviewed", tx.ID) } class="tx-review-ok">Looks good</button>
+		<button type="button" hx-put={ fmt.Sprintf("/transactions/%s/reviewed", tx.ID) } class="tx-review-ok"><span class="icon-check"></span>Looks good</button>
 	</div>
 }
 
