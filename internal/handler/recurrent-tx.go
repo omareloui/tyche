@@ -279,10 +279,8 @@ func (h Handler) mapRecurrentTxToFD(rt *models.RecurrentTx, valerr *errs.Validat
 			StopsOn:     form.FDInput{Value: formatDateOnlyIfNonZero(rt.StopsAt), Error: valerr.Errors.MsgFor("StopsAt")},
 		},
 		TransactionAmountsAndKindFD: views.TransactionAmountsAndKindFD{
-			AccountIFD: form.AccountIFD{
-				AccountID: form.FDInput{Value: rt.Account.ID, Error: valerr.Errors.MsgFor("AccountID")},
-				Amount:    form.FDInput{Value: formatFloatIfNonZero(rt.Amount), Error: valerr.Errors.MsgFor("Amount")},
-			},
+			AccountIFD: amountIFD(rt.Amount, &rt.Account, form.FDInput{Value: rt.Account.ID, Error: valerr.Errors.MsgFor("AccountID")},
+				valerr.Errors.MsgFor("Amount")),
 			Kind: form.FDInput{Value: rt.Kind.String(), Error: valerr.Errors.MsgFor("Kind")},
 		},
 		Description: form.FDInput{Value: rt.Description, Error: valerr.Errors.MsgFor("Description")},
@@ -303,10 +301,9 @@ func (h Handler) mapRecurrentTxToFD(rt *models.RecurrentTx, valerr *errs.Validat
 	}
 
 	if rt.ToAccount != nil {
-		fd.ToAccountIFD = &form.AccountIFD{
-			Amount:    form.FDInput{Value: formatFloatIfNonZero(rt.ToAmount), Error: valerr.Errors.MsgFor("ToAmount")},
-			AccountID: form.FDInput{Value: rt.ToAccount.ID, Error: valerr.Errors.MsgFor("ToAccountID")},
-		}
+		toIFD := amountIFD(rt.ToAmount, rt.ToAccount, form.FDInput{Value: rt.ToAccount.ID, Error: valerr.Errors.MsgFor("ToAccountID")},
+			valerr.Errors.MsgFor("ToAmount"))
+		fd.ToAccountIFD = &toIFD
 	} else if hasToAccount {
 		fd.ToAccountIFD = &form.AccountIFD{
 			Amount:    form.FDInput{Error: valerr.Errors.MsgFor("ToAmount")},

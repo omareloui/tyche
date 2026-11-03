@@ -78,3 +78,9 @@ UPDATE currencies
 SET
     is_shown = sqlc.arg(is_shown)
 WHERE id = sqlc.arg(id);
+
+-- name: SetCurrencyInGrams :exec
+UPDATE currencies
+SET
+    in_grams = sqlc.arg(in_grams)
+WHERE id = sqlc.arg(id);

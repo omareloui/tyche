@@ -113,16 +113,15 @@ templ budgetMonthNav(month, label, path string) {
 // budgetTotalBar is the visible budgets as one bar, each category's spending
 // a segment, with the month's pace marked.
 templ budgetTotalBar(bs *models.BudgetSummary) {
-	{{ sym := bs.Currency.Symbol }}
 	{{ budget := bs.Budget() }}
 	{{ scale := max(budget, bs.BudgetedSpent()) }}
 	<div class="grid gap-2.5">
 		<div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
 			if budget > 0 {
 				<p>
-					<span class="sensitive text-2xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">{ formatters.FormatAmount(bs.BudgetedSpent(), sym) }</span>
+					<span class="sensitive text-2xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">{ bs.Currency.Format(bs.BudgetedSpent()) }</span>
 					<span class="text-sm text-zinc-500">
-						of <span class="sensitive">{ formatters.FormatAmount(budget, sym) }</span>
+						of <span class="sensitive">{ bs.Currency.Format(budget) }</span>
 						{ fmt.Sprintf("· %.0f%% used", bs.Pct()) }
 						if bs.IsCurrent() {
 							{ fmt.Sprintf("· %.0f%% of the month", bs.MonthPct()) }
@@ -131,19 +130,19 @@ templ budgetTotalBar(bs *models.BudgetSummary) {
 				</p>
 			} else {
 				<p>
-					<span class="sensitive text-2xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">{ formatters.FormatAmount(bs.Spent(), sym) }</span>
+					<span class="sensitive text-2xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">{ bs.Currency.Format(bs.Spent()) }</span>
 					<span class="text-sm text-zinc-500">spent, no budgets shown</span>
 				</p>
 			}
 			<div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
 				if safe, ok := bs.SafePerDay(); ok && budget > 0 {
 					<span class="text-zinc-400">
-						<span class="sensitive text-zinc-200 tabular-nums">{ formatters.FormatAmount(safe, sym) }</span>
+						<span class="sensitive text-zinc-200 tabular-nums">{ bs.Currency.Format(safe) }</span>
 						a day for { fmt.Sprint(bs.DaysLeft()) } { plural(bs.DaysLeft(), "day", "days") }
 					</span>
 				}
 				if budget > 0 {
-					@budgetStatus(bs.Left(), bs.Ahead(), sym)
+					@budgetStatus(bs.Left(), bs.Ahead(), &bs.Currency)
 				}
 				if n := bs.Over(); n > 0 {
 					<span class="flex items-center gap-1 text-red-400">
@@ -161,7 +160,7 @@ templ budgetTotalBar(bs *models.BudgetSummary) {
 							<button
 								type="button"
 								data-budget-toggle={ it.Key() }
-								title={ fmt.Sprintf("%s: %s, click to hide", it.Name, formatters.FormatAmount(it.Spent, sym)) }
+								title={ fmt.Sprintf("%s: %s, click to hide", it.Name, bs.Currency.Format(it.Spent)) }
 								data-hidden-title={ it.Name + ", click to hide" }
 								class="h-full cursor-pointer hover:opacity-80"
 								style={ fmt.Sprintf("flex:%.4f 1 0;background-color:%s", it.Spent, budgetFill(models.CategoryColorToHex(it.Color), it.Over())) }
@@ -180,12 +179,12 @@ templ budgetTotalBar(bs *models.BudgetSummary) {
 	</div>
 }
 
-templ budgetStatus(left float64, ahead bool, sym string) {
+templ budgetStatus(left float64, ahead bool, cur *models.Currency) {
 	if left < 0 {
-		<span class="text-red-400"><span class="sensitive tabular-nums">{ formatters.FormatAmount(-left, sym) }</span> over</span>
+		<span class="text-red-400"><span class="sensitive tabular-nums">{ cur.Format(-left) }</span> over</span>
 	} else {
 		<span class={ templ.KV("text-amber-300", ahead), templ.KV("text-zinc-400", !ahead) }>
-			<span class="sensitive tabular-nums">{ formatters.FormatAmount(left, sym) }</span> left
+			<span class="sensitive tabular-nums">{ cur.Format(left) }</span> left
 			if ahead {
 				· ahead of the month
 			}
@@ -255,16 +254,15 @@ templ budgetBurnUp(bs *models.BudgetSummary) {
 // budgetDay is a day's hover target in the burn-up chart, with its tooltip.
 templ budgetDay(bs *models.BudgetSummary, i int, cum, pace []float64) {
 	{{ days := bs.Days() }}
-	{{ sym := bs.Currency.Symbol }}
 	<div class="group relative flex-1 h-full">
 		<div class="absolute inset-y-0 left-1/2 border-l border-zinc-500/60 hidden group-hover:block"></div>
 		<div class={ "absolute bottom-full mb-1 hidden group-hover:block z-10", tooltipSide(i, days) }>
 			<div class="glass-tooltip">
 				<p class="text-zinc-400">{ bs.Month.AddDate(0, 0, i).Format("Mon, Jan 2") }</p>
 				if i < len(cum) {
-					<p class="sensitive tabular-nums">Spent { formatters.FormatAmount(cum[i], sym) }</p>
+					<p class="sensitive tabular-nums">Spent { bs.Currency.Format(cum[i]) }</p>
 				}
-				<p class="sensitive tabular-nums text-zinc-400">On pace { formatters.FormatAmount(pace[i], sym) }</p>
+				<p class="sensitive tabular-nums text-zinc-400">On pace { bs.Currency.Format(pace[i]) }</p>
 			</div>
 		</div>
 	</div>
@@ -327,13 +325,12 @@ templ budgetSummaryTitle(title string) {
 templ budgetUnbudgetedTitle(bs *models.BudgetSummary, n int) {
 	{ fmt.Sprintf("%d without a budget", n) }
 	<span class="text-zinc-500">·</span>
-	<span class="sensitive tabular-nums">{ formatters.FormatAmount(bs.UnbudgetedSpent(), bs.Currency.Symbol) }</span>
+	<span class="sensitive tabular-nums">{ bs.Currency.Format(bs.UnbudgetedSpent()) }</span>
 	<span class="text-zinc-500">spent</span>
 }
 
 templ budgetBullet(bs *models.BudgetSummary, it models.BudgetSummaryItem, maxSpent float64) {
 	{{ hex := models.CategoryColorToHex(it.Color) }}
-	{{ sym := bs.Currency.Symbol }}
 	{{ ahead := bs.ItemAhead(it) }}
 	<li class="group grid gap-1.5">
 		<div class="flex items-baseline justify-between gap-3 text-sm">
@@ -355,7 +352,7 @@ templ budgetBullet(bs *models.BudgetSummary, it models.BudgetSummaryItem, maxSpe
 				</button>
 			</span>
 			<span class="sensitive shrink-0 tabular-nums text-zinc-400">
-				{ formatters.FormatAmount(it.Spent, sym) }
+				{ bs.Currency.Format(it.Spent) }
 				if it.HasBudget() {
 					<span class="text-zinc-600">/ { formatters.FormatNum(it.Budget) }</span>
 				}
@@ -372,7 +369,7 @@ templ budgetBullet(bs *models.BudgetSummary, it models.BudgetSummaryItem, maxSpe
 				}
 			</div>
 			<p class="text-xs">
-				@budgetStatus(it.Left(), ahead, sym)
+				@budgetStatus(it.Left(), ahead, &bs.Currency)
 			</p>
 		} else {
 			<div class="h-2 rounded-full bg-zinc-800/40">

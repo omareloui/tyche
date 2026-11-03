@@ -240,19 +240,19 @@ templ txSummary(s *models.TxSummary, chips []TxFilterChip, def *models.Currency)
 			if s.In > 0 {
 				<div>
 					<dt class="text-xs text-zinc-500">Earned</dt>
-					<dd class="font-semibold text-emerald-400">{ "+" + formatters.FormatAmount(s.In, def.Symbol) }</dd>
+					<dd class="font-semibold text-emerald-400">{ "+" + def.Format(s.In) }</dd>
 				</div>
 			}
 			if s.Out != 0 {
 				<div>
 					<dt class="text-xs text-zinc-500">Spent</dt>
-					<dd class="font-semibold">{ formatSignedAmount(-s.Out, def.Symbol) }</dd>
+					<dd class="font-semibold">{ formatSignedAmount(-s.Out, def) }</dd>
 				</div>
 			}
 			if s.In > 0 && s.Out != 0 {
 				<div>
 					<dt class="text-xs text-zinc-500">Net</dt>
-					<dd class={ "font-semibold", templ.KV("text-emerald-400", s.In >= s.Out) }>{ formatSignedAmount(s.In-s.Out, def.Symbol) }</dd>
+					<dd class={ "font-semibold", templ.KV("text-emerald-400", s.In >= s.Out) }>{ formatSignedAmount(s.In-s.Out, def) }</dd>
 				</div>
 			}
 		</dl>
@@ -325,10 +325,10 @@ templ txMonthSection(m *txMonth, def *models.Currency) {
 					if m.In > 0 || m.Out != 0 {
 						<p class="sensitive sm:hidden flex gap-2 text-xs tabular-nums whitespace-nowrap overflow-hidden">
 							if m.In > 0 {
-								<span class="text-emerald-400" title="In">{ "+" + formatters.FormatAmount(m.In, def.Symbol) }</span>
+								<span class="text-emerald-400" title="In">{ "+" + def.Format(m.In) }</span>
 							}
 							if m.Out != 0 {
-								<span class="text-zinc-400" title="Out">{ formatSignedAmount(-m.Out, def.Symbol) }</span>
+								<span class="text-zinc-400" title="Out">{ formatSignedAmount(-m.Out, def) }</span>
 							}
 						</p>
 					} else {
@@ -340,13 +340,13 @@ templ txMonthSection(m *txMonth, def *models.Currency) {
 						if m.In > 0 {
 							<div class="hidden sm:block text-right">
 								<dt class="text-[0.65rem] uppercase tracking-wider text-zinc-500">In</dt>
-								<dd class="text-sm font-medium text-emerald-400">{ "+" + formatters.FormatAmount(m.In, def.Symbol) }</dd>
+								<dd class="text-sm font-medium text-emerald-400">{ "+" + def.Format(m.In) }</dd>
 							</div>
 						}
 						if m.Out != 0 {
 							<div class="hidden sm:block text-right">
 								<dt class="text-[0.65rem] uppercase tracking-wider text-zinc-500">Out</dt>
-								<dd class="text-sm font-medium text-zinc-300">{ formatSignedAmount(-m.Out, def.Symbol) }</dd>
+								<dd class="text-sm font-medium text-zinc-300">{ formatSignedAmount(-m.Out, def) }</dd>
 							</div>
 						}
 						<div>
@@ -358,7 +358,7 @@ templ txMonthSection(m *txMonth, def *models.Currency) {
 									templ.KV("bg-emerald-400/10 text-emerald-400 ring-1 ring-emerald-400/20", m.In >= m.Out),
 									templ.KV("bg-red-400/10 text-red-400 ring-1 ring-red-400/20", m.In < m.Out),
 								}
-							>{ formatSignedAmount(m.In-m.Out, def.Symbol) }</dd>
+							>{ formatSignedAmount(m.In-m.Out, def) }</dd>
 						</div>
 					</dl>
 				}
@@ -370,7 +370,7 @@ templ txMonthSection(m *txMonth, def *models.Currency) {
 				<h3 class="flex items-baseline justify-between gap-4 px-1 text-sm">
 					<span class="font-semibold text-zinc-300">{ formatTxDay(d.Day) }</span>
 					if d.In != 0 || d.Out != 0 {
-						<span class="sensitive tabular-nums text-zinc-500">{ formatSignedAmount(d.In-d.Out, def.Symbol) }</span>
+						<span class="sensitive tabular-nums text-zinc-500">{ formatSignedAmount(d.In-d.Out, def) }</span>
 					}
 				</h3>
 				for _, t := range d.Txs {
@@ -384,10 +384,10 @@ templ txMonthSection(m *txMonth, def *models.Currency) {
 templ txFlowTotals(in, out float64, def *models.Currency) {
 	<p class="sensitive shrink-0 flex gap-3 text-sm tabular-nums">
 		if in > 0 {
-			<span class="text-emerald-400" title="Earned">{ "+" + formatters.FormatAmount(in, def.Symbol) }</span>
+			<span class="text-emerald-400" title="Earned">{ "+" + def.Format(in) }</span>
 		}
 		if out != 0 {
-			<span class="text-zinc-400" title="Spent">{ formatSignedAmount(-out, def.Symbol) }</span>
+			<span class="text-zinc-400" title="Spent">{ formatSignedAmount(-out, def) }</span>
 		}
 	</p>
 }
@@ -819,7 +819,7 @@ templ transferPair(out *models.Transaction, def *models.Currency) {
 			if fee := out.TransferFee(); fee >= 0.01 {
 				<div class="flex justify-between px-4 text-sm font-semibold">
 					<span>Fees</span>
-					<span class="tabular-nums">{ "-" + formatters.FormatAmount(fee, out.Account.Currency.Symbol) }</span>
+					<span class="tabular-nums">{ "-" + out.Account.Currency.Format(fee) }</span>
 				</div>
 			}
 		</div>
@@ -1241,7 +1241,7 @@ func txConverted(tx *models.Transaction, def *models.Currency) string {
 	if rate == 0 {
 		return ""
 	}
-	return "≈ " + formatters.FormatAmount(amount*rate, def.Symbol)
+	return "≈ " + def.Format(amount*rate)
 }
 
 // dateOf is t's calendar date (in its own location) as a UTC midnight, the
@@ -1305,12 +1305,12 @@ func formatTxMonth(month time.Time) string {
 }
 
 // formatSignedAmount prefixes the amount with + or −.
-func formatSignedAmount(amount float64, sym string) string {
+func formatSignedAmount(amount float64, cur *models.Currency) string {
 	sign := "+"
 	if amount < 0 {
 		sign = "−"
 	}
-	return sign + formatters.FormatAmount(math.Abs(amount), sym)
+	return sign + cur.Format(math.Abs(amount))
 }
 
 func plural(n int, one, many string) string {
@@ -1337,8 +1337,8 @@ type txView struct {
 	toAccount string
 	// accountID is account's, to filter by it.
 	accountID string
-	accKind models.AccKind
-	amount  string
+	accKind   models.AccKind
+	amount    string
 	// original is the amount before reimbursements, shown struck through.
 	original    string
 	tone        string
@@ -1372,7 +1372,7 @@ func newTxView(tx *models.Transaction) txView {
 		if tx.Account.Currency.String != in.Account.Currency.String {
 			v.subtitle = "Sent " + tx.ViewAmount()
 		} else if fee := tx.TransferFee(); fee >= 0.01 {
-			v.subtitle = "Fees " + formatters.FormatAmount(fee, tx.Account.Currency.Symbol)
+			v.subtitle = "Fees " + tx.Account.Currency.Format(fee)
 		}
 		return v
 	}
@@ -1387,7 +1387,7 @@ func newTxView(tx *models.Transaction) txView {
 		v.amount = "+" + tx.ViewAmount()
 		v.tone = txToneIn
 	case models.AdjustmentTxKind:
-		v.amount = formatSignedAmount(tx.Amount, tx.Account.Currency.Symbol)
+		v.amount = formatSignedAmount(tx.Amount, &tx.Account.Currency)
 		v.tone = txToneNeutral
 		if v.title == "" {
 			v.title = models.BalanceFixDescription
@@ -1404,7 +1404,7 @@ func newTxView(tx *models.Transaction) txView {
 			if tx.Account.Currency.ID != tx.ToAccount.Currency.ID {
 				v.subtitle = "Sent " + tx.ViewAmount()
 			} else if fee := tx.Amount - tx.ToAmount; fee > 0 {
-				v.subtitle = "Fees " + formatters.FormatAmount(fee, tx.Account.Currency.Symbol)
+				v.subtitle = "Fees " + tx.Account.Currency.Format(fee)
 			}
 		}
 		return v

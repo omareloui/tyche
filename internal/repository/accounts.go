@@ -221,7 +221,8 @@ func (r *Repository) FixBalances(ctx context.Context, fixes []models.BalanceFix,
 				l.Error("getting account amount", zap.Error(err), zap.String("id", f.AccountID))
 				return err
 			}
-			diff := math.Round((f.Amount-cur)*100) / 100
+			// 6 digits: a metal's troy ounces need them (see Currency.Round).
+			diff := math.Round((f.Amount-cur)*1e6) / 1e6
 			if diff == 0 {
 				continue
 			}
@@ -450,9 +451,10 @@ func dbBalancesToBalances(dbBs []queries.GetBalancesRow) []models.Balance {
 		b[i] = models.Balance{
 			Amount: dbB.Balance,
 			Currency: models.Currency{
-				ID:     dbB.CurrencyID,
-				String: dbB.Currency.String,
-				Symbol: dbB.Currency.Symbol,
+				ID:      dbB.CurrencyID,
+				String:  dbB.Currency.String,
+				Symbol:  dbB.Currency.Symbol,
+				InGrams: dbB.Currency.InGrams,
 			},
 		}
 	}

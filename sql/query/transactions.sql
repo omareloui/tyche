@@ -17,13 +17,13 @@ INSERT INTO transactions (
 VALUES (
     sqlc.arg(id),
     sqlc.arg(account_id),
-    ROUND(sqlc.arg(amount), 2),
+    ROUND(sqlc.arg(amount), 6),
     sqlc.arg(kind),
     sqlc.arg(category_id),
     sqlc.arg(counterparty_id),
     sqlc.arg(description),
     sqlc.arg(to_account_id),
-    IIF(sqlc.narg(to_amount) > 0.0, ROUND(sqlc.narg(to_amount), 2), NULL),
+    IIF(sqlc.narg(to_amount) > 0.0, ROUND(sqlc.narg(to_amount), 6), NULL),
     sqlc.arg(recurrent_id),
     sqlc.arg(scheduled_to),
     sqlc.arg(fulfilled_at),
@@ -58,6 +58,7 @@ SELECT
     ta.deleted_at AS to_account_deleted_at,
     tc.string AS to_account_currency_string,
     tc.symbol AS to_account_currency_symbol,
+    tc.in_grams AS to_account_currency_in_grams,
     cat.id AS category_id,
     cat.name AS category_name,
     cat.color AS category_color,
@@ -71,6 +72,7 @@ SELECT
     g.fulfilled_at AS goal_fulfilled_at,
     gc.string AS goal_currency_string,
     gc.symbol AS goal_currency_symbol,
+    gc.in_grams AS goal_currency_in_grams,
     CAST(COALESCE((
         SELECT sm.body FROM sms_messages AS sm WHERE sm.transaction_id = t.id LIMIT 1
     ), '') AS TEXT) AS sms_body,
@@ -251,6 +253,7 @@ SELECT
     ta.deleted_at AS to_account_deleted_at,
     tc.string AS to_account_currency_string,
     tc.symbol AS to_account_currency_symbol,
+    tc.in_grams AS to_account_currency_in_grams,
     cat.id AS category_id,
     cat.name AS category_name,
     cat.color AS category_color,
@@ -264,6 +267,7 @@ SELECT
     g.fulfilled_at AS goal_fulfilled_at,
     gc.string AS goal_currency_string,
     gc.symbol AS goal_currency_symbol,
+    gc.in_grams AS goal_currency_in_grams,
     CAST(COALESCE((
         SELECT sm.body FROM sms_messages AS sm WHERE sm.transaction_id = t.id LIMIT 1
     ), '') AS TEXT) AS sms_body,
@@ -288,13 +292,13 @@ WHERE t.id = sqlc.arg(id) LIMIT 1;
 UPDATE transactions
 SET
     account_id = sqlc.arg(account_id),
-    amount = ROUND(sqlc.arg(amount), 2),
+    amount = ROUND(sqlc.arg(amount), 6),
     kind = sqlc.arg(kind),
     category_id = sqlc.arg(category_id),
     counterparty_id = sqlc.arg(counterparty_id),
     description = sqlc.arg(description),
     to_account_id = sqlc.narg(to_account_id),
-    to_amount = ROUND(sqlc.narg(to_amount), 2),
+    to_amount = ROUND(sqlc.narg(to_amount), 6),
     scheduled_to = sqlc.arg(scheduled_to),
     needs_review = FALSE
 WHERE id = sqlc.arg(id);
@@ -401,6 +405,7 @@ SELECT
     t.scheduled_to,
     a.name AS account_name,
     cur.symbol AS currency_symbol,
+    cur.in_grams AS currency_in_grams,
     cp.name AS counterparty_name,
     cat.name AS category_name,
     cat.color AS category_color,
@@ -472,6 +477,7 @@ SELECT
     ta.deleted_at AS to_account_deleted_at,
     tc.string AS to_account_currency_string,
     tc.symbol AS to_account_currency_symbol,
+    tc.in_grams AS to_account_currency_in_grams,
     cat.id AS category_id,
     cat.name AS category_name,
     cat.color AS category_color,
@@ -485,6 +491,7 @@ SELECT
     g.fulfilled_at AS goal_fulfilled_at,
     gc.string AS goal_currency_string,
     gc.symbol AS goal_currency_symbol,
+    gc.in_grams AS goal_currency_in_grams,
     CAST(COALESCE((
         SELECT sm.body FROM sms_messages AS sm WHERE sm.transaction_id = t.id LIMIT 1
     ), '') AS TEXT) AS sms_body,
@@ -535,6 +542,7 @@ SELECT
     ta.deleted_at AS to_account_deleted_at,
     tc.string AS to_account_currency_string,
     tc.symbol AS to_account_currency_symbol,
+    tc.in_grams AS to_account_currency_in_grams,
     cat.id AS category_id,
     cat.name AS category_name,
     cat.color AS category_color,
@@ -548,6 +556,7 @@ SELECT
     g.fulfilled_at AS goal_fulfilled_at,
     gc.string AS goal_currency_string,
     gc.symbol AS goal_currency_symbol,
+    gc.in_grams AS goal_currency_in_grams,
     CAST(COALESCE((
         SELECT sm.body FROM sms_messages AS sm WHERE sm.transaction_id = t.id LIMIT 1
     ), '') AS TEXT) AS sms_body,
@@ -600,6 +609,7 @@ SELECT
     ta.deleted_at AS to_account_deleted_at,
     tc.string AS to_account_currency_string,
     tc.symbol AS to_account_currency_symbol,
+    tc.in_grams AS to_account_currency_in_grams,
     cat.id AS category_id,
     cat.name AS category_name,
     cat.color AS category_color,
@@ -613,6 +623,7 @@ SELECT
     g.fulfilled_at AS goal_fulfilled_at,
     gc.string AS goal_currency_string,
     gc.symbol AS goal_currency_symbol,
+    gc.in_grams AS goal_currency_in_grams,
     CAST(COALESCE((
         SELECT sm.body FROM sms_messages AS sm WHERE sm.transaction_id = t.id LIMIT 1
     ), '') AS TEXT) AS sms_body,

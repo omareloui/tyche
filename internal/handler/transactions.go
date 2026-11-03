@@ -672,10 +672,8 @@ func (h Handler) getTxDeps(ctx context.Context) ([]models.Account, []models.TxKi
 func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationError) *views.TransactionFD {
 	fd := &views.TransactionFD{
 		TransactionAmountsAndKindFD: views.TransactionAmountsAndKindFD{
-			AccountIFD: form.AccountIFD{
-				Amount:    form.FDInput{Value: formatFloatIfNonZero(t.Amount), Error: err.Errors.MsgFor("Amount")},
-				AccountID: form.FDInput{Value: t.Account.ID, Error: err.Errors.MsgFor("AccountID")},
-			},
+			AccountIFD: amountIFD(t.Amount, &t.Account, form.FDInput{Value: t.Account.ID, Error: err.Errors.MsgFor("AccountID")},
+				err.Errors.MsgFor("Amount")),
 			Kind: form.FDInput{Value: t.Kind.String(), Error: err.Errors.MsgFor("Kind")},
 		},
 		Description:  form.FDInput{Value: t.Description, Error: err.Errors.MsgFor("Description")},
@@ -698,10 +696,9 @@ func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationE
 	}
 
 	if t.ToAccount != nil {
-		fd.ToAccountIFD = &form.AccountIFD{
-			Amount:    form.FDInput{Value: formatFloatIfNonZero(t.ToAmount), Error: err.Errors.MsgFor("ToAmount")},
-			AccountID: form.FDInput{Value: t.ToAccount.ID, Error: err.Errors.MsgFor("ToAccountID")},
-		}
+		toIFD := amountIFD(t.ToAmount, t.ToAccount, form.FDInput{Value: t.ToAccount.ID, Error: err.Errors.MsgFor("ToAccountID")},
+			err.Errors.MsgFor("ToAmount"))
+		fd.ToAccountIFD = &toIFD
 	} else if hasToAccount {
 		fd.ToAccountIFD = &form.AccountIFD{
 			Amount:    form.FDInput{Error: err.Errors.MsgFor("ToAmount")},
@@ -721,16 +718,35 @@ func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationE
 	return fd
 }
 
+// amountIFD is the inputs of an amount of acc. A metal account's amount is
+// in the unit its currency is shown in; when the currency isn't loaded (the
+// form answered with its errors) it stays in troy ounces, as parsed.
+func amountIFD(amount float64, acc *models.Account, accID form.FDInput, amountErr string) form.AccountIFD {
+	ifd := form.AccountIFD{
+		Amount:    form.FDInput{Value: formatFloatIfNonZero(amount), Error: amountErr},
+		AccountID: accID,
+		Unit:      form.FDInput{Value: string(models.MetalUnitOunce)},
+	}
+	if acc != nil && acc.Currency.IsMetal() {
+		u := acc.Currency.Unit()
+		ifd.Amount.Value = models.InputValue(amount, u)
+		ifd.Unit.Value = string(u)
+	}
+	return ifd
+}
+
 func (h Handler) mapFDToTransaction(r *http.Request, isRecurrent bool) (*models.Transaction, error) {
 	amount, err := parseFloatIfExists(r.FormValue("amount"))
 	if err != nil {
 		return nil, err
 	}
+	amount = models.FromUnit(amount, models.ParseMetalUnit(r.FormValue("amount_unit")))
 
 	toAmount, err := parseFloatIfExists(r.FormValue("to_amount"))
 	if err != nil {
 		return nil, err
 	}
+	toAmount = models.FromUnit(toAmount, models.ParseMetalUnit(r.FormValue("to_amount_unit")))
 
 	scheduledTo, err := parseDateOnlyIfExists(r.FormValue("scheduled_to"))
 	if err != nil {
@@ -917,6 +933,7 @@ func (h Handler) parseTransactionAmountsAndKindFD(r *http.Request, accs []models
 		AccountIFD: form.AccountIFD{
 			Amount:    form.FDInput{Value: r.FormValue("amount")},
 			AccountID: form.FDInput{Value: accId},
+			Unit:      form.FDInput{Value: r.FormValue("amount_unit")},
 		},
 		Kind: form.FDInput{Value: kindString},
 	}
@@ -979,12 +996,15 @@ func (h Handler) parseTransactionAmountsAndKindFD(r *http.Request, accs []models
 				fxRate, _ = fxrate.GetFxRate(acc.Currency.String, toAcc.Currency.String)
 			}
 			amt, _ := parseFloatIfExists(fd.AccountIFD.Amount.Value)
-			toAmt = strconv.FormatFloat(amt/fxRate, 'f', 2, 64)
+			amt = models.FromUnit(amt, acc.AmountUnit(fd.AccountIFD.Unit.Value))
+			toU := toAcc.AmountUnit(r.FormValue("to_amount_unit"))
+			toAmt = strconv.FormatFloat(models.ToUnit(amt/fxRate, toU), 'f', models.AmountDigits(toU), 64)
 		}
 
 		fd.ToAccountIFD = &form.AccountIFD{
 			Amount:    form.FDInput{Value: toAmt},
 			AccountID: form.FDInput{Value: toAccId},
+			Unit:      form.FDInput{Value: r.FormValue("to_amount_unit")},
 		}
 	} else {
 		fd.CategoryID = &form.FDInput{Value: r.FormValue("category_id")}

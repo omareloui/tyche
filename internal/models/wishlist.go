@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/omareloui/tyche/internal/errs"
-	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/sanitizer"
 	"github.com/omareloui/tyche/internal/valid"
 )
@@ -140,7 +139,7 @@ func (w *WishlistItem) CoolingProgress(now time.Time) float64 {
 }
 
 func (w *WishlistItem) ViewPrice() string {
-	return formatters.FormatAmount(w.Price, w.Currency.Symbol)
+	return w.Currency.Format(w.Price)
 }
 
 // ViewPlan sums its plan up, e.g. "12 × E£ 1,100" or "12 mo, E£ 1,200 →

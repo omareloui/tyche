@@ -395,16 +395,16 @@ templ txDetailsMonth(d *models.TxDetails, def *models.Currency) {
 							></div>
 						</div>
 						<p class="sensitive mt-2 text-xs text-zinc-400 tabular-nums">
-							{ formatters.FormatAmount(b.Spent, def.Symbol) } of { formatters.FormatAmount(b.Budget, def.Symbol) } ·
+							{ def.Format(b.Spent) } of { def.Format(b.Budget) } ·
 							if b.Over() {
-								<span class="text-red-400">{ formatters.FormatAmount(-b.Left(), def.Symbol) } over</span>
+								<span class="text-red-400">{ def.Format(-b.Left()) } over</span>
 							} else {
-								{ formatters.FormatAmount(b.Left(), def.Symbol) } left
+								{ def.Format(b.Left()) } left
 							}
 						</p>
 					} else {
 						<p class="sensitive mt-1 text-xs text-zinc-400 tabular-nums">
-							{ formatters.FormatAmount(b.Spent, def.Symbol) } spent, no budget
+							{ def.Format(b.Spent) } spent, no budget
 						</p>
 					}
 				</div>
@@ -425,10 +425,10 @@ templ txDetailsMonth(d *models.TxDetails, def *models.Currency) {
 					</p>
 					<p class="sensitive mt-1 flex flex-wrap gap-x-3 text-xs tabular-nums text-zinc-400">
 						if s.Out != 0 {
-							<span>{ formatters.FormatAmount(s.Out, def.Symbol) } spent</span>
+							<span>{ def.Format(s.Out) } spent</span>
 						}
 						if s.In != 0 {
-							<span class="text-emerald-400">{ formatters.FormatAmount(s.In, def.Symbol) } earned</span>
+							<span class="text-emerald-400">{ def.Format(s.In) } earned</span>
 						}
 						if s.Out == 0 && s.In == 0 {
 							<span>Nothing fulfilled yet</span>
@@ -491,7 +491,7 @@ templ txDetailsLinked(d *models.TxDetails, def *models.Currency) {
 				if fee := out.TransferFee(); fee >= 0.01 {
 					<div class="flex justify-between px-3 text-sm text-zinc-400">
 						<span>Fees</span>
-						<span class="tabular-nums">{ "-" + formatters.FormatAmount(fee, out.Account.Currency.Symbol) }</span>
+						<span class="tabular-nums">{ "-" + out.Account.Currency.Format(fee) }</span>
 					</div>
 				}
 			}
@@ -626,11 +626,11 @@ templ txGoalProgress(tx *models.Transaction) {
 		<p class="sensitive text-sm text-zinc-500 tabular-nums">
 			{ gl.ViewProgress() } of { gl.ViewAmount() } saved
 			if tx.IsGoalPurchase() {
-				· bought for { formatters.FormatAmount(tx.Amount, gl.Currency.Symbol) }
+				· bought for { gl.Currency.Format(tx.Amount) }
 			} else if amt := tx.GoalAmount(); amt > 0 {
-				· this one { "+" + formatters.FormatAmount(amt, gl.Currency.Symbol) } ({ formatters.FormatNum(tx.GoalPercentage()) }%)
+				· this one { "+" + gl.Currency.Format(amt) } ({ formatters.FormatNum(tx.GoalPercentage()) }%)
 			} else if amt < 0 {
-				· this one { formatters.FormatAmount(amt, gl.Currency.Symbol) }
+				· this one { gl.Currency.Format(amt) }
 			}
 		</p>
 	</div>

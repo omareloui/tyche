@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
@@ -58,10 +57,10 @@ templ gamyaaInputs(id string, fd *GamyaaFD, onChange templ.Attributes) {
 		@gamyaaTurnsInput(id, fd)
 		if g.Installment > 0 && g.Members > 0 && g.Shares > 0 {
 			<p class="text-sm text-zinc-400">
-				You pay <span class="text-zinc-100 tabular-nums">{ formatters.FormatAmount(g.MonthlyPayment(), sym) }</span> a month
+				You pay <span class="text-zinc-100 tabular-nums">{ fd.Currency.Format(g.MonthlyPayment()) }</span> a month
 				{ fmt.Sprintf("for %d months, until %s,", g.Members, g.EndsOn().Format("Jan 2006")) }
 				if len(g.Turns) > 0 {
-					and receive <span class="text-(--accent) tabular-nums">{ formatters.FormatAmount(g.PayoutAmount(), sym) }</span>
+					and receive <span class="text-(--accent) tabular-nums">{ fd.Currency.Format(g.PayoutAmount()) }</span>
 					{ "in " + gamyaaTurnMonths(g) + "." }
 				} else {
 					pick the month(s) you receive it in.
@@ -116,11 +115,11 @@ templ gamyaaSummary(g *models.Gamyaa, cur *models.Currency) {
 	if g != nil {
 		<div class="grid gap-1 rounded-2xl border border-zinc-800 bg-zinc-800/20 p-4 text-sm text-zinc-400">
 			<p>
-				<span class="text-zinc-100 tabular-nums">{ formatters.FormatAmount(g.MonthlyPayment(), cur.Symbol) }</span> a month,
+				<span class="text-zinc-100 tabular-nums">{ cur.Format(g.MonthlyPayment()) }</span> a month,
 				{ strconv.Itoa(g.Members) } months from { g.StartsOn.Format("Jan 2006") }, { g.ViewShares() }.
 			</p>
 			<p>
-				Receives <span class="text-zinc-100 tabular-nums">{ formatters.FormatAmount(g.PayoutAmount(), cur.Symbol) }</span>
+				Receives <span class="text-zinc-100 tabular-nums">{ cur.Format(g.PayoutAmount()) }</span>
 				{ "in " + gamyaaTurnMonths(g) + "." }
 			</p>
 			<p class="text-zinc-500">Its schedule lives in its transactions, edit or delete those to change it.</p>
@@ -131,7 +130,6 @@ templ gamyaaSummary(g *models.Gamyaa, cur *models.Currency) {
 // gamyaaProgress is a gam'yaa card's paid installments and its next dates.
 templ gamyaaProgress(a *models.Account) {
 	{{ g := a.Gamyaa }}
-	{{ sym := a.Currency.Symbol }}
 	{{ pct := 0.0 }}
 	if g.Members > 0 {
 		{{ pct = min(100, float64(g.PaidCount)/float64(g.Members)*100) }}
@@ -143,7 +141,7 @@ templ gamyaaProgress(a *models.Account) {
 			</div>
 			<div class="flex justify-between gap-3 mt-1.5 text-xs text-zinc-500 tabular-nums">
 				<span>{ fmt.Sprintf("%d/%d paid", g.PaidCount, g.Members) }</span>
-				<span class="truncate">{ g.ViewShares() } · { formatters.FormatAmount(g.MonthlyPayment(), sym) }/mo</span>
+				<span class="truncate">{ g.ViewShares() } · { a.Currency.Format(g.MonthlyPayment()) }/mo</span>
 			</div>
 		</div>
 		<div class="grid gap-1 text-sm">
@@ -157,7 +155,7 @@ templ gamyaaProgress(a *models.Account) {
 			if !g.NextPayoutOn.IsZero() {
 				<p class="flex items-center gap-1.5 text-zinc-400">
 					@icons.PiggyBank("14")
-					<span class="sensitive">Payout { formatters.FormatAmount(g.Pot(), sym) }</span>
+					<span class="sensitive">Payout { a.Currency.Format(g.Pot()) }</span>
 					<span class="ml-auto tabular-nums text-(--accent)">{ viewGamyaaDate(g.NextPayoutOn) }</span>
 				</p>
 			} else if len(g.Turns) > 0 {

@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/omareloui/tyche/internal/errs"
-	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/sanitizer"
 	"github.com/omareloui/tyche/internal/valid"
 )
@@ -61,11 +60,11 @@ type createTransaction struct {
 }
 
 func (t *Transaction) ViewAmount() string {
-	return formatters.FormatAmount(t.Amount, t.Account.Currency.Symbol)
+	return t.Account.Currency.Format(t.Amount)
 }
 
 func (t *Transaction) ViewNetAmount() string {
-	return formatters.FormatAmount(t.NetAmount(), t.Account.Currency.Symbol)
+	return t.Account.Currency.Format(t.NetAmount())
 }
 
 // IsReimbursement reports whether the transaction pays back (part of) an
@@ -94,7 +93,7 @@ func (t *Transaction) ViewToAmount() string {
 	if t.ToAccount == nil {
 		return ""
 	}
-	return formatters.FormatAmount(t.ToAmount, t.ToAccount.Currency.Symbol)
+	return t.ToAccount.Currency.Format(t.ToAmount)
 }
 
 func (t *Transaction) toValidate() *createTransaction {

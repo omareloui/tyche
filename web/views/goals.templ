@@ -107,10 +107,12 @@ templ GoalMoneyForm(gl *models.Goal, dir GoalMoneyDir, fd *GoalMoneyFD, accs []m
 // GoalMoneyFormFields is GoalMoneyForm's form alone, answered with its
 // errors.
 templ GoalMoneyFormFields(gl *models.Goal, dir GoalMoneyDir, fd *GoalMoneyFD, accs []models.Account) {
-	{{ p := form.DrawerFormProps{
-	Header: goalMoneyHeader(gl, dir), Method: "post", URL: fmt.Sprintf("/goals/%s/money?dir=%s", gl.ID, dir),
-	Submit: "Add money", Class: "[--accent:var(--color-emerald-400)]",
-} }}
+	{{
+		p := form.DrawerFormProps{
+			Header: goalMoneyHeader(gl, dir), Method: "post", URL: fmt.Sprintf("/goals/%s/money?dir=%s", gl.ID, dir),
+			Submit: "Add money", Class: "[--accent:var(--color-emerald-400)]",
+		}
+	}}
 	switch dir {
 		case GoalWithdraw:
 			{{ p.Submit, p.Class = "Withdraw", "[--accent:var(--color-amber-300)]" }}
@@ -386,10 +388,10 @@ templ goalsSummary(goals []models.Goal, defaultCur *models.Currency, oob bool) {
 								Saved so far
 							</p>
 							<p class="sensitive mt-1 text-3xl sm:text-4xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">
-								{ formatters.FormatAmount(s.Saved, defaultCur.Symbol) }
+								{ defaultCur.Format(s.Saved) }
 							</p>
 							<p class="text-sm text-zinc-500 tabular-nums">
-								of <span class="sensitive">{ formatters.FormatAmount(s.Target, defaultCur.Symbol) }</span> across { fmt.Sprint(s.Active) } { plural(s.Active, "goal", "goals") }
+								of <span class="sensitive">{ defaultCur.Format(s.Target) }</span> across { fmt.Sprint(s.Active) } { plural(s.Active, "goal", "goals") }
 							</p>
 						</div>
 					} else {
@@ -701,7 +703,7 @@ func goalRestIn(gl *models.Goal, accs []models.Account, accID string) float64 {
 }
 
 type goalsSummaryData struct {
-	Saved, Target            float64
+	Saved, Target           float64
 	Active, Ready, Achieved int
 }
 

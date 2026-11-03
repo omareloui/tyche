@@ -69,7 +69,8 @@ SELECT
     user.work_hours_per_week,
     c.id AS currency_id,
     c.string AS currency_string,
-    c.symbol AS currency_symbol
+    c.symbol AS currency_symbol,
+    c.in_grams AS currency_in_grams
 FROM user
 LEFT JOIN currencies AS c ON c.id = COALESCE(user.salary_currency_id, user.default_currency_id)
 LIMIT 1;

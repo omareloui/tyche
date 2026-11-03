@@ -119,6 +119,28 @@ func (r *Repository) SetCurrencyIsShown(ctx context.Context, currID string, isSh
 	return nil
 }
 
+// SetCurrencyInGrams sets whether a precious metal's amounts are shown in
+// grams instead of troy ounces.
+func (r *Repository) SetCurrencyInGrams(ctx context.Context, currID string, inGrams bool) error {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+
+	l := logger.FromCtx(ctx)
+
+	if err := q.SetCurrencyInGrams(ctx, queries.SetCurrencyInGramsParams{
+		ID:      currID,
+		InGrams: inGrams,
+	}); err != nil {
+		l.Error("error setting InGrams for currency", zap.String("currID", currID), zap.Bool("in_grams", inGrams), zap.Error(err))
+		return err
+	}
+
+	l.Debug("set currency in grams", zap.String("currID", currID), zap.Bool("in_grams", inGrams))
+	return nil
+}
+
 func (r *Repository) SetDefaultCurrency(ctx context.Context, currID string) error {
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
@@ -145,6 +167,7 @@ func dbCurrencyToCurrency(dbCurr *queries.Currency, isDefault bool) *models.Curr
 		IbanPrefix: dbCurr.IbanPrefix.String,
 		IsShown:    dbCurr.IsShown,
 		IsDefault:  isDefault,
+		InGrams:    dbCurr.InGrams,
 	}
 }
 

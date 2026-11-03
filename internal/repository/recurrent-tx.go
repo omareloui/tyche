@@ -275,9 +275,10 @@ func dbRecurrentTxDetailsToRecurrentTx(dbRtx queries.RecurrentTxsDetail) *models
 
 	if dbRtx.AccountCurrencyID.Valid {
 		rt.Account.Currency = models.Currency{
-			ID:     dbRtx.AccountCurrencyID.String,
-			String: dbRtx.AccountCurrencyString.String,
-			Symbol: dbRtx.AccountCurrencySymbol.String,
+			ID:      dbRtx.AccountCurrencyID.String,
+			String:  dbRtx.AccountCurrencyString.String,
+			Symbol:  dbRtx.AccountCurrencySymbol.String,
+			InGrams: dbRtx.AccountCurrencyInGrams.Bool,
 		}
 	}
 
@@ -301,9 +302,10 @@ func dbRecurrentTxDetailsToRecurrentTx(dbRtx queries.RecurrentTxsDetail) *models
 		}
 		if dbRtx.ToAccountCurrencyID.Valid {
 			rt.ToAccount.Currency = models.Currency{
-				ID:     dbRtx.ToAccountCurrencyID.String,
-				String: dbRtx.ToAccountCurrencyString.String,
-				Symbol: dbRtx.ToAccountCurrencySymbol.String,
+				ID:      dbRtx.ToAccountCurrencyID.String,
+				String:  dbRtx.ToAccountCurrencyString.String,
+				Symbol:  dbRtx.ToAccountCurrencySymbol.String,
+				InGrams: dbRtx.ToAccountCurrencyInGrams.Bool,
 			}
 		}
 		if dbRtx.ToAccountCounterpartyID.Valid {

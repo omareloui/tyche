@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/omareloui/tyche/internal/errs"
-	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/numsutils"
 	"github.com/omareloui/tyche/internal/sanitizer"
 	"github.com/omareloui/tyche/internal/valid"
@@ -43,7 +42,7 @@ type createGoal struct {
 }
 
 func (gl *Goal) ViewAmount() string {
-	return formatters.FormatAmount(gl.Price, gl.Currency.Symbol)
+	return gl.Currency.Format(gl.Price)
 }
 
 // Progress is the money saved: its account's balance plus what buying it
@@ -64,7 +63,7 @@ func (gl *Goal) Balance() float64 {
 }
 
 func (gl *Goal) ViewBalance() string {
-	return formatters.FormatAmount(gl.Balance(), gl.Currency.Symbol)
+	return gl.Currency.Format(gl.Balance())
 }
 
 func (gl *Goal) ProgressPercentage() float64 {
@@ -76,11 +75,11 @@ func (gl *Goal) Remaining() float64 {
 }
 
 func (gl *Goal) ViewRemaining() string {
-	return formatters.FormatAmount(gl.Remaining(), gl.Currency.Symbol)
+	return gl.Currency.Format(gl.Remaining())
 }
 
 func (gl *Goal) ViewProgress() string {
-	return formatters.FormatAmount(gl.Progress(), gl.Currency.Symbol)
+	return gl.Currency.Format(gl.Progress())
 }
 
 func (gl *Goal) Plan(numberOfMonths int) float64 {

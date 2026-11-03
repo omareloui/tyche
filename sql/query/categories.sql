@@ -3,7 +3,8 @@ SELECT
     sqlc.embed(c),
     cur.id AS budget_currency_id,
     cur.string AS budget_currency_string,
-    cur.symbol AS budget_currency_symbol
+    cur.symbol AS budget_currency_symbol,
+    cur.in_grams AS budget_currency_in_grams
 FROM categories AS c
 LEFT JOIN currencies AS cur ON cur.id = c.budget_currency_id
 ORDER BY c.created_at;
@@ -13,7 +14,8 @@ SELECT
     sqlc.embed(c),
     cur.id AS budget_currency_id,
     cur.string AS budget_currency_string,
-    cur.symbol AS budget_currency_symbol
+    cur.symbol AS budget_currency_symbol,
+    cur.in_grams AS budget_currency_in_grams
 FROM categories AS c
 LEFT JOIN currencies AS cur ON cur.id = c.budget_currency_id
 WHERE c.id = sqlc.arg(id);

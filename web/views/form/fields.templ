@@ -2,11 +2,11 @@ package form
 
 import (
 	"fmt"
-	"slices"
-	"strings"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/icons"
+	"slices"
+	"strings"
 )
 
 // SegmentedRadio is a row of pills, one per option. The hx attrs go on the
@@ -77,6 +77,11 @@ templ Toggle(label, name, id string, icon templ.Component, data FDInput, inputAt
 
 // HeroMoneyInput is a large, centered money input for a form's main amount.
 templ HeroMoneyInput(label, name, currencySymbol, id string, data FDInput, inputAttrs templ.Attributes) {
+	@HeroAmountInput(label, name, currencySymbol, 2, id, data, inputAttrs)
+}
+
+// HeroAmountInput is HeroMoneyInput keeping up to digits fraction digits.
+templ HeroAmountInput(label, name, currencySymbol string, digits int, id string, data FDInput, inputAttrs templ.Attributes) {
 	<div class="w-full">
 		<label for={ join(name, id) } class="sr-only">{ label }</label>
 		<input
@@ -84,10 +89,10 @@ templ HeroMoneyInput(label, name, currencySymbol, id string, data FDInput, input
 			type="text"
 			name={ name }
 			value={ data.Value }
-			placeholder={ fmt.Sprintf("%s 0.00", currencySymbol) }
+			placeholder={ fmt.Sprintf("%s 0.%s", currencySymbol, strings.Repeat("0", digits)) }
 			autocomplete="off"
 			inputmode="decimal"
-			x-mask:dynamic={ fmt.Sprintf("'%s ' + $money($input, '.', ',')", currencySymbol) }
+			x-mask:dynamic={ MoneyMask(currencySymbol, digits) }
 			class="amount-hero"
 			if data.Error != "" {
 				aria-invalid="true"
@@ -100,6 +105,53 @@ templ HeroMoneyInput(label, name, currencySymbol, id string, data FDInput, input
 			@ErrorMessage(data.Error)
 		</div>
 	</div>
+}
+
+// MoneyMask is the x-mask of an amount prefixed with sym, keeping up to
+// digits fraction digits.
+func MoneyMask(sym string, digits int) string {
+	return fmt.Sprintf("'%s ' + $money($input, '.', ',', %d)", sym, digits)
+}
+
+// MetalUnitToggle picks the unit (troy ounces or grams) a metal amount is
+// typed in.
+templ MetalUnitToggle(name, id string, selected models.MetalUnit, attrs templ.Attributes) {
+	<fieldset
+		id={ join(name, id) }
+		class="inline-flex"
+		if attrs != nil {
+			{ attrs... }
+		}
+	>
+		<legend class="sr-only">Unit</legend>
+		<div class="flex gap-0.5 p-0.5 rounded-lg bg-zinc-800/60 border border-zinc-800 text-xs">
+			for _, u := range models.MetalUnits {
+				<label
+					title={ metalUnitName(u) }
+					class="cursor-pointer select-none rounded-md px-2.5 py-1 font-medium text-zinc-400 transition-colors hover:text-white has-checked:bg-(--accent) has-checked:text-zinc-950 has-focus-visible:ring-2 has-focus-visible:ring-(--accent)"
+				>
+					<input
+						type="radio"
+						name={ name }
+						value={ string(u) }
+						aria-label={ metalUnitName(u) }
+						class="sr-only"
+						if u == selected {
+							checked
+						}
+					/>
+					{ string(u) }
+				</label>
+			}
+		</div>
+	</fieldset>
+}
+
+func metalUnitName(u models.MetalUnit) string {
+	if u == models.MetalUnitGram {
+		return "Grams"
+	}
+	return "Troy ounces"
 }
 
 // SelectAccountChip is a pill combobox of accounts, searchable when there

@@ -31,11 +31,16 @@ func FormatRate(rate float64) string {
 }
 
 func FormatAmount(amount float64, curSymbol string) string {
+	return FormatAmountDigits(amount, curSymbol, 2)
+}
+
+// FormatAmountDigits is FormatAmount keeping up to frac fraction digits.
+func FormatAmountDigits(amount float64, curSymbol string, frac int) string {
 	strBuilder := new(strings.Builder)
 	if curSymbol != "" {
 		strBuilder.WriteString(curSymbol)
 		strBuilder.WriteString(" ")
 	}
-	strBuilder.WriteString(FormatNum(amount))
+	strBuilder.WriteString(p.Sprintf("%v", number.Decimal(amount, number.MaxFractionDigits(frac))))
 	return strBuilder.String()
 }

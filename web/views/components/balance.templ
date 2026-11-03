@@ -3,7 +3,6 @@ package components
 import (
 	"fmt"
 
-	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/web/views/icons"
 )
@@ -39,7 +38,7 @@ templ NavbarBalance(balances []models.Balance, def *models.Currency, oob bool) {
 				if partial {
 					≈
 				}
-				{ formatters.FormatAmount(total, def.Symbol) }
+				{ def.Format(total) }
 			</span>
 		</button>
 		<button
@@ -66,7 +65,7 @@ templ NavbarBalance(balances []models.Balance, def *models.Currency, oob bool) {
 				<div>
 					<p class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Total balance</p>
 					<p class={ "sensitive mt-0.5 text-2xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)", templ.KV("text-red-400", total < 0) }>
-						{ formatters.FormatAmount(total, def.Symbol) }
+						{ def.Format(total) }
 					</p>
 					if partial {
 						<p class="text-xs text-amber-300">Some rates are unavailable, those currencies aren't counted.</p>
@@ -129,5 +128,5 @@ func convertedBalance(b *models.Balance, def *models.Currency) string {
 	if rate == 0 {
 		return "no rate"
 	}
-	return fmt.Sprintf("≈ %s", formatters.FormatAmount(b.Amount*rate, def.Symbol))
+	return fmt.Sprintf("≈ %s", def.Format(b.Amount*rate))
 }

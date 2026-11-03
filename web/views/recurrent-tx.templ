@@ -180,11 +180,11 @@ templ rtxSummary(rtxs []models.RecurrentTx, def *models.Currency, oob bool) {
 						</p>
 						<div class="flex flex-wrap items-baseline gap-x-5 gap-y-1 mt-1">
 							<p class="text-3xl sm:text-4xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">
-								{ formatSignedAmount(-s.Out, def.Symbol) }
+								{ formatSignedAmount(-s.Out, def) }
 							</p>
 							if s.In > 0 {
 								<p class="text-xl font-bold tabular-nums text-emerald-400 font-(family-name:--font-biorhyme-expanded)">
-									{ formatSignedAmount(s.In, def.Symbol) }
+									{ formatSignedAmount(s.In, def) }
 								</p>
 							}
 						</div>

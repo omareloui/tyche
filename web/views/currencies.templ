@@ -110,7 +110,52 @@ templ defaultCurrencyHero(cur *models.Currency) {
 			</p>
 			<p class="text-sm text-zinc-500">{ cur.Kind.String() } · your balance and the rates below are in it</p>
 		</div>
+		if cur.IsMetal() {
+			<div class="relative" hx-target="this" hx-swap="none">
+				@metalUnitToggle(cur)
+			</div>
+		}
 	</section>
+}
+
+// metalUnitToggle switches the unit a metal's amounts are shown in, everywhere.
+templ metalUnitToggle(cur *models.Currency) {
+	<div role="group" aria-label={ "Show " + cur.String + " in" } class="flex shrink-0 p-0.5 mr-1 rounded-lg bg-zinc-800/80 text-xs">
+		for _, u := range []models.MetalUnit{models.MetalUnitOunce, models.MetalUnitGram} {
+			<button
+				type="button"
+				hx-put={ fmt.Sprintf("/currencies/%s/unit", cur.ID) }
+				hx-vals={ fmt.Sprintf(`{"unit": %q}`, u) }
+				title={ metalUnitTitle(u) }
+				aria-pressed={ fmt.Sprint(cur.Unit() == u) }
+				disabled?={ cur.Unit() == u }
+				class="cursor-pointer h-7 px-2 rounded-md text-zinc-400 transition-colors hover:text-white aria-pressed:cursor-default aria-pressed:bg-(--accent)/15 aria-pressed:text-(--accent)"
+			>
+				{ string(u) }
+			</button>
+		}
+	</div>
+}
+
+func metalUnitTitle(u models.MetalUnit) string {
+	if u == models.MetalUnitGram {
+		return "Show in grams"
+	}
+	return "Show in troy ounces"
+}
+
+// currencyRate is what one unit of cur, as shown (e.g. a gram of gold), is
+// worth in defaultCur, as shown; 0 without a rate.
+func currencyRate(cur, defaultCur *models.Currency) float64 {
+	return defaultCur.Shown(cur.ValueIn(defaultCur.String)) / cur.Shown(1)
+}
+
+// unitPrefix is "g " or "oz " for a metal, "" for others.
+func unitPrefix(cur *models.Currency) string {
+	if u := cur.Unit(); u != "" {
+		return string(u) + " "
+	}
+	return ""
 }
 
 templ currenciesToolbar() {
@@ -152,7 +197,7 @@ templ currencyKindPill(label, kind string) {
 }
 
 templ Currency(cur *models.Currency, defaultCur *models.Currency) {
-	{{ value := cur.ValueIn(defaultCur.String) }}
+	{{ value := currencyRate(cur, defaultCur) }}
 	<div
 		id={ CurrencyCardID(cur.ID) }
 		hx-target="this"
@@ -182,13 +227,19 @@ templ Currency(cur *models.Currency, defaultCur *models.Currency) {
 				if value > 0 {
 					<p class="text-sm font-bold tabular-nums truncate font-(family-name:--font-biorhyme-expanded)">
 						{ defaultCur.Symbol } { formatters.FormatRate(value) }
+						if u := defaultCur.Unit(); u != "" {
+							<span class="text-xs font-normal text-zinc-500">/ { string(u) }</span>
+						}
 					</p>
-					<p class="text-xs text-zinc-500 truncate">per 1 { cur.String }</p>
+					<p class="text-xs text-zinc-500 truncate">per 1 { unitPrefix(cur) }{ cur.String }</p>
 				} else {
 					<p class="text-sm text-zinc-600">No rate</p>
 				}
 			</div>
 			<div class="flex items-center shrink-0 -mr-1">
+				if cur.IsMetal() {
+					@metalUnitToggle(cur)
+				}
 				if cur.IsShown {
 					<button
 						hx-put={ fmt.Sprintf("/currencies/%s/hide", cur.ID) }
@@ -245,9 +296,9 @@ func currencyRateTitle(cur, defaultCur *models.Currency, value float64) string {
 	if value <= 0 {
 		return "No exchange rate available"
 	}
-	return fmt.Sprintf("1 %s = %s %s\n1 %s = %s %s",
-		cur.String, formatters.FormatRate(value), defaultCur.String,
-		defaultCur.String, formatters.FormatRate(1/value), cur.String)
+	return fmt.Sprintf("1 %s%s = %s %s%s\n1 %s%s = %s %s%s",
+		unitPrefix(cur), cur.String, formatters.FormatRate(value), unitPrefix(defaultCur), defaultCur.String,
+		unitPrefix(defaultCur), defaultCur.String, formatters.FormatRate(1/value), unitPrefix(cur), cur.String)
 }
 
 func currencyKindSlug(k models.CurrencyKind) string {

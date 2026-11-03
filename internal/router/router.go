@@ -136,6 +136,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("PUT /currencies/{id}/show", handle(h.ChangeIsShownForCurrency(true)))
 	mux.Handle("PUT /currencies/{id}/hide", handle(h.ChangeIsShownForCurrency(false)))
 	mux.Handle("PUT /currencies/{id}/set-default", handle(h.SetDefaultCurrency))
+	mux.Handle("PUT /currencies/{id}/unit", handle(h.SetCurrencyUnit))
 
 	mux.Handle("POST /amount-inputs-with-currency/{id}", handle(h.AmountInputsWithCurrency))
 	mux.Handle("POST /amount-inputs-with-account/{id}", handle(h.AmountInputsWithAccount))

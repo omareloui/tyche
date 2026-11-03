@@ -604,9 +604,10 @@ func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTran
 		}
 		if _dbTx.GoalCurrencyID.Valid {
 			glCur = &queries.Currency{
-				ID:     _dbTx.GoalCurrencyID.String,
-				String: _dbTx.GoalCurrencyString.String,
-				Symbol: _dbTx.GoalCurrencySymbol.String,
+				ID:      _dbTx.GoalCurrencyID.String,
+				String:  _dbTx.GoalCurrencyString.String,
+				Symbol:  _dbTx.GoalCurrencySymbol.String,
+				InGrams: _dbTx.GoalCurrencyInGrams.Bool,
 			}
 		}
 	}
@@ -634,9 +635,10 @@ func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTran
 		}
 		if _dbTx.ToAccountCurrencyID.Valid {
 			toAccCurr = &queries.Currency{
-				ID:     toAcc.CurrencyID,
-				String: _dbTx.ToAccountCurrencyString.String,
-				Symbol: _dbTx.ToAccountCurrencySymbol.String,
+				ID:      toAcc.CurrencyID,
+				String:  _dbTx.ToAccountCurrencyString.String,
+				Symbol:  _dbTx.ToAccountCurrencySymbol.String,
+				InGrams: _dbTx.ToAccountCurrencyInGrams.Bool,
 			}
 		}
 

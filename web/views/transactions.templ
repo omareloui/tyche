@@ -484,6 +484,16 @@ templ TransferPairPicker(tx *models.Transaction, cands []models.Transaction, err
 	</div>
 }
 
+// txAccount is the account of accs with the id, nil if none.
+func txAccount(accs []models.Account, id string) *models.Account {
+	for i := range accs {
+		if accs[i].ID == id {
+			return &accs[i]
+		}
+	}
+	return nil
+}
+
 // transferPairLikely reports whether a and b look like the two sides of a
 // transfer, as auto pairing would see them.
 func transferPairLikely(a, b *models.Transaction) bool {
@@ -514,11 +524,15 @@ templ TransactionAmountsAndKindFormBody(
 		// One shrinkable column, so long account names truncate in their chips
 		// instead of widening the form past the screen.
 		<div class="grid grid-cols-1 justify-items-center gap-3 py-2">
-			@form.HeroMoneyInput("Amount", "amount", form.GetAccoutSym(accs, fd.AccountIFD.AccountID.Value, defaultCur), id,
-				fd.AccountIFD.Amount, templ.Attributes{
+			{{ unit := txAccount(accs, fd.AccountIFD.AccountID.Value).AmountUnit(fd.AccountIFD.Unit.Value) }}
+			@form.HeroAmountInput("Amount", "amount", form.GetAccoutSym(accs, fd.AccountIFD.AccountID.Value, defaultCur),
+				models.AmountDigits(unit), id, fd.AccountIFD.Amount, templ.Attributes{
 					"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
 					"hx-trigger": "keyup changed delay:200ms",
 				})
+			if unit != "" {
+				@form.MetalUnitToggle("amount_unit", id, unit, onChange)
+			}
 			<div class="flex items-center justify-center gap-2 w-full min-w-0">
 				@form.SelectAccountChip(txAccountLabel(fd), "account_id", id, getTxAccs(accs, kind, switched), fd.AccountIFD.AccountID, onChange)
 				if fd.ToAccountIFD != nil {
@@ -538,23 +552,29 @@ templ TransactionAmountsAndKindFormBody(
 			@form.ErrorMessage(fd.AccountIFD.AccountID.Error)
 			if fd.ToAccountIFD != nil {
 				{{ toSym := form.GetAccoutSym(accs, fd.ToAccountIFD.AccountID.Value, defaultCur) }}
-				<label class="flex items-center gap-2 text-sm text-zinc-400">
-					Receives
-					<input
-						id={ "to_amount-" + id }
-						type="text"
-						name="to_amount"
-						value={ fd.ToAccountIFD.Amount.Value }
-						placeholder={ toSym + " 0.00" }
-						autocomplete="off"
-						inputmode="decimal"
-						x-mask:dynamic={ fmt.Sprintf("'%s ' + $money($input, '.', ',')", toSym) }
-						class="input-field w-48! h-9! text-center tabular-nums font-(family-name:--font-biorhyme-expanded)"
-						if fd.ToAccountIFD.Amount.Error != "" {
-							aria-invalid="true"
-						}
-					/>
-				</label>
+				{{ toUnit := txAccount(accs, fd.ToAccountIFD.AccountID.Value).AmountUnit(fd.ToAccountIFD.Unit.Value) }}
+				<div class="flex flex-wrap items-center justify-center gap-2 text-sm text-zinc-400">
+					<label class="flex items-center gap-2">
+						Receives
+						<input
+							id={ "to_amount-" + id }
+							type="text"
+							name="to_amount"
+							value={ fd.ToAccountIFD.Amount.Value }
+							placeholder={ fmt.Sprintf("%s 0.%s", toSym, strings.Repeat("0", models.AmountDigits(toUnit))) }
+							autocomplete="off"
+							inputmode="decimal"
+							x-mask:dynamic={ form.MoneyMask(toSym, models.AmountDigits(toUnit)) }
+							class="input-field w-48! h-9! text-center tabular-nums font-(family-name:--font-biorhyme-expanded)"
+							if fd.ToAccountIFD.Amount.Error != "" {
+								aria-invalid="true"
+							}
+						/>
+					</label>
+					if toUnit != "" {
+						@form.MetalUnitToggle("to_amount_unit", id, toUnit, onChange)
+					}
+				</div>
 				@form.ErrorMessage(fd.ToAccountIFD.Amount.Error)
 				@form.ErrorMessage(fd.ToAccountIFD.AccountID.Error)
 			}

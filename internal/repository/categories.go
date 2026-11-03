@@ -125,9 +125,10 @@ func dbCategoryToCategory(dbCat *queries.Category, cur *queries.Currency) *model
 func dbCategoryRowToCategory[T queries.GetCategoryRow | queries.GetCategoriesRow](dbCat *T) *models.Category {
 	_dbCat := queries.GetCategoryRow(*dbCat)
 	return dbCategoryToCategory(&_dbCat.Category, &queries.Currency{
-		ID:     _dbCat.Category.BudgetCurrencyID.String,
-		String: _dbCat.BudgetCurrencyString.String,
-		Symbol: _dbCat.BudgetCurrencySymbol.String,
+		ID:      _dbCat.Category.BudgetCurrencyID.String,
+		String:  _dbCat.BudgetCurrencyString.String,
+		Symbol:  _dbCat.BudgetCurrencySymbol.String,
+		InGrams: _dbCat.BudgetCurrencyInGrams.Bool,
 	})
 }
 

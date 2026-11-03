@@ -48,7 +48,8 @@ SELECT
     a.created_at AS account_created_at,
     ac.id AS account_currency_id,
     ac.string AS account_currency_string,
-    ac.symbol AS account_currency_symbol
+    ac.symbol AS account_currency_symbol,
+    ac.in_grams AS account_currency_in_grams
 FROM goals AS gl
 LEFT JOIN currencies AS c ON c.id = gl.currency_id
 JOIN accounts AS ga ON ga.id = gl.account_id
@@ -92,7 +93,8 @@ SELECT
     a.created_at AS account_created_at,
     ac.id AS account_currency_id,
     ac.string AS account_currency_string,
-    ac.symbol AS account_currency_symbol
+    ac.symbol AS account_currency_symbol,
+    ac.in_grams AS account_currency_in_grams
 FROM goals AS gl
 LEFT JOIN currencies AS c ON c.id = gl.currency_id
 JOIN accounts AS ga ON ga.id = gl.account_id
@@ -137,7 +139,8 @@ SELECT
     a.created_at AS account_created_at,
     ac.id AS account_currency_id,
     ac.string AS account_currency_string,
-    ac.symbol AS account_currency_symbol
+    ac.symbol AS account_currency_symbol,
+    ac.in_grams AS account_currency_in_grams
 FROM goals AS gl
 LEFT JOIN currencies AS c ON c.id = gl.currency_id
 JOIN accounts AS ga ON ga.id = gl.account_id

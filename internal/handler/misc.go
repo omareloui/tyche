@@ -105,6 +105,7 @@ func (h Handler) TxInputsSwitch(w http.ResponseWriter, r *http.Request) (templ.C
 	if fd.ToAccountIFD != nil {
 		toAccId = fd.ToAccountIFD.AccountID.Value
 		fd.ToAccountIFD.AccountID.Value = accId
+		fd.AccountIFD.Unit, fd.ToAccountIFD.Unit = fd.ToAccountIFD.Unit, fd.AccountIFD.Unit
 	}
 	if toAccId != "" {
 		fd.AccountIFD.AccountID.Value = toAccId

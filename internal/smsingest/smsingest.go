@@ -193,7 +193,7 @@ func convert(amount float64, cur string, acc *models.Account, fxRate FxRateFunc)
 	if rate == 0 {
 		return 0, "", fmt.Errorf("got zero fx rate from %s to %s", cur, acc.Currency.String)
 	}
-	return amount * rate, "originally " + formatters.FormatAmount(amount, cur), nil
+	return acc.Currency.Round(amount * rate), "originally " + formatters.FormatAmount(amount, cur), nil
 }
 
 func matchAccount(ref, cur string, accounts []models.Account) *models.Account {

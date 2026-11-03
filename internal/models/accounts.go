@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/omareloui/tyche/internal/errs"
-	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/sanitizer"
 	"github.com/omareloui/tyche/internal/valid"
 )
@@ -53,8 +52,20 @@ type createAccount struct {
 	CounterpartyID string `validate:"required_if=Kind 4"`
 }
 
+// AmountUnit is the unit an amount of a, a metal account, is typed in: the
+// picked one, else the one its currency is shown in; "" for other accounts.
+func (a *Account) AmountUnit(picked string) MetalUnit {
+	if a == nil || !a.Currency.IsMetal() {
+		return ""
+	}
+	if u := ParseMetalUnit(picked); u != "" {
+		return u
+	}
+	return a.Currency.Unit()
+}
+
 func (a *Account) ViewAmount() string {
-	return formatters.FormatAmount(a.Amount, a.Currency.Symbol)
+	return a.Currency.Format(a.Amount)
 }
 
 // ViewAmountIn is the balance converted to cur, "" when there's no rate.
@@ -63,18 +74,18 @@ func (a *Account) ViewAmountIn(cur *Currency) string {
 	if rate == 0 {
 		return ""
 	}
-	return formatters.FormatAmount(rate*a.Amount, cur.Symbol)
+	return cur.Format(rate * a.Amount)
 }
 
 func (a *Account) ViewSetAside() string {
-	return formatters.FormatAmount(a.SetAside, a.Currency.Symbol)
+	return a.Currency.Format(a.SetAside)
 }
 
 // InBank is what the bank shows: its balance plus what's set aside for goals.
 func (a *Account) InBank() float64 { return a.Amount + a.SetAside }
 
 func (a *Account) ViewInBank() string {
-	return formatters.FormatAmount(a.InBank(), a.Currency.Symbol)
+	return a.Currency.Format(a.InBank())
 }
 
 func (a *Account) IsDeleted() bool { return !a.DeletedAt.IsZero() }
@@ -91,13 +102,13 @@ func (a *Account) DisplayName() string {
 func (a *Account) IsGoal() bool { return a.Kind.Enum == AccKindGoal }
 
 func (a *Account) ViewCardLimit() string {
-	return formatters.FormatAmount(a.CardLimit, a.Currency.Symbol)
+	return a.Currency.Format(a.CardLimit)
 }
 
 // ViewAvailableCredit is a credit card's limit left, its balance being
 // negative when spending.
 func (a *Account) ViewAvailableCredit() string {
-	return formatters.FormatAmount(a.CardLimit+a.Amount, a.Currency.Symbol)
+	return a.Currency.Format(a.CardLimit + a.Amount)
 }
 
 func (a *Account) MaskIban() string {
@@ -151,11 +162,11 @@ type Balance struct {
 }
 
 func (b *Balance) ViewAmount() string {
-	return formatters.FormatAmount(b.Amount, b.Currency.Symbol)
+	return b.Currency.Format(b.Amount)
 }
 
 func (b *Balance) ViewAmountWithCurrency(cur *Currency) string {
-	return formatters.FormatAmount(b.Currency.FxRate(cur.String)*b.Amount, cur.Symbol)
+	return cur.Format(b.Currency.FxRate(cur.String) * b.Amount)
 }
 
 func (b *Balance) AmountWithCurrency(cur *Currency) float64 {

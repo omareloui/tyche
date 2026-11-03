@@ -28,9 +28,10 @@ func (r *Repository) GetWorkSettings(ctx context.Context) (*models.WorkSettings,
 	return &models.WorkSettings{
 		MonthlySalary: row.MonthlySalary.Float64,
 		Currency: models.Currency{
-			ID:     row.CurrencyID.String,
-			String: row.CurrencyString.String,
-			Symbol: row.CurrencySymbol.String,
+			ID:      row.CurrencyID.String,
+			String:  row.CurrencyString.String,
+			Symbol:  row.CurrencySymbol.String,
+			InGrams: row.CurrencyInGrams.Bool,
 		},
 		HoursPerWeek: row.WorkHoursPerWeek,
 	}, nil

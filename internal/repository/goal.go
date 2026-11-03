@@ -311,9 +311,10 @@ func dbGoalRowsToGoals[T queries.GetGoalsRow | queries.GetGoalRow | queries.GetU
 		}
 
 		accCurr := queries.Currency{
-			ID:     acc.CurrencyID,
-			String: dbGl.AccountCurrencyString.String,
-			Symbol: dbGl.AccountCurrencySymbol.String,
+			ID:      acc.CurrencyID,
+			String:  dbGl.AccountCurrencyString.String,
+			Symbol:  dbGl.AccountCurrencySymbol.String,
+			InGrams: dbGl.AccountCurrencyInGrams.Bool,
 		}
 
 		tx := dbTransactionToTransaction(&_tx, &acc, &accCurr, nil, nil, nil, nil, nil, nil)

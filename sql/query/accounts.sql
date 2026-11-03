@@ -151,13 +151,13 @@ WHERE id = sqlc.arg(id);
 -- name: AddToAccount :exec
 UPDATE accounts
 SET
-    amount = ROUND(amount + sqlc.arg(amount), 2)
+    amount = ROUND(amount + sqlc.arg(amount), 6)
 WHERE id = sqlc.arg(id);
 
 -- name: RemoveFromAccount :exec
 UPDATE accounts
 SET
-    amount = ROUND(amount - sqlc.arg(amount), 2)
+    amount = ROUND(amount - sqlc.arg(amount), 6)
 WHERE id = sqlc.arg(id);
 
 -- name: GetAccountAmount :one
@@ -167,7 +167,7 @@ WHERE id = sqlc.arg(id);
 -- name: SetAccountAmount :exec
 UPDATE accounts
 SET
-    amount = ROUND(sqlc.arg(amount), 2)
+    amount = ROUND(sqlc.arg(amount), 6)
 WHERE id = sqlc.arg(id);
 
 -- name: SetCurrencyOfUnusedAccounts :exec

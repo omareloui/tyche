@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
@@ -96,7 +95,7 @@ templ Wishlist(items []models.WishlistItem, ws *models.WorkSettings, defaultCur 
 					<p class="mt-1 text-sm text-zinc-500 tabular-nums">
 						You let go of { fmt.Sprintf("%.0f%%", s.AbandonRate()) } of your wishes
 						if s.Saved > 0 {
-							, keeping <span class="text-emerald-400">{ formatters.FormatAmount(s.Saved, defaultCur.Symbol) }</span>
+							, keeping <span class="text-emerald-400">{ defaultCur.Format(s.Saved) }</span>
 						}
 					</p>
 				}
@@ -254,7 +253,7 @@ templ WishlistItem(item *models.WishlistItem, ws *models.WorkSettings) {
 				case models.WishlistAbandoned:
 					<p class="flex items-center gap-1.5 mt-auto text-sm text-(--accent)">
 						@icons.PiggyBank("14")
-						Let go { goalDay(item.DecidedAt) }, kept { formatters.FormatAmount(item.TotalCost(), item.Currency.Symbol) }
+						Let go { goalDay(item.DecidedAt) }, kept { item.Currency.Format(item.TotalCost()) }
 					</p>
 			}
 		</div>

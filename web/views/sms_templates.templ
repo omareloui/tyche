@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/smsparser"
@@ -181,10 +180,10 @@ templ sandboxResult(res *SMSSandboxResult) {
 templ sandboxTx(tx *models.Transaction) {
 	<dl class="grid gap-x-6 gap-y-2 p-3 rounded-xl bg-zinc-900/60 text-sm sm:grid-cols-2">
 		@kv("Transaction", tx.Kind.String())
-		@kv("Amount", formatters.FormatAmount(tx.Amount, tx.Account.Currency.Symbol))
+		@kv("Amount", tx.Account.Currency.Format(tx.Amount))
 		@kv("Account", tx.Account.Name)
 		if tx.ToAccount != nil {
-			@kv("To", fmt.Sprintf("%s (%s)", tx.ToAccount.Name, formatters.FormatAmount(tx.ToAmount, tx.ToAccount.Currency.Symbol)))
+			@kv("To", fmt.Sprintf("%s (%s)", tx.ToAccount.Name, tx.ToAccount.Currency.Format(tx.ToAmount)))
 		}
 		@kv("Date", tx.FulfilledAt.Format("Mon, Jan 2 2006, 3:04pm MST"))
 		if tx.Counterparty != nil {

@@ -3,8 +3,6 @@ package models
 import (
 	"errors"
 	"time"
-
-	"github.com/omareloui/tyche/internal/formatters"
 )
 
 var (
@@ -18,22 +16,22 @@ var (
 // ReimbursableExpense is an expense an income can be linked to as its
 // reimbursement.
 type ReimbursableExpense struct {
-	ID             string
-	Title          string
-	Subtitle       string
-	Category       string
-	CategoryColor  string
-	Account        string
-	Amount         float64
-	Reimbursed     float64
-	CurrencySymbol string
-	ScheduledTo    time.Time
+	ID            string
+	Title         string
+	Subtitle      string
+	Category      string
+	CategoryColor string
+	Account       string
+	Amount        float64
+	Reimbursed    float64
+	Currency      Currency
+	ScheduledTo   time.Time
 }
 
 func (e *ReimbursableExpense) ViewAmount() string {
-	return formatters.FormatAmount(e.Amount, e.CurrencySymbol)
+	return e.Currency.Format(e.Amount)
 }
 
 func (e *ReimbursableExpense) ViewNetAmount() string {
-	return formatters.FormatAmount(e.Amount-e.Reimbursed, e.CurrencySymbol)
+	return e.Currency.Format(e.Amount - e.Reimbursed)
 }
