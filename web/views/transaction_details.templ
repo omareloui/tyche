@@ -362,7 +362,7 @@ templ txDetailsRow(label string, icon templ.Component) {
 }
 
 templ txDetailsSection(title string) {
-	<section class="grid gap-2">
+	<section class="grid grid-cols-1 gap-2">
 		<h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ title }</h3>
 		{ children... }
 	</section>
