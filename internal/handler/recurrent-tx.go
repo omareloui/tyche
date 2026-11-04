@@ -373,25 +373,7 @@ func generateNextScheduledTransactions(rt *models.RecurrentTx, count int) []mode
 	now := time.Now()
 
 	for range count {
-		var nextOn time.Time
-
-		switch rt.Unit {
-		case models.RecurrentUnitDay:
-			nextOn = rt.LastTransactionScheduledTo.AddDate(0, 0, int(rt.Every))
-		case models.RecurrentUnitMonth:
-			nextOn = rt.LastTransactionScheduledTo.AddDate(0, int(rt.Every), 0)
-			if d := nextOn.Day(); d != rt.LastTransactionScheduledTo.Day() {
-				nextOn = nextOn.AddDate(0, 0, -d)
-			}
-		case models.RecurrentUnitYear:
-			nextOn = rt.LastTransactionScheduledTo.AddDate(int(rt.Every), 0, 0)
-			if d := nextOn.Day(); d != rt.LastTransactionScheduledTo.Day() {
-				nextOn = nextOn.AddDate(0, 0, -d)
-			}
-		}
-
-		nextOn = nextOn.Truncate(24 * time.Hour)
-
+		nextOn := rt.NextOn()
 		if !rt.StopsAt.IsZero() && nextOn.After(rt.StopsAt) {
 			break
 		}

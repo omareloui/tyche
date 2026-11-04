@@ -515,16 +515,20 @@ func relDay(day, today time.Time) string {
 }
 
 func getRecurrentTxMenuItems(rt *models.RecurrentTx) []templ.Component {
-	return []templ.Component{
+	items := []templ.Component{
 		components.EntryMenuDrawerItem("Details", recurrentTxDetailsURL(rt.ID),
 			components.WithEntryMenuItemIcon(icons.Eye("16"))),
-		components.EntryMenuAnchorItem("Schedule more", "post", fmt.Sprintf("/recurrent-tx/%s/generate-txs", rt.ID),
-			components.WithEntryMenuItemIcon(icons.Calendar("16"))),
+	}
+	if !rt.FullyScheduled() {
+		items = append(items, components.EntryMenuAnchorItem("Schedule more", "post", fmt.Sprintf("/recurrent-tx/%s/generate-txs", rt.ID),
+			components.WithEntryMenuItemIcon(icons.Calendar("16"))))
+	}
+	return append(items,
 		components.EntryMenuSeparator(),
 		components.EntryMenuEditItem(fmt.Sprintf("/recurrent-tx/%s/edit", rt.ID)),
 		components.EntryMenuSeparator(),
 		components.EntryMenuDeleteItem(fmt.Sprintf("/recurrent-tx/%s", rt.ID),
 			components.WithEntryMenuItemConfirmMessage("Delete it with its upcoming scheduled transactions? Past ones are kept."),
 		),
-	}
+	)
 }

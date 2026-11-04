@@ -139,7 +139,7 @@ templ rtxDetailsActions(rt *models.RecurrentTx, ended bool) {
 			@icons.Pencil("14")
 			Edit
 		</button>
-		if !ended {
+		if !ended && !rt.FullyScheduled() {
 			<button
 				type="button"
 				hx-post={ fmt.Sprintf("/recurrent-tx/%s/generate-txs?from=%s", rt.ID, RecurrentTxDetailsFrom) }

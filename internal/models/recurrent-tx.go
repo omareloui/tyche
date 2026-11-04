@@ -70,6 +70,32 @@ func (rt *RecurrentTx) HasEnded(now time.Time) bool {
 	return !rt.StopsAt.IsZero() && rt.StopsAt.Before(now) && len(rt.Upcoming) == 0
 }
 
+// NextOn is the date of the next transaction it generates, after the last
+// scheduled one.
+func (rt *RecurrentTx) NextOn() time.Time {
+	last := rt.LastTransactionScheduledTo
+	var next time.Time
+	switch rt.Unit {
+	case RecurrentUnitDay:
+		next = last.AddDate(0, 0, int(rt.Every))
+	case RecurrentUnitMonth:
+		next = last.AddDate(0, int(rt.Every), 0)
+	case RecurrentUnitYear:
+		next = last.AddDate(int(rt.Every), 0, 0)
+	}
+	// A day the month lacks (e.g. the 31st) falls on its last day.
+	if rt.Unit != RecurrentUnitDay && next.Day() != last.Day() {
+		next = next.AddDate(0, 0, -next.Day())
+	}
+	return next.Truncate(24 * time.Hour)
+}
+
+// FullyScheduled tells if every transaction until it stops is scheduled, so
+// there's no more to schedule.
+func (rt *RecurrentTx) FullyScheduled() bool {
+	return !rt.StopsAt.IsZero() && rt.NextOn().After(rt.StopsAt)
+}
+
 // PerMonth is how many times it happens in an average month.
 func (rt *RecurrentTx) PerMonth() float64 {
 	if rt.Every == 0 {
