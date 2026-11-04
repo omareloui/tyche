@@ -3,9 +3,11 @@ package badge
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	webpush "github.com/SherClockHolmes/webpush-go"
@@ -24,6 +26,31 @@ func TestCountsOnly(t *testing.T) {
 	}
 	if got := (Counts{Overdue: 1}).URL(); got != "/transactions?status=scheduled" {
 		t.Errorf("url: got %q", got)
+	}
+	c.Items = []Item{{Source: SourceSMS, Tag: "sms:1"}, {Source: SourceReview, Tag: "tx:1"}}
+	if got := c.Only([]Source{SourceReview}).Items; len(got) != 1 || got[0].Tag != "tx:1" {
+		t.Errorf("items: got %+v", got)
+	}
+	if got := c.Title(); got != "1 SMS to check · 2 to review · 4 overdue" {
+		t.Errorf("title: got %q", got)
+	}
+}
+
+func TestPayloadFits(t *testing.T) {
+	c := Counts{SMS: 40}
+	for i := range MaxItems {
+		c.Items = append(c.Items, Item{Source: SourceSMS, Tag: fmt.Sprintf("sms:%d", i), Title: "SMS to check · HSBC", Body: strings.Repeat("x", 300)})
+	}
+	b, err := payload(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var p Payload
+	if err := json.Unmarshal(b, &p); err != nil {
+		t.Fatal(err)
+	}
+	if len(b) > maxPayload || len(p.Items) == 0 || len(p.Items) == MaxItems || p.More != 40-len(p.Items) || p.Title != "40 SMS to check" {
+		t.Fatalf("%d bytes, %d items, %d more, title %q", len(b), len(p.Items), p.More, p.Title)
 	}
 }
 
@@ -92,8 +119,13 @@ func TestNotifierPush(t *testing.T) {
 	if s := push(Counts{SMS: 1, Review: 1}); len(s) != 0 {
 		t.Fatalf("same counts: sent %+v", s)
 	}
+	// Same total, another sms: sent again.
+	s = push(Counts{SMS: 1, Review: 1, Items: []Item{{Source: SourceSMS, Tag: "sms:2", Title: "SMS to check · CIB"}}})
+	if len(s) != 1 || len(s[0].p.Items) != 1 || s[0].p.Items[0].Tag != "sms:2" || s[0].p.More != 1 || s[0].p.Title != "1 SMS to check · 1 to review" {
+		t.Fatalf("other item: sent %+v", s)
+	}
 	// Only b counts overdue ones.
-	s = push(Counts{SMS: 1, Review: 1, Overdue: 3})
+	s = push(Counts{SMS: 1, Review: 1, Overdue: 3, Items: []Item{{Source: SourceSMS, Tag: "sms:2", Title: "SMS to check · CIB"}}})
 	if len(s) != 1 || s[0].endpoint != "https://push/b" || s[0].p.Total != 3 || s[0].p.SMS != 0 {
 		t.Fatalf("overdue: sent %+v", s)
 	}

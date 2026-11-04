@@ -66,6 +66,13 @@ WHERE id = sqlc.arg(id);
 SELECT COUNT(*) FROM sms_messages
 WHERE status IN (sqlc.slice(statuses));
 
+-- name: ListSMSMessagesByStatus :many
+-- The latest sms of the statuses, for the badge's notifications.
+SELECT id, sender, body FROM sms_messages
+WHERE status IN (sqlc.slice(statuses))
+ORDER BY received_at DESC
+LIMIT sqlc.arg(max);
+
 -- name: IgnoreSMSMessagesByStatus :execrows
 UPDATE sms_messages
 SET status = 'ignored'

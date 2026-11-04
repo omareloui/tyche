@@ -2,10 +2,10 @@
 // review and the overdue scheduled ones (internal/badge). Each device picks
 // what it counts (the settings page's "App badge" card, only shown in the
 // installed app), kept in localStorage and sent with its Web Push
-// subscription: the server pushes the counts when they change, the service
-// worker (sw.js) showing them as a silent notification (the icon's dot on
-// Android, which has no Badging API) and the badge's number where there's
-// one. While the app is open the badge is set from GET /badge. It's off
+// subscription: the server pushes what needs attention when it changes, the
+// service worker (sw.js) showing a notification per item (what Android's
+// launchers count, there's no Badging API there) and the badge's number
+// where there's one. While the app is open the badge is set from GET /badge. It's off
 // until turned on, which needs the notifications allowed: without them every
 // source is turned off again.
 
@@ -72,7 +72,15 @@ async function syncBadge() {
   }
   if (total === 0 && "serviceWorker" in navigator) {
     const reg = await navigator.serviceWorker.getRegistration();
-    for (const n of (await reg?.getNotifications({ tag: "attention" })) ?? []) n.close();
+    if (reg) await closeBadgeNotifications(reg);
+  }
+}
+
+// closeBadgeNotifications closes the notifications of the badge's pushes
+// (sw.js), the single "attention" one of before included.
+async function closeBadgeNotifications(reg) {
+  for (const n of await reg.getNotifications()) {
+    if (n.data?.badge === true || n.tag === "attention") n.close();
   }
 }
 
@@ -110,7 +118,7 @@ async function syncPush({ ask = false, force = false } = {}) {
       await badgeRequest("DELETE", "/push/subscription", { endpoint: sub.endpoint }).catch(() => {});
       await sub.unsubscribe().catch(() => {});
     }
-    for (const n of await reg.getNotifications({ tag: "attention" })) n.close();
+    await closeBadgeNotifications(reg);
     try {
       localStorage.removeItem(BADGE_SYNCED_KEY);
     } catch {}

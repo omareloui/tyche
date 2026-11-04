@@ -76,17 +76,24 @@ self.addEventListener("fetch", (e) => {
   }
 });
 
-// The badge's pushes (internal/badge): the counts of what needs attention, as
-// one silent notification replaced in place (the icon's dot on Android) and
-// the badge's number where there's one. 0 clears both.
-const ATTENTION = "attention";
+// The badge's pushes (internal/badge): what needs attention, one notification
+// per item (Android launchers count the notifications, there's no Badging
+// API there) plus one summing up the ones left out, and the badge's number
+// where there's one. A push replaces what's shown: items already shown stay
+// as they are (no new buzz), gone ones are closed. 0 clears everything.
+const BADGE_MORE = "badge-more";
+// The single notification the badge used before.
+const LEGACY_ATTENTION = "attention";
+const BADGE_OPTIONS = {
+  icon: "/favicons/icon-192.png",
+  badge: "/favicons/badge-96.png",
+  vibrate: [200, 100, 200],
+};
 
-function attentionBody(c) {
-  const parts = [];
-  if (c.sms) parts.push(`${c.sms} SMS to check`);
-  if (c.review) parts.push(`${c.review} to review`);
-  if (c.overdue) parts.push(`${c.overdue} overdue`);
-  return parts.join(" · ");
+function badgeNotifications() {
+  return self.registration
+    .getNotifications()
+    .then((ns) => ns.filter((n) => n.data?.badge === true || n.tag === LEGACY_ATTENTION));
 }
 
 self.addEventListener("push", (e) => {
@@ -95,29 +102,45 @@ self.addEventListener("push", (e) => {
     c = e.data?.json() ?? {};
   } catch {}
   const total = c.total || 0;
+  const items = total > 0 ? c.items || [] : [];
+  const more = total > 0 ? c.more || 0 : 0;
   const badge = self.navigator.setAppBadge
     ? (total > 0 ? self.navigator.setAppBadge(total) : self.navigator.clearAppBadge()).catch(() => {})
     : Promise.resolve();
 
-  if (total === 0) {
-    e.waitUntil(
-      Promise.all([badge, self.registration.getNotifications({ tag: ATTENTION }).then((ns) => ns.forEach((n) => n.close()))]),
-    );
-    return;
-  }
-  e.waitUntil(
-    Promise.all([
-      badge,
-      self.registration.showNotification(total === 1 ? "1 thing needs your attention" : `${total} things need your attention`, {
-        body: attentionBody(c),
-        tag: ATTENTION,
-        renotify: false,
-        silent: true,
-        icon: "/favicons/icon-192.png",
-        data: { url: c.url || "/" },
-      }),
-    ]),
-  );
+  const wanted = new Set(items.map((it) => it.tag));
+  if (more > 0) wanted.add(BADGE_MORE);
+  const notify = badgeNotifications().then((shown) => {
+    const kept = new Set();
+    for (const n of shown) {
+      if (wanted.has(n.tag)) kept.add(n.tag);
+      else n.close();
+    }
+    const show = items
+      .filter((it) => !kept.has(it.tag))
+      .map((it) =>
+        self.registration.showNotification(it.title, {
+          ...BADGE_OPTIONS,
+          body: it.body || "",
+          tag: it.tag,
+          data: { badge: true, url: it.url || "/" },
+        }),
+      );
+    if (more > 0) {
+      // Replaced in place, buzzing only when it's new.
+      show.push(
+        self.registration.showNotification(c.title, {
+          ...BADGE_OPTIONS,
+          body: `And ${more} more`,
+          tag: BADGE_MORE,
+          silent: kept.has(BADGE_MORE),
+          data: { badge: true, url: c.url || "/" },
+        }),
+      );
+    }
+    return Promise.all(show);
+  });
+  e.waitUntil(Promise.all([badge, notify]));
 });
 
 self.addEventListener("notificationclick", (e) => {

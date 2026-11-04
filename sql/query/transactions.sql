@@ -236,6 +236,35 @@ WHERE t.fulfilled_at IS NULL
     AND t.reimburses_id IS NULL
     AND NOT (t.transfer_pair_id IS NOT NULL AND t.kind = 2);
 
+-- name: ListBadgeTransactions :many
+-- The transactions to review (needs_review) or overdue (the ones
+-- CountOverdueTransactions counts), for the badge's notifications.
+SELECT
+    t.id,
+    t.kind,
+    t.amount,
+    t.description,
+    t.scheduled_to,
+    t.needs_review,
+    a.name AS account_name,
+    c.symbol AS currency_symbol,
+    c.in_grams AS currency_in_grams,
+    cp.name AS counterparty_name,
+    cat.name AS category_name
+FROM transactions AS t
+JOIN accounts AS a ON a.id = t.account_id
+JOIN currencies AS c ON c.id = a.currency_id
+LEFT JOIN counterparties AS cp ON cp.id = t.counterparty_id
+LEFT JOIN categories AS cat ON cat.id = t.category_id
+WHERE CASE WHEN CAST(sqlc.arg(review) AS BOOLEAN) THEN t.needs_review ELSE
+    t.fulfilled_at IS NULL
+    AND t.scheduled_to < sqlc.arg(today)
+    AND t.reimburses_id IS NULL
+    AND NOT (t.transfer_pair_id IS NOT NULL AND t.kind = 2)
+END
+ORDER BY t.scheduled_to DESC, t.id DESC
+LIMIT sqlc.arg(max);
+
 -- name: GetTransaction :one
 SELECT
     sqlc.embed(t),

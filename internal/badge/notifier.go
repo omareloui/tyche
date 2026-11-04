@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io"
+	"math"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -39,11 +42,51 @@ type Config struct {
 	Subject string
 }
 
+// maxPayload is how big a push's payload gets, under the push services'
+// 4 KB with room for the encryption.
+const maxPayload = 3500
+
 // Payload is what a push sends the service worker (sw.js).
 type Payload struct {
 	Counts
 	Total int    `json:"total"`
 	URL   string `json:"url"`
+	// More is how many weren't sent as items, shown as one more
+	// notification titled Title.
+	More  int    `json:"more"`
+	Title string `json:"title"`
+}
+
+// payload is the push of c, its items cut to fit maxPayload.
+func payload(c Counts) ([]byte, error) {
+	for {
+		total := c.Total()
+		b, err := json.Marshal(Payload{Counts: c, Total: total, URL: c.URL(), More: total - len(c.Items), Title: c.Title()})
+		if err != nil || len(b) <= maxPayload || len(c.Items) == 0 {
+			return b, err
+		}
+		c.Items = c.Items[:len(c.Items)-1]
+	}
+}
+
+// signature tells apart what a push shows, kept in last_sent: 0 for
+// nothing, else a hash of the total and the items.
+func signature(c Counts) int64 {
+	total := c.Total()
+	if total == 0 {
+		return 0
+	}
+	tags := make([]string, len(c.Items))
+	for i, it := range c.Items {
+		tags[i] = it.Tag
+	}
+	slices.Sort(tags)
+	h := fnv.New64a()
+	fmt.Fprintf(h, "%d|%s", total, strings.Join(tags, ","))
+	if sig := int64(h.Sum64() & math.MaxInt64); sig != 0 {
+		return sig
+	}
+	return 1
 }
 
 // sendFunc sends a push, answering the push service's status.
@@ -196,8 +239,8 @@ func (n *Notifier) Refresh(ctx context.Context, tenantID string) {
 	}()
 }
 
-// push sends c to each subscription of the tenant whose total changed. A
-// total of 0 is only sent to clear a badge shown, not to a new
+// push sends c to each subscription of the tenant whose counts or items
+// changed. A total of 0 is only sent to clear a badge shown, not to a new
 // subscription: a push showing nothing makes Chrome show its own
 // notification. Called holding sendMu, keeping each last_sent right.
 func (n *Notifier) push(ctx context.Context, tenantID string, c Counts) error {
@@ -209,18 +252,18 @@ func (n *Notifier) push(ctx context.Context, tenantID string, c Counts) error {
 	gone := false
 	for _, s := range subs {
 		mine := c.Only(ParseSources(s.Sources))
-		total := mine.Total()
-		if int64(total) == s.LastSent || (total == 0 && s.LastSent <= 0) {
+		sig := signature(mine)
+		if sig == s.LastSent || (sig == 0 && s.LastSent <= 0) {
 			if s.LastSent < 0 {
-				errs = append(errs, n.setSent(ctx, s.Endpoint, total))
+				errs = append(errs, n.setSent(ctx, s.Endpoint, sig))
 			}
 			continue
 		}
-		payload, err := json.Marshal(Payload{Counts: mine, Total: total, URL: mine.URL()})
+		body, err := payload(mine)
 		if err != nil {
 			return err
 		}
-		status, err := n.send(ctx, payload, &webpush.Subscription{
+		status, err := n.send(ctx, body, &webpush.Subscription{
 			Endpoint: s.Endpoint,
 			Keys:     webpush.Keys{P256dh: s.P256dh, Auth: s.Auth},
 		})
@@ -234,7 +277,7 @@ func (n *Notifier) push(ctx context.Context, tenantID string, c Counts) error {
 		case status >= 300:
 			errs = append(errs, fmt.Errorf("push service answered %d", status))
 		default:
-			errs = append(errs, n.setSent(ctx, s.Endpoint, total))
+			errs = append(errs, n.setSent(ctx, s.Endpoint, sig))
 		}
 	}
 	if gone {
@@ -243,8 +286,8 @@ func (n *Notifier) push(ctx context.Context, tenantID string, c Counts) error {
 	return errors.Join(errs...)
 }
 
-func (n *Notifier) setSent(ctx context.Context, endpoint string, total int) error {
-	return n.q.SetPushSubscriptionSent(ctx, sharedqueries.SetPushSubscriptionSentParams{LastSent: int64(total), Endpoint: endpoint})
+func (n *Notifier) setSent(ctx context.Context, endpoint string, sig int64) error {
+	return n.q.SetPushSubscriptionSent(ctx, sharedqueries.SetPushSubscriptionSentParams{LastSent: sig, Endpoint: endpoint})
 }
 
 // reloadTenant drops the tenant from the subscribed ones once it has none.

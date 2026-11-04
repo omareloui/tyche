@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -67,8 +68,13 @@ func TestBadgeCounts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (badge.Counts{Review: 1, Overdue: 2}); got != want {
-		t.Fatalf("counts: got %+v, want %+v", got, want)
+	if got.SMS != 0 || got.Review != 1 || got.Overdue != 2 {
+		t.Fatalf("counts: got %+v", got)
+	}
+	if len(got.Items) != 3 || got.Items[0].Source != badge.SourceReview ||
+		!strings.HasPrefix(got.Items[0].Title, "To review · ") || got.Items[0].URL != "/transactions?tx="+strings.TrimPrefix(got.Items[0].Tag, "tx:") ||
+		got.Items[1].Source != badge.SourceOverdue || !strings.Contains(got.Items[1].Body, " · due ") {
+		t.Fatalf("items: got %+v", got.Items)
 	}
 
 	pair, err := jwt.NewPair(usr)
@@ -100,7 +106,10 @@ func TestBadgeCounts(t *testing.T) {
 		if err := json.Unmarshal([]byte(body), &c); err != nil {
 			t.Fatal(err)
 		}
-		if c != got {
+		for i := range c.Items {
+			c.Items[i].Source = got.Items[i].Source // not sent
+		}
+		if !reflect.DeepEqual(c, got) {
 			t.Errorf("got %+v, want %+v", c, got)
 		}
 	})

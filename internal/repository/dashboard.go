@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/omareloui/tyche/internal/badge"
@@ -259,11 +260,7 @@ func (r *Repository) CountSMSNeedingAttention(ctx context.Context) (int, error) 
 	if err != nil {
 		return 0, err
 	}
-	n, err := q.CountSMSMessagesByStatus(ctx, []string{
-		string(models.SMSStatusUnparsed),
-		string(models.SMSStatusUnmatched),
-		string(models.SMSStatusFailed),
-	})
+	n, err := q.CountSMSMessagesByStatus(ctx, smsNeedingAttention)
 	if err != nil {
 		logger.FromCtx(ctx).Error("counting sms needing attention", zap.Error(err))
 		return 0, err
@@ -273,8 +270,10 @@ func (r *Repository) CountSMSNeedingAttention(ctx context.Context) (int, error) 
 
 // GetBadgeCounts is what the installed apps' badge counts: the sms needing
 // attention, the transactions to review and the overdue scheduled ones (due
-// before today, UTC like the transactions list).
+// before today, UTC like the transactions list), with the first
+// badge.MaxItems of them as items.
 func (r *Repository) GetBadgeCounts(ctx context.Context) (badge.Counts, error) {
+	l := logger.FromCtx(ctx)
 	sms, err := r.CountSMSNeedingAttention(ctx)
 	if err != nil {
 		return badge.Counts{}, err
@@ -288,10 +287,96 @@ func (r *Repository) GetBadgeCounts(ctx context.Context) (badge.Counts, error) {
 		return badge.Counts{}, err
 	}
 	now := time.Now().UTC()
-	overdue, err := q.CountOverdueTransactions(ctx, time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC))
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	overdue, err := q.CountOverdueTransactions(ctx, today)
 	if err != nil {
-		logger.FromCtx(ctx).Error("counting overdue transactions", zap.Error(err))
+		l.Error("counting overdue transactions", zap.Error(err))
 		return badge.Counts{}, err
 	}
-	return badge.Counts{SMS: sms, Review: review, Overdue: int(overdue)}, nil
+	c := badge.Counts{SMS: sms, Review: review, Overdue: int(overdue)}
+
+	if sms > 0 {
+		rows, err := q.ListSMSMessagesByStatus(ctx, queries.ListSMSMessagesByStatusParams{
+			Statuses: smsNeedingAttention,
+			Max:      badge.MaxItems,
+		})
+		if err != nil {
+			l.Error("listing sms needing attention", zap.Error(err))
+			return badge.Counts{}, err
+		}
+		for _, row := range rows {
+			c.Items = append(c.Items, badge.Item{
+				Source: badge.SourceSMS,
+				Tag:    "sms:" + row.ID,
+				Title:  "SMS to check · " + row.Sender,
+				Body:   badgeTruncate(strings.Join(strings.Fields(row.Body), " "), 120),
+				URL:    "/sms",
+			})
+		}
+	}
+	for _, src := range []badge.Source{badge.SourceReview, badge.SourceOverdue} {
+		left := badge.MaxItems - len(c.Items)
+		if left <= 0 || c.Of(src) == 0 {
+			continue
+		}
+		rows, err := q.ListBadgeTransactions(ctx, queries.ListBadgeTransactionsParams{
+			Review: src == badge.SourceReview,
+			Today:  today,
+			Max:    int64(left),
+		})
+		if err != nil {
+			l.Error("listing the badge's transactions", zap.Error(err))
+			return badge.Counts{}, err
+		}
+		for _, row := range rows {
+			c.Items = append(c.Items, badgeTxItem(src, row))
+		}
+	}
+	return c, nil
+}
+
+// smsNeedingAttention are the statuses of the sms that created no
+// transaction and weren't dismissed.
+var smsNeedingAttention = []string{
+	string(models.SMSStatusUnparsed),
+	string(models.SMSStatusUnmatched),
+	string(models.SMSStatusFailed),
+}
+
+// badgeTxItem is the notification of a transaction to review or overdue,
+// e.g. "To review · Carrefour", "EGP 250.00 · CIB".
+func badgeTxItem(src badge.Source, row queries.ListBadgeTransactionsRow) badge.Item {
+	name := row.CounterpartyName.String
+	if name == "" {
+		name = row.Description.String
+	}
+	if name == "" {
+		name = row.CategoryName.String
+	}
+	if name == "" {
+		name = models.TxKind(row.Kind).String()
+	}
+	cur := models.Currency{Symbol: row.CurrencySymbol, InGrams: row.CurrencyInGrams}
+	body := cur.Format(row.Amount) + " · " + row.AccountName
+	title := "To review · " + name
+	if src == badge.SourceOverdue {
+		title = "Overdue · " + name
+		body += " · due " + row.ScheduledTo.Format("Jan 2")
+	}
+	return badge.Item{
+		Source: src,
+		Tag:    "tx:" + row.ID,
+		Title:  title,
+		Body:   body,
+		URL:    "/transactions?tx=" + row.ID,
+	}
+}
+
+// badgeTruncate cuts s to n runes, with an ellipsis.
+func badgeTruncate(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return strings.TrimSpace(string(r[:n-1])) + "…"
 }
