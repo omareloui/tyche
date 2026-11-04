@@ -28,15 +28,221 @@ function standIn(el) {
 // DRAWER_URL_PARAMS are the query params of the details drawers
 // (components.DrawerProps.URLParam), kept in the url while one is open so
 // reloading the page opens it again; closing a fetched drawer drops them (an
-// edit form opened from the details keeps them meanwhile).
-const DRAWER_URL_PARAMS = ["cp", "goal"];
+// edit form opened from the details keeps them meanwhile). Each gives the url
+// of its details, where Back goes from a form opened from them.
+const DRAWER_URL_PARAMS = {
+  cp: (id) => `/counterparties/${encodeURIComponent(id)}/details`,
+  goal: (id) => `/goals/${encodeURIComponent(id)}/details`,
+};
+
+// DETAILS_URL_PARAMS also has the transaction details' ?tx= (transactions.js).
+const DETAILS_URL_PARAMS = [...Object.keys(DRAWER_URL_PARAMS), "tx"];
+
+// FORM_PARAM is the url (a path) an open form drawer was fetched from, kept
+// in the page's url so reloading opens it again; NEW_PARAM is the page's
+// create form open (layouts.WithCreateForm, createFormFromURL).
+const FORM_PARAM = "form";
+const NEW_PARAM = "new";
+const DRAWER_STATE_PARAMS = [...DETAILS_URL_PARAMS, FORM_PARAM, NEW_PARAM];
+
+// formPath is a FORM_PARAM's value if it's a path of this site, else null.
+function formPath(v) {
+  return v && /^\/(?![/\\])/.test(v) ? v : null;
+}
 
 function setDrawerParams(name, value) {
   const u = new URL(location.href);
-  for (const p of DRAWER_URL_PARAMS) u.searchParams.delete(p);
+  for (const p of Object.keys(DRAWER_URL_PARAMS)) u.searchParams.delete(p);
   if (name) u.searchParams.set(name, value);
   if (u.href !== location.href) history.replaceState(history.state, "", u);
 }
+
+// drawerHistory gives every open drawer a history entry, so the browser's
+// Back closes it instead of leaving the page, or goes back to the details a
+// form was opened from. Its stack has an entry per pushed one: {el, kind,
+// back, param, value, parent, form}, kind "plain" (a form), "details" (param
+// and value are its url param) or "child" (a form that replaced details in
+// #drawer, parent being their url), back(entry) what Back does, form its
+// FORM_PARAM (or NEW_PARAM). Closing a drawer otherwise goes back past its
+// entries itself.
+const drawerHistory = {
+  stack: [],
+  // expect is the depth our own history.go lands on, whose popstate isn't a
+  // Back; queue holds the pushes waiting for it.
+  expect: null,
+  queue: [],
+  // page tells this page's entries from the ones of a page left since
+  // (boosted navigations), which htmx restores.
+  page: Math.random().toString(36).slice(2),
+  // resume is the depth of the entry the page got reloaded on, which the
+  // drawers opening again from its url take over instead of pushing theirs.
+  resume: 0,
+  // pendingForm is the form to open again on load, once the details it was
+  // opened from (if any) are.
+  pendingForm: null,
+  // fetched is the url of the drawer being swapped into #drawer.
+  fetched: null,
+
+  top() {
+    return this.stack[this.stack.length - 1];
+  },
+
+  // load reopens the form the url has, and makes the drawers opening from it
+  // take over the entries the page got reloaded on.
+  load() {
+    const u = new URL(location.href);
+    const form = formPath(u.searchParams.get(FORM_PARAM));
+    const details = DETAILS_URL_PARAMS.some((p) => u.searchParams.has(p));
+    const d = history.state?.drawer ?? 0;
+    if (d > 0) {
+      const n = Number(details) + Number(!!form || u.searchParams.has(NEW_PARAM));
+      for (let i = n; i < d; i++) this.stack.push({ el: null, kind: "plain" });
+      this.resume = d;
+    }
+    if (!form) return;
+    if (details) this.pendingForm = form;
+    else htmx.ajax("GET", form, { target: "#" + "drawer", swap: "innerHTML" });
+  },
+
+  entryURL(entry) {
+    const u = new URL(location.href);
+    if (entry.param || this.stack.length === 1) for (const p of DRAWER_STATE_PARAMS) u.searchParams.delete(p);
+    if (entry.param) u.searchParams.set(entry.param, entry.value);
+    if (entry.form === NEW_PARAM) u.searchParams.set(NEW_PARAM, "");
+    else if (entry.form) u.searchParams.set(FORM_PARAM, entry.form);
+    return u;
+  },
+
+  push(entry) {
+    this.stack.push(entry);
+    const state = { htmx: true, drawer: this.stack.length, page: this.page };
+    if (this.resume) {
+      // Reloaded on this entry (or one over it): it's there already.
+      if (this.stack.length >= this.resume) {
+        this.resume = 0;
+        history.replaceState(state, "", this.entryURL(entry));
+      }
+      return;
+    }
+    const go = () => {
+      const u = this.entryURL(entry);
+      if (entry.param || this.stack.length === 1) {
+        // Going back lands on the url without the drawers.
+        const base = new URL(location.href);
+        for (const p of DRAWER_STATE_PARAMS) base.searchParams.delete(p);
+        history.replaceState(history.state, "", base);
+      }
+      history.pushState(state, "", u);
+    };
+    if (this.expect === null) go();
+    else this.queue.push(go);
+  },
+
+  // drop goes back past the top n entries.
+  drop(n) {
+    n = Math.min(n, this.stack.length);
+    if (n <= 0) return;
+    this.stack.length -= n;
+    this.expect = this.stack.length;
+    history.go(-n);
+  },
+
+  // opened registers drawer el opening, param and value being its url param
+  // if it's details, form its FORM_PARAM if it's a form. One replacing a
+  // drawer in place (in #drawer, or the transaction details) takes over its
+  // entry; a form replacing details gets its own (Back goes back to them);
+  // details replacing that form (canceling or saving it) go back to the
+  // details' entry.
+  opened(el, back, param = null, value = null, form = null) {
+    this.register(el, back, param, value, form);
+    if (param && this.pendingForm) {
+      // The transaction details swap their edit form in their panel.
+      const target = param === "tx" ? "#txd-panel" : "#drawer";
+      htmx.ajax("GET", this.pendingForm, { target, swap: "innerHTML" });
+      this.pendingForm = null;
+    }
+  },
+
+  register(el, back, param, value, form) {
+    const kind = param ? "details" : "plain";
+    let top = this.top();
+    if (top?.el && !top.el.isConnected) {
+      if (kind === "details" && top.kind === "child") {
+        this.drop(1);
+        top = this.top();
+      }
+      if (top) {
+        const parent = top.kind === "details" && DRAWER_URL_PARAMS[top.param];
+        if (kind === "plain" && parent) return this.push({ el, kind: "child", back, parent: parent(top.value), form });
+        if (top.kind === "child") Object.assign(top, { el, back, form });
+        else Object.assign(top, { el, kind, back, param, value, form });
+        if (form && this.expect === null) history.replaceState(history.state, "", this.entryURL(top));
+        return;
+      }
+    }
+    this.push({ el, kind, back, param, value, form });
+  },
+
+  // closed goes back past the entries of drawer el, closed, and the ones it
+  // replaced.
+  closed(el) {
+    if (this.top()?.el !== el) return;
+    let i = this.stack.length;
+    while (i > 0 && (this.stack[i - 1].el === el || !this.stack[i - 1].el?.isConnected)) i--;
+    this.drop(this.stack.length - i);
+  },
+
+  reset() {
+    this.stack = [];
+    this.expect = null;
+    this.queue = [];
+    this.resume = 0;
+    this.pendingForm = null;
+    this.page = Math.random().toString(36).slice(2);
+  },
+
+  // onPopState runs before htmx's window.onpopstate (capturing), stopping it
+  // when the entry is a drawer's of this page.
+  onPopState(e) {
+    const d = e.state?.drawer ?? 0;
+    this.resume = 0;
+    if (this.expect !== null) {
+      const ours = d === this.expect;
+      this.expect = null;
+      const queue = this.queue;
+      this.queue = [];
+      if (ours) {
+        e.stopImmediatePropagation();
+        for (const go of queue) go();
+        return;
+      }
+    }
+    if (d < this.stack.length) {
+      e.stopImmediatePropagation();
+      const top = this.top();
+      this.stack.length = d;
+      top.back?.(top);
+    } else if (d > this.stack.length && e.state?.page === this.page) {
+      // Forward to a drawer closed since: back where it was.
+      e.stopImmediatePropagation();
+      this.expect = this.stack.length;
+      history.go(this.stack.length - d);
+    }
+  },
+};
+
+window.addEventListener("popstate", (e) => drawerHistory.onPopState(e), true);
+// Another page (its drawers gone with the old body).
+for (const ev of ["htmx:pushedIntoHistory", "htmx:historyRestore", "htmx:historyCacheMissLoad"])
+  document.addEventListener(ev, () => drawerHistory.reset());
+// The url a drawer swapped into #drawer was fetched from, for its FORM_PARAM.
+document.addEventListener("htmx:beforeSwap", (e) => {
+  if (e.detail.target?.id !== "drawer") return;
+  const get = e.detail.requestConfig?.verb === "get";
+  drawerHistory.fetched = get ? e.detail.pathInfo?.finalRequestPath || e.detail.pathInfo?.requestPath : null;
+});
+// Before Alpine starts (deferred, after this), as its drawers register.
+drawerHistory.load();
 
 // drawerBase is the "drawer" Alpine component, to spread into ones extending
 // it (txDetails). It has no getters, as spreading would evaluate them.
@@ -52,7 +258,8 @@ function drawerBase() {
 
     init() {
       if (!this.isStatic()) return this.opened();
-      this.$watch("shown", (v) => v && this.opened());
+      // Hidden by its variable rather than closing.
+      this.$watch("shown", (v) => (v ? this.opened() : drawerHistory.closed(this.drawerRoot())));
       if (this.shown) this.opened();
     },
 
@@ -73,7 +280,14 @@ function drawerBase() {
 
     opened() {
       const root = this.drawerRoot();
-      if (root.dataset.urlParam) setDrawerParams(root.dataset.urlParam, root.dataset.urlValue);
+      const { urlParam, urlValue } = root.dataset;
+      if (urlParam) setDrawerParams(urlParam, urlValue);
+      const fetched = drawerHistory.fetched;
+      drawerHistory.fetched = null;
+      let form = null;
+      if (this.isStatic()) form = root.getAttribute("x-model") === "openCreateForm" ? NEW_PARAM : null;
+      else if (!urlParam) form = formPath(fetched);
+      drawerHistory.opened(root, (e) => this.back(e), urlParam || null, urlValue, form);
       if (!root.contains(document.activeElement)) this.opener = document.activeElement;
       this.$nextTick(() => {
         this.pristine = this.formState();
@@ -117,6 +331,15 @@ function drawerBase() {
 
     async requestClose() {
       if (await this.confirmDiscard()) this.close();
+    },
+
+    // back is the browser's Back (drawerHistory), its entry already gone:
+    // back to the details the form was opened from, else closing; kept
+    // open (its entry back) when its changes aren't to be discarded.
+    async back(entry) {
+      if (!(await this.confirmDiscard())) return drawerHistory.push(entry);
+      if (entry.parent) htmx.ajax("GET", entry.parent, { target: "#drawer", swap: "innerHTML" });
+      else this.close(true);
     },
 
     // escape (on keyup, after an open combobox stopped it for closing itself)
@@ -200,10 +423,11 @@ function drawerBase() {
     },
 
     // close slides the drawer out, then hides (kept in the page) or removes
-    // it.
-    close() {
+    // it; fromHistory when Back closes it, its entry gone already.
+    close(fromHistory = false) {
       const root = this.drawerRoot();
       if (!this.isOpen() || root.hasAttribute("data-closing")) return;
+      if (!fromHistory) drawerHistory.closed(root);
       const back = this.opener;
       if (!root.hasAttribute("data-drawer-static")) setDrawerParams(null);
       root.setAttribute("data-closing", "");

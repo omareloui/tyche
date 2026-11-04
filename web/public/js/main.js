@@ -219,13 +219,10 @@ document.addEventListener(
 );
 
 // createFormFromURL opens a page's create form (layouts.WithCreateForm) when
-// its url has ?new, e.g. from the PWA's shortcuts, then drops it from the url.
+// its url has ?new, e.g. from the PWA's shortcuts or reloading with it open
+// (drawerHistory keeps it in the url meanwhile).
 function createFormFromURL(data) {
-  const url = new URL(location.href);
-  if (!url.searchParams.has("new")) return;
-  url.searchParams.delete("new");
-  history.replaceState(history.state, "", url);
-  data.openCreateForm = true;
+  if (new URL(location.href).searchParams.has("new")) data.openCreateForm = true;
 }
 
 // The service worker (sw.js) only caches static files and the offline page.

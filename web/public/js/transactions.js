@@ -254,6 +254,14 @@ document.addEventListener("alpine:init", () => {
       show(id, mode, from = null) {
         // A form answered with its errors keeps the values it was opened with.
         const opening = mode === "edit" && this.mode !== "edit";
+        // Back closes the drawer, or leaves the edit form opened from the
+        // details (its own entry) for them.
+        const root = this.drawerRoot();
+        const top = drawerHistory.top();
+        if (top?.el !== root) drawerHistory.opened(root, (e) => this.back(e), "tx", id);
+        else if (mode === "edit" && from === "details" && top.kind !== "child")
+          drawerHistory.push({ el: root, kind: "child", back: (e) => this.back(e), form: txURL(id, "edit") });
+        else if (mode === "view" && top.kind === "child") drawerHistory.drop(1);
         this.id = id;
         this.mode = mode;
         this.from = from;
@@ -273,10 +281,18 @@ document.addEventListener("alpine:init", () => {
         return htmx.ajax("GET", url, { target: "#txd-panel", swap: "innerHTML" });
       },
 
-      close() {
+      close(fromHistory = false) {
         setTxParam(null);
         this.opener = this.row()?.querySelector("[data-tx-row]") ?? this.opener;
-        base.close.call(this);
+        base.close.call(this, fromHistory);
+      },
+
+      // back is the browser's Back (drawerHistory): the edit form opened from
+      // the details goes back to them, else closing.
+      async back(entry) {
+        if (!(await this.confirmDiscard())) return drawerHistory.push(entry);
+        if (entry.kind === "child") this.panel(txDetailsURL(this.id));
+        else this.close(true);
       },
 
       // cancel leaves the edit form: back to the details, or closing when
