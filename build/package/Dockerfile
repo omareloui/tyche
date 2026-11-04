@@ -66,6 +66,7 @@ COPY --from=build /usr/src/web/public/favicons web/public/favicons
 COPY --from=build /usr/src/web/public/js web/public/js
 COPY --from=build /usr/src/web/public/fonts web/public/fonts
 COPY --from=build /usr/src/web/public/icons web/public/icons
+COPY --from=build /usr/src/web/public/sw.js /usr/src/web/public/manifest.webmanifest web/public/
 
 COPY --from=build /usr/src/web/brand-icons web/brand-icons
 COPY third_party/simple-icons/icons third_party/simple-icons/icons
