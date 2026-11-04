@@ -11,6 +11,10 @@
 
 const BADGE_SOURCES = ["sms", "review", "overdue"];
 const BADGE_SOURCES_KEY = "badgeSources";
+// When dismissed notifications are shown again while unhandled, in hours (0
+// = never), sent with the subscription.
+const BADGE_REPOST_KEY = "badgeRepostHours";
+const BADGE_REPOST_DEFAULT = 1;
 // The subscription last sent and when, to send it again once a day (or when
 // the browser rotated it) rather than on every page load.
 const BADGE_SYNCED_KEY = "badgeSynced";
@@ -30,6 +34,20 @@ function badgeSources() {
 function saveBadgeSources(sources) {
   try {
     localStorage.setItem(BADGE_SOURCES_KEY, JSON.stringify(sources));
+  } catch {}
+}
+
+function badgeRepostHours() {
+  try {
+    const h = parseInt(localStorage.getItem(BADGE_REPOST_KEY), 10);
+    if (h >= 0) return h;
+  } catch {}
+  return BADGE_REPOST_DEFAULT;
+}
+
+function saveBadgeRepostHours(h) {
+  try {
+    localStorage.setItem(BADGE_REPOST_KEY, String(h));
   } catch {}
 }
 
@@ -138,11 +156,12 @@ async function syncPush({ ask = false, force = false } = {}) {
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const synced = `${sub.endpoint} ${sources.join(",")} ${today}`;
+  const repostHours = badgeRepostHours();
+  const synced = `${sub.endpoint} ${sources.join(",")} ${repostHours} ${today}`;
   try {
     if (!force && localStorage.getItem(BADGE_SYNCED_KEY) === synced) return;
   } catch {}
-  await badgeRequest("PUT", "/push/subscription", { subscription: sub.toJSON(), sources });
+  await badgeRequest("PUT", "/push/subscription", { subscription: sub.toJSON(), sources, repost_hours: repostHours });
   try {
     localStorage.setItem(BADGE_SYNCED_KEY, synced);
   } catch {}
@@ -176,9 +195,14 @@ document.addEventListener("alpine:init", () => {
   Alpine.data("badgeSettings", () => ({
     installed: isInstalledPWA(),
     sources: badgeSources(),
+    repostHours: String(badgeRepostHours()),
     busy: false,
     status: "",
     failed: false,
+
+    get anyOn() {
+      return Object.values(this.sources).some(Boolean);
+    },
 
     init() {
       if (pushSupported() && Notification.permission === "denied") {
@@ -191,6 +215,7 @@ document.addEventListener("alpine:init", () => {
       this.failed = false;
       this.status = "";
       saveBadgeSources(this.sources);
+      saveBadgeRepostHours(parseInt(this.repostHours, 10) || 0);
       try {
         await syncPush({ ask: true, force: true });
         this.status = "Saved";

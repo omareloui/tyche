@@ -346,14 +346,25 @@ templ SettingsBadgeCard() {
 				<div class="min-w-0">
 					<h2 class="font-semibold">App badge</h2>
 					<p class="text-sm text-zinc-500">
-						What the app's icon counts on this device. It needs notifications: on
-						Android it shows as a dot with a silent notification listing them.
+						What the app's icon counts on this device, each shown as a
+						notification (what Android counts on the icon).
 					</p>
 				</div>
 			</header>
 			@BadgeSwitches()
 		}
 	</div>
+}
+
+// badgeRepostOptions are when dismissed badge notifications come back
+// (badge.js' repostHours, hours).
+var badgeRepostOptions = []struct{ value, label string }{
+	{"1", "After 1 hour"},
+	{"2", "After 2 hours"},
+	{"4", "After 4 hours"},
+	{"8", "After 8 hours"},
+	{"24", "After a day"},
+	{"0", "Never"},
 }
 
 // BadgeSwitches are the badge's sources, saved on the device as they're
@@ -367,6 +378,18 @@ templ BadgeSwitches() {
 			templ.Attributes{"x-model": "sources.review", "@change": "save()", ":disabled": "busy"})
 		@form.Toggle("Overdue scheduled transactions", "badge_overdue", "", icons.Clock("16"), form.FDInput{},
 			templ.Attributes{"x-model": "sources.overdue", "@change": "save()", ":disabled": "busy"})
+		<div x-show="anyOn" class="min-w-0">
+			<label for="badge_repost_hours" class="input-label">Show dismissed ones again</label>
+			<div class="relative min-w-0">
+				<select id="badge_repost_hours" class="input-field" x-model="repostHours" @change="save()" :disabled="busy">
+					for _, o := range badgeRepostOptions {
+						<option value={ o.value }>{ o.label }</option>
+					}
+				</select>
+				@icons.ChevronDown("18", &templ.Attributes{"class": "pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400"})
+			</div>
+			<p class="mt-1 text-xs text-zinc-500">While still unhandled, silently, after this long.</p>
+		</div>
 	</div>
 	<p x-show="status" x-text="status" class="text-sm" :class="failed ? 'text-red-400' : 'text-zinc-500'"></p>
 }

@@ -81,6 +81,7 @@ func main() {
 	if err := badges.Load(ctx); err != nil {
 		log.Fatalln(err)
 	}
+	go badges.RunReposts(ctx)
 	h := handler.New(repo, valid, sani, fxJob, smsTemplates, badges)
 
 	srv := http.Server{

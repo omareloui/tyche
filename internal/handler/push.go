@@ -38,7 +38,15 @@ func (h *Handler) PushKey(w http.ResponseWriter, r *http.Request) ([]byte, error
 type pushSubscriptionReq struct {
 	Subscription webpush.Subscription `json:"subscription"`
 	Sources      []string             `json:"sources"`
+	// RepostHours is when dismissed notifications are shown again, 0 =
+	// never, missing = defaultRepostHours.
+	RepostHours *int `json:"repost_hours"`
 }
+
+const (
+	defaultRepostHours = 1
+	maxRepostHours     = 7 * 24
+)
 
 // Subscribe saves the browser's push subscription with the counts it shows.
 func (h *Handler) Subscribe(w http.ResponseWriter, r *http.Request) ([]byte, error) {
@@ -59,7 +67,11 @@ func (h *Handler) Subscribe(w http.ResponseWriter, r *http.Request) ([]byte, err
 	if len(srcs) == 0 {
 		return nil, resperr.New(http.StatusUnprocessableEntity, "Pick what the badge counts.")
 	}
-	if err := h.badges.Subscribe(r.Context(), tenantID, sub, srcs); err != nil {
+	hours := defaultRepostHours
+	if req.RepostHours != nil {
+		hours = min(max(*req.RepostHours, 0), maxRepostHours)
+	}
+	if err := h.badges.Subscribe(r.Context(), tenantID, sub, srcs, hours); err != nil {
 		return nil, err
 	}
 	return []byte("{}"), nil
@@ -83,6 +95,24 @@ func (h *Handler) Unsubscribe(w http.ResponseWriter, r *http.Request) ([]byte, e
 		return nil, resperr.New(http.StatusBadRequest, "Invalid subscription.")
 	}
 	if err := h.badges.Unsubscribe(r.Context(), tenantID, req.Endpoint); err != nil {
+		return nil, err
+	}
+	return []byte("{}"), nil
+}
+
+// PushDismissed is the service worker telling a badge notification was
+// dismissed, to show it again later (badge.Notifier.Dismissed). Routed
+// without the auth/vault middlewares: the subscription's endpoint is what
+// authorizes it, and a locked vault mustn't lose it.
+func (h *Handler) PushDismissed(w http.ResponseWriter, r *http.Request) ([]byte, error) {
+	if !h.badges.Enabled() {
+		return nil, resperr.New(http.StatusNotFound, "Notifications aren't set up.")
+	}
+	var req pushUnsubscribeReq
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxPushBody)).Decode(&req); err != nil || req.Endpoint == "" {
+		return nil, resperr.New(http.StatusBadRequest, "Invalid subscription.")
+	}
+	if err := h.badges.Dismissed(r.Context(), req.Endpoint); err != nil {
 		return nil, err
 	}
 	return []byte("{}"), nil

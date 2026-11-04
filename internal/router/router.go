@@ -204,6 +204,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("GET /push/key", handlePubJSON(h.PushKey, middleware.Protected))
 	mux.Handle("PUT /push/subscription", handlePubJSON(h.Subscribe, middleware.Protected, middleware.HTMXOnly))
 	mux.Handle("DELETE /push/subscription", handlePubJSON(h.Unsubscribe, middleware.Protected, middleware.HTMXOnly))
+	mux.Handle("POST /push/dismissed", middleware.CorrelationID(middleware.RequestLogger(route_handler.JSONRouteHandler(h.PushDismissed))))
 	mux.Handle("PUT /settings/profile", handle(h.SetProfile, middleware.HTMXOnly))
 	mux.Handle("PUT /settings/region", handle(h.SetRegionSettings, middleware.HTMXOnly))
 	mux.Handle("PUT /settings/month", handle(h.SetMonthStart, middleware.HTMXOnly))

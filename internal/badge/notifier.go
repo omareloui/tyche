@@ -152,14 +152,16 @@ func (n *Notifier) Load(ctx context.Context) error {
 }
 
 // Subscribe adds (or updates) a browser's subscription, then pushes it the
-// current counts.
-func (n *Notifier) Subscribe(ctx context.Context, tenantID string, sub webpush.Subscription, srcs []Source) error {
+// current counts. Its dismissed notifications are shown again repostHours
+// later while unhandled, never when 0.
+func (n *Notifier) Subscribe(ctx context.Context, tenantID string, sub webpush.Subscription, srcs []Source, repostHours int) error {
 	err := n.q.UpsertPushSubscription(ctx, sharedqueries.UpsertPushSubscriptionParams{
-		Endpoint: sub.Endpoint,
-		TenantID: tenantID,
-		P256dh:   sub.Keys.P256dh,
-		Auth:     sub.Keys.Auth,
-		Sources:  JoinSources(srcs),
+		Endpoint:    sub.Endpoint,
+		TenantID:    tenantID,
+		P256dh:      sub.Keys.P256dh,
+		Auth:        sub.Keys.Auth,
+		Sources:     JoinSources(srcs),
+		RepostHours: int64(repostHours),
 	})
 	if err != nil {
 		return fmt.Errorf("saving the push subscription: %w", err)
@@ -169,6 +171,70 @@ func (n *Notifier) Subscribe(ctx context.Context, tenantID string, sub webpush.S
 	n.mu.Unlock()
 	n.Refresh(ctx, tenantID)
 	return nil
+}
+
+// Dismissed notes that the user dismissed one of the subscription's
+// notifications: they're pushed a repost after its repost hours (RunReposts),
+// the service worker showing again the dismissed ones still unhandled. The
+// endpoint, known only to the browser and us, is what authorizes it.
+func (n *Notifier) Dismissed(ctx context.Context, endpoint string) error {
+	return n.q.SetPushRepost(ctx, sharedqueries.SetPushRepostParams{Now: time.Now().Unix(), Endpoint: endpoint})
+}
+
+// repostPayload asks the service worker to show the dismissed notifications
+// again, from what it was last sent: no tenant database is opened for it.
+var repostPayload = []byte(`{"repost":true}`)
+
+// RunReposts pushes the due reposts every minute until ctx is done.
+func (n *Notifier) RunReposts(ctx context.Context) {
+	if !n.Enabled() {
+		return
+	}
+	t := time.NewTicker(time.Minute)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		if err := n.repost(ctx); err != nil {
+			logger.Get().Error("reposting the badge's notifications", zap.Error(err))
+		}
+	}
+}
+
+// repost pushes the subscriptions whose repost is due.
+func (n *Notifier) repost(ctx context.Context) error {
+	n.sendMu.Lock()
+	defer n.sendMu.Unlock()
+	subs, err := n.q.ListDuePushReposts(ctx, time.Now().Unix())
+	if err != nil {
+		return fmt.Errorf("listing the due reposts: %w", err)
+	}
+	var errs []error
+	for _, s := range subs {
+		errs = append(errs, n.q.ClearPushRepost(ctx, s.Endpoint))
+		if s.LastSent <= 0 {
+			// Nothing left to show.
+			continue
+		}
+		ctx, cancel := context.WithTimeout(ctx, sendTimeout)
+		status, err := n.send(ctx, repostPayload, &webpush.Subscription{
+			Endpoint: s.Endpoint,
+			Keys:     webpush.Keys{P256dh: s.P256dh, Auth: s.Auth},
+		})
+		cancel()
+		switch {
+		case status == http.StatusNotFound || status == http.StatusGone:
+			errs = append(errs, n.q.DeleteGonePushSubscription(ctx, s.Endpoint), n.reloadTenant(ctx, s.TenantID))
+		case err != nil:
+			errs = append(errs, err)
+		case status >= 300:
+			errs = append(errs, fmt.Errorf("push service answered %d", status))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // Unsubscribe drops a browser's subscription.

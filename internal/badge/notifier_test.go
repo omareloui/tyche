@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	webpush "github.com/SherClockHolmes/webpush-go"
 	"github.com/omareloui/tyche/internal/shareddb"
@@ -138,6 +139,42 @@ func TestNotifierPush(t *testing.T) {
 	sub("https://push/a", SourceSMS, SourceReview)
 	if s := push(Counts{}); len(s) != 0 {
 		t.Fatalf("resubscribed: sent %+v", s)
+	}
+
+	// A dismissal asks for a repost repost_hours later, only once and only
+	// while something is shown.
+	if err := q.UpsertPushSubscription(ctx, sharedqueries.UpsertPushSubscriptionParams{Endpoint: "https://push/a", TenantID: "GL_1", P256dh: "k", Auth: "a", Sources: JoinSources([]Source{SourceSMS, SourceReview}), RepostHours: 2}); err != nil {
+		t.Fatal(err)
+	}
+	push(Counts{SMS: 1})
+	if err := n.Dismissed(ctx, "https://push/a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := n.Dismissed(ctx, "https://push/b"); err != nil { // nothing shown there
+		t.Fatal(err)
+	}
+	got = nil
+	if err := n.repost(ctx); err != nil || len(got) != 0 {
+		t.Fatalf("not due yet: sent %+v, %v", got, err)
+	}
+	// Due: dismissed more than 2 hours ago.
+	if err := q.ClearPushRepost(ctx, "https://push/a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := q.SetPushRepost(ctx, sharedqueries.SetPushRepostParams{Now: time.Now().Add(-3 * time.Hour).Unix(), Endpoint: "https://push/a"}); err != nil {
+		t.Fatal(err)
+	}
+	var raw []string
+	n.send = func(_ context.Context, payload []byte, s *webpush.Subscription) (int, error) {
+		raw = append(raw, s.Endpoint+" "+string(payload))
+		return status, nil
+	}
+	if err := n.repost(ctx); err != nil || len(raw) != 1 || raw[0] != `https://push/a {"repost":true}` {
+		t.Fatalf("due: sent %v, %v", raw, err)
+	}
+	raw = nil
+	if err := n.repost(ctx); err != nil || len(raw) != 0 {
+		t.Fatalf("reposted once: sent %v, %v", raw, err)
 	}
 
 	// A gone subscription is dropped, the tenant too once it has none.
