@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"net/http"
 	"net/url"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/a-h/templ"
+	"github.com/oklog/ulid"
 	"github.com/omareloui/tyche/internal/errs"
 	"github.com/omareloui/tyche/internal/fxrate"
 	"github.com/omareloui/tyche/internal/idgen"
@@ -576,19 +578,69 @@ func (h Handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) (temp
 	}
 	l.Debug("fetched transaction", zap.Any("transaction", tx))
 
-	if tx.IsGoalPurchase() && tx.Goal != nil {
-		return nil, errGoalPurchaseDelete
+	return h.deleteTransactions(w, r, []*models.Transaction{tx})
+}
+
+// maxBatchDelete caps the transactions deleted at once (the undo toast's).
+const maxBatchDelete = 500
+
+// DeleteTransactions deletes the transactions of the form's ids at once, the
+// ones waiting out the undo toast (transactions.js). Ids already gone are
+// skipped.
+func (h Handler) DeleteTransactions(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	if err := r.ParseForm(); err != nil {
+		return nil, resperr.New(http.StatusBadRequest, "Invalid form.")
+	}
+	ids := slices.Clone(r.PostForm["id"])
+	slices.Sort(ids)
+	ids = slices.Compact(ids)
+	if len(ids) == 0 || len(ids) > maxBatchDelete {
+		return nil, resperr.New(http.StatusUnprocessableEntity, "Invalid transactions to delete.")
 	}
 
-	if err := h.repo.DeleteTransaction(r.Context(), tx); err != nil {
-		l.Error("deleting transaction", zap.Error(err))
+	l := logger.FromCtx(r.Context())
+
+	txs := make([]*models.Transaction, 0, len(ids))
+	for _, id := range ids {
+		if _, err := ulid.ParseStrict(id); err != nil {
+			return nil, errs.ErrInvalidID
+		}
+		tx, err := h.repo.GetTransaction(r.Context(), id)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			l.Error("fetching transaction", zap.Error(err), zap.String("id", id))
+			return nil, err
+		}
+		txs = append(txs, tx)
+	}
+
+	return h.deleteTransactions(w, r, txs)
+}
+
+// deleteTransactions deletes txs, answering the list (and the balances when
+// one was fulfilled).
+func (h Handler) deleteTransactions(w http.ResponseWriter, r *http.Request, txs []*models.Transaction) (templ.Component, error) {
+	l := logger.FromCtx(r.Context())
+
+	fulfilled := false
+	for _, tx := range txs {
+		if tx.IsGoalPurchase() && tx.Goal != nil {
+			return nil, errGoalPurchaseDelete
+		}
+		fulfilled = fulfilled || !tx.FulfilledAt.IsZero()
+	}
+
+	if err := h.repo.DeleteTransactions(r.Context(), txs); err != nil {
+		l.Error("deleting transactions", zap.Error(err))
 		return nil, err
 	}
-	l.Info("deleted transaction")
+	l.Info("deleted transactions", zap.Int("count", len(txs)))
 
 	hxRetargetTxList(w)
 
-	if !tx.FulfilledAt.IsZero() {
+	if fulfilled {
 		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
 			return nil, err
 		}

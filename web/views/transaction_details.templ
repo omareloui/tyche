@@ -211,7 +211,8 @@ templ txDetailsActions(tx *models.Transaction) {
 				hx-target="#tx-list"
 				hx-swap="outerHTML"
 				@htmx:after-request="reload($event)"
-				class="txd-action"
+				hx-disabled-elt="this"
+				class="txd-action busy-swap"
 			>
 				@icons.Check("14")
 				Fulfill
@@ -224,7 +225,8 @@ templ txDetailsActions(tx *models.Transaction) {
 				hx-target="#tx-list"
 				hx-swap="outerHTML"
 				@htmx:after-request="reload($event)"
-				class="txd-action"
+				hx-disabled-elt="this"
+				class="txd-action busy-swap"
 			>
 				@icons.CheckCheck("14")
 				Mark reviewed

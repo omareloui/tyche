@@ -152,13 +152,15 @@ templ smsInbox(msgs []models.SMSMessage) {
 					:hx-confirm="`Ignore ${count(status)} SMS? They won't become transactions.`"
 					data-confirm-label="Ignore"
 					data-confirm-danger
-					class="inline-flex items-center gap-2 h-9 px-4 rounded-full border border-zinc-700 text-sm text-zinc-300 cursor-pointer transition-colors hover:border-zinc-500 hover:text-white"
+					hx-disabled-elt="this"
+					class="busy-swap inline-flex items-center gap-2 h-9 px-4 rounded-full border border-zinc-700 text-sm text-zinc-300 cursor-pointer transition-colors hover:border-zinc-500 hover:text-white"
 				>
 					@icons.Ban("16")
 					<span x-text="status ? `Ignore ${count(status)}` : 'Ignore all'">Ignore all</span>
 				</button>
 				<button
 					hx-post="/sms/retry"
+					hx-disabled-elt="this"
 					hx-target="#sms-list"
 					hx-swap="outerHTML"
 					:hx-vals="JSON.stringify({status})"
@@ -218,6 +220,7 @@ templ SMSMessage(m *models.SMSMessage) {
 		x-show="matches($el)"
 		hx-target="this"
 		hx-swap="outerHTML"
+		hx-indicator="this"
 		class={ "relative flex flex-col gap-3 p-4 rounded-2xl bg-zinc-700/20 overflow-hidden", meta.Accent }
 	>
 		<div aria-hidden="true" class="pointer-events-none absolute -top-16 -right-16 size-40 rounded-full bg-(--accent)/8 blur-2xl"></div>
@@ -312,6 +315,7 @@ templ SMSMessage(m *models.SMSMessage) {
 				}
 				<button
 					hx-put={ fmt.Sprintf("/sms/%s/ignore", m.ID) }
+					hx-disabled-elt="this"
 					class="inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-sm text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white"
 				>
 					@icons.Ban("15")
@@ -319,6 +323,7 @@ templ SMSMessage(m *models.SMSMessage) {
 				</button>
 				<button
 					hx-post={ fmt.Sprintf("/sms/%s/retry", m.ID) }
+					hx-disabled-elt="this"
 					class="inline-flex items-center gap-1.5 h-9 pl-3 pr-4 rounded-full bg-(--accent)/15 text-sm font-medium text-(--accent) cursor-pointer transition-colors hover:bg-(--accent)/25"
 				>
 					@icons.Retry("15", &templ.Attributes{"class": "in-[.htmx-request]:animate-spin"})

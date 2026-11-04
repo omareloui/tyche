@@ -3,14 +3,18 @@
 // requests just need some target.
 
 const UNDO_MS = 5000;
+// txDeleteSeq tells the deletes sent apart, for their answers.
+let txDeleteSeq = 0;
 const SWIPE_PX = 90;
 
 function txURL(id, action) {
   return action ? `/transactions/${id}/${action}` : `/transactions/${id}`;
 }
 
+// txRequest sends an action of a row, from it so it shows busy meanwhile
+// (its hx-indicator).
 function txRequest(verb, url, el) {
-  return htmx.ajax(verb, url, { target: el, swap: "outerHTML" });
+  return htmx.ajax(verb, url, { source: el, target: el, swap: "outerHTML" });
 }
 
 function txDetailsURL(id) {
@@ -37,51 +41,119 @@ function closeTxDetails() {
 const TX_ROW_CONTROLS = "button, a, input, select, textarea, label, [role=menu], [tabindex]:not([data-tx-row])";
 
 document.addEventListener("alpine:init", () => {
-  // txs holds the deletes waiting out their undo delay. Their rows stay in
-  // the DOM, hidden, so undoing is instant.
+  // txs holds the deletes waiting out their undo delay, all sent at once
+  // when it ends (each delete restarts it), or undone together. Their rows
+  // stay in the DOM, hidden by a stylesheet out of the swapped list, so
+  // undoing is instant and the list re-rendering (other actions, the delete's
+  // answer) never shows them back.
   Alpine.store("txs", {
-    pending: {},
+    // pending is the deletes the toast offers to undo, as {id, label}.
+    pending: [],
+    timer: null,
+    // toast is the shown toast: its text, and a key restarting its countdown.
     toast: null,
-
-    isPending(id) {
-      return id in this.pending;
-    },
+    // left is the seconds left before the pending deletes are sent.
+    left: 0,
+    deadline: 0,
+    ticker: null,
+    // hidden is every id hidden: pending ones and sent ones (gone from the
+    // list once answered; shown again if the delete fails).
+    hidden: new Set(),
 
     remove(el) {
       const { id, label } = el?.dataset ?? {};
-      if (!id || this.isPending(id)) return;
-      this.pending[id] = {
-        url: txURL(id),
-        timer: setTimeout(() => this.commit(id), UNDO_MS),
+      if (!id || this.hidden.has(id)) return;
+      // The focus in the row (e.g. its menu's Delete) goes on to the next
+      // row, as deleting with the key does, rather than to the page.
+      if (el.contains(document.activeElement))
+        txNeighbor(el.querySelector("[data-tx-row]"))?.focus({ preventScroll: true });
+      this.pending.push({ id, label });
+      this.hide([id]);
+      clearTimeout(this.timer);
+      this.timer = setTimeout(() => this.commit(), UNDO_MS);
+      this.countDown();
+      const n = this.pending.length;
+      this.toast = {
+        text: n === 1 ? `Deleted “${label}”` : `Deleted ${n} transactions`,
+        key: (this.toast?.key ?? 0) + 1,
       };
-      this.toast = { id, label };
+    },
+
+    // countDown (re)starts the seconds the toast shows.
+    countDown() {
+      this.deadline = Date.now() + UNDO_MS;
+      const tick = () => (this.left = Math.max(0, Math.ceil((this.deadline - Date.now()) / 1000)));
+      tick();
+      this.ticker ??= setInterval(tick, 200);
+    },
+
+    stopCountDown() {
+      clearInterval(this.ticker);
+      this.ticker = null;
     },
 
     undo() {
-      const id = this.toast?.id;
-      if (!id) return;
-      clearTimeout(this.pending[id]?.timer);
-      delete this.pending[id];
+      clearTimeout(this.timer);
+      this.stopCountDown();
+      this.show(this.pending.map((p) => p.id));
+      this.pending = [];
       this.toast = null;
     },
 
-    commit(id) {
-      const p = this.pending[id];
-      if (!p) return;
-      clearTimeout(p.timer);
-      if (this.toast?.id === id) this.toast = null;
-      // On failure the row shows up again, as it was never swapped out.
-      txRequest("DELETE", p.url, "#tx-list").finally(() => delete this.pending[id]);
+    commit() {
+      clearTimeout(this.timer);
+      this.stopCountDown();
+      const ids = this.pending.map((p) => p.id);
+      this.pending = [];
+      this.toast = null;
+      if (!ids.length) return;
+      // Shown back if it fails (htmx shows the error).
+      const key = String(++txDeleteSeq);
+      const done = (e) => {
+        if (e.detail.requestConfig?.headers?.["X-Tx-Delete"] !== key) return;
+        document.removeEventListener("htmx:afterRequest", done);
+        if (!e.detail.successful) this.show(ids);
+      };
+      document.addEventListener("htmx:afterRequest", done);
+      htmx.ajax("POST", "/transactions/delete", {
+        target: "#tx-list",
+        swap: "outerHTML",
+        values: { id: ids },
+        headers: { "X-Tx-Delete": key },
+      });
     },
 
     // flush sends the pending deletes right away, when leaving the page.
     flush() {
-      for (const [id, p] of Object.entries(this.pending)) {
-        clearTimeout(p.timer);
-        fetch(p.url, { method: "DELETE", keepalive: true });
-        delete this.pending[id];
+      clearTimeout(this.timer);
+      this.stopCountDown();
+      if (this.pending.length) {
+        const body = new URLSearchParams(this.pending.map((p) => ["id", p.id]));
+        fetch("/transactions/delete", { method: "POST", body, keepalive: true });
       }
+      this.pending = [];
       this.toast = null;
+      this.show([...this.hidden]);
+    },
+
+    hide(ids) {
+      for (const id of ids) this.hidden.add(id);
+      this.paint();
+    },
+
+    show(ids) {
+      for (const id of ids) this.hidden.delete(id);
+      this.paint();
+    },
+
+    paint() {
+      let style = document.getElementById("tx-hidden");
+      if (!style) {
+        style = document.createElement("style");
+        style.id = "tx-hidden";
+        document.head.append(style);
+      }
+      style.textContent = [...this.hidden].map((id) => `#tx-${CSS.escape(id)}{display:none!important}`).join("");
     },
   });
 
@@ -349,11 +421,6 @@ document.addEventListener("alpine:init", () => {
     x0: null,
     y0: null,
     swiping: false,
-
-    // shown hides rows waiting to be deleted.
-    get shown() {
-      return !Alpine.store("txs").isPending(this.$root.dataset.id);
-    },
 
     // swipe binds the row to the pointer, with x-bind to keep each row's
     // markup short.

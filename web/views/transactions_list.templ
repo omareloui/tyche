@@ -415,14 +415,15 @@ templ Transaction(tx *models.Transaction, def *models.Currency) {
 }
 
 // txRowAttrs are what the row's swipe and keyboard actions (transactions.js)
-// read: its id, label for the undo toast, and which actions it has.
+// read: its id, label for the undo toast, and which actions it has. Its
+// actions' requests show it busy (main.css).
 func txRowAttrs(tx *models.Transaction, v *txView) templ.Attributes {
 	attrs := templ.Attributes{
-		"id":         TxRowID(tx.ID),
-		"data-tx":    true,
-		"data-id":    tx.ID,
-		"data-label": v.title,
-		"x-show":     "shown",
+		"id":           TxRowID(tx.ID),
+		"data-tx":      true,
+		"data-id":      tx.ID,
+		"data-label":   v.title,
+		"hx-indicator": "this",
 	}
 	if tx.FulfilledAt.IsZero() {
 		attrs["data-scheduled"] = true
@@ -767,6 +768,7 @@ templ transferPair(out *models.Transaction, def *models.Currency) {
 		id={ "tx-pair-" + out.ID }
 		hx-target="this"
 		hx-swap="outerHTML"
+		hx-indicator="this"
 		class="relative"
 		x-data="txRow"
 	>
@@ -970,15 +972,27 @@ templ reimbursement(tx *models.Transaction, def *models.Currency) {
 	</div>
 }
 
+// txUndoToast offers to undo the deletes waiting to be sent, all of them;
+// its ring drains, with the seconds left in it, until they are (restarted by
+// each delete).
 templ txUndoToast() {
 	<div
 		x-cloak
 		x-show="$store.txs.toast"
 		x-transition.opacity.duration.150ms
 		role="status"
-		class="fixed z-60 bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 max-w-[calc(100vw-2rem)] pl-5 pr-1.5 py-1.5 rounded-full bg-zinc-800 ring-1 ring-zinc-700 shadow-xl shadow-black/50"
+		class="fixed z-60 bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 max-w-[calc(100vw-2rem)] pl-2 pr-1.5 py-1.5 rounded-full bg-zinc-800 ring-1 ring-zinc-700 shadow-xl shadow-black/50"
 	>
-		<span class="truncate text-base">Deleted “<span x-text="$store.txs.toast?.label"></span>”</span>
+		<span aria-hidden="true" class="relative grid place-items-center shrink-0 size-8">
+			<template x-for="k in [$store.txs.toast?.key]" :key="k">
+				<svg viewBox="0 0 32 32" class="absolute inset-0 -rotate-90">
+					<circle cx="16" cy="16" r="14" class="tx-undo-track"></circle>
+					<circle cx="16" cy="16" r="14" pathLength="100" class="tx-undo-ring"></circle>
+				</svg>
+			</template>
+			<span class="text-sm font-semibold tabular-nums text-violet-300" x-text="$store.txs.left"></span>
+		</span>
+		<span class="truncate text-base" x-text="$store.txs.toast?.text"></span>
 		<button
 			type="button"
 			@click="$store.txs.undo()"
@@ -994,9 +1008,14 @@ const (
 	txMenuSmall = "top-11 right-3 origin-top-right"
 )
 
+// txMenuItem sends a request for the row, closing the menu so the row
+// shows busy meanwhile.
 func txMenuItem(label, action, url string, icon templ.Component, opts ...components.EntryMenuItemOpt) templ.Component {
 	return components.EntryMenuAnchorItem(label, action, url,
-		append([]components.EntryMenuItemOpt{components.WithEntryMenuItemIcon(icon)}, opts...)...)
+		append([]components.EntryMenuItemOpt{
+			components.WithEntryMenuItemIcon(icon),
+			components.WithEntryMenuItemAttrs(templ.Attributes{"@click": "openMenu = false"}),
+		}, opts...)...)
 }
 
 // txMenuDelete deletes the transaction after a few seconds, offering an undo

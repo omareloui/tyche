@@ -1,12 +1,17 @@
 package router_test
 
 import (
+	"net/http/httptest"
+	"net/url"
 	"slices"
 	"testing"
 	"time"
 
+	"github.com/omareloui/tyche/internal/handler"
 	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/sanitizer"
+	"github.com/omareloui/tyche/internal/valid"
 )
 
 func TestDeleteTransactionUndoesBalances(t *testing.T) {
@@ -330,5 +335,56 @@ func TestTxFilterToIncludesTheWholeDay(t *testing.T) {
 				t.Errorf("summary counts %d, want %d", sum.Count, tt.want)
 			}
 		})
+	}
+}
+
+func TestDeleteTransactionsBatch(t *testing.T) {
+	repo, ctx, _ := setupTenant(t)
+	h := handler.New(repo, valid.New(), sanitizer.New(), nil, nil)
+	bank := newTestAccount(t, repo, ctx, "Bank", "EGP", models.AccKindBankAcc, 100)
+
+	create := func(amount float64) *models.Transaction {
+		t.Helper()
+		tx := &models.Transaction{
+			ID: idgen.New(), Account: *bank, Amount: amount, Kind: models.ExpenseTxKind,
+			ScheduledTo: time.Now(), FulfilledAt: time.Now(),
+		}
+		if err := repo.CreateTransaction(ctx, tx, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+		return tx
+	}
+	a, b, kept := create(10), create(20), create(5)
+
+	// One id twice and one already gone are fine.
+	w := httptest.NewRecorder()
+	if _, err := callHandler(ctx, h.DeleteTransactions)(w, "POST", "/transactions/delete", "", url.Values{
+		"id": {a.ID, b.ID, a.ID, idgen.New()},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.Header().Get("HX-Retarget"); got != "#tx-list" {
+		t.Errorf("HX-Retarget = %q, want #tx-list", got)
+	}
+	for _, tx := range []*models.Transaction{a, b} {
+		if _, err := repo.GetTransaction(ctx, tx.ID); err == nil {
+			t.Errorf("transaction %v not deleted", tx.Amount)
+		}
+	}
+	if _, err := repo.GetTransaction(ctx, kept.ID); err != nil {
+		t.Errorf("kept transaction: %v", err)
+	}
+	acc, err := repo.GetAccount(ctx, bank.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acc.Amount != 95 {
+		t.Errorf("bank = %v, want 95", acc.Amount)
+	}
+
+	for name, ids := range map[string][]string{"none": nil, "invalid": {"nope"}} {
+		if _, err := callHandler(ctx, h.DeleteTransactions)(httptest.NewRecorder(), "POST", "/transactions/delete", "", url.Values{"id": ids}); err == nil {
+			t.Errorf("%s: no error", name)
+		}
 	}
 }

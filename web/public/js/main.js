@@ -108,6 +108,22 @@ document.addEventListener("click", (e) => {
     });
   }
   addEventListener("pageshow", done);
+
+  // Actions (any request but a GET) slower than a moment show the bar too,
+  // without the blur. Counted by their xhr, as their element may be swapped
+  // out before afterRequest.
+  let busy = 0;
+  let busyTimer;
+  document.addEventListener("htmx:beforeSend", (e) => {
+    const xhr = e.detail.xhr;
+    if (e.detail.boosted || e.detail.requestConfig?.verb === "get" || !xhr) return;
+    if (busy++ === 0) busyTimer = setTimeout(() => (root.dataset.busy = ""), 150);
+    xhr.addEventListener("loadend", () => {
+      if (--busy > 0) return;
+      clearTimeout(busyTimer);
+      delete root.dataset.busy;
+    });
+  });
 })();
 
 // components.HoverPopup hangs right-aligned under its group (group/popup), so on narrow

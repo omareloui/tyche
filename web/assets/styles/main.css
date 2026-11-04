@@ -493,6 +493,90 @@ input[type="number"] {
   }
 }
 
+/* Busy rows: a transaction (or SMS) whose action is being sent dims, with a
+   spinner over its menu; delayed so quick answers don't flash it. */
+.htmx-request > :is([data-tx-row], .tx-review),
+[data-sms].htmx-request > * {
+  opacity: 0.5;
+  pointer-events: none;
+  transition: opacity 0.15s 0.12s;
+}
+
+.htmx-request > [data-tx-row]::after,
+[data-sms].htmx-request::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0.75rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: -0.625rem;
+  border-radius: 9999px;
+  border: 2px solid color-mix(in oklab, var(--accent) 25%, transparent);
+  border-top-color: var(--accent);
+  opacity: 0;
+  animation:
+    spin 0.7s linear infinite,
+    busy-in 0.15s 0.12s forwards;
+}
+
+[data-sms].htmx-request::after {
+  top: auto;
+  bottom: 1.5rem;
+  right: auto;
+  left: 1.25rem;
+}
+
+/* A button whose request is being sent shows a spinner for its icon. */
+.busy-swap.htmx-request > svg:first-child {
+  display: none;
+}
+
+.busy-swap.htmx-request::before {
+  content: "";
+  flex-shrink: 0;
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 9999px;
+  border: 2px solid color-mix(in oklab, currentColor 25%, transparent);
+  border-top-color: currentColor;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes busy-in {
+  to {
+    opacity: 1;
+  }
+}
+
+/* The undo toast's countdown ring (txUndoToast), draining clockwise from
+   full, restarted by each delete. */
+.tx-undo-track,
+.tx-undo-ring {
+  fill: none;
+  stroke-width: 2.5;
+}
+
+.tx-undo-track {
+  stroke: var(--color-zinc-700);
+}
+
+.tx-undo-ring {
+  stroke: var(--color-violet-400);
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  animation: tx-undo-ring 5s linear forwards;
+}
+
+@keyframes tx-undo-ring {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+
 /* Page switch loading (main.js): bar at once, blur + spinner when slow. */
 #nav-progress {
   position: fixed;
@@ -508,7 +592,8 @@ input[type="number"] {
   pointer-events: none;
 }
 
-[data-navigating] #nav-progress {
+[data-navigating] #nav-progress,
+[data-busy] #nav-progress {
   opacity: 1;
   animation: nav-progress 8s cubic-bezier(0.1, 0.7, 0.2, 1) forwards;
 }
@@ -590,13 +675,21 @@ a.nav-pending {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-navigating] #nav-progress {
+  [data-navigating] #nav-progress,
+  [data-busy] #nav-progress {
     animation: none;
     transform: scaleX(0.9);
   }
 
-  .nav-spinner {
+  .nav-spinner,
+  .busy-swap.htmx-request::before,
+  .htmx-request > [data-tx-row]::after,
+  [data-sms].htmx-request::after {
     animation-duration: 2.5s;
+  }
+
+  .tx-undo-ring {
+    animation: none;
   }
 
   .nav-loading-text {

@@ -77,6 +77,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("PUT /transactions/{id}/category", handle(h.ReviewTransactionCategory))
 	mux.Handle("GET /transactions/{id}/duplicate", handle(h.DuplicateTransaction))
 	mux.Handle("DELETE /transactions/{id}", handle(h.DeleteTransaction))
+	mux.Handle("POST /transactions/delete", handle(h.DeleteTransactions))
 	mux.Handle("GET /transactions/{id}/reimburses", handle(h.GetReimbursePicker))
 	mux.Handle("PUT /transactions/{id}/reimburses", handle(h.LinkReimbursement))
 	mux.Handle("DELETE /transactions/{id}/reimburses", handle(h.UnlinkReimbursement))

@@ -419,8 +419,18 @@ func (r *Repository) GetTransaction(ctx context.Context, id string) (*models.Tra
 }
 
 func (r *Repository) DeleteTransaction(ctx context.Context, tx *models.Transaction) error {
+	return r.DeleteTransactions(ctx, []*models.Transaction{tx})
+}
+
+// DeleteTransactions deletes txs at once, all or none.
+func (r *Repository) DeleteTransactions(ctx context.Context, txs []*models.Transaction) error {
 	return r.transact(ctx, func(qtx *queries.Queries) error {
-		return r.deleteTransactionWithTxn(ctx, qtx, tx)
+		for _, tx := range txs {
+			if err := r.deleteTransactionWithTxn(ctx, qtx, tx); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 
