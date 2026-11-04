@@ -121,8 +121,7 @@ func (h Handler) CreateRecurrentTx(w http.ResponseWriter, r *http.Request) (temp
 	}
 	tx.ID = idgen.New()
 
-	sod := time.Now().Truncate(24 * time.Hour)
-	if !tx.ScheduledTo.After(sod) {
+	if !tx.ScheduledTo.After(h.userToday(r.Context())) {
 		tx.FulfilledAt = time.Now()
 	}
 

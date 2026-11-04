@@ -82,6 +82,19 @@ func parseSignedFloatIfExists(str string) (float64, error) {
 	return num, err
 }
 
+// userToday is today in the user's time zone as the date-only form values
+// parse (midnight UTC), to tell a picked day is today or ahead: comparing
+// it with time.Now() instead takes today for ahead until midnight UTC, east
+// of UTC.
+func (h Handler) userToday(ctx context.Context) time.Time {
+	loc, err := h.repo.GetTimezone(ctx)
+	if err != nil {
+		loc = time.UTC
+	}
+	y, m, d := time.Now().In(loc).Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+}
+
 func parseDateOnlyIfExists(str string) (time.Time, error) {
 	if str != "" {
 		date, err := time.Parse(time.DateOnly, str)

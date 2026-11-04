@@ -497,7 +497,8 @@ func (h Handler) goalMoneyTx(r *http.Request, gl *models.Goal, accs []models.Acc
 	} else {
 		tx.Account, tx.ToAccount = *gl.Account, acc
 	}
-	if !tx.ScheduledTo.After(tx.CreatedAt) {
+	// A withdraw is now, a deposit on the picked day.
+	if dir != views.GoalDeposit || !tx.ScheduledTo.After(h.userToday(r.Context())) {
 		tx.FulfilledAt = tx.CreatedAt
 	}
 	return tx, nil
@@ -638,7 +639,7 @@ func (h Handler) FulfillGoal(w http.ResponseWriter, r *http.Request) (templ.Comp
 	switch {
 	case err != nil || day.IsZero():
 		fd.ScheduledTo.Error, failed = "This field is required", true
-	case day.After(time.Now()):
+	case day.After(h.userToday(r.Context())):
 		fd.ScheduledTo.Error, failed = errs.ValidationField{Tag: "future_date"}.String(), true
 	}
 	if failed {

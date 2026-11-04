@@ -200,8 +200,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 	}
 	tx.ID = idgen.New()
 
-	sod := time.Now().Truncate(24 * time.Hour)
-	if tx.ScheduledTo.Equal(sod) || tx.ScheduledTo.Before(sod) {
+	if !tx.ScheduledTo.After(h.userToday(r.Context())) {
 		tx.FulfilledAt = time.Now()
 	}
 

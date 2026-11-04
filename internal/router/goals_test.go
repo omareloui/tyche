@@ -82,7 +82,7 @@ func TestGoalLifecycle(t *testing.T) {
 		}
 		return &gls[0]
 	}
-	today := time.Now().Format(time.DateOnly)
+	today := userToday(t)
 
 	create := callHandler(ctx, h.CreateGoal)
 	if _, err := create(httptest.NewRecorder(), "POST", "/goals", "", url.Values{
@@ -391,7 +391,7 @@ func TestGoalLoanPayments(t *testing.T) {
 	if _, err := callHandler(ctx, h.SetGoalPlan)(httptest.NewRecorder(), "PUT", "/goals/x/plan", gl.ID, plan); err != nil {
 		t.Fatal(err)
 	}
-	today := time.Now().Format(time.DateOnly)
+	today := userToday(t)
 	if _, err := callHandler(ctx, h.MoveGoalMoney)(httptest.NewRecorder(), "POST", "/goals/x/money?dir=deposit", gl.ID, url.Values{
 		"amount": {"300"}, "account_id": {bank.ID}, "scheduled_to": {today},
 	}); err != nil {
@@ -459,4 +459,15 @@ func TestGoalLoanPayments(t *testing.T) {
 	if left != 1 {
 		t.Errorf("%d payments left, want the paid one", left)
 	}
+}
+
+// userToday is today for a new user, in the default time zone the forms'
+// days are read in (whatever the machine's).
+func userToday(t *testing.T) string {
+	t.Helper()
+	loc, err := models.LoadTimezone(models.DefaultTimezone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return time.Now().In(loc).Format(time.DateOnly)
 }
