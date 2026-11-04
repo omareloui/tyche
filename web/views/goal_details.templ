@@ -12,6 +12,10 @@ import (
 	"github.com/omareloui/tyche/web/views/icons"
 )
 
+// GoalDetailsParam is the goals page's query param holding the goal whose
+// details are open.
+const GoalDetailsParam = "goal"
+
 func goalDetailsURL(gl *models.Goal) string {
 	return goalDetailsURLOf(gl.ID)
 }
@@ -61,7 +65,7 @@ templ GoalCardOOB(gl *models.Goal, plan *GoalPlanCard) {
 // in its place.
 templ GoalDetails(gl *models.Goal, plan *GoalPlanCard, pace float64, accNames map[string]string) {
 	{{ st := goalStateOf(gl) }}
-	@components.Drawer(components.DrawerProps{Label: gl.Name + " details"}) {
+	@components.Drawer(components.DrawerProps{Label: gl.Name + " details", URLParam: GoalDetailsParam, URLValue: gl.ID}) {
 		<div class={ "drawer-panel flex flex-col flex-1 min-h-0", goalAccentClass(st) }>
 			<header class="flex items-start gap-3 px-5 sm:px-6 pt-5 pb-4">
 				@goalRing(gl.ShownPercentage(), st, "size-11", "text-[0.65rem]")

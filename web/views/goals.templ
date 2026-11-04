@@ -25,10 +25,14 @@ templ Goals(
 	balances []models.Balance,
 	fd *GoalFD, goals []models.Goal,
 	plans map[string]*GoalPlanCard,
-	curs []models.Currency) {
+	curs []models.Currency,
+	openID string) {
 	@layouts.WithCreateForm(claims, "Goals", balances,
 		CreateGoalForm(fd, curs, &claims.DefaultCurrency)) {
 		@goalsList(goals, plans, &claims.DefaultCurrency)
+		if openID != "" {
+			@components.DrawerOnLoad(goalDetailsURLOf(openID))
+		}
 	}
 }
 

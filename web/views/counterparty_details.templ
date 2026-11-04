@@ -25,8 +25,20 @@ type CounterpartyDetailsData struct {
 	LabelsInUse []string
 }
 
+// CounterpartyDetailsParam is the counterparties page's query param holding
+// the counterparty whose details are open.
+const CounterpartyDetailsParam = "cp"
+
 func counterpartyDetailsURL(id string) string {
 	return fmt.Sprintf("/counterparties/%s/details", id)
+}
+
+// counterpartyDetailsURLIf is the details url of id, empty for no id.
+func counterpartyDetailsURLIf(id string) string {
+	if id == "" {
+		return ""
+	}
+	return counterpartyDetailsURL(id)
 }
 
 func counterpartyTxsURL(id string) templ.SafeURL {
@@ -37,7 +49,7 @@ func counterpartyTxsURL(id string) templ.SafeURL {
 // details: its rating, note, locations, spending and last transactions.
 templ CounterpartyDetails(d *CounterpartyDetailsData) {
 	{{ cp := d.Counterparty }}
-	@components.Drawer(components.DrawerProps{Label: cp.Name + " details"}) {
+	@components.Drawer(components.DrawerProps{Label: cp.Name + " details", URLParam: CounterpartyDetailsParam, URLValue: cp.ID}) {
 		<div class="drawer-panel flex flex-col flex-1 min-h-0">
 			<header class="flex items-start gap-3 px-5 sm:px-6 pt-5 pb-4">
 				<div class="grid place-items-center shrink-0 w-11 h-11 rounded-xl bg-zinc-700/40">
@@ -347,7 +359,7 @@ templ counterpartyDetailsRecent(d *CounterpartyDetailsData) {
 					</div>
 					<p
 						class={
-							"sensitive shrink-0 text-sm font-semibold tabular-nums",
+							"shrink-0 text-sm font-semibold tabular-nums",
 							templ.KV("text-emerald-400", v.tone == txToneIn),
 							templ.KV("text-zinc-400", v.tone == txToneNeutral),
 						}

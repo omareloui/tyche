@@ -114,6 +114,21 @@ func TestCounterpartyRatingLocationsHTTP(t *testing.T) {
 		}
 	})
 
+	t.Run("?cp= opens the details, which keep it in the url", func(t *testing.T) {
+		_, body := do("GET", "/counterparties?cp="+cafe.ID, nil)
+		if !strings.Contains(body, `hx-get="/counterparties/`+cafe.ID+`/details" hx-trigger="load"`) {
+			t.Error("page doesn't open the details on load")
+		}
+		_, body = do("GET", "/counterparties", nil)
+		if strings.Contains(body, `hx-trigger="load" hx-target="#drawer"`) {
+			t.Error("page opens a drawer without ?cp=")
+		}
+		_, body = do("GET", "/counterparties/"+cafe.ID+"/details", nil)
+		if !strings.Contains(body, `data-url-param="cp" data-url-value="`+cafe.ID+`"`) {
+			t.Error("details don't keep ?cp= in the url")
+		}
+	})
+
 	t.Run("details", func(t *testing.T) {
 		res, body := do("GET", "/counterparties/"+cafe.ID+"/details", nil)
 		if res.StatusCode != http.StatusOK {

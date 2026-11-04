@@ -19,6 +19,18 @@ type DrawerProps struct {
 	Bind string
 	// Attrs go on the drawer's root, e.g. a data attribute to find it by.
 	Attrs templ.Attributes
+	// URLParam and URLValue, for a details drawer, are kept in the page's url
+	// while it's open (e.g. ?cp=<id>), so reloading opens it again
+	// (DrawerOnLoad). The param must be in drawer.js' DRAWER_URL_PARAMS.
+	URLParam, URLValue string
+}
+
+// DrawerOnLoad opens the drawer url answers with as the page loads, e.g. the
+// details its ?cp= asks for; nothing for an empty url.
+templ DrawerOnLoad(url string) {
+	if url != "" {
+		<div hx-get={ url } hx-trigger="load" hx-target={ "#" + DrawerSlot } hx-swap="innerHTML" class="hidden"></div>
+	}
 }
 
 // Drawer is the panel the add and edit forms (and the transaction details)
@@ -35,6 +47,10 @@ templ Drawer(p DrawerProps) {
 		data-drawer
 		if p.Attrs != nil {
 			{ p.Attrs... }
+		}
+		if p.URLParam != "" {
+			data-url-param={ p.URLParam }
+			data-url-value={ p.URLValue }
 		}
 		if p.Bind != "" {
 			data-drawer-static

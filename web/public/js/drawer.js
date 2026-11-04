@@ -25,6 +25,19 @@ function standIn(el) {
   return (attrs.length && fresh.querySelector(el.tagName.toLowerCase() + attrs.join(""))) || fresh;
 }
 
+// DRAWER_URL_PARAMS are the query params of the details drawers
+// (components.DrawerProps.URLParam), kept in the url while one is open so
+// reloading the page opens it again; closing a fetched drawer drops them (an
+// edit form opened from the details keeps them meanwhile).
+const DRAWER_URL_PARAMS = ["cp", "goal"];
+
+function setDrawerParams(name, value) {
+  const u = new URL(location.href);
+  for (const p of DRAWER_URL_PARAMS) u.searchParams.delete(p);
+  if (name) u.searchParams.set(name, value);
+  if (u.href !== location.href) history.replaceState(history.state, "", u);
+}
+
 // drawerBase is the "drawer" Alpine component, to spread into ones extending
 // it (txDetails). It has no getters, as spreading would evaluate them.
 function drawerBase() {
@@ -59,7 +72,9 @@ function drawerBase() {
     },
 
     opened() {
-      if (!this.drawerRoot().contains(document.activeElement)) this.opener = document.activeElement;
+      const root = this.drawerRoot();
+      if (root.dataset.urlParam) setDrawerParams(root.dataset.urlParam, root.dataset.urlValue);
+      if (!root.contains(document.activeElement)) this.opener = document.activeElement;
       this.$nextTick(() => {
         this.pristine = this.formState();
         this.focusFirst();
@@ -190,6 +205,7 @@ function drawerBase() {
       const root = this.drawerRoot();
       if (!this.isOpen() || root.hasAttribute("data-closing")) return;
       const back = this.opener;
+      if (!root.hasAttribute("data-drawer-static")) setDrawerParams(null);
       root.setAttribute("data-closing", "");
       const sheet = root.querySelector(".drawer-sheet");
       let done = false;

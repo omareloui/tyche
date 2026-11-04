@@ -51,9 +51,11 @@ templ Counterparties(
 	balances []models.Balance,
 	fd *CounterpartyFD,
 	counterparties []models.Counterparty,
-	cats []models.Category) {
+	cats []models.Category,
+	openID string) {
 	@layouts.WithCreateForm(claims, "Counterparties", balances, CreateCounterpartyForm(fd, cats)) {
 		@counterpartiesList(counterparties)
+		@components.DrawerOnLoad(counterpartyDetailsURLIf(openID))
 	}
 }
 

@@ -44,7 +44,10 @@ func (h Handler) Counterparties(w http.ResponseWriter, r *http.Request) (templ.C
 		return nil, err
 	}
 
-	return views.Counterparties(getClaims(r.Context()), b, h.mapCounterpartyToFD(dfltCounterparty(), &errs.ValidationError{}, models.CounterpartyLabels(cp)), cp, cats), nil
+	// ?cp= opens the counterparty's details, e.g. when reloading the page.
+	openID := r.URL.Query().Get(views.CounterpartyDetailsParam)
+
+	return views.Counterparties(getClaims(r.Context()), b, h.mapCounterpartyToFD(dfltCounterparty(), &errs.ValidationError{}, models.CounterpartyLabels(cp)), cp, cats, openID), nil
 }
 
 func (h Handler) Counterparty(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

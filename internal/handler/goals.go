@@ -49,7 +49,10 @@ func (h Handler) Goals(w http.ResponseWriter, r *http.Request) (templ.Component,
 	}
 
 	claims := getClaims(r.Context())
-	return views.Goals(claims, b, h.mapGlToFD(dfltGoal(&claims.DefaultCurrency), &errs.ValidationError{}), gls, cards, curs), nil
+	// ?goal= opens the goal's details, e.g. when reloading the page.
+	openID := r.URL.Query().Get(views.GoalDetailsParam)
+
+	return views.Goals(claims, b, h.mapGlToFD(dfltGoal(&claims.DefaultCurrency), &errs.ValidationError{}), gls, cards, curs, openID), nil
 }
 
 func (h Handler) Goal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
