@@ -29,4 +29,15 @@
     <string name="activity_title">Activity</string>
     <string name="activity_empty">Nothing yet. New bank SMS and uploads show up here.</string>
     <string name="clear">Clear</string>
+    <string name="dev_tools">Dev tools</string>
+    <string name="dev_title">Dev tools</string>
+    <string name="dev_account_ref">Account reference</string>
+    <string name="dev_account_ref_hint">Filled into the transaction SMS, set it as an account\'s SMS Reference on Tyche. Another one tests unmatched SMS.</string>
+    <string name="dev_valid">Transactions</string>
+    <string name="dev_ignored">Ignored</string>
+    <string name="dev_unrecognized">Unrecognized</string>
+    <string name="dev_sender">Sender</string>
+    <string name="dev_body">Message</string>
+    <string name="dev_send">Send SMS</string>
+    <string name="dev_turn_off">Turn off dev mode</string>
 </resources>

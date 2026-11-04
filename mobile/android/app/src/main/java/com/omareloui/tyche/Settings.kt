@@ -67,6 +67,16 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(KEY_BATTERY_ASKED, false)
         set(value) = prefs.edit().putBoolean(KEY_BATTERY_ASKED, value).apply()
 
+    /** Shows the dev tools sending fake SMS, toggled by tapping the header 7 times. */
+    var devMode: Boolean
+        get() = prefs.getBoolean(KEY_DEV_MODE, false)
+        set(value) = prefs.edit().putBoolean(KEY_DEV_MODE, value).apply()
+
+    /** Account reference filled into the dev tools' transaction SMS. */
+    var devAccountRef: String
+        get() = prefs.getString(KEY_DEV_ACCOUNT_REF, null) ?: DEFAULT_DEV_ACCOUNT_REF
+        set(value) = prefs.edit().putString(KEY_DEV_ACCOUNT_REF, value.trim()).apply()
+
     /** The server as host[:port], for messages. */
     val serverHost: String
         get() = runCatching {
@@ -137,6 +147,9 @@ class Settings(context: Context) {
         private const val KEY_INSTALL_ID = "install_id"
         private const val KEY_LAST_SCAN_AT = "last_scan_at"
         private const val KEY_BATTERY_ASKED = "battery_asked"
+        private const val KEY_DEV_MODE = "dev_mode"
+        private const val KEY_DEV_ACCOUNT_REF = "dev_account_ref"
+        private const val DEFAULT_DEV_ACCOUNT_REF = "789"
 
         private const val KEYSTORE = "AndroidKeyStore"
         private const val KEY_ALIAS = "tyche_token_key"

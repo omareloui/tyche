@@ -1,4 +1,4 @@
-# Tyche Android
+# Tyche SMS (Android)
 
 Minimal app that signs in to Tyche and forwards bank SMS to `POST /api/sms`,
 where they become transactions flagged for review.
@@ -77,6 +77,19 @@ adb reverse tcp:<port> tcp:<port>
 ```
 
 Then use `http://localhost:<port>` as the Tyche URL in the app.
+
+## Dev mode
+
+Tap the `tyche` header 7 times (any build) to toggle it. A "Dev tools" button
+then opens a screen sending fake bank SMS through the receiver's path (sender
+check, queue, activity log, upload), to test the parser, `/sms`, reviews and
+the PWA badge. Presets (`DevSms.kt`, from the samples in
+`internal/smsparser/seed.go`): transactions dated now with a random amount,
+ignored messages and unrecognized ones; the fields stay editable. The account
+reference is filled into the transaction SMS: set it as an account's SMS
+Reference on Tyche, another one tests unmatched SMS. Each send is stamped now,
+so the same preset is never a duplicate. Fakes are real data on the signed-in
+Tyche, nothing goes to the phone's inbox.
 
 ## Testing on the emulator
 

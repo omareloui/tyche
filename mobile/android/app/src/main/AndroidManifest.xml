@@ -40,6 +40,13 @@
             android:parentActivityName=".MainActivity"
             android:theme="@style/Theme.Tyche.Bar" />
 
+        <activity
+            android:name=".DevActivity"
+            android:exported="false"
+            android:label="@string/dev_title"
+            android:parentActivityName=".MainActivity"
+            android:theme="@style/Theme.Tyche.Bar" />
+
         <receiver
             android:name=".SmsReceiver"
             android:exported="true"

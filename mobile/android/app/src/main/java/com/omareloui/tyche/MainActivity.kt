@@ -49,6 +49,10 @@ class MainActivity : AppCompatActivity() {
     /** Log entries showing their whole detail. */
     private val expanded = mutableSetOf<Long>()
 
+    /** Header taps in a row toward toggling dev mode. */
+    private var titleTaps = 0
+    private var lastTitleTapAt = 0L
+
     private val requestSmsPermissions =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
             if (granted.values.all { it }) {
@@ -83,6 +87,8 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<Button>(R.id.import_all).setOnClickListener { importSince(0, "the whole inbox") }
         findViewById<Button>(R.id.choose_senders).setOnClickListener { openSenders() }
+        findViewById<View>(R.id.header_title).setOnClickListener { tapTitle() }
+        findViewById<Button>(R.id.dev_tools).setOnClickListener { startActivity(Intent(this, DevActivity::class.java)) }
         findViewById<View>(R.id.health_pill).setOnClickListener { lifecycleScope.launch { checkHealth() } }
         findViewById<TextView>(R.id.clear_activity).setOnClickListener {
             lifecycleScope.launch(Dispatchers.IO) { log.clear() }
@@ -214,6 +220,20 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) { SmsImporter.importSince(this@MainActivity, sinceMillis, label) }
     }
 
+    /** Toggles dev mode on the 7th tap in a row. */
+    private fun tapTitle() {
+        val now = System.currentTimeMillis()
+        titleTaps = if (now - lastTitleTapAt < DEV_TAP_GAP_MS) titleTaps + 1 else 1
+        lastTitleTapAt = now
+        if (titleTaps < DEV_TAPS) return
+        titleTaps = 0
+        settings.devMode = !settings.devMode
+        val state = if (settings.devMode) "on" else "off"
+        log.add(LogLevel.MUTED, "Dev mode $state")
+        toast("Dev mode $state")
+        render()
+    }
+
     private fun openSenders() = startActivity(Intent(this, SendersActivity::class.java))
 
     private fun askForSmsPermissions() {
@@ -245,6 +265,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.header_sub).text =
             if (signedIn) "Forwarding bank SMS to ${settings.serverHost}" else "Not signed in"
         renderHealth()
+        findViewById<View>(R.id.dev_tools).visibility = if (signedIn && settings.devMode) View.VISIBLE else View.GONE
 
         if (!signedIn) return
 
@@ -451,6 +472,8 @@ class MainActivity : AppCompatActivity() {
         private const val REFRESH_MS = 5_000L
         private const val STALL_GRACE_MS = 2 * 60 * 1000L
         private const val HEALTH_MS = 15_000L
+        private const val DEV_TAPS = 7
+        private const val DEV_TAP_GAP_MS = 600L
     }
 }
 

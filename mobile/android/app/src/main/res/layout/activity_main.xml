@@ -16,7 +16,9 @@
 
         <!-- Header -->
         <!-- Lowercase, as the web app's header. -->
+        <!-- Tapped 7 times, toggles dev mode. -->
         <TextView
+            android:id="@+id/header_title"
             style="@style/Tyche.Heading"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -404,6 +406,15 @@
                 android:layout_marginTop="28dp"
                 android:text="@string/sign_out"
                 android:textColor="@color/red" />
+
+            <Button
+                android:id="@+id/dev_tools"
+                style="@style/Tyche.Button.Ghost"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/dev_tools"
+                android:visibility="gone" />
         </LinearLayout>
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>

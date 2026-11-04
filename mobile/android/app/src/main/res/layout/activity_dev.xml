@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg"
+    android:fitsSystemWindows="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="18dp"
+        android:paddingBottom="32dp">
+
+        <TextView
+            android:id="@+id/warning"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textColor="@color/amber"
+            android:textSize="16sp" />
+
+        <LinearLayout
+            style="@style/Tyche.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp">
+
+            <TextView
+                style="@style/Tyche.Section"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/dev_account_ref" />
+
+            <EditText
+                android:id="@+id/account_ref"
+                android:layout_width="match_parent"
+                android:layout_height="50dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_field"
+                android:importantForAutofill="no"
+                android:inputType="text"
+                android:paddingHorizontal="14dp"
+                android:textColor="@color/text"
+                android:textSize="17sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/dev_account_ref_hint"
+                android:textColor="@color/dim"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <!-- A ghost button per preset, filled from DevSms.PRESETS. -->
+        <TextView
+            style="@style/Tyche.Section"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="@string/dev_valid" />
+
+        <LinearLayout
+            android:id="@+id/presets_valid"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <TextView
+            style="@style/Tyche.Section"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="@string/dev_ignored" />
+
+        <LinearLayout
+            android:id="@+id/presets_ignored"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <TextView
+            style="@style/Tyche.Section"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="@string/dev_unrecognized" />
+
+        <LinearLayout
+            android:id="@+id/presets_unrecognized"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <LinearLayout
+            style="@style/Tyche.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp">
+
+            <TextView
+                style="@style/Tyche.Section"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/dev_sender" />
+
+            <EditText
+                android:id="@+id/sender"
+                android:layout_width="match_parent"
+                android:layout_height="50dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_field"
+                android:importantForAutofill="no"
+                android:inputType="text"
+                android:paddingHorizontal="14dp"
+                android:textColor="@color/text"
+                android:textSize="17sp" />
+
+            <TextView
+                style="@style/Tyche.Section"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/dev_body" />
+
+            <EditText
+                android:id="@+id/body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_field"
+                android:gravity="top|start"
+                android:importantForAutofill="no"
+                android:inputType="textMultiLine"
+                android:minLines="4"
+                android:padding="14dp"
+                android:textColor="@color/text"
+                android:textSize="16sp" />
+
+            <Button
+                android:id="@+id/send"
+                style="@style/Tyche.Button.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="@string/dev_send" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/turn_off"
+            style="@style/Tyche.Button.Ghost"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:text="@string/dev_turn_off"
+            android:textColor="@color/red" />
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>
