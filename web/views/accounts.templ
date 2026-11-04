@@ -505,7 +505,7 @@ templ creditUsage(a *models.Account) {
 		</div>
 		<div class="flex justify-between gap-3 mt-1.5 text-xs text-zinc-500 tabular-nums">
 			<span>{ fmt.Sprintf("%.0f%% used", pct) }</span>
-			<span class="truncate">{ a.ViewAvailableCredit() } of { a.ViewCardLimit() } left</span>
+			<span class="truncate"><span class="sensitive">{ a.ViewAvailableCredit() }</span> of <span class="sensitive">{ a.ViewCardLimit() }</span> left</span>
 		</div>
 	</div>
 }

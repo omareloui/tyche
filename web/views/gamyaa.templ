@@ -141,7 +141,7 @@ templ gamyaaProgress(a *models.Account) {
 			</div>
 			<div class="flex justify-between gap-3 mt-1.5 text-xs text-zinc-500 tabular-nums">
 				<span>{ fmt.Sprintf("%d/%d paid", g.PaidCount, g.Members) }</span>
-				<span class="truncate">{ g.ViewShares() } · { a.Currency.Format(g.MonthlyPayment()) }/mo</span>
+				<span class="truncate">{ g.ViewShares() } · <span class="sensitive">{ a.Currency.Format(g.MonthlyPayment()) }/mo</span></span>
 			</div>
 		</div>
 		<div class="grid gap-1 text-sm">
