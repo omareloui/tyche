@@ -82,7 +82,7 @@ templ TxDetailsPanel(d *models.TxDetails, def *models.Currency) {
 						@txDetailsMini(&rt)
 					}
 					if d.Recurrent != nil {
-						<a href={ templ.SafeURL("/recurrent-tx#" + RecurrentTxID(d.Recurrent.ID)) } class="txd-more">
+						<a href={ RecurrentTxURL(d.Recurrent.ID) } class="txd-more">
 							See the recurring transaction
 							@icons.ArrowRight("14")
 						</a>

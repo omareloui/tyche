@@ -88,7 +88,9 @@ func New(h *handler.Handler) Router {
 	mux.Handle("POST /recurrence-form/{id}", handle(h.RecurrenceForm))
 
 	mux.Handle("GET /recurrent-tx", handle(h.RecurrentTxs))
+	mux.Handle("POST /recurrent-tx", handle(h.CreateRecurrentTx))
 	mux.Handle("GET /recurrent-tx/{id}", handle(h.RecurrentTx))
+	mux.Handle("GET /recurrent-tx/{id}/details", handle(h.RecurrentTxDetails))
 	mux.Handle("GET /recurrent-tx/{id}/edit", handle(h.GetEditRecurrentTx))
 	mux.Handle("PUT /recurrent-tx/{id}", handle(h.EditRecurrentTx))
 	mux.Handle("POST /recurrent-tx/{id}/generate-txs", handle(h.GenerateTransactions))

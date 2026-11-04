@@ -340,3 +340,10 @@ func dbRecurrentTxDetailsToRecurrentTx(dbRtx queries.RecurrentTxsDetail) *models
 
 	return &rt
 }
+
+// GetRecurrentTxTransactions is every transaction generated from the
+// recurrent transaction id, newest first.
+func (r *Repository) GetRecurrentTxTransactions(ctx context.Context, id string) ([]models.Transaction, error) {
+	p := queries.GetTransactionsParams{RecurrentTxID: id, Lim: -1}
+	return r.listTransactions(ctx, p)
+}

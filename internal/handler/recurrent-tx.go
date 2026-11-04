@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/a-h/templ"
@@ -50,7 +51,137 @@ func (h Handler) RecurrentTxs(w http.ResponseWriter, r *http.Request) (templ.Com
 	}
 	l.Info("fetched recurrent transactions")
 
-	return views.RecurrentTxs(getClaims(r.Context()), balances, ftxs), nil
+	accs, knds, cats, cps, err := h.getTxDeps(r.Context())
+	if err != nil {
+		return nil, err
+	}
+
+	// ?rtx= opens the recurrent transaction's details, e.g. when reloading.
+	openID := r.URL.Query().Get(views.RecurrentTxDetailsParam)
+
+	return views.RecurrentTxs(getClaims(r.Context()), balances, ftxs,
+		newRecurrentTxFD(h, accs), accs, knds, cats, cps, openID), nil
+}
+
+// RecurrentTxDetails is the recurrent transaction in full, in a drawer: what
+// it is, how often, and its upcoming and past transactions.
+func (h Handler) RecurrentTxDetails(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+	l := logger.FromCtx(r.Context())
+
+	rt, err := h.repo.GetRecurrentTx(r.Context(), id)
+	if err != nil {
+		l.Error("fetching recurrent tx", zap.Error(err))
+		return nil, err
+	}
+	txs, err := h.repo.GetRecurrentTxTransactions(r.Context(), id)
+	if err != nil {
+		l.Error("fetching recurrent tx transactions", zap.Error(err))
+		return nil, err
+	}
+
+	d := &views.RecurrentTxDetailsData{RecurrentTx: rt, Def: &getClaims(r.Context()).DefaultCurrency}
+	for _, tx := range txs {
+		if tx.FulfilledAt.IsZero() {
+			d.Upcoming = append(d.Upcoming, tx)
+		} else {
+			d.Past = append(d.Past, tx)
+		}
+	}
+	slices.Reverse(d.Upcoming)
+
+	return views.RecurrentTxDetails(d), nil
+}
+
+// fromRecurrentTxDetails is whether the request is an action of the details,
+// answered with them.
+func fromRecurrentTxDetails(r *http.Request) bool {
+	return r.URL.Query().Get("from") == views.RecurrentTxDetailsFrom
+}
+
+// newRecurrentTxFD is the create form's data: starting today, monthly.
+func newRecurrentTxFD(h Handler, accs []models.Account) *views.TransactionFD {
+	tx := defaultTransaction(accs)
+	tx.RecurrentTx = &models.RecurrentTx{Unit: models.RecurrentUnitMonth, Every: 1}
+	return h.mapTransactionToFD(tx, new(errs.ValidationError))
+}
+
+// CreateRecurrentTx creates a recurrent transaction with its first
+// transaction on its start date (fulfilled when not ahead), the next ones
+// counted from it.
+func (h Handler) CreateRecurrentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	l := logger.FromCtx(r.Context())
+
+	tx, err := h.mapFDToTransaction(r, true)
+	if err != nil {
+		return nil, err
+	}
+	tx.ID = idgen.New()
+
+	sod := time.Now().Truncate(24 * time.Hour)
+	if !tx.ScheduledTo.After(sod) {
+		tx.FulfilledAt = time.Now()
+	}
+
+	accs, knds, cats, cps, err := h.getTxDeps(r.Context())
+	if err != nil {
+		return nil, err
+	}
+
+	applyCounterpartyDefaultCategory(tx, cps)
+
+	claims := getClaims(r.Context())
+
+	fd, err := h.prepareTx(r, tx, accs, knds, cats, cps)
+	if fd != nil {
+		return views.CreateRecurrentTxForm(fd, accs, knds, cats, cps, &claims.DefaultCurrency), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	rt := tx.RecurrentTx
+	rt.ID = idgen.New()
+	rt.LastTransactionScheduledTo = tx.ScheduledTo
+
+	if err := rt.SanitizeAndValidate(h.sani, h.valid); err != nil {
+		var valerr errs.ValidationError
+		if errors.As(err, &valerr) {
+			l.Error("validating recurrent transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
+			return views.CreateRecurrentTxForm(h.mapTransactionToFD(tx, &valerr),
+				accs, knds, cats, cps, &claims.DefaultCurrency), nil
+		}
+		l.Error("sanitizing recurrent transaction", zap.Error(err))
+		return nil, err
+	}
+
+	scheduled := generateNextScheduledTransactions(rt, generateNextScheduledTransactionsCount)
+
+	if err := h.repo.CreateTransaction(r.Context(), tx, rt, scheduled); err != nil {
+		l.Error("creating recurrent transaction", zap.Error(err))
+		return nil, err
+	}
+	l.Info("created recurrent transaction", zap.String("id", rt.ID))
+	drawerCreated(w)
+
+	rts, err := h.repo.GetRecurrentTxs(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	if err := renderToBody(w, r, views.RecurrentTxsListOOB(rts, &claims.DefaultCurrency)); err != nil {
+		return nil, err
+	}
+
+	if !tx.FulfilledAt.IsZero() {
+		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
+			return nil, err
+		}
+	}
+
+	return views.CreateRecurrentTxForm(newRecurrentTxFD(h, accs), accs, knds, cats, cps, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) RecurrentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -188,6 +319,17 @@ func (h Handler) GenerateTransactions(w http.ResponseWriter, r *http.Request) (t
 		return nil, err
 	}
 
+	if fromRecurrentTxDetails(r) {
+		rt, err := h.repo.GetRecurrentTx(r.Context(), id)
+		if err != nil {
+			return nil, err
+		}
+		if err := renderToBody(w, r, views.RecurrentTxOOB(rt)); err != nil {
+			return nil, err
+		}
+		return h.RecurrentTxDetails(w, r)
+	}
+
 	// refetched for its new upcoming dates
 	return h.RecurrentTx(w, r)
 }
@@ -205,6 +347,9 @@ func (h Handler) DeleteRecurrentTx(w http.ResponseWriter, r *http.Request) (temp
 		return nil, err
 	}
 	l.Info("deleted recurrent transaction")
+	if fromRecurrentTxDetails(r) {
+		addHXTrigger(w, drawerSavedEvent)
+	}
 
 	if err := h.renderRecurrentTxsSummaryOOB(w, r); err != nil {
 		return nil, err

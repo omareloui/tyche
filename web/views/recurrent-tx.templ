@@ -20,9 +20,41 @@ type RecurrenceFD struct {
 	StopsOn     form.FDInput
 }
 
-templ RecurrentTxs(claims *jwt.AccessClaims, balances []models.Balance, rtxs []models.RecurrentTx) {
-	@layouts.WithTitle(claims, "Recurring", balances) {
-		@rtxsList(rtxs, &claims.DefaultCurrency)
+templ RecurrentTxs(
+	claims *jwt.AccessClaims, balances []models.Balance, rtxs []models.RecurrentTx,
+	fd *TransactionFD, accs []models.Account, knds []models.TxKind,
+	cats []models.Category, cps []models.Counterparty, openID string) {
+	@layouts.WithCreateForm(claims, "Recurring", balances,
+		CreateRecurrentTxForm(fd, accs, knds, cats, cps, &claims.DefaultCurrency)) {
+		@rtxsList(rtxs, &claims.DefaultCurrency, false)
+		@components.DrawerOnLoad(recurrentTxDetailsURLIf(openID))
+	}
+}
+
+// CreateRecurrentTxForm is the page's create form: a transaction on its
+// start date, repeating from it.
+templ CreateRecurrentTxForm(
+	fd *TransactionFD, accs []models.Account,
+	knds []models.TxKind, cats []models.Category,
+	cps []models.Counterparty,
+	defaultCur *models.Currency) {
+	@form.SheetForm("New recurring transaction", "/recurrent-tx", "Add", "tx-form") {
+		@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, "0", knds, cats, accs, cps, defaultCur)
+		@form.Field("Description", "description", "0", icons.Pencil("15"), fd.Description.Error) {
+			@form.Control("text", "description", "What is it for?", "0", fd.Description, nil)
+		}
+		<div>
+			@form.Field("Starts on", "scheduled_to", "0", icons.Calendar("15"), fd.ScheduledTo.Error) {
+				@form.Control("text", "scheduled_to", "yyyy-mm-dd", "0", fd.ScheduledTo, templ.Attributes{
+					"autocomplete":    "off",
+					"x-mask":          "9999-99-99",
+					"data-datepicker": true,
+				})
+			}
+			<p class="mt-1.5 text-sm text-zinc-500">The first one, then it repeats from it.</p>
+		</div>
+		<input type="hidden" name="is_recurrent" value="on"/>
+		@rtxRepeatsBox("0", fd.RecurrenceFD)
 	}
 }
 
@@ -57,12 +89,16 @@ templ rtxFormBody(
 	@form.Field("Description", "description", id, icons.Pencil("15"), fd.Description.Error) {
 		@form.Control("text", "description", "What is it for?", id, fd.Description, nil)
 	}
+	@rtxRepeatsBox(id, &fd.RecurrenceFD)
+}
+
+templ rtxRepeatsBox(id string, fd *RecurrenceFD) {
 	<div class="grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-800/20 p-4">
 		<p class="inline-flex items-center gap-2 text-zinc-300">
 			@icons.Repeat("18")
 			Repeats
 		</p>
-		@recurrenceFormBody(id, &fd.RecurrenceFD)
+		@recurrenceFormBody(id, fd)
 	</div>
 }
 
@@ -118,9 +154,15 @@ templ rtxEditHeader() {
 	<p class="text-sm text-zinc-500">Its upcoming scheduled transactions get replaced, starting from today.</p>
 }
 
-templ rtxsList(rtxs []models.RecurrentTx, def *models.Currency) {
+templ rtxsList(rtxs []models.RecurrentTx, def *models.Currency, oob bool) {
 	{{ active, ended := splitRecurrentTxs(rtxs) }}
-	<div id="rtx-list" class="grid gap-8">
+	<div
+		id="rtx-list"
+		class="grid gap-8"
+		if oob {
+			hx-swap-oob="true"
+		}
+	>
 		@rtxSummary(rtxs, def, false)
 		<section class="hidden has-[[data-rtx]]:block">
 			<h2 class="flex items-center gap-2 mb-3 text-sm font-semibold uppercase tracking-wider text-zinc-500">
@@ -151,11 +193,11 @@ templ rtxsList(rtxs []models.RecurrentTx, def *models.Currency) {
 				@icons.Repeat("30", &templ.Attributes{"class": "relative"})
 			</div>
 			<p class="mt-2 text-xl font-semibold">Nothing recurring yet</p>
-			<p class="max-w-sm text-zinc-500">Rent, salary, subscriptions… turn on <span class="text-zinc-300">Repeat</span> when adding a transaction and it shows up here.</p>
-			<a href="/transactions" class="btn-primary mt-2">
-				Go to transactions
-				@icons.ArrowRight("18")
-			</a>
+			<p class="max-w-sm text-zinc-500">Rent, salary, subscriptions… add one here, or turn on <span class="text-zinc-300">Repeat</span> when adding a transaction.</p>
+			<button type="button" class="btn-primary mt-2" @click="openCreateForm=true">
+				Add recurring transaction
+				@icons.Repeat("18")
+			</button>
 		</div>
 	</div>
 }
@@ -210,6 +252,16 @@ templ rtxSummary(rtxs []models.RecurrentTx, def *models.Currency, oob bool) {
 }
 
 templ RecurrentTx(rt *models.RecurrentTx) {
+	@recurrentTxCard(rt, false)
+}
+
+// RecurrentTxOOB swaps the card in place, e.g. after an action of its
+// details.
+templ RecurrentTxOOB(rt *models.RecurrentTx) {
+	@recurrentTxCard(rt, true)
+}
+
+templ recurrentTxCard(rt *models.RecurrentTx, oob bool) {
 	{{ tx := rt.AsTransaction() }}
 	{{ v := newTxView(tx) }}
 	{{ today := dateOf(time.Now()) }}
@@ -218,13 +270,23 @@ templ RecurrentTx(rt *models.RecurrentTx) {
 		id={ RecurrentTxID(rt.ID) }
 		hx-target="this"
 		hx-swap="outerHTML"
+		if oob {
+			hx-swap-oob="true"
+		}
 		data-rtx
 		class={ "relative", templ.KV("opacity-60 hover:opacity-100 transition-opacity", ended) }
-		x-data="{openMenu: false}"
+		x-data={ accountCardData }
 		:class="{ 'z-30': openMenu }"
 	>
 		@components.EntryMenuAt("openMenu", cardMenuPosition, getRecurrentTxMenuItems(rt))
-		<div class={ "relative flex flex-col gap-4 h-full p-4 rounded-2xl bg-zinc-700/20 overflow-hidden", rtxAccentClass(rt.Kind) }>
+		<div
+			tabindex="0"
+			data-details={ recurrentTxDetailsURL(rt.ID) }
+			@click="openDetails($event, $el)"
+			@keydown.enter.self="openDetails($event, $el)"
+			aria-label={ v.title + " details" }
+			class={ "relative flex flex-col gap-4 h-full p-4 rounded-2xl bg-zinc-700/20 overflow-hidden cursor-pointer transition hover:bg-zinc-700/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)/60", rtxAccentClass(rt.Kind) }
+		>
 			<div aria-hidden="true" class="pointer-events-none absolute -top-16 -right-16 size-40 rounded-full bg-(--accent)/10 blur-2xl"></div>
 			<div class="relative flex items-center gap-3 min-w-0">
 				@txTile(tx, &v)
@@ -344,6 +406,12 @@ templ rtxChips(rt *models.RecurrentTx, title string) {
 	</div>
 }
 
+// RecurrentTxsListOOB re-renders the whole list, e.g. with a new one in its
+// place.
+templ RecurrentTxsListOOB(rtxs []models.RecurrentTx, def *models.Currency) {
+	@rtxsList(rtxs, def, true)
+}
+
 templ RecurrentTxsSummaryOOB(rtxs []models.RecurrentTx, def *models.Currency) {
 	@rtxSummary(rtxs, def, true)
 }
@@ -448,6 +516,8 @@ func relDay(day, today time.Time) string {
 
 func getRecurrentTxMenuItems(rt *models.RecurrentTx) []templ.Component {
 	return []templ.Component{
+		components.EntryMenuDrawerItem("Details", recurrentTxDetailsURL(rt.ID),
+			components.WithEntryMenuItemIcon(icons.Eye("16"))),
 		components.EntryMenuAnchorItem("Schedule more", "post", fmt.Sprintf("/recurrent-tx/%s/generate-txs", rt.ID),
 			components.WithEntryMenuItemIcon(icons.Calendar("16"))),
 		components.EntryMenuSeparator(),

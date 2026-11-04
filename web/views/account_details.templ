@@ -42,7 +42,8 @@ func accountTxsURL(id string) templ.SafeURL {
 }
 
 // accountCardData opens the card's details on a click on it, unless on one
-// of its controls or selecting its text, like a goal's card.
+// of its controls or selecting its text, like a goal's card (also a
+// recurrent transaction's).
 const accountCardData = `{
 	openMenu: false,
 	openDetails(e, card) {
