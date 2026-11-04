@@ -539,3 +539,101 @@ func dbBalancesToBalances(dbBs []queries.GetBalancesRow) []models.Balance {
 func nullInt(n int) sql.NullInt64 {
 	return sql.NullInt64{Int64: int64(n), Valid: n != 0}
 }
+
+// GetAccountHistory is the account's balance day by day over the last
+// models.AccountHistoryMonths months, "today" in the user's time zone.
+func (r *Repository) GetAccountHistory(ctx context.Context, a *models.Account) (*models.AccountHistory, error) {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	loc, err := r.GetTimezone(ctx)
+	if err != nil {
+		return nil, err
+	}
+	today := time.Now().In(loc)
+	from := models.AccountHistoryFrom(today)
+
+	rows, err := q.GetAccountDailyNet(ctx, queries.GetAccountDailyNetParams{
+		AccountID: sql.NullString{String: a.ID, Valid: true},
+		Since:     from,
+	})
+	if err != nil {
+		logger.FromCtx(ctx).Error("querying account daily net", zap.Error(err), zap.String("id", a.ID))
+		return nil, err
+	}
+	days := make([]models.DayFlow, 0, len(rows))
+	for _, row := range rows {
+		day, err := time.Parse(dayLayout, row.Day)
+		if err != nil {
+			continue
+		}
+		days = append(days, models.DayFlow{Day: day, In: row.MoneyIn, Out: row.MoneyOut})
+	}
+	return models.NewAccountHistory(a.Amount, days, from, today), nil
+}
+
+// GetAccountTxStats is how many fulfilled transactions touched the account,
+// and when the first and last were.
+func (r *Repository) GetAccountTxStats(ctx context.Context, id string) (*models.AccountTxStats, error) {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	row, err := q.GetAccountTxStats(ctx, id)
+	if err != nil {
+		logger.FromCtx(ctx).Error("querying account tx stats", zap.Error(err), zap.String("id", id))
+		return nil, err
+	}
+	s := &models.AccountTxStats{Count: int(row.Count)}
+	if len(row.FirstAt) >= len(dayLayout) {
+		s.First, _ = time.Parse(dayLayout, row.FirstAt[:len(dayLayout)])
+	}
+	if len(row.LastAt) >= len(dayLayout) {
+		s.Last, _ = time.Parse(dayLayout, row.LastAt[:len(dayLayout)])
+	}
+	return s, nil
+}
+
+// GetAccountRecentTransactions is the account's last n fulfilled
+// transactions, in or out of it as /transactions?account= lists them, newest
+// first.
+func (r *Repository) GetAccountRecentTransactions(ctx context.Context, id string, n int) ([]models.Transaction, error) {
+	p := txFilterParams(&models.TxFilter{AccountID: id})
+	p.Fulfilled = true
+	p.Lim = int64(n)
+	return r.listAccountTransactions(ctx, p)
+}
+
+// GetAccountUpcomingTransactions is the account's scheduled transactions due
+// before until, overdue ones included, soonest first.
+func (r *Repository) GetAccountUpcomingTransactions(ctx context.Context, id string, until time.Time) ([]models.Transaction, error) {
+	p := txFilterParams(&models.TxFilter{AccountID: id})
+	p.Fulfilled = false
+	p.Before = until.UTC()
+	p.Lim = -1
+	txs, err := r.listAccountTransactions(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	slices.Reverse(txs)
+	return txs, nil
+}
+
+// listAccountTransactions lists an account's transactions with their
+// transfer pairs, as a pair is listed once, by its outgoing leg, even when
+// the account got the incoming one.
+func (r *Repository) listAccountTransactions(ctx context.Context, p queries.GetTransactionsParams) ([]models.Transaction, error) {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	txs, err := r.listTransactions(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.loadTransferPairs(ctx, q, txs); err != nil {
+		return nil, err
+	}
+	return txs, nil
+}

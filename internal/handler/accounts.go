@@ -44,7 +44,50 @@ func (h *Handler) Accounts(w http.ResponseWriter, r *http.Request) (templ.Compon
 
 	claims := getClaims(r.Context())
 	fd := h.mapAccToFD(defaultAccount(claims, deps.knds), &errs.ValidationError{}, deps)
-	return views.Accounts(claims, balances, fd, deps.knds, deps.shownCurs, deps.accs, deps.cps), nil
+	// ?acc= opens the account's details, e.g. when reloading the page.
+	openID := r.URL.Query().Get(views.AccountDetailsParam)
+	return views.Accounts(claims, balances, fd, deps.knds, deps.shownCurs, deps.accs, deps.cps, openID), nil
+}
+
+// The transactions an account's details list: its last fulfilled ones, and
+// its scheduled ones due within accountUpcomingDays (overdue included), the
+// first accountUpcomingTxs of them.
+const (
+	accountRecentTxs    = 8
+	accountUpcomingTxs  = 5
+	accountUpcomingDays = 31
+)
+
+// AccountDetails is the account in full, in a drawer: its balance over the
+// last months, what moved in and out of it, its transactions and details.
+func (h *Handler) AccountDetails(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	l := logger.FromCtx(r.Context())
+
+	a, err := h.repo.GetAccount(r.Context(), r.PathValue("id"))
+	if err != nil {
+		l.Error("fetching account", zap.Error(err))
+		return nil, err
+	}
+
+	d := &views.AccountDetailsData{Account: a, Def: &getClaims(r.Context()).DefaultCurrency}
+	if d.History, err = h.repo.GetAccountHistory(r.Context(), a); err != nil {
+		return nil, err
+	}
+	if d.Stats, err = h.repo.GetAccountTxStats(r.Context(), a.ID); err != nil {
+		return nil, err
+	}
+	if d.Recent, err = h.repo.GetAccountRecentTransactions(r.Context(), a.ID, accountRecentTxs); err != nil {
+		l.Error("fetching account transactions", zap.Error(err))
+		return nil, err
+	}
+	until := time.Now().AddDate(0, 0, accountUpcomingDays)
+	if d.Upcoming, err = h.repo.GetAccountUpcomingTransactions(r.Context(), a.ID, until); err != nil {
+		l.Error("fetching account upcoming transactions", zap.Error(err))
+		return nil, err
+	}
+	d.Upcoming = d.Upcoming[:min(len(d.Upcoming), accountUpcomingTxs)]
+
+	return views.AccountDetails(d), nil
 }
 
 func (h *Handler) Account(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

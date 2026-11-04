@@ -44,6 +44,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("GET /accounts/fix-balances", handle(h.FixBalancesPage))
 	mux.Handle("POST /accounts/fix-balances", handle(h.FixBalances))
 	mux.Handle("GET /accounts/{id}", handle(h.LiveAccount(h.Account)))
+	mux.Handle("GET /accounts/{id}/details", handle(h.LiveAccount(h.AccountDetails)))
 	mux.Handle("GET /accounts/{id}/edit", handle(h.LiveAccount(h.GetEditAccount)))
 	mux.Handle("PUT /accounts/{id}", handle(h.LiveAccount(h.EditAccount)))
 	mux.Handle("PUT /accounts/{id}/default", handle(h.LiveAccount(h.SetDefaultAccount)))

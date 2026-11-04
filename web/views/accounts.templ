@@ -66,9 +66,10 @@ templ Accounts(
 	balances []models.Balance,
 	fd *AccountFD, aknds []models.AccountKind,
 	curs []models.Currency, accounts []models.Account,
-	cps []models.Counterparty) {
+	cps []models.Counterparty, openID string) {
 	@layouts.WithCreateForm(claims, "Accounts", balances,
 		CreateAccountForm(fd, aknds, curs, cps, &claims.DefaultCurrency)) {
+		@components.DrawerOnLoad(accountDetailsURLIf(openID))
 		if len(accounts) > 0 {
 			<div class="flex justify-end -mt-3 mb-4">
 				<a
@@ -392,12 +393,17 @@ templ Account(a *models.Account, defaultCur *models.Currency) {
 		hx-swap="outerHTML"
 		data-account
 		class={ "relative", templ.KV("opacity-60 hover:opacity-100 transition-opacity", a.IsArchive) }
-		x-data="{openMenu: false}"
+		x-data={ accountCardData }
 		:class="{ 'z-30': openMenu }"
 	>
 		@components.EntryMenuAt("openMenu", cardMenuPosition, getAccountMenuItems(a))
 		<div
-			class={ "relative flex flex-col gap-4 h-full p-4 rounded-2xl bg-zinc-700/20 overflow-hidden", accKindAccentClass(a.Kind.Enum) }
+			tabindex="0"
+			data-details={ accountDetailsURL(a.ID) }
+			@click="openDetails($event, $el)"
+			@keydown.enter.self="openDetails($event, $el)"
+			aria-label={ a.Name + " details" }
+			class={ "relative flex flex-col gap-4 h-full p-4 rounded-2xl bg-zinc-700/20 overflow-hidden cursor-pointer transition hover:bg-zinc-700/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)/60", accKindAccentClass(a.Kind.Enum) }
 		>
 			<div aria-hidden="true" class="pointer-events-none absolute -top-16 -right-16 size-40 rounded-full bg-(--accent)/10 blur-2xl"></div>
 			<div class="relative flex items-center gap-3 min-w-0">
@@ -818,6 +824,8 @@ const cardMenuPosition = "top-14 right-3 origin-top-right"
 
 func getAccountMenuItems(a *models.Account) []templ.Component {
 	items := []templ.Component{
+		components.EntryMenuDrawerItem("Details", accountDetailsURL(a.ID),
+			components.WithEntryMenuItemIcon(icons.Eye("16"))),
 		components.EntryMenuEditItem(fmt.Sprintf("/accounts/%s/edit", a.ID)),
 	}
 

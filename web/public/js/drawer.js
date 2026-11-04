@@ -33,6 +33,7 @@ function standIn(el) {
 const DRAWER_URL_PARAMS = {
   cp: (id) => `/counterparties/${encodeURIComponent(id)}/details`,
   goal: (id) => `/goals/${encodeURIComponent(id)}/details`,
+  acc: (id) => `/accounts/${encodeURIComponent(id)}/details`,
 };
 
 // DETAILS_URL_PARAMS also has the transaction details' ?tx= (transactions.js).

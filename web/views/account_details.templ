@@ -1,0 +1,567 @@
+package views
+
+import (
+	"fmt"
+	"net/url"
+	"strings"
+
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+// AccountDetailsData is what an account's details drawer shows.
+type AccountDetailsData struct {
+	Account *models.Account
+	History *models.AccountHistory
+	Stats   *models.AccountTxStats
+	// Recent are its last fulfilled transactions, newest first; Upcoming its
+	// scheduled ones due soon, soonest first.
+	Recent, Upcoming []models.Transaction
+	Def              *models.Currency
+}
+
+// AccountDetailsParam is the accounts page's query param holding the account
+// whose details are open.
+const AccountDetailsParam = "acc"
+
+func accountDetailsURL(id string) string {
+	return fmt.Sprintf("/accounts/%s/details", id)
+}
+
+// accountDetailsURLIf is the details url of id, empty for no id.
+func accountDetailsURLIf(id string) string {
+	if id == "" {
+		return ""
+	}
+	return accountDetailsURL(id)
+}
+
+func accountTxsURL(id string) templ.SafeURL {
+	return templ.SafeURL("/transactions?" + url.Values{models.TxFilterAccount: {id}}.Encode())
+}
+
+// accountCardData opens the card's details on a click on it, unless on one
+// of its controls or selecting its text, like a goal's card.
+const accountCardData = `{
+	openMenu: false,
+	openDetails(e, card) {
+		if (e.target !== card && e.target.closest('button, a, input, [role=menu]')) return
+		if (getSelection()?.toString()) return
+		htmx.ajax('GET', card.dataset.details, {target: '#drawer', swap: 'innerHTML'})
+	},
+}`
+
+// AccountDetails is an account in full, in a drawer like a goal's details:
+// its balance and how it moved, its transactions and its details.
+templ AccountDetails(d *AccountDetailsData) {
+	{{ a := d.Account }}
+	@components.Drawer(components.DrawerProps{Label: a.Name + " details", URLParam: AccountDetailsParam, URLValue: a.ID}) {
+		<div class={ "drawer-panel flex flex-col flex-1 min-h-0", accKindAccentClass(a.Kind.Enum) }>
+			<header class="flex items-start gap-3 px-5 sm:px-6 pt-5 pb-4">
+				if a.Kind.Enum == models.AccKindDebt && a.Counterparty != nil {
+					<div class="grid place-items-center shrink-0 w-11 h-11 rounded-xl bg-(--accent)/15">
+						@components.CounterpartyIcon(a.Counterparty.Name, a.Counterparty.Icon, a.Counterparty.Color, "w-7 h-7 text-sm")
+					</div>
+				} else {
+					<div class="grid place-items-center shrink-0 w-11 h-11 rounded-xl bg-(--accent)/15 text-(--accent)">
+						@accKindIcon(a.Kind.Enum, "22")
+					</div>
+				}
+				<div class="flex-1 min-w-0">
+					<h2 class="flex items-center gap-1.5 text-lg font-bold leading-snug">
+						<span class="break-words min-w-0">{ a.Name }</span>
+						if a.IsDefault {
+							<span title="Default account" class="shrink-0 text-amber-300">
+								@icons.Star("15", &templ.Attributes{"fill": "currentColor"})
+							</span>
+						}
+					</h2>
+					<p class="text-sm text-zinc-400 truncate">
+						{ accountSubtitle(a, a.Kind.Enum == models.AccKindCreditCard || a.Kind.Enum == models.AccKindBankAcc) }
+					</p>
+				</div>
+				@components.DrawerClose()
+			</header>
+			<div class="flex-1 grid grid-cols-1 content-start gap-6 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
+				@accountDetailsHero(a, d.Def)
+				@accountDetailsActions(a)
+				@accountDetailsChart(a, d.History)
+				@accountDetailsMoney(d)
+				if len(d.Upcoming) > 0 {
+					@accountDetailsTxs("Upcoming", a, d.Upcoming)
+				}
+				@accountDetailsRecent(d)
+				@accountDetailsInfo(a)
+			</div>
+		</div>
+	}
+}
+
+templ accountDetailsHero(a *models.Account, def *models.Currency) {
+	<div class="grid gap-3">
+		<div>
+			if a.Kind.Enum == models.AccKindDebt {
+				<p class="text-xs text-zinc-500">{ debtCaption(a.Amount) }</p>
+			} else if a.Kind.Enum == models.AccKindGamyaa {
+				<p class="text-xs text-zinc-500">{ gamyaaCaption(a.Amount) }</p>
+			}
+			<p
+				class={
+					"sensitive text-3xl font-semibold font-(family-name:--font-biorhyme-expanded) tabular-nums break-words",
+					templ.KV("text-red-400", a.Amount < 0 && a.Kind.Enum != models.AccKindDebt && a.Kind.Enum != models.AccKindGamyaa),
+				}
+			>{ a.ViewAmount() }</p>
+			if def != nil && a.Currency.String != def.String {
+				if v := a.ViewAmountIn(def); v != "" {
+					<p title={ "In " + def.String } class="sensitive text-sm text-zinc-500 tabular-nums">≈ { v }</p>
+				}
+			}
+			if a.SetAside > 0 {
+				<p class="sensitive text-sm text-zinc-500 tabular-nums">
+					+ { a.ViewSetAside() } set aside for goals · { a.ViewInBank() } in the bank
+				</p>
+			}
+		</div>
+		if a.Kind.Enum == models.AccKindCreditCard && a.CardLimit > 0 {
+			@creditUsage(a)
+		}
+		if a.Statement != nil {
+			@cardStatement(a.Statement)
+		}
+		if a.Gamyaa != nil {
+			@gamyaaProgress(a)
+		}
+	</div>
+}
+
+// accountDetailsActions open the account's drawers in place of the details;
+// Back goes from them to the details.
+templ accountDetailsActions(a *models.Account) {
+	{{ slot := "#" + components.DrawerSlot }}
+	<div class="flex flex-wrap gap-2">
+		<button type="button" hx-get={ fmt.Sprintf("/accounts/%s/edit", a.ID) } hx-target={ slot } hx-swap="innerHTML" class="txd-action">
+			@icons.Pencil("14")
+			Edit
+		</button>
+		<a href={ accountTxsURL(a.ID) } class="txd-action">
+			@icons.Search("14")
+			Transactions
+		</a>
+		if !a.IsArchive {
+			<a href="/accounts/fix-balances" class="txd-action">
+				@icons.Scale("14")
+				Fix balance
+			</a>
+		}
+		if a.Amount > 0 {
+			<button type="button" hx-get={ fmt.Sprintf("/accounts/%s/delete-form", a.ID) } hx-target={ slot } hx-swap="innerHTML" class="txd-action text-red-300!">
+				@icons.Trash("14")
+				Delete
+			</button>
+		} else {
+			// The POST answer closes the drawer and removes the card.
+			<button
+				type="button"
+				hx-post={ fmt.Sprintf("/accounts/%s/delete", a.ID) }
+				hx-confirm="Delete this account? Its transactions stay in the history."
+				hx-target={ "#" + AccountWrapperID(a.ID) }
+				hx-swap="outerHTML"
+				class="txd-action text-red-300!"
+			>
+				@icons.Trash("14")
+				Delete
+			</button>
+		}
+	</div>
+}
+
+// accountChartSamples are the days the balance chart's hover targets show,
+// one a week back from today, oldest first.
+func accountChartSamples(h *models.AccountHistory) []int {
+	var res []int
+	for i := len(h.Balance) - 1; i >= 0; i -= 7 {
+		res = append(res, i)
+	}
+	for l, r := 0, len(res)-1; l < r; l, r = l+1, r-1 {
+		res[l], res[r] = res[r], res[l]
+	}
+	return res
+}
+
+// accountChartY is where v sits on the chart from the top, in percent, lo
+// at the bottom and hi at the top.
+func accountChartY(v, lo, hi float64) float64 {
+	if hi == lo {
+		return 50
+	}
+	return (hi - v) / (hi - lo) * 100
+}
+
+func accountChartX(i, n int) float64 {
+	if n <= 1 {
+		return 0
+	}
+	return float64(i) / float64(n-1) * 100
+}
+
+func accountChartPoints(h *models.AccountHistory, lo, hi float64) string {
+	var b strings.Builder
+	for i, v := range h.Balance {
+		fmt.Fprintf(&b, "%.2f,%.2f ", accountChartX(i, len(h.Balance)), accountChartY(v, lo, hi))
+	}
+	return b.String()
+}
+
+// accountChartArea is the area between the line and zero.
+func accountChartArea(h *models.AccountHistory, lo, hi float64) string {
+	zero := accountChartY(0, lo, hi)
+	return fmt.Sprintf("0,%.2f %s100,%.2f", zero, accountChartPoints(h, lo, hi), zero)
+}
+
+// accountChartMonths are the months starting in the chart, with where they
+// start in percent.
+func accountChartMonths(h *models.AccountHistory) []struct {
+	X     float64
+	Label string
+} {
+	var res []struct {
+		X     float64
+		Label string
+	}
+	n := len(h.Balance)
+	for i := range n {
+		if d := h.DayOf(i); d.Day() == 1 {
+			res = append(res, struct {
+				X     float64
+				Label string
+			}{accountChartX(i, n), d.Format("Jan")})
+		}
+	}
+	return res
+}
+
+templ accountDetailsChart(a *models.Account, h *models.AccountHistory) {
+	{{ lo, hi := h.Range() }}
+	{{ n := len(h.Balance) }}
+	{{ samples := accountChartSamples(h) }}
+	@txDetailsSection("Balance") {
+		<div class="grid gap-2 p-4 rounded-2xl bg-zinc-800/30 ring-1 ring-zinc-800">
+			<div class="flex justify-between gap-3 text-xs text-zinc-500 tabular-nums">
+				<span class="sensitive">{ a.Currency.Format(hi) }</span>
+				<span>Last { fmt.Sprint(models.AccountHistoryMonths) } months</span>
+			</div>
+			<div class="relative h-36">
+				if lo < 0 && hi > 0 {
+					<div
+						aria-hidden="true"
+						class="absolute inset-x-0 border-t border-dashed border-zinc-700"
+						style={ templ.SafeCSS(fmt.Sprintf("top:%.2f%%;", accountChartY(0, lo, hi))) }
+					></div>
+				}
+				<svg viewBox="0 0 100 100" preserveAspectRatio="none" class="absolute inset-0 size-full overflow-visible" aria-hidden="true">
+					<polygon points={ accountChartArea(h, lo, hi) } class="fill-(--accent)/10"></polygon>
+					<polyline points={ accountChartPoints(h, lo, hi) } fill="none" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke" class="stroke-(--accent)"></polyline>
+				</svg>
+				<span
+					aria-hidden="true"
+					class="absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-(--accent) ring-2 ring-zinc-900"
+					style={ templ.SafeCSS(fmt.Sprintf("left:100%%;top:%.2f%%;", accountChartY(h.Balance[n-1], lo, hi))) }
+				></span>
+				<div class="absolute inset-0 flex">
+					for k, i := range samples {
+						<div class="group relative flex-1 h-full">
+							<div class="absolute inset-y-0 left-1/2 border-l border-zinc-500/60 hidden group-hover:block"></div>
+							<div class={ "absolute bottom-full mb-1 hidden group-hover:block z-10", tooltipSide(k, len(samples)) }>
+								<div class="glass-tooltip whitespace-nowrap">
+									<p class="text-zinc-400">{ h.DayOf(i).Format("Mon, Jan 2") }</p>
+									<p class="sensitive tabular-nums">{ a.Currency.Format(h.Balance[i]) }</p>
+								</div>
+							</div>
+						</div>
+					}
+				</div>
+			</div>
+			<div class="relative h-4 text-xs text-zinc-500">
+				for _, m := range accountChartMonths(h) {
+					<span class="absolute -translate-x-1/2 first:translate-x-0" style={ templ.SafeCSS(fmt.Sprintf("left:%.2f%%;", m.X)) }>{ m.Label }</span>
+				}
+			</div>
+			<p class="text-xs text-zinc-500 tabular-nums">
+				Lowest <span class="sensitive text-zinc-300">{ a.Currency.Format(minOf(h.Balance)) }</span>
+				· highest <span class="sensitive text-zinc-300">{ a.Currency.Format(maxOf(h.Balance)) }</span>
+			</p>
+		</div>
+	}
+}
+
+func minOf(vs []float64) float64 {
+	m := vs[0]
+	for _, v := range vs {
+		m = min(m, v)
+	}
+	return m
+}
+
+func maxOf(vs []float64) float64 {
+	m := vs[0]
+	for _, v := range vs {
+		m = max(m, v)
+	}
+	return m
+}
+
+templ accountDetailsMoney(d *AccountDetailsData) {
+	{{ cur := &d.Account.Currency }}
+	{{ in, out := d.History.ThisMonth() }}
+	{{ avgIn, avgOut := d.History.MonthlyAvg() }}
+	@txDetailsSection("Money") {
+		<dl class="grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-zinc-800/60 ring-1 ring-zinc-800">
+			@counterpartyDetailsStat("In this month", cur.Format(in))
+			@counterpartyDetailsStat("Out this month", cur.Format(out))
+			@counterpartyDetailsStat("In a month, avg", cur.Format(avgIn))
+			@counterpartyDetailsStat("Out a month, avg", cur.Format(avgOut))
+			@counterpartyDetailsStat("Transactions", fmt.Sprint(d.Stats.Count))
+			if d.Stats.Last.IsZero() {
+				@counterpartyDetailsStat("Last one", "Never")
+			} else {
+				@counterpartyDetailsStat("Last one", formatTxDay(d.Stats.Last))
+			}
+		</dl>
+		<p class="text-xs text-zinc-500">
+			Everything in and out of it, transfers included.
+			if !d.Stats.First.IsZero() {
+				First one on { d.Stats.First.Format("Jan 2, 2006") }.
+			}
+		</p>
+	}
+}
+
+templ accountDetailsRecent(d *AccountDetailsData) {
+	@accountDetailsTxs("Recent", d.Account, d.Recent) {
+		if len(d.Recent) == 0 {
+			<p class="text-sm text-zinc-500">No transactions yet.</p>
+		} else if d.Stats.Count > len(d.Recent) {
+			<a href={ accountTxsURL(d.Account.ID) } class="justify-self-start text-sm text-sky-400 hover:text-sky-300">
+				See all { fmt.Sprint(d.Stats.Count) }
+			</a>
+		}
+	}
+}
+
+// accountDetailsTxs lists transactions as they moved the account's money,
+// children after them.
+templ accountDetailsTxs(title string, a *models.Account, txs []models.Transaction) {
+	@txDetailsSection(title) {
+		for _, tx := range txs {
+			{{ m := accountTxMove(&tx, a.ID) }}
+			<a
+				href={ goalTxURL(&tx) }
+				class="flex items-center gap-3 w-full px-3 py-2 rounded-xl bg-tx-row text-left transition hover:ring-1 hover:ring-zinc-700"
+			>
+				<div class="flex-1 min-w-0">
+					<p class="truncate text-sm">{ m.title }</p>
+					<p class="truncate text-xs text-zinc-500">
+						{ formatTxDay(tx.ScheduledTo) }
+						if m.other != "" {
+							· { m.other }
+						}
+					</p>
+				</div>
+				<p
+					class={
+						"shrink-0 text-sm font-semibold tabular-nums",
+						templ.KV("text-emerald-400", m.tone == txToneIn),
+						templ.KV("text-zinc-400", m.tone == txToneNeutral),
+					}
+				>{ m.amount }</p>
+			</a>
+		}
+		{ children... }
+	}
+}
+
+// accountMove is a transaction as it moved an account's money.
+type accountMove struct {
+	title, other, amount, tone string
+}
+
+// accountTxMove is what tx did to the account id: the amount signed as it
+// moved its balance (an expense's full amount, reimbursed or not), and the
+// other account of a transfer or debt.
+func accountTxMove(tx *models.Transaction, id string) accountMove {
+	v := newTxView(tx)
+	m := accountMove{title: counterpartyTxTitle(tx, &v), tone: txToneOut}
+	if tx.Counterparty != nil && tx.Counterparty.Name != m.title {
+		m.other = tx.Counterparty.Name
+	}
+
+	switch {
+	case tx.TransferPair != nil:
+		// Listed by its outgoing leg, the account got the incoming one or
+		// sent this one.
+		m.title = "Transfer"
+		if in := tx.TransferPair; in.Account.ID == id {
+			m.other = "from " + tx.Account.DisplayName()
+			m.amount, m.tone = "+"+in.ViewAmount(), txToneIn
+		} else {
+			m.other = "to " + in.Account.DisplayName()
+			m.amount = "-" + tx.ViewAmount()
+		}
+	case (tx.Kind == models.TransferTxKind || tx.Kind == models.DebtTxKind) && tx.ToAccount != nil:
+		if tx.ToAccount.ID == id {
+			m.other = "from " + tx.Account.DisplayName()
+			m.amount, m.tone = "+"+tx.ViewToAmount(), txToneIn
+		} else {
+			m.other = "to " + tx.ToAccount.DisplayName()
+			m.amount = "-" + tx.ViewAmount()
+		}
+	case tx.Kind == models.AdjustmentTxKind:
+		m.amount, m.tone = formatSignedAmount(tx.Amount, &tx.Account.Currency), txToneNeutral
+	case tx.Kind.IsIncoming():
+		m.amount, m.tone = "+"+tx.ViewAmount(), txToneIn
+	default:
+		m.amount = "-" + tx.ViewAmount()
+	}
+	return m
+}
+
+templ accountDetailsInfo(a *models.Account) {
+	@txDetailsSection("Details") {
+		<dl class="grid grid-cols-1 divide-y divide-zinc-800 rounded-2xl ring-1 ring-zinc-800 overflow-hidden">
+			if a.CardNumber != "" {
+				@accountInfoRow("Card number", formatCardNumber(a.CardNumber), a.CardNumber, true)
+			}
+			if a.NameOnCard != "" {
+				@accountInfoRow("Name on card", a.NameOnCard, "", false)
+			}
+			if !a.ExpirationDate.IsZero() {
+				@accountInfoRow("Expires", a.ExpirationDate.Format("01/06"), "", false)
+			}
+			if a.CardLimit > 0 {
+				@accountInfoRow("Credit limit", a.ViewCardLimit(), "", true)
+			}
+			if a.Cycle.IsSet() {
+				@accountInfoRow("Statement", cardCycleText(a.Cycle), "", false)
+			}
+			if a.Iban != "" {
+				@accountInfoRow("IBAN", formatIban(a.Iban), a.Iban, true)
+			}
+			if len(a.SmsRefs) > 0 {
+				@accountInfoRow("SMS references", strings.Join(a.SmsRefs, ", "), "", false)
+			}
+			if a.Counterparty != nil && a.Kind.Enum == models.AccKindGamyaa {
+				@accountInfoRow("Organizer", a.Counterparty.Name, "", false)
+			}
+			@accountInfoRow("Currency", a.Currency.String, "", false)
+			if !a.CreatedAt.IsZero() {
+				@accountInfoRow("Added", a.CreatedAt.Format("Jan 2, 2006"), "", false)
+			}
+			if a.ExcludeFromBalance || a.IsArchive {
+				@accountInfoRow("Status", accountStatusText(a), "", false)
+			}
+		</dl>
+		if a.Note != "" {
+			<p class="whitespace-pre-line break-words text-sm text-zinc-300">{ a.Note }</p>
+		}
+	}
+}
+
+// accountInfoRow is a detail of the account, with a copy button when copy is
+// set (the value as it's pasted, e.g. a card number without spaces).
+templ accountInfoRow(label, value, copy string, sensitive bool) {
+	<div class="flex items-center gap-3 min-w-0 px-3 py-2 bg-zinc-900">
+		<div class="flex-1 min-w-0">
+			<dt class="text-xs text-zinc-500">{ label }</dt>
+			<dd class={ "mt-0.5 text-sm tabular-nums [overflow-wrap:anywhere]", templ.KV("sensitive", sensitive) }>{ value }</dd>
+		</div>
+		if copy != "" {
+			@copyButton(copy, copyLabel(label))
+		}
+	</div>
+}
+
+// copyButton copies value to the clipboard, showing a check for a moment.
+templ copyButton(value, label string) {
+	<button
+		type="button"
+		x-data="{copied: false}"
+		data-copy={ value }
+		@click="navigator.clipboard.writeText($el.dataset.copy); copied = true; setTimeout(() => copied = false, 1500)"
+		:aria-label={ fmt.Sprintf("copied ? 'Copied' : '%s'", label) }
+		title={ label }
+		class="grid place-items-center shrink-0 w-8 h-8 rounded-lg text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-700 hover:text-white"
+	>
+		<span x-show="!copied">
+			@icons.Copy("15")
+		</span>
+		<span x-show="copied" x-cloak class="text-emerald-400">
+			@icons.Check("15")
+		</span>
+	</button>
+}
+
+// copyLabel is the copy button's label of a detail, e.g. "Copy card
+// number", keeping acronyms ("Copy IBAN").
+func copyLabel(label string) string {
+	if label == strings.ToUpper(label) {
+		return "Copy " + label
+	}
+	return "Copy " + strings.ToLower(label)
+}
+
+// formatCardNumber groups a card number's digits by 4.
+func formatCardNumber(n string) string {
+	return groupBy4(strings.ReplaceAll(n, " ", ""))
+}
+
+// formatIban groups an IBAN's characters by 4.
+func formatIban(iban string) string {
+	return groupBy4(strings.ReplaceAll(iban, " ", ""))
+}
+
+func groupBy4(s string) string {
+	var b strings.Builder
+	for i, r := range s {
+		if i > 0 && i%4 == 0 {
+			b.WriteByte(' ')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// cardCycleText is a credit card's statement cycle in words.
+func cardCycleText(c models.CardCycle) string {
+	s := "Closes on the " + ordinal(c.StatementDay)
+	if c.DueDay != 0 {
+		return s + ", due on the " + ordinal(c.DueDay) + " of the next month"
+	}
+	return fmt.Sprintf("%s, due %d days later", s, c.DueDays)
+}
+
+func ordinal(n int) string {
+	suffix := "th"
+	if n%100 < 11 || n%100 > 13 {
+		switch n % 10 {
+		case 1:
+			suffix = "st"
+		case 2:
+			suffix = "nd"
+		case 3:
+			suffix = "rd"
+		}
+	}
+	return fmt.Sprintf("%d%s", n, suffix)
+}
+
+func accountStatusText(a *models.Account) string {
+	var parts []string
+	if a.IsArchive {
+		parts = append(parts, "Archived")
+	}
+	if a.ExcludeFromBalance {
+		parts = append(parts, "Not in balance")
+	}
+	return strings.Join(parts, " · ")
+}
