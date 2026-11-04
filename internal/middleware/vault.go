@@ -9,12 +9,13 @@ import (
 	"github.com/omareloui/tyche/internal/errpage"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/slicesutils"
+	"github.com/omareloui/tyche/internal/vaultctx"
 	"github.com/omareloui/tyche/web/views"
 	"go.uber.org/zap"
 )
 
 // VaultKeyCtxKey holds the key of the tenant's encrypted database.
-type VaultKeyCtxKey struct{}
+type VaultKeyCtxKey = vaultctx.Key
 
 // VaultOpener gets the key of the request's tenant database from its unlocked
 // session. encrypted is false when the database isn't encrypted (key is nil
@@ -67,11 +68,7 @@ func Vault(open VaultOpener) func(http.Handler) http.Handler {
 // the page they were on.
 func RedirectToUnlock(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("HX-Request") == "true" {
-		back := "/"
-		if u, err := url.Parse(r.Header.Get("HX-Current-URL")); err == nil && u.Path != "" {
-			back = u.RequestURI()
-		}
-		w.Header().Set("HX-Redirect", UnlockURL(back))
+		w.Header().Set("HX-Redirect", UnlockURL(CurrentURL(r)))
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -85,6 +82,15 @@ func RedirectToUnlock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, UnlockURL(r.URL.RequestURI()), http.StatusSeeOther)
+}
+
+// CurrentURL is the page (path + query) an HTMX request was sent from, "/"
+// when unknown.
+func CurrentURL(r *http.Request) string {
+	if u, err := url.Parse(r.Header.Get("HX-Current-URL")); err == nil && u.Path != "" {
+		return u.RequestURI()
+	}
+	return "/"
 }
 
 // UnlockURL is the unlock page, then going to next.

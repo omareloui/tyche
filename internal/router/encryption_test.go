@@ -58,6 +58,7 @@ func TestEncryption(t *testing.T) {
 		form    url.Values
 		htmx    bool
 		cookies []*http.Cookie
+		headers map[string]string
 	}
 	do := func(method, path string, o reqOpts) (*http.Response, string) {
 		t.Helper()
@@ -65,6 +66,9 @@ func TestEncryption(t *testing.T) {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		if o.htmx {
 			req.Header.Set("HX-Request", "true")
+		}
+		for k, v := range o.headers {
+			req.Header.Set(k, v)
 		}
 		for _, c := range o.cookies {
 			req.AddCookie(c)
@@ -99,6 +103,9 @@ func TestEncryption(t *testing.T) {
 		res, body := do("GET", "/welcome?step=security", reqOpts{cookies: []*http.Cookie{access}})
 		if res.StatusCode != http.StatusOK || !strings.Contains(body, "Encrypt your data with a password?") || !strings.Contains(body, "Not now") {
 			t.Fatalf("got %d", res.StatusCode)
+		}
+		if _, body := do("GET", "/accounts", reqOpts{cookies: []*http.Cookie{access}}); strings.Contains(body, `hx-post="/security/lock"`) {
+			t.Error("lock button shown for a plain database")
 		}
 	})
 
@@ -152,6 +159,9 @@ func TestEncryption(t *testing.T) {
 		res, body := do("GET", "/accounts", reqOpts{cookies: []*http.Cookie{access, session}})
 		if res.StatusCode != http.StatusOK || !strings.Contains(body, "Cash") {
 			t.Fatalf("got %d", res.StatusCode)
+		}
+		if !strings.Contains(body, `hx-post="/security/lock"`) {
+			t.Error("no lock button in the navbar")
 		}
 		res, body = do("GET", "/security", reqOpts{cookies: []*http.Cookie{access, session}})
 		if res.StatusCode != http.StatusOK || !strings.Contains(body, "Your data is encrypted") || !strings.Contains(body, "this browser") {
@@ -223,6 +233,21 @@ func TestEncryption(t *testing.T) {
 		}
 		if cookie(res, "vault_session") == nil || cookie(res, "access_token") == nil {
 			t.Fatal("the recovery code didn't sign in")
+		}
+	})
+
+	t.Run("locks from any page", func(t *testing.T) {
+		res, _ := do("POST", "/unlock", reqOpts{form: url.Values{"password": {"correct horse"}}, cookies: []*http.Cookie{access}})
+		s := cookie(res, "vault_session")
+		if s == nil {
+			t.Fatal("no vault session cookie")
+		}
+		res, _ = do("POST", "/security/lock", reqOpts{htmx: true, cookies: []*http.Cookie{access, s}, headers: map[string]string{"HX-Current-URL": srv.URL + "/accounts?archived=1"}})
+		if want := middleware.UnlockURL("/accounts?archived=1"); res.Header.Get("HX-Redirect") != want {
+			t.Fatalf("got %d to %q, want %q", res.StatusCode, res.Header.Get("HX-Redirect"), want)
+		}
+		if res, _ = do("GET", "/accounts", reqOpts{cookies: []*http.Cookie{access, s}}); res.StatusCode != http.StatusSeeOther {
+			t.Fatalf("the session still reads after locking: got %d", res.StatusCode)
 		}
 	})
 

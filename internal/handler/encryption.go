@@ -548,7 +548,7 @@ func (h *Handler) LockOtherSessions(w http.ResponseWriter, r *http.Request) (tem
 // Lock locks the database in this browser.
 func (h *Handler) Lock(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	h.endVaultSession(r.Context(), w, r)
-	w.Header().Set("HX-Redirect", middleware.UnlockPath)
+	w.Header().Set("HX-Redirect", middleware.UnlockURL(middleware.CurrentURL(r)))
 	return nil, nil
 }
 
