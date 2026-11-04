@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Tyche</string>
+    <string name="app_name">Tyche SMS</string>
     <string name="wordmark" translatable="false">tyche</string>
     <string name="server_url">Tyche URL</string>
     <string name="server_url_hint">https://tyche.example.com</string>
