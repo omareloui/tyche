@@ -72,7 +72,7 @@ templ RecurrentTxDetails(d *RecurrentTxDetailsData) {
 				</div>
 				@components.DrawerClose()
 			</header>
-			<div class="flex-1 grid grid-cols-1 content-start gap-6 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
+			<div class="flex-1 grid grid-cols-1 auto-rows-max content-start gap-6 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
 				@rtxDetailsHero(rt, &v, d.Def, ended)
 				@rtxDetailsActions(rt, ended)
 				@rtxDetailsMoney(d)

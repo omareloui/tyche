@@ -6,6 +6,10 @@
 // first; a drawer-saved event from its form (the answer's HX-Trigger)
 // closes it right away. On phones the sheet also closes by swiping it down.
 
+// SHEET_RADIUS is the phone sheet's top corners' radius (rounded-t-3xl), in
+// px.
+const SHEET_RADIUS = 24;
+
 // datepickerOpen reports if a Litepicker is showing, which Escape leaves
 // open.
 function datepickerOpen() {
@@ -407,8 +411,13 @@ function drawerBase() {
       d.lastDy = d.dy;
       d.lastT = e.timeStamp;
       if (d.dir === "up") {
+        const full = this.fullHeight();
+        const h = Math.min(full, d.h0 - d.dy);
         d.sheet.style.maxHeight = "none";
-        d.sheet.style.height = `${Math.min(innerHeight, d.h0 - d.dy)}px`;
+        d.sheet.style.height = `${h}px`;
+        // Its top corners square off as it nears the top.
+        const progress = full > d.h0 ? (h - d.h0) / (full - d.h0) : 1;
+        d.sheet.style.borderRadius = `${SHEET_RADIUS * (1 - progress)}px ${SHEET_RADIUS * (1 - progress)}px 0 0`;
         return;
       }
       d.sheet.style.transform = `translateY(${d.dy}px)`;
@@ -426,7 +435,7 @@ function drawerBase() {
       const root = this.drawerRoot();
       const backdrop = root.querySelector(".drawer-backdrop");
       if (d.dir === "up") {
-        if (-d.dy > 40 || d.speed < -0.5) this.resize(d.sheet, innerHeight, () => root.setAttribute("data-expanded", ""));
+        if (-d.dy > 40 || d.speed < -0.5) this.resize(d.sheet, this.fullHeight(), () => root.setAttribute("data-expanded", ""));
         else this.resize(d.sheet, d.h0);
         return;
       }
@@ -453,20 +462,29 @@ function drawerBase() {
       if (far) this.requestClose();
     },
 
-    // resize animates the sheet's height from where it is to px, then leaves
-    // it to its css again, after calling done (e.g. setting data-expanded).
-    resize(sheet, px, done) {
+    // fullHeight is the height of a sheet filling the screen: the root's box
+    // (fixed inset-0), which innerHeight or 100dvh may not match on phones.
+    fullHeight() {
+      return this.drawerRoot().clientHeight;
+    },
+
+    // resize animates the sheet's height from where it is to px, after
+    // calling before (e.g. setting data-expanded, so its corners and padding
+    // animate along), then leaves it to its css again.
+    resize(sheet, px, before) {
       sheet.style.maxHeight = "none";
       sheet.style.height = `${sheet.offsetHeight}px`;
+      sheet.style.borderRadius = getComputedStyle(sheet).borderRadius;
       sheet.offsetHeight; // Starts the transition from there.
-      sheet.style.transition = "height 220ms cubic-bezier(0.32, 0.72, 0, 1), transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
+      const ease = "220ms cubic-bezier(0.32, 0.72, 0, 1)";
+      sheet.style.transition = ["height", "transform", "border-radius", "padding-top"].map((p) => `${p} ${ease}`).join(", ");
+      before?.();
       sheet.style.height = `${px}px`;
-      sheet.style.transform = "";
+      sheet.style.transform = sheet.style.borderRadius = sheet.style.paddingTop = "";
       const end = (e) => {
         if (e && (e.target !== sheet || e.propertyName !== "height")) return;
         sheet.removeEventListener("transitionend", end);
         clearTimeout(timer);
-        done?.();
         sheet.style.height = sheet.style.maxHeight = sheet.style.transition = "";
       };
       sheet.addEventListener("transitionend", end);
@@ -477,12 +495,16 @@ function drawerBase() {
     // it was dragged to.
     collapse(sheet) {
       const top = sheet.getBoundingClientRect().top;
+      const pad = getComputedStyle(sheet).paddingTop;
       this.drawerRoot().removeAttribute("data-expanded");
       sheet.style.transition = "none";
       sheet.style.height = sheet.style.maxHeight = sheet.style.transform = "";
       const natural = sheet.offsetHeight;
+      // Kept square and padded as it was, resize animating them back.
+      sheet.style.paddingTop = pad;
+      sheet.style.borderRadius = "0";
       sheet.style.maxHeight = "none";
-      sheet.style.height = `${innerHeight - top}px`;
+      sheet.style.height = `${this.fullHeight() - top}px`;
       this.resize(sheet, natural);
     },
 
@@ -505,7 +527,7 @@ function drawerBase() {
           root.removeAttribute("data-closing");
           root.removeAttribute("data-dragged");
           root.removeAttribute("data-expanded");
-          if (sheet) sheet.style.transform = sheet.style.transition = sheet.style.height = sheet.style.maxHeight = "";
+          if (sheet) sheet.style.transform = sheet.style.transition = sheet.style.height = sheet.style.maxHeight = sheet.style.borderRadius = sheet.style.paddingTop = "";
           const backdrop = root.querySelector(".drawer-backdrop");
           backdrop.style.opacity = backdrop.style.transition = "";
         } else {

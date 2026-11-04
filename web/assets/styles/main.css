@@ -289,11 +289,14 @@ input[type="number"] {
 /* Swiped up on a phone (drawer.js), the sheet fills the screen. */
 @media (width < 40rem) {
   .drawer-sheet {
-    transition: border-radius 220ms;
+    transition:
+      border-radius 220ms cubic-bezier(0.32, 0.72, 0, 1),
+      padding-top 220ms cubic-bezier(0.32, 0.72, 0, 1);
   }
+  /* The root's box, as drawer.js measures it (100dvh can differ on phones). */
   .drawer-root[data-expanded] .drawer-sheet {
-    height: 100dvh;
-    max-height: 100dvh;
+    height: 100%;
+    max-height: 100%;
     border-radius: 0;
     padding-top: env(safe-area-inset-top);
   }
