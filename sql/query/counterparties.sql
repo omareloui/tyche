@@ -126,3 +126,8 @@ VALUES (
 -- name: DeleteCounterpartyLocations :exec
 DELETE FROM counterparty_locations
 WHERE counterparty_id = sqlc.arg(counterparty_id);
+
+-- name: SetCounterpartyLabels :exec
+UPDATE counterparties
+SET labels = sqlc.arg(labels)
+WHERE id = sqlc.arg(id);

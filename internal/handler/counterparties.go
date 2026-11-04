@@ -86,6 +86,10 @@ func (h Handler) CounterpartyDetails(w http.ResponseWriter, r *http.Request) (te
 	}
 
 	d := &views.CounterpartyDetailsData{Counterparty: cp, Def: &getClaims(r.Context()).DefaultCurrency}
+	if d.LabelsInUse, err = h.counterpartyLabels(r); err != nil {
+		l.Error("fetching counterparty labels", zap.Error(err))
+		return nil, err
+	}
 	f := models.TxFilter{CounterpartyID: id, Status: models.TxStatusFulfilled}
 	if d.AllTime, err = h.repo.GetTransactionsSummary(r.Context(), f, d.Def); err != nil {
 		l.Error("summing counterparty transactions", zap.Error(err))
@@ -408,6 +412,51 @@ func (h Handler) RateCounterparty(w http.ResponseWriter, r *http.Request) (templ
 		return views.CounterpartyReplaceOOB(cp), nil
 	}
 	return views.Counterparty(cp), nil
+}
+
+// SetCounterpartyLabels replaces the counterparty's labels from its details
+// with labels (the whole list) plus add (one typed in), answering their labels
+// section (with its error, if any) and its card out of band.
+func (h Handler) SetCounterpartyLabels(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+
+	cp, err := h.repo.GetCounterparty(r.Context(), id)
+	if err != nil {
+		l.Error("fetching counterparty", zap.Error(err))
+		return nil, err
+	}
+	inUse, err := h.counterpartyLabels(r)
+	if err != nil {
+		l.Error("fetching counterparty labels", zap.Error(err))
+		return nil, err
+	}
+
+	prev := cp.Labels
+	cp.Labels = models.MatchLabelCasing(parseAliases(r.FormValue("labels")+","+r.FormValue("add")), inUse)
+	if valerr := h.valid.Validate(cp); valerr != nil {
+		if msg := labelsError(valerr); msg != "" {
+			l.Info("invalid counterparty labels", zap.Any("errors", valerr.Errors))
+			cp.Labels = prev
+			return views.CounterpartyDetailsLabels(cp, inUse, msg), nil
+		}
+	}
+
+	if err := h.repo.SetCounterpartyLabels(r.Context(), id, cp.Labels); err != nil {
+		l.Error("setting counterparty labels", zap.Error(err))
+		return nil, err
+	}
+	l.Info("set counterparty labels", zap.String("id", id), zap.Strings("labels", cp.Labels))
+
+	if err := renderToBody(w, r, views.CounterpartyReplaceOOB(cp)); err != nil {
+		l.Error("rendering counterparty oob", zap.Error(err))
+		return nil, err
+	}
+	return views.CounterpartyDetailsLabels(cp, models.CounterpartyLabels([]models.Counterparty{{Labels: inUse}, *cp}), ""), nil
 }
 
 // AddCounterpartyLocation adds a location to a merchant from its details,

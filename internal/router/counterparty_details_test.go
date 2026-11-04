@@ -201,6 +201,45 @@ func TestCounterpartyRatingLocationsHTTP(t *testing.T) {
 		}
 	})
 
+	t.Run("editing labels from the details", func(t *testing.T) {
+		_, body := do("GET", "/counterparties/"+cafe.ID+"/details", nil)
+		if !strings.Contains(body, `id="cp-labels-`+cafe.ID+`"`) || !strings.Contains(body, "Add the Online store label") {
+			t.Fatal("details miss the labels editor")
+		}
+
+		res, body := do("PUT", "/counterparties/"+cafe.ID+"/labels", url.Values{"labels": {"cafe, Brunch"}})
+		if res.StatusCode != http.StatusOK || !strings.Contains(body, `hx-swap-oob="innerHTML"`) || !strings.Contains(body, `data-labels="cafe|brunch"`) {
+			t.Fatalf("status %d: %s", res.StatusCode, body)
+		}
+		got, err := repo.GetCounterparty(ctx, cafe.ID)
+		if err != nil || strings.Join(got.Labels, ",") != "Cafe,Brunch" || len(got.Locations) != 3 {
+			t.Errorf("stored = %q, %d locations (%v), want Cafe,Brunch and the locations kept", got.Labels, len(got.Locations), err)
+		}
+
+		res, body = do("PUT", "/counterparties/"+cafe.ID+"/labels", url.Values{"labels": {"Cafe, Brunch"}, "add": {"Late night"}})
+		if res.StatusCode != http.StatusOK || !strings.Contains(body, "Remove the Late night label") {
+			t.Fatalf("status %d, typed label not added: %s", res.StatusCode, body)
+		}
+
+		// Removing one, as its chip sends the others.
+		res, body = do("PUT", "/counterparties/"+cafe.ID+"/labels", url.Values{"labels": {"Cafe, Late night"}})
+		if res.StatusCode != http.StatusOK || strings.Contains(body, "Remove the Brunch label") {
+			t.Fatalf("status %d, Brunch not removed: %s", res.StatusCode, body)
+		}
+		if got, err := repo.GetCounterparty(ctx, cafe.ID); err != nil || strings.Join(got.Labels, ",") != "Cafe,Late night" {
+			t.Fatalf("stored = %q (%v), want Cafe,Late night", got.Labels, err)
+		}
+		do("PUT", "/counterparties/"+cafe.ID+"/labels", url.Values{"labels": {"Cafe, Brunch, Late night"}})
+
+		res, body = do("PUT", "/counterparties/"+cafe.ID+"/labels", url.Values{"labels": {"Cafe"}, "add": {strings.Repeat("x", 41)}})
+		if res.StatusCode != http.StatusOK || !strings.Contains(body, "form-error-message") {
+			t.Errorf("status %d, too long label not rejected: %s", res.StatusCode, body)
+		}
+		if got, err := repo.GetCounterparty(ctx, cafe.ID); err != nil || strings.Join(got.Labels, ",") != "Cafe,Brunch,Late night" {
+			t.Errorf("rejected change saved: %q (%v)", got.Labels, err)
+		}
+	})
+
 	t.Run("page groups merchants and others", func(t *testing.T) {
 		res, body := do("GET", "/counterparties", nil)
 		if res.StatusCode != http.StatusOK || !strings.Contains(body, "Filter by rating") {

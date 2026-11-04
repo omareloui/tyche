@@ -351,3 +351,16 @@ func (r *Repository) AddCounterpartyLocation(ctx context.Context, cpID string, l
 		})
 	})
 }
+
+func (r *Repository) SetCounterpartyLabels(ctx context.Context, id string, labels []string) error {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+
+	dbLabels, err := marshalStrings(labels)
+	if err != nil {
+		return err
+	}
+	return q.SetCounterpartyLabels(ctx, queries.SetCounterpartyLabelsParams{ID: id, Labels: dbLabels})
+}

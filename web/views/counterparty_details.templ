@@ -1,8 +1,10 @@
 package views
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/omareloui/tyche/internal/models"
@@ -19,6 +21,8 @@ type CounterpartyDetailsData struct {
 	// Recent are its last fulfilled transactions, newest first.
 	Recent []models.Transaction
 	Def    *models.Currency
+	// LabelsInUse are every counterparty's labels, suggested when editing.
+	LabelsInUse []string
 }
 
 func counterpartyDetailsURL(id string) string {
@@ -61,16 +65,7 @@ templ CounterpartyDetails(d *CounterpartyDetailsData) {
 			</header>
 			<div class="flex-1 grid grid-cols-1 content-start gap-6 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
 				@counterpartyDetailsActions(cp)
-				if len(cp.Labels) > 0 {
-					<div class="flex flex-wrap gap-1.5">
-						for _, l := range cp.Labels {
-							<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-violet-400/10 text-sm text-violet-300">
-								@icons.Tag("13")
-								{ l }
-							</span>
-						}
-					</div>
-				}
+				@CounterpartyDetailsLabels(cp, d.LabelsInUse, "")
 				if cp.Note != "" {
 					@txDetailsSection("Note") {
 						<p class="whitespace-pre-line break-words text-sm text-zinc-300">{ cp.Note }</p>
@@ -127,6 +122,84 @@ templ counterpartyDetailsStat(label, value string) {
 		<dt class="text-xs text-zinc-500">{ label }</dt>
 		<dd class="sensitive mt-0.5 truncate text-sm font-semibold tabular-nums">{ value }</dd>
 	</div>
+}
+
+func counterpartyLabelsID(id string) string {
+	return "cp-labels-" + id
+}
+
+// CounterpartyDetailsLabels is the details' labels, edited in place: clicking
+// one removes it, clicking a suggestion (or typing a new one) adds it, each
+// saved right away with the whole list. err is the last change's error.
+templ CounterpartyDetailsLabels(cp *models.Counterparty, inUse []string, err string) {
+	{{ labelsURL := fmt.Sprintf("/counterparties/%s/labels", cp.ID) }}
+	<div
+		id={ counterpartyLabelsID(cp.ID) }
+		hx-target="this"
+		hx-swap="outerHTML"
+	>
+		@txDetailsSection("Labels") {
+			if len(cp.Labels) > 0 {
+				<div class="flex flex-wrap gap-1.5">
+					for _, l := range cp.Labels {
+						<button
+							type="button"
+							hx-put={ labelsURL }
+							hx-vals={ labelsVals(without(cp.Labels, l)) }
+							title={ "Remove " + l }
+							aria-label={ "Remove the " + l + " label" }
+							class="group/label inline-flex items-center gap-1 h-8 px-2.5 rounded-lg bg-violet-400/10 text-sm text-violet-300 cursor-pointer transition-colors hover:bg-red-500/15 hover:text-red-300"
+						>
+							@icons.Tag("13", &templ.Attributes{"class": "group-hover/label:hidden"})
+							@icons.X("13", &templ.Attributes{"class": "hidden group-hover/label:block"})
+							{ l }
+						</button>
+					}
+				</div>
+			}
+			<div class="flex items-center gap-1.5 -mx-5 sm:-mx-6 px-5 sm:px-6 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+				for _, sug := range counterpartyLabelSuggestions(inUse) {
+					if !slices.ContainsFunc(cp.Labels, func(l string) bool { return strings.EqualFold(l, sug) }) {
+						<button
+							type="button"
+							hx-put={ labelsURL }
+							hx-vals={ labelsVals(append(slices.Clone(cp.Labels), sug)) }
+							aria-label={ "Add the " + sug + " label" }
+							class="shrink-0 inline-flex items-center gap-1 h-8 px-2.5 rounded-lg border border-dashed border-zinc-700 text-sm text-zinc-400 whitespace-nowrap cursor-pointer transition-colors hover:border-zinc-500 hover:text-zinc-200"
+						>
+							@icons.Plus("12")
+							{ sug }
+						</button>
+					}
+				}
+				<form hx-put={ labelsURL } class="shrink-0">
+					<input type="hidden" name="labels" value={ strings.Join(cp.Labels, ", ") }/>
+					<input
+						type="text"
+						name="add"
+						required
+						maxlength="40"
+						placeholder="New label"
+						aria-label="New label"
+						autocomplete="off"
+						enterkeyhint="done"
+						class="w-28 h-8 px-2.5 rounded-lg border border-zinc-700 bg-transparent text-sm outline-none placeholder:text-zinc-500 focus:w-40 focus:border-zinc-400 transition-[width,border-color]"
+					/>
+				</form>
+			</div>
+			@form.ErrorMessage(err)
+		}
+	</div>
+}
+
+// labelsVals is the hx-vals sending labels as the whole list.
+func labelsVals(labels []string) string {
+	b, _ := json.Marshal(map[string]string{"labels": strings.Join(labels, ", ")})
+	return string(b)
+}
+
+func without(labels []string, l string) []string {
+	return slices.DeleteFunc(slices.Clone(labels), func(x string) bool { return x == l })
 }
 
 // CounterpartyFromDetails is the `from` of a request made from a
