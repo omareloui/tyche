@@ -6,12 +6,11 @@ import (
 
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/models"
-	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
 	"github.com/omareloui/tyche/web/views/layouts"
 )
 
-templ SMS(claims *jwt.AccessClaims, balances []models.Balance, msgs []models.SMSMessage, devices []models.Device, tz *TimezoneFD, templatesCount int) {
+templ SMS(claims *jwt.AccessClaims, balances []models.Balance, msgs []models.SMSMessage, devices []models.Device, loc *time.Location, templatesCount int) {
 	@layouts.WithTitle(claims, "SMS", balances) {
 		<div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
 			@smsInbox(msgs)
@@ -19,7 +18,7 @@ templ SMS(claims *jwt.AccessClaims, balances []models.Balance, msgs []models.SMS
 				@templatesCard(templatesCount)
 				@TransferPairsCard(nil)
 				@devicesPanel(devices)
-				@TimezoneCard(tz)
+				@TimezoneSummary(loc)
 			</div>
 		</div>
 	}
@@ -95,75 +94,6 @@ templ TransferPairsCard(paired *int) {
 				</p>
 			}
 		</div>
-	</section>
-}
-
-// TimezoneFD is the time zone form of the sms page.
-type TimezoneFD struct {
-	Name  string
-	Error string
-	// Saved shows it got saved.
-	Saved bool
-}
-
-func NewTimezoneFD(loc *time.Location) *TimezoneFD {
-	return &TimezoneFD{Name: loc.String()}
-}
-
-// TimezoneCard sets the time zone the bank sms dates are read in.
-templ TimezoneCard(fd *TimezoneFD) {
-	<section id="sms-timezone" class="grid gap-4">
-		<header>
-			<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
-				@icons.Clock("16")
-				Time zone
-			</h2>
-			<p class="text-sm text-zinc-600">The dates and times in your bank SMS are read in it.</p>
-		</header>
-		<form
-			hx-put="/sms/timezone"
-			hx-target="#sms-timezone"
-			hx-swap="outerHTML"
-			x-data
-			class="grid gap-2"
-		>
-			<div class="flex gap-2">
-				<input
-					x-ref="tz"
-					name="timezone"
-					value={ fd.Name }
-					list="sms-timezones"
-					autocomplete="off"
-					spellcheck="false"
-					aria-label="Time zone"
-					placeholder="Africa/Cairo"
-					class="input-field flex-1 min-w-0"
-					if fd.Error != "" {
-						aria-invalid="true"
-					}
-				/>
-				<button type="submit" class="btn-primary shrink-0">Save</button>
-			</div>
-			<datalist id="sms-timezones">
-				for _, tz := range models.CommonTimezones {
-					<option value={ tz }></option>
-				}
-			</datalist>
-			<button
-				type="button"
-				@click="$refs.tz.value = Intl.DateTimeFormat().resolvedOptions().timeZone; $el.form.requestSubmit()"
-				class="justify-self-start text-sm text-zinc-500 cursor-pointer hover:text-zinc-300"
-			>
-				Use this device's time zone
-			</button>
-			@form.ErrorMessage(fd.Error)
-			if fd.Saved {
-				<p class="flex items-center gap-1.5 text-sm text-emerald-400">
-					@icons.Check("14")
-					Saved, retry the pending SMS to use it.
-				</p>
-			}
-		</form>
 	</section>
 }
 

@@ -24,7 +24,7 @@ templ MerchantSpendingChart(ms *models.MerchantSpending) {
 				</h2>
 				<div class="flex items-center gap-1 rounded-full bg-zinc-900/60 ring-1 ring-zinc-800 px-2 py-1 shrink-0">
 					@monthNavButton(ms.Prev, "Previous month", "M3.828 7l4.95 4.95-1.414 1.414L1 7 7.364.636 8.778 2.05z")
-					<span class="min-w-12 text-center">{ monthLabel(ms.Month) }</span>
+					<span class="min-w-12 text-center" title={ ms.Period.RangeLabel() }>{ monthLabel(ms.Month) }</span>
 					@monthNavButton(ms.Next, "Next month", "M6.172 7L1.222 2.05 2.636.636 9 7l-6.364 6.364-1.414-1.414z")
 				</div>
 			</div>

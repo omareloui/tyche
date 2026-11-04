@@ -148,6 +148,24 @@ func (r *Repository) SetTimezone(ctx context.Context, loc *time.Location) error 
 	return q.SetTimezone(ctx, loc.String())
 }
 
+// SetMonthStart sets the day the user's months start on.
+func (r *Repository) SetMonthStart(ctx context.Context, s models.MonthStart) error {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+	return q.SetStartOfPeriod(ctx, int64(s.Day()))
+}
+
+// SetUserName sets the user's first and last name.
+func (r *Repository) SetUserName(ctx context.Context, first, last string) error {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+	return q.SetUserName(ctx, queries.SetUserNameParams{FirstName: first, LastName: last})
+}
+
 // SetOnboarded records the user finished (or skipped) the onboarding.
 func (r *Repository) SetOnboarded(ctx context.Context) error {
 	_, q, err := r.dbFromCtx(ctx)

@@ -3,6 +3,7 @@ package repository
 import (
 	"cmp"
 	"context"
+	"database/sql"
 	"slices"
 	"time"
 
@@ -10,13 +11,15 @@ import (
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/middleware"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/queries"
 	"go.uber.org/zap"
 )
 
 const monthLayout = "2006-01"
 
-// GetMerchantSpending returns the merchant expenses, net of refunds, of month
-// (YYYY-MM), or of the latest month with spending when month is empty.
+// GetMerchantSpending returns the merchant expenses, net of refunds, of the
+// user's month named month (YYYY-MM), or of the latest month with spending
+// when month is empty.
 func (r *Repository) GetMerchantSpending(ctx context.Context, month string) (*models.MerchantSpending, error) {
 	l := logger.FromCtx(ctx)
 
@@ -25,14 +28,26 @@ func (r *Repository) GetMerchantSpending(ctx context.Context, month string) (*mo
 		return nil, err
 	}
 
-	months, err := q.GetMerchantSpendingMonths(ctx)
+	days, err := q.GetMerchantSpendingDays(ctx)
 	if err != nil {
-		l.Error("querying merchant spending months", zap.Error(err))
+		l.Error("querying merchant spending days", zap.Error(err))
 		return nil, err
+	}
+	// The user's months with spending, latest first.
+	start := monthStartFromCtx(ctx)
+	var months []string
+	for _, d := range days {
+		day, err := time.Parse(dayLayout, d)
+		if err != nil {
+			continue
+		}
+		if m := start.Of(day).Key(); len(months) == 0 || months[len(months)-1] != m {
+			months = append(months, m)
+		}
 	}
 
 	if month == "" {
-		month = time.Now().Format(monthLayout)
+		month = start.Of(time.Now()).Key()
 		if len(months) > 0 {
 			month = months[0]
 		}
@@ -41,14 +56,18 @@ func (r *Repository) GetMerchantSpending(ctx context.Context, month string) (*mo
 	if err != nil {
 		return nil, err
 	}
+	p := start.For(monthTime)
 
-	rows, err := q.GetMerchantSpending(ctx, month)
+	rows, err := q.GetMerchantSpending(ctx, queries.GetMerchantSpendingParams{
+		FromDate: sql.NullTime{Time: p.From, Valid: true},
+		ToDate:   sql.NullTime{Time: p.To, Valid: true},
+	})
 	if err != nil {
 		l.Error("querying merchant spending", zap.Error(err))
 		return nil, err
 	}
 
-	ms := &models.MerchantSpending{Month: monthTime}
+	ms := &models.MerchantSpending{Month: p.Month, Period: p}
 	if v := ctx.Value(middleware.AccessClaimsCtxKey{}); v != nil {
 		ms.Currency = v.(*jwt.AccessClaims).DefaultCurrency
 	}

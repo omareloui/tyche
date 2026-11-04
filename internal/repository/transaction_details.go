@@ -35,7 +35,8 @@ func (r *Repository) GetTransactionDetails(ctx context.Context, id string, def *
 		return nil, err
 	}
 
-	d := &models.TxDetails{Tx: tx, Month: models.MonthOf(tx.ScheduledTo)}
+	p := monthStartFromCtx(ctx).Of(tx.ScheduledTo)
+	d := &models.TxDetails{Tx: tx, Month: p.Month, Period: p}
 
 	if tx.FromSMS {
 		row, err := q.GetSMSMessageOfTransaction(ctx, sql.NullString{String: id, Valid: true})
@@ -81,8 +82,8 @@ func (r *Repository) GetTransactionDetails(ctx context.Context, id string, def *
 		}
 		if d.CounterpartyMonth, err = r.GetTransactionsSummary(ctx, models.TxFilter{
 			CounterpartyID: tx.Counterparty.ID,
-			From:           d.Month,
-			To:             d.Month.AddDate(0, 1, -1),
+			From:           p.From,
+			To:             p.Last(),
 		}, def); err != nil {
 			return nil, err
 		}

@@ -1,0 +1,323 @@
+package views
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+// SettingsData is what the settings page shows, each card with its form's
+// values (and errors, after a failed save).
+type SettingsData struct {
+	Profile SettingsProfileFD
+	Region  SettingsRegionFD
+	Month   SettingsMonthFD
+	Work    *WorkSettingsFD
+	Account SettingsAccountFD
+
+	// Saved names the card just saved, to show it.
+	Saved string
+
+	// Currencies are the fiat ones, to pick the main currency from;
+	// ShownCurrencies the ones in use, for the salary.
+	Currencies, ShownCurrencies []models.Currency
+	DefaultCurrency             *models.Currency
+	WorkSettings                *models.WorkSettings
+	// Accounts can be the default one.
+	Accounts []models.Account
+}
+
+type SettingsProfileFD struct {
+	FirstName, LastName form.FDInput
+}
+
+type SettingsRegionFD struct {
+	CurrencyID, Timezone form.FDInput
+	Error                string
+}
+
+type SettingsMonthFD struct {
+	Day form.FDInput
+}
+
+type SettingsAccountFD struct {
+	AccountID form.FDInput
+}
+
+// The settings cards, the ids they swap and are linked to by.
+const (
+	SettingsProfile = "profile"
+	SettingsRegion  = "region"
+	SettingsMonth   = "month"
+	SettingsWork    = "work"
+	SettingsAccount = "account"
+)
+
+// SettingsURL links to a card of the settings page.
+func SettingsURL(card string) templ.SafeURL {
+	return templ.SafeURL("/settings#" + settingsCardID(card))
+}
+
+// settingsCardID is the id of a card, swapped by its form and linked to.
+func settingsCardID(card string) string {
+	return "settings-" + card
+}
+
+templ Settings(claims *jwt.AccessClaims, balances []models.Balance, d *SettingsData) {
+	@layouts.WithTitle(claims, "Settings", balances) {
+		// The aside comes first, so on phones its links are at the top.
+		<div class="grid gap-8 lg:gap-10 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+			<aside class="grid gap-4 lg:sticky lg:top-22 lg:col-start-2 lg:row-start-1">
+				<h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-500">On this page</h2>
+				<nav class="flex flex-wrap gap-2 lg:grid lg:gap-1 text-zinc-400">
+					@settingsNavLink(SettingsProfile, "Profile")
+					@settingsNavLink(SettingsRegion, "Currency and time zone")
+					@settingsNavLink(SettingsMonth, "Start of the month")
+					@settingsNavLink(SettingsWork, "Salary and work hours")
+					@settingsNavLink(SettingsAccount, "Default account")
+				</nav>
+				<p class="text-sm text-zinc-500">
+					Encryption, backups and resetting your account are on
+					<a href="/security" class="text-zinc-300 hover:underline">Security</a>,
+					<a href="/backup" class="text-zinc-300 hover:underline">Backup</a> and
+					<a href="/reset" class="text-zinc-300 hover:underline">Reset account</a>.
+				</p>
+			</aside>
+			<div class="grid gap-6 lg:col-start-1 lg:row-start-1">
+				@SettingsProfileCard(d)
+				@SettingsRegionCard(d)
+				@SettingsMonthCard(d)
+				@SettingsWorkCard(d)
+				@SettingsAccountCard(d)
+			</div>
+		</div>
+	}
+}
+
+// settingsNavLink scrolls to a card: a chip on phones, a plain link in the
+// aside on wide screens.
+templ settingsNavLink(card, label string) {
+	<a
+		href={ templ.SafeURL("#" + settingsCardID(card)) }
+		class="rounded-full px-3 py-1.5 text-sm bg-zinc-800/60 ring-1 ring-zinc-800 transition-colors hover:bg-white/5 hover:text-white lg:rounded-md lg:px-2 lg:py-1 lg:-mx-2 lg:text-base lg:bg-transparent lg:ring-0"
+	>{ label }</a>
+}
+
+// settingsCard is a settings card around its form, which saves it and swaps
+// the answered card in.
+templ settingsCard(d *SettingsData, card, title, desc string, icon templ.Component, hue string, formAttrs templ.Attributes) {
+	<div
+		id={ settingsCardID(card) }
+		x-data="settingsForm"
+		@input="check()"
+		@change="check()"
+		class="scroll-mt-24"
+	>
+		@components.GlassCard("grid gap-5 p-5 sm:p-6", hue) {
+			<header class="flex gap-3">
+				<span class="grid place-items-center shrink-0 size-10 rounded-full bg-zinc-800/80 text-zinc-300">
+					@icon
+				</span>
+				<div class="min-w-0">
+					<h2 class="font-semibold">{ title }</h2>
+					<p class="text-sm text-zinc-500">{ desc }</p>
+				</div>
+			</header>
+			<form
+				if formAttrs != nil {
+					{ formAttrs... }
+				}
+				hx-put={ "/settings/" + card }
+				hx-target={ "#" + settingsCardID(card) }
+				hx-swap="outerHTML"
+				hx-disabled-elt="find button[type=submit]"
+				class="grid gap-4"
+			>
+				{ children... }
+				<div class="flex flex-wrap items-center gap-3">
+					<button type="submit" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed" disabled :disabled="!dirty">Save</button>
+					if d.Saved == card {
+						<p class="flex items-center gap-1.5 text-sm text-emerald-400">
+							@icons.Check("14")
+							Saved
+						</p>
+					}
+				</div>
+			</form>
+		}
+	</div>
+}
+
+templ SettingsProfileCard(d *SettingsData) {
+	@settingsCard(d, SettingsProfile, "Profile", "Your name as Tyche shows it. Signing in again doesn't change it.",
+		icons.User("18"), "bg-violet-400/10", nil) {
+		<div class="grid sm:grid-cols-2 gap-4">
+			@form.Field("First name", "first_name", "settings", nil, d.Profile.FirstName.Error) {
+				@form.Control("text", "first_name", "", "settings", d.Profile.FirstName, templ.Attributes{"autocomplete": "given-name"})
+			}
+			@form.Field("Last name", "last_name", "settings", nil, d.Profile.LastName.Error) {
+				@form.Control("text", "last_name", "", "settings", d.Profile.LastName, templ.Attributes{"autocomplete": "family-name"})
+			}
+		</div>
+	}
+}
+
+templ SettingsRegionCard(d *SettingsData) {
+	@settingsCard(d, SettingsRegion, "Currency and time zone",
+		"Totals, budgets and charts are shown in your main currency, and new accounts start in it. Your accounts keep their own currencies.",
+		icons.Coins("18"), "bg-emerald-400/10", templ.Attributes{"x-data": true}) {
+		@form.Field("Main currency", "currency_id", "settings", nil, d.Region.CurrencyID.Error) {
+			@form.Combobox(form.ComboboxProps{
+				Name: "currency_id", ID: "settings", Label: "Main currency", Placeholder: "Currency",
+				Options: form.CurrencyComboOptions(d.Currencies), Data: d.Region.CurrencyID, Searchable: true,
+			})
+		}
+		<div class="grid gap-2">
+			@form.Field("Time zone", "timezone", "settings", nil, d.Region.Timezone.Error) {
+				@form.Control("text", "timezone", "Africa/Cairo", "settings", d.Region.Timezone, templ.Attributes{
+					"x-ref": "tz", "list": "settings-timezones", "autocomplete": "off", "spellcheck": "false",
+				})
+			}
+			<datalist id="settings-timezones">
+				for _, tz := range models.CommonTimezones {
+					<option value={ tz }></option>
+				}
+			</datalist>
+			<button
+				type="button"
+				@click="$refs.tz.value = Intl.DateTimeFormat().resolvedOptions().timeZone; $refs.tz.dispatchEvent(new Event('input', { bubbles: true }))"
+				class="justify-self-start text-sm text-zinc-500 cursor-pointer hover:text-zinc-300"
+			>
+				Use this device's time zone
+			</button>
+			<p class="text-sm text-zinc-500">The dates and times in your bank SMS, and your cards' statement days, are read in it.</p>
+		</div>
+		@form.ErrorMessage(d.Region.Error)
+	}
+}
+
+templ SettingsMonthCard(d *SettingsData) {
+	{{ start := models.MonthStart(0) }}
+	if day, err := parseDay(d.Month.Day.Value); err == nil {
+		{{ start = models.MonthStart(day) }}
+	}
+	{{ cur := start.Of(time.Now()) }}
+	@settingsCard(d, SettingsMonth, "Start of the month",
+		"The day your months start on, e.g. your payday: budgets, the dashboard, analytics and the transactions list count months from it.",
+		icons.Calendar("18"), "bg-amber-400/10", nil) {
+		@form.Field("Months start on the", "month_start", "settings", nil, d.Month.Day.Error) {
+			@form.Combobox(form.ComboboxProps{
+				Name: "month_start", ID: "settings", Label: "Start of the month", Placeholder: "Day",
+				Options: monthStartOptions(), Data: d.Month.Day,
+			})
+		}
+		<div class="grid gap-1 rounded-2xl bg-zinc-900/50 ring-1 ring-zinc-800 px-4 py-3 text-sm">
+			<p class="flex flex-wrap justify-between gap-x-4">
+				<span class="text-zinc-400">This month, { cur.Month.Format("January") }</span>
+				<span class="tabular-nums">{ cur.RangeLabel() }</span>
+			</p>
+			<p class="flex flex-wrap justify-between gap-x-4">
+				<span class="text-zinc-400">Next month, { cur.Next().Month.Format("January") }</span>
+				<span class="tabular-nums">{ cur.Next().RangeLabel() }</span>
+			</p>
+		</div>
+		<p class="text-sm text-zinc-500">
+			A month is named after the one it ends in. After the 28th, a shorter month starts on its last day.
+		</p>
+	}
+}
+
+templ SettingsWorkCard(d *SettingsData) {
+	@settingsCard(d, SettingsWork, "Salary and work hours",
+		"What you earn a month, after tax, and how long you work: prices are shown in work hours, and goal plans offer what's free of it after your budgets.",
+		icons.Banknote("18"), "bg-sky-400/10", templ.Attributes{
+			"x-data":  moneyInputsData(d.ShownCurrencies, d.Work.Salary.CurrencyID.Value, d.DefaultCurrency, PayCash, ""),
+			"@change": "onChange($event)",
+		}) {
+		@plainAmountInputs("Monthly salary / income", nil, d.Work.Salary, "settings", d.ShownCurrencies, d.DefaultCurrency)
+		@form.Field("Hours you work a week", "work_hours_per_week", "settings", nil, d.Work.HoursPerWeek.Error) {
+			@form.Control("text", "work_hours_per_week", "40", "settings", d.Work.HoursPerWeek, templ.Attributes{
+				"inputmode": "decimal", "autocomplete": "off",
+			})
+		}
+		if ws := d.WorkSettings; ws.IsSet() {
+			<p class="sensitive text-sm text-zinc-500 tabular-nums">
+				An hour of your work is worth <span class="text-zinc-300">{ ws.Currency.Format(ws.HourlyRate()) }</span>.
+			</p>
+		}
+	}
+}
+
+templ SettingsAccountCard(d *SettingsData) {
+	@settingsCard(d, SettingsAccount, "Default account", "New transactions start in it.",
+		icons.Wallet("18"), "bg-rose-400/10", nil) {
+		@form.Field("Default account", "account_id", "settings", nil, d.Account.AccountID.Error) {
+			@form.Combobox(form.ComboboxProps{
+				Name: "account_id", ID: "settings", Label: "Default account", Placeholder: "Account",
+				Options: form.AccountComboOptions(d.Accounts), Data: d.Account.AccountID, Searchable: true,
+			})
+		}
+	}
+}
+
+// WorkSettingsSummary is the salary prices are counted in work hours from,
+// set on the settings page.
+templ WorkSettingsSummary(ws *models.WorkSettings) {
+	<section class="grid gap-4 p-5 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800 [--accent:var(--color-amber-300)]">
+		<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-(--accent)">
+			@icons.Clock("14")
+			Cost in work hours
+		</p>
+		if ws.IsSet() {
+			<div>
+				<p class="sensitive text-2xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">
+					{ ws.Currency.Format(ws.HourlyRate()) }<span class="text-base font-normal text-zinc-500">/h</span>
+				</p>
+				<p class="text-sm text-zinc-500 tabular-nums">
+					<span class="sensitive">{ ws.Currency.Format(ws.MonthlySalary) }/mo</span> · { fmt.Sprintf("%g", ws.HoursPerWeek) } h a week
+				</p>
+			</div>
+			<a href={ SettingsURL(SettingsWork) } class="justify-self-start text-sm text-(--accent) hover:underline">Edit in settings →</a>
+		} else {
+			<p class="text-sm text-zinc-500">Enter what you earn a month and how long you work, to see prices as hours of your work.</p>
+			<a href={ SettingsURL(SettingsWork) } class="btn-primary justify-self-start">
+				@icons.Banknote("18")
+				Set your salary
+			</a>
+		}
+	</section>
+}
+
+// TimezoneSummary is the time zone the bank sms are read in, set on the
+// settings page.
+templ TimezoneSummary(loc *time.Location) {
+	<section class="grid gap-2">
+		<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+			@icons.Clock("16")
+			Time zone
+		</h2>
+		<p class="text-sm text-zinc-600">The dates and times in your bank SMS are read in <span class="text-zinc-300">{ loc.String() }</span>.</p>
+		<a href={ SettingsURL(SettingsRegion) } class="justify-self-start text-sm text-zinc-400 hover:text-zinc-200 hover:underline">Change in settings →</a>
+	</section>
+}
+
+func monthStartOptions() []form.ComboOption {
+	opts := make([]form.ComboOption, models.MaxMonthStart)
+	for i := range opts {
+		d := fmt.Sprint(i + 1)
+		opts[i] = form.ComboOption{Value: d, Label: ordinal(i + 1)}
+	}
+	return opts
+}
+
+func parseDay(s string) (int, error) {
+	var d int
+	_, err := fmt.Sscan(s, &d)
+	return d, err
+}

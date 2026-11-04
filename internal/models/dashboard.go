@@ -23,7 +23,9 @@ type DayFlow struct {
 // MonthFlow is a month's fulfilled income and spending in the default
 // currency.
 type MonthFlow struct {
+	// Month is the 1st of the month Period is named after.
 	Month   time.Time
+	Period  Period
 	In, Out float64
 }
 
@@ -53,20 +55,22 @@ type Flow struct {
 }
 
 // FlowFrom is the first day the flow covers.
-func FlowFrom(today time.Time) time.Time {
-	return MonthOf(today).AddDate(0, -(FlowMonths - 1), 0)
+func FlowFrom(s MonthStart, today time.Time) time.Time {
+	cur := s.Of(today)
+	return s.For(cur.Month.AddDate(0, -(FlowMonths - 1), 0)).From
 }
 
-// NewFlow sums days, oldest first, into the months up to today's.
-func NewFlow(today time.Time, days []DayFlow, partial bool) *Flow {
+// NewFlow sums days, oldest first, into the months (starting on s) up to
+// today's.
+func NewFlow(s MonthStart, today time.Time, days []DayFlow, partial bool) *Flow {
 	f := &Flow{Today: dateOnly(today), Days: days, Partial: partial}
-	from := FlowFrom(today)
+	first := s.For(s.Of(today).Month.AddDate(0, -(FlowMonths - 1), 0))
 	f.Months = make([]MonthFlow, FlowMonths)
-	for i := range f.Months {
-		f.Months[i].Month = from.AddDate(0, i, 0)
+	for i, p := 0, first; i < FlowMonths; i, p = i+1, p.Next() {
+		f.Months[i] = MonthFlow{Month: p.Month, Period: p}
 	}
 	for _, d := range days {
-		i := monthsBetween(from, d.Day)
+		i := monthsBetween(first.Month, s.Of(d.Day).Month)
 		if i < 0 || i >= FlowMonths {
 			continue
 		}
@@ -84,14 +88,19 @@ func (f *Flow) Prev() MonthFlow {
 	return f.Months[len(f.Months)-2]
 }
 
-// PrevToDate is last month up to today's day of the month (or its end), to
-// compare a month in progress fairly.
+// Elapsed counts the days of the current month passed, today included.
+func (f *Flow) Elapsed() int {
+	return f.Current().Period.Day(f.Today) + 1
+}
+
+// PrevToDate is last month up to as many days as passed of this one (or its
+// end), to compare a month in progress fairly.
 func (f *Flow) PrevToDate() MonthFlow {
 	prev := f.Prev()
-	m := MonthFlow{Month: prev.Month}
-	last := min(f.Today.Day(), daysIn(prev.Month))
+	m := MonthFlow{Month: prev.Month, Period: prev.Period}
+	last := f.Elapsed() - 1
 	for _, d := range f.Days {
-		if MonthOf(d.Day).Equal(prev.Month) && d.Day.Day() <= last {
+		if prev.Period.Contains(d.Day) && prev.Period.Day(d.Day) <= last {
 			m.In += d.In
 			m.Out += d.Out
 		}
@@ -100,19 +109,19 @@ func (f *Flow) PrevToDate() MonthFlow {
 }
 
 // Pace is the cumulative spending per day of the current month up to today
-// and of all of last month, one value per day starting from the 1st.
+// and of all of last month, one value per day starting from the first.
 func (f *Flow) Pace() (cur, prev []float64) {
-	curMonth, prevMonth := f.Current().Month, f.Prev().Month
-	cur = make([]float64, f.Today.Day())
-	prev = make([]float64, daysIn(prevMonth))
+	curP, prevP := f.Current().Period, f.Prev().Period
+	cur = make([]float64, f.Elapsed())
+	prev = make([]float64, prevP.Days())
 	for _, d := range f.Days {
-		switch MonthOf(d.Day) {
-		case curMonth:
-			if i := d.Day.Day() - 1; i < len(cur) {
+		switch {
+		case curP.Contains(d.Day):
+			if i := curP.Day(d.Day); i < len(cur) {
 				cur[i] += d.Out
 			}
-		case prevMonth:
-			prev[d.Day.Day()-1] += d.Out
+		case prevP.Contains(d.Day):
+			prev[prevP.Day(d.Day)] += d.Out
 		}
 	}
 	for i := 1; i < len(cur); i++ {
@@ -167,7 +176,8 @@ type CategorySpend struct {
 // CategorySpending is a month's spending per category, in Currency, most
 // first.
 type CategorySpending struct {
-	Month time.Time
+	Month  time.Time
+	Period Period
 	// Prev and Next are the months (YYYY-MM) to navigate to, if any.
 	Prev, Next string
 	Currency   Currency
@@ -178,8 +188,8 @@ type CategorySpending struct {
 
 // NewCategorySpending merges totals into def per category, keeping the top
 // MaxCategorySpends and folding the rest into "Other".
-func NewCategorySpending(month time.Time, def Currency, cats []Category, totals []CategoryTotal) *CategorySpending {
-	cs := &CategorySpending{Month: month, Currency: def}
+func NewCategorySpending(p Period, def Currency, cats []Category, totals []CategoryTotal) *CategorySpending {
+	cs := &CategorySpending{Month: p.Month, Period: p, Currency: def}
 	byID := make(map[string]*Category, len(cats))
 	for i := range cats {
 		byID[cats[i].ID] = &cats[i]
@@ -253,14 +263,15 @@ func (b BudgetUsage) Left() float64 {
 // Budgets is the current month's spending of the categories with a budget.
 type Budgets struct {
 	Today    time.Time
+	Period   Period
 	Currency Currency
 	Items    []BudgetUsage
 	Partial  bool
 }
 
 // NewBudgets is the usage of every budgeted category, most used first.
-func NewBudgets(today time.Time, def Currency, cats []Category, totals []CategoryTotal) *Budgets {
-	b := &Budgets{Today: dateOnly(today), Currency: def}
+func NewBudgets(s MonthStart, today time.Time, def Currency, cats []Category, totals []CategoryTotal) *Budgets {
+	b := &Budgets{Today: dateOnly(today), Period: s.Of(today), Currency: def}
 	idx := map[string]int{}
 	for _, cat := range cats {
 		if !cat.HasBudget() || !cat.HasKind(ExpenseTxKind) {
@@ -288,12 +299,12 @@ func NewBudgets(today time.Time, def Currency, cats []Category, totals []Categor
 
 // MonthPct is how much of the month has passed, today included.
 func (b *Budgets) MonthPct() float64 {
-	return float64(b.Today.Day()) / float64(daysIn(b.Today)) * 100
+	return float64(b.Period.Day(b.Today)+1) / float64(b.Period.Days()) * 100
 }
 
 // DaysLeft counts the days left in the month, today included.
 func (b *Budgets) DaysLeft() int {
-	return daysIn(b.Today) - b.Today.Day() + 1
+	return b.Period.Days() - b.Period.Day(b.Today)
 }
 
 // SafePerDay is what's left of all the budgets, in Currency, per day left;

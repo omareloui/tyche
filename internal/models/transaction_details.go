@@ -23,6 +23,8 @@ type TxDetails struct {
 	CounterpartyMonth *TxSummary
 	// Budget is its category's spending of Month, against its budget if any.
 	Budget *BudgetSummaryItem
-	// Month is the month of the transaction, the stats are of.
+	// Month is the 1st of the month Period is named after.
 	Month time.Time
+	// Period is the user's month of the transaction, the stats are of.
+	Period Period
 }

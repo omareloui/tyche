@@ -100,7 +100,7 @@ templ FxRatesStatus(d FxRatesStatusData) {
 }
 
 templ fxJobBadge(d FxRatesStatusData) {
-	switch {
+	switch  {
 		case d.busy():
 			<span class="px-2 py-0.5 rounded-full bg-violet-400/15 text-xs normal-case tracking-normal text-violet-300 animate-pulse">Running</span>
 		case d.Status.LastErr != "":

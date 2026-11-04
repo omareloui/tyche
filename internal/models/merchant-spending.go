@@ -15,7 +15,9 @@ type MerchantSpend struct {
 // MerchantSpending is a month's expenses per merchant, converted to Currency
 // and sorted from most to least expensive.
 type MerchantSpending struct {
-	Month time.Time
+	// Month is the 1st of the month Period is named after.
+	Month  time.Time
+	Period Period
 	// Prev and Next are the closest months (YYYY-MM) with spending, if any.
 	Prev, Next string
 	Currency   Currency

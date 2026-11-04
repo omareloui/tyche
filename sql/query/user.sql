@@ -88,6 +88,12 @@ SELECT timezone FROM user LIMIT 1;
 -- name: SetTimezone :exec
 UPDATE user SET timezone = sqlc.arg(timezone);
 
+-- name: SetStartOfPeriod :exec
+UPDATE user SET start_of_period = sqlc.arg(start_of_period);
+
+-- name: SetUserName :exec
+UPDATE user SET first_name = sqlc.arg(first_name), last_name = sqlc.arg(last_name);
+
 -- name: SetOnboarded :exec
 UPDATE user SET onboarded_at = DATETIME('now') WHERE onboarded_at IS NULL;
 

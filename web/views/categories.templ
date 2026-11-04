@@ -3,12 +3,12 @@ package views
 import (
 	"fmt"
 
-	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/jwt"
-	"github.com/omareloui/tyche/web/views/layouts"
+	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
 )
 
 type CategoryFD struct {
@@ -78,7 +78,7 @@ func categoryAccentAttrs(fd *CategoryFD) templ.Attributes {
 		accent = models.CategoryColorToHex(fd.Color.Value)
 	}
 	return templ.Attributes{
-		"x-data":  fmt.Sprintf("{accent: '%s'}", accent),
+		"x-data": fmt.Sprintf("{accent: '%s'}", accent),
 		":style": "accent && '--accent: ' + accent",
 	}
 }

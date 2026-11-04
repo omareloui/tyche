@@ -204,7 +204,7 @@ func FilterAmountString(n *float64) string {
 type TxPage struct {
 	// Upcoming are the unfulfilled transactions, only in the first chunk.
 	Upcoming []Transaction
-	// History are the fulfilled ones, newest first, whole months.
+	// History are the fulfilled ones, newest first, whole (user's) months.
 	History []Transaction
 	// Until is the first day of the oldest month loaded so far, zero when
 	// everything is.
@@ -213,6 +213,9 @@ type TxPage struct {
 	HasMore bool
 	// NeedsReview counts all the transactions to review, unfiltered.
 	NeedsReview int
+	// MonthStart is the day the user's months, the list's sections, start
+	// on.
+	MonthStart MonthStart
 }
 
 // TxSummary is what a filter of the transactions list matches as a whole,

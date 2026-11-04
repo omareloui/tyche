@@ -80,7 +80,8 @@ func (h *Handler) DashboardBudgets(w http.ResponseWriter, r *http.Request) (temp
 func (h *Handler) DashboardCategories(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	claims := getClaims(r.Context())
 
-	month := time.Now()
+	// Zero for the current month.
+	var month time.Time
 	if v := r.URL.Query().Get("month"); v != "" {
 		m, err := time.Parse("2006-01", v)
 		if err != nil {
@@ -112,12 +113,12 @@ func (h *Handler) DashboardGlance(w http.ResponseWriter, r *http.Request) (templ
 	if err != nil {
 		return nil, err
 	}
-	month := models.MonthOf(flow.Today)
+	from := flow.Current().Period.From
 	page, err := h.repo.GetTransactionsPage(ctx, models.TxFilter{
 		Kind:   models.ExpenseTxKind,
 		Status: models.TxStatusFulfilled,
-		From:   month,
-	}, time.Time{}, &month)
+		From:   from,
+	}, time.Time{}, &from)
 	if err != nil {
 		return nil, err
 	}

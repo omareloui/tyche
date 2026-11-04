@@ -144,7 +144,7 @@ templ goalPlanMoney(m models.GoalPlanMoney) {
 		<p class="flex items-start gap-2 px-4 py-3 rounded-2xl bg-zinc-800/30 ring-1 ring-zinc-800 text-sm text-zinc-400">
 			@icons.Wallet("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
 			<span>
-				Set your monthly salary in <a href="/decide" class="text-(--accent) underline-offset-2 hover:underline">Decide</a> to see what's free after your budgets. You can still type an amount.
+				Set your monthly salary in <a href={ SettingsURL(SettingsWork) } class="text-(--accent) underline-offset-2 hover:underline">Settings</a> to see what's free after your budgets. You can still type an amount.
 			</span>
 		</p>
 	} else {

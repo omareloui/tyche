@@ -85,6 +85,15 @@ func TenantIDFromCtx(ctx context.Context) (string, error) {
 	return models.TenantID(provider, oauthID), nil
 }
 
+// monthStartFromCtx is the day the user's months start on, from the access
+// claims.
+func monthStartFromCtx(ctx context.Context) models.MonthStart {
+	if claims, ok := ctx.Value(middleware.AccessClaimsCtxKey{}).(*jwt.AccessClaims); ok {
+		return claims.MonthStart
+	}
+	return 1
+}
+
 // tenantFromCtx gets who the tenant is from the access or refresh claims.
 func tenantFromCtx(ctx context.Context) (models.OAuthProvider, string, error) {
 	var oauthId string

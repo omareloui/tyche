@@ -19,10 +19,6 @@ import (
 )
 
 // Wishlist renders the whole wishlist, which every change on it re-renders.
-func (h Handler) Wishlist(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	return h.wishlist(r, false)
-}
-
 func (h Handler) wishlist(r *http.Request, oob bool) (templ.Component, error) {
 	items, err := h.repo.GetWishlistItems(r.Context())
 	if err != nil {

@@ -374,7 +374,7 @@ templ flowMonth(m models.MonthFlow, axisMax float64, current bool, def *models.C
 // dashPaceChart is this month's cumulative spending against last month's.
 templ dashPaceChart(f *models.Flow, def *models.Currency) {
 	{{ cur, prev := f.Pace() }}
-	{{ days := max(len(prev), daysInMonth(f.Today)) }}
+	{{ days := max(len(prev), f.Current().Period.Days()) }}
 	{{ axisMax := models.AxisMax(max(last(cur), last(prev)), dashAxisTicks) }}
 	{{ prevToDate := f.PrevToDate() }}
 	@components.GlassCard("grid gap-4 p-5 sm:p-6", "bg-violet-400/10") {
@@ -384,7 +384,7 @@ templ dashPaceChart(f *models.Flow, def *models.Currency) {
 				Spending pace
 			</h2>
 			<div class="flex gap-3">
-				@dashLegendItem(f.Today.Format("January"), "bg-violet-400", false)
+				@dashLegendItem(f.Current().Month.Format("January"), "bg-violet-400", false)
 				@dashLegendItem(f.Prev().Month.Format("January"), "border-zinc-500", true)
 			</div>
 		</div>
@@ -412,9 +412,9 @@ templ dashPaceChart(f *models.Flow, def *models.Currency) {
 					</div>
 				</div>
 				<div class="flex justify-between mt-2 text-xs text-zinc-500">
-					<span>1</span>
-					<span>15</span>
-					<span>{ fmt.Sprint(days) }</span>
+					<span>{ paceDayLabel(f, 0) }</span>
+					<span>{ paceDayLabel(f, 14) }</span>
+					<span>{ paceDayLabel(f, days-1) }</span>
 				</div>
 			</div>
 		</div>
@@ -433,9 +433,14 @@ templ paceDay(i, days int, cur, prev []float64, f *models.Flow, def *models.Curr
 		<div class="absolute inset-y-0 left-1/2 border-l border-zinc-500/60 hidden group-hover:block"></div>
 		<div class={ "absolute bottom-full mb-1 hidden group-hover:block z-10", tooltipSide(i, days) }>
 			<div class="glass-tooltip">
-				<p class="text-zinc-400">{ fmt.Sprintf("Day %d", i+1) }</p>
+				<p class="text-zinc-400">
+					{ fmt.Sprintf("Day %d", i+1) }
+					if p := f.Current().Period; !p.IsCalendar() {
+						{ "· " + p.From.AddDate(0, 0, i).Format("Jan 2") }
+					}
+				</p>
 				if i < len(cur) {
-					<p class="sensitive tabular-nums"><span class="text-violet-300">{ f.Today.Format("Jan") }</span> { def.Format(cur[i]) }</p>
+					<p class="sensitive tabular-nums"><span class="text-violet-300">{ f.Current().Month.Format("Jan") }</span> { def.Format(cur[i]) }</p>
 				}
 				if i < len(prev) {
 					<p class="sensitive tabular-nums"><span class="text-zinc-400">{ f.Prev().Month.Format("Jan") }</span> { def.Format(prev[i]) }</p>
@@ -449,7 +454,7 @@ templ paceDay(i, days int, cur, prev []float64, f *models.Flow, def *models.Curr
 // day.
 templ DashBudgets(b *models.Budgets) {
 	@components.GlassCard("grid content-start gap-4 p-5 sm:p-6", "bg-amber-400/10") {
-		@dashCardHeader("Budgets · "+b.Today.Format("January"), "text-amber-300", "/categories", icons.Coins("14"))
+		@dashCardHeader("Budgets · "+b.Period.Month.Format("January"), "text-amber-300", "/categories", icons.Coins("14"))
 		if len(b.Items) == 0 {
 			<div class="grid place-items-center gap-2 py-8 text-center">
 				<p class="text-zinc-400">No budgets yet</p>
@@ -532,7 +537,7 @@ templ DashCategories(cs *models.CategorySpending) {
 				</h2>
 				<div class="flex items-center gap-1 rounded-full bg-zinc-900/60 ring-1 ring-zinc-800 px-2 py-1 shrink-0 text-base">
 					@dashMonthNav(cs.Prev, "Previous month", "M3.828 7l4.95 4.95-1.414 1.414L1 7 7.364.636 8.778 2.05z")
-					<span class="min-w-12 text-center">{ shortMonth(cs.Month) }</span>
+					<span class="min-w-12 text-center" title={ cs.Period.RangeLabel() }>{ shortMonth(cs.Month) }</span>
 					@dashMonthNav(cs.Next, "Next month", "M6.172 7L1.222 2.05 2.636.636 9 7l-6.364 6.364-1.414-1.414z")
 				</div>
 			</div>
@@ -878,8 +883,13 @@ func last(vals []float64) float64 {
 	return vals[len(vals)-1]
 }
 
-func daysInMonth(t time.Time) int {
-	return time.Date(t.Year(), t.Month()+1, 0, 0, 0, 0, 0, time.UTC).Day()
+// paceDayLabel is the x axis label of the i-th (0-based) day of the current
+// month: its number, or its date when months don't start on the 1st.
+func paceDayLabel(f *models.Flow, i int) string {
+	if p := f.Current().Period; !p.IsCalendar() {
+		return p.From.AddDate(0, 0, i).Format("Jan 2")
+	}
+	return fmt.Sprint(i + 1)
 }
 
 // paceXY is a day's point in the pace chart's 100×100 view box.
@@ -937,11 +947,10 @@ func categoryTxsURL(cs *models.CategorySpending, it models.CategorySpend) string
 	if it.Category == nil {
 		return ""
 	}
-	end := cs.Month.AddDate(0, 1, -1)
 	return fmt.Sprintf("/transactions?%s=%s&%s=%s&%s=%s",
 		models.TxFilterCategory, it.Category.ID,
-		models.TxFilterFrom, cs.Month.Format(time.DateOnly),
-		models.TxFilterTo, end.Format(time.DateOnly))
+		models.TxFilterFrom, cs.Period.From.Format(time.DateOnly),
+		models.TxFilterTo, cs.Period.Last().Format(time.DateOnly))
 }
 
 func budgetFill(hex string, over bool) string {
@@ -1012,7 +1021,7 @@ func accountConverted(a *models.Account, def *models.Currency) string {
 // DashGlanceData is what DashGlance shows, from the flow and this month's
 // fulfilled expenses.
 type DashGlanceData struct {
-	dailyAvg, prevDailyAvg float64
+	dailyAvg, prevDailyAvg  float64
 	noSpendDays, daysPassed int
 	// busiestDay is the weekday with the most spending, -1 without any.
 	busiestDay  int
@@ -1025,11 +1034,11 @@ type DashGlanceData struct {
 func NewDashGlance(f *models.Flow, expenses []models.Transaction, def *models.Currency) *DashGlanceData {
 	g := &DashGlanceData{busiestDay: -1}
 	cur, prev := f.Current(), f.Prev()
-	g.dailyAvg = cur.Out / float64(f.Today.Day())
-	g.prevDailyAvg = prev.Out / float64(daysInMonth(prev.Month))
+	g.dailyAvg = cur.Out / float64(f.Elapsed())
+	g.prevDailyAvg = prev.Out / float64(prev.Period.Days())
 
 	// Today isn't over, so only the days before it count as no-spend ones.
-	g.daysPassed = f.Today.Day() - 1
+	g.daysPassed = f.Elapsed() - 1
 	g.noSpendDays = g.daysPassed
 	var byWeekday [7]float64
 	for _, d := range f.Days {
@@ -1037,7 +1046,7 @@ func NewDashGlance(f *models.Flow, expenses []models.Transaction, def *models.Cu
 			continue
 		}
 		byWeekday[d.Day.Weekday()] += d.Out
-		if d.Day.Year() == cur.Month.Year() && d.Day.Month() == cur.Month.Month() && d.Day.Day() < f.Today.Day() {
+		if cur.Period.Contains(d.Day) && d.Day.Before(f.Today) {
 			g.noSpendDays--
 		}
 	}

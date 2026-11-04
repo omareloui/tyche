@@ -256,3 +256,28 @@ async function installApp() {
   p.prompt();
   await p.userChoice;
 }
+
+// settingsForm keeps a settings card's Save button disabled until its form
+// differs from how the card loaded (settings.templ).
+document.addEventListener("alpine:init", () => {
+  Alpine.data("settingsForm", () => ({
+    pristine: null,
+    dirty: false,
+
+    init() {
+      // After the nested inputs' init, e.g. x-mask formatting the amount.
+      setTimeout(() => {
+        this.pristine = this.state();
+      });
+    },
+
+    state() {
+      const form = this.$root.querySelector("form");
+      return form ? new URLSearchParams(new FormData(form)).toString() : "";
+    },
+
+    check() {
+      this.dirty = this.pristine !== null && this.state() !== this.pristine;
+    },
+  }));
+});

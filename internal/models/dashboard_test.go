@@ -20,7 +20,7 @@ func near(a, b float64) bool {
 
 func TestNewFlow(t *testing.T) {
 	today := day("2026-10-15")
-	f := NewFlow(today, []DayFlow{
+	f := NewFlow(1, today, []DayFlow{
 		{Day: day("2026-04-30"), In: 999, Out: 999}, // before the window
 		{Day: day("2026-05-02"), In: 100, Out: 50},
 		{Day: day("2026-09-10"), In: 1000, Out: 200},
@@ -66,9 +66,50 @@ func TestNewFlow(t *testing.T) {
 
 func TestPrevToDateShorterMonth(t *testing.T) {
 	// On March 31st, all of February counts.
-	f := NewFlow(day("2026-03-31"), []DayFlow{{Day: day("2026-02-28"), Out: 10}}, false)
+	f := NewFlow(1, day("2026-03-31"), []DayFlow{{Day: day("2026-02-28"), Out: 10}}, false)
 	if p := f.PrevToDate(); p.Out != 10 {
 		t.Errorf("prev to date out = %v, want 10", p.Out)
+	}
+}
+
+func TestNewFlowMonthStart(t *testing.T) {
+	// Months start on the 25th: today (Nov 2) is in November (Oct 25 – Nov 24).
+	f := NewFlow(25, day("2026-11-02"), []DayFlow{
+		{Day: day("2026-09-24"), Out: 1},  // September
+		{Day: day("2026-09-25"), Out: 10}, // October
+		{Day: day("2026-09-27"), Out: 20},
+		{Day: day("2026-10-24"), Out: 40},
+		{Day: day("2026-10-25"), In: 5000}, // November
+		{Day: day("2026-10-26"), Out: 100},
+		{Day: day("2026-11-02"), Out: 50},
+	}, false)
+	cur, prev := f.Current(), f.Prev()
+	if !cur.Month.Equal(day("2026-11-01")) || cur.In != 5000 || cur.Out != 150 {
+		t.Errorf("current = %+v", cur)
+	}
+	if !prev.Month.Equal(day("2026-10-01")) || prev.Out != 70 {
+		t.Errorf("prev = %+v", prev)
+	}
+	if f.Months[3].Out != 1 {
+		t.Errorf("september = %+v", f.Months[3])
+	}
+	if got := FlowFrom(25, day("2026-11-02")); !got.Equal(day("2026-05-25")) {
+		t.Errorf("FlowFrom = %v", got)
+	}
+	// 9 days passed (Oct 25 – Nov 2): Sep 25 – Oct 3 of last month.
+	if p := f.PrevToDate(); p.Out != 30 {
+		t.Errorf("prev to date = %+v, want 30 out", p)
+	}
+	curPace, prevPace := f.Pace()
+	if len(curPace) != 9 || len(prevPace) != 30 {
+		t.Fatalf("pace lens = %d, %d, want 9, 30", len(curPace), len(prevPace))
+	}
+	if curPace[1] != 100 || curPace[8] != 150 || prevPace[29] != 70 {
+		t.Errorf("pace = %v, %v", curPace, prevPace)
+	}
+	b := NewBudgets(25, day("2026-11-02"), Currency{String: "EGP"}, nil, nil)
+	if b.DaysLeft() != 23 || !near(b.MonthPct(), 9.0/31*100) {
+		t.Errorf("days left = %d, month pct = %v", b.DaysLeft(), b.MonthPct())
 	}
 }
 
@@ -84,7 +125,7 @@ func TestPctChange(t *testing.T) {
 func TestNewCategorySpending(t *testing.T) {
 	egp := Currency{String: "EGP"}
 	cats := []Category{{ID: "food", Name: "Food", Color: "red"}, {ID: "fun", Name: "Fun", Color: "blue"}}
-	cs := NewCategorySpending(day("2026-10-01"), egp, cats, []CategoryTotal{
+	cs := NewCategorySpending(MonthStart(1).For(day("2026-10-01")), egp, cats, []CategoryTotal{
 		{CategoryID: "food", Currency: egp, Amount: 300},
 		{CategoryID: "fun", Currency: egp, Amount: -20}, // refunds cover it
 		{CategoryID: "", Currency: egp, Amount: 100},
@@ -106,7 +147,7 @@ func TestNewCategorySpendingFoldsOther(t *testing.T) {
 	for i := range MaxCategorySpends + 2 {
 		totals = append(totals, CategoryTotal{CategoryID: string(rune('a' + i)), Currency: egp, Amount: float64(100 - i)})
 	}
-	cs := NewCategorySpending(day("2026-10-01"), egp, nil, totals)
+	cs := NewCategorySpending(MonthStart(1).For(day("2026-10-01")), egp, nil, totals)
 	if len(cs.Items) != MaxCategorySpends {
 		t.Fatalf("items = %d, want %d", len(cs.Items), MaxCategorySpends)
 	}
@@ -125,7 +166,7 @@ func TestNewBudgets(t *testing.T) {
 		{ID: "salary", Name: "Salary", BudgetAmount: 500, BudgetCurrency: &egp, Kinds: []TxKind{IncomeTxKind}},
 		{ID: "misc", Name: "Misc", Kinds: []TxKind{ExpenseTxKind}},
 	}
-	b := NewBudgets(day("2026-10-21"), egp, cats, []CategoryTotal{
+	b := NewBudgets(1, day("2026-10-21"), egp, cats, []CategoryTotal{
 		{CategoryID: "food", Currency: egp, Amount: 400},
 		{CategoryID: "rent", Currency: egp, Amount: 600},
 		{CategoryID: "misc", Currency: egp, Amount: 50},

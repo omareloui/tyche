@@ -414,8 +414,8 @@ templ txDetailsMonth(d *models.TxDetails, def *models.Currency) {
 					type="button"
 					@click={ fmt.Sprintf("filterBy({%q: %q, %q: %q, %q: %q})",
 						models.TxFilterCounterparty, tx.Counterparty.ID,
-						models.TxFilterFrom, d.Month.Format("2006-01-02"),
-						models.TxFilterTo, d.Month.AddDate(0, 1, -1).Format("2006-01-02")) }
+						models.TxFilterFrom, d.Period.From.Format("2006-01-02"),
+						models.TxFilterTo, d.Period.Last().Format("2006-01-02")) }
 					title={ "Show " + tx.Counterparty.Name + "'s transactions of the month" }
 					class="txd-card text-left cursor-pointer transition-colors hover:bg-zinc-800/70"
 				>

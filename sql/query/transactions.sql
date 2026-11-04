@@ -339,8 +339,8 @@ WHERE id = sqlc.arg(id);
 -- name: GetMerchantSpending :many
 -- Sums fulfilled expenses (kind 1, net of their reimbursements) net of refunds
 -- (kind 5) and incomes (kind 2, treated as refunds from merchants) per merchant and
--- account currency for a YYYY-MM month; currencies are merged in Go using live
--- fx rates.
+-- account currency fulfilled between from_date and to_date (exclusive);
+-- currencies are merged in Go using live fx rates.
 SELECT
     cp.id AS counterparty_id,
     cp.name AS counterparty_name,
@@ -367,12 +367,15 @@ WHERE
     AND t.transfer_pair_id IS NULL
     AND t.fulfilled_at IS NOT NULL
     AND cp.is_merchant IS TRUE
-    AND STRFTIME('%Y-%m', t.fulfilled_at) = CAST(sqlc.arg(month) AS TEXT)
+    AND t.fulfilled_at >= sqlc.arg(from_date)
+    AND t.fulfilled_at < sqlc.arg(to_date)
 GROUP BY cp.id, cur.id
 ORDER BY total DESC;
 
--- name: GetMerchantSpendingMonths :many
-SELECT DISTINCT CAST(STRFTIME('%Y-%m', t.fulfilled_at) AS TEXT) AS month
+-- name: GetMerchantSpendingDays :many
+-- The days (YYYY-MM-DD) with merchant expenses, latest first, for the months
+-- to navigate to.
+SELECT DISTINCT CAST(SUBSTR(t.fulfilled_at, 1, 10) AS TEXT) AS day
 FROM transactions AS t
 JOIN counterparties AS cp ON t.counterparty_id = cp.id
 WHERE
@@ -380,7 +383,7 @@ WHERE
     AND t.transfer_pair_id IS NULL
     AND t.fulfilled_at IS NOT NULL
     AND cp.is_merchant IS TRUE
-ORDER BY month DESC;
+ORDER BY day DESC;
 
 -- name: SetTransactionReimburses :exec
 UPDATE transactions

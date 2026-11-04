@@ -126,7 +126,7 @@ func (r *Repository) GetTransactionsPage(ctx context.Context, f models.TxFilter,
 		return nil, err
 	}
 
-	page := &models.TxPage{}
+	page := &models.TxPage{MonthStart: monthStartFromCtx(ctx)}
 	list := func(p queries.GetTransactionsParams) ([]models.Transaction, error) {
 		return r.listTransactions(ctx, p)
 	}
@@ -160,8 +160,7 @@ func (r *Repository) GetTransactionsPage(ctx context.Context, f models.TxFilter,
 				return nil, err
 			}
 			if len(rows) > 0 {
-				d := rows[0].ScheduledTo.UTC()
-				after = time.Date(d.Year(), d.Month(), 1, 0, 0, 0, 0, time.UTC)
+				after = page.MonthStart.Of(rows[0].ScheduledTo.UTC()).From
 			}
 		}
 

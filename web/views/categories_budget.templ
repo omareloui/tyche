@@ -47,10 +47,13 @@ templ CategoriesBudget(bs *models.BudgetSummary) {
 				<h2 class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-amber-300">
 					@icons.Coins("14")
 					Budget summary
+					if !bs.Period.IsCalendar() {
+						<span class="font-normal normal-case tracking-normal text-zinc-500">· { bs.Period.RangeLabel() }</span>
+					}
 				</h2>
 				<div class="flex items-center gap-1 rounded-full bg-zinc-900/60 ring-1 ring-zinc-800 px-2 py-1 shrink-0 text-base">
 					@budgetMonthNav(bs.Prev, "Previous month", "M3.828 7l4.95 4.95-1.414 1.414L1 7 7.364.636 8.778 2.05z")
-					<span class="min-w-20 text-center">{ shortMonth(bs.Month) }</span>
+					<span class="min-w-20 text-center" title={ bs.Period.RangeLabel() }>{ shortMonth(bs.Month) }</span>
 					@budgetMonthNav(bs.Next, "Next month", "M6.172 7L1.222 2.05 2.636.636 9 7l-6.364 6.364-1.414-1.414z")
 				</div>
 			</div>
@@ -241,9 +244,9 @@ templ budgetBurnUp(bs *models.BudgetSummary) {
 						</div>
 					</div>
 					<div class="flex justify-between mt-2 text-xs text-zinc-500">
-						<span>1</span>
-						<span>15</span>
-						<span>{ fmt.Sprint(days) }</span>
+						<span>{ budgetDayLabel(bs, 0) }</span>
+						<span>{ budgetDayLabel(bs, 14) }</span>
+						<span>{ budgetDayLabel(bs, days-1) }</span>
 					</div>
 				</div>
 			</div>
@@ -258,7 +261,7 @@ templ budgetDay(bs *models.BudgetSummary, i int, cum, pace []float64) {
 		<div class="absolute inset-y-0 left-1/2 border-l border-zinc-500/60 hidden group-hover:block"></div>
 		<div class={ "absolute bottom-full mb-1 hidden group-hover:block z-10", tooltipSide(i, days) }>
 			<div class="glass-tooltip">
-				<p class="text-zinc-400">{ bs.Month.AddDate(0, 0, i).Format("Mon, Jan 2") }</p>
+				<p class="text-zinc-400">{ bs.Period.From.AddDate(0, 0, i).Format("Mon, Jan 2") }</p>
 				if i < len(cum) {
 					<p class="sensitive tabular-nums">Spent { bs.Currency.Format(cum[i]) }</p>
 				}
@@ -415,15 +418,23 @@ func budgetMaxUnbudgeted(bs *models.BudgetSummary) float64 {
 	return max(top, 1)
 }
 
+// budgetDayLabel is the x axis label of the month's i-th (0-based) day: its
+// number, or its date when months don't start on the 1st.
+func budgetDayLabel(bs *models.BudgetSummary, i int) string {
+	if !bs.Period.IsCalendar() {
+		return bs.Period.From.AddDate(0, 0, i).Format("Jan 2")
+	}
+	return fmt.Sprint(i + 1)
+}
+
 // budgetTxsURL lists the month's transactions of the item's category, empty
 // for uncategorized spending.
 func budgetTxsURL(bs *models.BudgetSummary, it models.BudgetSummaryItem) string {
 	if it.Category == nil {
 		return ""
 	}
-	end := bs.Month.AddDate(0, 1, -1)
 	return fmt.Sprintf("/transactions?%s=%s&%s=%s&%s=%s",
 		models.TxFilterCategory, it.Category.ID,
-		models.TxFilterFrom, bs.Month.Format(time.DateOnly),
-		models.TxFilterTo, end.Format(time.DateOnly))
+		models.TxFilterFrom, bs.Period.From.Format(time.DateOnly),
+		models.TxFilterTo, bs.Period.Last().Format(time.DateOnly))
 }

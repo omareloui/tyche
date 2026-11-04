@@ -7,7 +7,6 @@ import (
 
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/models"
-	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
 	"github.com/omareloui/tyche/web/views/layouts"
@@ -43,7 +42,7 @@ templ Decide(
 		<div class="grid gap-8">
 			<div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] items-start">
 				@AffordSection(pfd, "", curs, &claims.DefaultCurrency, AffordResult(nil, nil))
-				@WorkSettingsCard(ws, NewWorkSettingsFD(ws), curs, &claims.DefaultCurrency, false)
+				@WorkSettingsSummary(ws)
 			</div>
 			@Wishlist(items, ws, &claims.DefaultCurrency, false)
 		</div>
@@ -72,7 +71,7 @@ templ AffordSection(fd *PurchaseFD, name string, curs []models.Currency, default
 		</header>
 		<form
 			hx-post="/decide/afford"
-			hx-trigger={ "input delay:400ms, change, " + WorkSettingsChangedEvent + " from:body" }
+			hx-trigger="input delay:400ms, change"
 			hx-target="#afford-result"
 			hx-swap="innerHTML"
 			class="relative grid gap-4"
@@ -238,74 +237,6 @@ templ goalImpact(g *models.GoalImpact) {
 
 templ AffordHint(msg string) {
 	<p class="text-sm text-zinc-500">{ msg }</p>
-}
-
-// WorkSettingsCard shows what an hour of work is worth, with a form to set
-// the salary behind it.
-// WorkSettingsCard shows the hourly rate prices are counted in, edited in a
-// drawer kept in the page (editing). The form's answer is the whole card, of
-// which only the form is swapped in while it has errors.
-templ WorkSettingsCard(ws *models.WorkSettings, fd *WorkSettingsFD, curs []models.Currency, defaultCur *models.Currency, editing bool) {
-	<section
-		id="work-settings"
-		x-data={ fmt.Sprintf("{editing: %t}", editing) }
-		class="grid gap-4 p-5 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800 [--accent:var(--color-amber-300)]"
-	>
-		<header class="flex items-start justify-between gap-3">
-			<div class="min-w-0">
-				<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-(--accent)">
-					@icons.Clock("14")
-					Cost in work hours
-				</p>
-				if ws.IsSet() {
-					<p class="sensitive mt-1 text-2xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">
-						{ ws.Currency.Format(ws.HourlyRate()) }<span class="text-base font-normal text-zinc-500">/h</span>
-					</p>
-					<p class="text-sm text-zinc-500 tabular-nums">
-						<span class="sensitive">{ ws.Currency.Format(ws.MonthlySalary) }/mo</span> · { fmt.Sprintf("%g", ws.HoursPerWeek) } h a week
-					</p>
-				} else {
-					<p class="mt-1 text-sm text-zinc-500">Enter what you earn a month and how long you work, to see prices as hours of your work.</p>
-				}
-			</div>
-			if ws.IsSet() {
-				<button
-					type="button"
-					@click="editing = true"
-					aria-label="Edit salary"
-					class="grid place-items-center shrink-0 w-8 h-8 rounded-full text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white"
-				>
-					@icons.Pencil("16")
-				</button>
-			}
-		</header>
-		if !ws.IsSet() {
-			<button type="button" @click="editing = true" class="btn-primary justify-self-start">
-				@icons.Banknote("18")
-				Set your salary
-			</button>
-		}
-		@components.Drawer(components.DrawerProps{Label: "Cost in work hours", Bind: "editing"}) {
-			@form.DrawerForm(form.DrawerFormProps{
-				Title: "Cost in work hours", Method: "put", URL: "/decide/work-settings", Submit: "Save",
-				Select: true, Class: "[--accent:var(--color-amber-300)]",
-				Attrs: templ.Attributes{
-					"x-data":  moneyInputsData(curs, fd.Salary.CurrencyID.Value, defaultCur, PayCash, ""),
-					"@change": "onChange($event)",
-				},
-			}) {
-				<div>
-					@plainAmountInputs("Monthly salary / income", icons.Banknote("15"), fd.Salary, "salary", curs, defaultCur)
-					<p class="mt-1.5 text-sm text-zinc-500">What lands in your account each month, after tax.</p>
-				</div>
-				@form.Field("Hours you work a week", "work_hours_per_week", "salary", icons.Clock("15"), fd.HoursPerWeek.Error) {
-					@form.Control("text", "work_hours_per_week", "40", "salary", fd.HoursPerWeek, templ.Attributes{
-						"inputmode": "decimal", "autocomplete": "off",
-					})
-				}
-			}
-		}
-	</section>
 }
 
 func NewWorkSettingsFD(ws *models.WorkSettings) *WorkSettingsFD {

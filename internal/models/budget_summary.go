@@ -61,8 +61,10 @@ func (it BudgetSummaryItem) Over() bool {
 // BudgetSummary is a month's spending of the expense categories against
 // their budgets, in Currency. Hidden items are left out of every total.
 type BudgetSummary struct {
-	Month time.Time
-	Today time.Time
+	// Month is the 1st of the month Period is named after.
+	Month  time.Time
+	Period Period
+	Today  time.Time
 	// Prev and Next are the months (YYYY-MM) to navigate to, if any.
 	Prev, Next string
 	Currency   Currency
@@ -74,8 +76,8 @@ type BudgetSummary struct {
 
 // NewBudgetSummary is month's spending of every expense category with a
 // budget or some spending, and of the uncategorized one, in def.
-func NewBudgetSummary(month, today time.Time, def Currency, cats []Category, totals []DayCategoryTotal, hidden []string) *BudgetSummary {
-	bs := &BudgetSummary{Month: MonthOf(month), Today: dateOnly(today), Currency: def}
+func NewBudgetSummary(p Period, today time.Time, def Currency, cats []Category, totals []DayCategoryTotal, hidden []string) *BudgetSummary {
+	bs := &BudgetSummary{Month: p.Month, Period: p, Today: dateOnly(today), Currency: def}
 	days := bs.Days()
 
 	idx := map[string]int{}
@@ -122,7 +124,7 @@ func NewBudgetSummary(month, today time.Time, def Currency, cats []Category, tot
 		}
 		it := &bs.Items[i]
 		it.Spent += amount
-		if d := t.Day.Day() - 1; d >= 0 && d < days {
+		if d := bs.Period.Day(t.Day); d >= 0 && d < days {
 			it.Daily[d] += amount
 		}
 	}
@@ -154,20 +156,20 @@ func btoi(b bool) int {
 
 // Days counts the days of the month.
 func (bs *BudgetSummary) Days() int {
-	return daysIn(bs.Month)
+	return bs.Period.Days()
 }
 
 // IsCurrent tells whether the month is today's.
 func (bs *BudgetSummary) IsCurrent() bool {
-	return MonthOf(bs.Today).Equal(bs.Month)
+	return bs.Period.Contains(bs.Today)
 }
 
 // Elapsed counts the days of the month passed, today included.
 func (bs *BudgetSummary) Elapsed() int {
 	switch {
 	case bs.IsCurrent():
-		return bs.Today.Day()
-	case bs.Month.Before(bs.Today):
+		return bs.Period.Day(bs.Today) + 1
+	case !bs.Period.To.After(bs.Today):
 		return bs.Days()
 	}
 	return 0
@@ -184,7 +186,7 @@ func (bs *BudgetSummary) DaysLeft() int {
 	if !bs.IsCurrent() {
 		return 0
 	}
-	return bs.Days() - bs.Today.Day() + 1
+	return bs.Days() - bs.Period.Day(bs.Today)
 }
 
 // Visible are the items not hidden.

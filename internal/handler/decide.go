@@ -3,7 +3,6 @@ package handler
 import (
 	"fmt"
 	"net/http"
-	"strconv"
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/errs"
@@ -187,62 +186,6 @@ func (h Handler) affordResult(r *http.Request, p *models.Purchase) (templ.Compon
 		return views.AffordHint(err.Error()), nil
 	}
 	return views.AffordResult(&a, ws), nil
-}
-
-func (h Handler) EditWorkSettings(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	l := logger.FromCtx(r.Context())
-
-	if err := r.ParseForm(); err != nil {
-		return nil, err
-	}
-
-	curs, err := h.repo.GetCurrencies(r.Context())
-	if err != nil {
-		return nil, err
-	}
-
-	fd := &views.WorkSettingsFD{
-		Salary: &form.AmountFD{
-			Amount:     form.FDInput{Value: r.FormValue("amount")},
-			CurrencyID: form.FDInput{Value: r.FormValue("currency_id")},
-		},
-		HoursPerWeek: form.FDInput{Value: r.FormValue("work_hours_per_week")},
-	}
-
-	salary, err := parseFloatIfExists(fd.Salary.Amount.Value)
-	if err != nil || salary <= 0 {
-		fd.Salary.Amount.Error = "Enter your monthly salary or income"
-	}
-	hours, err := strconv.ParseFloat(fd.HoursPerWeek.Value, 64)
-	if err != nil || hours <= 0 || hours > 168 {
-		fd.HoursPerWeek.Error = "Between 1 and 168 hours"
-	}
-	cur := slicesutils.Find(curs, func(c models.Currency) bool { return c.ID == fd.Salary.CurrencyID.Value })
-	if cur == nil {
-		fd.Salary.CurrencyID.Error = "Pick a currency"
-	}
-
-	claims := getClaims(r.Context())
-	if fd.Salary.Amount.Error != "" || fd.HoursPerWeek.Error != "" || cur == nil {
-		ws, err := h.repo.GetWorkSettings(r.Context())
-		if err != nil {
-			return nil, err
-		}
-		return views.WorkSettingsCard(ws, fd, curs, &claims.DefaultCurrency, true), nil
-	}
-
-	ws := &models.WorkSettings{MonthlySalary: salary, Currency: *cur, HoursPerWeek: hours}
-	if err := h.repo.SetWorkSettings(r.Context(), ws); err != nil {
-		l.Error("saving work settings", zap.Error(err))
-		return nil, err
-	}
-	l.Info("saved work settings")
-
-	// The whole card, in place of the one the drawer is in, once it slid out.
-	addHXTrigger(w, views.WorkSettingsChangedEvent)
-	drawerSaved(w, "#work-settings", "outerHTML swap:200ms")
-	w.Header().Set("HX-Reselect", "#work-settings")
-	return views.WorkSettingsCard(ws, views.NewWorkSettingsFD(ws), curs, &claims.DefaultCurrency, false), nil
 }
 
 // mapPurchaseToFD fills the purchase's form, with the plan's problems if

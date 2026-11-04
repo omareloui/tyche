@@ -6,10 +6,10 @@ import "time"
 // its balance, the current one included.
 const AccountHistoryMonths = 6
 
-// AccountHistoryFrom is the first day an account's details chart: the 1st of
-// the month AccountHistoryMonths-1 months before today's.
-func AccountHistoryFrom(today time.Time) time.Time {
-	return time.Date(today.Year(), today.Month()-(AccountHistoryMonths-1), 1, 0, 0, 0, 0, time.UTC)
+// AccountHistoryFrom is the first day an account's details chart: the start
+// of the month (starting on s) AccountHistoryMonths-1 months before today's.
+func AccountHistoryFrom(s MonthStart, today time.Time) time.Time {
+	return s.For(s.Of(today).Month.AddDate(0, -(AccountHistoryMonths - 1), 0)).From
 }
 
 // AccountHistory is an account's balance day by day from From to Today,
@@ -18,6 +18,8 @@ func AccountHistoryFrom(today time.Time) time.Time {
 // so not an analysis).
 type AccountHistory struct {
 	From, Today time.Time
+	// Start is the day the user's months start on.
+	Start MonthStart
 	// Days are the days money moved, oldest first.
 	Days []DayFlow
 	// Balance is the balance at the end of each day from From to Today.
@@ -27,7 +29,7 @@ type AccountHistory struct {
 // NewAccountHistory works the balance back from balance (today's, after
 // every fulfilled transaction) through days, the money moved per day since
 // from. Days after today (e.g. another time zone's today) count as today's.
-func NewAccountHistory(balance float64, days []DayFlow, from, today time.Time) *AccountHistory {
+func NewAccountHistory(s MonthStart, balance float64, days []DayFlow, from, today time.Time) *AccountHistory {
 	from, today = dateOnly(from), dateOnly(today)
 	n := max(int(today.Sub(from).Hours()/24)+1, 1)
 	net := make([]float64, n)
@@ -44,7 +46,7 @@ func NewAccountHistory(balance float64, days []DayFlow, from, today time.Time) *
 	for i := n - 1; i > 0; i-- {
 		bal[i-1] = bal[i] - net[i]
 	}
-	return &AccountHistory{From: from, Today: today, Days: days, Balance: bal}
+	return &AccountHistory{From: from, Today: today, Start: s, Days: days, Balance: bal}
 }
 
 // DayOf is the date of the i-th balance.
@@ -73,22 +75,22 @@ func (h *AccountHistory) InOut(from, to time.Time) (in, out float64) {
 	return in, out
 }
 
-// ThisMonth is the money moved in and out since the 1st of Today's month
-// (days after Today counted, as in the balance).
+// ThisMonth is the money moved in and out in Today's month (days after
+// Today counted, as in the balance).
 func (h *AccountHistory) ThisMonth() (in, out float64) {
-	start := time.Date(h.Today.Year(), h.Today.Month(), 1, 0, 0, 0, 0, time.UTC)
-	return h.InOut(start, start.AddDate(0, 1, 0))
+	p := h.Start.Of(h.Today)
+	return h.InOut(p.From, p.To)
 }
 
 // MonthlyAvg is the money moved in and out a month on average over the
 // full months before Today's.
 func (h *AccountHistory) MonthlyAvg() (in, out float64) {
-	start := time.Date(h.Today.Year(), h.Today.Month(), 1, 0, 0, 0, 0, time.UTC)
-	months := (start.Year()-h.From.Year())*12 + int(start.Month()-h.From.Month())
+	cur := h.Start.Of(h.Today)
+	months := monthsBetween(h.Start.Of(h.From).Month, cur.Month)
 	if months <= 0 {
 		return 0, 0
 	}
-	in, out = h.InOut(h.From, start)
+	in, out = h.InOut(h.From, cur.From)
 	return in / float64(months), out / float64(months)
 }
 

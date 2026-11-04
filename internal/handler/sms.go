@@ -235,28 +235,10 @@ func (h *Handler) SMSPage(w http.ResponseWriter, r *http.Request) (templ.Compone
 		return nil, err
 	}
 
-	return views.SMS(getClaims(ctx), b, msgs, devices, views.NewTimezoneFD(loc), len(templates)), nil
+	return views.SMS(getClaims(ctx), b, msgs, devices, loc, len(templates)), nil
 }
 
 // SetTimezone sets the time zone of the dates in the user's sms.
-func (h *Handler) SetTimezone(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	fd := &views.TimezoneFD{Name: strings.TrimSpace(r.FormValue("timezone"))}
-
-	loc, err := models.LoadTimezone(fd.Name)
-	if err != nil {
-		fd.Error = "Unknown time zone, use a name like Africa/Cairo"
-		return views.TimezoneCard(fd), nil
-	}
-	if err := h.repo.SetTimezone(r.Context(), loc); err != nil {
-		return nil, err
-	}
-	logger.FromCtx(r.Context()).Info("set the sms time zone", zap.String("timezone", loc.String()))
-
-	fd = views.NewTimezoneFD(loc)
-	fd.Saved = true
-	return views.TimezoneCard(fd), nil
-}
-
 func (h *Handler) RetrySMS(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	ctx := r.Context()
 	l := logger.FromCtx(ctx)

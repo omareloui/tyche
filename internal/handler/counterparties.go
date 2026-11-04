@@ -98,8 +98,7 @@ func (h Handler) CounterpartyDetails(w http.ResponseWriter, r *http.Request) (te
 		l.Error("summing counterparty transactions", zap.Error(err))
 		return nil, err
 	}
-	now := time.Now()
-	f.From = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	f.From = getClaims(r.Context()).Period(time.Now()).From
 	if d.ThisMonth, err = h.repo.GetTransactionsSummary(r.Context(), f, d.Def); err != nil {
 		l.Error("summing counterparty transactions of the month", zap.Error(err))
 		return nil, err

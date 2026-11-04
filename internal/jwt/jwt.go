@@ -52,6 +52,17 @@ type AccessClaims struct {
 	Picture         string
 	DefaultCurrency models.Currency
 	DefaultAccount  *models.Account
+	// MonthStart is the day the user's months start on (models.MonthStart).
+	MonthStart models.MonthStart
+}
+
+// Period is the user's month now is in.
+func (c *AccessClaims) Period(now time.Time) models.Period {
+	var s models.MonthStart
+	if c != nil {
+		s = c.MonthStart
+	}
+	return s.Of(now)
 }
 
 // IsAdmin reports whether the user is listed in ADMIN_TENANT_IDS.
@@ -123,6 +134,8 @@ func ParseAccessClaims(token string) (*AccessClaims, error) {
 		cur.IsDefault = true
 	}
 
+	monthStart, _ := (*claims)["month_start"].(float64)
+
 	return &AccessClaims{
 		ID:              (*claims)["id"].(string),
 		OAuthID:         (*claims)["oauth_id"].(string),
@@ -134,6 +147,8 @@ func ParseAccessClaims(token string) (*AccessClaims, error) {
 		Picture:         (*claims)["picture"].(string),
 		DefaultCurrency: cur,
 		DefaultAccount:  acc,
+		// Tokens issued before it was added have none: 1st of the month.
+		MonthStart: models.MonthStart(monthStart),
 	}, nil
 }
 
@@ -261,6 +276,8 @@ func newToken(kind TokenType, usr *models.User) (string, time.Time, error) {
 			"default_currency_kind":        usr.DefaultCurrency.Kind,
 			"default_currency_iban_prefix": usr.DefaultCurrency.IbanPrefix,
 			"default_currency_is_shown":    usr.DefaultCurrency.IsShown,
+
+			"month_start": usr.StartOfPeriod,
 
 			"iat": now.Unix(),
 			"exp": exp.Unix(),

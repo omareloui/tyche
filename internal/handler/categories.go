@@ -50,7 +50,8 @@ func (h Handler) Categories(w http.ResponseWriter, r *http.Request) (templ.Compo
 func (h Handler) CategoriesBudget(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	claims := getClaims(r.Context())
 
-	month := time.Now()
+	// Zero for the current month.
+	var month time.Time
 	if v := r.URL.Query().Get("month"); v != "" {
 		m, err := time.Parse("2006-01", v)
 		if err != nil {

@@ -20,9 +20,6 @@ type WishlistItemFD struct {
 	Note        form.FDInput
 }
 
-// WorkSettingsChangedEvent re-renders what's priced in work hours.
-const WorkSettingsChangedEvent = "work-settings-changed"
-
 templ CreateWishlistItemForm(fd *WishlistItemFD, curs []models.Currency, defaultCur *models.Currency) {
 	@form.SheetForm("Add to wishlist", "/wishlist", "Add", "") {
 		@wishlistItemFormBody("wl", fd, curs, defaultCur)
@@ -70,16 +67,13 @@ templ wishlistItemFormBody(id string, fd *WishlistItemFD, curs []models.Currency
 }
 
 // Wishlist is every item, grouped by where it is in its cooling-off, with
-// the stats on what was decided. Changing the salary re-renders it.
+// the stats on what was decided.
 templ Wishlist(items []models.WishlistItem, ws *models.WorkSettings, defaultCur *models.Currency, oob bool) {
 	{{ now := time.Now() }}
 	{{ s := models.SummarizeWishlist(items, defaultCur) }}
 	{{ ready, cooling, decided := groupWishlist(items, now) }}
 	<section
 		id="wishlist"
-		hx-get="/wishlist"
-		hx-trigger={ WorkSettingsChangedEvent + " from:body" }
-		hx-swap="outerHTML"
 		if oob {
 			hx-swap-oob="true"
 		}

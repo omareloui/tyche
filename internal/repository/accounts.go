@@ -552,7 +552,8 @@ func (r *Repository) GetAccountHistory(ctx context.Context, a *models.Account) (
 		return nil, err
 	}
 	today := time.Now().In(loc)
-	from := models.AccountHistoryFrom(today)
+	start := monthStartFromCtx(ctx)
+	from := models.AccountHistoryFrom(start, today)
 
 	rows, err := q.GetAccountDailyNet(ctx, queries.GetAccountDailyNetParams{
 		AccountID: sql.NullString{String: a.ID, Valid: true},
@@ -570,7 +571,7 @@ func (r *Repository) GetAccountHistory(ctx context.Context, a *models.Account) (
 		}
 		days = append(days, models.DayFlow{Day: day, In: row.MoneyIn, Out: row.MoneyOut})
 	}
-	return models.NewAccountHistory(a.Amount, days, from, today), nil
+	return models.NewAccountHistory(start, a.Amount, days, from, today), nil
 }
 
 // GetAccountTxStats is how many fulfilled transactions touched the account,

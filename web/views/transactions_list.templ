@@ -323,9 +323,9 @@ templ txMonthSection(m *txMonth, def *models.Currency) {
 						<button
 							type="button"
 							@click={ fmt.Sprintf("filterBy({%q: %q, %q: %q})",
-								models.TxFilterFrom, m.Month.Format(time.DateOnly),
-								models.TxFilterTo, m.Month.AddDate(0, 1, -1).Format(time.DateOnly)) }
-							title={ "Show only " + formatTxMonth(m.Month) }
+								models.TxFilterFrom, m.Period.From.Format(time.DateOnly),
+								models.TxFilterTo, m.Period.Last().Format(time.DateOnly)) }
+							title={ "Show only " + formatTxMonth(m.Month) + " (" + m.Period.RangeLabel() + ")" }
 							tabindex="-1"
 							class="cursor-pointer outline-none transition-colors hover:text-(--accent)"
 						>{ formatTxMonth(m.Month) }</button>
@@ -1165,6 +1165,7 @@ type txDay struct {
 
 type txMonth struct {
 	Month   time.Time
+	Period  models.Period
 	Days    []txDay
 	Count   int
 	In, Out float64
@@ -1197,10 +1198,9 @@ func buildTxList(p *models.TxPage, def *models.Currency) txListView {
 	for _, tx := range p.History {
 		in, out := txFlow(&tx, def)
 		day := dateOf(tx.ScheduledTo)
-		month := time.Date(day.Year(), day.Month(), 1, 0, 0, 0, 0, day.Location())
-
-		if n := len(l.Months); n == 0 || !l.Months[n-1].Month.Equal(month) {
-			l.Months = append(l.Months, txMonth{Month: month})
+		if n := len(l.Months); n == 0 || !l.Months[n-1].Period.Contains(day) {
+			period := p.MonthStart.Of(day)
+			l.Months = append(l.Months, txMonth{Month: period.Month, Period: period})
 		}
 		m := &l.Months[len(l.Months)-1]
 		m.Count++

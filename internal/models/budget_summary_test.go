@@ -15,7 +15,7 @@ func budgetSummaryFixture(today string, hidden []string) *BudgetSummary {
 		{ID: "idle", Name: "Idle", Kinds: []TxKind{ExpenseTxKind}},
 		{ID: "salary", Name: "Salary", Kinds: []TxKind{IncomeTxKind}},
 	}
-	return NewBudgetSummary(day("2026-10-01"), day(today), egp, cats, []DayCategoryTotal{
+	return NewBudgetSummary(MonthStart(1).For(day("2026-10-01")), day(today), egp, cats, []DayCategoryTotal{
 		{day("2026-10-02"), CategoryTotal{CategoryID: "food", Currency: egp, Amount: 300}},
 		{day("2026-10-05"), CategoryTotal{CategoryID: "food", Currency: egp, Amount: 100}},
 		{day("2026-10-03"), CategoryTotal{CategoryID: "rent", Currency: egp, Amount: 600}},

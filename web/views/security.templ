@@ -36,8 +36,16 @@ templ Security(claims *jwt.AccessClaims, balances []models.Balance, data *Securi
 // SecurityBody is the content of #security-body: the settings with their
 // aside.
 templ SecurityBody(data *SecurityData) {
+	// The aside comes first, so on phones it's above the settings, but after
+	// them while a new recovery code (shown once) or a notice is up.
 	<div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
-		<div class="grid gap-6">
+		<div class={ "grid gap-10 lg:sticky lg:top-22 lg:col-start-2 lg:row-start-1", templ.KV("max-lg:order-last", data.RecoveryCode != "" || data.Notice != "") }>
+			if data.Encrypted {
+				@encryptionStatus()
+			}
+			@securityInfo(data.Encrypted)
+		</div>
+		<div class="grid gap-6 lg:col-start-1 lg:row-start-1">
 			if data.RecoveryCode != "" {
 				@recoveryCodeCard(data.RecoveryCode, data.JustEnabled)
 			}
@@ -52,12 +60,6 @@ templ SecurityBody(data *SecurityData) {
 			} else {
 				@enableEncryption()
 			}
-		</div>
-		<div class="grid gap-10 lg:sticky lg:top-22">
-			if data.Encrypted {
-				@encryptionStatus()
-			}
-			@securityInfo(data.Encrypted)
 		</div>
 	</div>
 }

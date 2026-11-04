@@ -94,7 +94,7 @@ templ ErrorPage(d ErrorPageData) {
 }
 
 templ errorActions(d ErrorPageData) {
-	switch {
+	switch  {
 		case d.UnlockURL != "":
 			<a href={ templ.SafeURL(d.UnlockURL) } hx-boost="false" class="btn-primary">
 				@icons.Lock("16")

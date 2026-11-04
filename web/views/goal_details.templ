@@ -94,10 +94,10 @@ templ goalDetailsHero(gl *models.Goal, st goalState) {
 				<p class="sensitive text-sm text-zinc-500 tabular-nums">paid of { gl.Currency.Format(gl.Purchased + gl.Loan.Total) } · { fmt.Sprintf("%.0f%%", gl.PayoffPercentage()) }</p>
 			</div>
 		} else {
-		<div>
-			<p class="sensitive text-3xl font-semibold font-(family-name:--font-biorhyme-expanded) tabular-nums break-words">{ gl.ViewProgress() }</p>
-			<p class="sensitive text-sm text-zinc-500 tabular-nums">of { gl.ViewAmount() } · { fmt.Sprintf("%.0f%%", min(gl.ProgressPercentage(), 999)) }</p>
-		</div>
+			<div>
+				<p class="sensitive text-3xl font-semibold font-(family-name:--font-biorhyme-expanded) tabular-nums break-words">{ gl.ViewProgress() }</p>
+				<p class="sensitive text-sm text-zinc-500 tabular-nums">of { gl.ViewAmount() } · { fmt.Sprintf("%.0f%%", min(gl.ProgressPercentage(), 999)) }</p>
+			</div>
 		}
 		@goalProgressBar(gl)
 	</div>

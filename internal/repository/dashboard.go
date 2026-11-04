@@ -24,7 +24,8 @@ func (r *Repository) GetFlow(ctx context.Context, def *models.Currency) (*models
 	}
 
 	today := time.Now()
-	rows, err := q.GetDailyFlow(ctx, models.FlowFrom(today))
+	start := monthStartFromCtx(ctx)
+	rows, err := q.GetDailyFlow(ctx, models.FlowFrom(start, today))
 	if err != nil {
 		l.Error("querying daily flow", zap.Error(err))
 		return nil, err
@@ -53,14 +54,14 @@ func (r *Repository) GetFlow(ctx context.Context, def *models.Currency) (*models
 		days = append(days, models.DayFlow{Day: day, In: in, Out: out})
 	}
 
-	return models.NewFlow(today, days, partial), nil
+	return models.NewFlow(start, today, days, partial), nil
 }
 
-// getCategoryTotals is the spending per category and currency of month.
-func (r *Repository) getCategoryTotals(ctx context.Context, q *queries.Queries, month time.Time) ([]models.CategoryTotal, error) {
+// getCategoryTotals is the spending per category and currency of p.
+func (r *Repository) getCategoryTotals(ctx context.Context, q *queries.Queries, p models.Period) ([]models.CategoryTotal, error) {
 	rows, err := q.GetCategorySpending(ctx, queries.GetCategorySpendingParams{
-		FromDate: month,
-		ToDate:   month.AddDate(0, 1, 0),
+		FromDate: p.From,
+		ToDate:   p.To,
 	})
 	if err != nil {
 		logger.FromCtx(ctx).Error("querying category spending", zap.Error(err))
@@ -77,17 +78,16 @@ func (r *Repository) getCategoryTotals(ctx context.Context, q *queries.Queries, 
 	return totals, nil
 }
 
-// GetCategorySpending is the spending per category of month, in def.
+// GetCategorySpending is the spending per category of the user's month named
+// after month's (the current one when zero), in def.
 func (r *Repository) GetCategorySpending(ctx context.Context, month time.Time, def *models.Currency) (*models.CategorySpending, error) {
-	l := logger.FromCtx(ctx)
-
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	month = models.MonthOf(month)
-	totals, err := r.getCategoryTotals(ctx, q, month)
+	p := userPeriod(ctx, month)
+	totals, err := r.getCategoryTotals(ctx, q, p)
 	if err != nil {
 		return nil, err
 	}
@@ -96,23 +96,15 @@ func (r *Repository) GetCategorySpending(ctx context.Context, month time.Time, d
 		return nil, err
 	}
 
-	cs := models.NewCategorySpending(month, *def, cats, totals)
-
-	first, err := q.GetFirstFulfilledTransactionDate(ctx)
-	if err != nil {
-		l.Error("querying first transaction date", zap.Error(err))
+	cs := models.NewCategorySpending(p, *def, cats, totals)
+	if cs.Prev, cs.Next, err = r.periodNav(ctx, q, p, time.Now()); err != nil {
 		return nil, err
-	}
-	if d, err := time.Parse(dayLayout, first); err == nil && models.MonthOf(d).Before(month) {
-		cs.Prev = month.AddDate(0, -1, 0).Format(monthLayout)
-	}
-	if next := month.AddDate(0, 1, 0); !next.After(time.Now()) {
-		cs.Next = next.Format(monthLayout)
 	}
 	return cs, nil
 }
 
-// GetBudgetSummary is month's spending of the expense categories against
+// GetBudgetSummary is the spending of the user's month named after month's
+// (the current one when zero) of the expense categories against
 // their budgets, in def, hidden ones (category IDs or
 // models.UncategorizedKey) left out of the totals.
 func (r *Repository) GetBudgetSummary(ctx context.Context, month time.Time, def *models.Currency, hidden []string) (*models.BudgetSummary, error) {
@@ -123,10 +115,10 @@ func (r *Repository) GetBudgetSummary(ctx context.Context, month time.Time, def 
 		return nil, err
 	}
 
-	month = models.MonthOf(month)
+	p := userPeriod(ctx, month)
 	rows, err := q.GetDailyCategorySpending(ctx, queries.GetDailyCategorySpendingParams{
-		FromDate: month,
-		ToDate:   month.AddDate(0, 1, 0),
+		FromDate: p.From,
+		ToDate:   p.To,
 	})
 	if err != nil {
 		l.Error("querying daily category spending", zap.Error(err))
@@ -153,20 +145,38 @@ func (r *Repository) GetBudgetSummary(ctx context.Context, month time.Time, def 
 	}
 
 	now := time.Now()
-	bs := models.NewBudgetSummary(month, now, *def, cats, totals, hidden)
-
-	first, err := q.GetFirstFulfilledTransactionDate(ctx)
-	if err != nil {
-		l.Error("querying first transaction date", zap.Error(err))
+	bs := models.NewBudgetSummary(p, now, *def, cats, totals, hidden)
+	if bs.Prev, bs.Next, err = r.periodNav(ctx, q, p, now); err != nil {
 		return nil, err
 	}
-	if d, err := time.Parse(dayLayout, first); err == nil && models.MonthOf(d).Before(month) {
-		bs.Prev = month.AddDate(0, -1, 0).Format(monthLayout)
-	}
-	if next := month.AddDate(0, 1, 0); !next.After(now) {
-		bs.Next = next.Format(monthLayout)
-	}
 	return bs, nil
+}
+
+// userPeriod is the user's month named after month's, the current one when
+// month is zero.
+func userPeriod(ctx context.Context, month time.Time) models.Period {
+	s := monthStartFromCtx(ctx)
+	if month.IsZero() {
+		return s.Of(time.Now())
+	}
+	return s.For(month)
+}
+
+// periodNav is the months (YYYY-MM) before and after p to navigate to, if
+// any: back to the first fulfilled transaction's, up to now's.
+func (r *Repository) periodNav(ctx context.Context, q *queries.Queries, p models.Period, now time.Time) (prev, next string, err error) {
+	first, err := q.GetFirstFulfilledTransactionDate(ctx)
+	if err != nil {
+		logger.FromCtx(ctx).Error("querying first transaction date", zap.Error(err))
+		return "", "", err
+	}
+	if d, err := time.Parse(dayLayout, first); err == nil && d.Before(p.From) {
+		prev = p.Prev().Key()
+	}
+	if n := p.Next(); !n.From.After(now) {
+		next = n.Key()
+	}
+	return prev, next, nil
 }
 
 // GetBudgets is the current month's usage of the budgeted categories.
@@ -177,7 +187,8 @@ func (r *Repository) GetBudgets(ctx context.Context, def *models.Currency) (*mod
 	}
 
 	today := time.Now()
-	totals, err := r.getCategoryTotals(ctx, q, models.MonthOf(today))
+	start := monthStartFromCtx(ctx)
+	totals, err := r.getCategoryTotals(ctx, q, start.Of(today))
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +196,7 @@ func (r *Repository) GetBudgets(ctx context.Context, def *models.Currency) (*mod
 	if err != nil {
 		return nil, err
 	}
-	return models.NewBudgets(today, *def, cats, totals), nil
+	return models.NewBudgets(start, today, *def, cats, totals), nil
 }
 
 // GetRecentTransactions is the n latest fulfilled transactions.
