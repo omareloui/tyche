@@ -64,16 +64,26 @@ func TestBadgeCounts(t *testing.T) {
 		}
 	}
 
+	// Needing attention: unparsed and unmatched; ignored ones aren't.
+	for i, st := range []models.SMSStatus{models.SMSStatusUnparsed, models.SMSStatusUnmatched, models.SMSStatusIgnored} {
+		msg := &models.SMSMessage{ID: idgen.New(), Sender: "HSBC", Body: "Card  ending 1234\nused", ReceivedAt: now.Add(time.Duration(i) * time.Minute), Hash: idgen.New(), Status: st}
+		if err := repo.CreateSMSMessage(ctx, msg, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	got, err := repo.GetBadgeCounts(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.SMS != 0 || got.Review != 1 || got.Overdue != 2 {
+	if got.SMS != 2 || got.Review != 1 || got.Overdue != 2 {
 		t.Fatalf("counts: got %+v", got)
 	}
-	if len(got.Items) != 3 || got.Items[0].Source != badge.SourceReview ||
-		!strings.HasPrefix(got.Items[0].Title, "To review · ") || got.Items[0].URL != "/transactions?tx="+strings.TrimPrefix(got.Items[0].Tag, "tx:") ||
-		got.Items[1].Source != badge.SourceOverdue || !strings.Contains(got.Items[1].Body, " · due ") {
+	if len(got.Items) != 5 ||
+		got.Items[0].Source != badge.SourceSMS || got.Items[0].Title != "SMS to check · HSBC" || got.Items[0].Body != "Card ending 1234 used" ||
+		got.Items[2].Source != badge.SourceReview || !strings.HasPrefix(got.Items[2].Title, "To review · ") ||
+		got.Items[2].URL != "/transactions?tx="+strings.TrimPrefix(got.Items[2].Tag, "tx:") ||
+		got.Items[3].Source != badge.SourceOverdue || !strings.Contains(got.Items[3].Body, " · due ") {
 		t.Fatalf("items: got %+v", got.Items)
 	}
 

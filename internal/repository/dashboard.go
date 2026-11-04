@@ -298,7 +298,7 @@ func (r *Repository) GetBadgeCounts(ctx context.Context) (badge.Counts, error) {
 	if sms > 0 {
 		rows, err := q.ListSMSMessagesByStatus(ctx, queries.ListSMSMessagesByStatusParams{
 			Statuses: smsNeedingAttention,
-			Max:      badge.MaxItems,
+			Limit:    badge.MaxItems,
 		})
 		if err != nil {
 			l.Error("listing sms needing attention", zap.Error(err))
