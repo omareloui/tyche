@@ -462,6 +462,17 @@ templ Goal(gl *models.Goal, plan *GoalPlanCard) {
 	@goalCard(gl, plan, false)
 }
 
+// goalCardData opens the card's details on a click on it, unless on one of
+// its controls or selecting its text, like a counterparty's card.
+const goalCardData = `{
+	openMenu: false,
+	openDetails(e, card) {
+		if (e.target !== card && e.target.closest('button, a, input, label, [role=group], [role=menu]')) return
+		if (getSelection()?.toString()) return
+		htmx.ajax('GET', card.dataset.details, {target: '#drawer', swap: 'innerHTML'})
+	},
+}`
+
 templ goalCard(gl *models.Goal, plan *GoalPlanCard, oob bool) {
 	{{ st := goalStateOf(gl) }}
 	{{ deposits, scheduled := goalDeposits(gl) }}
@@ -474,22 +485,22 @@ templ goalCard(gl *models.Goal, plan *GoalPlanCard, oob bool) {
 		hx-swap="outerHTML"
 		data-goal
 		class="relative"
-		x-data="{openMenu: false}"
+		x-data={ goalCardData }
 	>
 		@components.EntryMenuAt("openMenu", "top-16 right-3 origin-top-right", getGoalMenuItems(gl, st))
-		<div class={ "relative flex flex-col gap-4 h-full p-4 rounded-2xl bg-zinc-700/20 overflow-hidden", goalAccentClass(st) }>
+		<div
+			tabindex="0"
+			data-details={ goalDetailsURL(gl) }
+			@click="openDetails($event, $el)"
+			@keydown.enter.self="openDetails($event, $el)"
+			aria-label={ gl.Name + " details" }
+			class={ "relative flex flex-col gap-4 h-full p-4 rounded-2xl bg-zinc-700/20 overflow-hidden cursor-pointer transition hover:bg-zinc-700/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)/60", goalAccentClass(st) }
+		>
 			<div aria-hidden="true" class="pointer-events-none absolute -top-16 -right-16 size-40 rounded-full bg-(--accent)/10 blur-2xl"></div>
 			<div class="relative flex items-center gap-4 min-w-0">
 				@goalRing(gl.ShownPercentage(), st, "size-14", "text-xs")
 				<div class="flex-1 min-w-0">
-					<button
-						type="button"
-						hx-get={ goalDetailsURL(gl) }
-						hx-target={ "#" + components.DrawerSlot }
-						hx-swap="innerHTML"
-						title="See the details"
-						class="block max-w-full text-left text-lg leading-tight truncate cursor-pointer transition-colors hover:text-(--accent)"
-					>{ gl.Name }</button>
+					<p class="text-lg leading-tight truncate">{ gl.Name }</p>
 					<p class="sensitive text-sm text-zinc-500 tabular-nums truncate">
 						<span class="text-zinc-300">{ gl.ViewProgress() }</span> of { gl.ViewAmount() }
 					</p>
