@@ -64,6 +64,11 @@ func (h *Handler) welcomeData(r *http.Request, step models.OnboardingStep) (*vie
 			return nil, err
 		}
 		d.Encrypted = h.vaults.IsEncrypted(tenantID)
+	case models.OnboardingBadge:
+		// Nothing to offer without the VAPID keys.
+		if !h.badges.Enabled() {
+			d.Step = models.OnboardingDone
+		}
 	}
 	return d, nil
 }

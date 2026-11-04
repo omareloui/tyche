@@ -5,7 +5,9 @@
 // subscription: the server pushes the counts when they change, the service
 // worker (sw.js) showing them as a silent notification (the icon's dot on
 // Android, which has no Badging API) and the badge's number where there's
-// one. While the app is open the badge is set from GET /badge.
+// one. While the app is open the badge is set from GET /badge. It's off
+// until turned on, which needs the notifications allowed: without them every
+// source is turned off again.
 
 const BADGE_SOURCES = ["sms", "review", "overdue"];
 const BADGE_SOURCES_KEY = "badgeSources";
@@ -22,7 +24,7 @@ function badgeSources() {
     const s = JSON.parse(localStorage.getItem(BADGE_SOURCES_KEY));
     if (s && typeof s === "object") return Object.fromEntries(BADGE_SOURCES.map((k) => [k, s[k] === true]));
   } catch {}
-  return Object.fromEntries(BADGE_SOURCES.map((k) => [k, true]));
+  return Object.fromEntries(BADGE_SOURCES.map((k) => [k, false]));
 }
 
 function saveBadgeSources(sources) {
@@ -82,11 +84,23 @@ function urlBase64ToUint8Array(s) {
 // syncPush makes the push subscription match the picked sources: dropped
 // when none is, else created (asking for the notifications permission when
 // ask, so only from a click) and sent. force sends it even when sent today.
+// Without the notifications allowed (or supported) every source is turned
+// off, throwing why when asked.
 async function syncPush({ ask = false, force = false } = {}) {
+  let sources = badgeSourceList(badgeSources());
+  if (sources.length > 0 && !pushSupported()) {
+    saveBadgeSources({});
+    if (ask) throw new Error("This browser can't show notifications, so it can't badge the app.");
+    return;
+  }
   if (!pushSupported()) return;
-  const sources = badgeSourceList(badgeSources());
   // Before any await: browsers only ask from a user gesture.
-  const permission = ask && sources.length > 0 && Notification.permission === "default" ? Notification.requestPermission() : null;
+  const asked = ask && sources.length > 0 && Notification.permission === "default" ? Notification.requestPermission() : null;
+  const permission = asked ? await asked : Notification.permission;
+  if (sources.length > 0 && permission !== "granted") {
+    saveBadgeSources({});
+    sources = [];
+  }
 
   const reg = await navigator.serviceWorker.ready;
   let sub = await reg.pushManager.getSubscription();
@@ -100,12 +114,12 @@ async function syncPush({ ask = false, force = false } = {}) {
     try {
       localStorage.removeItem(BADGE_SYNCED_KEY);
     } catch {}
-    return;
-  }
-
-  if ((permission ? await permission : Notification.permission) !== "granted") {
-    if (Notification.permission === "denied") {
-      throw new Error("Notifications are blocked: allow them for Tyche in the browser's site settings to get the badge when the app is closed.");
+    if (ask && permission !== "granted") {
+      throw new Error(
+        permission === "denied"
+          ? "Notifications are blocked for Tyche: allow them in the browser's site settings, then turn the badge on again."
+          : "The badge needs notifications: allow them to turn it on.",
+      );
     }
     return;
   }
@@ -143,7 +157,8 @@ if (isInstalledPWA()) {
   });
 }
 
-// badgeSettings is the settings page's "App badge" card.
+// badgeSettings is the badge's switches: the settings page's "App badge"
+// card and the onboarding's notifications step.
 document.addEventListener("alpine:init", () => {
   Alpine.data("badgeSettings", () => ({
     installed: isInstalledPWA(),
@@ -154,8 +169,7 @@ document.addEventListener("alpine:init", () => {
 
     init() {
       if (pushSupported() && Notification.permission === "denied") {
-        this.failed = true;
-        this.status = "Notifications are blocked: the badge only updates while the app is open.";
+        this.status = "Notifications are blocked for Tyche: allow them in the browser's site settings to turn the badge on.";
       }
     },
 
@@ -166,14 +180,16 @@ document.addEventListener("alpine:init", () => {
       saveBadgeSources(this.sources);
       try {
         await syncPush({ ask: true, force: true });
-        await syncBadge();
         this.status = "Saved";
       } catch (e) {
         this.failed = true;
         this.status = e.message;
       } finally {
+        // Turned off again without the notifications.
+        this.sources = badgeSources();
         this.busy = false;
       }
+      syncBadge();
     },
   }));
 });

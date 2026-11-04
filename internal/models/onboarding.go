@@ -9,10 +9,12 @@ const (
 	OnboardingRegion   OnboardingStep = "region"
 	OnboardingAccounts OnboardingStep = "accounts"
 	OnboardingSecurity OnboardingStep = "security"
-	OnboardingDone     OnboardingStep = "done"
+	// OnboardingBadge offers the installed app's badge (or installing it).
+	OnboardingBadge OnboardingStep = "badge"
+	OnboardingDone  OnboardingStep = "done"
 )
 
-var OnboardingSteps = []OnboardingStep{OnboardingRegion, OnboardingAccounts, OnboardingSecurity, OnboardingDone}
+var OnboardingSteps = []OnboardingStep{OnboardingRegion, OnboardingAccounts, OnboardingSecurity, OnboardingBadge, OnboardingDone}
 
 // ParseOnboardingStep is the step named s, the first one if none is.
 func ParseOnboardingStep(s string) OnboardingStep {

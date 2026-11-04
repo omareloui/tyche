@@ -206,6 +206,13 @@ func TestOnboarding(t *testing.T) {
 		}
 	})
 
+	t.Run("skips the badge step without VAPID keys", func(t *testing.T) {
+		res, body := do("GET", "/welcome?step=badge", nil, true)
+		if res.StatusCode != http.StatusOK || !strings.Contains(body, "all set") || strings.Contains(body, "badgeSettings") {
+			t.Fatalf("got %d, want the done step", res.StatusCode)
+		}
+	})
+
 	t.Run("finishes", func(t *testing.T) {
 		res, _ := do("POST", "/welcome/finish", url.Values{"next": {"/sms"}}, true)
 		if res.StatusCode != http.StatusOK || res.Header.Get("HX-Redirect") != "/sms" {

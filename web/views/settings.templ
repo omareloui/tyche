@@ -346,20 +346,27 @@ templ SettingsBadgeCard() {
 				<div class="min-w-0">
 					<h2 class="font-semibold">App badge</h2>
 					<p class="text-sm text-zinc-500">
-						What the app's icon counts on this device. On Android it shows as a dot
-						with a silent notification listing them.
+						What the app's icon counts on this device. It needs notifications: on
+						Android it shows as a dot with a silent notification listing them.
 					</p>
 				</div>
 			</header>
-			<div class="grid gap-4">
-				@form.Toggle("SMS needing attention", "badge_sms", "", icons.Message("16"), form.FDInput{},
-					templ.Attributes{"x-model": "sources.sms", "@change": "save()", ":disabled": "busy"})
-				@form.Toggle("Transactions to review", "badge_review", "", icons.Eye("16"), form.FDInput{},
-					templ.Attributes{"x-model": "sources.review", "@change": "save()", ":disabled": "busy"})
-				@form.Toggle("Overdue scheduled transactions", "badge_overdue", "", icons.Clock("16"), form.FDInput{},
-					templ.Attributes{"x-model": "sources.overdue", "@change": "save()", ":disabled": "busy"})
-			</div>
-			<p x-show="status" x-text="status" class="text-sm" :class="failed ? 'text-red-400' : 'text-zinc-500'"></p>
+			@BadgeSwitches()
 		}
 	</div>
+}
+
+// BadgeSwitches are the badge's sources, saved on the device as they're
+// switched (badgeSettings in badge.js, x-data of a parent): turning one on
+// asks for the notifications, all turned off again without them.
+templ BadgeSwitches() {
+	<div class="grid gap-4">
+		@form.Toggle("SMS needing attention", "badge_sms", "", icons.Message("16"), form.FDInput{},
+			templ.Attributes{"x-model": "sources.sms", "@change": "save()", ":disabled": "busy"})
+		@form.Toggle("Transactions to review", "badge_review", "", icons.Eye("16"), form.FDInput{},
+			templ.Attributes{"x-model": "sources.review", "@change": "save()", ":disabled": "busy"})
+		@form.Toggle("Overdue scheduled transactions", "badge_overdue", "", icons.Clock("16"), form.FDInput{},
+			templ.Attributes{"x-model": "sources.overdue", "@change": "save()", ":disabled": "busy"})
+	</div>
+	<p x-show="status" x-text="status" class="text-sm" :class="failed ? 'text-red-400' : 'text-zinc-500'"></p>
 }
