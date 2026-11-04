@@ -255,7 +255,8 @@ function drawerBase() {
     pristine: null,
     // opener is what had the focus before opening, given back on closing.
     opener: null,
-    // drag is the swipe down closing the sheet on phones, while it lasts.
+    // drag is the swipe on the sheet on phones, while it lasts: down closes
+    // it, up fills the screen with it (data-expanded).
     drag: null,
 
     init() {
@@ -370,45 +371,68 @@ function drawerBase() {
       const sheet = root.querySelector(".drawer-sheet");
       for (let el = e.target; el && el !== sheet; el = el.parentElement) if (el.scrollTop > 0) return;
       const t = e.touches[0];
-      this.drag = { sheet, x0: t.clientX, y0: t.clientY, t0: e.timeStamp, dy: 0, on: false };
+      this.drag = {
+        sheet,
+        x0: t.clientX,
+        y0: t.clientY,
+        t0: e.timeStamp,
+        h0: sheet.offsetHeight,
+        expanded: root.hasAttribute("data-expanded"),
+        dy: 0,
+        dir: null,
+      };
     },
 
-    // dragMove moves the sheet with the finger once it goes down; going up or
-    // sideways first leaves the touch to scrolling.
+    // dragMove moves the sheet with the finger once it goes down, or grows it
+    // when it goes up (unless it fills the screen already); going sideways
+    // first, or up on a full screen sheet, leaves the touch to scrolling.
     dragMove(e) {
       const d = this.drag;
       if (!d) return;
       const t = e.touches[0];
       const dx = t.clientX - d.x0;
       const dy = t.clientY - d.y0;
-      if (!d.on) {
-        if (dy <= 0 || Math.abs(dx) > dy) {
+      if (!d.dir) {
+        if (Math.abs(dx) > Math.abs(dy) || dy === 0 || (dy < 0 && d.expanded)) {
           this.drag = null;
           return;
         }
-        d.on = true;
+        d.dir = dy > 0 ? "down" : "up";
         d.sheet.style.transition = "none";
         this.drawerRoot().querySelector(".drawer-backdrop").style.transition = "none";
       }
       if (e.cancelable) e.preventDefault();
-      d.dy = Math.max(0, dy);
+      d.dy = d.dir === "down" ? Math.max(0, dy) : Math.min(0, dy);
       d.speed = (d.dy - (d.lastDy ?? 0)) / Math.max(1, e.timeStamp - (d.lastT ?? d.t0));
       d.lastDy = d.dy;
       d.lastT = e.timeStamp;
+      if (d.dir === "up") {
+        d.sheet.style.maxHeight = "none";
+        d.sheet.style.height = `${Math.min(innerHeight, d.h0 - d.dy)}px`;
+        return;
+      }
       d.sheet.style.transform = `translateY(${d.dy}px)`;
       const backdrop = this.drawerRoot().querySelector(".drawer-backdrop");
       backdrop.style.opacity = String(Math.max(0, 1 - d.dy / d.sheet.offsetHeight));
     },
 
-    // dragEnd closes the sheet when dragged far or fast enough (asking first
-    // if its form changed), else puts it back.
+    // dragEnd fills the screen with the sheet when dragged up far or fast
+    // enough; down, closes it when dragged far or fast enough (asking first
+    // if its form changed), shrinks a full screen one back, else puts it back.
     async dragEnd() {
       const d = this.drag;
       this.drag = null;
-      if (!d?.on) return;
+      if (!d?.dir) return;
       const root = this.drawerRoot();
       const backdrop = root.querySelector(".drawer-backdrop");
-      const far = d.dy > d.sheet.offsetHeight / 4 || (d.speed > 0.5 && d.dy > 40);
+      if (d.dir === "up") {
+        if (-d.dy > 40 || d.speed < -0.5) this.resize(d.sheet, innerHeight, () => root.setAttribute("data-expanded", ""));
+        else this.resize(d.sheet, d.h0);
+        return;
+      }
+      const h = d.sheet.offsetHeight;
+      const fast = d.speed > 0.5 && d.dy > 40;
+      const far = d.expanded ? d.dy > h / 2 || (fast && d.dy > h / 4) : d.dy > h / 4 || fast;
       if (far && !this.dirty()) {
         // Slides out from where it is instead of the closing animation's start.
         root.setAttribute("data-dragged", "");
@@ -417,11 +441,49 @@ function drawerBase() {
         this.close();
         return;
       }
-      d.sheet.style.transition = "transform 200ms cubic-bezier(0.32, 0.72, 0, 1)";
-      d.sheet.style.transform = "";
       backdrop.style.transition = "opacity 200ms";
       backdrop.style.opacity = "";
+      if (d.expanded && (d.dy > h / 4 || fast)) {
+        this.collapse(d.sheet);
+        if (far) this.requestClose();
+        return;
+      }
+      d.sheet.style.transition = "transform 200ms cubic-bezier(0.32, 0.72, 0, 1)";
+      d.sheet.style.transform = "";
       if (far) this.requestClose();
+    },
+
+    // resize animates the sheet's height from where it is to px, then leaves
+    // it to its css again, after calling done (e.g. setting data-expanded).
+    resize(sheet, px, done) {
+      sheet.style.maxHeight = "none";
+      sheet.style.height = `${sheet.offsetHeight}px`;
+      sheet.offsetHeight; // Starts the transition from there.
+      sheet.style.transition = "height 220ms cubic-bezier(0.32, 0.72, 0, 1), transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
+      sheet.style.height = `${px}px`;
+      sheet.style.transform = "";
+      const end = (e) => {
+        if (e && (e.target !== sheet || e.propertyName !== "height")) return;
+        sheet.removeEventListener("transitionend", end);
+        clearTimeout(timer);
+        done?.();
+        sheet.style.height = sheet.style.maxHeight = sheet.style.transition = "";
+      };
+      sheet.addEventListener("transitionend", end);
+      const timer = setTimeout(end, 260);
+    },
+
+    // collapse shrinks a full screen sheet back to its own height, from where
+    // it was dragged to.
+    collapse(sheet) {
+      const top = sheet.getBoundingClientRect().top;
+      this.drawerRoot().removeAttribute("data-expanded");
+      sheet.style.transition = "none";
+      sheet.style.height = sheet.style.maxHeight = sheet.style.transform = "";
+      const natural = sheet.offsetHeight;
+      sheet.style.maxHeight = "none";
+      sheet.style.height = `${innerHeight - top}px`;
+      this.resize(sheet, natural);
     },
 
     // close slides the drawer out, then hides (kept in the page) or removes
@@ -442,7 +504,8 @@ function drawerBase() {
           this.shown = false;
           root.removeAttribute("data-closing");
           root.removeAttribute("data-dragged");
-          if (sheet) sheet.style.transform = sheet.style.transition = "";
+          root.removeAttribute("data-expanded");
+          if (sheet) sheet.style.transform = sheet.style.transition = sheet.style.height = sheet.style.maxHeight = "";
           const backdrop = root.querySelector(".drawer-backdrop");
           backdrop.style.opacity = backdrop.style.transition = "";
         } else {

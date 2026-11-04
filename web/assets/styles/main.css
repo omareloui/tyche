@@ -286,6 +286,18 @@ input[type="number"] {
 .drawer-root[data-dragged] .drawer-sheet {
   animation: none;
 }
+/* Swiped up on a phone (drawer.js), the sheet fills the screen. */
+@media (width < 40rem) {
+  .drawer-sheet {
+    transition: border-radius 220ms;
+  }
+  .drawer-root[data-expanded] .drawer-sheet {
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    padding-top: env(safe-area-inset-top);
+  }
+}
 @media (min-width: 40rem) {
   .drawer-sheet {
     animation-name: drawer-left-in;
