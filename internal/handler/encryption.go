@@ -453,7 +453,7 @@ func (h *Handler) EnableEncryption(w http.ResponseWriter, r *http.Request) (temp
 	}
 
 	if r.FormValue("welcome") != "" {
-		return welcomeStep(w, &views.WelcomeData{Step: models.OnboardingSecurity, Encrypted: true, RecoveryCode: code}), nil
+		return h.welcomeStep(w, r, &views.WelcomeData{Step: models.OnboardingSecurity, Encrypted: true, RecoveryCode: code}), nil
 	}
 
 	data := &views.SecurityData{Encrypted: true, RecoveryCode: code, JustEnabled: true}

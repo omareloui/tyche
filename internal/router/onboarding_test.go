@@ -2,6 +2,7 @@ package router_test
 
 import (
 	"database/sql"
+	"github.com/omareloui/tyche/internal/badge"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -44,13 +45,19 @@ func TestOnboarding(t *testing.T) {
 	}
 	access := &http.Cookie{Name: "access_token", Value: pair.Access.Encoded}
 
-	srv := httptest.NewServer(router.New(handler.New(repo, valid.New(), sanitizer.New(), nil, sharedTemplates(t), nil)))
+	// Pushes set up (no subscription, so nothing is ever sent).
+	badges := badge.NewNotifier(nil, nil, badge.Config{PublicKey: "pub", PrivateKey: "priv"})
+	srv := httptest.NewServer(router.New(handler.New(repo, valid.New(), sanitizer.New(), nil, sharedTemplates(t), badges)))
 	t.Cleanup(srv.Close)
 
+	installed := false
 	do := func(method, path string, form url.Values, htmx bool) (*http.Response, string) {
 		t.Helper()
 		req, _ := http.NewRequest(method, srv.URL+path, strings.NewReader(form.Encode()))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		if installed {
+			req.Header.Set("X-Installed-App", "1")
+		}
 		if htmx {
 			req.Header.Set("HX-Request", "true")
 			req.Header.Set("HX-Target", "welcome")
@@ -206,10 +213,45 @@ func TestOnboarding(t *testing.T) {
 		}
 	})
 
-	t.Run("skips the badge step without VAPID keys", func(t *testing.T) {
+	t.Run("skips the badge step in a browser tab", func(t *testing.T) {
 		res, body := do("GET", "/welcome?step=badge", nil, true)
 		if res.StatusCode != http.StatusOK || !strings.Contains(body, "all set") || strings.Contains(body, "badgeSettings") {
 			t.Fatalf("got %d, want the done step", res.StatusCode)
+		}
+		if got := res.Header.Get("HX-Push-Url"); got != "/welcome?step=done" {
+			t.Errorf("pushed %q, want the done step", got)
+		}
+		if !strings.Contains(body, "Step 4 of 4") || !strings.Contains(body, `hx-get="/welcome?step=security"`) {
+			t.Error("done should be step 4 of 4, back to security")
+		}
+	})
+
+	t.Run("full page loads ask the installed app again", func(t *testing.T) {
+		res, body := do("GET", "/welcome?step=badge", nil, false)
+		if res.StatusCode != http.StatusOK || !strings.Contains(body, "all set") {
+			t.Fatalf("got %d, want the done step", res.StatusCode)
+		}
+		if !strings.Contains(body, `hx-get="/welcome?step=badge"`) || !strings.Contains(body, `hx-trigger="load[isInstalledPWA()]"`) {
+			t.Error("no recheck of the badge step from the installed app")
+		}
+		if !strings.Contains(body, "history.replaceState(history.state, &#39;&#39;, &#39;/welcome?step=done&#39;)") {
+			t.Error("the url isn't set to the done step in a browser tab")
+		}
+		_, body = do("GET", "/welcome?step=accounts", nil, false)
+		if !strings.Contains(body, `hx-get="/welcome?step=accounts"`) || strings.Contains(body, "replaceState") {
+			t.Error("a step not skipped should only be rechecked")
+		}
+	})
+
+	t.Run("offers the badge in the installed app", func(t *testing.T) {
+		installed = true
+		defer func() { installed = false }()
+		res, body := do("GET", "/welcome?step=badge", nil, true)
+		if res.StatusCode != http.StatusOK || !strings.Contains(body, "badgeSettings") || !strings.Contains(body, "Step 4 of 5") {
+			t.Fatalf("got %d, want the badge step", res.StatusCode)
+		}
+		if _, body := do("GET", "/welcome?step=done", nil, true); !strings.Contains(body, `hx-get="/welcome?step=badge"`) {
+			t.Error("done should go back to the badge step")
 		}
 	})
 

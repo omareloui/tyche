@@ -1,6 +1,9 @@
 package models
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // OnboardingStep is a step of the onboarding at /welcome, in order.
 type OnboardingStep string
@@ -15,6 +18,15 @@ const (
 )
 
 var OnboardingSteps = []OnboardingStep{OnboardingRegion, OnboardingAccounts, OnboardingSecurity, OnboardingBadge, OnboardingDone}
+
+// OnboardingStepsOf are the steps shown: without the badge one when it isn't
+// offered (not in the installed app, or no pushes).
+func OnboardingStepsOf(badge bool) []OnboardingStep {
+	if badge {
+		return OnboardingSteps
+	}
+	return slices.DeleteFunc(slices.Clone(OnboardingSteps), func(s OnboardingStep) bool { return s == OnboardingBadge })
+}
 
 // ParseOnboardingStep is the step named s, the first one if none is.
 func ParseOnboardingStep(s string) OnboardingStep {

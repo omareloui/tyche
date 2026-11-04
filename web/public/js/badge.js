@@ -141,6 +141,11 @@ async function syncPush({ ask = false, force = false } = {}) {
 }
 
 if (isInstalledPWA()) {
+  // Tells the server it's the installed app, e.g. for the onboarding to
+  // offer the badge (skipped in a browser tab).
+  document.addEventListener("htmx:configRequest", (e) => {
+    e.detail.headers["X-Installed-App"] = "1";
+  });
   window.addEventListener("load", () => {
     syncBadge();
     syncPush().catch(() => {});

@@ -3,6 +3,7 @@ package views
 import (
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 
 	"github.com/omareloui/tyche/internal/jwt"
@@ -36,6 +37,20 @@ type WelcomeData struct {
 	// Security step.
 	Encrypted    bool
 	RecoveryCode string
+
+	// Badge is whether the badge step is shown: in the installed app, with
+	// pushes set up.
+	Badge bool
+	// Requested is the step asked for by a full page load, Recheck whether
+	// to ask for it again from the installed app (whose full page loads
+	// don't say it is, see Badge).
+	Requested models.OnboardingStep
+	Recheck   bool
+}
+
+// steps are the steps shown.
+func (d *WelcomeData) steps() []models.OnboardingStep {
+	return models.OnboardingStepsOf(d.Badge)
 }
 
 // WelcomeAccountFD is the account being added on the accounts step.
@@ -67,6 +82,19 @@ templ Welcome(claims *jwt.AccessClaims, balances []models.Balance, d *WelcomeDat
 		@components.Container() {
 			<div class="flex flex-col justify-center min-h-[calc(100dvh-12rem)] py-10">
 				<div id={ WelcomeTarget } class="w-full max-w-lg mx-auto grid gap-6">
+					if d.Recheck {
+						<div
+							hidden
+							hx-get={ welcomeURL(d.Requested) }
+							hx-trigger="load[isInstalledPWA()]"
+							hx-target={ "#" + WelcomeTarget }
+							hx-swap="innerHTML"
+						></div>
+						if d.Step != d.Requested {
+							// Skipped in a browser tab: the url names the step shown.
+							<div hidden x-data { templ.Attributes{"x-init": "isInstalledPWA() || history.replaceState(history.state, '', '" + welcomeURL(d.Step) + "')"}... }></div>
+						}
+					}
 					@WelcomeBody(d)
 				</div>
 			</div>
@@ -77,7 +105,7 @@ templ Welcome(claims *jwt.AccessClaims, balances []models.Balance, d *WelcomeDat
 // WelcomeBody is the content of #welcome: the steps' progress and the current
 // one.
 templ WelcomeBody(d *WelcomeData) {
-	@welcomeProgress(d.Step)
+	@welcomeProgress(d)
 	switch d.Step {
 		case models.OnboardingRegion:
 			@welcomeRegion(d)
@@ -92,27 +120,29 @@ templ WelcomeBody(d *WelcomeData) {
 	}
 }
 
-templ welcomeProgress(step models.OnboardingStep) {
+templ welcomeProgress(d *WelcomeData) {
+	{{ steps := d.steps() }}
+	{{ at := max(slices.Index(steps, d.Step), 0) }}
 	<div class="flex items-center gap-4">
-		if step.Index() > 0 {
+		if at > 0 {
 			<button
 				type="button"
 				aria-label="Back"
 				title="Back"
 				class="grid place-items-center w-9 h-9 -ml-2 rounded-full text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white"
-				{ welcomeNav(step.Prev())... }
+				{ welcomeNav(steps[at-1])... }
 			>
 				@icons.ArrowLeft("18")
 			</button>
 		}
 		<ol class="flex items-center gap-2" aria-label="Setup progress">
-			for i, s := range models.OnboardingSteps {
+			for i, s := range steps {
 				<li
 					class={ "h-1.5 rounded-full transition-all",
-						templ.KV("w-8 bg-violet-400", s == step),
-						templ.KV("w-4 bg-violet-400/50", i < step.Index()),
-						templ.KV("w-4 bg-zinc-700", i > step.Index()) }
-					if s == step {
+						templ.KV("w-8 bg-violet-400", i == at),
+						templ.KV("w-4 bg-violet-400/50", i < at),
+						templ.KV("w-4 bg-zinc-700", i > at) }
+					if i == at {
 						aria-current="step"
 					}
 				>
@@ -121,7 +151,7 @@ templ welcomeProgress(step models.OnboardingStep) {
 			}
 		</ol>
 		<span class="ml-auto text-sm text-zinc-500">
-			{ fmt.Sprintf("Step %d of %d", step.Index()+1, len(models.OnboardingSteps)) }
+			{ fmt.Sprintf("Step %d of %d", at+1, len(steps)) }
 		</span>
 	</div>
 }

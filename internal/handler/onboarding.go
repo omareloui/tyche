@@ -27,13 +27,22 @@ var welcomeAccKinds = []models.AccKind{models.AccKindBankAcc, models.AccKindCred
 // Welcome is the onboarding, shown on signing in until it's finished or
 // skipped. ?step= is the step, the region one by default.
 func (h *Handler) Welcome(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	d, err := h.welcomeData(r, models.ParseOnboardingStep(r.URL.Query().Get("step")))
+	step := models.ParseOnboardingStep(r.URL.Query().Get("step"))
+	d, err := h.welcomeData(r, step)
 	if err != nil {
 		return nil, err
+	}
+	if d.Step != step {
+		w.Header().Set("HX-Push-Url", "/welcome?step="+string(d.Step))
 	}
 	if r.Header.Get("HX-Target") == views.WelcomeTarget {
 		return views.WelcomeBody(d), nil
 	}
+	// A full page load has no X-Installed-App (only htmx requests do): in the
+	// installed app the page asks for its step again (the region step's
+	// suggestion does already).
+	d.Requested = step
+	d.Recheck = h.badges.Enabled() && !d.Badge && !d.Suggest
 	balances, err := h.repo.GetBalances(r.Context())
 	if err != nil {
 		return nil, err
@@ -43,16 +52,23 @@ func (h *Handler) Welcome(w http.ResponseWriter, r *http.Request) (templ.Compone
 
 // welcomeStep answers a step's form with the step to show (the next one, or
 // the same with its errors).
-func welcomeStep(w http.ResponseWriter, d *views.WelcomeData) templ.Component {
+func (h *Handler) welcomeStep(w http.ResponseWriter, r *http.Request, d *views.WelcomeData) templ.Component {
+	d.Badge = h.offerBadge(r)
 	w.Header().Set("HX-Retarget", "#"+views.WelcomeTarget)
 	w.Header().Set("HX-Reswap", "innerHTML show:window:top")
 	w.Header().Set("HX-Push-Url", "/welcome?step="+string(d.Step))
 	return views.WelcomeBody(d)
 }
 
+// offerBadge is whether the onboarding offers the badge: in the installed app
+// (badge.js sends X-Installed-App with its htmx requests) with pushes set up.
+func (h *Handler) offerBadge(r *http.Request) bool {
+	return h.badges.Enabled() && r.Header.Get("X-Installed-App") == "1"
+}
+
 func (h *Handler) welcomeData(r *http.Request, step models.OnboardingStep) (*views.WelcomeData, error) {
 	ctx := r.Context()
-	d := &views.WelcomeData{Step: step}
+	d := &views.WelcomeData{Step: step, Badge: h.offerBadge(r)}
 	switch step {
 	case models.OnboardingRegion:
 		return d, h.welcomeRegionData(r, d)
@@ -65,8 +81,7 @@ func (h *Handler) welcomeData(r *http.Request, step models.OnboardingStep) (*vie
 		}
 		d.Encrypted = h.vaults.IsEncrypted(tenantID)
 	case models.OnboardingBadge:
-		// Nothing to offer without the VAPID keys.
-		if !h.badges.Enabled() {
+		if !d.Badge {
 			d.Step = models.OnboardingDone
 		}
 	}
@@ -164,7 +179,7 @@ func (h *Handler) WelcomeRegion(w http.ResponseWriter, r *http.Request) (templ.C
 		} else {
 			d.RegionError = "Unknown time zone, use a name like Africa/Cairo."
 		}
-		return welcomeStep(w, d), nil
+		return h.welcomeStep(w, r, d), nil
 	}
 
 	if err := h.repo.SetRegion(ctx, cur.ID, loc); err != nil {
@@ -185,7 +200,7 @@ func (h *Handler) WelcomeRegion(w http.ResponseWriter, r *http.Request) (templ.C
 	if err := h.welcomeAccountsData(ctx, d); err != nil {
 		return nil, err
 	}
-	return welcomeStep(w, d), nil
+	return h.welcomeStep(w, r, d), nil
 }
 
 // WelcomeAddAccount adds an account on the accounts step, saving the
@@ -202,7 +217,7 @@ func (h *Handler) WelcomeAddAccount(w http.ResponseWriter, r *http.Request) (tem
 		return nil, err
 	} else if msg != "" {
 		d.AccountsError = msg
-		return welcomeStep(w, d), nil
+		return h.welcomeStep(w, r, d), nil
 	}
 	// With the balances just saved.
 	d = &views.WelcomeData{Step: models.OnboardingAccounts}
@@ -259,14 +274,14 @@ func (h *Handler) WelcomeAddAccount(w http.ResponseWriter, r *http.Request) (tem
 	}
 	if fd.Name.Error != "" || fd.KindID.Error != "" || fd.CurrencyID.Error != "" || fd.Amount.Error != "" {
 		d.NewAccount = fd
-		return welcomeStep(w, d), nil
+		return h.welcomeStep(w, r, d), nil
 	}
 
 	d = &views.WelcomeData{Step: models.OnboardingAccounts}
 	if err := h.welcomeAccountsData(ctx, d); err != nil {
 		return nil, err
 	}
-	return welcomeStep(w, d), nil
+	return h.welcomeStep(w, r, d), nil
 }
 
 // WelcomeBalances saves the accounts step's balances, moving on.
@@ -280,14 +295,14 @@ func (h *Handler) WelcomeBalances(w http.ResponseWriter, r *http.Request) (templ
 		return nil, err
 	} else if msg != "" {
 		d.AccountsError = msg
-		return welcomeStep(w, d), nil
+		return h.welcomeStep(w, r, d), nil
 	}
 
 	d, err := h.welcomeData(r, models.OnboardingAccounts.Next())
 	if err != nil {
 		return nil, err
 	}
-	return welcomeStep(w, d), nil
+	return h.welcomeStep(w, r, d), nil
 }
 
 // saveWelcomeBalances writes the balances of the accounts step as is (no
