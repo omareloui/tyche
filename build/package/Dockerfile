@@ -16,6 +16,12 @@ RUN useradd -u 1001 nonroot
 COPY go.mod go.sum ./
 RUN go mod download && go mod verify
 
+# Compiles the slow parts once into the build cache, a layer of its own kept
+# while go.mod/go.sum don't change: the cgo SQLCipher driver and the templ
+# tool (same tags and env as the build below, so it hits the cache).
+RUN go build -tags netgo,sqlcipher github.com/mattn/go-sqlite3 && \
+  go tool templ version
+
 COPY cmd cmd
 COPY sql sql
 COPY internal internal
@@ -24,9 +30,12 @@ COPY web web
 
 COPY Makefile Makefile
 
+# The commit served by /health, which the deploy waits for.
+ARG GIT_SHA=dev
+
 RUN make templ sqlgen && \
   go build \
-  -ldflags="-linkmode external -extldflags -static" \
+  -ldflags="-linkmode external -extldflags -static -X github.com/omareloui/tyche/internal/buildinfo.Commit=${GIT_SHA}" \
   -tags netgo,sqlcipher \
   -o /usr/src/bin/tyche \
   ./cmd/tyche && \

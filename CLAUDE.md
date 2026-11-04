@@ -90,7 +90,7 @@ make docker-prod
 ```
 
 ### Deployment
-Pushing to `main` deploys to AWS (`.github/workflows/deploy.yml`, arm64 runner → ECR → ECS). One `t4g.micro` ECS host, no load balancer: the task (`aws/infra/task-definition.json`, host networking) runs the app + Caddy (TLS), the DBs live on a separate EBS volume mounted at `/srv/tyche` (→ `/app/data`) with daily DLM snapshots, secrets come from SSM (`/tyche/*`). `aws/infra/up.sh` creates/completes it; see `aws/README.md` (restore, costs)
+Pushing to `main` deploys to AWS (`.github/workflows/deploy.yml`, arm64 runner → ECR → ECS; buildx with the GitHub Actions layer cache, then it waits for `/health`'s `commit` (`internal/buildinfo`, `GIT_SHA` build arg) to be the pushed one rather than for ECS to call the service stable, which takes minutes; the deployment circuit breaker rolls failed tasks back). The task definition CI deploys is the registered one with the new image: changes to `aws/infra/task-definition.json` need `up.sh <image>`. One `t4g.micro` ECS host, no load balancer: the task (`aws/infra/task-definition.json`, host networking) runs the app + Caddy (TLS), the DBs live on a separate EBS volume mounted at `/srv/tyche` (→ `/app/data`) with daily DLM snapshots, secrets come from SSM (`/tyche/*`). `aws/infra/up.sh` creates/completes it; see `aws/README.md` (restore, costs)
 
 ## Architecture
 
