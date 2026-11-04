@@ -115,6 +115,9 @@ func (h Handler) DeleteTenant(w http.ResponseWriter, r *http.Request) (templ.Com
 		return nil, err
 	}
 	forgetUnlocks(id)
+	if err := h.badges.Forget(ctx, id); err != nil {
+		logger.FromCtx(ctx).Error("forgetting a tenant's push subscriptions", zap.String("tenantID", id), zap.Error(err))
+	}
 
 	data, err = h.adminTenantsData(r)
 	if err != nil {

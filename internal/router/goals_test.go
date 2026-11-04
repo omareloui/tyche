@@ -54,7 +54,7 @@ func newTestAccount(t *testing.T, repo *repository.Repository, ctx context.Conte
 
 func TestGoalLifecycle(t *testing.T) {
 	repo, ctx, _ := setupTenant(t)
-	h := handler.New(repo, valid.New(), sanitizer.New(), nil, nil)
+	h := handler.New(repo, valid.New(), sanitizer.New(), nil, nil, nil)
 
 	bank := newTestAccount(t, repo, ctx, "Bank", "EGP", models.AccKindBankAcc, 1000)
 	usd := newTestAccount(t, repo, ctx, "Dollars", "USD", models.AccKindBankAcc, 100)
@@ -280,7 +280,7 @@ func TestGoalLifecycle(t *testing.T) {
 
 func TestDeleteAccountKeepsHistory(t *testing.T) {
 	repo, ctx, _ := setupTenant(t)
-	h := handler.New(repo, valid.New(), sanitizer.New(), nil, nil)
+	h := handler.New(repo, valid.New(), sanitizer.New(), nil, nil, nil)
 
 	a := newTestAccount(t, repo, ctx, "Old bank", "EGP", models.AccKindBankAcc, 100)
 	b := newTestAccount(t, repo, ctx, "New bank", "EGP", models.AccKindBankAcc, 50)
@@ -360,7 +360,7 @@ func TestDeleteAccountKeepsHistory(t *testing.T) {
 
 func TestGoalLoanPayments(t *testing.T) {
 	repo, ctx, usr := setupTenant(t)
-	h := handler.New(repo, valid.New(), sanitizer.New(), nil, nil)
+	h := handler.New(repo, valid.New(), sanitizer.New(), nil, nil, nil)
 	egp, err := repo.GetCurrencyByString(ctx, "EGP")
 	if err != nil {
 		t.Fatal(err)

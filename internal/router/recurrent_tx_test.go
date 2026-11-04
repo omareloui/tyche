@@ -17,7 +17,7 @@ import (
 func TestCreateRecurrentTx(t *testing.T) {
 	repo, ctx, _ := setupTenant(t)
 	bank := newTestAccount(t, repo, ctx, "Bank", "EGP", models.AccKindBankAcc, 1000)
-	hd := handler.New(repo, valid.New(), sanitizer.New(), nil, nil)
+	hd := handler.New(repo, valid.New(), sanitizer.New(), nil, nil, nil)
 
 	// Started in the past: the first one is fulfilled, the next ones counted
 	// from its day, not today.

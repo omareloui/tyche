@@ -99,7 +99,7 @@ func TestAccountDetails(t *testing.T) {
 		t.Errorf("cash recent = %+v, want the transfer", recent)
 	}
 
-	hd := handler.New(repo, valid.New(), sanitizer.New(), nil, nil)
+	hd := handler.New(repo, valid.New(), sanitizer.New(), nil, nil, nil)
 	c, err := callHandler(ctx, hd.AccountDetails)(httptest.NewRecorder(), "GET", "/accounts/"+cash.ID+"/details", cash.ID, nil)
 	if err != nil {
 		t.Fatal(err)

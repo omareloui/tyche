@@ -21,7 +21,7 @@ func TestSMSTemplates(t *testing.T) {
 	t.Setenv("ADMIN_TENANT_IDS", models.TenantID(usr.OAuthProvider, usr.OAuthID))
 	shared := sharedTemplates(t)
 
-	srv := httptest.NewServer(router.New(handler.New(repo, valid.New(), sanitizer.New(), nil, shared)))
+	srv := httptest.NewServer(router.New(handler.New(repo, valid.New(), sanitizer.New(), nil, shared, nil)))
 	defer srv.Close()
 	pair, err := jwt.NewPair(usr)
 	if err != nil {

@@ -53,7 +53,7 @@ func TestBackup(t *testing.T) {
 		t.Fatal(err)
 	}
 	cookies := []*http.Cookie{{Name: "access_token", Value: pair.Access.Encoded}}
-	srv := httptest.NewServer(router.New(handler.New(repo, valid.New(), sanitizer.New(), nil, sharedTemplates(t))))
+	srv := httptest.NewServer(router.New(handler.New(repo, valid.New(), sanitizer.New(), nil, sharedTemplates(t), nil)))
 	t.Cleanup(srv.Close)
 
 	send := func(req *http.Request, htmx bool) (*http.Response, []byte) {

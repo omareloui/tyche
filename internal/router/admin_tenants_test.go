@@ -47,7 +47,7 @@ func TestAdminTenants(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	srv := httptest.NewServer(router.New(handler.New(repo, valid.New(), sanitizer.New(), nil, nil)))
+	srv := httptest.NewServer(router.New(handler.New(repo, valid.New(), sanitizer.New(), nil, nil, nil)))
 	defer srv.Close()
 
 	tokens := func(usr *models.User) string {

@@ -23,6 +23,9 @@ type SettingsData struct {
 
 	// Saved names the card just saved, to show it.
 	Saved string
+	// Badge is whether the installed app's badge can be pushed (VAPID keys
+	// set): its card only shows then, and in the installed app.
+	Badge bool
 
 	// Currencies are the fiat ones, to pick the main currency from;
 	// ShownCurrencies the ones in use, for the salary.
@@ -57,6 +60,7 @@ const (
 	SettingsMonth   = "month"
 	SettingsWork    = "work"
 	SettingsAccount = "account"
+	SettingsBadge   = "badge"
 )
 
 // SettingsURL links to a card of the settings page.
@@ -81,6 +85,11 @@ templ Settings(claims *jwt.AccessClaims, balances []models.Balance, d *SettingsD
 					@settingsNavLink(SettingsMonth, "Start of the month")
 					@settingsNavLink(SettingsWork, "Salary and work hours")
 					@settingsNavLink(SettingsAccount, "Default account")
+					if d.Badge {
+						<span x-data x-show="isInstalledPWA()" x-cloak class="contents">
+							@settingsNavLink(SettingsBadge, "App badge")
+						</span>
+					}
 				</nav>
 				<p class="text-sm text-zinc-500">
 					Encryption, backups and resetting your account are on
@@ -95,6 +104,9 @@ templ Settings(claims *jwt.AccessClaims, balances []models.Balance, d *SettingsD
 				@SettingsMonthCard(d)
 				@SettingsWorkCard(d)
 				@SettingsAccountCard(d)
+				if d.Badge {
+					@SettingsBadgeCard()
+				}
 			</div>
 		</div>
 	}
@@ -320,4 +332,34 @@ func parseDay(s string) (int, error) {
 	var d int
 	_, err := fmt.Sscan(s, &d)
 	return d, err
+}
+
+// SettingsBadgeCard picks what the installed app's badge counts, saved on
+// the device (badge.js), so it only shows in the installed app.
+templ SettingsBadgeCard() {
+	<div id={ settingsCardID(SettingsBadge) } x-data="badgeSettings" x-show="installed" x-cloak class="scroll-mt-24">
+		@components.GlassCard("grid gap-5 p-5 sm:p-6", "bg-amber-400/10") {
+			<header class="flex gap-3">
+				<span class="grid place-items-center shrink-0 size-10 rounded-full bg-zinc-800/80 text-zinc-300">
+					@icons.Bell("18")
+				</span>
+				<div class="min-w-0">
+					<h2 class="font-semibold">App badge</h2>
+					<p class="text-sm text-zinc-500">
+						What the app's icon counts on this device. On Android it shows as a dot
+						with a silent notification listing them.
+					</p>
+				</div>
+			</header>
+			<div class="grid gap-4">
+				@form.Toggle("SMS needing attention", "badge_sms", "", icons.Message("16"), form.FDInput{},
+					templ.Attributes{"x-model": "sources.sms", "@change": "save()", ":disabled": "busy"})
+				@form.Toggle("Transactions to review", "badge_review", "", icons.Eye("16"), form.FDInput{},
+					templ.Attributes{"x-model": "sources.review", "@change": "save()", ":disabled": "busy"})
+				@form.Toggle("Overdue scheduled transactions", "badge_overdue", "", icons.Clock("16"), form.FDInput{},
+					templ.Attributes{"x-model": "sources.overdue", "@change": "save()", ":disabled": "busy"})
+			</div>
+			<p x-show="status" x-text="status" class="text-sm" :class="failed ? 'text-red-400' : 'text-zinc-500'"></p>
+		}
+	</div>
 }

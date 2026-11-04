@@ -1,8 +1,8 @@
-// Tyche's service worker: makes the app installable and answers page loads
-// without a network with the offline page. Only static files and /offline
+// Tyche's service worker: makes the app installable, answers page loads
+// without a network with the offline page and shows the badge's pushes. Only static files and /offline
 // are ever cached, never a page or partial (they hold the user's data).
 // Bump CACHE when changing PRECACHE.
-const CACHE = "tyche-static-v1";
+const CACHE = "tyche-static-v2";
 const OFFLINE = "/offline";
 
 const PRECACHE = [
@@ -25,6 +25,7 @@ const PRECACHE = [
   "/js/transactions.js",
   "/js/money-inputs.js",
   "/js/passkeys.js",
+  "/js/badge.js",
 ];
 
 const STATIC = ["/styles/", "/js/", "/fonts/", "/icons/", "/favicons/", "/brand-icons/"];
@@ -73,4 +74,60 @@ self.addEventListener("fetch", (e) => {
         .catch(() => caches.match(req, { ignoreSearch: true }).then((res) => res ?? Response.error())),
     );
   }
+});
+
+// The badge's pushes (internal/badge): the counts of what needs attention, as
+// one silent notification replaced in place (the icon's dot on Android) and
+// the badge's number where there's one. 0 clears both.
+const ATTENTION = "attention";
+
+function attentionBody(c) {
+  const parts = [];
+  if (c.sms) parts.push(`${c.sms} SMS to check`);
+  if (c.review) parts.push(`${c.review} to review`);
+  if (c.overdue) parts.push(`${c.overdue} overdue`);
+  return parts.join(" · ");
+}
+
+self.addEventListener("push", (e) => {
+  let c = {};
+  try {
+    c = e.data?.json() ?? {};
+  } catch {}
+  const total = c.total || 0;
+  const badge = self.navigator.setAppBadge
+    ? (total > 0 ? self.navigator.setAppBadge(total) : self.navigator.clearAppBadge()).catch(() => {})
+    : Promise.resolve();
+
+  if (total === 0) {
+    e.waitUntil(
+      Promise.all([badge, self.registration.getNotifications({ tag: ATTENTION }).then((ns) => ns.forEach((n) => n.close()))]),
+    );
+    return;
+  }
+  e.waitUntil(
+    Promise.all([
+      badge,
+      self.registration.showNotification(total === 1 ? "1 thing needs your attention" : `${total} things need your attention`, {
+        body: attentionBody(c),
+        tag: ATTENTION,
+        renotify: false,
+        silent: true,
+        icon: "/favicons/icon-192.png",
+        data: { url: c.url || "/" },
+      }),
+    ]),
+  );
+});
+
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const url = new URL(e.notification.data?.url || "/", location.origin).href;
+  e.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((cs) => {
+      const c = cs.find((c) => new URL(c.url).origin === location.origin);
+      if (c) return c.focus().then((c) => c.navigate(url));
+      return self.clients.openWindow(url);
+    }),
+  );
 });

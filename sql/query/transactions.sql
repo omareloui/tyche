@@ -227,6 +227,15 @@ GROUP BY c.id, fulfilled;
 -- name: CountTransactionsNeedingReview :one
 SELECT COUNT(*) FROM transactions WHERE needs_review;
 
+-- name: CountOverdueTransactions :one
+-- The scheduled transactions due before today, counted like the
+-- transactions list's upcoming ones (top-level only).
+SELECT COUNT(*) FROM transactions AS t
+WHERE t.fulfilled_at IS NULL
+    AND t.scheduled_to < sqlc.arg(today)
+    AND t.reimburses_id IS NULL
+    AND NOT (t.transfer_pair_id IS NOT NULL AND t.kind = 2);
+
 -- name: GetTransaction :one
 SELECT
     sqlc.embed(t),

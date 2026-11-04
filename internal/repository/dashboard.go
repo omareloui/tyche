@@ -5,6 +5,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/omareloui/tyche/internal/badge"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/queries"
@@ -268,4 +269,29 @@ func (r *Repository) CountSMSNeedingAttention(ctx context.Context) (int, error) 
 		return 0, err
 	}
 	return int(n), nil
+}
+
+// GetBadgeCounts is what the installed apps' badge counts: the sms needing
+// attention, the transactions to review and the overdue scheduled ones (due
+// before today, UTC like the transactions list).
+func (r *Repository) GetBadgeCounts(ctx context.Context) (badge.Counts, error) {
+	sms, err := r.CountSMSNeedingAttention(ctx)
+	if err != nil {
+		return badge.Counts{}, err
+	}
+	review, err := r.CountTransactionsNeedingReview(ctx)
+	if err != nil {
+		return badge.Counts{}, err
+	}
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return badge.Counts{}, err
+	}
+	now := time.Now().UTC()
+	overdue, err := q.CountOverdueTransactions(ctx, time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		logger.FromCtx(ctx).Error("counting overdue transactions", zap.Error(err))
+		return badge.Counts{}, err
+	}
+	return badge.Counts{SMS: sms, Review: review, Overdue: int(overdue)}, nil
 }

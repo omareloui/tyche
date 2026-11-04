@@ -47,7 +47,7 @@ func TestEncryption(t *testing.T) {
 	dbPath := "data/" + models.TenantID(usr.OAuthProvider, usr.OAuthID) + ".sqlite"
 
 	newServer := func(repo *repository.Repository) *httptest.Server {
-		srv := httptest.NewServer(router.New(handler.New(repo, valid.New(), sanitizer.New(), nil, sharedTemplates(t))))
+		srv := httptest.NewServer(router.New(handler.New(repo, valid.New(), sanitizer.New(), nil, sharedTemplates(t), nil)))
 		t.Cleanup(srv.Close)
 		return srv
 	}

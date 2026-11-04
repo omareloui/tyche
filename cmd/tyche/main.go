@@ -15,6 +15,7 @@ import (
 	_ "github.com/omareloui/tyche/internal/sqlite"
 	"go.uber.org/zap"
 
+	"github.com/omareloui/tyche/internal/badge"
 	"github.com/omareloui/tyche/internal/config"
 	"github.com/omareloui/tyche/internal/fxrate"
 	"github.com/omareloui/tyche/internal/handler"
@@ -75,7 +76,12 @@ func main() {
 	}
 	valid := valid.New()
 	sani := sanitizer.New()
-	h := handler.New(repo, valid, sani, fxJob, smsTemplates)
+	pub, priv, subject := config.GetVAPIDKeys()
+	badges := badge.NewNotifier(sharedQ, repo.GetBadgeCounts, badge.Config{PublicKey: pub, PrivateKey: priv, Subject: subject})
+	if err := badges.Load(ctx); err != nil {
+		log.Fatalln(err)
+	}
+	h := handler.New(repo, valid, sani, fxJob, smsTemplates, badges)
 
 	srv := http.Server{
 		Addr:    fmt.Sprintf(":%d", port),

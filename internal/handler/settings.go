@@ -63,6 +63,7 @@ func (h *Handler) settingsData(ctx context.Context) (*views.SettingsData, error)
 	}
 
 	d := &views.SettingsData{
+		Badge: h.badges.Enabled(),
 		Profile: views.SettingsProfileFD{
 			FirstName: form.FDInput{Value: usr.FirstName},
 			LastName:  form.FDInput{Value: usr.LastName},

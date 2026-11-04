@@ -37,7 +37,7 @@ func TestPWA(t *testing.T) {
 	}
 	access := &http.Cookie{Name: "access_token", Value: pair.Access.Encoded}
 
-	srv := httptest.NewServer(router.New(handler.New(repo, valid.New(), sanitizer.New(), nil, sharedTemplates(t))))
+	srv := httptest.NewServer(router.New(handler.New(repo, valid.New(), sanitizer.New(), nil, sharedTemplates(t), nil)))
 	t.Cleanup(srv.Close)
 	// Static files are served from ./web/public, opened on each request.
 	t.Chdir(root)

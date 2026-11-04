@@ -145,7 +145,7 @@ func TestIngestSMS(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	srv := httptest.NewServer(router.New(handler.New(repo, valid.New(), sanitizer.New(), nil, sharedTemplates(t))))
+	srv := httptest.NewServer(router.New(handler.New(repo, valid.New(), sanitizer.New(), nil, sharedTemplates(t), nil)))
 	defer srv.Close()
 
 	post := func(token string, body any) (*http.Response, ingestResp) {

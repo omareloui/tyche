@@ -79,6 +79,23 @@ for name in JWT_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET ADMIN_TENANT_IDS; d
   unset value
 done
 
+# --- Web Push keys (the app badge), generated once -----------------------
+if ! aws ssm get-parameter --name /tyche/VAPID_PRIVATE_KEY >/dev/null 2>&1; then
+  if [ -n "$FROM_REGION" ]; then
+    log "Copying the VAPID keys from $FROM_REGION"
+    VAPID_PUBLIC_KEY=$(aws ssm get-parameter --region "$FROM_REGION" --name /tyche/VAPID_PUBLIC_KEY \
+      --query Parameter.Value --output text)
+    VAPID_PRIVATE_KEY=$(aws ssm get-parameter --region "$FROM_REGION" --name /tyche/VAPID_PRIVATE_KEY --with-decryption \
+      --query Parameter.Value --output text)
+  else
+    log "Generating the VAPID keys"
+    eval "$(cd ../.. && go run ./cmd/vapid)"
+  fi
+  aws ssm put-parameter --name /tyche/VAPID_PUBLIC_KEY --type String --value "$VAPID_PUBLIC_KEY" --overwrite >/dev/null
+  aws ssm put-parameter --name /tyche/VAPID_PRIVATE_KEY --type SecureString --value "$VAPID_PRIVATE_KEY" --overwrite >/dev/null
+  unset VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY
+fi
+
 # --- IAM -------------------------------------------------------------------
 aws iam put-role-policy --role-name ecsTaskExecutionRole --policy-name tyche-ssm-secrets \
   --policy-document "{

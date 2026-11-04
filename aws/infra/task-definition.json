@@ -19,13 +19,16 @@
         { "name": "PORT", "value": "3333" },
         { "name": "LOG_LEVEL", "value": "0" },
         { "name": "OAUTH_CB_ORIGIN", "value": "https://__DOMAIN__" },
-        { "name": "FX_RATE_FETCH_INTERVAL_HOURS", "value": "6" }
+        { "name": "FX_RATE_FETCH_INTERVAL_HOURS", "value": "6" },
+        { "name": "VAPID_SUBJECT", "value": "https://__DOMAIN__" }
       ],
       "secrets": [
         { "name": "JWT_SECRET", "valueFrom": "arn:aws:ssm:__REGION__:__ACCOUNT__:parameter/tyche/JWT_SECRET" },
         { "name": "GOOGLE_CLIENT_ID", "valueFrom": "arn:aws:ssm:__REGION__:__ACCOUNT__:parameter/tyche/GOOGLE_CLIENT_ID" },
         { "name": "GOOGLE_CLIENT_SECRET", "valueFrom": "arn:aws:ssm:__REGION__:__ACCOUNT__:parameter/tyche/GOOGLE_CLIENT_SECRET" },
-        { "name": "ADMIN_TENANT_IDS", "valueFrom": "arn:aws:ssm:__REGION__:__ACCOUNT__:parameter/tyche/ADMIN_TENANT_IDS" }
+        { "name": "ADMIN_TENANT_IDS", "valueFrom": "arn:aws:ssm:__REGION__:__ACCOUNT__:parameter/tyche/ADMIN_TENANT_IDS" },
+        { "name": "VAPID_PUBLIC_KEY", "valueFrom": "arn:aws:ssm:__REGION__:__ACCOUNT__:parameter/tyche/VAPID_PUBLIC_KEY" },
+        { "name": "VAPID_PRIVATE_KEY", "valueFrom": "arn:aws:ssm:__REGION__:__ACCOUNT__:parameter/tyche/VAPID_PRIVATE_KEY" }
       ],
       "mountPoints": [
         { "sourceVolume": "data", "containerPath": "/app/data" },

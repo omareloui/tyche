@@ -21,10 +21,15 @@ type Router interface {
 // encrypted databases).
 var auth, deleted, vault func(http.Handler) http.Handler
 
+// badge counts the installed apps' badge again after the requests of a
+// tenant with one (middleware.Badge), set by New.
+var badge func(http.Handler) http.Handler
+
 func New(h *handler.Handler) Router {
 	auth = middleware.Auth(h.RefreshSession)
 	deleted = middleware.Deleted(h.IsTenantDeleted, handler.SignOutDeleted)
 	vault = middleware.Vault(h.OpenVault)
+	badge = middleware.Badge(h.RefreshBadge)
 	mux := http.NewServeMux()
 
 	mux.Handle("GET /{$}", handlePub(h.HomePage))
@@ -195,6 +200,10 @@ func New(h *handler.Handler) Router {
 	mux.Handle("POST /unlock/passkey/options", handlePubJSON(h.UnlockPasskeyOptions, middleware.HTMXOnly))
 	mux.Handle("POST /unlock/passkey", handlePubJSON(h.UnlockPasskey, middleware.HTMXOnly))
 	mux.Handle("GET /settings", handle(h.Settings))
+	mux.Handle("GET /badge", handlePubJSON(h.BadgeCounts, middleware.Protected))
+	mux.Handle("GET /push/key", handlePubJSON(h.PushKey, middleware.Protected))
+	mux.Handle("PUT /push/subscription", handlePubJSON(h.Subscribe, middleware.Protected, middleware.HTMXOnly))
+	mux.Handle("DELETE /push/subscription", handlePubJSON(h.Unsubscribe, middleware.Protected, middleware.HTMXOnly))
 	mux.Handle("PUT /settings/profile", handle(h.SetProfile, middleware.HTMXOnly))
 	mux.Handle("PUT /settings/region", handle(h.SetRegionSettings, middleware.HTMXOnly))
 	mux.Handle("PUT /settings/month", handle(h.SetMonthStart, middleware.HTMXOnly))
@@ -286,6 +295,7 @@ func handlePubJSON(h handler.HandlerJSONMethod, appendMiddlewares ...(func(http.
 		handler = appendMiddlewares[i](handler)
 	}
 
+	handler = badge(handler)
 	handler = vault(handler)
 	handler = deleted(handler)
 	handler = auth(handler)
@@ -298,6 +308,7 @@ func handlePubJSON(h handler.HandlerJSONMethod, appendMiddlewares ...(func(http.
 func handleDeviceJSON(h handler.HandlerJSONMethod, verify middleware.DeviceVerifier) http.Handler {
 	var handler http.Handler = route_handler.JSONRouteHandler(h)
 
+	handler = badge(handler)
 	handler = middleware.DeviceAuth(verify)(handler)
 	handler = middleware.RequestLogger(handler)
 	handler = middleware.CorrelationID(handler)
@@ -312,6 +323,7 @@ func handlePub(h handler.HandlerMethod, appendMiddlewares ...(func(http.Handler)
 		handler = appendMiddlewares[i](handler)
 	}
 
+	handler = badge(handler)
 	handler = vault(handler)
 	handler = deleted(handler)
 	handler = auth(handler)

@@ -69,7 +69,7 @@ func TestTransferPairs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	srv := httptest.NewServer(router.New(handler.New(repo, valid.New(), sanitizer.New(), nil, sharedTemplates(t))))
+	srv := httptest.NewServer(router.New(handler.New(repo, valid.New(), sanitizer.New(), nil, sharedTemplates(t), nil)))
 	defer srv.Close()
 
 	ingest := func(body string, at time.Time) string {

@@ -340,7 +340,7 @@ func TestTxFilterToIncludesTheWholeDay(t *testing.T) {
 
 func TestDeleteTransactionsBatch(t *testing.T) {
 	repo, ctx, _ := setupTenant(t)
-	h := handler.New(repo, valid.New(), sanitizer.New(), nil, nil)
+	h := handler.New(repo, valid.New(), sanitizer.New(), nil, nil, nil)
 	bank := newTestAccount(t, repo, ctx, "Bank", "EGP", models.AccKindBankAcc, 100)
 
 	create := func(amount float64) *models.Transaction {

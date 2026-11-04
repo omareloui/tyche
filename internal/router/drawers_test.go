@@ -44,7 +44,7 @@ func TestFormDrawers(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	srv := httptest.NewServer(router.New(handler.New(repo, valid.New(), sanitizer.New(), nil, sharedTemplates(t))))
+	srv := httptest.NewServer(router.New(handler.New(repo, valid.New(), sanitizer.New(), nil, sharedTemplates(t), nil)))
 	t.Cleanup(srv.Close)
 
 	do := func(method, path string, form url.Values) (*http.Response, string) {

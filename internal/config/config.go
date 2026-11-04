@@ -67,3 +67,12 @@ func GetExtraBrandIconsDir() string {
 func GetSimpleIconsDir() string {
 	return getEnvironmentValueWithDefault("SIMPLE_ICONS_DIR", "./third_party/simple-icons")
 }
+
+// GetVAPIDKeys are the keys signing the Web Push notifications of the
+// installed apps' badge (generate with `go run ./cmd/vapid`), the subject a
+// mailto: or https: contact. Empty keys turn the badge's pushes off.
+func GetVAPIDKeys() (public, private, subject string) {
+	return getEnvironmentValueWithDefault("VAPID_PUBLIC_KEY", ""),
+		getEnvironmentValueWithDefault("VAPID_PRIVATE_KEY", ""),
+		getEnvironmentValueWithDefault("VAPID_SUBJECT", "")
+}

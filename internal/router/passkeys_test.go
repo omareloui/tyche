@@ -146,7 +146,7 @@ func TestPasskeys(t *testing.T) {
 	refresh := &http.Cookie{Name: "refresh_token", Value: pair.Refresh.Encoded}
 	tenantID := models.TenantID(usr.OAuthProvider, usr.OAuthID)
 
-	srv := httptest.NewServer(router.New(handler.New(repo, valid.New(), sanitizer.New(), nil, sharedTemplates(t))))
+	srv := httptest.NewServer(router.New(handler.New(repo, valid.New(), sanitizer.New(), nil, sharedTemplates(t), nil)))
 	t.Cleanup(srv.Close)
 	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 

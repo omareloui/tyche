@@ -122,7 +122,7 @@ func TestFixBalances(t *testing.T) {
 
 	t.Run("form", func(t *testing.T) {
 		neg, big, blank := newBank(100), newBank(100), newBank(100)
-		h := handler.New(repo, valid.New(), sanitizer.New(), nil, nil)
+		h := handler.New(repo, valid.New(), sanitizer.New(), nil, nil, nil)
 		f := url.Values{
 			"amount-" + neg.ID:   {"-1,250.50"},
 			"amount-" + big.ID:   {"12,345.6"},

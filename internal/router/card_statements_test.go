@@ -122,7 +122,7 @@ func TestCardStatement(t *testing.T) {
 
 func TestCardCycleForm(t *testing.T) {
 	repo, ctx, _ := setupTenant(t)
-	h := handler.New(repo, valid.New(), sanitizer.New(), nil, nil)
+	h := handler.New(repo, valid.New(), sanitizer.New(), nil, nil, nil)
 	card := newTestAccount(t, repo, ctx, "Visa", "EGP", models.AccKindCreditCard, 0)
 	edit := callHandler(ctx, h.EditAccount)
 

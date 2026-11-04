@@ -32,7 +32,7 @@ func TestAvatar(t *testing.T) {
 	}
 	access := &http.Cookie{Name: "access_token", Value: pair.Access.Encoded}
 
-	srv := httptest.NewServer(router.New(handler.New(repo, valid.New(), sanitizer.New(), nil, sharedTemplates(t))))
+	srv := httptest.NewServer(router.New(handler.New(repo, valid.New(), sanitizer.New(), nil, sharedTemplates(t), nil)))
 	t.Cleanup(srv.Close)
 
 	get := func(etag string) (*http.Response, []byte) {

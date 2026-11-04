@@ -13,7 +13,7 @@ import (
 
 func TestGoalDetailsURL(t *testing.T) {
 	repo, ctx, _ := setupTenant(t)
-	h := handler.New(repo, valid.New(), sanitizer.New(), nil, nil)
+	h := handler.New(repo, valid.New(), sanitizer.New(), nil, nil, nil)
 
 	egp, err := repo.GetCurrencyByString(ctx, "EGP")
 	if err != nil {
