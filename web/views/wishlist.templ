@@ -20,8 +20,10 @@ type WishlistItemFD struct {
 	Note        form.FDInput
 }
 
+// CreateWishlistItemForm is the goals page's second create form, bound to
+// openWishForm (the page's own is the goal's).
 templ CreateWishlistItemForm(fd *WishlistItemFD, curs []models.Currency, defaultCur *models.Currency) {
-	@form.SheetForm("Add to wishlist", "/wishlist", "Add", "") {
+	@form.SheetFormBound(WishFormBind, "Add to wishlist", "/wishlist", "Add", "") {
 		@wishlistItemFormBody("wl", fd, curs, defaultCur)
 	}
 }
@@ -42,6 +44,30 @@ templ EditWishlistItemForm(id string, fd *WishlistItemFD, curs []models.Currency
 		Submit: "Save changes",
 	}) {
 		@wishlistItemFormBody(id, fd, curs, defaultCur)
+	}
+}
+
+// WishGoal is the goal form saving for the wish, prefilled from it, in a
+// drawer.
+templ WishGoal(item *models.WishlistItem, fd *GoalFD, curs []models.Currency, defaultCur *models.Currency) {
+	@components.Drawer(components.DrawerProps{Label: "Save for " + item.Name}) {
+		@WishGoalForm(item, fd, curs, defaultCur)
+	}
+}
+
+// WishGoalForm is WishGoal's form alone, answered with its errors.
+templ WishGoalForm(item *models.WishlistItem, fd *GoalFD, curs []models.Currency, defaultCur *models.Currency) {
+	@form.DrawerForm(form.DrawerFormProps{
+		Title: "Save for it", Method: "post", URL: fmt.Sprintf("/wishlist/%s/goal", item.ID),
+		Submit: "Create goal", Class: "[--accent:var(--color-violet-400)]",
+	}) {
+		<p class="text-sm text-zinc-500">
+			A goal puts money aside for it. Buying the goal marks the wish bought, deleting it lets the wish go.
+			if item.IsInstallments() {
+				Its installment plan becomes the goal's plan next.
+			}
+		</p>
+		@goalFormBody("wish-"+item.ID, fd, curs, defaultCur)
 	}
 }
 
@@ -84,6 +110,9 @@ templ Wishlist(items []models.WishlistItem, ws *models.WorkSettings, defaultCur 
 				<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
 					@icons.Hourglass("16")
 					Wishlist
+					<button type="button" @click="openWishForm=true" aria-label="Add a wish" title="Add a wish" class="grid place-items-center size-6 rounded-full text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/50">
+						@icons.Plus("14")
+					</button>
 				</h2>
 				if s.Bought+s.Abandoned > 0 {
 					<p class="mt-1 text-sm text-zinc-500 tabular-nums">
@@ -94,8 +123,21 @@ templ Wishlist(items []models.WishlistItem, ws *models.WorkSettings, defaultCur 
 					</p>
 				}
 			</div>
-			<div class="flex gap-2">
+			<div class="flex flex-wrap items-center gap-2">
+				<button
+					hx-get={ AffordURL("") }
+					hx-target={ "#" + components.DrawerSlot }
+					hx-swap="innerHTML"
+					data-opens-drawer
+					class="wl-action"
+				>
+					@icons.Scale("14")
+					Can I afford it?
+				</button>
 				@statTile(strconv.Itoa(s.Waiting), "Waiting", "text-zinc-100")
+				if s.Saving > 0 {
+					@statTile(strconv.Itoa(s.Saving), "Saving", "text-violet-400")
+				}
 				@statTile(strconv.Itoa(s.Bought), "Bought", "text-sky-400")
 				@statTile(strconv.Itoa(s.Abandoned), "Let go", "text-emerald-400")
 			</div>
@@ -107,13 +149,9 @@ templ Wishlist(items []models.WishlistItem, ws *models.WorkSettings, defaultCur 
 			@wishlistGroup("Cooling off", icons.Hourglass("16"), cooling, ws)
 		}
 		if len(ready)+len(cooling) == 0 {
-			<div class="grid place-items-center gap-3 py-12 text-center">
-				<div class="grid place-items-center w-16 h-16 rounded-2xl bg-sky-400/15 text-sky-400">
-					@icons.Hourglass("30")
-				</div>
-				<p class="mt-2 text-xl font-semibold">Nothing on your wishlist</p>
-				<p class="max-w-sm text-zinc-500">Want something? Add it and wait a week or a month. If you still want it then, buy it.</p>
-				<button type="button" @click="openCreateForm=true" class="btn-primary mt-2">
+			<div class="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl border border-dashed border-zinc-800">
+				<p class="max-w-md text-sm text-zinc-500">Want something? Add it and wait a week or a month. If you still want it then, buy it or save for it.</p>
+				<button type="button" @click="openWishForm=true" class="btn-primary">
 					@icons.Plus("18")
 					Add a wish
 				</button>
@@ -213,9 +251,10 @@ templ WishlistItem(item *models.WishlistItem, ws *models.WorkSettings) {
 					}
 					<div class="flex flex-wrap gap-2 mt-auto">
 						<button
-							hx-get={ fmt.Sprintf("/decide/afford?wishlist_id=%s", item.ID) }
-							hx-target="#afford"
-							hx-swap="outerHTML show:#afford:top"
+							hx-get={ AffordURL(item.ID) }
+							hx-target={ "#" + components.DrawerSlot }
+							hx-swap="innerHTML"
+							data-opens-drawer
 							class="wl-action"
 						>
 							@icons.Scale("14")
@@ -223,7 +262,7 @@ templ WishlistItem(item *models.WishlistItem, ws *models.WorkSettings) {
 						</button>
 						<button
 							hx-get={ fmt.Sprintf("/wishlist/%s/buy", item.ID) }
-							hx-target="#decide-sheet"
+							hx-target={ "#" + WishSheetID }
 							hx-swap="innerHTML"
 							if !ready {
 								hx-confirm="Buy it anyway? It's still cooling off."
@@ -234,10 +273,38 @@ templ WishlistItem(item *models.WishlistItem, ws *models.WorkSettings) {
 							@icons.Check("14")
 							Buy
 						</button>
+						<button
+							hx-get={ fmt.Sprintf("/wishlist/%s/goal", item.ID) }
+							hx-target={ "#" + components.DrawerSlot }
+							hx-swap="innerHTML"
+							data-opens-drawer
+							class="wl-action"
+						>
+							@icons.Target("14")
+							Save for it
+						</button>
 						<button hx-put={ fmt.Sprintf("/wishlist/%s/abandon", item.ID) } class="wl-action">
 							@icons.Ban("14")
 							Let it go
 						</button>
+					</div>
+				case models.WishlistSaving:
+					<div class="flex flex-wrap items-center justify-between gap-2 mt-auto">
+						<p class="flex items-center gap-1.5 text-sm text-(--accent)">
+							@icons.Target("14")
+							Saving for it since { goalDay(item.DecidedAt) }
+						</p>
+						if item.GoalID != "" {
+							<button
+								hx-get={ goalDetailsURLOf(item.GoalID) }
+								hx-target={ "#" + components.DrawerSlot }
+								hx-swap="innerHTML"
+								data-opens-drawer
+								class="wl-action"
+							>
+								Open goal
+							</button>
+						}
 					</div>
 				case models.WishlistBought:
 					<p class="flex items-center gap-1.5 mt-auto text-sm text-(--accent)">
@@ -293,6 +360,8 @@ func wishlistAccentClass(item *models.WishlistItem, ready bool) string {
 		return "[--accent:var(--color-sky-400)]"
 	case item.Status == models.WishlistAbandoned:
 		return "[--accent:var(--color-emerald-400)]"
+	case item.Status == models.WishlistSaving:
+		return "[--accent:var(--color-violet-400)]"
 	case ready:
 		return "[--accent:var(--color-amber-300)]"
 	}
@@ -301,9 +370,16 @@ func wishlistAccentClass(item *models.WishlistItem, ready bool) string {
 
 func wishlistMenuItems(item *models.WishlistItem) []templ.Component {
 	items := []templ.Component{}
-	if item.Status == models.WishlistWaiting {
+	switch item.Status {
+	case models.WishlistWaiting:
 		items = append(items, wishlistEditMenuItem(item.ID))
-	} else {
+	case models.WishlistSaving:
+		// Its goal decides it.
+		if item.GoalID != "" {
+			items = append(items, components.EntryMenuDrawerItem("Open goal", goalDetailsURLOf(item.GoalID),
+				components.WithEntryMenuItemIcon(icons.Target("16"))))
+		}
+	default:
 		items = append(items, components.EntryMenuAnchorItem("Back to waiting", "put", fmt.Sprintf("/wishlist/%s/restore", item.ID),
 			components.WithEntryMenuItemIcon(icons.RotateCcw("16"))))
 	}
@@ -319,3 +395,9 @@ func wishlistEditMenuItem(id string) templ.Component {
 	return components.EntryMenuEditItem(fmt.Sprintf("/wishlist/%s/edit", id),
 		components.WithEntryMenuItemAttrs(templ.Attributes{"hx-target": "#" + WishlistItemID(id)}))
 }
+
+// WishSheetID holds the transaction form buying a wish.
+const WishSheetID = "wish-sheet"
+
+// WishFormBind is the Alpine variable opening the wish create form.
+const WishFormBind = "openWishForm"

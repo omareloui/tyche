@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 
 	"github.com/omareloui/tyche/internal/dbtypes"
 	"github.com/omareloui/tyche/internal/logger"
@@ -40,6 +41,23 @@ func (r *Repository) GetWishlistItem(ctx context.Context, id string) (*models.Wi
 	}
 
 	row, err := q.GetWishlistItem(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return dbWishlistItemToWishlistItem(&row.WishlistItem, &row.Currency), nil
+}
+
+// GetWishlistItemByGoal is the wish the goal saves for, nil when none.
+func (r *Repository) GetWishlistItemByGoal(ctx context.Context, goalID string) (*models.WishlistItem, error) {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	row, err := q.GetWishlistItemByGoal(ctx, sql.NullString{String: goalID, Valid: true})
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -140,6 +158,7 @@ func dbWishlistItemToWishlistItem(w *queries.WishlistItem, cur *queries.Currency
 		Status:        models.WishlistStatus(w.Status),
 		DecidedAt:     w.DecidedAt.Time,
 		TransactionID: w.TransactionID.String,
+		GoalID:        w.GoalID.String,
 		CreatedAt:     w.CreatedAt,
 	}
 }
@@ -174,6 +193,20 @@ func wishlistPlanFromDB(w *queries.WishlistItem) *models.InstallmentPlan {
 	}
 	if w.Installments > 0 {
 		return &models.InstallmentPlan{Months: int(w.Installments), Amount: w.InstallmentAmount}
+	}
+	return nil
+}
+
+// setWishlistItemStatusByGoalWithTxn decides the wish the goal saves for, if
+// any, linking the transaction it was bought with.
+func setWishlistItemStatusByGoalWithTxn(ctx context.Context, qtx *queries.Queries, goalID string, status models.WishlistStatus, txID string) error {
+	if err := qtx.SetWishlistItemStatusByGoal(ctx, queries.SetWishlistItemStatusByGoalParams{
+		GoalID:        sql.NullString{String: goalID, Valid: true},
+		Status:        int64(status),
+		TransactionID: sql.NullString{String: txID, Valid: txID != ""},
+	}); err != nil {
+		logger.FromCtx(ctx).Error("deciding the goal's wish", zap.String("goal", goalID), zap.Error(err))
+		return err
 	}
 	return nil
 }

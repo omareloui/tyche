@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 
 	"github.com/omareloui/tyche/internal/logger"
@@ -20,6 +21,10 @@ func (r *Repository) GetWorkSettings(ctx context.Context) (*models.WorkSettings,
 	}
 
 	row, err := q.GetWorkSettings(ctx)
+	// No user row yet (e.g. a tenant in tests): nothing set.
+	if errors.Is(err, sql.ErrNoRows) {
+		return &models.WorkSettings{}, nil
+	}
 	if err != nil {
 		l.Error("fetching work settings", zap.Error(err))
 		return nil, err

@@ -22,16 +22,31 @@ type GoalFD struct {
 	AmountFD *form.AmountFD
 }
 
+// GoalsWishes is the goals page's wishlist: the wishes, the work settings
+// pricing them in hours and the wish create form.
+type GoalsWishes struct {
+	Items []models.WishlistItem
+	Work  *models.WorkSettings
+	FD    *WishlistItemFD
+}
+
+// Goals is the page of what's wanted: the wishlist (deciding whether to buy
+// something, or to save for it), then the goals saving for things.
 templ Goals(
 	claims *jwt.AccessClaims,
 	balances []models.Balance,
 	fd *GoalFD, goals []models.Goal,
 	plans map[string]*GoalPlanCard,
 	curs []models.Currency,
+	wishes GoalsWishes,
 	openID string) {
 	@layouts.WithCreateForm(claims, "Goals", balances,
 		CreateGoalForm(fd, curs, &claims.DefaultCurrency)) {
-		@goalsList(goals, plans, &claims.DefaultCurrency)
+		<div x-data={ fmt.Sprintf("{%s:false}", WishFormBind) }>
+			@goalsList(goals, plans, &claims.DefaultCurrency, Wishlist(wishes.Items, wishes.Work, &claims.DefaultCurrency, false))
+			@CreateWishlistItemForm(wishes.FD, curs, &claims.DefaultCurrency)
+		</div>
+		<div id={ WishSheetID }></div>
 		if openID != "" {
 			@components.DrawerOnLoad(goalDetailsURLOf(openID))
 		}
@@ -446,9 +461,10 @@ templ goalBuyHeader(gl *models.Goal) {
 	</div>
 }
 
-templ goalsList(goals []models.Goal, plans map[string]*GoalPlanCard, defaultCur *models.Currency) {
+templ goalsList(goals []models.Goal, plans map[string]*GoalPlanCard, defaultCur *models.Currency, wishes templ.Component) {
 	<div id="goals-list" class="grid grid-cols-1 gap-8">
 		@goalsSummary(goals, defaultCur, false)
+		@wishes
 		<section class="hidden has-[[data-goal]]:block">
 			<h2 class="flex items-center gap-2 mb-3 text-sm font-semibold uppercase tracking-wider text-zinc-500">
 				@icons.Target("16")

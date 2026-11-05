@@ -5,11 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
-	"github.com/omareloui/tyche/web/views/layouts"
+	"github.com/omareloui/tyche/web/views/components"
 )
 
 const (
@@ -29,60 +28,52 @@ type WorkSettingsFD struct {
 	HoursPerWeek form.FDInput
 }
 
-templ Decide(
-	claims *jwt.AccessClaims,
-	balances []models.Balance,
-	curs []models.Currency,
-	ws *models.WorkSettings,
-	items []models.WishlistItem,
-	wlFD *WishlistItemFD,
-	pfd *PurchaseFD) {
-	@layouts.WithCreateForm(claims, "Decide", balances,
-		CreateWishlistItemForm(wlFD, curs, &claims.DefaultCurrency)) {
-		<div class="grid gap-8">
-			<div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] items-start">
-				@AffordSection(pfd, "", curs, &claims.DefaultCurrency, AffordResult(nil, nil))
-				@WorkSettingsSummary(ws)
-			</div>
-			@Wishlist(items, ws, &claims.DefaultCurrency, false)
-		</div>
-		<div id="decide-sheet"></div>
+// AffordURL opens the "Can I afford it?" drawer, prefilled from the wish
+// itemID, if any.
+func AffordURL(itemID string) string {
+	if itemID == "" {
+		return "/decide/afford"
 	}
+	return "/decide/afford?wishlist_id=" + itemID
 }
 
-// AffordSection is the "Can I afford it?" calculator, checking the purchase
-// as it's typed.
-templ AffordSection(fd *PurchaseFD, name string, curs []models.Currency, defaultCur *models.Currency, result templ.Component) {
-	<section
-		id="afford"
-		class="relative min-w-0 overflow-hidden grid gap-5 p-5 sm:p-6 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800 [--accent:var(--color-sky-400)]"
-	>
-		<div aria-hidden="true" class="pointer-events-none absolute -top-24 -right-16 size-64 rounded-full bg-(--accent)/10 blur-3xl"></div>
-		<header class="relative min-w-0">
-			<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-(--accent)">
-				@icons.Scale("14")
-				Can I afford it?
-			</p>
-			if name != "" {
-				<h2 title={ name } class="mt-1 text-2xl font-bold font-(family-name:--font-biorhyme-expanded) break-words line-clamp-2">{ name }</h2>
-			} else {
-				<p class="mt-1 text-sm text-zinc-500">Enter a price to see what it does to your balance and goals.</p>
-			}
-		</header>
-		<form
-			hx-post="/decide/afford"
-			hx-trigger="input delay:400ms, change"
-			hx-target="#afford-result"
-			hx-swap="innerHTML"
-			class="relative grid gap-4"
-			@submit.prevent
-		>
-			@purchaseInputs(fd, "afford", curs, defaultCur, false)
-		</form>
-		<div id="afford-result" class="relative">
-			@result
+// AffordDrawer is the "Can I afford it?" calculator, in a drawer, checking
+// the purchase as it's typed, with the cost in work hours.
+templ AffordDrawer(fd *PurchaseFD, name string, curs []models.Currency, defaultCur *models.Currency, ws *models.WorkSettings, result templ.Component) {
+	@components.Drawer(components.DrawerProps{Label: "Can I afford it?"}) {
+		<div class="drawer-panel flex flex-col flex-1 min-h-0 [--accent:var(--color-sky-400)]">
+			<header class="flex items-start gap-3 px-5 sm:px-6 pt-5 pb-4">
+				<div class="flex-1 min-w-0">
+					<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-(--accent)">
+						@icons.Scale("14")
+						Can I afford it?
+					</p>
+					if name != "" {
+						<h2 title={ name } class="mt-1 text-lg font-bold leading-snug break-words line-clamp-2">{ name }</h2>
+					} else {
+						<p class="mt-1 text-sm text-zinc-500">Enter a price to see what it does to your balance and goals.</p>
+					}
+				</div>
+				@components.DrawerClose()
+			</header>
+			<div id="afford" class="flex-1 grid grid-cols-1 auto-rows-max content-start gap-5 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
+				<form
+					hx-post="/decide/afford"
+					hx-trigger="input delay:400ms, change"
+					hx-target="#afford-result"
+					hx-swap="innerHTML"
+					class="grid gap-4"
+					@submit.prevent
+				>
+					@purchaseInputs(fd, "afford", curs, defaultCur, false)
+				</form>
+				<div id="afford-result">
+					@result
+				</div>
+				@WorkSettingsSummary(ws)
+			</div>
 		</div>
-	</section>
+	}
 }
 
 // purchaseInputs are a price, its currency and how it's paid: cash, or by

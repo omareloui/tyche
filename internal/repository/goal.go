@@ -82,30 +82,52 @@ func (r *Repository) GetGoal(ctx context.Context, id string) (*models.Goal, erro
 
 // CreateGoal creates the goal with its account, holding the money saved.
 func (r *Repository) CreateGoal(ctx context.Context, gl *models.Goal) error {
-	l := logger.FromCtx(ctx)
 	return r.transact(ctx, func(qtx *queries.Queries) error {
-		kindID, err := qtx.GetAccountKindID(ctx, int64(models.AccKindGoal))
-		if err != nil {
-			l.Error("getting the goal account kind", zap.Error(err))
-			return err
-		}
-		accID, err := createGoalAccountWithTxn(ctx, qtx, kindID, models.GoalAccountName(gl.Name), gl.Currency.ID)
-		if err != nil {
-			return err
-		}
-		gl.Account = &models.Account{ID: accID, Currency: gl.Currency}
-		if err := qtx.CreateGoal(ctx, queries.CreateGoalParams{
-			ID:         gl.ID,
-			Name:       gl.Name,
-			Price:      gl.Price,
-			CurrencyID: gl.Currency.ID,
-			AccountID:  sql.NullString{String: accID, Valid: true},
-		}); err != nil {
-			l.Error("creating goal", zap.Error(err))
-			return err
-		}
-		return setAccountGoalWithTxn(ctx, qtx, accID, gl.ID)
+		return createGoalWithTxn(ctx, qtx, gl)
 	})
+}
+
+// CreateGoalFromWish creates the goal saving for the wishlist item, the
+// item then saved for (models.WishlistSaving) until the goal decides it.
+func (r *Repository) CreateGoalFromWish(ctx context.Context, gl *models.Goal, itemID string) error {
+	return r.transact(ctx, func(qtx *queries.Queries) error {
+		if err := createGoalWithTxn(ctx, qtx, gl); err != nil {
+			return err
+		}
+		if err := qtx.LinkWishlistItemToGoal(ctx, queries.LinkWishlistItemToGoalParams{
+			ID:     itemID,
+			GoalID: sql.NullString{String: gl.ID, Valid: true},
+		}); err != nil {
+			logger.FromCtx(ctx).Error("linking wish to goal", zap.Error(err), zap.String("wish", itemID))
+			return err
+		}
+		return nil
+	})
+}
+
+func createGoalWithTxn(ctx context.Context, qtx *queries.Queries, gl *models.Goal) error {
+	l := logger.FromCtx(ctx)
+	kindID, err := qtx.GetAccountKindID(ctx, int64(models.AccKindGoal))
+	if err != nil {
+		l.Error("getting the goal account kind", zap.Error(err))
+		return err
+	}
+	accID, err := createGoalAccountWithTxn(ctx, qtx, kindID, models.GoalAccountName(gl.Name), gl.Currency.ID)
+	if err != nil {
+		return err
+	}
+	gl.Account = &models.Account{ID: accID, Currency: gl.Currency}
+	if err := qtx.CreateGoal(ctx, queries.CreateGoalParams{
+		ID:         gl.ID,
+		Name:       gl.Name,
+		Price:      gl.Price,
+		CurrencyID: gl.Currency.ID,
+		AccountID:  sql.NullString{String: accID, Valid: true},
+	}); err != nil {
+		l.Error("creating goal", zap.Error(err))
+		return err
+	}
+	return setAccountGoalWithTxn(ctx, qtx, accID, gl.ID)
 }
 
 func setAccountGoalWithTxn(ctx context.Context, qtx *queries.Queries, accID, goalID string) error {
@@ -294,6 +316,17 @@ func (r *Repository) FulfillGoal(ctx context.Context, gl *models.Goal, conversio
 			l.Error("fulfilling goal", zap.Error(err))
 			return err
 		}
+		// The wish it saved for is bought, with the purchase (or the loan's
+		// first payment, with nothing down).
+		txID := ""
+		if purchase != nil {
+			txID = purchase.ID
+		} else if len(loanTxs) > 0 {
+			txID = loanTxs[0].ID
+		}
+		if err := setWishlistItemStatusByGoalWithTxn(ctx, qtx, id, models.WishlistBought, txID); err != nil {
+			return err
+		}
 		l.Debug("fulfilled goal", zap.String("id", id))
 		return nil
 	})
@@ -355,6 +388,9 @@ func (r *Repository) UnfulfillGoal(ctx context.Context, gl *models.Goal) error {
 			l.Error("unfulfilling goal", zap.Error(err))
 			return err
 		}
+		if err := setWishlistItemStatusByGoalWithTxn(ctx, qtx, id, models.WishlistSaving, ""); err != nil {
+			return err
+		}
 		l.Debug("unfulfilled goal", zap.String("id", id))
 		return nil
 	})
@@ -370,6 +406,11 @@ func (r *Repository) DeleteGoal(ctx context.Context, gl *models.Goal, withdraws 
 			if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, &withdraws[i]); err != nil {
 				return err
 			}
+		}
+		// Given up on: the wish it saved for is let go (its goal_id then
+		// cleared by the foreign key).
+		if err := setWishlistItemStatusByGoalWithTxn(ctx, qtx, gl.ID, models.WishlistAbandoned, ""); err != nil {
+			return err
 		}
 		if err := qtx.DeleteGoal(ctx, gl.ID); err != nil {
 			l.Error("deleting goal", zap.Error(err))

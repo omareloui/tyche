@@ -175,11 +175,19 @@ templ SelectAccountChip(label, name, id string, accs []models.Account, data FDIn
 // again (fresh after creating), of which only the form is swapped in; a
 // created one also closes the drawer (HX-Trigger drawer-saved).
 templ SheetForm(title, postTo, submitStr, class string, attrs ...templ.Attributes) {
+	@SheetFormBound("openCreateForm", title, postTo, submitStr, class, attrs...) {
+		{ children... }
+	}
+}
+
+// SheetFormBound is a SheetForm shown by bind instead of openCreateForm, for
+// a page's second create form.
+templ SheetFormBound(bind, title, postTo, submitStr, class string, attrs ...templ.Attributes) {
 	{{ var a templ.Attributes }}
 	if len(attrs) > 0 {
 		{{ a = attrs[0] }}
 	}
-	@components.Drawer(components.DrawerProps{Label: title, Bind: "openCreateForm"}) {
+	@components.Drawer(components.DrawerProps{Label: title, Bind: bind}) {
 		@DrawerForm(DrawerFormProps{
 			Title: title, Method: "post", URL: postTo, Submit: submitStr,
 			Select: true, Class: class, Attrs: a,

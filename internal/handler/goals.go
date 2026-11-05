@@ -49,11 +49,25 @@ func (h Handler) Goals(w http.ResponseWriter, r *http.Request) (templ.Component,
 		return nil, err
 	}
 
+	items, err := h.repo.GetWishlistItems(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	ws, err := h.repo.GetWorkSettings(r.Context())
+	if err != nil {
+		return nil, err
+	}
+
 	claims := getClaims(r.Context())
 	// ?goal= opens the goal's details, e.g. when reloading the page.
 	openID := r.URL.Query().Get(views.GoalDetailsParam)
 
-	return views.Goals(claims, b, h.mapGlToFD(dfltGoal(&claims.DefaultCurrency), &errs.ValidationError{}), gls, cards, curs, openID), nil
+	wishes := views.GoalsWishes{
+		Items: items,
+		Work:  ws,
+		FD:    mapWishlistItemToFD(dfltWishlistItem(&claims.DefaultCurrency), &errs.ValidationError{}),
+	}
+	return views.Goals(claims, b, h.mapGlToFD(dfltGoal(&claims.DefaultCurrency), &errs.ValidationError{}), gls, cards, curs, wishes, openID), nil
 }
 
 func (h Handler) Goal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

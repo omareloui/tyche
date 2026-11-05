@@ -12,8 +12,10 @@ import (
 	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/resperr"
 	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views"
+	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
 	"go.uber.org/zap"
 )
@@ -224,6 +226,107 @@ func (h Handler) BuyWishlistItem(w http.ResponseWriter, r *http.Request) (templ.
 
 	claims := getClaims(r.Context())
 	return views.WishlistBuySheet(views.CreateTransactionForm(fd, accs, knds, cats, cps, &claims.DefaultCurrency)), nil
+}
+
+// GetWishGoal is the goal form saving for a waiting wish, prefilled from it.
+func (h Handler) GetWishGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	item, err := h.waitingWish(r)
+	if err != nil {
+		return nil, err
+	}
+	curs, err := h.repo.GetCurrencies(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	gl := &models.Goal{Name: item.Name, Price: item.Price, Currency: item.Currency}
+	claims := getClaims(r.Context())
+	return views.WishGoal(item, h.mapGlToFD(gl, &errs.ValidationError{}), curs, &claims.DefaultCurrency), nil
+}
+
+// SaveWishForGoal creates the goal saving for the wish. A wish paid in
+// installments goes on to the goal's plan, its loan prefilled.
+func (h Handler) SaveWishForGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	l := logger.FromCtx(r.Context())
+
+	item, err := h.waitingWish(r)
+	if err != nil {
+		return nil, err
+	}
+	gl, err := h.mapFDToGoal(r)
+	if err != nil {
+		return nil, err
+	}
+	gl.ID = idgen.New()
+	gl.CreatedAt = time.Now()
+
+	renderForm := func(valerr *errs.ValidationError) (templ.Component, error) {
+		curs, err := h.repo.GetCurrencies(r.Context())
+		if err != nil {
+			return nil, err
+		}
+		claims := getClaims(r.Context())
+		return views.WishGoalForm(item, h.mapGlToFD(gl, valerr), curs, &claims.DefaultCurrency), nil
+	}
+	if err := gl.SanitizeAndValidate(h.sani, h.valid); err != nil {
+		var valerr errs.ValidationError
+		if errors.As(err, &valerr) {
+			return renderForm(&valerr)
+		}
+		return nil, err
+	}
+	if err := h.repo.CreateGoalFromWish(r.Context(), gl, item.ID); err != nil {
+		var valerr *errs.ValidationError
+		if errors.As(err, &valerr) {
+			return renderForm(valerr)
+		}
+		l.Error("creating goal from wish", zap.Error(err), zap.String("wish", item.ID))
+		return nil, err
+	}
+	l.Info("created goal from wish", zap.String("goal", gl.ID), zap.String("wish", item.ID))
+
+	if gl, err = h.repo.GetGoal(r.Context(), gl.ID); err != nil {
+		return nil, err
+	}
+	if err := renderToBody(w, r, views.GoalOOB(gl, nil)); err != nil {
+		return nil, err
+	}
+	if err := h.renderGoalsSummaryOOB(w, r); err != nil {
+		return nil, err
+	}
+
+	if item.Plan == nil {
+		drawerSaved(w, "#wishlist", "outerHTML")
+		return h.wishlist(r, false)
+	}
+	list, err := h.wishlist(r, true)
+	if err != nil {
+		return nil, err
+	}
+	if err := renderToBody(w, r, list); err != nil {
+		return nil, err
+	}
+	// The plan's drawer in place of this one.
+	w.Header().Set("HX-Retarget", "#"+components.DrawerSlot)
+	w.Header().Set("HX-Reswap", "innerHTML")
+	r.SetPathValue("id", gl.ID)
+	return h.GetGoalPlanForm(w, r)
+}
+
+// waitingWish is the request's wish, only while waiting (a decided one is
+// a 409).
+func (h Handler) waitingWish(r *http.Request) (*models.WishlistItem, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+	item, err := h.repo.GetWishlistItem(r.Context(), id)
+	if err != nil {
+		return nil, err
+	}
+	if item.Status != models.WishlistWaiting {
+		return nil, resperr.New(http.StatusConflict, "This wish is already decided.")
+	}
+	return item, nil
 }
 
 // wishlistFxRate converts the item's amounts to the account's currency,

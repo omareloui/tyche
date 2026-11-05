@@ -136,8 +136,9 @@ func New(h *handler.Handler) Router {
 	mux.Handle("DELETE /goals/{id}/plan", handle(h.DeleteGoalPlan))
 	mux.Handle("DELETE /goals/{id}", handle(h.DeleteGoal))
 
-	mux.Handle("GET /decide", handle(h.Decide))
-	mux.Handle("GET /decide/afford", handle(h.AffordSection))
+	// The wishlist moved to the goals page.
+	mux.Handle("GET /decide", http.RedirectHandler("/goals", http.StatusFound))
+	mux.Handle("GET /decide/afford", handle(h.AffordDrawer))
 	mux.Handle("POST /decide/afford", handle(h.Afford))
 	mux.Handle("POST /decide/plan-preview", handle(h.PlanPreview))
 
@@ -147,6 +148,8 @@ func New(h *handler.Handler) Router {
 	mux.Handle("PUT /wishlist/{id}/abandon", handle(h.AbandonWishlistItem))
 	mux.Handle("PUT /wishlist/{id}/restore", handle(h.RestoreWishlistItem))
 	mux.Handle("GET /wishlist/{id}/buy", handle(h.BuyWishlistItem))
+	mux.Handle("GET /wishlist/{id}/goal", handle(h.GetWishGoal))
+	mux.Handle("POST /wishlist/{id}/goal", handle(h.SaveWishForGoal))
 	mux.Handle("DELETE /wishlist/{id}", handle(h.DeleteWishlistItem))
 
 	mux.Handle("GET /counterparties", handle(h.Counterparties))

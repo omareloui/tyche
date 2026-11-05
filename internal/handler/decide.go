@@ -6,44 +6,11 @@ import (
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/errs"
-	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views"
 	"github.com/omareloui/tyche/web/views/form"
-	"go.uber.org/zap"
 )
-
-func (h Handler) Decide(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	l := logger.FromCtx(r.Context())
-
-	balances, err := h.repo.GetBalances(r.Context())
-	if err != nil {
-		l.Error("fetching balances", zap.Error(err))
-		return nil, err
-	}
-
-	curs, err := h.repo.GetCurrencies(r.Context())
-	if err != nil {
-		l.Error("fetching currencies", zap.Error(err))
-		return nil, err
-	}
-
-	ws, err := h.repo.GetWorkSettings(r.Context())
-	if err != nil {
-		return nil, err
-	}
-
-	items, err := h.repo.GetWishlistItems(r.Context())
-	if err != nil {
-		return nil, err
-	}
-
-	claims := getClaims(r.Context())
-	return views.Decide(claims, balances, curs, ws, items,
-		mapWishlistItemToFD(dfltWishlistItem(&claims.DefaultCurrency), &errs.ValidationError{}),
-		mapPurchaseToFD(&models.Purchase{Currency: claims.DefaultCurrency}, nil)), nil
-}
 
 // Afford checks a purchase from the afford form.
 func (h Handler) Afford(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -126,9 +93,9 @@ func planProblem(ve errs.ValidationErrors) string {
 	return ""
 }
 
-// AffordSection renders the afford form, prefilled from a wishlist item if
+// AffordDrawer renders the afford drawer, prefilled from a wishlist item if
 // asked, with its result.
-func (h Handler) AffordSection(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+func (h Handler) AffordDrawer(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	curs, err := h.repo.GetCurrencies(r.Context())
 	if err != nil {
 		return nil, err
@@ -152,7 +119,11 @@ func (h Handler) AffordSection(w http.ResponseWriter, r *http.Request) (templ.Co
 	if err != nil {
 		return nil, err
 	}
-	return views.AffordSection(mapPurchaseToFD(p, nil), name, curs, &claims.DefaultCurrency, result), nil
+	ws, err := h.repo.GetWorkSettings(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	return views.AffordDrawer(mapPurchaseToFD(p, nil), name, curs, &claims.DefaultCurrency, ws, result), nil
 }
 
 func (h Handler) affordResult(r *http.Request, p *models.Purchase) (templ.Component, error) {

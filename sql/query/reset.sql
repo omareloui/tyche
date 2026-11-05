@@ -16,6 +16,12 @@ DELETE FROM sms_templates;
 -- name: ResetDeleteGoals :exec
 DELETE FROM goals;
 
+-- The wishes saved for by the goals are waiting again (their goal_id is
+-- cleared by the foreign key).
+-- name: ResetWishlistSaving :exec
+UPDATE wishlist_items SET status = 0, decided_at = NULL
+WHERE status = 3; -- models.WishlistSaving
+
 -- Goals' accounts, deleted goals' ones included. Their transactions are
 -- reset too (ResetGoals requires it).
 -- name: ResetDeleteGoalAccounts :exec

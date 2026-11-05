@@ -15,6 +15,9 @@ const (
 	WishlistWaiting WishlistStatus = iota
 	WishlistBought
 	WishlistAbandoned
+	// WishlistSaving is saved for by a goal (GoalID), which decides it once
+	// bought or deleted.
+	WishlistSaving
 )
 
 // WishlistCoolingDays are the cooling-off periods to pick from.
@@ -35,7 +38,9 @@ type WishlistItem struct {
 	Status        WishlistStatus
 	DecidedAt     time.Time
 	TransactionID string
-	CreatedAt     time.Time
+	// GoalID is the goal saving for it, while WishlistSaving.
+	GoalID    string
+	CreatedAt time.Time
 }
 
 type createWishlistItem struct {
@@ -155,8 +160,8 @@ func (w *WishlistItem) ViewPlan() string {
 // WishlistStats sums up the decided items, with what abandoning saved in the
 // given currency.
 type WishlistStats struct {
-	Waiting, Bought, Abandoned int
-	Saved                      float64
+	Waiting, Saving, Bought, Abandoned int
+	Saved                              float64
 }
 
 // AbandonRate is the share of decided items that were abandoned, 0 to 100.
@@ -174,6 +179,8 @@ func SummarizeWishlist(items []WishlistItem, cur *Currency) WishlistStats {
 		switch w.Status {
 		case WishlistWaiting:
 			s.Waiting++
+		case WishlistSaving:
+			s.Saving++
 		case WishlistBought:
 			s.Bought++
 		case WishlistAbandoned:

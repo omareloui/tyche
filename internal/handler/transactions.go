@@ -259,7 +259,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		if err := h.repo.SetWishlistItemStatus(r.Context(), wishlistID, models.WishlistBought, tx.ID); err != nil {
 			return nil, err
 		}
-		hxRespondWithRedirect(w, "/decide")
+		hxRespondWithRedirect(w, "/goals")
 		return nil, nil
 	}
 

@@ -50,6 +50,12 @@ func (h Handler) GetGoalPlanForm(w http.ResponseWriter, r *http.Request) (templ.
 	plan := &models.GoalPlan{Monthly: money.Free()}
 	if gl.Plan != nil {
 		*plan = *gl.Plan
+	} else if item, err := h.repo.GetWishlistItemByGoal(r.Context(), gl.ID); err != nil {
+		return nil, err
+	} else if item != nil && item.Plan != nil {
+		// Saving for a wish paid in installments: its plan's loan.
+		loan := *item.Plan
+		plan.Mode, plan.Loan = models.GoalPlanInstallments, &loan
 	}
 	if plan.Loan == nil {
 		// A fifth down, to start from the usual bank loan.
