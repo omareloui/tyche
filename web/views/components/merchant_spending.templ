@@ -2,6 +2,7 @@ package components
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/omareloui/tyche/internal/formatters"
@@ -9,18 +10,16 @@ import (
 	"github.com/omareloui/tyche/web/views/icons"
 )
 
-// MerchantSpendingChart is a lollipop chart of a month's expenses per merchant,
-// most expensive first, scrolling horizontally when they don't fit.
+// MerchantSpendingChart is a month's expenses per merchant as a ranked list
+// of bars, most expensive first: the top ones, the rest behind "Show more".
+// Each row opens the merchant's transactions of the month.
 templ MerchantSpendingChart(ms *models.MerchantSpending) {
 	<div id="merchant-spending">
-		@GlassCard("p-5 sm:p-6", "bg-fuchsia-400/8") {
-			<div class="flex items-center justify-between gap-4 mb-2">
+		@GlassCard("grid content-start gap-4 p-5 sm:p-6", "bg-fuchsia-400/8") {
+			<div class="flex items-center justify-between gap-4">
 				<h2 class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-fuchsia-300">
 					@icons.Tag("14")
-					Expenses by merchant
-					if ms.Currency.Symbol != "" {
-						<span class="font-normal normal-case tracking-normal text-zinc-500">({ ms.Currency.Symbol })</span>
-					}
+					By merchant
 				</h2>
 				<div class="flex items-center gap-1 rounded-full bg-zinc-900/60 ring-1 ring-zinc-800 px-2 py-1 shrink-0">
 					@monthNavButton(ms.Prev, "Previous month", "M3.828 7l4.95 4.95-1.414 1.414L1 7 7.364.636 8.778 2.05z")
@@ -29,59 +28,84 @@ templ MerchantSpendingChart(ms *models.MerchantSpending) {
 				</div>
 			</div>
 			if len(ms.Items) == 0 {
-				<p class="h-56 grid place-items-center text-zinc-400">No merchant spending this month</p>
+				<p class="py-10 text-center text-zinc-400">No merchant spending this month</p>
 			} else {
-				<div class="flex">
-					<div class="relative w-10 h-56 mt-4 shrink-0 text-xs text-zinc-500">
-						for _, tick := range ms.Ticks() {
-							<span class="absolute right-2 translate-y-1/2" style={ BottomPct(ms.Pct(tick)) }>
-								{ CompactNum(tick) }
-							</span>
+				<p>
+					<span class="sensitive text-2xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">{ ms.Currency.Format(ms.Total()) }</span>
+					<span class="text-sm text-zinc-500">
+						at { strconv.Itoa(len(ms.Items)) } { pluralWord(len(ms.Items), "merchant", "merchants") }
+					</span>
+				</p>
+				<div x-data="{ all: false }" class="grid gap-1">
+					<ul class="grid gap-1">
+						for i, it := range ms.Items {
+							if i < models.MerchantSpendingTop {
+								<li>
+									@merchantSpendLink(ms, it, i+1)
+								</li>
+							} else {
+								<li x-show="all" x-cloak>
+									@merchantSpendLink(ms, it, i+1)
+								</li>
+							}
 						}
-						<span class="absolute right-2 bottom-0 translate-y-1/2">0</span>
-					</div>
-					<div class="grow overflow-x-auto overflow-y-hidden">
-						<div class="relative min-w-full w-max pt-4">
-							<div class="absolute inset-x-0 top-4 h-56 pointer-events-none">
-								for _, tick := range ms.Ticks() {
-									<div class="absolute inset-x-0 border-t-[1.5px] border-dashed border-zinc-800" style={ BottomPct(ms.Pct(tick)) }></div>
-								}
-								<div class="absolute inset-x-0 bottom-0 border-t-[1.5px] border-zinc-800"></div>
-							</div>
-							<div class="relative flex justify-around gap-2 px-2">
-								for _, it := range ms.Items {
-									@merchantSpendColumn(ms, it)
-								}
-							</div>
-						</div>
-					</div>
+					</ul>
+					if more := len(ms.Items) - models.MerchantSpendingTop; more > 0 {
+						<button
+							type="button"
+							@click="all = !all"
+							class="justify-self-start mt-1 px-2 py-1 rounded-lg text-sm text-sky-400 hover:text-sky-300 hover:bg-zinc-800/60 cursor-pointer"
+						>
+							<span x-show="!all">Show { strconv.Itoa(more) } more</span>
+							<span x-show="all" x-cloak>Show less</span>
+						</button>
+					}
 				</div>
 			}
 		}
 	</div>
 }
 
-templ merchantSpendColumn(ms *models.MerchantSpending, it models.MerchantSpend) {
-	<div tabindex="0" class="group flex flex-col items-center w-14 outline-none">
-		<div class="h-56 flex items-end">
-			<div class="relative w-2 rounded-[3px] bg-zinc-600" style={ HeightPct(ms.Pct(it.Amount)) }>
-				<span
-					class="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 border-zinc-900 transition-transform group-hover:scale-125 group-focus:scale-125"
-					style={ dotStyle(it.Counterparty.Color) }
-				></span>
-			</div>
-		</div>
-		// Tall enough to hold the tooltip, as the scroll area clips overflow.
-		<div class="relative mt-3 h-20">
-			@CounterpartyIcon(it.Counterparty.Name, it.Counterparty.Icon, it.Counterparty.Color, "w-7 h-7 text-sm")
-			<div class="absolute top-8 left-1/2 -translate-x-1/2 hidden group-hover:block group-focus:block z-10">
-				<div class="glass-tooltip mt-1 text-center">
-					<div>{ it.Counterparty.Name }</div>
-					<div class="sensitive text-zinc-300">{ ms.Currency.Format(it.Amount) }</div>
-				</div>
-			</div>
-		</div>
-	</div>
+// merchantSpendLink is a merchant's row: its icon, name and share of the
+// month, a bar in its brand color sized against the top merchant's, and
+// what was spent.
+templ merchantSpendLink(ms *models.MerchantSpending, it models.MerchantSpend, rank int) {
+	{{ cp := it.Counterparty }}
+	<a
+		href={ templ.SafeURL(merchantTxsURL(ms, cp.ID)) }
+		class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 -mx-2 px-2 py-2 rounded-xl transition-colors hover:bg-zinc-800/50"
+	>
+		<span class="row-span-2">
+			@CounterpartyIcon(cp.Name, cp.Icon, cp.Color, "w-9 h-9 text-sm")
+		</span>
+		<span class="flex items-baseline gap-2 min-w-0 text-sm">
+			<span class="shrink-0 text-xs text-zinc-600 tabular-nums">{ strconv.Itoa(rank) }</span>
+			<span class="truncate">{ cp.Name }</span>
+		</span>
+		<span class="sensitive text-right text-sm font-semibold tabular-nums">{ ms.Currency.Format(it.Amount) }</span>
+		<span class="h-1.5 rounded-full bg-zinc-800/70">
+			<span class="block h-full rounded-full" style={ merchantBarStyle(ms.BarPct(it.Amount), cp.Color) }></span>
+		</span>
+		<span class="w-10 text-right text-xs text-zinc-500 tabular-nums justify-self-end">{ fmt.Sprintf("%.0f%%", ms.Share(it.Amount)) }</span>
+	</a>
+}
+
+func merchantTxsURL(ms *models.MerchantSpending, id string) string {
+	return fmt.Sprintf("/transactions?%s=%s&%s=%s&%s=%s",
+		models.TxFilterCounterparty, id,
+		models.TxFilterFrom, ms.Period.From.Format(time.DateOnly),
+		models.TxFilterTo, ms.Period.Last().Format(time.DateOnly))
+}
+
+func merchantBarStyle(pct float64, color string) templ.SafeCSS {
+	return templ.SafeCSS(fmt.Sprintf("width:%.2f%%;background-color:%s;", max(pct, 1.5), brandFill(color)))
+}
+
+func pluralWord(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 templ monthNavButton(month, label, path string) {
@@ -128,9 +152,4 @@ func BottomPct(pct float64) templ.SafeCSS {
 
 func HeightPct(pct float64) templ.SafeCSS {
 	return templ.SafeCSS(fmt.Sprintf("height:%.2f%%;", pct))
-}
-
-func dotStyle(color string) templ.SafeCSS {
-	fill := brandFill(color)
-	return templ.SafeCSS(fmt.Sprintf("background-color:%s;", fill))
 }

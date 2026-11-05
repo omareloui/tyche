@@ -5,8 +5,6 @@ import (
 	"time"
 )
 
-const merchantSpendingTicks = 3
-
 type MerchantSpend struct {
 	Counterparty Counterparty
 	Amount       float64
@@ -24,27 +22,37 @@ type MerchantSpending struct {
 	Items      []MerchantSpend
 }
 
-// AxisMax is the top of the y axis, rounded up to a readable step.
-func (ms *MerchantSpending) AxisMax() float64 {
-	var max float64
+// MerchantSpendingTop is how many merchants show before "Show more".
+const MerchantSpendingTop = 6
+
+// Total is what was spent at all its merchants.
+func (ms *MerchantSpending) Total() float64 {
+	var t float64
 	for _, it := range ms.Items {
-		max = math.Max(max, it.Amount)
+		t += max(it.Amount, 0)
 	}
-	return AxisMax(max, merchantSpendingTicks)
+	return t
 }
 
-// Ticks returns the y axis labels from top to bottom, excluding zero.
-func (ms *MerchantSpending) Ticks() []float64 {
-	return AxisTicks(ms.AxisMax(), merchantSpendingTicks)
-}
-
-// Pct is the amount's height as a percentage of the y axis.
-func (ms *MerchantSpending) Pct(amount float64) float64 {
-	axisMax := ms.AxisMax()
-	if axisMax == 0 {
+// Share is the amount's percentage of Total.
+func (ms *MerchantSpending) Share(amount float64) float64 {
+	t := ms.Total()
+	if t <= 0 {
 		return 0
 	}
-	return amount / axisMax * 100
+	return max(amount, 0) / t * 100
+}
+
+// BarPct is the amount's bar width, as a percentage of the top merchant's.
+func (ms *MerchantSpending) BarPct(amount float64) float64 {
+	var top float64
+	for _, it := range ms.Items {
+		top = max(top, it.Amount)
+	}
+	if top <= 0 {
+		return 0
+	}
+	return max(amount, 0) / top * 100
 }
 
 // niceStep rounds v up to a readable multiple of a power of ten.
