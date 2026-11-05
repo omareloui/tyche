@@ -94,7 +94,7 @@ templ purchaseInputs(fd *PurchaseFD, id string, curs []models.Currency, defaultC
 		{{ mode = PayCash }}
 	}
 	<div x-data={ moneyInputsData(curs, fd.AmountFD.CurrencyID.Value, defaultCur, mode, fd.Plan.strategy()) } @change="onChange($event)" class="grid gap-4">
-		@plainAmountInputs("Price", icons.Tag("15"), fd.AmountFD, id, curs, defaultCur)
+		@plainAmountInputs("Price", icons.Tag("15"), fd.AmountFD, id, curs, defaultCur, false)
 		@form.SegmentedRadio("Paying", "mode", id, []form.RadioOption{
 			{Value: PayCash, Label: "Cash"},
 			{Value: PayInstallments, Label: "Installments"},
@@ -111,20 +111,22 @@ const moneyMask = "(sym ? sym + ' ' : '') + $money($input, '.', ',')"
 
 // plainAmountInputs is a labeled amount and a currency picker with no
 // requests of their own. It expects a moneyInputs scope for the symbol.
-templ plainAmountInputs(label string, icon templ.Component, fd *form.AmountFD, id string, curs []models.Currency, defaultCur *models.Currency) {
+templ plainAmountInputs(label string, icon templ.Component, fd *form.AmountFD, id string, curs []models.Currency, defaultCur *models.Currency, sensitive bool) {
 	{{ cur := fd.CurrencyID }}
 	if cur.Value == "" && defaultCur != nil {
 		{{ cur.Value = defaultCur.ID }}
 	}
 	<div class="grid grid-cols-[1fr_9rem] gap-3">
 		@form.Field(label, "amount", id, icon, fd.Amount.Error) {
-			@form.Control("text", "amount", "", id, fd.Amount, templ.Attributes{
-				"autocomplete":   "off",
-				"inputmode":      "decimal",
-				"data-money":     true,
-				"x-mask:dynamic": moneyMask,
-				":placeholder":   "money(1000)",
-			})
+			<div class={ templ.KV("sensitive", sensitive) }>
+				@form.Control("text", "amount", "", id, fd.Amount, templ.Attributes{
+					"autocomplete":   "off",
+					"inputmode":      "decimal",
+					"data-money":     true,
+					"x-mask:dynamic": moneyMask,
+					":placeholder":   "money(1000)",
+				})
+			</div>
 		}
 		@form.Field("Currency", "currency_id", id, nil, fd.CurrencyID.Error) {
 			@form.Combobox(form.ComboboxProps{

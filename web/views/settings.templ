@@ -252,15 +252,15 @@ templ SettingsWorkCard(d *SettingsData) {
 			"x-data":  moneyInputsData(d.ShownCurrencies, d.Work.Salary.CurrencyID.Value, d.DefaultCurrency, PayCash, ""),
 			"@change": "onChange($event)",
 		}) {
-		@plainAmountInputs("Monthly salary / income", nil, d.Work.Salary, "settings", d.ShownCurrencies, d.DefaultCurrency)
+		@plainAmountInputs("Monthly salary / income", nil, d.Work.Salary, "settings", d.ShownCurrencies, d.DefaultCurrency, true)
 		@form.Field("Hours you work a week", "work_hours_per_week", "settings", nil, d.Work.HoursPerWeek.Error) {
 			@form.Control("text", "work_hours_per_week", "40", "settings", d.Work.HoursPerWeek, templ.Attributes{
 				"inputmode": "decimal", "autocomplete": "off",
 			})
 		}
 		if ws := d.WorkSettings; ws.IsSet() {
-			<p class="sensitive text-sm text-zinc-500 tabular-nums">
-				An hour of your work is worth <span class="text-zinc-300">{ ws.Currency.Format(ws.HourlyRate()) }</span>.
+			<p class="text-sm text-zinc-500 tabular-nums">
+				An hour of your work is worth <span class="sensitive text-zinc-300">{ ws.Currency.Format(ws.HourlyRate()) }</span>.
 			</p>
 		}
 	}
