@@ -240,7 +240,7 @@ templ rtxSummary(rtxs []models.RecurrentTx, def *models.Currency, oob bool) {
 							@icons.Calendar("14")
 							In a typical month
 						</p>
-						<div class="flex flex-wrap items-baseline gap-x-5 gap-y-1 mt-1">
+						<div class="sensitive flex flex-wrap items-baseline gap-x-5 gap-y-1 mt-1">
 							<p class="text-3xl sm:text-4xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">
 								{ formatSignedAmount(-s.Out, def) }
 							</p>
@@ -328,7 +328,7 @@ templ recurrentTxCard(rt *models.RecurrentTx, oob bool) {
 			<div class="relative flex items-end justify-between gap-3">
 				<p
 					class={
-						"text-2xl font-bold tabular-nums truncate font-(family-name:--font-biorhyme-expanded)",
+						"sensitive text-2xl font-bold tabular-nums truncate font-(family-name:--font-biorhyme-expanded)",
 						templ.KV("text-emerald-400", v.tone == txToneIn),
 						templ.KV("text-zinc-300", v.tone == txToneNeutral),
 					}

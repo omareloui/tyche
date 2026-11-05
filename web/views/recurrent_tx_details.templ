@@ -103,7 +103,7 @@ templ rtxDetailsHero(rt *models.RecurrentTx, v *txView, def *models.Currency, en
 	<div class="grid gap-3">
 		<p
 			class={
-				"text-3xl font-semibold font-(family-name:--font-biorhyme-expanded) tabular-nums break-words",
+				"sensitive text-3xl font-semibold font-(family-name:--font-biorhyme-expanded) tabular-nums break-words",
 				templ.KV("text-emerald-400", v.tone == txToneIn),
 				templ.KV("text-zinc-300", v.tone == txToneNeutral),
 			}
