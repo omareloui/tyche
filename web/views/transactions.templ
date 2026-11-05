@@ -52,6 +52,7 @@ templ Transactions(
 			@txDetailsSlot(openTx)
 			@txUndoToast()
 			@txSelectionBar()
+			@txShortcutsDialog()
 		</div>
 	}
 }
@@ -181,7 +182,7 @@ templ txFilterBar(f *models.TxFilter, start models.MonthStart, accs []models.Acc
 				></span>
 			</button>
 		</div>
-		// Shortcuts sit up here: the list scrolls on forever.
+		// The shortcuts' button sits up here: the list scrolls on forever.
 		@txShortcuts()
 		<div id="tx-filters-panel" x-cloak x-show="filtersOpen" x-collapse>
 			<div class="flex flex-wrap items-center gap-2 pt-1">
@@ -244,17 +245,105 @@ templ txShortcuts() {
 			@icons.X("14")
 		</button>
 	</p>
-	<p class="hidden sm:flex flex-wrap justify-end gap-x-4 gap-y-1 text-xs text-zinc-600">
-		<span><kbd class="kbd">/</kbd> search</span>
-		<span><kbd class="kbd">j</kbd> <kbd class="kbd">k</kbd> move</span>
-		<span><kbd class="kbd">gg</kbd> <kbd class="kbd">G</kbd> top, bottom</span>
-		<span><kbd class="kbd">e</kbd> edit</span>
-		<span><kbd class="kbd">f</kbd> fulfill</span>
-		<span><kbd class="kbd">r</kbd> reviewed</span>
-		<span><kbd class="kbd">⌫</kbd> delete</span>
-		<span><kbd class="kbd">x</kbd> <kbd class="kbd">space</kbd> select</span>
-		<span><kbd class="kbd">n</kbd> new</span>
-	</p>
+	<div class="hidden sm:flex justify-end">
+		<button
+			type="button"
+			@click="toggleShortcuts()"
+			class="inline-flex items-center gap-1.5 text-xs text-zinc-600 cursor-pointer transition-colors hover:text-zinc-300"
+		>
+			@icons.Keyboard("14")
+			Shortcuts <kbd class="kbd">?</kbd>
+		</button>
+	</div>
+}
+
+type txShortcut struct {
+	Keys []string
+	Desc string
+}
+
+type txShortcutGroup struct {
+	Title string
+	Items []txShortcut
+}
+
+var txShortcutGroups = []txShortcutGroup{
+	{"Move around", []txShortcut{
+		{[]string{"j", "k"}, "Next, previous transaction"},
+		{[]string{"gg", "G"}, "First, last one"},
+		{[]string{"^e", "^y"}, "Scroll a row down, up"},
+		{[]string{"^d", "^u"}, "Half a screen down, up"},
+		{[]string{"^f", "^b"}, "A screen down, up"},
+		{[]string{"/"}, "Search"},
+	}},
+	{"Act on the focused one", []txShortcut{
+		{[]string{"Enter"}, "Details (or fold upcoming)"},
+		{[]string{"e"}, "Edit"},
+		{[]string{"f"}, "Fulfill"},
+		{[]string{"r"}, "Mark reviewed"},
+		{[]string{"⌫"}, "Delete"},
+	}},
+	{"Select", []txShortcut{
+		{[]string{"x"}, "Select, unselect"},
+		{[]string{"⇧x"}, "Select a range"},
+		{[]string{"space"}, "Toggle while selecting"},
+		{[]string{"⌫"}, "Delete the selected"},
+		{[]string{"Esc"}, "Stop selecting"},
+	}},
+	{"Other", []txShortcut{
+		{[]string{"n"}, "New transaction"},
+		{[]string{"?"}, "Show these shortcuts"},
+	}},
+}
+
+// txShortcutsDialog lists the keyboard shortcuts, opened with ? or from
+// txShortcuts' button.
+templ txShortcutsDialog() {
+	<dialog
+		id="tx-shortcuts"
+		aria-labelledby="tx-shortcuts-title"
+		class="confirm-dialog shortcuts-dialog m-auto w-[calc(100%-2rem)] max-w-2xl max-h-[calc(100dvh-2rem)] p-0 overflow-hidden rounded-3xl border border-white/10 bg-zinc-900/45 text-zinc-100 shadow-2xl shadow-black/50 backdrop-blur-2xl backdrop-saturate-150"
+		@click.self="$el.close()"
+	>
+		// Glass: glows behind the frosted panel, a light catching its top edge.
+		<div aria-hidden="true" class="pointer-events-none absolute inset-0">
+			<div class="absolute -top-24 -left-16 size-64 rounded-full bg-violet-400/20 blur-3xl"></div>
+			<div class="absolute -bottom-28 -right-20 size-72 rounded-full bg-sky-400/12 blur-3xl"></div>
+			<div class="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-white/25 to-transparent"></div>
+		</div>
+		<div class="relative max-h-[calc(100dvh-2rem)] overflow-y-auto p-5 sm:p-6">
+			<div class="flex items-center gap-3 mb-5">
+				<div class="grid place-items-center shrink-0 w-10 h-10 rounded-xl bg-violet-400/12 text-violet-300">
+					@icons.Keyboard("20")
+				</div>
+				<h2 id="tx-shortcuts-title" class="flex-1 text-lg font-semibold">Keyboard shortcuts</h2>
+				<form method="dialog">
+					<button aria-label="Close" class="grid place-items-center w-8 h-8 rounded-full text-zinc-400 cursor-pointer transition-colors hover:bg-white/8 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60">
+						@icons.X("16")
+					</button>
+				</form>
+			</div>
+			<div class="grid gap-x-8 gap-y-5 sm:grid-cols-2">
+				for _, g := range txShortcutGroups {
+					<section>
+						<h3 class="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">{ g.Title }</h3>
+						<dl class="grid gap-1.5 text-sm">
+							for _, it := range g.Items {
+								<div class="flex items-center justify-between gap-4">
+									<dt class="text-zinc-300">{ it.Desc }</dt>
+									<dd class="flex shrink-0 gap-1">
+										for _, k := range it.Keys {
+											<kbd class="kbd border-white/15! bg-white/5 text-zinc-200!">{ k }</kbd>
+										}
+									</dd>
+								</div>
+							}
+						</dl>
+					</section>
+				}
+			</div>
+		</div>
+	</dialog>
 }
 
 templ txFilterCombo(name, label, anyLabel, value string, searchable bool, opts []form.ComboOption) {

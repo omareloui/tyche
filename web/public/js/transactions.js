@@ -428,10 +428,32 @@ document.addEventListener("alpine:init", () => {
       this.openDetails(row.dataset.details);
     },
 
+    // toggleShortcuts opens or closes the keyboard shortcuts' dialog.
+    toggleShortcuts() {
+      const d = document.getElementById("tx-shortcuts");
+      if (!d) return;
+      if (d.open) d.close();
+      else d.showModal();
+    },
+
     onKey(e) {
-      if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
+      if (e.metaKey || e.altKey || e.defaultPrevented) return;
       const t = e.target;
+      // The shortcuts' dialog takes no other key while open (Escape closes it).
+      if (document.getElementById("tx-shortcuts")?.open) {
+        if (e.key === "?") {
+          e.preventDefault();
+          this.toggleShortcuts();
+        }
+        return;
+      }
       if (this.openCreateForm || document.querySelector("[data-tx-details], #drawer [data-drawer]")) return;
+      if (e.ctrlKey) {
+        if (e.shiftKey || t.closest?.("input, textarea, select, [contenteditable], form, [role=listbox], [role=menu]")) return;
+        if (!this.vimScroll(e.key, t)) return;
+        e.preventDefault();
+        return;
+      }
       if (e.key === "Escape" && Alpine.store("txSel").on && !t.closest?.("input, textarea, select, [role=listbox], [role=menu]")) {
         e.preventDefault();
         Alpine.store("txSel").clear();
@@ -454,6 +476,9 @@ document.addEventListener("alpine:init", () => {
       this.lastG = e.key === "g" && !gg ? Date.now() : 0;
 
       switch (e.key) {
+        case "?":
+          this.toggleShortcuts();
+          break;
         case "Enter":
           if (!t.matches?.("[data-tx-row][data-details]")) return;
           this.openDetails(t.dataset.details);
@@ -511,6 +536,34 @@ document.addEventListener("alpine:init", () => {
           return;
       }
       e.preventDefault();
+    },
+
+    // vimScroll scrolls the page as vim does for Ctrl+key: e/y a row, d/u
+    // half a screen, f/b a screen (less the sticky headers, so no row is
+    // skipped). A focused row scrolled out of view hands the focus on to the
+    // nearest one in view. Reports if key is one of them.
+    vimScroll(key, from) {
+      const sticky = txStickyHeight();
+      const page = window.innerHeight - sticky;
+      const steps = { e: 64, y: -64, d: page / 2, u: -page / 2, f: page, b: -page };
+      const by = steps[key];
+      if (by === undefined) return false;
+      window.scrollBy({ top: by, behavior: key === "e" || key === "y" ? "instant" : "smooth" });
+
+      const cur = from.closest?.(TX_STOPS);
+      if (!cur || !this.$root.contains(cur)) return true;
+      // Where the page ends up once scrolled (a smooth scroll is still going).
+      const top = Math.max(0, Math.min(window.scrollY + by, document.documentElement.scrollHeight - window.innerHeight));
+      const shift = top - window.scrollY;
+      const inView = (el) => {
+        const r = el.getBoundingClientRect();
+        return r.top - shift >= sticky && r.bottom - shift <= window.innerHeight;
+      };
+      if (inView(cur)) return true;
+      const rows = [...this.$root.querySelectorAll(TX_STOPS)].filter(txShown).filter(inView);
+      const next = by > 0 ? rows[0] : rows.at(-1);
+      next?.focus({ preventScroll: true });
+      return true;
     },
 
     // focusEdge focuses the first row (the upcoming section's header when
@@ -817,9 +870,11 @@ document.addEventListener("htmx:beforeHistorySave", () => Alpine.store("txs")?.f
 document.addEventListener("htmx:configRequest", (e) => {
   const until = document.getElementById("tx-until")?.dataset.until;
   if (until) e.detail.headers["X-Tx-Until"] = until;
-  // Re-rendered lists keep the upcoming section open or folded.
+  // Re-rendered lists keep the upcoming groups open or folded.
   const upcoming = document.getElementById("tx-upcoming");
   if (upcoming) e.detail.headers["X-Tx-Upcoming"] = upcoming.open ? "open" : "closed";
+  const later = document.getElementById("tx-upcoming-later");
+  if (later) e.detail.headers["X-Tx-Upcoming-Later"] = later.open ? "open" : "closed";
   // Keep the URL the filters go into short.
   if (e.detail.elt.id === "tx-filters") {
     for (const [k, v] of Object.entries(e.detail.parameters)) {
@@ -970,6 +1025,28 @@ function txShown(el) {
   const folded = el.closest("details:not([open])");
   return !folded || el.closest("summary")?.parentElement === folded;
 }
+
+// txStickyHeight is how much of the top of the screen the sticky nav and
+// month header cover.
+function txStickyHeight() {
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  const month = document.querySelector("[data-tx-month-head]")?.offsetHeight ?? 0;
+  return 4 * rem + month;
+}
+
+// --tx-month-h is the height of a month's header, which the days' headers
+// stick under (it differs between phones and wider screens).
+const txMonthHeadObserver = new ResizeObserver((entries) => {
+  const h = entries.at(-1)?.target.offsetHeight;
+  if (h) document.getElementById("tx-list")?.style.setProperty("--tx-month-h", `${h}px`);
+});
+function txObserveMonthHead() {
+  txMonthHeadObserver.disconnect();
+  const head = document.querySelector("#tx-list [data-tx-month-head]");
+  if (head) txMonthHeadObserver.observe(head);
+}
+document.addEventListener("htmx:afterSettle", txObserveMonthHead);
+txObserveMonthHead();
 
 // Keep the keyboard focus on the same transaction across list re-renders.
 let txRefocusId = null;

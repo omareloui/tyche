@@ -85,14 +85,9 @@ func (h Handler) txListData(r *http.Request, f models.TxFilter, before time.Time
 		return nil, err
 	}
 	d := &views.TxListData{Page: page, Filter: f, Def: &getClaims(r.Context()).DefaultCurrency}
-	// The upcoming section stays as the page has it (transactions.js).
-	switch r.Header.Get("X-Tx-Upcoming") {
-	case "open":
-		d.UpcomingOpen = new(bool)
-		*d.UpcomingOpen = true
-	case "closed":
-		d.UpcomingOpen = new(bool)
-	}
+	// The upcoming groups stay as the page has them (transactions.js).
+	d.UpcomingOpen = openHeader(r, "X-Tx-Upcoming")
+	d.LaterOpen = openHeader(r, "X-Tx-Upcoming-Later")
 	// Only the first chunk (or a re-render) shows the summary.
 	if !f.IsZero() && before.IsZero() {
 		if d.Summary, err = h.repo.GetTransactionsSummary(r.Context(), f, d.Def); err != nil {
@@ -1064,4 +1059,18 @@ func (h Handler) parseTransactionAmountsAndKindFD(r *http.Request, accs []models
 	}
 
 	return fd, nil
+}
+
+// openHeader is whether the page has a folding section open, from its
+// header (open / closed), nil when it doesn't tell.
+func openHeader(r *http.Request, name string) *bool {
+	var open bool
+	switch r.Header.Get(name) {
+	case "open":
+		open = true
+	case "closed":
+	default:
+		return nil
+	}
+	return &open
 }

@@ -24,9 +24,11 @@ type TxListData struct {
 	Summary *models.TxSummary
 	// Chips are the filters set, removable one by one.
 	Chips []TxFilterChip
-	// UpcomingOpen is whether the page has the upcoming section open (the
-	// X-Tx-Upcoming header), nil on loading the page: open if any is overdue.
-	UpcomingOpen *bool
+	// UpcomingOpen is whether the page has this month's upcoming group open
+	// (the X-Tx-Upcoming header), nil on loading the page: open if any is
+	// overdue. LaterOpen is the later group's (X-Tx-Upcoming-Later), folded
+	// on loading the page.
+	UpcomingOpen, LaterOpen *bool
 }
 
 // TxFilterChip is a filter that's set: its label and the query string
@@ -48,7 +50,7 @@ templ TransactionsListOOB(d TxListData) {
 }
 
 templ txList(d TxListData, oob bool) {
-	{{ l := buildTxList(d.Page, d.Def) }}
+	{{ l := buildTxList(ctx, d.Page, d.Def) }}
 	<div
 		id="tx-list"
 		if oob {
@@ -70,8 +72,8 @@ templ txList(d TxListData, oob bool) {
 			if d.Summary != nil {
 				@txSummary(d.Summary, d.Chips, d.Def)
 			}
-			if len(l.Upcoming) > 0 {
-				@txUpcoming(&l, d.Def, d.UpcomingOpen)
+			if len(l.ThisMonth.Txs) > 0 || len(l.Later.Txs) > 0 {
+				@txUpcoming(&l, &d)
 			}
 			for _, m := range l.Months {
 				@txMonthSection(&m, d.Def)
@@ -84,7 +86,7 @@ templ txList(d TxListData, oob bool) {
 // TxListChunk is a chunk of older months, replacing the trigger that loaded
 // it (txMore).
 templ TxListChunk(d TxListData) {
-	{{ l := buildTxList(d.Page, d.Def) }}
+	{{ l := buildTxList(ctx, d.Page, d.Def) }}
 	for _, m := range l.Months {
 		@txMonthSection(&m, d.Def)
 	}
@@ -279,38 +281,128 @@ templ txFilterChips(chips []TxFilterChip) {
 	}
 }
 
-// txUpcoming is the scheduled transactions, folded unless some are overdue;
-// re-rendering the list keeps it as the page has it (open).
-templ txUpcoming(l *txListView, def *models.Currency, open *bool) {
-	<details
-		id="tx-upcoming"
-		class="group rounded-2xl ring-1 ring-zinc-800"
-		if (open == nil && l.Overdue > 0) || (open != nil && *open) {
-			open
-		}
-	>
-		<summary data-tx-stop class="flex items-center gap-3 p-4 rounded-2xl list-none cursor-pointer select-none outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60 [&::-webkit-details-marker]:hidden">
-			<div class="grid place-items-center shrink-0 w-10 h-10 rounded-xl bg-sky-400/10 text-sky-400">
-				@icons.Calendar("20")
-			</div>
-			<div class="flex-1 min-w-0">
-				<p class="font-semibold">Upcoming</p>
-				<p class="text-sm text-zinc-500">
-					{ fmt.Sprint(len(l.Upcoming)) } scheduled
-					if l.Overdue > 0 {
-						· <span class="text-red-400">{ fmt.Sprint(l.Overdue) } overdue</span>
+// txUpcoming is the scheduled transactions in two groups, the furthest on
+// top like the history under them: the later ones, folded, then the ones due
+// by the end of the user's month (the overdue ones too), open when some are
+// overdue. Re-rendering the list keeps each as
+// the page has it (open).
+templ txUpcoming(l *txListView, d *TxListData) {
+	<div class="grid grid-cols-1 gap-3">
+		if g := &l.Later; len(g.Txs) > 0 {
+			<details
+				id="tx-upcoming-later"
+				class="group rounded-2xl ring-1 ring-zinc-800"
+				if isOpen(d.LaterOpen, false) {
+					open
+				}
+			>
+				<summary data-tx-stop class="flex items-center gap-3 p-4 rounded-2xl list-none cursor-pointer select-none outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60 [&::-webkit-details-marker]:hidden">
+					<div class="grid place-items-center shrink-0 w-10 h-10 rounded-xl bg-zinc-800/70 text-zinc-400">
+						@icons.Calendar("20")
+					</div>
+					<div class="flex-1 min-w-0">
+						<p class="font-semibold">Later</p>
+						<p class="text-sm text-zinc-500">
+							{ fmt.Sprint(len(g.Txs)) } scheduled
+							<span class="hidden sm:inline">· from { g.Period.From.Format("Jan 2") }</span>
+						</p>
+					</div>
+					@txFlowTotals(g.In, g.Out, d.Def)
+					@icons.ChevronDown("18", &templ.Attributes{"class": "shrink-0 text-zinc-500 transition-transform group-open:rotate-180"})
+				</summary>
+				<div class="grid grid-cols-1 gap-2 px-1.5 pb-1.5 sm:px-3 sm:pb-3">
+					for _, t := range g.Txs {
+						@Transaction(&t, d.Def)
 					}
-				</p>
-			</div>
-			@txFlowTotals(l.UpcomingIn, l.UpcomingOut, def)
-			@icons.ChevronDown("18", &templ.Attributes{"class": "shrink-0 text-zinc-500 transition-transform group-open:rotate-180"})
-		</summary>
-		<div class="grid grid-cols-1 gap-2 px-1.5 pb-1.5 sm:px-3 sm:pb-3">
-			for _, t := range l.Upcoming {
-				@Transaction(&t, def)
+				</div>
+			</details>
+		}
+		if g := &l.ThisMonth; len(g.Txs) > 0 {
+			<details
+				id="tx-upcoming"
+				class="group rounded-2xl ring-1 ring-sky-400/20 bg-sky-400/3"
+				if isOpen(d.UpcomingOpen, g.Overdue > 0) {
+					open
+				}
+			>
+				<summary data-tx-stop class="flex items-center gap-3 p-4 rounded-2xl list-none cursor-pointer select-none outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60 [&::-webkit-details-marker]:hidden">
+					<div class="grid place-items-center shrink-0 w-10 h-10 rounded-xl bg-sky-400/10 text-sky-400">
+						@icons.Calendar("20")
+					</div>
+					<div class="flex-1 min-w-0">
+						<p class="font-semibold">Due this month</p>
+						<p class="text-sm text-zinc-500">
+							{ fmt.Sprint(len(g.Txs)) } scheduled
+							if g.Overdue > 0 {
+								· <span class="text-red-400">{ fmt.Sprint(g.Overdue) } overdue</span>
+							}
+							<span class="hidden sm:inline">· until { g.Period.Last().Format("Jan 2") }</span>
+						</p>
+					</div>
+					@txUpcomingTotals(g, d.Def)
+					@icons.ChevronDown("18", &templ.Attributes{"class": "shrink-0 text-zinc-500 transition-transform group-open:rotate-180"})
+				</summary>
+				<div class="grid grid-cols-1 gap-2 px-1.5 pb-1.5 sm:px-3 sm:pb-3">
+					for _, t := range g.Txs {
+						@Transaction(&t, d.Def)
+					}
+				</div>
+			</details>
+		}
+	</div>
+}
+
+// txUpcomingTotals is what this month's scheduled transactions earn and
+// spend, and their net.
+templ txUpcomingTotals(g *txUpcomingGroup, def *models.Currency) {
+	@txInOutNet(g.In, g.Out, def)
+}
+
+// txInOutNet is what a period earns and spends and its net, a pill. With
+// money only going one way the net is that amount, so the pill shows it
+// alone.
+templ txInOutNet(in, out float64, def *models.Currency) {
+	if in > 0 || out != 0 {
+		{{ both := in > 0 && out != 0 }}
+		<dl class="sensitive flex shrink-0 items-center gap-4 tabular-nums whitespace-nowrap">
+			if both {
+				<div class="hidden sm:block text-right">
+					<dt class="text-[0.65rem] uppercase tracking-wider text-zinc-500">In</dt>
+					<dd class="text-sm font-medium text-emerald-400">{ "+" + def.Format(in) }</dd>
+				</div>
+				<div class="hidden sm:block text-right">
+					<dt class="text-[0.65rem] uppercase tracking-wider text-zinc-500">Out</dt>
+					<dd class="text-sm font-medium text-zinc-300">{ formatSignedAmount(-out, def) }</dd>
+				</div>
 			}
-		</div>
-	</details>
+			{{ label := "Net" }}
+			if !both && in > 0 {
+				{{ label = "In" }}
+			} else if !both {
+				{{ label = "Out" }}
+			}
+			<div>
+				<dt class="sr-only">{ label }</dt>
+				<dd
+					title={ label }
+					class={
+						"px-2.5 py-1 rounded-full text-xs sm:text-sm font-semibold",
+						templ.KV("bg-emerald-400/10 text-emerald-400 ring-1 ring-emerald-400/20", in >= out),
+						templ.KV("bg-red-400/10 text-red-400 ring-1 ring-red-400/20", in < out),
+					}
+				>{ formatSignedAmount(in-out, def) }</dd>
+			</div>
+		</dl>
+	}
+}
+
+// isOpen is whether a folding section the page has as open (nil when
+// loading the page, then def) is.
+func isOpen(open *bool, def bool) bool {
+	if open == nil {
+		return def
+	}
+	return *open
 }
 
 // txMonthSection is a month of the list under its header, the month's name
@@ -318,7 +410,7 @@ templ txUpcoming(l *txListView, def *models.Currency, open *bool) {
 // go row to row).
 templ txMonthSection(m *txMonth, def *models.Currency) {
 	<section class="grid grid-cols-1 gap-5">
-		<header class="sticky top-16 z-10 -mx-2 px-2 py-2">
+		<header data-tx-month-head class="sticky top-16 z-10 -mx-2 px-2 py-2">
 			<div class="flex items-center justify-between gap-3 sm:gap-4 px-3 py-2.5 sm:px-4 sm:py-3 rounded-2xl bg-zinc-900/60 ring-1 ring-zinc-800 backdrop-blur-sm">
 				<div class="min-w-0">
 					<h2 class="text-base sm:text-lg font-bold leading-tight truncate font-(family-name:--font-biorhyme-expanded)">
@@ -333,8 +425,9 @@ templ txMonthSection(m *txMonth, def *models.Currency) {
 						>{ formatTxMonth(m.Month) }</button>
 					</h2>
 					<p class="hidden sm:block text-xs text-zinc-500">{ fmt.Sprint(m.Count) } { plural(m.Count, "transaction", "transactions") }</p>
-					// Mobile: in/out on one line under the month, the net stays on the right.
-					if m.In > 0 || m.Out != 0 {
+					// Mobile: in/out on one line under the month, the net stays on the
+					// right (alone when money only went one way).
+					if m.In > 0 && m.Out != 0 {
 						<p class="sensitive sm:hidden flex gap-2 text-xs tabular-nums whitespace-nowrap overflow-hidden">
 							if m.In > 0 {
 								<span class="text-emerald-400" title="In">{ "+" + def.Format(m.In) }</span>
@@ -347,39 +440,15 @@ templ txMonthSection(m *txMonth, def *models.Currency) {
 						<p class="sm:hidden text-xs text-zinc-500">{ fmt.Sprint(m.Count) } { plural(m.Count, "transaction", "transactions") }</p>
 					}
 				</div>
-				if m.In > 0 || m.Out != 0 {
-					<dl class="sensitive flex shrink-0 items-center gap-4 tabular-nums whitespace-nowrap">
-						if m.In > 0 {
-							<div class="hidden sm:block text-right">
-								<dt class="text-[0.65rem] uppercase tracking-wider text-zinc-500">In</dt>
-								<dd class="text-sm font-medium text-emerald-400">{ "+" + def.Format(m.In) }</dd>
-							</div>
-						}
-						if m.Out != 0 {
-							<div class="hidden sm:block text-right">
-								<dt class="text-[0.65rem] uppercase tracking-wider text-zinc-500">Out</dt>
-								<dd class="text-sm font-medium text-zinc-300">{ formatSignedAmount(-m.Out, def) }</dd>
-							</div>
-						}
-						<div>
-							<dt class="sr-only">Net</dt>
-							<dd
-								title="Net"
-								class={
-									"px-2.5 py-1 rounded-full text-xs sm:text-sm font-semibold",
-									templ.KV("bg-emerald-400/10 text-emerald-400 ring-1 ring-emerald-400/20", m.In >= m.Out),
-									templ.KV("bg-red-400/10 text-red-400 ring-1 ring-red-400/20", m.In < m.Out),
-								}
-							>{ formatSignedAmount(m.In-m.Out, def) }</dd>
-						</div>
-					</dl>
-				}
+				@txInOutNet(m.In, m.Out, def)
 			</div>
 		</header>
 		for _, d := range m.Days {
 			// Hidden once all its transactions get deleted.
 			<section class="hidden has-[[data-tx]]:grid grid-cols-1 gap-2">
-				<h3 class="flex items-baseline justify-between gap-4 px-1 text-sm">
+				// Sticks under the month's header (--tx-month-h, transactions.js)
+				// while its day is in view.
+				<h3 class="sticky top-[calc(4rem+var(--tx-month-h,4.5rem))] z-[9] flex items-baseline justify-between gap-4 -mx-1 px-2 py-1 rounded-lg bg-zinc-950/80 backdrop-blur-sm text-sm">
 					<span class="font-semibold text-zinc-300">{ formatTxDay(d.Day) }</span>
 					if d.In != 0 || d.Out != 0 {
 						<span class="sensitive tabular-nums text-zinc-500">{ formatSignedAmount(d.In-d.Out, def) }</span>
@@ -1228,28 +1297,50 @@ type txMonth struct {
 	In, Out float64
 }
 
-type txListView struct {
-	// Upcoming are the scheduled (not yet fulfilled) ones, soonest first.
-	Upcoming                []models.Transaction
-	UpcomingIn, UpcomingOut float64
-	Overdue                 int
-	Months                  []txMonth
-	Empty                   bool
+// txUpcomingGroup is a group of scheduled (not yet fulfilled) transactions,
+// soonest first.
+type txUpcomingGroup struct {
+	Txs     []models.Transaction
+	In, Out float64
+	Overdue int
+	// Period is the user's current month for this month's group, the next
+	// one for the later group (From is where it starts).
+	Period models.Period
 }
 
-// buildTxList groups the page's history by month and day, with totals in
+func (g *txUpcomingGroup) add(tx *models.Transaction, def *models.Currency, today time.Time) {
+	g.Txs = append(g.Txs, *tx)
+	in, out := txFlow(tx, def)
+	g.In += in
+	g.Out += out
+	if dateOf(tx.ScheduledTo).Before(today) {
+		g.Overdue++
+	}
+}
+
+type txListView struct {
+	// ThisMonth are the scheduled ones due by the end of the user's month,
+	// the overdue ones included; Later the ones after.
+	ThisMonth, Later txUpcomingGroup
+	Months           []txMonth
+	Empty            bool
+}
+
+// buildTxList splits the page's upcoming transactions at the end of the
+// user's month and groups its history by month and day, with totals in
 // def.
-func buildTxList(p *models.TxPage, def *models.Currency) txListView {
-	l := txListView{Upcoming: p.Upcoming, Empty: len(p.Upcoming) == 0 && len(p.History) == 0}
-	today := dateOf(time.Now())
+func buildTxList(ctx context.Context, p *models.TxPage, def *models.Currency) txListView {
+	l := txListView{Empty: len(p.Upcoming) == 0 && len(p.History) == 0}
+	today := dateOf(tzctx.In(ctx, time.Now()))
+	l.ThisMonth.Period = p.MonthStart.Of(today)
+	l.Later.Period = l.ThisMonth.Period.Next()
 
 	for _, tx := range p.Upcoming {
-		in, out := txFlow(&tx, def)
-		l.UpcomingIn += in
-		l.UpcomingOut += out
-		if tx.ScheduledTo.Before(today) {
-			l.Overdue++
+		g := &l.Later
+		if dateOf(tx.ScheduledTo).Before(l.ThisMonth.Period.To) {
+			g = &l.ThisMonth
 		}
+		g.add(&tx, def, today)
 	}
 
 	for _, tx := range p.History {
