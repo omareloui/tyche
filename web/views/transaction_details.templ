@@ -1,9 +1,11 @@
 package views
 
 import (
+	"context"
 	"fmt"
 	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/tzctx"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
@@ -54,7 +56,7 @@ templ TxDetails(d *models.TxDetails, def *models.Currency) {
 // alone when the drawer is already open.
 templ TxDetailsPanel(d *models.TxDetails, def *models.Currency) {
 	{{ tx := d.Tx }}
-	{{ v := newTxView(tx) }}
+	{{ v := newTxView(ctx, tx) }}
 	<div class="drawer-panel flex flex-col flex-1 min-h-0" x-init={ fmt.Sprintf("show(%q, 'view')", tx.ID) }>
 		<header class="flex items-start gap-3 px-5 sm:px-6 pt-5 pb-4">
 			@txTile(tx, &v)
@@ -337,7 +339,7 @@ templ txDetailsFields(d *models.TxDetails, v *txView) {
 			if tx.FulfilledAt.IsZero() {
 				<span class="text-zinc-500">Not yet</span>
 			} else {
-				<span>{ tx.FulfilledAt.Format("Jan 2 2006, 3:04pm") }</span>
+				<span>{ tzctx.In(ctx, tx.FulfilledAt).Format("Jan 2 2006, 3:04pm") }</span>
 			}
 		}
 		if d.Recurrent != nil {
@@ -346,7 +348,7 @@ templ txDetailsFields(d *models.TxDetails, v *txView) {
 			}
 		}
 		@txDetailsRow("Added", icons.Clock("15")) {
-			<span class="text-zinc-400">{ tx.CreatedAt.Format("Jan 2 2006, 3:04pm") }</span>
+			<span class="text-zinc-400">{ tzctx.In(ctx, tx.CreatedAt).Format("Jan 2 2006, 3:04pm") }</span>
 		}
 	</dl>
 }
@@ -535,7 +537,7 @@ templ txDetailsSMS(d *models.TxDetails) {
 
 // txDetailsMini is a related transaction, opening its own details on click.
 templ txDetailsMini(tx *models.Transaction) {
-	{{ v := txMiniView(tx) }}
+	{{ v := txMiniView(ctx, tx) }}
 	<button
 		type="button"
 		hx-get={ txDetailsURL(tx.ID) }
@@ -564,13 +566,13 @@ templ txDetailsMini(tx *models.Transaction) {
 
 // txMiniView is a related transaction's view, a transfer pair's side as
 // what it sent or received (instead of the whole transfer).
-func txMiniView(tx *models.Transaction) txView {
+func txMiniView(ctx context.Context, tx *models.Transaction) txView {
 	if !tx.IsTransferLeg() {
-		return newTxView(tx)
+		return newTxView(ctx, tx)
 	}
 	leg := *tx
 	leg.TransferPair = nil
-	v := newTxView(&leg)
+	v := newTxView(ctx, &leg)
 	if tx.Kind == models.ExpenseTxKind {
 		v.title = "Sent from " + tx.Account.Name
 	} else {

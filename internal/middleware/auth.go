@@ -10,6 +10,7 @@ import (
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/slicesutils"
+	"github.com/omareloui/tyche/internal/tzctx"
 	"github.com/omareloui/tyche/web/views"
 	"go.uber.org/zap"
 )
@@ -55,7 +56,7 @@ func Auth(refresh TokenRefresher) func(http.Handler) http.Handler {
 			}
 
 			if claims != nil {
-				ctx := context.WithValue(r.Context(), AccessClaimsCtxKey{}, claims)
+				ctx := withClaims(r.Context(), claims)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
@@ -87,10 +88,17 @@ func Auth(refresh TokenRefresher) func(http.Handler) http.Handler {
 				return
 			}
 
-			ctx = context.WithValue(r.Context(), AccessClaimsCtxKey{}, claims)
+			ctx = withClaims(r.Context(), claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// withClaims is ctx holding the access claims, and the user's time zone for
+// the templates.
+func withClaims(ctx context.Context, claims *jwt.AccessClaims) context.Context {
+	ctx = context.WithValue(ctx, AccessClaimsCtxKey{}, claims)
+	return tzctx.With(ctx, claims.Location())
 }
 
 // ClaimsFromCtx are the access claims of the signed in user, nil without.

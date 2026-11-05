@@ -13,6 +13,7 @@ import (
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/smsparser"
+	"github.com/omareloui/tyche/internal/tzctx"
 	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
 	"github.com/omareloui/tyche/web/views/layouts"
@@ -185,7 +186,7 @@ templ sandboxTx(tx *models.Transaction) {
 		if tx.ToAccount != nil {
 			@kv("To", fmt.Sprintf("%s (%s)", tx.ToAccount.Name, tx.ToAccount.Currency.Format(tx.ToAmount)))
 		}
-		@kv("Date", tx.FulfilledAt.Format("Mon, Jan 2 2006, 3:04pm MST"))
+		@kv("Date", tzctx.In(ctx, tx.FulfilledAt).Format("Mon, Jan 2 2006, 3:04pm MST"))
 		if tx.Counterparty != nil {
 			if tx.Counterparty.ID == "" {
 				if tx.Counterparty.IsMerchant {

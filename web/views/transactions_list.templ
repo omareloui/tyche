@@ -1,6 +1,7 @@
 package views
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/tzctx"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
@@ -435,7 +437,7 @@ func txRowAttrs(tx *models.Transaction, v *txView) templ.Attributes {
 }
 
 templ transaction(tx *models.Transaction, def *models.Currency) {
-	{{ v := newTxView(tx) }}
+	{{ v := newTxView(ctx, tx) }}
 	<div
 		{ txRowAttrs(tx, &v)... }
 		hx-target="this"
@@ -762,7 +764,7 @@ templ reimbursementsBreakdown(tx *models.Transaction, def *models.Currency) {
 // SMS: one row for the transfer, with both sides (the transactions the SMS
 // made) under it. Actions on a side are on its own row.
 templ transferPair(out *models.Transaction, def *models.Currency) {
-	{{ v := newTxView(out) }}
+	{{ v := newTxView(ctx, out) }}
 	{{ in := out.TransferPair }}
 	<div
 		id={ "tx-pair-" + out.ID }
@@ -846,7 +848,7 @@ templ transferPair(out *models.Transaction, def *models.Currency) {
 // transferLeg is a side of a transfer pair, the transaction an SMS made:
 // what left an account or reached the other.
 templ transferLeg(tx *models.Transaction, def *models.Currency) {
-	{{ v := newTxView(tx) }}
+	{{ v := newTxView(ctx, tx) }}
 	{{ sent := tx.Kind == models.ExpenseTxKind }}
 	<div
 		{ txRowAttrs(tx, &v)... }
@@ -924,7 +926,7 @@ templ transferLeg(tx *models.Transaction, def *models.Currency) {
 // reimbursement is an income paying back (part of) an expense, shown under
 // its expense.
 templ reimbursement(tx *models.Transaction, def *models.Currency) {
-	{{ v := newTxView(tx) }}
+	{{ v := newTxView(ctx, tx) }}
 	<div
 		{ txRowAttrs(tx, &v)... }
 		hx-target="this"
@@ -1380,7 +1382,7 @@ type txView struct {
 	isOverdue   bool
 }
 
-func newTxView(tx *models.Transaction) txView {
+func newTxView(ctx context.Context, tx *models.Transaction) txView {
 	v := txView{
 		title:       tx.Description,
 		account:     tx.Account.DisplayName(),
@@ -1394,7 +1396,7 @@ func newTxView(tx *models.Transaction) txView {
 	if v.isScheduled {
 		v.isOverdue = tx.ScheduledTo.Before(dateOf(time.Now()))
 	} else {
-		v.time = tx.FulfilledAt.Format("3:04pm")
+		v.time = tzctx.In(ctx, tx.FulfilledAt).Format("3:04pm")
 	}
 
 	// A transfer pair shows as a transfer: what reached the other account.

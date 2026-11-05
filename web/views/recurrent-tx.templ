@@ -263,7 +263,7 @@ templ RecurrentTxOOB(rt *models.RecurrentTx) {
 
 templ recurrentTxCard(rt *models.RecurrentTx, oob bool) {
 	{{ tx := rt.AsTransaction() }}
-	{{ v := newTxView(tx) }}
+	{{ v := newTxView(ctx, tx) }}
 	{{ today := dateOf(time.Now()) }}
 	{{ ended := rt.HasEnded(today) }}
 	<div

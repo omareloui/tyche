@@ -78,6 +78,7 @@ func dbUserToUser(dbU *queries.User, dfltCur *queries.Currency, dfltAcc *queries
 		Picture:       dbU.Picture.String,
 		PictureHash:   dbU.PictureHash.String,
 		StartOfPeriod: uint8(dbU.StartOfPeriod),
+		Timezone:      dbU.Timezone,
 		DefaultCurrency: models.Currency{
 			ID: dbU.DefaultCurrencyID,
 		},

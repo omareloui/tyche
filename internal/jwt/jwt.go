@@ -54,6 +54,20 @@ type AccessClaims struct {
 	DefaultAccount  *models.Account
 	// MonthStart is the day the user's months start on (models.MonthStart).
 	MonthStart models.MonthStart
+	// Timezone is the user's IANA time zone, "" in tokens issued before it
+	// was added.
+	Timezone string
+}
+
+// Location is the user's time zone, the default one when unknown.
+func (c *AccessClaims) Location() *time.Location {
+	if c != nil {
+		if loc, err := models.LoadTimezone(c.Timezone); err == nil {
+			return loc
+		}
+	}
+	loc, _ := models.LoadTimezone(models.DefaultTimezone)
+	return loc
 }
 
 // Period is the user's month now is in.
@@ -135,6 +149,7 @@ func ParseAccessClaims(token string) (*AccessClaims, error) {
 	}
 
 	monthStart, _ := (*claims)["month_start"].(float64)
+	timezone, _ := (*claims)["timezone"].(string)
 
 	return &AccessClaims{
 		ID:              (*claims)["id"].(string),
@@ -149,6 +164,7 @@ func ParseAccessClaims(token string) (*AccessClaims, error) {
 		DefaultAccount:  acc,
 		// Tokens issued before it was added have none: 1st of the month.
 		MonthStart: models.MonthStart(monthStart),
+		Timezone:   timezone,
 	}, nil
 }
 
@@ -278,6 +294,7 @@ func newToken(kind TokenType, usr *models.User) (string, time.Time, error) {
 			"default_currency_is_shown":    usr.DefaultCurrency.IsShown,
 
 			"month_start": usr.StartOfPeriod,
+			"timezone":    usr.Timezone,
 
 			"iat": now.Unix(),
 			"exp": exp.Unix(),

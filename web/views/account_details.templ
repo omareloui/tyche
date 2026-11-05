@@ -1,6 +1,7 @@
 package views
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"strings"
@@ -355,7 +356,7 @@ templ accountDetailsRecent(d *AccountDetailsData) {
 templ accountDetailsTxs(title string, a *models.Account, txs []models.Transaction) {
 	@txDetailsSection(title) {
 		for _, tx := range txs {
-			{{ m := accountTxMove(&tx, a.ID) }}
+			{{ m := accountTxMove(ctx, &tx, a.ID) }}
 			<a
 				href={ goalTxURL(&tx) }
 				class="flex items-center gap-3 w-full px-3 py-2 rounded-xl bg-tx-row text-left transition hover:ring-1 hover:ring-zinc-700"
@@ -390,8 +391,8 @@ type accountMove struct {
 // accountTxMove is what tx did to the account id: the amount signed as it
 // moved its balance (an expense's full amount, reimbursed or not), and the
 // other account of a transfer or debt.
-func accountTxMove(tx *models.Transaction, id string) accountMove {
-	v := newTxView(tx)
+func accountTxMove(ctx context.Context, tx *models.Transaction, id string) accountMove {
+	v := newTxView(ctx, tx)
 	m := accountMove{title: counterpartyTxTitle(tx, &v), tone: txToneOut}
 	if tx.Counterparty != nil && tx.Counterparty.Name != m.title {
 		m.other = tx.Counterparty.Name

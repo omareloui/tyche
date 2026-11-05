@@ -169,6 +169,8 @@ The app uses a **per-user database model** where each authenticated user gets th
 
 **Days picked in forms**: date-only values parse to midnight UTC; whether a picked day is today/ahead (fulfilled or scheduled, no future purchase) compares it with `Handler.userToday` (today in `user.timezone`, same form), never `time.Now()`, which takes today for ahead until midnight UTC east of UTC
 
+**Times shown**: stored times keep whatever zone they were written in (`time.Now()` on the server is UTC, SMS ones are in the user's zone); templates show times of day through `tzctx.In(ctx, t)` (the user's zone from the access claims' `timezone`, put in the context by `middleware.Auth`), never `t.Format` directly
+
 **Model Validation**: Models implement `SanitizeAndValidate(sani, valid)` that:
 1. Sanitizes input (trim whitespace, etc.)
 2. Validates using struct tags (`validate:"required,ulid"`)

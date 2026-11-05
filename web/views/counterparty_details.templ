@@ -348,7 +348,7 @@ templ counterpartyDetailsRecent(d *CounterpartyDetailsData) {
 			<p class="text-sm text-zinc-500">No transactions with { d.Counterparty.Name } yet.</p>
 		} else {
 			for _, tx := range d.Recent {
-				{{ v := txMiniView(&tx) }}
+				{{ v := txMiniView(ctx, &tx) }}
 				<a
 					href={ goalTxURL(&tx) }
 					class="flex items-center gap-3 w-full px-3 py-2 rounded-xl bg-tx-row text-left transition hover:ring-1 hover:ring-zinc-700"

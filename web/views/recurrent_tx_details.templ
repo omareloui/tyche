@@ -50,7 +50,7 @@ func RecurrentTxURL(id string) templ.SafeURL {
 templ RecurrentTxDetails(d *RecurrentTxDetailsData) {
 	{{ rt := d.RecurrentTx }}
 	{{ tx := rt.AsTransaction() }}
-	{{ v := newTxView(tx) }}
+	{{ v := newTxView(ctx, tx) }}
 	{{ today := dateOf(time.Now()) }}
 	{{ ended := rt.HasEnded(today) }}
 	@components.Drawer(components.DrawerProps{Label: v.title + " details", URLParam: RecurrentTxDetailsParam, URLValue: rt.ID}) {
@@ -198,7 +198,7 @@ func rtxTotal(txs []models.Transaction) float64 {
 templ rtxDetailsTxs(title string, txs []models.Transaction) {
 	@txDetailsSection(title) {
 		for _, tx := range txs {
-			{{ v := txMiniView(&tx) }}
+			{{ v := txMiniView(ctx, &tx) }}
 			<a
 				href={ goalTxURL(&tx) }
 				class="flex items-center gap-3 w-full px-3 py-2 rounded-xl bg-tx-row text-left transition hover:ring-1 hover:ring-zinc-700"

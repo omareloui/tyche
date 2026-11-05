@@ -368,7 +368,7 @@ func txAccountFilterOptions(accs []models.Account) []form.ComboOption {
 
 // ReimbursePicker lets choosing the expense an income pays back.
 templ ReimbursePicker(tx *models.Transaction, exps []models.ReimbursableExpense, errMsg string) {
-	{{ v := newTxView(tx) }}
+	{{ v := newTxView(ctx, tx) }}
 	<div data-tx hx-target="this" hx-swap="outerHTML" class="grid gap-3 px-4 py-3 rounded-2xl bg-zinc-700/20">
 		<div class="flex items-center justify-between gap-4">
 			<p>
@@ -425,7 +425,7 @@ templ ReimbursePicker(tx *models.Transaction, exps []models.ReimbursableExpense,
 // transfer between the user's accounts. The ones that look like it (amount
 // and time) are flagged.
 templ TransferPairPicker(tx *models.Transaction, cands []models.Transaction, errMsg string) {
-	{{ v := newTxView(tx) }}
+	{{ v := newTxView(ctx, tx) }}
 	<div data-tx hx-target="this" hx-swap="outerHTML" class="grid gap-3 px-4 py-3 rounded-2xl bg-zinc-700/20">
 		<div class="flex items-center justify-between gap-4">
 			<p>
@@ -455,7 +455,7 @@ templ TransferPairPicker(tx *models.Transaction, cands []models.Transaction, err
 		}
 		<ul class="grid gap-2 max-h-96 overflow-y-auto">
 			for _, c := range cands {
-				{{ cv := newTxView(&c) }}
+				{{ cv := newTxView(ctx, &c) }}
 				<li>
 					<button
 						hx-put={ fmt.Sprintf("/transactions/%s/transfer-pair", tx.ID) }

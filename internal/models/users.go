@@ -55,6 +55,8 @@ type User struct {
 	DefaultCurrency Currency `validate:"required"`
 	DefaultAccount  *Account `validate:"required"`
 	StartOfPeriod   uint8    `validate:"required,min=1,max=31"`
+	// Timezone is the user's IANA time zone (e.g. Africa/Cairo).
+	Timezone string
 	SeededAt        time.Time
 	// Onboarded is whether the user finished (or skipped) the onboarding at
 	// /welcome, shown on signing in until then.
