@@ -193,6 +193,24 @@ type BalanceFix struct {
 	Amount    float64
 }
 
+// BankEntry is what a's balance is typed as when fixing it: what the bank
+// shows (InBank, so what's set aside for goals included), what's owed for a
+// credit card.
+func (a *Account) BankEntry() float64 {
+	if a.Kind.Enum == AccKindCreditCard {
+		return -a.InBank()
+	}
+	return a.InBank()
+}
+
+// FixOfBankEntry is the BalanceFix of a typed BankEntry (in the stored unit).
+func (a *Account) FixOfBankEntry(entry float64) BalanceFix {
+	if a.Kind.Enum == AccKindCreditCard {
+		entry = -entry
+	}
+	return BalanceFix{AccountID: a.ID, Amount: entry - a.SetAside}
+}
+
 // BalanceFixDescription describes the adjustment transactions fixing a
 // balance.
 const BalanceFixDescription = "Balance correction"

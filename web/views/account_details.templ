@@ -155,10 +155,10 @@ templ accountDetailsActions(a *models.Account) {
 			Transactions
 		</a>
 		if !a.IsArchive {
-			<a href="/accounts/fix-balances" class="txd-action">
+			<button type="button" hx-get={ fmt.Sprintf("/accounts/%s/adjust", a.ID) } hx-target={ slot } hx-swap="innerHTML" class="txd-action">
 				@icons.Scale("14")
-				Fix balance
-			</a>
+				Adjust balance
+			</button>
 		}
 		if a.Amount > 0 {
 			<button type="button" hx-get={ fmt.Sprintf("/accounts/%s/delete-form", a.ID) } hx-target={ slot } hx-swap="innerHTML" class="txd-action text-red-300!">

@@ -417,3 +417,102 @@ document.addEventListener("alpine:init", () => {
     },
   }));
 });
+
+// balanceFix backs a balance typed as the bank shows it (views.balanceStep):
+// the amount input's mask (signed, prefixed with the symbol, the metal
+// unit's digits) and its difference with the current one. cur is in troy
+// ounces for metals; owed (credit cards) colors a rise red.
+document.addEventListener("alpine:init", () => {
+  Alpine.data("balanceFix", (id, cur, sym, unit = "", owed = false) => ({
+    id,
+    cur,
+    sym,
+    unit,
+    owed,
+
+    init() {
+      if (this.changes) {
+        this.$watch("unit", () => this.track());
+        this.$el.addEventListener("input", () => this.track());
+      }
+    },
+
+    // track tells the stepper (fixBalances) around it this one's change.
+    track() {
+      this.changes[this.id] = this.diff() === 0 ? "" : this.fmtDiff();
+    },
+
+    digits() {
+      return this.unit === "oz" ? 4 : 2;
+    },
+
+    mask(input, money) {
+      const prefix = this.sym + " ";
+      const s = input.startsWith(prefix) ? input.slice(prefix.length) : input;
+      return prefix + money(s.trimStart(), ".", ",", this.digits());
+    },
+
+    remask() {
+      this.$nextTick(() => {
+        const i = this.$root.querySelector("input[inputmode=decimal]");
+        if (i?.value) i.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    },
+
+    typed() {
+      const i = this.$root.querySelector("input[inputmode=decimal]");
+      const s = (i?.value ?? "").replace(this.sym, "");
+      const n = parseFloat(s.replace(/[^0-9.]/g, ""));
+      if (isNaN(n)) return null;
+      return /-|−/.test(s) ? -n : n;
+    },
+
+    diff() {
+      const n = this.typed();
+      if (n === null) return 0;
+      const cur = this.unit === "g" ? this.cur * 31.1034768 : this.cur;
+      const pow = 10 ** this.digits();
+      return Math.round((n - cur) * pow) / pow;
+    },
+
+    fmtDiff() {
+      const d = this.diff();
+      const digits = this.digits();
+      return (d > 0 ? "+" : "−") + Math.abs(d).toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+    },
+
+    up() {
+      return (this.diff() > 0) !== this.owed;
+    },
+  }));
+
+  // fixBalances steps through the accounts of the fix balances drawer one at
+  // a time (views.FixBalancesForm), the list under it showing every change
+  // (balanceFix fills changes) and jumping to one.
+  Alpine.data("fixBalances", (n) => ({
+    k: 0,
+    n,
+    changes: {},
+
+    changed() {
+      return Object.values(this.changes).filter(Boolean).length;
+    },
+
+    go(k) {
+      this.k = Math.max(0, Math.min(this.n - 1, k));
+      this.$nextTick(() => {
+        const i = this.$root.querySelector(`[data-step="${this.k}"] input[inputmode=decimal]`);
+        i?.focus();
+        i?.select();
+      });
+    },
+
+    // onEnter goes to the next account, submitting on the last one.
+    onEnter(e) {
+      if (this.k < this.n - 1) {
+        e.preventDefault();
+        this.go(this.k + 1);
+      }
+    },
+  }));
+});

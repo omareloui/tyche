@@ -279,32 +279,21 @@ func (r *Repository) DeleteAccount(ctx context.Context, id string, moveBalance *
 }
 
 // FixBalances sets each account's balance to its fix, recording the
-// difference as an adjustment transaction fulfilled at `at` when asTx, else
-// overwriting the balance. It returns how many accounts changed.
-func (r *Repository) FixBalances(ctx context.Context, fixes []models.BalanceFix, asTx bool, at time.Time) (int, error) {
+// difference as an adjustment transaction fulfilled at `at`. It returns how
+// many accounts changed.
+func (r *Repository) FixBalances(ctx context.Context, fixes []models.BalanceFix, at time.Time) (int, error) {
 	l := logger.FromCtx(ctx)
 	changed := 0
 	err := r.transact(ctx, func(qtx *queries.Queries) error {
 		for _, f := range fixes {
-			cur, err := qtx.GetAccountAmount(ctx, f.AccountID)
+			diff, err := balanceFixDiff(ctx, qtx, f)
 			if err != nil {
-				l.Error("getting account amount", zap.Error(err), zap.String("id", f.AccountID))
 				return err
 			}
-			// 6 digits: a metal's troy ounces need them (see Currency.Round).
-			diff := math.Round((f.Amount-cur)*1e6) / 1e6
 			if diff == 0 {
 				continue
 			}
 			changed++
-
-			if !asTx {
-				if err := qtx.SetAccountAmount(ctx, queries.SetAccountAmountParams{ID: f.AccountID, Amount: f.Amount}); err != nil {
-					l.Error("setting account amount", zap.Error(err), zap.String("id", f.AccountID))
-					return err
-				}
-				continue
-			}
 
 			tx := &models.Transaction{
 				ID:          idgen.New(),
@@ -324,8 +313,49 @@ func (r *Repository) FixBalances(ctx context.Context, fixes []models.BalanceFix,
 	if err != nil {
 		return 0, err
 	}
-	l.Debug("fixed balances", zap.Int("changed", changed), zap.Bool("as_tx", asTx))
+	l.Debug("fixed balances", zap.Int("changed", changed))
 	return changed, nil
+}
+
+// SetBalances overwrites each account's balance with its fix, leaving no
+// transaction (the onboarding's starting balances). It returns how many
+// accounts changed.
+func (r *Repository) SetBalances(ctx context.Context, fixes []models.BalanceFix) (int, error) {
+	l := logger.FromCtx(ctx)
+	changed := 0
+	err := r.transact(ctx, func(qtx *queries.Queries) error {
+		for _, f := range fixes {
+			diff, err := balanceFixDiff(ctx, qtx, f)
+			if err != nil {
+				return err
+			}
+			if diff == 0 {
+				continue
+			}
+			changed++
+			if err := qtx.SetAccountAmount(ctx, queries.SetAccountAmountParams{ID: f.AccountID, Amount: f.Amount}); err != nil {
+				l.Error("setting account amount", zap.Error(err), zap.String("id", f.AccountID))
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	l.Debug("set balances", zap.Int("changed", changed))
+	return changed, nil
+}
+
+// balanceFixDiff is what f adds to its account's balance.
+func balanceFixDiff(ctx context.Context, qtx *queries.Queries, f models.BalanceFix) (float64, error) {
+	cur, err := qtx.GetAccountAmount(ctx, f.AccountID)
+	if err != nil {
+		logger.FromCtx(ctx).Error("getting account amount", zap.Error(err), zap.String("id", f.AccountID))
+		return 0, err
+	}
+	// 6 digits: a metal's troy ounces need them (see Currency.Round).
+	return math.Round((f.Amount-cur)*1e6) / 1e6, nil
 }
 
 func (r *Repository) applyTxToAccountWithTxn(qtx *queries.Queries, ctx context.Context, tx *models.Transaction) error {

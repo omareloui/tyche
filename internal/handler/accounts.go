@@ -888,22 +888,24 @@ func formatCardExpiry(date time.Time) string {
 	return date.Format("01/06")
 }
 
-// FixBalancesPage lists the active accounts with their balance editable, to
-// set them to what they really are.
-func (h *Handler) FixBalancesPage(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	balances, err := h.repo.GetBalances(r.Context())
-	if err != nil {
-		return nil, err
+// GetFixBalances is the drawer stepping through the active accounts with
+// their balance editable, to set them to what they really are.
+func (h *Handler) GetFixBalances(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	if r.Header.Get("HX-Request") == "" {
+		// The old page's url: the drawer opens from the accounts page.
+		http.Redirect(w, r, "/accounts", http.StatusSeeOther)
+		return nil, nil
 	}
 	accs, err := h.activeAccounts(r.Context())
 	if err != nil {
 		return nil, err
 	}
-	return views.FixBalances(getClaims(r.Context()), balances, accs), nil
+	return views.FixBalancesDrawer(accs, views.NewFixBalancesFD(accs)), nil
 }
 
-// FixBalances sets the submitted balances, as adjustment transactions of the
-// differences or as is.
+// FixBalances sets the submitted balances (as the banks show them) as
+// adjustment transactions of the differences, answering the changed cards
+// out of band.
 func (h *Handler) FixBalances(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	l := logger.FromCtx(r.Context())
 
@@ -916,38 +918,138 @@ func (h *Handler) FixBalances(w http.ResponseWriter, r *http.Request) (templ.Com
 		return nil, err
 	}
 
+	fd := &views.FixBalancesFD{Balances: map[string]*views.BalanceFD{}, Changed: -1}
 	var fixes []models.BalanceFix
-	for _, a := range accs {
-		v := strings.TrimSpace(r.PostFormValue("amount-" + a.ID))
-		if v == "" {
+	for i := range accs {
+		a := &accs[i]
+		bfd := balanceFD(r, a, "-"+a.ID)
+		fd.Balances[a.ID] = bfd
+		if bfd.Amount.Value == "" {
 			continue
 		}
-		amount, err := parseSignedFloatIfExists(v)
+		fix, err := parseBalanceFix(a, bfd)
 		if err != nil {
-			return nil, resperr.New(http.StatusUnprocessableEntity, "Invalid balance for "+a.Name+".")
+			bfd.Amount.Error = "Invalid balance"
+			fd.Error = "Invalid balance for " + a.Name + "."
+			continue
 		}
-		fixes = append(fixes, models.BalanceFix{AccountID: a.ID, Amount: amount})
+		fixes = append(fixes, fix)
+	}
+	if fd.Error != "" {
+		return views.FixBalancesForm(accs, fd), nil
 	}
 
-	mode := r.PostFormValue("mode")
-	if mode != views.FixBalancesSet {
-		mode = views.FixBalancesAsTx
-	}
-
-	changed, err := h.repo.FixBalances(r.Context(), fixes, mode == views.FixBalancesAsTx, time.Now())
+	changed, err := h.repo.FixBalances(r.Context(), fixes, time.Now())
 	if err != nil {
 		return nil, err
 	}
-	l.Info("fixed balances", zap.Int("changed", changed), zap.String("mode", mode))
+	l.Info("fixed balances", zap.Int("changed", changed))
+	if changed == 0 {
+		fd.Changed = 0
+		return views.FixBalancesForm(accs, fd), nil
+	}
 
+	addHXTrigger(w, views.AccountsChangedEvent)
+	drawerSaved(w, "", "")
+	w.Header().Set("HX-Reswap", "none")
+
+	now, err := h.activeAccounts(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	def := &getClaims(r.Context()).DefaultCurrency
+	for i := range now {
+		prev := slicesutils.Find(accs, func(a models.Account) bool { return a.ID == now[i].ID })
+		if prev != nil && prev.Amount == now[i].Amount {
+			continue
+		}
+		if err := renderToBody(w, r, views.AccountReplaceOOB(&now[i], def)); err != nil {
+			return nil, err
+		}
+	}
 	if err := h.getAndRenderBalancesOOB(w, r); err != nil {
 		return nil, err
 	}
+	return nil, nil
+}
 
-	if accs, err = h.activeAccounts(r.Context()); err != nil {
+// GetAdjustBalance is the drawer setting the account's balance.
+func (h *Handler) GetAdjustBalance(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	a, err := h.adjustableAccount(r)
+	if err != nil {
 		return nil, err
 	}
-	return views.FixBalancesForm(accs, mode, changed), nil
+	return views.AdjustBalanceDrawer(a, views.NewBalanceFD(a)), nil
+}
+
+// AdjustBalance sets the account's balance (as the bank shows it) as an
+// adjustment transaction of the difference, answering its card.
+func (h *Handler) AdjustBalance(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	l := logger.FromCtx(r.Context())
+	a, err := h.adjustableAccount(r)
+	if err != nil {
+		return nil, err
+	}
+
+	fd := balanceFD(r, a, "")
+	fix, err := parseBalanceFix(a, fd)
+	if fd.Amount.Value == "" || err != nil {
+		fd.Amount.Error = "Invalid balance"
+		return views.AdjustBalanceForm(a, fd), nil
+	}
+
+	changed, err := h.repo.FixBalances(r.Context(), []models.BalanceFix{fix}, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	l.Info("adjusted balance", zap.String("id", a.ID), zap.Int("changed", changed))
+	if changed == 0 {
+		drawerSaved(w, "", "")
+		w.Header().Set("HX-Reswap", "none")
+		return nil, nil
+	}
+	return h.renderUpdatedAccount(w, r, a)
+}
+
+// balanceFD is a's typed balance, its fields named amount<suffix> and
+// amount_unit<suffix>.
+func balanceFD(r *http.Request, a *models.Account, suffix string) *views.BalanceFD {
+	v := strings.TrimSpace(r.PostFormValue("amount" + suffix))
+	if !strings.ContainsAny(strings.TrimPrefix(v, a.Currency.Symbol), "0123456789") {
+		// Nothing typed but the mask's symbol.
+		v = ""
+	}
+	return &views.BalanceFD{
+		Amount: form.FDInput{Value: v},
+		Unit:   string(a.AmountUnit(r.PostFormValue("amount_unit" + suffix))),
+	}
+}
+
+// parseBalanceFix reads fd, a's balance as the bank shows it (e.g.
+// "EGP -1,250.50", what's owed for a credit card).
+func parseBalanceFix(a *models.Account, fd *views.BalanceFD) (models.BalanceFix, error) {
+	v := strings.TrimSpace(strings.TrimPrefix(fd.Amount.Value, a.Currency.Symbol))
+	n, err := parseFloatIfExists(v)
+	if err != nil {
+		return models.BalanceFix{}, err
+	}
+	if strings.ContainsAny(v, "-−") {
+		n = -n
+	}
+	return a.FixOfBankEntry(models.FromUnit(n, models.ParseMetalUnit(fd.Unit))), nil
+}
+
+// adjustableAccount is the account {id}, if its balance can be adjusted
+// (not archived).
+func (h *Handler) adjustableAccount(r *http.Request) (*models.Account, error) {
+	a, err := h.repo.GetAccount(r.Context(), r.PathValue("id"))
+	if err != nil {
+		return nil, err
+	}
+	if a.IsArchive {
+		return nil, resperr.New(http.StatusUnprocessableEntity, "Unarchive the account to adjust its balance.")
+	}
+	return a, nil
 }
 
 func (h *Handler) activeAccounts(ctx context.Context) ([]models.Account, error) {

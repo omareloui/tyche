@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/errs"
@@ -327,7 +326,7 @@ func (h *Handler) saveWelcomeBalances(ctx context.Context, r *http.Request, accs
 	if len(fixes) == 0 {
 		return "", nil
 	}
-	changed, err := h.repo.FixBalances(ctx, fixes, false, time.Now())
+	changed, err := h.repo.SetBalances(ctx, fixes)
 	if err != nil {
 		return "", err
 	}

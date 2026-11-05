@@ -73,13 +73,16 @@ templ Accounts(
 		if len(accounts) > 0 {
 			@accountsSummaryLazy()
 			<div class="flex justify-end -mt-3 mb-4">
-				<a
-					href="/accounts/fix-balances"
+				<button
+					type="button"
+					hx-get="/accounts/fix-balances"
+					hx-target={ "#" + components.DrawerSlot }
+					hx-swap="innerHTML"
 					class="inline-flex items-center gap-1.5 text-sm text-zinc-400 transition-colors hover:text-white"
 				>
 					@icons.Scale("16")
 					Fix balances
-				</a>
+				</button>
 			</div>
 		}
 		@accountsList(accounts, &claims.DefaultCurrency)
@@ -832,6 +835,12 @@ func getAccountMenuItems(a *models.Account) []templ.Component {
 		components.EntryMenuDrawerItem("Details", accountDetailsURL(a.ID),
 			components.WithEntryMenuItemIcon(icons.Eye("16"))),
 		components.EntryMenuEditItem(fmt.Sprintf("/accounts/%s/edit", a.ID)),
+	}
+
+	if !a.IsArchive {
+		items = append(items,
+			components.EntryMenuDrawerItem("Adjust balance", fmt.Sprintf("/accounts/%s/adjust", a.ID),
+				components.WithEntryMenuItemIcon(icons.Scale("16"))))
 	}
 
 	if !a.IsDefault && !a.IsArchive {

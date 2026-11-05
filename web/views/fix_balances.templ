@@ -5,140 +5,230 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
-	"github.com/omareloui/tyche/web/views/icons"
-	"github.com/omareloui/tyche/web/views/layouts"
 )
 
-// FixBalancesMode is how the fix balances form applies the differences.
-const (
-	FixBalancesAsTx = "tx"
-	FixBalancesSet  = "set"
-)
+// BalanceFD is a balance typed as the bank shows it (Account.BankEntry), in
+// Unit for metals.
+type BalanceFD struct {
+	Amount form.FDInput
+	Unit   string
+}
 
-templ FixBalances(claims *jwt.AccessClaims, balances []models.Balance, accs []models.Account) {
-	@layouts.WithTitle(claims, "Fix balances", balances) {
-		<div class="max-w-2xl grid gap-4">
-			<p class="text-zinc-400">
-				Type what each account really has, e.g. as your bank shows it. Only the changed ones get updated.
-			</p>
-			@FixBalancesForm(accs, FixBalancesAsTx, -1)
-		</div>
+// NewBalanceFD is a's balance as its form starts.
+func NewBalanceFD(a *models.Account) *BalanceFD {
+	u := a.AmountUnit("")
+	return &BalanceFD{
+		Amount: form.FDInput{Value: strconv.FormatFloat(models.ToUnit(a.BankEntry(), u), 'f', models.AmountDigits(u), 64)},
+		Unit:   string(u),
 	}
 }
 
-// FixBalancesForm lists the accounts with their balance editable. changed is
-// how many accounts the last submit changed, -1 before any.
-templ FixBalancesForm(accs []models.Account, mode string, changed int) {
-	<form
-		hx-post="/accounts/fix-balances"
-		hx-target="this"
-		hx-swap="outerHTML"
-		hx-disabled-elt="find button[type=submit]"
-		class="grid gap-6"
-	>
-		if len(accs) == 0 {
-			@components.GlassCard("p-5 sm:p-6") {
-				<p class="text-zinc-400">
-					No accounts yet. <a href="/accounts" class="text-(--accent) hover:underline">Add one →</a>
-				</p>
-			}
-		} else {
-			for _, s := range accountSections {
-				if accs := accountsInSection(accs, s.ID); len(accs) > 0 {
-					<section class="grid gap-3">
-						<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
-							@accKindIcon(s.Kind, "16")
-							{ s.Title }
-						</h2>
-						@components.GlassCard("divide-y divide-zinc-800") {
-							for _, a := range accs {
-								@fixBalanceRow(a)
-							}
-						}
-					</section>
-				}
-			}
-			<div class="grid gap-2">
-				<span class="input-label">Apply the differences as</span>
-				@form.SegmentedRadio("Apply the differences as", "mode", "fix", []form.RadioOption{
-					{Value: FixBalancesAsTx, Label: "Correction transactions"},
-					{Value: FixBalancesSet, Label: "New balances as is"},
-				}, form.FDInput{Value: mode}, nil)
-				<p class="text-sm text-zinc-500">
-					Corrections are "Adjustment" transactions, kept in your history but out of every analysis; delete one to undo it. Setting them as is leaves no trace.
-				</p>
-			</div>
-			<div class="flex items-center justify-end gap-4">
-				if changed == 0 {
-					<p class="text-sm text-zinc-400">Nothing changed.</p>
-				} else if changed > 0 {
-					<p class="inline-flex items-center gap-1.5 text-sm text-emerald-400">
-						@icons.Check("16")
-						{ fmt.Sprintf("Updated %d %s.", changed, plural(changed, "account", "accounts")) }
-					</p>
-				}
-				<button type="submit" class="btn-primary">Save balances</button>
-			</div>
-		}
-	</form>
+// FixBalancesFD is the fix balances form: each account's BalanceFD by id,
+// the error of the last submit and how many accounts it changed (-1 before
+// any).
+type FixBalancesFD struct {
+	Balances map[string]*BalanceFD
+	Error    string
+	Changed  int
 }
 
-templ fixBalanceRow(a models.Account) {
-	{{ id := "fix-amount-" + a.ID }}
-	<div class="flex flex-wrap items-center gap-x-4 gap-y-2 p-4" x-data={ fixBalanceRowData(&a) }>
-		<label for={ id } class="min-w-0 flex-1">
-			<span class="block truncate font-medium">{ a.Name }</span>
-			<span class="block text-sm text-zinc-500 tabular-nums">
-				Now <span class="sensitive">{ a.ViewAmount() }</span>
-				<span
-					x-cloak
-					x-show="diff() !== 0"
-					:class="diff() > 0 ? 'text-emerald-400' : 'text-red-400'"
-					x-text="fmtDiff()"
-				></span>
-			</span>
-			if a.SetAside > 0 {
-				<span class="block text-xs text-zinc-500">
-					The bank shows <span class="sensitive tabular-nums">{ a.ViewInBank() }</span>: <span class="sensitive tabular-nums">{ a.ViewSetAside() }</span> of it is set aside for goals, not in this balance.
-				</span>
+// NewFixBalancesFD is the fix balances form as it starts.
+func NewFixBalancesFD(accs []models.Account) *FixBalancesFD {
+	fd := &FixBalancesFD{Balances: map[string]*BalanceFD{}, Changed: -1}
+	for i := range accs {
+		fd.Balances[accs[i].ID] = NewBalanceFD(&accs[i])
+	}
+	return fd
+}
+
+// FixBalancesDrawer sets every active account's balance, one at a time, in
+// a drawer.
+templ FixBalancesDrawer(accs []models.Account, fd *FixBalancesFD) {
+	@components.Drawer(components.DrawerProps{Label: "Fix balances"}) {
+		@FixBalancesForm(accs, fd)
+	}
+}
+
+// FixBalancesForm steps through the accounts (fixBalances, main.js), the
+// current one's balance in a big input, the list of them all under it.
+templ FixBalancesForm(accs []models.Account, fd *FixBalancesFD) {
+	{{ accs = fixBalancesOrder(accs) }}
+	@form.DrawerForm(form.DrawerFormProps{
+		Title: "Fix balances", Method: "post", URL: "/accounts/fix-balances", Submit: "Save balances",
+		Attrs: templ.Attributes{"hx-disabled-elt": "find button[type=submit]", "x-data": fmt.Sprintf("fixBalances(%d)", len(accs))},
+	}) {
+		if len(accs) == 0 {
+			<p class="text-zinc-400">No accounts yet.</p>
+		} else {
+			<div class="grid gap-2">
+				<div class="flex items-center justify-between text-xs text-zinc-500 tabular-nums">
+					<span x-text="`${k + 1} of ${n}`">1 of { strconv.Itoa(len(accs)) }</span>
+					<span x-cloak x-show="changed()" x-text="`${changed()} changed`" class="text-(--accent)"></span>
+				</div>
+				<div class="flex gap-1" aria-hidden="true">
+					for i, a := range accs {
+						<button
+							type="button"
+							tabindex="-1"
+							@click={ fmt.Sprintf("go(%d)", i) }
+							class="h-1.5 flex-1 rounded-full bg-zinc-800 cursor-pointer transition-colors"
+							:class={ fmt.Sprintf("k === %d ? 'bg-(--accent)!' : (changes[%s] ? 'bg-(--accent)/40!' : '')", i, jsString(a.ID)) }
+						></button>
+					}
+				</div>
+			</div>
+			for i, a := range accs {
+				<div
+					data-step={ strconv.Itoa(i) }
+					x-show={ fmt.Sprintf("k === %d", i) }
+					if i > 0 {
+						x-cloak
+					}
+					class="grid gap-4"
+				>
+					<h3 class="flex items-center justify-center gap-2 font-medium text-zinc-200">
+						<span class="text-zinc-400">
+							@accKindIcon(a.Kind.Enum, "18")
+						</span>
+						<span class="truncate">{ a.Name }</span>
+					</h3>
+					{{ attrs := templ.Attributes{"@keydown.enter": "onEnter($event)"} }}
+					if i == 0 {
+						{{ attrs["x-init"] = "$nextTick(() => { $el.focus(); $el.select() })" }}
+					}
+					@balanceStep(&a, fd.Balances[a.ID], "-"+a.ID, attrs)
+				</div>
+			}
+			<div class="flex items-center justify-between">
+				<button type="button" @click="go(k - 1)" :disabled="k === 0" class="btn-ghost h-9! px-3! disabled:opacity-40 disabled:cursor-default">
+					← Previous
+				</button>
+				<button type="button" @click="go(k + 1)" :disabled="k === n - 1" class="btn-ghost h-9! px-3! disabled:opacity-40 disabled:cursor-default">
+					Next →
+				</button>
+			</div>
+			@form.ErrorMessage(fd.Error)
+			if fd.Changed == 0 {
+				<p class="text-sm text-zinc-400">Nothing changed.</p>
+			}
+			<ul class="divide-y divide-zinc-800 border-t border-zinc-800">
+				for i, a := range accs {
+					<li>
+						<button
+							type="button"
+							@click={ fmt.Sprintf("go(%d)", i) }
+							class="flex w-full items-center gap-3 py-2.5 text-left text-sm cursor-pointer transition-colors hover:text-white"
+							:class={ fmt.Sprintf("k === %d ? 'text-(--accent)' : 'text-zinc-300'", i) }
+						>
+							<span class="shrink-0 text-zinc-500">
+								@accKindIcon(a.Kind.Enum, "16")
+							</span>
+							<span class="flex-1 min-w-0 truncate">{ a.Name }</span>
+							<span class="shrink-0 tabular-nums text-zinc-500 sensitive">{ a.Currency.Format(a.BankEntry()) }</span>
+							<span
+								x-cloak
+								x-show={ fmt.Sprintf("changes[%s]", jsString(a.ID)) }
+								x-text={ fmt.Sprintf("changes[%s]", jsString(a.ID)) }
+								class="shrink-0 w-24 text-right tabular-nums text-(--accent)"
+							></span>
+						</button>
+					</li>
+				}
+			</ul>
+			<p class="text-xs text-zinc-500">
+				Enter goes to the next account. The differences are recorded as "Adjustment" transactions, out of every analysis; delete one to undo it.
+			</p>
+		}
+	}
+}
+
+// AdjustBalanceDrawer sets one account's balance, in a drawer.
+templ AdjustBalanceDrawer(a *models.Account, fd *BalanceFD) {
+	@components.Drawer(components.DrawerProps{Label: "Adjust " + a.Name}) {
+		@AdjustBalanceForm(a, fd)
+	}
+}
+
+// AdjustBalanceForm is AdjustBalanceDrawer's form alone, answered with its
+// errors.
+templ AdjustBalanceForm(a *models.Account, fd *BalanceFD) {
+	@form.DrawerForm(form.DrawerFormProps{
+		Title: "Adjust " + a.Name, Method: "post", URL: fmt.Sprintf("/accounts/%s/adjust", a.ID), Submit: "Save balance",
+		Attrs: templ.Attributes{"hx-disabled-elt": "find button[type=submit]"},
+	}) {
+		@balanceStep(a, fd, "", templ.Attributes{"autofocus": true, "x-init": "$nextTick(() => { $el.focus(); $el.select() })"})
+		<p class="text-xs text-zinc-500 text-center">
+			The difference is recorded as an "Adjustment" transaction, out of every analysis; delete it to undo.
+		</p>
+	}
+}
+
+// balanceStep is a's balance typed as the bank shows it (balanceFix,
+// main.js) in the transaction form's big amount input, its fields named
+// amount<suffix> and amount_unit<suffix>.
+templ balanceStep(a *models.Account, fd *BalanceFD, suffix string, inputAttrs templ.Attributes) {
+	{{ id := "balance-" + a.ID }}
+	{{ owed := a.Kind.Enum == models.AccKindCreditCard }}
+	<div class="grid grid-cols-1 justify-items-center gap-3" x-data={ balanceFixData(a, fd) }>
+		<label for={ id } class="text-sm text-zinc-400">
+			if owed {
+				What you owe
+			} else {
+				What the bank shows
 			}
 		</label>
-		<div class="flex items-center gap-2 w-full sm:w-52">
-			<span class="text-sm text-zinc-500">{ a.Currency.Symbol }</span>
-			<input
-				id={ id }
-				name={ "amount-" + a.ID }
-				type="text"
-				inputmode="decimal"
-				autocomplete="off"
-				value={ strconv.FormatFloat(a.Amount, 'f', 2, 64) }
-				x-model="val"
-				x-mask:dynamic="$money($input, '.', ',')"
-				class="input-field sensitive text-right tabular-nums"
-			/>
-		</div>
+		<input
+			id={ id }
+			type="text"
+			name={ "amount" + suffix }
+			value={ fd.Amount.Value }
+			placeholder={ a.Currency.Symbol + " 0.00" }
+			autocomplete="off"
+			inputmode="decimal"
+			x-mask:dynamic="mask($input, $money)"
+			class="amount-hero"
+			if fd.Amount.Error != "" {
+				aria-invalid="true"
+			}
+			{ inputAttrs... }
+		/>
+		@form.ErrorMessage(fd.Amount.Error)
+		if fd.Unit != "" {
+			@form.MetalUnitToggle("amount_unit"+suffix, a.ID, models.ParseMetalUnit(fd.Unit), templ.Attributes{
+				"@change": "unit = $event.target.value; remask()",
+			})
+		}
+		<p class="text-sm text-zinc-500 tabular-nums">
+			Now <span class="sensitive">{ a.Currency.Format(a.BankEntry()) }</span>
+			<span x-cloak x-show="diff() !== 0" :class="up() ? 'text-emerald-400' : 'text-red-400'" x-text="fmtDiff()"></span>
+		</p>
+		if a.SetAside > 0 {
+			<p class="max-w-xs text-center text-xs text-zinc-500">
+				Includes <span class="sensitive tabular-nums">{ a.ViewSetAside() }</span> set aside for goals, out of this account's balance (<span class="sensitive tabular-nums">{ a.ViewAmount() }</span>).
+			</p>
+		}
 	</div>
 }
 
-// fixBalanceRowData is the row's Alpine state: the stored balance and the
-// typed one, with their difference.
-func fixBalanceRowData(a *models.Account) string {
-	cur, _ := json.Marshal(a.Amount)
-	val, _ := json.Marshal(strconv.FormatFloat(a.Amount, 'f', 2, 64))
-	return fmt.Sprintf(`{
-		cur: %s,
-		val: %s,
-		diff() {
-			const n = parseFloat(String(this.val).replace(/[^0-9.\-]/g, ''));
-			return isNaN(n) ? 0 : Math.round((n - this.cur) * 100) / 100;
-		},
-		fmtDiff() {
-			const d = this.diff();
-			return (d > 0 ? '+' : '−') + Math.abs(d).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
-		},
-	}`, cur, val)
+func balanceFixData(a *models.Account, fd *BalanceFD) string {
+	cur, _ := json.Marshal(a.BankEntry())
+	return fmt.Sprintf("balanceFix(%s, %s, %s, %s, %t)",
+		jsString(a.ID), cur, jsString(a.Currency.Symbol), jsString(fd.Unit), a.Kind.Enum == models.AccKindCreditCard)
+}
+
+func jsString(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
+}
+
+// fixBalancesOrder is accs in the order of the accounts page's sections.
+func fixBalancesOrder(accs []models.Account) []models.Account {
+	var res []models.Account
+	for _, s := range accountSections {
+		res = append(res, accountsInSection(accs, s.ID)...)
+	}
+	return res
 }
