@@ -6,6 +6,7 @@ import (
 
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/tzctx"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
@@ -34,6 +35,8 @@ type SettingsData struct {
 	WorkSettings                *models.WorkSettings
 	// Accounts can be the default one.
 	Accounts []models.Account
+	// Joined is when the user signed up.
+	Joined time.Time
 }
 
 type SettingsProfileFD struct {
@@ -177,6 +180,12 @@ templ SettingsProfileCard(d *SettingsData) {
 				@form.Control("text", "last_name", "", "settings", d.Profile.LastName, templ.Attributes{"autocomplete": "family-name"})
 			}
 		</div>
+		if !d.Joined.IsZero() {
+			<p class="text-sm text-zinc-500">
+				Using Tyche since
+				<time datetime={ d.Joined.Format(time.RFC3339) } class="text-zinc-300">{ tzctx.In(ctx, d.Joined).Format("Jan 2, 2006") }</time>.
+			</p>
+		}
 	}
 }
 

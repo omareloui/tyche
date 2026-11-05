@@ -79,6 +79,7 @@ func (h *Handler) settingsData(ctx context.Context) (*views.SettingsData, error)
 		ShownCurrencies: shown,
 		DefaultCurrency: &usr.DefaultCurrency,
 		Accounts:        accs,
+		Joined:          usr.CreatedAt,
 	}
 	if usr.DefaultAccount != nil {
 		d.Account.AccountID.Value = usr.DefaultAccount.ID
