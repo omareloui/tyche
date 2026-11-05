@@ -447,7 +447,7 @@ templ goalBuyHeader(gl *models.Goal) {
 }
 
 templ goalsList(goals []models.Goal, plans map[string]*GoalPlanCard, defaultCur *models.Currency) {
-	<div id="goals-list" class="grid gap-8">
+	<div id="goals-list" class="grid grid-cols-1 gap-8">
 		@goalsSummary(goals, defaultCur, false)
 		<section class="hidden has-[[data-goal]]:block">
 			<h2 class="flex items-center gap-2 mb-3 text-sm font-semibold uppercase tracking-wider text-zinc-500">
@@ -481,7 +481,7 @@ templ goalsList(goals []models.Goal, plans map[string]*GoalPlanCard, defaultCur 
 }
 
 templ goalSectionGrid(section string) {
-	<div id={ GoalSectionID(section) } class="grid sm:grid-cols-2 gap-4">
+	<div id={ GoalSectionID(section) } class="grid grid-cols-1 sm:grid-cols-2 gap-4">
 		{ children... }
 	</div>
 }
@@ -512,7 +512,7 @@ templ goalsSummary(goals []models.Goal, defaultCur *models.Currency, oob bool) {
 		}
 	>
 		if len(goals) > 0 {
-			<section class="relative overflow-hidden grid gap-5 p-5 sm:p-6 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800 [--accent:var(--color-violet-400)]">
+			<section class="relative overflow-hidden grid grid-cols-1 gap-5 p-5 sm:p-6 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800 [--accent:var(--color-violet-400)]">
 				<div aria-hidden="true" class="pointer-events-none absolute -top-24 -right-16 size-64 rounded-full bg-(--accent)/15 blur-3xl"></div>
 				<div aria-hidden="true" class="pointer-events-none absolute -bottom-28 -left-20 size-56 rounded-full bg-emerald-400/10 blur-3xl"></div>
 				<div class="relative flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
@@ -539,7 +539,7 @@ templ goalsSummary(goals []models.Goal, defaultCur *models.Currency, oob bool) {
 							<p class="text-sm text-zinc-500">Time to dream up the next one.</p>
 						</div>
 					}
-					<div class="flex gap-2">
+					<div class="grid grid-flow-col auto-cols-fr gap-2 w-full sm:w-auto">
 						@statTile(fmt.Sprint(s.Active), "In progress", "text-zinc-100")
 						if s.Ready > 0 {
 							@statTile(fmt.Sprint(s.Ready), "Ready", "text-amber-300")
@@ -624,8 +624,8 @@ templ goalCard(gl *models.Goal, plan *GoalPlanCard, oob bool) {
 			</div>
 			switch st {
 				case goalActive:
-					<div class="relative flex items-end justify-between gap-3 mt-auto">
-						<div class="min-w-0">
+					<div class="relative flex flex-wrap items-end justify-between gap-3 mt-auto">
+						<div class="min-w-0 max-w-full">
 							<p class="text-xs text-zinc-500">Still to go</p>
 							<p class="sensitive text-xl font-bold tabular-nums truncate font-(family-name:--font-biorhyme-expanded)">{ gl.ViewRemaining() }</p>
 						</div>
