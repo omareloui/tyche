@@ -249,13 +249,14 @@ templ PlanPreview(s *models.InstallmentSchedule, sym, problem string) {
 }
 
 // planBreakdown is a plan's totals and its payment schedule, bought on
-// start.
-templ planBreakdown(s *models.InstallmentSchedule, sym string, start time.Time) {
+// start, its amounts blurred with the hidden amounts when sensitive.
+templ planBreakdown(s *models.InstallmentSchedule, sym string, start time.Time, sensitive bool) {
+	{{ sens := templ.KV("sensitive", sensitive) }}
 	<div class="grid gap-3">
 		<dl class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-			@affordStat("Monthly", planMonthly(s, sym), "")
-			@affordStat("Interest", formatters.FormatAmount(s.TotalInterest, sym), "")
-			@affordStat("Fees", formatters.FormatAmount(s.TotalFees, sym), "")
+			@affordStat("Monthly", planMonthly(s, sym), sensitiveClass(sensitive))
+			@affordStat("Interest", formatters.FormatAmount(s.TotalInterest, sym), sensitiveClass(sensitive))
+			@affordStat("Fees", formatters.FormatAmount(s.TotalFees, sym), sensitiveClass(sensitive))
 			@affordStat("Effective rate", models.ViewRate(s.APR)+" / yr", aprClass(s.APR))
 		</dl>
 		<details class="group">
@@ -280,21 +281,21 @@ templ planBreakdown(s *models.InstallmentSchedule, sym string, start time.Time) 
 						if s.PaidOnDay() > 0 {
 							<tr>
 								<td class="px-3 py-1.5 text-zinc-400">{ planDayLabel(start) }</td>
-								<td class="px-3 py-1.5 text-right">{ formatters.FormatNum(s.PaidOnDay()) }</td>
-								<td class="px-3 py-1.5 text-right text-zinc-500">–</td>
-								<td class="px-3 py-1.5 text-right hidden sm:table-cell">{ formatters.FormatNum(s.DownPayment) }</td>
-								<td class="px-3 py-1.5 text-right hidden sm:table-cell">{ formatters.FormatNum(s.UpfrontFees) }</td>
-								<td class="px-3 py-1.5 text-right text-zinc-500">{ formatters.FormatNum(s.Financed) }</td>
+								<td class={ "px-3 py-1.5 text-right", sens }>{ formatters.FormatNum(s.PaidOnDay()) }</td>
+								<td class={ "px-3 py-1.5 text-right text-zinc-500", sens }>–</td>
+								<td class={ "px-3 py-1.5 text-right hidden sm:table-cell", sens }>{ formatters.FormatNum(s.DownPayment) }</td>
+								<td class={ "px-3 py-1.5 text-right hidden sm:table-cell", sens }>{ formatters.FormatNum(s.UpfrontFees) }</td>
+								<td class={ "px-3 py-1.5 text-right text-zinc-500", sens }>{ formatters.FormatNum(s.Financed) }</td>
 							</tr>
 						}
 						for _, row := range s.Rows {
 							<tr>
 								<td class="px-3 py-1.5 text-zinc-400">{ start.AddDate(0, row.Month, 0).Format("Jan 2006") }</td>
-								<td class="px-3 py-1.5 text-right">{ formatters.FormatNum(row.Payment) }</td>
-								<td class="px-3 py-1.5 text-right">{ formatters.FormatNum(row.Interest) }</td>
-								<td class="px-3 py-1.5 text-right hidden sm:table-cell">{ formatters.FormatNum(row.Principal) }</td>
-								<td class="px-3 py-1.5 text-right hidden sm:table-cell">{ formatters.FormatNum(row.Fees) }</td>
-								<td class="px-3 py-1.5 text-right text-zinc-500">{ formatters.FormatNum(row.Left) }</td>
+								<td class={ "px-3 py-1.5 text-right", sens }>{ formatters.FormatNum(row.Payment) }</td>
+								<td class={ "px-3 py-1.5 text-right", sens }>{ formatters.FormatNum(row.Interest) }</td>
+								<td class={ "px-3 py-1.5 text-right hidden sm:table-cell", sens }>{ formatters.FormatNum(row.Principal) }</td>
+								<td class={ "px-3 py-1.5 text-right hidden sm:table-cell", sens }>{ formatters.FormatNum(row.Fees) }</td>
+								<td class={ "px-3 py-1.5 text-right text-zinc-500", sens }>{ formatters.FormatNum(row.Left) }</td>
 							</tr>
 						}
 					</tbody>
@@ -311,6 +312,14 @@ func planDayLabel(start time.Time) string {
 		return "Today"
 	}
 	return start.Format("Jan 2006")
+}
+
+// sensitiveClass is the class blurring an amount with the hidden amounts.
+func sensitiveClass(sensitive bool) string {
+	if sensitive {
+		return "sensitive"
+	}
+	return ""
 }
 
 func planMonthly(s *models.InstallmentSchedule, sym string) string {

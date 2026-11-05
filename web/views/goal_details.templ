@@ -202,7 +202,7 @@ templ goalDetailsPlan(gl *models.Goal, card *GoalPlanCard, st goalState) {
 					}
 				</div>
 				if loan != nil {
-					@planBreakdown(loan, gl.Currency.Symbol, gl.FulfilledAt)
+					@planBreakdown(loan, gl.Currency.Symbol, gl.FulfilledAt, true)
 				}
 			}
 		}
@@ -232,7 +232,7 @@ templ goalDetailsPlan(gl *models.Goal, card *GoalPlanCard, st goalState) {
 				if pr.Loan != nil {
 					<div class="grid gap-2 mt-2">
 						<p class="text-sm text-zinc-300">The loan, from { pr.BuyOn.Format("Jan 2006") }</p>
-						@planBreakdown(pr.Loan, gl.Currency.Symbol, pr.BuyOn)
+						@planBreakdown(pr.Loan, gl.Currency.Symbol, pr.BuyOn, true)
 					</div>
 				}
 			}

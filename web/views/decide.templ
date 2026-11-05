@@ -189,7 +189,7 @@ templ AffordResult(a *models.Affordability, ws *models.WorkSettings) {
 				}
 			</dl>
 			if a.Schedule != nil {
-				@planBreakdown(a.Schedule, a.Purchase.Currency.Symbol, time.Now())
+				@planBreakdown(a.Schedule, a.Purchase.Currency.Symbol, time.Now(), false)
 			}
 			if a.WorkHours > 0 {
 				<p class="flex items-center gap-2 text-zinc-300">
