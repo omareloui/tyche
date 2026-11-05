@@ -2,6 +2,7 @@ package router_test
 
 import (
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -31,6 +32,8 @@ func TestAccountDetails(t *testing.T) {
 		{Amount: 200, Kind: models.ExpenseTxKind, FulfilledAt: daysAgo(2)},
 		{Amount: 100, Kind: models.TransferTxKind, ToAccount: cash, ToAmount: 100, FulfilledAt: daysAgo(1)},
 		{Amount: 50, Kind: models.IncomeTxKind, FulfilledAt: daysAgo(0).Add(-time.Hour)},
+		// marked fulfilled today: on its own date in the history
+		{Amount: 10, Kind: models.ExpenseTxKind, ScheduledTo: daysAgo(5), FulfilledAt: noon},
 		// scheduled: not in the balance yet
 		{Amount: 30, Kind: models.ExpenseTxKind, ScheduledTo: noon.AddDate(0, 0, 3)},
 	} {
@@ -48,8 +51,8 @@ func TestAccountDetails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bank.Amount != 750 {
-		t.Fatalf("bank balance = %v, want 750", bank.Amount)
+	if bank.Amount != 740 {
+		t.Fatalf("bank balance = %v, want 740", bank.Amount)
 	}
 
 	h, err := repo.GetAccountHistory(ctx, bank)
@@ -57,10 +60,10 @@ func TestAccountDetails(t *testing.T) {
 		t.Fatal(err)
 	}
 	n := len(h.Balance)
-	// End of day balances: 1000 before, 800 after the expense, 700 after
-	// the transfer, 750 today.
-	if got := h.Balance[n-4:]; got[0] != 1000 || got[1] != 800 || got[2] != 700 || got[3] != 750 {
-		t.Errorf("last balances = %v, want 1000 800 700 750", got)
+	// End of day balances: 1000 before, 990 after the expense dated 5 days
+	// ago, 790 after the other, 690 after the transfer, 740 today.
+	if got := h.Balance[n-7:]; !slices.Equal(got, []float64{1000, 990, 990, 990, 790, 690, 740}) {
+		t.Errorf("last balances = %v, want 1000 990 990 990 790 690 740", got)
 	}
 
 	if cash, err = repo.GetAccount(ctx, cash.ID); err != nil {
@@ -78,8 +81,8 @@ func TestAccountDetails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stats.Count != 3 || stats.First.IsZero() || stats.Last.Before(stats.First) {
-		t.Errorf("stats = %+v, want 3 txs", stats)
+	if stats.Count != 4 || stats.First.IsZero() || stats.Last.Before(stats.First) {
+		t.Errorf("stats = %+v, want 4 txs", stats)
 	}
 
 	upcoming, err := repo.GetAccountUpcomingTransactions(ctx, bank.ID, noon.AddDate(0, 1, 0))

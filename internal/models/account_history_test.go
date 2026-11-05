@@ -3,6 +3,7 @@ package models
 import (
 	"slices"
 	"testing"
+	"time"
 )
 
 func TestNewAccountHistory(t *testing.T) {
@@ -12,7 +13,7 @@ func TestNewAccountHistory(t *testing.T) {
 		{Day: day("2026-11-03"), Out: 20},          // -20, nothing on the 2nd
 		{Day: day("2026-11-05"), In: 10},           // after today: today's
 	}
-	h := NewAccountHistory(1, 500, days, day("2026-11-01"), day("2026-11-04"))
+	h := NewAccountHistory(1, 500, days, nil, day("2026-11-01"), day("2026-11-04"), day("2026-11-04"))
 
 	// End of day balances worked back from 500: the 4th got +10, the 3rd -20.
 	if got := h.Balance; !slices.Equal(got, []float64{510, 510, 490, 500}) {
@@ -30,7 +31,7 @@ func TestNewAccountHistory(t *testing.T) {
 }
 
 func TestNewAccountHistoryEmpty(t *testing.T) {
-	h := NewAccountHistory(1, -200, nil, day("2026-06-01"), day("2026-11-04"))
+	h := NewAccountHistory(1, -200, nil, nil, day("2026-06-01"), day("2026-11-04"), time.Time{})
 	if len(h.Balance) != 157 || h.Balance[0] != -200 || h.Balance[156] != -200 {
 		t.Errorf("balance = %d points, %v … %v", len(h.Balance), h.Balance[0], h.Balance[len(h.Balance)-1])
 	}
@@ -45,11 +46,32 @@ func TestAccountHistoryMonthlyAvg(t *testing.T) {
 		{Day: day("2026-10-10"), In: 100, Out: 300},
 		{Day: day("2026-11-02"), In: 1000}, // this month: left out
 	}
-	h := NewAccountHistory(1, 0, days, day("2026-09-01"), day("2026-11-04"))
+	h := NewAccountHistory(1, 0, days, nil, day("2026-09-01"), day("2026-11-04"), day("2026-11-04"))
 	if in, out := h.MonthlyAvg(); in != 200 || out != 200 {
 		t.Errorf("monthly avg = %v, %v", in, out)
 	}
 	if !AccountHistoryFrom(1, day("2026-11-04")).Equal(day("2026-06-01")) {
 		t.Errorf("from = %v", AccountHistoryFrom(1, day("2026-11-04")))
+	}
+}
+
+func TestNewAccountHistoryProjected(t *testing.T) {
+	days := []DayFlow{{Day: day("2026-11-02"), In: 100}}
+	scheduled := []DayFlow{
+		{Day: day("2026-11-01"), Out: 30}, // overdue: tomorrow's
+		{Day: day("2026-11-06"), In: 50},
+		{Day: day("2026-11-09"), Out: 500}, // after to: left out
+	}
+	h := NewAccountHistory(1, 200, days, scheduled, day("2026-11-01"), day("2026-11-03"), day("2026-11-07"))
+
+	if got := h.Balance; !slices.Equal(got, []float64{100, 200, 200, 170, 170, 220, 220}) {
+		t.Errorf("balance = %v", got)
+	}
+	if h.TodayIdx() != 2 || !h.HasProjection() || h.IsProjected(2) || !h.IsProjected(3) {
+		t.Errorf("today = %d, projected = %v", h.TodayIdx(), h.HasProjection())
+	}
+	// Only fulfilled ones count in the month's money.
+	if in, out := h.ThisMonth(); in != 100 || out != 0 {
+		t.Errorf("this month = %v, %v", in, out)
 	}
 }

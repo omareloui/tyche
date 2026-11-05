@@ -297,3 +297,50 @@ document.addEventListener("alpine:init", () => {
     },
   }));
 });
+
+// chartScrub shows a chart's tooltips under a finger on touch screens, where
+// group-hover never applies (Tailwind's hover needs a hover-capable pointer):
+// touching or dragging across the chart marks the target under the finger
+// `is-active` (its tooltip shown by group-[.is-active]), kept a moment after
+// lifting it. Its children are the targets, side by side; touch-pan-y on it
+// leaves vertical drags to scrolling (cancelling the scrub).
+document.addEventListener("alpine:init", () => {
+  Alpine.data("chartScrub", () => ({
+    timer: null,
+
+    scrub: {
+      "@pointerdown"(e) {
+        this.track(e);
+      },
+      "@pointermove"(e) {
+        this.track(e);
+      },
+      "@pointerup"() {
+        this.release();
+      },
+      "@pointercancel"() {
+        this.release();
+      },
+    },
+
+    track(e) {
+      if (e.pointerType === "mouse") return;
+      clearTimeout(this.timer);
+      // A tapped target focused (group-focus) would keep its tooltip too.
+      if (this.$root.contains(document.activeElement)) document.activeElement.blur();
+      const targets = this.$root.children;
+      const r = this.$root.getBoundingClientRect();
+      const i = Math.floor(((e.clientX - r.left) / r.width) * targets.length);
+      this.show(Math.min(Math.max(i, 0), targets.length - 1));
+    },
+
+    release() {
+      clearTimeout(this.timer);
+      this.timer = setTimeout(() => this.show(-1), 1500);
+    },
+
+    show(i) {
+      [...this.$root.children].forEach((t, k) => t.classList.toggle("is-active", k === i));
+    },
+  }));
+});

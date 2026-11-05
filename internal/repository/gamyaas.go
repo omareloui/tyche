@@ -117,17 +117,26 @@ func (r *Repository) attachGamyaas(ctx context.Context, q *queries.Queries, accs
 			if t.FulfilledAt.Valid {
 				g.PaidCount++
 				g.PaidAmount += t.ToAmount.Float64
-			} else if g.NextPaymentOn.IsZero() {
-				g.NextPaymentOn = t.ScheduledTo
+			} else {
+				g.ToPay += t.ToAmount.Float64
+				if g.NextPaymentOn.IsZero() {
+					g.NextPaymentOn = t.ScheduledTo
+				}
 			}
+			g.AddMonthTx(t.ScheduledTo, t.ToAmount.Float64, false, t.FulfilledAt.Valid)
 		}
 		if i, ok := idx[t.AccountID]; ok && accs[i].Gamyaa != nil {
 			g := accs[i].Gamyaa
 			if t.FulfilledAt.Valid {
 				g.ReceivedCount++
-			} else if g.NextPayoutOn.IsZero() {
-				g.NextPayoutOn = t.ScheduledTo
+				g.ReceivedAmount += t.Amount
+			} else {
+				g.ToReceive += t.Amount
+				if g.NextPayoutOn.IsZero() {
+					g.NextPayoutOn = t.ScheduledTo
+				}
 			}
+			g.AddMonthTx(t.ScheduledTo, t.Amount, true, t.FulfilledAt.Valid)
 		}
 	}
 	return nil

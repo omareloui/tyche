@@ -541,7 +541,9 @@ func nullInt(n int) sql.NullInt64 {
 }
 
 // GetAccountHistory is the account's balance day by day over the last
-// models.AccountHistoryMonths months, "today" in the user's time zone.
+// models.AccountHistoryMonths months, "today" in the user's time zone. A
+// gam'yaa's spans its whole life instead, projected through its scheduled
+// installments and payouts.
 func (r *Repository) GetAccountHistory(ctx context.Context, a *models.Account) (*models.AccountHistory, error) {
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
@@ -553,7 +555,10 @@ func (r *Repository) GetAccountHistory(ctx context.Context, a *models.Account) (
 	}
 	today := time.Now().In(loc)
 	start := monthStartFromCtx(ctx)
-	from := models.AccountHistoryFrom(start, today)
+	from, to := models.AccountHistoryFrom(start, today), today
+	if g := a.Gamyaa; g != nil {
+		from, to = models.GamyaaHistoryRange(g)
+	}
 
 	rows, err := q.GetAccountDailyNet(ctx, queries.GetAccountDailyNetParams{
 		AccountID: sql.NullString{String: a.ID, Valid: true},
@@ -565,13 +570,33 @@ func (r *Repository) GetAccountHistory(ctx context.Context, a *models.Account) (
 	}
 	days := make([]models.DayFlow, 0, len(rows))
 	for _, row := range rows {
-		day, err := time.Parse(dayLayout, row.Day)
-		if err != nil {
-			continue
+		if d, ok := dayFlow(row.Day, row.MoneyIn, row.MoneyOut); ok {
+			days = append(days, d)
 		}
-		days = append(days, models.DayFlow{Day: day, In: row.MoneyIn, Out: row.MoneyOut})
 	}
-	return models.NewAccountHistory(start, a.Amount, days, from, today), nil
+
+	var scheduled []models.DayFlow
+	if to.After(today) {
+		rows, err := q.GetAccountScheduledDailyNet(ctx, queries.GetAccountScheduledDailyNetParams{
+			AccountID: sql.NullString{String: a.ID, Valid: true},
+			Until:     to.AddDate(0, 0, 1),
+		})
+		if err != nil {
+			logger.FromCtx(ctx).Error("querying account scheduled daily net", zap.Error(err), zap.String("id", a.ID))
+			return nil, err
+		}
+		for _, row := range rows {
+			if d, ok := dayFlow(row.Day, row.MoneyIn, row.MoneyOut); ok {
+				scheduled = append(scheduled, d)
+			}
+		}
+	}
+	return models.NewAccountHistory(start, a.Amount, days, scheduled, from, today, to), nil
+}
+
+func dayFlow(day string, in, out float64) (models.DayFlow, bool) {
+	d, err := time.Parse(dayLayout, day)
+	return models.DayFlow{Day: d, In: in, Out: out}, err == nil
 }
 
 // GetAccountTxStats is how many fulfilled transactions touched the account,

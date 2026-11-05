@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/omareloui/tyche/internal/models"
@@ -88,6 +89,9 @@ templ AccountDetails(d *AccountDetailsData) {
 			<div class="flex-1 grid grid-cols-1 auto-rows-max content-start gap-6 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
 				@accountDetailsHero(a, d.Def)
 				@accountDetailsActions(a)
+				if a.Gamyaa != nil {
+					@gamyaaDetails(a)
+				}
 				@accountDetailsChart(a, d.History)
 				@accountDetailsMoney(d)
 				if len(d.Upcoming) > 0 {
@@ -179,14 +183,19 @@ templ accountDetailsActions(a *models.Account) {
 }
 
 // accountChartSamples are the days the balance chart's hover targets show,
-// one a week back from today, oldest first.
+// one a week back from today and ahead of it to the last day, oldest first.
 func accountChartSamples(h *models.AccountHistory) []int {
 	var res []int
-	for i := len(h.Balance) - 1; i >= 0; i -= 7 {
+	t := min(h.TodayIdx(), len(h.Balance)-1)
+	for i := t; i >= 0; i -= 7 {
 		res = append(res, i)
 	}
-	for l, r := 0, len(res)-1; l < r; l, r = l+1, r-1 {
-		res[l], res[r] = res[r], res[l]
+	slices.Reverse(res)
+	for i := t + 7; i < len(h.Balance); i += 7 {
+		res = append(res, i)
+	}
+	if last := len(h.Balance) - 1; res[len(res)-1] != last {
+		res = append(res, last)
 	}
 	return res
 }
@@ -207,18 +216,30 @@ func accountChartX(i, n int) float64 {
 	return float64(i) / float64(n-1) * 100
 }
 
-func accountChartPoints(h *models.AccountHistory, lo, hi float64) string {
+// accountChartPoints are the chart's points of the balances from..to
+// (inclusive).
+func accountChartPoints(h *models.AccountHistory, from, to int, lo, hi float64) string {
 	var b strings.Builder
-	for i, v := range h.Balance {
-		fmt.Fprintf(&b, "%.2f,%.2f ", accountChartX(i, len(h.Balance)), accountChartY(v, lo, hi))
+	for i := from; i <= to && i < len(h.Balance); i++ {
+		fmt.Fprintf(&b, "%.2f,%.2f ", accountChartX(i, len(h.Balance)), accountChartY(h.Balance[i], lo, hi))
 	}
 	return b.String()
 }
 
-// accountChartArea is the area between the line and zero.
+// accountChartArea is the area between the line and zero up to today.
 func accountChartArea(h *models.AccountHistory, lo, hi float64) string {
 	zero := accountChartY(0, lo, hi)
-	return fmt.Sprintf("0,%.2f %s100,%.2f", zero, accountChartPoints(h, lo, hi), zero)
+	t := min(h.TodayIdx(), len(h.Balance)-1)
+	return fmt.Sprintf("0,%.2f %s%.2f,%.2f", zero, accountChartPoints(h, 0, t, lo, hi), accountChartX(t, len(h.Balance)), zero)
+}
+
+// accountChartSpan names the chart's days: the last months, or the months
+// it spans when projected (a gam'yaa's whole life).
+func accountChartSpan(h *models.AccountHistory) string {
+	if !h.HasProjection() && h.From.Equal(models.AccountHistoryFrom(h.Start, h.Today)) {
+		return fmt.Sprintf("Last %d months", models.AccountHistoryMonths)
+	}
+	return h.From.Format("Jan 2006") + " – " + h.To.Format("Jan 2006")
 }
 
 // accountChartMonths are the months starting in the chart, with where they
@@ -243,15 +264,18 @@ func accountChartMonths(h *models.AccountHistory) []struct {
 	return res
 }
 
+// accountChart's hover targets show their tooltips on hover, and under a
+// finger on touch screens (chartScrub, main.js).
 templ accountDetailsChart(a *models.Account, h *models.AccountHistory) {
 	{{ lo, hi := h.Range() }}
 	{{ n := len(h.Balance) }}
+	{{ t := min(h.TodayIdx(), n-1) }}
 	{{ samples := accountChartSamples(h) }}
 	@txDetailsSection("Balance") {
 		<div class="grid gap-2 p-4 rounded-2xl bg-zinc-800/30 ring-1 ring-zinc-800">
 			<div class="flex justify-between gap-3 text-xs text-zinc-500 tabular-nums">
 				<span class="sensitive">{ a.Currency.Format(hi) }</span>
-				<span>Last { fmt.Sprint(models.AccountHistoryMonths) } months</span>
+				<span>{ accountChartSpan(h) }</span>
 			</div>
 			<div class="relative h-36">
 				if lo < 0 && hi > 0 {
@@ -263,20 +287,28 @@ templ accountDetailsChart(a *models.Account, h *models.AccountHistory) {
 				}
 				<svg viewBox="0 0 100 100" preserveAspectRatio="none" class="absolute inset-0 size-full overflow-visible" aria-hidden="true">
 					<polygon points={ accountChartArea(h, lo, hi) } class="fill-(--accent)/10"></polygon>
-					<polyline points={ accountChartPoints(h, lo, hi) } fill="none" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke" class="stroke-(--accent)"></polyline>
+					<polyline points={ accountChartPoints(h, 0, t, lo, hi) } fill="none" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke" class="stroke-(--accent)"></polyline>
+					if h.HasProjection() {
+						<polyline points={ accountChartPoints(h, t, n-1, lo, hi) } fill="none" stroke-width="2" stroke-dasharray="4 4" stroke-linejoin="round" vector-effect="non-scaling-stroke" class="stroke-(--accent) opacity-60"></polyline>
+					}
 				</svg>
 				<span
 					aria-hidden="true"
 					class="absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-(--accent) ring-2 ring-zinc-900"
-					style={ templ.SafeCSS(fmt.Sprintf("left:100%%;top:%.2f%%;", accountChartY(h.Balance[n-1], lo, hi))) }
+					style={ templ.SafeCSS(fmt.Sprintf("left:%.2f%%;top:%.2f%%;", accountChartX(t, n), accountChartY(h.Balance[t], lo, hi))) }
 				></span>
-				<div class="absolute inset-0 flex">
+				<div x-data="chartScrub" x-bind="scrub" class="absolute inset-0 flex touch-pan-y">
 					for k, i := range samples {
 						<div class="group relative flex-1 h-full">
-							<div class="absolute inset-y-0 left-1/2 border-l border-zinc-500/60 hidden group-hover:block"></div>
-							<div class={ "absolute bottom-full mb-1 hidden group-hover:block z-10", tooltipSide(k, len(samples)) }>
+							<div class="absolute inset-y-0 left-1/2 border-l border-zinc-500/60 hidden group-hover:block group-[.is-active]:block"></div>
+							<div class={ "absolute bottom-full mb-1 hidden group-hover:block group-[.is-active]:block z-10 pointer-events-none", tooltipSide(k, len(samples)) }>
 								<div class="glass-tooltip whitespace-nowrap">
-									<p class="text-zinc-400">{ h.DayOf(i).Format("Mon, Jan 2") }</p>
+									<p class="text-zinc-400">
+										{ h.DayOf(i).Format("Mon, Jan 2") }
+										if h.IsProjected(i) {
+											· scheduled
+										}
+									</p>
 									<p class="sensitive tabular-nums">{ a.Currency.Format(h.Balance[i]) }</p>
 								</div>
 							</div>
@@ -292,6 +324,9 @@ templ accountDetailsChart(a *models.Account, h *models.AccountHistory) {
 			<p class="text-xs text-zinc-500 tabular-nums">
 				Lowest <span class="sensitive text-zinc-300">{ a.Currency.Format(minOf(h.Balance)) }</span>
 				· highest <span class="sensitive text-zinc-300">{ a.Currency.Format(maxOf(h.Balance)) }</span>
+				if h.HasProjection() {
+					· dashed: scheduled
+				}
 			</p>
 		</div>
 	}

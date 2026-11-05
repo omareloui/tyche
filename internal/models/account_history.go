@@ -12,46 +12,102 @@ func AccountHistoryFrom(s MonthStart, today time.Time) time.Time {
 	return s.For(s.Of(today).Month.AddDate(0, -(AccountHistoryMonths - 1), 0)).From
 }
 
+// GamyaaHistoryRange is the days a gam'yaa's details chart: from the first
+// of the month it starts in to its last installment or payout.
+func GamyaaHistoryRange(g *Gamyaa) (from, to time.Time) {
+	from = MonthOf(g.StartsOn)
+	to = g.EndsOn()
+	for _, t := range g.Turns {
+		if d := g.MonthDate(t); d.After(to) {
+			to = d
+		}
+	}
+	return from, to
+}
+
 // AccountHistory is an account's balance day by day from From to Today,
 // worked back from its current balance and what its fulfilled transactions
-// moved in and out of it (in its own currency, transfers and debts included,
-// so not an analysis).
+// moved in and out of it (by their dates, in its own currency, transfers and
+// debts included, so not an analysis), then projected to To through its
+// scheduled ones.
 type AccountHistory struct {
 	From, Today time.Time
+	// To is the last day, Today without a projection.
+	To time.Time
 	// Start is the day the user's months start on.
 	Start MonthStart
 	// Days are the days money moved, oldest first.
 	Days []DayFlow
-	// Balance is the balance at the end of each day from From to Today.
+	// Scheduled are the days money is scheduled to move, oldest first.
+	Scheduled []DayFlow
+	// Balance is the balance at the end of each day from From to To.
 	Balance []float64
 }
 
 // NewAccountHistory works the balance back from balance (today's, after
 // every fulfilled transaction) through days, the money moved per day since
-// from. Days after today (e.g. another time zone's today) count as today's.
-func NewAccountHistory(s MonthStart, balance float64, days []DayFlow, from, today time.Time) *AccountHistory {
-	from, today = dateOnly(from), dateOnly(today)
-	n := max(int(today.Sub(from).Hours()/24)+1, 1)
-	net := make([]float64, n)
+// from, then ahead to to (Today when before it) through scheduled. Days after
+// today (e.g. another time zone's today) count as today's, scheduled ones
+// not after today (overdue) as tomorrow's.
+func NewAccountHistory(s MonthStart, balance float64, days, scheduled []DayFlow, from, today, to time.Time) *AccountHistory {
+	from, today, to = dateOnly(from), dateOnly(today), dateOnly(to)
+	if to.Before(today) {
+		to = today
+	}
+	n := max(daysFrom(from, today)+1, 1)
+	total := n + daysFrom(today, to)
+	net := make([]float64, total)
 	for _, d := range days {
-		i := int(dateOnly(d.Day).Sub(from).Hours() / 24)
+		i := daysFrom(from, d.Day)
 		if i < 0 {
 			continue
 		}
 		net[min(i, n-1)] += d.In - d.Out
 	}
+	if total > n {
+		for _, d := range scheduled {
+			i := max(daysFrom(from, d.Day), n)
+			if i >= total {
+				continue
+			}
+			net[i] += d.In - d.Out
+		}
+	}
 
-	bal := make([]float64, n)
+	bal := make([]float64, total)
 	bal[n-1] = balance
 	for i := n - 1; i > 0; i-- {
 		bal[i-1] = bal[i] - net[i]
 	}
-	return &AccountHistory{From: from, Today: today, Start: s, Days: days, Balance: bal}
+	for i := n; i < total; i++ {
+		bal[i] = bal[i-1] + net[i]
+	}
+	return &AccountHistory{From: from, Today: today, To: to, Start: s, Days: days, Scheduled: scheduled, Balance: bal}
+}
+
+func daysFrom(from, t time.Time) int {
+	return int(dateOnly(t).Sub(dateOnly(from)).Hours() / 24)
 }
 
 // DayOf is the date of the i-th balance.
 func (h *AccountHistory) DayOf(i int) time.Time {
 	return h.From.AddDate(0, 0, i)
+}
+
+// TodayIdx is the index of today's balance.
+func (h *AccountHistory) TodayIdx() int {
+	return max(daysFrom(h.From, h.Today), 0)
+}
+
+// IsProjected tells if the i-th balance is after today, from scheduled
+// transactions.
+func (h *AccountHistory) IsProjected(i int) bool {
+	return i > h.TodayIdx()
+}
+
+// HasProjection tells if it goes past today.
+func (h *AccountHistory) HasProjection() bool {
+	return len(h.Balance) > h.TodayIdx()+1
 }
 
 // Range is the lowest and highest balance, 0 included so the chart's axis

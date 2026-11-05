@@ -72,3 +72,42 @@ func TestGamyaaSchedule(t *testing.T) {
 		t.Errorf("bad payout %+v", p)
 	}
 }
+
+func TestGamyaaMonths(t *testing.T) {
+	day := func(s string) time.Time {
+		d, _ := time.Parse(time.DateOnly, s)
+		return d
+	}
+	g := &models.Gamyaa{Installment: 5000, Members: 10, Shares: 2, Turns: []int{7, 8}, StartsOn: day("2026-04-23")}
+
+	for _, tt := range []struct {
+		on   string
+		want int
+	}{
+		{"2026-04-22", 0},
+		{"2026-04-23", 1},
+		{"2026-05-22", 1},
+		{"2026-11-05", 7},
+		{"2027-01-23", 10},
+		{"2027-02-23", 11},
+	} {
+		if got := g.MonthOf(day(tt.on)); got != tt.want {
+			t.Errorf("MonthOf(%s) = %d, want %d", tt.on, got, tt.want)
+		}
+	}
+	if got := g.MonthsLeft(day("2026-11-05")); got != 3 {
+		t.Errorf("MonthsLeft = %d, want 3", got)
+	}
+
+	g.AddMonthTx(day("2026-04-26"), 10000, false, true) // paid late in month 1
+	g.AddMonthTx(day("2026-10-25"), 40000, true, true)  // payout received
+	g.AddMonthTx(day("2026-11-23"), 10000, false, false)
+	g.AddMonthTx(day("2026-11-23"), 50000, true, false)
+	if len(g.Months) != 10 || g.Months[0].Paid != 10000 || g.Months[6].Received != 40000 || !g.Months[6].Turn {
+		t.Errorf("months = %+v", g.Months)
+	}
+	m := g.Months[7]
+	if m.Due != 10000 || m.Payout != 50000 || m.IsOverdue(day("2026-11-05")) || !m.IsOverdue(day("2026-11-24")) {
+		t.Errorf("month 8 = %+v", m)
+	}
+}

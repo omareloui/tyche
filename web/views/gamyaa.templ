@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/tzctx"
 	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
 )
@@ -199,4 +200,127 @@ func viewGamyaaDate(t time.Time) string {
 
 func isOverdue(t time.Time) bool {
 	return t.Before(time.Now().Truncate(24 * time.Hour))
+}
+
+// gamyaaDetails is a gam'yaa account's details: its terms, where it's at,
+// the money in and out of it, and its months.
+templ gamyaaDetails(a *models.Account) {
+	{{ g := a.Gamyaa }}
+	{{ cur := &a.Currency }}
+	{{ today := tzctx.In(ctx, time.Now()) }}
+	@txDetailsSection("Gam'yaa") {
+		<dl class="grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-zinc-800/60 ring-1 ring-zinc-800">
+			@gamyaaStat("Shares", g.ViewShares(), false)
+			@gamyaaStat("A month", cur.Format(g.MonthlyPayment()), true)
+			@gamyaaStat("Pay day", ordinal(g.PayDay())+" of the month", false)
+			@gamyaaStat("Month", gamyaaMonthStatus(g, today), false)
+			@gamyaaStat("Starts", g.StartsOn.Format("Jan 2, 2006"), false)
+			@gamyaaStat("Ends", g.EndsOn().Format("Jan 2, 2006"), false)
+			@gamyaaStat("Paid in", cur.Format(g.PaidAmount), true)
+			@gamyaaStat("Still to pay", cur.Format(g.ToPay), true)
+			@gamyaaStat("Received", cur.Format(g.ReceivedAmount), true)
+			@gamyaaStat("To receive", cur.Format(g.ToReceive), true)
+			@gamyaaStat("Payout", gamyaaPayouts(g, cur), true)
+			if g.PayFrom != nil {
+				@gamyaaStat("Pays from", g.PayFrom.Name, false)
+			}
+		</dl>
+		if len(g.Months) > 0 {
+			{{ now := g.MonthOf(today) }}
+			<ol class="grid grid-cols-5 sm:grid-cols-10 gap-1.5" aria-label="Months">
+				for _, m := range g.Months {
+					<li
+						title={ gamyaaMonthTitle(&m, today) }
+						class={
+							"grid justify-items-center gap-1 py-2 rounded-xl text-xs ring-1",
+							templ.KV("bg-(--accent)/15 text-(--accent) ring-transparent", m.Paid > 0 && !m.IsOverdue(today)),
+							templ.KV("bg-red-500/10 text-red-300 ring-red-500/40", m.IsOverdue(today)),
+							templ.KV("bg-zinc-800/40 text-zinc-500 ring-transparent", m.Paid == 0 && !m.IsOverdue(today)),
+							templ.KV("ring-zinc-400!", m.N == now),
+						}
+					>
+						<span class="font-medium">{ m.Date.Format("Jan") }</span>
+						if m.Turn || m.Received > 0 || m.Payout > 0 {
+							@icons.PiggyBank("14")
+						} else if m.IsOverdue(today) {
+							@icons.Clock("14")
+						} else if m.Paid > 0 {
+							@icons.Check("14")
+						} else {
+							<span class="tabular-nums">{ strconv.Itoa(m.N) }</span>
+						}
+					</li>
+				}
+			</ol>
+			<p class="text-xs text-zinc-500">Highlighted months are paid, red ones overdue, the piggy bank marks the payouts and the ring this month.</p>
+			<ul class="grid gap-1 text-sm">
+				for _, m := range g.Months {
+					if m.Turn || m.Received > 0 || m.Payout > 0 {
+						<li class="flex items-center gap-1.5 text-zinc-400">
+							@icons.PiggyBank("14")
+							<span>Payout, { m.Date.Format("Jan 2006") }</span>
+							<span class="sensitive ml-auto tabular-nums">
+								if m.Received > 0 {
+									<span class="text-emerald-400">{ cur.Format(m.Received) } received</span>
+								}
+								if m.Received > 0 && m.Payout > 0 {
+									·
+								}
+								if m.Payout > 0 {
+									<span class="text-(--accent)">{ cur.Format(m.Payout) } scheduled</span>
+								}
+								if m.Received == 0 && m.Payout == 0 {
+									{ cur.Format(g.PayoutAmount()) }
+								}
+							</span>
+						</li>
+					}
+				}
+			</ul>
+		}
+	}
+}
+
+templ gamyaaStat(label, value string, sensitive bool) {
+	<div class="px-4 py-3 bg-zinc-900 min-w-0">
+		<dt class="text-xs text-zinc-500">{ label }</dt>
+		<dd class={ "mt-0.5 truncate text-sm font-semibold tabular-nums", templ.KV("sensitive", sensitive) }>{ value }</dd>
+	</div>
+}
+
+// gamyaaMonthStatus is where the gam'yaa is at today, e.g. "7 of 10 · 3
+// left".
+func gamyaaMonthStatus(g *models.Gamyaa, today time.Time) string {
+	switch n := g.MonthOf(today); {
+	case n == 0:
+		return "Not started"
+	case n > g.Members:
+		return "Ended"
+	default:
+		return fmt.Sprintf("%d of %d · %d left", n, g.Members, g.MonthsLeft(today))
+	}
+}
+
+// gamyaaPayouts is what each turn pays, e.g. "E£50,000 × 2".
+func gamyaaPayouts(g *models.Gamyaa, cur *models.Currency) string {
+	if len(g.Turns) > 1 {
+		return fmt.Sprintf("%s × %d", cur.Format(g.PayoutAmount()), len(g.Turns))
+	}
+	return cur.Format(g.PayoutAmount())
+}
+
+func gamyaaMonthTitle(m *models.GamyaaMonth, today time.Time) string {
+	parts := []string{fmt.Sprintf("Month %d, %s", m.N, m.Date.Format("Jan 2, 2006"))}
+	switch {
+	case m.IsOverdue(today):
+		parts = append(parts, "overdue")
+	case m.Paid > 0:
+		parts = append(parts, "paid")
+	case m.Due > 0:
+		parts = append(parts, "due")
+	}
+	if m.Received > 0 || m.Payout > 0 || m.Turn {
+		parts = append(parts, "payout")
+	}
+	return strings.Join(parts, " · ")
 }

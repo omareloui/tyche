@@ -34,6 +34,77 @@ type Gamyaa struct {
 	NextPaymentOn time.Time
 	ReceivedCount int
 	NextPayoutOn  time.Time
+	// ReceivedAmount is what its fulfilled payouts took out; ToPay and
+	// ToReceive what its scheduled installments and payouts will move.
+	ReceivedAmount, ToPay, ToReceive float64
+	// Months are its months, what moved in each (MonthsOf).
+	Months []GamyaaMonth
+}
+
+// GamyaaMonth is one of a gam'yaa's months and what its transactions moved
+// in it: installments paid in (Paid, scheduled ones Due) and payouts taken
+// out (Received, scheduled ones Payout).
+type GamyaaMonth struct {
+	N    int
+	Date time.Time
+	Turn bool
+
+	Paid, Due, Received, Payout float64
+}
+
+// IsOverdue tells if an installment due in it is still unpaid past today.
+func (m *GamyaaMonth) IsOverdue(today time.Time) bool {
+	return m.Due > 0 && dateOnly(m.Date).Before(dateOnly(today))
+}
+
+// MonthOf is the 1-based month t is in, 0 before it starts and Members+1
+// after its last month.
+func (g *Gamyaa) MonthOf(t time.Time) int {
+	t = dateOnly(t)
+	if t.Before(dateOnly(g.StartsOn)) {
+		return 0
+	}
+	for n := 1; n <= g.Members; n++ {
+		if t.Before(dateOnly(g.MonthDate(n + 1))) {
+			return n
+		}
+	}
+	return g.Members + 1
+}
+
+// AddMonthTx counts a transaction into (out == false) or out of the
+// gam'yaa in the month of its date, setting Months up on the first one.
+func (g *Gamyaa) AddMonthTx(on time.Time, amount float64, out, fulfilled bool) {
+	if g.Months == nil {
+		g.Months = make([]GamyaaMonth, g.Members)
+		for i := range g.Months {
+			g.Months[i] = GamyaaMonth{N: i + 1, Date: g.MonthDate(i + 1), Turn: g.IsTurn(i + 1)}
+		}
+	}
+	if len(g.Months) == 0 {
+		return
+	}
+	m := &g.Months[min(max(g.MonthOf(on), 1), len(g.Months))-1]
+	switch {
+	case !out && fulfilled:
+		m.Paid += amount
+	case !out:
+		m.Due += amount
+	case fulfilled:
+		m.Received += amount
+	default:
+		m.Payout += amount
+	}
+}
+
+// PayDay is the day of the month its installments are due on.
+func (g *Gamyaa) PayDay() int {
+	return g.StartsOn.Day()
+}
+
+// MonthsLeft is how many of its months start after today's.
+func (g *Gamyaa) MonthsLeft(today time.Time) int {
+	return min(max(g.Members-g.MonthOf(today), 0), g.Members)
 }
 
 // MonthlyPayment is what's paid every month for the held shares.

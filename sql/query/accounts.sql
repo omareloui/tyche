@@ -245,8 +245,9 @@ WHERE default_account_id = sqlc.arg(id);
 
 -- name: GetAccountDailyNet :many
 -- What the account's fulfilled transactions moved in and out of it per day
--- (of fulfilled_at, when they touched the balance) since since: the raw
--- money movement, transfers and debts included, not an analysis (so not
+-- (of scheduled_to, the transaction's date as the lists show it, not when it
+-- was marked fulfilled, e.g. past ones backfilled later) since since: the
+-- raw money movement, transfers and debts included, not an analysis (so not
 -- following the analysis rule), to walk its balance back from the current
 -- one.
 SELECT
@@ -255,7 +256,7 @@ SELECT
     CAST(TOTAL(MAX(-e.effect, 0)) AS FLOAT) AS money_out
 FROM (
     SELECT
-        SUBSTR(t.fulfilled_at, 1, 10) AS day,
+        SUBSTR(t.scheduled_to, 1, 10) AS day,
         CASE
             WHEN t.kind IN (3, 4) AND t.to_account_id = sqlc.arg(account_id) THEN COALESCE(t.to_amount, t.amount)
             WHEN t.kind IN (2, 5, 6) THEN t.amount -- income, refund, adjustment
@@ -265,18 +266,43 @@ FROM (
     WHERE
         (t.account_id = sqlc.arg(account_id) OR t.to_account_id = sqlc.arg(account_id))
         AND t.fulfilled_at IS NOT NULL
-        AND JULIANDAY(t.fulfilled_at) >= JULIANDAY(sqlc.arg(since))
+        AND JULIANDAY(t.scheduled_to) >= JULIANDAY(sqlc.arg(since))
+) AS e
+GROUP BY e.day
+ORDER BY e.day;
+
+-- name: GetAccountScheduledDailyNet :many
+-- What the account's unfulfilled transactions will move in and out of it
+-- per day (of scheduled_to) before until, overdue ones included, like
+-- GetAccountDailyNet: to project its balance ahead.
+SELECT
+    CAST(e.day AS TEXT) AS day,
+    CAST(TOTAL(MAX(e.effect, 0)) AS FLOAT) AS money_in,
+    CAST(TOTAL(MAX(-e.effect, 0)) AS FLOAT) AS money_out
+FROM (
+    SELECT
+        SUBSTR(t.scheduled_to, 1, 10) AS day,
+        CASE
+            WHEN t.kind IN (3, 4) AND t.to_account_id = sqlc.arg(account_id) THEN COALESCE(t.to_amount, t.amount)
+            WHEN t.kind IN (2, 5, 6) THEN t.amount -- income, refund, adjustment
+            ELSE -t.amount
+        END AS effect
+    FROM transactions AS t
+    WHERE
+        (t.account_id = sqlc.arg(account_id) OR t.to_account_id = sqlc.arg(account_id))
+        AND t.fulfilled_at IS NULL
+        AND JULIANDAY(t.scheduled_to) < JULIANDAY(sqlc.arg(until))
 ) AS e
 GROUP BY e.day
 ORDER BY e.day;
 
 -- name: GetAccountTxStats :one
--- How many fulfilled transactions touched the account, and when the first
--- and last were.
+-- How many fulfilled transactions touched the account, and the dates of the
+-- first and last.
 SELECT
     COUNT(*) AS count,
-    CAST(IFNULL(MIN(t.fulfilled_at), '') AS TEXT) AS first_at,
-    CAST(IFNULL(MAX(t.fulfilled_at), '') AS TEXT) AS last_at
+    CAST(IFNULL(MIN(t.scheduled_to), '') AS TEXT) AS first_at,
+    CAST(IFNULL(MAX(t.scheduled_to), '') AS TEXT) AS last_at
 FROM transactions AS t
 WHERE
     (t.account_id = sqlc.arg(account_id) OR t.to_account_id = sqlc.arg(account_id))
