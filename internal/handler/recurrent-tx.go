@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -12,12 +13,11 @@ import (
 	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/resperr"
 	"github.com/omareloui/tyche/web/views"
 	"github.com/omareloui/tyche/web/views/form"
 	"go.uber.org/zap"
 )
-
-const generateNextScheduledTransactionsCount = 5
 
 func (h Handler) RecurrenceForm(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	l := logger.FromCtx(r.Context())
@@ -144,7 +144,6 @@ func (h Handler) CreateRecurrentTx(w http.ResponseWriter, r *http.Request) (temp
 
 	rt := tx.RecurrentTx
 	rt.ID = idgen.New()
-	rt.LastTransactionScheduledTo = tx.ScheduledTo
 
 	if err := rt.SanitizeAndValidate(h.sani, h.valid); err != nil {
 		var valerr errs.ValidationError
@@ -157,9 +156,7 @@ func (h Handler) CreateRecurrentTx(w http.ResponseWriter, r *http.Request) (temp
 		return nil, err
 	}
 
-	scheduled := generateNextScheduledTransactions(rt, generateNextScheduledTransactionsCount)
-
-	if err := h.repo.CreateTransaction(r.Context(), tx, rt, scheduled); err != nil {
+	if err := h.repo.CreateTransaction(r.Context(), tx, rt, nil); err != nil {
 		l.Error("creating recurrent transaction", zap.Error(err))
 		return nil, err
 	}
@@ -214,9 +211,8 @@ func (h Handler) GetEditRecurrentTx(w http.ResponseWriter, r *http.Request) (tem
 		return nil, err
 	}
 
-	rt, err := h.repo.GetRecurrentTx(r.Context(), id)
+	rt, err := h.liveRecurrentTx(r)
 	if err != nil {
-		l.Error("fetching recurrent tx", zap.Error(err))
 		return nil, err
 	}
 	l.Info("fetched recurrent tx")
@@ -235,6 +231,12 @@ func (h Handler) EditRecurrentTx(w http.ResponseWriter, r *http.Request) (templ.
 	}
 
 	l := logger.FromCtx(r.Context())
+
+	old, err := h.liveRecurrentTx(r)
+	if err != nil {
+		return nil, err
+	}
+
 	tx, err := h.mapFDToTransaction(r, true)
 	if err != nil {
 		l.Error("parsing formdata", zap.Error(err))
@@ -243,36 +245,41 @@ func (h Handler) EditRecurrentTx(w http.ResponseWriter, r *http.Request) (templ.
 
 	rt := tx.RecurrentTx
 	rt.ID = id
-	rt.LastTransactionScheduledTo = time.Now()
+	rt.StartsAt = old.StartsAt
+	rt.PausedAt = old.PausedAt
+
+	// The schedule is counted again from the next day picked, when it or the
+	// frequency changed.
+	nextOn, err := parseDateOnlyIfExists(r.FormValue("next_on"))
+	if err != nil {
+		return nil, err
+	}
+	rt.Anchor = old.Anchor
+	if !nextOn.IsZero() && (!nextOn.Equal(nextOccurrence(old)) || rt.Unit != old.Unit || rt.Every != old.Every) {
+		rt.Anchor = nextOn
+	} else if rt.Unit != old.Unit || rt.Every != old.Every {
+		rt.Anchor = nextOccurrence(old)
+	}
 
 	accs, knds, cats, cps, err := h.getTxDeps(r.Context())
 	if err != nil {
 		return nil, err
 	}
 
-	oldFtx, err := h.repo.GetRecurrentTx(r.Context(), id)
-	if err != nil {
-		l.Error("getting old recurrent tx", zap.String("id", id), zap.Error(err))
-		return nil, err
-	}
-
-	rt.StartsAt = oldFtx.StartsAt
-
 	if err := rt.SanitizeAndValidate(h.sani, h.valid); err != nil {
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("validating recurrent transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
 			claims := getClaims(r.Context())
-			return views.EditRecurrentTxForm(rt, h.mapRecurrentTxToFD(rt, &valerr, knds),
-				accs, knds, cats, cps, &claims.DefaultCurrency), nil
+			fd := h.mapRecurrentTxToFD(rt, &valerr, knds)
+			fd.NextOn = form.FDInput{Value: r.FormValue("next_on"), Error: valerr.Errors.MsgFor("Anchor")}
+			return views.EditRecurrentTxForm(rt, fd, accs, knds, cats, cps, &claims.DefaultCurrency), nil
 		}
 		l.Error("sanitizing recurrent transaction", zap.Error(err))
 		return nil, err
 	}
 
-	scheduled := generateNextScheduledTransactions(rt, generateNextScheduledTransactionsCount)
-
-	if err := h.repo.UpdateRecurrentTx(r.Context(), rt, scheduled); err != nil {
+	if err := h.repo.UpdateRecurrentTx(r.Context(), old, rt); err != nil {
 		l.Error("updating recurrent tx", zap.Error(err))
 		return nil, err
 	}
@@ -293,33 +300,100 @@ func (h Handler) EditRecurrentTx(w http.ResponseWriter, r *http.Request) (templ.
 	return views.RecurrentTx(rt), nil
 }
 
-func (h Handler) GenerateTransactions(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+// nextOccurrence is the day of rt's next transaction: its first scheduled
+// one, else the next it writes.
+func nextOccurrence(rt *models.RecurrentTx) time.Time {
+	if len(rt.Upcoming) > 0 {
+		return dateOnly(rt.Upcoming[0])
+	}
+	return rt.NextOn()
+}
+
+func dateOnly(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+// liveRecurrentTx is the recurrent tx of the path's id, refused when it pays
+// a gam'yaa's installments: its schedule is only changed through its
+// transactions.
+func (h Handler) liveRecurrentTx(r *http.Request) (*models.RecurrentTx, error) {
 	id := r.PathValue("id")
 	if id == "" {
 		return nil, errs.ErrInvalidID
 	}
-
-	l := logger.FromCtx(r.Context())
-
 	rt, err := h.repo.GetRecurrentTx(r.Context(), id)
 	if err != nil {
-		l.Error("fetching recurrent tx", zap.Error(err))
+		logger.FromCtx(r.Context()).Error("fetching recurrent tx", zap.Error(err), zap.String("id", id))
 		return nil, err
 	}
-	l.Debug("fetched recurrent tx", zap.Any("recurrent tx", rt))
+	if rt.IsGamyaa() {
+		return nil, resperr.New(http.StatusForbidden, "A gam'yaa's installments change through its transactions.")
+	}
+	return rt, nil
+}
 
-	scheduled := generateNextScheduledTransactions(rt, generateNextScheduledTransactionsCount)
+// SkipRecurrentOccurrence deletes one of its scheduled transactions
+// (DELETE /recurrent-tx/{id}/occurrences/{txID}), never written again,
+// answering its details.
+func (h Handler) SkipRecurrentOccurrence(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	rt, err := h.liveRecurrentTx(r)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := h.repo.GetTransaction(r.Context(), r.PathValue("txID"))
+	if err != nil {
+		return nil, err
+	}
+	if tx.RecurrentTxID != rt.ID || !tx.FulfilledAt.IsZero() {
+		return nil, resperr.New(http.StatusNotFound, "That isn't one of its scheduled transactions.")
+	}
+	if err := h.repo.DeleteTransaction(r.Context(), tx); err != nil {
+		return nil, err
+	}
+	logger.FromCtx(r.Context()).Info("skipped an occurrence", zap.String("recurrent_id", rt.ID), zap.String("id", tx.ID))
 
-	if err := h.repo.GenerateScheduledTransactions(r.Context(), rt, scheduled); err != nil {
+	if err := h.renderRecurrentTxsSummaryOOB(w, r); err != nil {
+		return nil, err
+	}
+	if rt, err = h.repo.GetRecurrentTx(r.Context(), rt.ID); err != nil {
+		return nil, err
+	}
+	if err := renderToBody(w, r, views.RecurrentTxOOB(rt)); err != nil {
+		return nil, err
+	}
+	return h.RecurrentTxDetails(w, r)
+}
+
+// PauseRecurrentTx stops scheduling it (PUT /recurrent-tx/{id}/pause),
+// ResumeRecurrentTx starts again from today (PUT /recurrent-tx/{id}/resume).
+func (h Handler) PauseRecurrentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	return h.setRecurrentTxPaused(w, r, true)
+}
+
+func (h Handler) ResumeRecurrentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	return h.setRecurrentTxPaused(w, r, false)
+}
+
+func (h Handler) setRecurrentTxPaused(w http.ResponseWriter, r *http.Request, paused bool) (templ.Component, error) {
+	rt, err := h.liveRecurrentTx(r)
+	if err != nil {
+		return nil, err
+	}
+	if paused {
+		err = h.repo.PauseRecurrentTx(r.Context(), rt)
+	} else {
+		err = h.repo.ResumeRecurrentTx(r.Context(), rt)
+	}
+	if err != nil {
+		logger.FromCtx(r.Context()).Error("pausing recurrent tx", zap.Bool("paused", paused), zap.Error(err))
 		return nil, err
 	}
 
 	if err := h.renderRecurrentTxsSummaryOOB(w, r); err != nil {
 		return nil, err
 	}
-
 	if fromRecurrentTxDetails(r) {
-		rt, err := h.repo.GetRecurrentTx(r.Context(), id)
+		rt, err := h.repo.GetRecurrentTx(r.Context(), rt.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -328,16 +402,15 @@ func (h Handler) GenerateTransactions(w http.ResponseWriter, r *http.Request) (t
 		}
 		return h.RecurrentTxDetails(w, r)
 	}
-
-	// refetched for its new upcoming dates
 	return h.RecurrentTx(w, r)
 }
 
 func (h Handler) DeleteRecurrentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	id := r.PathValue("id")
-	if id == "" {
-		return nil, errs.ErrInvalidID
+	rt, err := h.liveRecurrentTx(r)
+	if err != nil {
+		return nil, err
 	}
+	id := rt.ID
 
 	l := logger.FromCtx(r.Context())
 
@@ -367,35 +440,6 @@ func (h Handler) renderRecurrentTxsSummaryOOB(w http.ResponseWriter, r *http.Req
 	return renderToBody(w, r, views.RecurrentTxsSummaryOOB(rts, &claims.DefaultCurrency))
 }
 
-func generateNextScheduledTransactions(rt *models.RecurrentTx, count int) []models.Transaction {
-	txs := []models.Transaction{}
-	now := time.Now()
-
-	for range count {
-		nextOn := rt.NextOn()
-		if !rt.StopsAt.IsZero() && nextOn.After(rt.StopsAt) {
-			break
-		}
-
-		txs = append(txs, models.Transaction{
-			ID:           idgen.New(),
-			Account:      rt.Account,
-			Amount:       rt.Amount,
-			Kind:         rt.Kind,
-			Category:     rt.Category,
-			Counterparty: rt.Counterparty,
-			ToAccount:    rt.ToAccount,
-			ToAmount:     rt.ToAmount,
-			Description:  rt.Description,
-			RecurrentTx:  &models.RecurrentTx{ID: rt.ID},
-			ScheduledTo:  nextOn,
-			CreatedAt:    now,
-		})
-		rt.LastTransactionScheduledTo = nextOn
-	}
-	return txs
-}
-
 func (h Handler) mapRecurrentTxToFD(rt *models.RecurrentTx, valerr *errs.ValidationError, knds []models.TxKind) *views.RecurrentTxFD {
 	fd := &views.RecurrentTxFD{
 		RecurrenceFD: views.RecurrenceFD{
@@ -403,6 +447,9 @@ func (h Handler) mapRecurrentTxToFD(rt *models.RecurrentTx, valerr *errs.Validat
 			Unit:        form.FDInput{Value: formatIntIfNonZero(int(rt.Unit)), Error: valerr.Errors.MsgFor("Unit")},
 			Every:       form.FDInput{Value: formatIntIfNonZero(int(rt.Every)), Error: valerr.Errors.MsgFor("Every")},
 			StopsOn:     form.FDInput{Value: formatDateOnlyIfNonZero(rt.StopsAt), Error: valerr.Errors.MsgFor("StopsAt")},
+			AutoFulfill: form.FDInput{Value: onIf(rt.AutoFulfill)},
+			NextOn:      form.FDInput{Value: formatDateOnlyIfNonZero(nextOccurrence(rt)), Error: valerr.Errors.MsgFor("Anchor")},
+			WithNextOn:  true,
 		},
 		TransactionAmountsAndKindFD: views.TransactionAmountsAndKindFD{
 			AccountIFD: amountIFD(rt.Amount, &rt.Account, form.FDInput{Value: rt.Account.ID, Error: valerr.Errors.MsgFor("AccountID")},
@@ -446,5 +493,12 @@ func (h Handler) parseRecurrenceFD(r *http.Request, err *errs.ValidationError) *
 		Every:       form.FDInput{Value: r.FormValue("every"), Error: err.Errors.MsgFor("RecurrentBy")},
 		Unit:        form.FDInput{Value: r.FormValue("unit"), Error: err.Errors.MsgFor("Recurrence")},
 		StopsOn:     form.FDInput{Value: r.FormValue("stops_on"), Error: err.Errors.MsgFor("StopsAt")},
+		AutoFulfill: form.FDInput{Value: r.FormValue("auto_fulfill")},
 	}
+}
+
+// TopUpRecurrentTxs writes the recurrent transactions' occurrences due of the
+// tenant in ctx, once a day (middleware.RecurrentTopUp).
+func (h *Handler) TopUpRecurrentTxs(ctx context.Context, tenantID string) {
+	h.repo.TopUpRecurrentTxsDaily(ctx, tenantID)
 }

@@ -33,19 +33,21 @@ func (r *Repository) CreateGamyaa(ctx context.Context, a *models.Account) error 
 		}
 
 		rt := &models.RecurrentTx{
-			ID:                         idgen.New(),
-			Unit:                       models.RecurrentUnitMonth,
-			Every:                      1,
-			Account:                    *g.PayFrom,
-			Amount:                     g.MonthlyPayment(),
-			Kind:                       models.TransferTxKind,
-			ToAccount:                  a,
-			ToAmount:                   g.MonthlyPayment(),
-			Description:                a.Name + " installment",
-			StartsAt:                   g.StartsOn,
-			StopsAt:                    g.EndsOn(),
-			LastTransactionScheduledTo: g.EndsOn(),
-			CreatedAt:                  now,
+			ID:          idgen.New(),
+			Unit:        models.RecurrentUnitMonth,
+			Every:       1,
+			Account:     *g.PayFrom,
+			Amount:      g.MonthlyPayment(),
+			Kind:        models.TransferTxKind,
+			ToAccount:   a,
+			ToAmount:    g.MonthlyPayment(),
+			Description: a.Name + " installment",
+			StartsAt:    g.StartsOn,
+			StopsAt:     g.EndsOn(),
+			// Its installments are all written below, none left to write.
+			Anchor:    g.EndsOn(),
+			NextIndex: 1,
+			CreatedAt: now,
 		}
 		if err := r.createRecurrentTxWithTxn(qtx, ctx, rt); err != nil {
 			return err

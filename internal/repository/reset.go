@@ -13,6 +13,8 @@ import (
 // Reset deletes the selected entities of the tenant in one transaction. A
 // full reset seeds the defaults again, as for a new user.
 func (r *Repository) Reset(ctx context.Context, opts models.ResetOptions) error {
+	// Its recurrent transactions changed: written again on the next request.
+	defer r.forgetTopUpOf(ctx)
 	l := logger.FromCtx(ctx)
 	opts.Normalize()
 

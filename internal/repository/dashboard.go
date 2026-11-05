@@ -235,7 +235,27 @@ func (r *Repository) listTransactions(ctx context.Context, p queries.GetTransact
 	for i := range rows {
 		txs[i] = *dbTransactionRowToTransaction(&rows[i])
 	}
+	if err := markAutoRecurrent(ctx, q, txs); err != nil {
+		return nil, err
+	}
 	return txs, nil
+}
+
+// markAutoRecurrent sets RecurrentAuto on the txs of recurrent ones fulfilling
+// them by themselves.
+func markAutoRecurrent(ctx context.Context, q *queries.Queries, txs []models.Transaction) error {
+	if !slices.ContainsFunc(txs, func(t models.Transaction) bool { return t.RecurrentTxID != "" }) {
+		return nil
+	}
+	ids, err := q.GetAutoFulfillRecurrentTxIDs(ctx)
+	if err != nil {
+		logger.FromCtx(ctx).Error("querying the auto fulfilled recurrent txs", zap.Error(err))
+		return err
+	}
+	for i := range txs {
+		txs[i].RecurrentAuto = txs[i].RecurrentTxID != "" && slices.Contains(ids, txs[i].RecurrentTxID)
+	}
+	return nil
 }
 
 // CountTransactionsNeedingReview counts the transactions, from sms mostly,

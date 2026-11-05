@@ -346,7 +346,10 @@ SET
     to_account_id = sqlc.narg(to_account_id),
     to_amount = ROUND(sqlc.narg(to_amount), 6),
     scheduled_to = sqlc.arg(scheduled_to),
-    needs_review = FALSE
+    needs_review = FALSE,
+    -- An occurrence edited on its own keeps its edit when its recurrent
+    -- transaction is edited.
+    recurrent_overridden = recurrent_id IS NOT NULL
 WHERE id = sqlc.arg(id);
 
 -- name: FulfillTransaction :exec

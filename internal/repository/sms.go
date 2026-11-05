@@ -92,10 +92,7 @@ func (r *Repository) CreateSMSMessage(ctx context.Context, msg *models.SMSMessag
 		l := logger.FromCtx(ctx)
 
 		if tx != nil {
-			if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, tx); err != nil {
-				return err
-			}
-			if _, err := r.pairTransferWithTxn(ctx, qtx, tx); err != nil {
+			if err := r.createSMSTransactionWithTxn(ctx, qtx, tx); err != nil {
 				return err
 			}
 			msg.TransactionID = tx.ID
@@ -128,10 +125,7 @@ func (r *Repository) UpdateSMSMessageResult(ctx context.Context, msg *models.SMS
 		l := logger.FromCtx(ctx)
 
 		if tx != nil {
-			if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, tx); err != nil {
-				return err
-			}
-			if _, err := r.pairTransferWithTxn(ctx, qtx, tx); err != nil {
+			if err := r.createSMSTransactionWithTxn(ctx, qtx, tx); err != nil {
 				return err
 			}
 			msg.TransactionID = tx.ID
@@ -170,4 +164,21 @@ func dbSMSMessageToSMSMessage(m *queries.SmsMessage) *models.SMSMessage {
 		TemplateID:    m.TemplateID.String,
 		CreatedAt:     m.CreatedAt,
 	}
+}
+
+// createSMSTransactionWithTxn saves an SMS's transaction: the occurrence of a
+// recurrent tx it likely pays becomes it (tx then being that one), else it's
+// created; then paired with the other leg of a transfer.
+func (r *Repository) createSMSTransactionWithTxn(ctx context.Context, qtx *queries.Queries, tx *models.Transaction) error {
+	occ, err := r.mergeSMSIntoOccurrenceWithTxn(ctx, qtx, tx)
+	if err != nil {
+		return err
+	}
+	if occ != nil {
+		*tx = *occ
+	} else if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, tx); err != nil {
+		return err
+	}
+	_, err = r.pairTransferWithTxn(ctx, qtx, tx)
+	return err
 }

@@ -2,10 +2,14 @@ package repository
 
 import (
 	"database/sql"
+	"errors"
+	"time"
 
+	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/queries"
+	"github.com/omareloui/tyche/internal/tzctx"
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
 )
@@ -29,20 +33,23 @@ func (r *Repository) createRecurrentTxWithTxn(qtx *queries.Queries, ctx context.
 	}
 
 	if err := qtx.CreateRecurrentTx(ctx, queries.CreateRecurrentTxParams{
-		ID:                         rt.ID,
-		AccountID:                  rt.Account.ID,
-		Unit:                       int64(rt.Unit),
-		Every:                      int64(rt.Every),
-		Amount:                     rt.Amount,
-		Kind:                       int64(rt.Kind),
-		CategoryID:                 catId,
-		CounterpartyID:             cpId,
-		Description:                sql.NullString{String: rt.Description, Valid: rt.Description != ""},
-		ToAccountID:                toAccId,
-		ToAmount:                   rt.ToAmount,
-		StartsAt:                   rt.StartsAt,
-		StopsAt:                    sql.NullTime{Time: rt.StopsAt, Valid: !rt.StopsAt.IsZero()},
-		LastTransactionScheduledTo: rt.LastTransactionScheduledTo,
+		ID:             rt.ID,
+		AccountID:      rt.Account.ID,
+		Unit:           int64(rt.Unit),
+		Every:          int64(rt.Every),
+		Amount:         rt.Amount,
+		Kind:           int64(rt.Kind),
+		CategoryID:     catId,
+		CounterpartyID: cpId,
+		Description:    sql.NullString{String: rt.Description, Valid: rt.Description != ""},
+		ToAccountID:    toAccId,
+		ToAmount:       rt.ToAmount,
+		StartsAt:       rt.StartsAt,
+		StopsAt:        sql.NullTime{Time: rt.StopsAt, Valid: !rt.StopsAt.IsZero()},
+		Anchor:         sql.NullTime{Time: rt.Anchor, Valid: true},
+		NextIndex:      int64(rt.NextIndex),
+		NextOn:         sql.NullTime{Time: rt.NextOn(), Valid: true},
+		AutoFulfill:    rt.AutoFulfill,
 	}); err != nil {
 		l.Error("creating recurrent transaction", zap.Error(err), zap.Any("recurrent tx", rt))
 		return err
@@ -115,59 +122,101 @@ func (r *Repository) GetRecurrentTx(ctx context.Context, id string) (*models.Rec
 	return rt, nil
 }
 
-func (r *Repository) UpdateRecurrentTx(ctx context.Context, rt *models.RecurrentTx, scheduledTxs []models.Transaction) error {
+// UpdateRecurrentTx saves the edited rt over old: its fields go to its
+// scheduled occurrences (but the ones edited on their own); a changed
+// schedule (every, unit, anchor) deletes the ones from today on and writes
+// them again from rt's anchor; a sooner end deletes the ones after it.
+func (r *Repository) UpdateRecurrentTx(ctx context.Context, old, rt *models.RecurrentTx) error {
+	today := r.userToday(ctx)
 	return r.transact(ctx, func(qtx *queries.Queries) error {
 		l := logger.FromCtx(ctx)
+		rid := sql.NullString{String: rt.ID, Valid: true}
 
-		if err := qtx.DeleteScheduledTransactionsOfRecurrentTx(ctx, sql.NullString{String: rt.ID, Valid: rt.ID != ""}); err != nil {
-			l.Error("deleting scheduled transaction of transaction", zap.Error(err))
+		if err := qtx.UpdateUnfulfilledOccurrences(ctx, queries.UpdateUnfulfilledOccurrencesParams{
+			RecurrentID:    rid,
+			AccountID:      rt.Account.ID,
+			Amount:         rt.Amount,
+			Kind:           int64(rt.Kind),
+			CategoryID:     nullID(rt.Category),
+			CounterpartyID: nullCpID(rt.Counterparty),
+			Description:    sql.NullString{String: rt.Description, Valid: rt.Description != ""},
+			ToAccountID:    nullAccID(rt.ToAccount),
+			ToAmount:       rt.ToAmount,
+		}); err != nil {
+			l.Error("updating the scheduled occurrences", zap.Error(err), zap.String("id", rt.ID))
 			return err
 		}
-		l.Debug("deleted scheduled transaction of transaction")
 
-		var catId, cpId, toAccId sql.NullString
-
-		if rt.Category != nil {
-			catId.Valid = rt.Category.ID != ""
-			catId.String = rt.Category.ID
+		rescheduled := rt.Unit != old.Unit || rt.Every != old.Every || !rt.Anchor.Equal(old.Anchor)
+		if rescheduled {
+			if err := qtx.DeleteUnfulfilledOccurrencesFrom(ctx, queries.DeleteUnfulfilledOccurrencesFromParams{
+				RecurrentID: rid, FromDate: today, KeepOverridden: true,
+			}); err != nil {
+				l.Error("deleting the scheduled occurrences", zap.Error(err), zap.String("id", rt.ID))
+				return err
+			}
+			rt.NextIndex = rt.ResumeIndex(today)
+		} else {
+			rt.NextIndex = old.NextIndex
 		}
-		if rt.Counterparty != nil {
-			cpId.Valid = rt.Counterparty.ID != ""
-			cpId.String = rt.Counterparty.ID
-		}
-		if rt.ToAccount != nil {
-			toAccId.Valid = rt.ToAccount.ID != ""
-			toAccId.String = rt.ToAccount.ID
+		if !rt.StopsAt.IsZero() {
+			if err := qtx.DeleteUnfulfilledOccurrencesFrom(ctx, queries.DeleteUnfulfilledOccurrencesFromParams{
+				RecurrentID: rid, FromDate: rt.StopsAt.AddDate(0, 0, 1), KeepOverridden: false,
+			}); err != nil {
+				l.Error("deleting the occurrences after its end", zap.Error(err), zap.String("id", rt.ID))
+				return err
+			}
 		}
 
 		if err := qtx.UpdateRecurrentTx(ctx, queries.UpdateRecurrentTxParams{
-			ID:                         rt.ID,
-			AccountID:                  rt.Account.ID,
-			Amount:                     rt.Amount,
-			Kind:                       int64(rt.Kind),
-			CategoryID:                 catId,
-			CounterpartyID:             cpId,
-			Unit:                       int64(rt.Unit),
-			Every:                      int64(rt.Every),
-			Description:                sql.NullString{String: rt.Description, Valid: rt.Description != ""},
-			ToAccountID:                toAccId,
-			ToAmount:                   rt.ToAmount,
-			StopsAt:                    sql.NullTime{Time: rt.StopsAt, Valid: !rt.StopsAt.IsZero()},
-			LastTransactionScheduledTo: rt.LastTransactionScheduledTo,
+			ID:             rt.ID,
+			AccountID:      rt.Account.ID,
+			Amount:         rt.Amount,
+			Kind:           int64(rt.Kind),
+			CategoryID:     nullID(rt.Category),
+			CounterpartyID: nullCpID(rt.Counterparty),
+			Unit:           int64(rt.Unit),
+			Every:          int64(rt.Every),
+			Description:    sql.NullString{String: rt.Description, Valid: rt.Description != ""},
+			ToAccountID:    nullAccID(rt.ToAccount),
+			ToAmount:       rt.ToAmount,
+			StopsAt:        sql.NullTime{Time: rt.StopsAt, Valid: !rt.StopsAt.IsZero()},
+			Anchor:         sql.NullTime{Time: rt.Anchor, Valid: true},
+			NextIndex:      int64(rt.NextIndex),
+			NextOn:         sql.NullTime{Time: rt.NextOn(), Valid: true},
+			AutoFulfill:    rt.AutoFulfill,
 		}); err != nil {
 			l.Error("updating recurrent tx", zap.Any("recurrent tx", rt), zap.Error(err))
 			return err
 		}
 		l.Debug("updated recurrent tx", zap.Any("recurrent tx", rt))
 
-		for _, stx := range scheduledTxs {
-			if err := r.createTransactionWithTxn(qtx, ctx, &stx); err != nil {
-				return err
-			}
+		if !rt.IsPaused() {
+			return r.scheduleRecurrentTxWithTxn(ctx, qtx, rt, today)
 		}
-
 		return nil
 	})
+}
+
+func nullID(c *models.Category) sql.NullString {
+	if c == nil {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: c.ID, Valid: c.ID != ""}
+}
+
+func nullCpID(c *models.Counterparty) sql.NullString {
+	if c == nil {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: c.ID, Valid: c.ID != ""}
+}
+
+func nullAccID(a *models.Account) sql.NullString {
+	if a == nil {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: a.ID, Valid: a.ID != ""}
 }
 
 func (r *Repository) DeleteRecurrentTx(ctx context.Context, id string) error {
@@ -190,21 +239,289 @@ func (r *Repository) DeleteRecurrentTx(ctx context.Context, id string) error {
 	})
 }
 
-func (r *Repository) GenerateScheduledTransactions(ctx context.Context, rt *models.RecurrentTx, scheduledTxs []models.Transaction) error {
+// PauseRecurrentTx stops writing its occurrences, deleting the scheduled ones
+// from today on.
+func (r *Repository) PauseRecurrentTx(ctx context.Context, rt *models.RecurrentTx) error {
+	today := r.userToday(ctx)
 	return r.transact(ctx, func(qtx *queries.Queries) error {
-		if err := qtx.UpdateRecurrentTxLastTransactionCreatedAt(ctx, queries.UpdateRecurrentTxLastTransactionCreatedAtParams{
-			ID:                         rt.ID,
-			LastTransactionScheduledTo: rt.LastTransactionScheduledTo,
+		if err := qtx.DeleteUnfulfilledOccurrencesFrom(ctx, queries.DeleteUnfulfilledOccurrencesFromParams{
+			RecurrentID: sql.NullString{String: rt.ID, Valid: true}, FromDate: today, KeepOverridden: false,
 		}); err != nil {
 			return err
 		}
-		for _, stx := range scheduledTxs {
-			if err := r.createTransactionWithTxn(qtx, ctx, &stx); err != nil {
+		return qtx.SetRecurrentTxPaused(ctx, queries.SetRecurrentTxPausedParams{
+			ID:        rt.ID,
+			PausedAt:  sql.NullTime{Time: time.Now(), Valid: true},
+			NextIndex: int64(rt.NextIndex),
+			NextOn:    sql.NullTime{Time: rt.NextOn(), Valid: true},
+		})
+	})
+}
+
+// ResumeRecurrentTx writes its occurrences again, from today on: the ones
+// while paused are skipped.
+func (r *Repository) ResumeRecurrentTx(ctx context.Context, rt *models.RecurrentTx) error {
+	today := r.userToday(ctx)
+	return r.transact(ctx, func(qtx *queries.Queries) error {
+		// Pausing deleted the ones from its day on.
+		rt.PausedAt = time.Time{}
+		rt.NextIndex = rt.ResumeIndex(today)
+		if err := qtx.SetRecurrentTxPaused(ctx, queries.SetRecurrentTxPausedParams{
+			ID:        rt.ID,
+			NextIndex: int64(rt.NextIndex),
+			NextOn:    sql.NullTime{Time: rt.NextOn(), Valid: true},
+		}); err != nil {
+			return err
+		}
+		return r.scheduleRecurrentTxWithTxn(ctx, qtx, rt, today)
+	})
+}
+
+// TopUpRecurrentTxs writes the occurrences of every recurrent tx due through
+// the schedule horizon (models.ScheduleHorizon) and fulfills the due ones of
+// the ones fulfilling themselves.
+func (r *Repository) TopUpRecurrentTxs(ctx context.Context) error {
+	today := r.userToday(ctx)
+	return r.transact(ctx, func(qtx *queries.Queries) error {
+		rows, err := qtx.GetRecurrentTxsDue(ctx)
+		if err != nil {
+			return err
+		}
+		for _, row := range rows {
+			rt := dbRecurrentTxRowToRecurrentTx(queries.GetRecurrentTxsRow(row))
+			if rt.IsGamyaa() {
+				continue
+			}
+			if err := r.scheduleRecurrentTxWithTxn(ctx, qtx, rt, today); err != nil {
 				return err
 			}
 		}
-		return nil
+		return r.autoFulfillWithTxn(ctx, qtx, today)
 	})
+}
+
+// scheduleRecurrentTxWithTxn writes rt's occurrences due through the horizon
+// (one migrated from its last scheduled date continuing from today), taking
+// for one on or before today an SMS transaction already paying it, then
+// fulfills the due ones when it fulfills them by itself.
+func (r *Repository) scheduleRecurrentTxWithTxn(ctx context.Context, qtx *queries.Queries, rt *models.RecurrentTx, today time.Time) error {
+	l := logger.FromCtx(ctx)
+	rt.ContinueFrom(today)
+	ks := rt.ToSchedule(today, models.ScheduleHorizon(monthStartFromCtx(ctx), today))
+	now := time.Now()
+	for _, k := range ks {
+		occ := rt.Occurrence(idgen.New(), k, now)
+		if !occ.ScheduledTo.After(today) {
+			paid, err := r.paidOccurrenceWithTxn(ctx, qtx, &occ)
+			if err != nil {
+				return err
+			}
+			if paid != nil {
+				if err := qtx.SetTransactionRecurrent(ctx, queries.SetTransactionRecurrentParams{
+					ID: paid.ID, RecurrentID: sql.NullString{String: rt.ID, Valid: true},
+				}); err != nil {
+					return err
+				}
+				l.Info("took an sms transaction for an occurrence", zap.String("recurrent_id", rt.ID), zap.String("id", paid.ID))
+				continue
+			}
+		}
+		if err := r.createTransactionWithTxn(qtx, ctx, &occ); err != nil {
+			return err
+		}
+	}
+	if len(ks) > 0 {
+		rt.NextIndex = ks[len(ks)-1] + 1
+	}
+	if err := qtx.SetRecurrentTxNext(ctx, queries.SetRecurrentTxNextParams{
+		ID:        rt.ID,
+		NextIndex: int64(rt.NextIndex),
+		NextOn:    sql.NullTime{Time: rt.NextOn(), Valid: true},
+	}); err != nil {
+		return err
+	}
+	if rt.AutoFulfill {
+		return r.autoFulfillWithTxn(ctx, qtx, today)
+	}
+	return nil
+}
+
+// paidOccurrenceWithTxn is the SMS transaction, not taken by a recurrent tx
+// yet, that likely paid occ, nil if none.
+func (r *Repository) paidOccurrenceWithTxn(ctx context.Context, qtx *queries.Queries, occ *models.Transaction) (*models.Transaction, error) {
+	rows, err := qtx.GetUnlinkedSMSTransactions(ctx, queries.GetUnlinkedSMSTransactionsParams{
+		AccountID: occ.Account.ID,
+		Since:     occ.ScheduledTo.Add(-models.RecurrentMatchWindow),
+		Until:     occ.ScheduledTo.Add(models.RecurrentMatchWindow),
+	})
+	if err != nil {
+		logger.FromCtx(ctx).Error("querying sms transactions paying an occurrence", zap.Error(err))
+		return nil, err
+	}
+	var best *models.Transaction
+	for i := range rows {
+		sms := leanTransaction(&rows[i])
+		if pick := models.PickRecurrentOccurrence(sms, []models.Transaction{*occ}); pick != nil {
+			if best == nil || absDur(sms.ScheduledTo.Sub(occ.ScheduledTo)) < absDur(best.ScheduledTo.Sub(occ.ScheduledTo)) {
+				best = sms
+			}
+		}
+	}
+	return best, nil
+}
+
+func absDur(d time.Duration) time.Duration {
+	if d < 0 {
+		return -d
+	}
+	return d
+}
+
+// leanTransaction is a transactions row with only its references' ids.
+func leanTransaction(t *queries.Transaction) *models.Transaction {
+	tx := dbTransactionToTransaction(t, nil, nil, nil, nil, nil, nil, nil, nil)
+	tx.Account.ID = t.AccountID
+	return tx
+}
+
+// autoFulfillWithTxn fulfills, on their day, the occurrences due by today of
+// the recurrent txs fulfilling themselves, flagged for review.
+func (r *Repository) autoFulfillWithTxn(ctx context.Context, qtx *queries.Queries, today time.Time) error {
+	rows, err := qtx.GetAutoFulfillDue(ctx, today.AddDate(0, 0, 1))
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
+		tx := &models.Transaction{
+			ID:          row.ID,
+			Account:     models.Account{ID: row.AccountID},
+			Kind:        models.TxKind(row.Kind),
+			Amount:      row.Amount,
+			ToAmount:    row.ToAmount.Float64,
+			FulfilledAt: row.ScheduledTo,
+		}
+		if row.ToAccountID.Valid {
+			tx.ToAccount = &models.Account{ID: row.ToAccountID.String}
+		}
+		if err := qtx.FulfillTransactionOn(ctx, queries.FulfillTransactionOnParams{
+			ID: tx.ID, FulfilledAt: sql.NullTime{Time: tx.FulfilledAt, Valid: true}, NeedsReview: true,
+		}); err != nil {
+			return err
+		}
+		if err := r.applyTxToAccountWithTxn(qtx, ctx, tx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// mergeSMSIntoOccurrenceWithTxn finds the occurrence of a recurrent tx the
+// SMS transaction sms likely pays and makes it the paid one (models.MergeSMS),
+// returning it, nil (and nothing done) if none matches.
+func (r *Repository) mergeSMSIntoOccurrenceWithTxn(ctx context.Context, qtx *queries.Queries, sms *models.Transaction) (*models.Transaction, error) {
+	if sms.FulfilledAt.IsZero() || (sms.Kind != models.ExpenseTxKind && sms.Kind != models.IncomeTxKind) {
+		return nil, nil
+	}
+	rows, err := qtx.GetRecurrentOccurrenceCandidates(ctx, queries.GetRecurrentOccurrenceCandidatesParams{
+		AccountID: sms.Account.ID,
+		ID:        sms.ID,
+		Since:     sms.ScheduledTo.Add(-models.RecurrentMatchWindow),
+		Until:     sms.ScheduledTo.Add(models.RecurrentMatchWindow),
+	})
+	if err != nil {
+		logger.FromCtx(ctx).Error("querying the occurrences an sms may pay", zap.Error(err))
+		return nil, err
+	}
+	cands := make([]models.Transaction, len(rows))
+	for i := range rows {
+		cands[i] = *leanTransaction(&rows[i])
+	}
+	occ := models.PickRecurrentOccurrence(sms, cands)
+	if occ == nil {
+		return nil, nil
+	}
+	return occ, r.mergeIntoOccurrenceWithTxn(ctx, qtx, occ, sms)
+}
+
+// mergeIntoOccurrenceWithTxn saves occ as paid by the SMS transaction sms
+// (not stored, or already deleted).
+func (r *Repository) mergeIntoOccurrenceWithTxn(ctx context.Context, qtx *queries.Queries, occ, sms *models.Transaction) error {
+	old := *occ
+	occ.MergeSMS(sms)
+	if err := r.updateTransactionWithTxn(ctx, qtx, &old, occ); err != nil {
+		return err
+	}
+	if err := qtx.FulfillTransactionOn(ctx, queries.FulfillTransactionOnParams{
+		ID: occ.ID, FulfilledAt: sql.NullTime{Time: occ.FulfilledAt, Valid: true}, NeedsReview: true,
+	}); err != nil {
+		return err
+	}
+	if old.FulfilledAt.IsZero() {
+		if err := r.applyTxToAccountWithTxn(qtx, ctx, occ); err != nil {
+			return err
+		}
+	}
+	logger.FromCtx(ctx).Info("merged an sms into an occurrence", zap.String("id", occ.ID), zap.String("recurrent_id", occ.RecurrentTxID))
+	return nil
+}
+
+// GetRecurrentMatchCandidates are the occurrences of recurrent txs the SMS
+// transaction tx may pay, within models.RecurrentManualMatchWindow, soonest
+// first, to match it by hand.
+func (r *Repository) GetRecurrentMatchCandidates(ctx context.Context, tx *models.Transaction) ([]models.Transaction, error) {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := q.GetRecurrentOccurrenceCandidates(ctx, queries.GetRecurrentOccurrenceCandidatesParams{
+		AccountID: tx.Account.ID,
+		ID:        tx.ID,
+		Since:     tx.ScheduledTo.Add(-models.RecurrentManualMatchWindow),
+		Until:     tx.ScheduledTo.Add(models.RecurrentManualMatchWindow),
+	})
+	if err != nil {
+		return nil, err
+	}
+	var res []models.Transaction
+	for i := range rows {
+		occ := leanTransaction(&rows[i])
+		if !models.MayPayOccurrence(tx, occ) {
+			continue
+		}
+		full, err := r.GetTransaction(ctx, occ.ID)
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, *full)
+	}
+	return res, nil
+}
+
+// MatchSMSToOccurrence makes occ the transaction the SMS transaction sms
+// paid: its SMS moves to occ, sms is deleted, occ takes its amount and date.
+func (r *Repository) MatchSMSToOccurrence(ctx context.Context, sms, occ *models.Transaction) error {
+	return r.transact(ctx, func(qtx *queries.Queries) error {
+		if err := qtx.MoveSMSMessagesTransaction(ctx, queries.MoveSMSMessagesTransactionParams{
+			FromID: sql.NullString{String: sms.ID, Valid: true},
+			ToID:   sql.NullString{String: occ.ID, Valid: true},
+		}); err != nil {
+			return err
+		}
+		if err := r.deleteTransactionWithTxn(ctx, qtx, sms); err != nil {
+			return err
+		}
+		return r.mergeIntoOccurrenceWithTxn(ctx, qtx, occ, sms)
+	})
+}
+
+// userToday is today in the user's time zone, as a UTC date.
+func (r *Repository) userToday(ctx context.Context) time.Time {
+	loc, err := r.GetTimezone(ctx)
+	if err != nil {
+		loc = time.UTC
+	}
+	y, m, d := time.Now().In(loc).Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }
 
 func dbRecurrentTxsDetailsToRecurrentTxs(dbRts []queries.GetRecurrentTxsRow) []models.RecurrentTx {
@@ -245,12 +562,17 @@ func dbRecurrentTxDetailsToRecurrentTx(dbRtx queries.RecurrentTxsDetail) *models
 
 		Kind: models.TxKind(dbRtx.RecurrentTxKind),
 
-		ToAmount:                   dbRtx.RecurrentTxToAmount.Float64,
-		Every:                      uint(dbRtx.RecurrentTxEvery),
-		Unit:                       models.RecurrentUnit(dbRtx.RecurrentTxUnit),
-		StartsAt:                   dbRtx.RecurrentTxStartsAt,
-		StopsAt:                    dbRtx.RecurrentTxStopsAt.Time,
-		LastTransactionScheduledTo: dbRtx.RecurrentTxLastTransactionScheduledTo,
+		ToAmount:        dbRtx.RecurrentTxToAmount.Float64,
+		Every:           uint(dbRtx.RecurrentTxEvery),
+		Unit:            models.RecurrentUnit(dbRtx.RecurrentTxUnit),
+		StartsAt:        dbRtx.RecurrentTxStartsAt,
+		StopsAt:         dbRtx.RecurrentTxStopsAt.Time,
+		Anchor:          dbRtx.RecurrentTxAnchor.Time,
+		NextIndex:       int(dbRtx.RecurrentTxNextIndex),
+		NextUnset:       !dbRtx.RecurrentTxNextOn.Valid,
+		AutoFulfill:     dbRtx.RecurrentTxAutoFulfill,
+		PausedAt:        dbRtx.RecurrentTxPausedAt.Time,
+		GamyaaAccountID: dbRtx.GamyaaAccountID.String,
 	}
 
 	if dbRtx.AccountName.Valid {
@@ -346,4 +668,42 @@ func dbRecurrentTxDetailsToRecurrentTx(dbRtx queries.RecurrentTxsDetail) *models
 func (r *Repository) GetRecurrentTxTransactions(ctx context.Context, id string) ([]models.Transaction, error) {
 	p := queries.GetTransactionsParams{RecurrentTxID: id, Lim: -1}
 	return r.listTransactions(ctx, p)
+}
+
+// TopUpRecurrentTxsDaily runs TopUpRecurrentTxs on the tenant's first request
+// of the day (in the user's time zone), logging what fails: the request goes
+// on without.
+func (r *Repository) TopUpRecurrentTxsDaily(ctx context.Context, tenantID string) {
+	y, m, d := tzctx.In(ctx, time.Now()).Date()
+	day := time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Format(time.DateOnly)
+
+	r.topUpMu.Lock()
+	if r.toppedUp[tenantID] == day {
+		r.topUpMu.Unlock()
+		return
+	}
+	r.toppedUp[tenantID] = day
+	r.topUpMu.Unlock()
+
+	if err := r.TopUpRecurrentTxs(ctx); err != nil {
+		r.forgetTopUp(tenantID)
+		if !errors.Is(err, ErrTenantLocked) && !errors.Is(err, ErrTenantDeleted) {
+			logger.FromCtx(ctx).Error("writing the recurrent transactions' occurrences", zap.Error(err))
+		}
+	}
+}
+
+// forgetTopUp makes the tenant's next request write its recurrent
+// transactions' occurrences, e.g. after its database got replaced.
+func (r *Repository) forgetTopUp(tenantID string) {
+	r.topUpMu.Lock()
+	delete(r.toppedUp, tenantID)
+	r.topUpMu.Unlock()
+}
+
+// forgetTopUpOf is forgetTopUp of the tenant in ctx.
+func (r *Repository) forgetTopUpOf(ctx context.Context) {
+	if id, err := TenantIDFromCtx(ctx); err == nil {
+		r.forgetTopUp(id)
+	}
 }

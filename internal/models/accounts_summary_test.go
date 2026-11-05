@@ -177,14 +177,14 @@ func TestAccountsSummaryForecastSalary(t *testing.T) {
 }
 
 func TestRecurrentOccurrencesBetween(t *testing.T) {
-	rt := &RecurrentTx{Unit: RecurrentUnitMonth, Every: 1, LastTransactionScheduledTo: day("2026-10-31")}
+	rt := &RecurrentTx{Unit: RecurrentUnitMonth, Every: 1, Anchor: day("2026-10-31"), NextIndex: 1}
 	got := rt.OccurrencesBetween(day("2026-11-05"), day("2027-01-01"))
-	// The 31st falls on the months' last days, the one before after skipped.
-	if want := []time.Time{day("2026-11-30"), day("2026-12-30")}; !slices.EqualFunc(got, want, time.Time.Equal) {
+	// The 31st falls on a shorter month's last day, back on the 31st after.
+	if want := []time.Time{day("2026-11-30"), day("2026-12-31")}; !slices.EqualFunc(got, want, time.Time.Equal) {
 		t.Errorf("monthly = %v, want %v", got, want)
 	}
 
-	rt = &RecurrentTx{Unit: RecurrentUnitDay, Every: 7, LastTransactionScheduledTo: day("2026-10-01"), StopsAt: day("2026-11-20")}
+	rt = &RecurrentTx{Unit: RecurrentUnitDay, Every: 7, Anchor: day("2026-10-01"), NextIndex: 1, StopsAt: day("2026-11-20")}
 	got = rt.OccurrencesBetween(day("2026-11-05"), day("2027-01-01"))
 	if want := []time.Time{day("2026-11-12"), day("2026-11-19")}; !slices.EqualFunc(got, want, time.Time.Equal) {
 		t.Errorf("weekly until it stops = %v, want %v", got, want)

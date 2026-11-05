@@ -18,6 +18,11 @@ type RecurrenceFD struct {
 	Unit        form.FDInput
 	Every       form.FDInput
 	StopsOn     form.FDInput
+	AutoFulfill form.FDInput
+	// NextOn is the day of the next occurrence, the others counted from it:
+	// only on the edit form (WithNextOn).
+	NextOn     form.FDInput
+	WithNextOn bool
 }
 
 templ RecurrentTxs(
@@ -113,13 +118,25 @@ templ recurrenceFormBody(id string, fd *RecurrenceFD) {
 	</div>
 	<div>
 		@form.Field("Stops on", "stops_on", id, icons.Calendar("15"), fd.StopsOn.Error) {
-			@form.Control("text", "stops_on", "Never", id, fd.StopsOn, templ.Attributes{
-				"autocomplete":    "off",
-				"x-mask":          "9999-99-99",
-				"data-datepicker": true,
-			})
+			@form.ClearableDate("stops_on", "Never", id, fd.StopsOn)
 		}
 		<p class="mt-1.5 text-sm text-zinc-500">Leave it empty to keep it going.</p>
+	</div>
+	if fd.WithNextOn {
+		<div>
+			@form.Field("Next on", "next_on", id, icons.Calendar("15"), fd.NextOn.Error) {
+				@form.Control("text", "next_on", "yyyy-mm-dd", id, fd.NextOn, templ.Attributes{
+					"autocomplete":    "off",
+					"x-mask":          "9999-99-99",
+					"data-datepicker": true,
+				})
+			}
+			<p class="mt-1.5 text-sm text-zinc-500">The next ones are counted from it.</p>
+		</div>
+	}
+	<div>
+		@form.Toggle("Pays by itself", "auto_fulfill", id, icons.Zap("18"), fd.AutoFulfill, nil)
+		<p class="mt-1.5 text-sm text-zinc-500">Fulfilled on its day, as a direct debit, for you to review.</p>
 	</div>
 }
 
@@ -151,7 +168,7 @@ templ EditRecurrentTxForm(
 
 templ rtxEditHeader() {
 	<h2 class="text-lg font-bold">Edit recurring transaction</h2>
-	<p class="text-sm text-zinc-500">Its upcoming scheduled transactions get replaced, starting from today.</p>
+	<p class="text-sm text-zinc-500">Its upcoming scheduled transactions follow, but the ones edited on their own.</p>
 }
 
 templ rtxsList(rtxs []models.RecurrentTx, def *models.Currency, oob bool) {
@@ -164,6 +181,9 @@ templ rtxsList(rtxs []models.RecurrentTx, def *models.Currency, oob bool) {
 		}
 	>
 		@rtxSummary(rtxs, def, false)
+		if len(rtxs) > 0 {
+			@rtxSMSMatchHint()
+		}
 		<section class="hidden has-[[data-rtx]]:block">
 			<h2 class="flex items-center gap-2 mb-3 text-sm font-semibold uppercase tracking-wider text-zinc-500">
 				@icons.Repeat("16")
@@ -366,23 +386,66 @@ templ rtxSchedule(rt *models.RecurrentTx, today time.Time, ended bool) {
 				@icons.Archive("16")
 				Ended { rt.StopsAt.Format("Jan 2, 2006") }
 			</p>
-		} else {
+		} else if rt.IsPaused() {
 			<div class="flex items-center justify-between gap-3">
-				<p class="text-sm text-zinc-400">Nothing scheduled ahead.</p>
+				<p class="flex items-center gap-2 text-sm text-zinc-400">
+					@icons.Pause("16")
+					Paused since { rt.PausedAt.Format("Jan 2") }
+				</p>
 				<button
-					hx-post={ fmt.Sprintf("/recurrent-tx/%s/generate-txs", rt.ID) }
+					hx-put={ fmt.Sprintf("/recurrent-tx/%s/resume", rt.ID) }
 					class="inline-flex shrink-0 items-center gap-1.5 h-9 pl-3 pr-4 rounded-full bg-(--accent)/15 text-sm font-medium text-(--accent) cursor-pointer transition-colors hover:bg-(--accent)/25"
 				>
-					@icons.Calendar("15")
-					Schedule next
+					@icons.Play("15")
+					Resume
 				</button>
 			</div>
+		} else {
+			<p class="text-sm text-zinc-400">Nothing scheduled ahead.</p>
 		}
 	</div>
 }
 
+// rtxSMSMatchHint tells how an SMS becomes the payment of a scheduled
+// occurrence instead of a transaction of its own (models.MatchesRecurrentOccurrence).
+templ rtxSMSMatchHint() {
+	<details class="group rounded-2xl bg-zinc-700/20 px-4 py-3">
+		<summary class="flex items-center gap-2 list-none cursor-pointer select-none text-sm text-zinc-400 hover:text-zinc-200 [&::-webkit-details-marker]:hidden">
+			@icons.Message("16", &templ.Attributes{"class": "shrink-0"})
+			<span class="flex-1">Bank SMS are matched with these, so a payment isn't counted twice</span>
+			@icons.ChevronDown("16", &templ.Attributes{"class": "shrink-0 transition-transform group-open:rotate-180"})
+		</summary>
+		<div class="grid gap-2 mt-3 text-sm text-zinc-400">
+			<p>An SMS becomes the scheduled transaction it pays, taking its amount and date (your category and counterparty are kept), when it's:</p>
+			<ul class="grid gap-1 pl-5 list-disc marker:text-zinc-600">
+				<li>On the same account.</li>
+				<li>A debit for an expense or a transfer out, a credit for an income.</li>
+				<li>Within { fmt.Sprint(int(models.RecurrentMatchWindow.Hours() / 24)) } days of its date, before or after.</li>
+				<li>From the same counterparty, or within { fmt.Sprintf("%.0f%%", models.RecurrentMatchTolerance*100) } of its amount.</li>
+			</ul>
+			<p>
+				It matches one still scheduled, or one that paid by itself (Auto) with no SMS yet; the closest in date wins.
+				The ones that don't match stay transactions of their own: “Match to scheduled…” in their menu matches them by hand,
+				with any scheduled one on the account within { fmt.Sprint(int(models.RecurrentManualMatchWindow.Hours() / 24)) } days.
+			</p>
+		</div>
+	</details>
+}
+
 templ rtxChips(rt *models.RecurrentTx, title string) {
 	<div class="relative flex flex-wrap items-center gap-1.5">
+		if rt.AutoFulfill {
+			<span class="chip" title="Fulfilled on its day by itself">
+				@icons.Zap("12")
+				Auto
+			</span>
+		}
+		if rt.IsGamyaa() {
+			<span class="chip" title="Changed through the gam'yaa's transactions">
+				@icons.Lock("12")
+				Gam'yaa
+			</span>
+		}
 		if rt.FulfilledCount > 0 {
 			<span class="chip" title={ "Last on " + rt.LastFulfilledOn.Format("Jan 2, 2006") }>
 				@icons.Check("12")
@@ -437,9 +500,9 @@ func splitRecurrentTxs(rtxs []models.RecurrentTx) (active, ended []models.Recurr
 	return active, ended
 }
 
-// nextDue is the next scheduled date, or far ahead with none.
+// nextDue is the next scheduled date, or far ahead with none (paused).
 func nextDue(rt *models.RecurrentTx) time.Time {
-	if len(rt.Upcoming) == 0 {
+	if len(rt.Upcoming) == 0 || rt.IsPaused() {
 		return time.Date(9999, 1, 1, 0, 0, 0, 0, time.UTC)
 	}
 	return rt.Upcoming[0]
@@ -459,10 +522,7 @@ func summarizeRecurrentTxs(rtxs []models.RecurrentTx, def *models.Currency) rtxS
 		if rt.HasEnded(today) {
 			continue
 		}
-		s.Active++
-		in, out := txFlow(rt.AsTransaction(), def)
-		s.In += in * rt.PerMonth()
-		s.Out += out * rt.PerMonth()
+		// Its scheduled ones still count as due, not its monthly flow.
 		for _, d := range rt.Upcoming {
 			if d.Before(today) {
 				s.Overdue++
@@ -470,6 +530,13 @@ func summarizeRecurrentTxs(rtxs []models.RecurrentTx, def *models.Currency) rtxS
 				s.DueThisWeek++
 			}
 		}
+		if rt.IsPaused() {
+			continue
+		}
+		s.Active++
+		in, out := txFlow(rt.AsTransaction(), def)
+		s.In += in * rt.PerMonth()
+		s.Out += out * rt.PerMonth()
 	}
 	return s
 }
@@ -519,9 +586,17 @@ func getRecurrentTxMenuItems(rt *models.RecurrentTx) []templ.Component {
 		components.EntryMenuDrawerItem("Details", recurrentTxDetailsURL(rt.ID),
 			components.WithEntryMenuItemIcon(icons.Eye("16"))),
 	}
-	if !rt.FullyScheduled() {
-		items = append(items, components.EntryMenuAnchorItem("Schedule more", "post", fmt.Sprintf("/recurrent-tx/%s/generate-txs", rt.ID),
-			components.WithEntryMenuItemIcon(icons.Calendar("16"))))
+	if rt.IsGamyaa() {
+		return append(items, components.EntryMenuDrawerItem("Gam'yaa details", accountDetailsURL(rt.GamyaaAccountID),
+			components.WithEntryMenuItemIcon(icons.Users("16"))))
+	}
+	if rt.IsPaused() {
+		items = append(items, components.EntryMenuAnchorItem("Resume", "put", fmt.Sprintf("/recurrent-tx/%s/resume", rt.ID),
+			components.WithEntryMenuItemIcon(icons.Play("16"))))
+	} else if !rt.HasEnded(dateOf(time.Now())) && !rt.FullyScheduled() {
+		items = append(items, components.EntryMenuAnchorItem("Pause", "put", fmt.Sprintf("/recurrent-tx/%s/pause", rt.ID),
+			components.WithEntryMenuItemIcon(icons.Pause("16")),
+			components.WithEntryMenuItemConfirmMessage("Pause it? Its scheduled transactions from today on are deleted, and resuming starts again from that day.")))
 	}
 	return append(items,
 		components.EntryMenuSeparator(),

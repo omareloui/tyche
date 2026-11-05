@@ -600,3 +600,33 @@ templ Info(size string, attrs ...*templ.Attributes) {
 		<path d="M12 8h.01"></path>
 	}
 }
+
+// Pause stops a recurring transaction for a while.
+templ Pause(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<rect x="14" y="4" width="4" height="16" rx="1"></rect>
+		<rect x="6" y="4" width="4" height="16" rx="1"></rect>
+	}
+}
+
+// Play resumes a paused recurring transaction.
+templ Play(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<polygon points="6 3 20 12 6 21 6 3"></polygon>
+	}
+}
+
+// SkipForward skips one occurrence of a recurring transaction.
+templ SkipForward(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<polygon points="5 4 15 12 5 20 5 4"></polygon>
+		<line x1="19" x2="19" y1="5" y2="19"></line>
+	}
+}
+
+// Zap marks a recurring transaction fulfilling itself on its day.
+templ Zap(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"></path>
+	}
+}

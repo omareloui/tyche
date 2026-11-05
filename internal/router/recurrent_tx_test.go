@@ -55,8 +55,14 @@ func TestCreateRecurrentTx(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rt.FulfilledCount != 1 || len(rt.Upcoming) != 5 {
-		t.Errorf("fulfilled %d, upcoming %d, want 1 and 5", rt.FulfilledCount, len(rt.Upcoming))
+	// Written through next month.
+	horizon := models.ScheduleHorizon(1, time.Now().UTC())
+	want := 0
+	for k := 1; !rt.OccurrenceOn(k).After(horizon); k++ {
+		want++
+	}
+	if rt.FulfilledCount != 1 || len(rt.Upcoming) != want {
+		t.Errorf("fulfilled %d, upcoming %d, want 1 and %d", rt.FulfilledCount, len(rt.Upcoming), want)
 	}
 	if start.Day() <= 28 {
 		for i, d := range rt.Upcoming {

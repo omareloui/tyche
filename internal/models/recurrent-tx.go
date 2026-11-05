@@ -41,10 +41,24 @@ type RecurrentTx struct {
 	Category     *Category
 	Counterparty *Counterparty
 
-	StartsAt                   time.Time
-	StopsAt                    time.Time
-	CreatedAt                  time.Time
-	LastTransactionScheduledTo time.Time
+	StartsAt  time.Time
+	StopsAt   time.Time
+	CreatedAt time.Time
+
+	// Anchor is the day its occurrences are counted from (occurrence 0, see
+	// OccurrenceOn), NextIndex the next one to write.
+	Anchor    time.Time
+	NextIndex int
+	// NextUnset tells NextIndex wasn't recomputed since the anchors were
+	// migrated from the last scheduled dates: it continues from today when
+	// that's past.
+	NextUnset bool
+	// AutoFulfill fulfills its occurrences on their day by themselves.
+	AutoFulfill bool
+	PausedAt    time.Time
+	// GamyaaAccountID is the gam'yaa whose installments it pays, set on its
+	// creation and only changed through its transactions.
+	GamyaaAccountID string
 
 	// Upcoming are its scheduled, not yet fulfilled, transactions' dates,
 	// soonest first.
@@ -70,48 +84,131 @@ func (rt *RecurrentTx) HasEnded(now time.Time) bool {
 	return !rt.StopsAt.IsZero() && rt.StopsAt.Before(now) && len(rt.Upcoming) == 0
 }
 
-// NextOn is the date of the next transaction it generates, after the last
-// scheduled one.
-func (rt *RecurrentTx) NextOn() time.Time {
-	last := rt.LastTransactionScheduledTo
-	var next time.Time
-	switch rt.Unit {
-	case RecurrentUnitDay:
-		next = last.AddDate(0, 0, int(rt.Every))
-	case RecurrentUnitMonth:
-		next = last.AddDate(0, int(rt.Every), 0)
-	case RecurrentUnitYear:
-		next = last.AddDate(int(rt.Every), 0, 0)
-	}
-	// A day the month lacks (e.g. the 31st) falls on its last day.
-	if rt.Unit != RecurrentUnitDay && next.Day() != last.Day() {
-		next = next.AddDate(0, 0, -next.Day())
-	}
-	return next.Truncate(24 * time.Hour)
+func (rt *RecurrentTx) IsPaused() bool {
+	return !rt.PausedAt.IsZero()
 }
 
-// maxOccurrences caps OccurrencesBetween, e.g. a daily one last scheduled
-// long ago.
+// IsGamyaa tells it pays a gam'yaa's installments: locked, as the gam'yaa's
+// schedule is only set on its creation.
+func (rt *RecurrentTx) IsGamyaa() bool {
+	return rt.GamyaaAccountID != ""
+}
+
+// OccurrenceOn is the day of its occurrence k: k × every units after its
+// anchor, a day the month lacks (e.g. the 31st) falling on its last day, so
+// the next months are back on the anchor's day.
+func (rt *RecurrentTx) OccurrenceOn(k int) time.Time {
+	a := dateOnly(rt.Anchor)
+	n := k * int(rt.Every)
+	switch rt.Unit {
+	case RecurrentUnitDay:
+		return a.AddDate(0, 0, n)
+	case RecurrentUnitMonth:
+		return addMonthsClamped(a, n)
+	case RecurrentUnitYear:
+		return addMonthsClamped(a, 12*n)
+	}
+	return a
+}
+
+// addMonthsClamped is n months after t, on t's day or the month's last.
+func addMonthsClamped(t time.Time, n int) time.Time {
+	first := time.Date(t.Year(), t.Month()+time.Month(n), 1, 0, 0, 0, 0, time.UTC)
+	return first.AddDate(0, 0, min(t.Day(), daysIn(first))-1)
+}
+
+// NextOn is the day of the next occurrence it writes.
+func (rt *RecurrentTx) NextOn() time.Time {
+	return rt.OccurrenceOn(rt.NextIndex)
+}
+
+// longestUnitDays is the most days one of its intervals can last, to start
+// counting occurrences close to a day.
+func (rt *RecurrentTx) longestUnitDays() int {
+	switch rt.Unit {
+	case RecurrentUnitMonth:
+		return 31 * int(rt.Every)
+	case RecurrentUnitYear:
+		return 366 * int(rt.Every)
+	}
+	return int(rt.Every)
+}
+
+// ResumeIndex is its first occurrence on or after day.
+func (rt *RecurrentTx) ResumeIndex(day time.Time) int {
+	if rt.Every == 0 {
+		return 0
+	}
+	day = dateOnly(day)
+	k := max(0, int(day.Sub(dateOnly(rt.Anchor)).Hours()/24)/rt.longestUnitDays()-1)
+	for rt.OccurrenceOn(k).Before(day) {
+		k++
+	}
+	return k
+}
+
+// ContinueFrom makes one migrated from its last scheduled date (NextUnset)
+// continue from today when that's past: the occurrences missed meanwhile are
+// skipped, not written as overdue.
+func (rt *RecurrentTx) ContinueFrom(today time.Time) {
+	if rt.NextUnset {
+		rt.NextIndex = max(rt.NextIndex, rt.ResumeIndex(today))
+		rt.NextUnset = false
+	}
+}
+
+// ScheduleHorizon is how far ahead the occurrences are written: through the
+// user's next month.
+func ScheduleHorizon(ms MonthStart, today time.Time) time.Time {
+	return ms.Of(today).Next().Last()
+}
+
+// maxOccurrences caps the occurrences counted at once, e.g. a daily one last
+// written long ago.
 const maxOccurrences = 5000
 
-// OccurrencesBetween are the dates of the transactions it would generate
-// next (after its last scheduled one), after after and before until, until
-// it stops: the ones it hasn't scheduled yet.
-func (rt *RecurrentTx) OccurrencesBetween(after, until time.Time) []time.Time {
-	if rt.Every == 0 || rt.LastTransactionScheduledTo.IsZero() {
+// ToSchedule are the indexes of the occurrences to write now, from the next
+// one: the ones through horizon, and one after today if none is, until it
+// stops. None while paused.
+func (rt *RecurrentTx) ToSchedule(today, horizon time.Time) []int {
+	if rt.Every == 0 || rt.IsPaused() || rt.Anchor.IsZero() {
 		return nil
 	}
-	c := *rt
+	today = dateOnly(today)
+	var res []int
+	for k := rt.NextIndex; k < rt.NextIndex+maxOccurrences; k++ {
+		d := rt.OccurrenceOn(k)
+		if !rt.StopsAt.IsZero() && d.After(dateOnly(rt.StopsAt)) {
+			break
+		}
+		if d.After(horizon) && k > 0 && rt.OccurrenceOn(k-1).After(today) {
+			break
+		}
+		res = append(res, k)
+	}
+	return res
+}
+
+// OccurrencesBetween are the dates of the transactions it would generate
+// next (from its next index), after after and before until, until it stops:
+// the ones it hasn't written yet. None while paused.
+func (rt *RecurrentTx) OccurrencesBetween(after, until time.Time) []time.Time {
+	if rt.Every == 0 || rt.IsPaused() || rt.Anchor.IsZero() {
+		return nil
+	}
+	k := rt.NextIndex
+	if rt.NextUnset {
+		k = max(k, rt.ResumeIndex(after))
+	}
 	var res []time.Time
-	for range maxOccurrences {
-		next := c.NextOn()
+	for end := k + maxOccurrences; k < end; k++ {
+		next := rt.OccurrenceOn(k)
 		if !next.Before(until) || (!rt.StopsAt.IsZero() && next.After(rt.StopsAt)) {
 			break
 		}
 		if next.After(after) {
 			res = append(res, next)
 		}
-		c.LastTransactionScheduledTo = next
 	}
 	return res
 }
@@ -120,6 +217,24 @@ func (rt *RecurrentTx) OccurrencesBetween(after, until time.Time) []time.Time {
 // there's no more to schedule.
 func (rt *RecurrentTx) FullyScheduled() bool {
 	return !rt.StopsAt.IsZero() && rt.NextOn().After(rt.StopsAt)
+}
+
+// Occurrence is its occurrence k as a scheduled transaction.
+func (rt *RecurrentTx) Occurrence(id string, k int, now time.Time) Transaction {
+	return Transaction{
+		ID:           id,
+		Account:      rt.Account,
+		Amount:       rt.Amount,
+		Kind:         rt.Kind,
+		Category:     rt.Category,
+		Counterparty: rt.Counterparty,
+		ToAccount:    rt.ToAccount,
+		ToAmount:     rt.ToAmount,
+		Description:  rt.Description,
+		RecurrentTx:  &RecurrentTx{ID: rt.ID},
+		ScheduledTo:  rt.OccurrenceOn(k),
+		CreatedAt:    now,
+	}
 }
 
 // PerMonth is how many times it happens in an average month.
@@ -160,9 +275,9 @@ type createRecurrentTx struct {
 	Unit  RecurrentUnit `validate:"required"`
 	Every uint          `validate:"required"`
 
-	StartsAt                   time.Time `validate:"required"`
-	StopsAt                    time.Time `validate:"omitempty,gtfield=StartsAt"`
-	LastTransactionScheduledTo time.Time `validate:"required"`
+	StartsAt time.Time `validate:"required"`
+	StopsAt  time.Time `validate:"omitempty,gtfield=StartsAt"`
+	Anchor   time.Time `validate:"required"`
 }
 
 func (rt *RecurrentTx) ViewRecurrence() string {
@@ -214,11 +329,11 @@ func (rt *RecurrentTx) toValidate() *createRecurrentTx {
 			ToAmount:       rt.ToAmount,
 			Description:    rt.Description,
 		},
-		Unit:                       rt.Unit,
-		Every:                      rt.Every,
-		StartsAt:                   rt.StartsAt,
-		StopsAt:                    rt.StopsAt,
-		LastTransactionScheduledTo: rt.LastTransactionScheduledTo,
+		Unit:     rt.Unit,
+		Every:    rt.Every,
+		StartsAt: rt.StartsAt,
+		StopsAt:  rt.StopsAt,
+		Anchor:   rt.Anchor,
 	}
 }
 

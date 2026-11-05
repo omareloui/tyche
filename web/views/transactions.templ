@@ -495,6 +495,66 @@ templ TransferPairPicker(tx *models.Transaction, cands []models.Transaction, err
 	</div>
 }
 
+// CanMatchRecurrent tells whether tx (an SMS's expense or income, not one of
+// a recurrent transaction's) can be matched by hand with a recurrent
+// transaction's scheduled one it paid (RecurrentMatchPicker).
+func CanMatchRecurrent(tx *models.Transaction) bool {
+	return tx.FromSMS && tx.RecurrentTxID == "" && !tx.FulfilledAt.IsZero() &&
+		(tx.Kind == models.ExpenseTxKind || tx.Kind == models.IncomeTxKind) &&
+		!tx.IsTransferLeg() && !tx.IsReimbursement() && tx.Reimbursed == 0
+}
+
+// RecurrentMatchPicker matches an SMS transaction by hand with the scheduled
+// transaction of a recurrent one it paid, which takes its amount and date.
+// The ones that look like it are flagged.
+templ RecurrentMatchPicker(tx *models.Transaction, cands []models.Transaction) {
+	{{ v := newTxView(ctx, tx) }}
+	<div data-tx hx-target="this" hx-swap="outerHTML" class="grid gap-3 px-4 py-3 rounded-2xl bg-zinc-700/20">
+		<div class="flex items-center justify-between gap-4">
+			<p>
+				Which scheduled one did <span class="font-semibold">{ v.title }</span>
+				<span class={ "tabular-nums", templ.KV("text-emerald-400", v.tone == txToneIn) }>{ v.amount }</span> pay?
+			</p>
+			<button hx-get={ fmt.Sprintf("/transactions/%s", tx.ID) } class="cursor-pointer text-sm text-zinc-400 hover:text-zinc-200">Cancel</button>
+		</div>
+		if len(cands) == 0 {
+			<p class="text-sm text-zinc-400">No recurring transaction scheduled on { tx.Account.Name } within two weeks of it.</p>
+		} else {
+			<p class="text-sm text-zinc-500">It takes this one's amount and date, and this one goes.</p>
+		}
+		<ul class="grid gap-2 max-h-96 overflow-y-auto">
+			for _, c := range cands {
+				{{ cv := newTxView(ctx, &c) }}
+				<li>
+					<button
+						hx-put={ fmt.Sprintf("/transactions/%s/recurrent-match", tx.ID) }
+						hx-vals={ fmt.Sprintf(`{"occurrence_id": %q}`, c.ID) }
+						class="cursor-pointer w-full flex items-center gap-4 px-4 py-2 rounded-xl bg-zinc-700/30 text-left transition-colors hover:bg-zinc-600/40"
+					>
+						<div class="flex-1 min-w-0">
+							<p class="flex items-center gap-2 min-w-0">
+								<span class="truncate">{ cv.title }</span>
+								if models.MatchesRecurrentOccurrence(tx, &c) {
+									<span class="chip shrink-0 bg-sky-400/10 text-sky-300">Likely</span>
+								}
+							</p>
+							<p class="text-xs text-zinc-400 truncate">
+								{ formatTxDay(c.ScheduledTo) }
+								if c.FulfilledAt.IsZero() {
+									· scheduled
+								} else {
+									· paid by itself
+								}
+							</p>
+						</div>
+						<p class={ "shrink-0 font-semibold tabular-nums", templ.KV("text-emerald-400", cv.tone == txToneIn) }>{ cv.amount }</p>
+					</button>
+				</li>
+			}
+		</ul>
+	</div>
+}
+
 // txAccount is the account of accs with the id, nil if none.
 func txAccount(accs []models.Account, id string) *models.Account {
 	for i := range accs {

@@ -25,11 +25,16 @@ var auth, deleted, vault func(http.Handler) http.Handler
 // tenant with one (middleware.Badge), set by New.
 var badge func(http.Handler) http.Handler
 
+// recurrent writes the recurrent transactions' occurrences due before the
+// requests of a tenant, once a day (middleware.RecurrentTopUp), set by New.
+var recurrent func(http.Handler) http.Handler
+
 func New(h *handler.Handler) Router {
 	auth = middleware.Auth(h.RefreshSession)
 	deleted = middleware.Deleted(h.IsTenantDeleted, handler.SignOutDeleted)
 	vault = middleware.Vault(h.OpenVault)
 	badge = middleware.Badge(h.RefreshBadge)
+	recurrent = middleware.RecurrentTopUp(h.TopUpRecurrentTxs)
 	mux := http.NewServeMux()
 
 	mux.Handle("GET /{$}", handlePub(h.HomePage))
@@ -94,6 +99,8 @@ func New(h *handler.Handler) Router {
 	mux.Handle("GET /transactions/{id}/transfer-pair", handle(h.GetTransferPairPicker))
 	mux.Handle("PUT /transactions/{id}/transfer-pair", handle(h.LinkTransferPair))
 	mux.Handle("DELETE /transactions/{id}/transfer-pair", handle(h.UnlinkTransferPair))
+	mux.Handle("GET /transactions/{id}/recurrent-match", handle(h.GetRecurrentMatchPicker))
+	mux.Handle("PUT /transactions/{id}/recurrent-match", handle(h.MatchRecurrentOccurrence))
 
 	mux.Handle("POST /recurrence-form/", handle(h.RecurrenceForm))
 	mux.Handle("POST /recurrence-form/{id}", handle(h.RecurrenceForm))
@@ -104,7 +111,9 @@ func New(h *handler.Handler) Router {
 	mux.Handle("GET /recurrent-tx/{id}/details", handle(h.RecurrentTxDetails))
 	mux.Handle("GET /recurrent-tx/{id}/edit", handle(h.GetEditRecurrentTx))
 	mux.Handle("PUT /recurrent-tx/{id}", handle(h.EditRecurrentTx))
-	mux.Handle("POST /recurrent-tx/{id}/generate-txs", handle(h.GenerateTransactions))
+	mux.Handle("PUT /recurrent-tx/{id}/pause", handle(h.PauseRecurrentTx))
+	mux.Handle("DELETE /recurrent-tx/{id}/occurrences/{txID}", handle(h.SkipRecurrentOccurrence))
+	mux.Handle("PUT /recurrent-tx/{id}/resume", handle(h.ResumeRecurrentTx))
 	mux.Handle("DELETE /recurrent-tx/{id}", handle(h.DeleteRecurrentTx))
 
 	mux.Handle("GET /goals", handle(h.Goals))
@@ -302,6 +311,7 @@ func handlePubJSON(h handler.HandlerJSONMethod, appendMiddlewares ...(func(http.
 		handler = appendMiddlewares[i](handler)
 	}
 
+	handler = recurrent(handler)
 	handler = badge(handler)
 	handler = vault(handler)
 	handler = deleted(handler)
@@ -315,6 +325,7 @@ func handlePubJSON(h handler.HandlerJSONMethod, appendMiddlewares ...(func(http.
 func handleDeviceJSON(h handler.HandlerJSONMethod, verify middleware.DeviceVerifier) http.Handler {
 	var handler http.Handler = route_handler.JSONRouteHandler(h)
 
+	handler = recurrent(handler)
 	handler = badge(handler)
 	handler = middleware.DeviceAuth(verify)(handler)
 	handler = middleware.RequestLogger(handler)
@@ -330,6 +341,7 @@ func handlePub(h handler.HandlerMethod, appendMiddlewares ...(func(http.Handler)
 		handler = appendMiddlewares[i](handler)
 	}
 
+	handler = recurrent(handler)
 	handler = badge(handler)
 	handler = vault(handler)
 	handler = deleted(handler)

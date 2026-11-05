@@ -231,7 +231,6 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 
 	if tx.RecurrentTx != nil {
 		tx.RecurrentTx.ID = idgen.New()
-		tx.RecurrentTx.LastTransactionScheduledTo = time.Now()
 
 		if err := tx.RecurrentTx.SanitizeAndValidate(h.sani, h.valid); err != nil {
 			var valerr errs.ValidationError
@@ -244,8 +243,6 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 			l.Error("sanitizing recurrent transaction", zap.Error(err))
 			return nil, err
 		}
-
-		scheduledTxs = generateNextScheduledTransactions(tx.RecurrentTx, generateNextScheduledTransactionsCount)
 	}
 
 	if wishlistID != "" && tx.RecurrentTx == nil {
@@ -754,10 +751,19 @@ func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationE
 			Unit:        form.FDInput{Value: formatIntIfNonZero(int(t.RecurrentTx.Unit)), Error: err.Errors.MsgFor("Unit")},
 			Every:       form.FDInput{Value: formatIntIfNonZero(int(t.RecurrentTx.Every)), Error: err.Errors.MsgFor("Every")},
 			StopsOn:     form.FDInput{Value: formatDateOnlyIfNonZero(t.RecurrentTx.StopsAt), Error: err.Errors.MsgFor("StopsAt")},
+			AutoFulfill: form.FDInput{Value: onIf(t.RecurrentTx.AutoFulfill)},
 		}
 	}
 
 	return fd
+}
+
+// onIf is a checkbox's value: "on" when checked.
+func onIf(checked bool) string {
+	if checked {
+		return "on"
+	}
+	return ""
 }
 
 // amountIFD is the inputs of an amount of acc. A metal account's amount is
@@ -893,6 +899,10 @@ func (h Handler) mapFDAndTxToRecurrentTx(r *http.Request, tx *models.Transaction
 		Every:        uint(every),
 		StartsAt:     tx.ScheduledTo,
 		StopsAt:      stopsOn,
+		// tx is its first occurrence, the next ones counted from it.
+		Anchor:      tx.ScheduledTo,
+		NextIndex:   1,
+		AutoFulfill: r.FormValue("auto_fulfill") != "",
 	}, nil
 }
 

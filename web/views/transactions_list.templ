@@ -579,7 +579,7 @@ templ txTile(tx *models.Transaction, v *txView) {
 
 templ txChips(tx *models.Transaction, v *txView) {
 	{{ isRefund := tx.Kind == models.RefundTxKind }}
-	{{ hasChips := isRefund || tx.Category != nil || v.isScheduled || tx.FromSMS || tx.RecurrentTx != nil || tx.Goal != nil || len(tx.Reimbursements) > 0 }}
+	{{ hasChips := isRefund || tx.Category != nil || v.isScheduled || tx.FromSMS || tx.RecurrentTxID != "" || tx.Goal != nil || len(tx.Reimbursements) > 0 }}
 	if hasChips {
 		<div class="flex flex-wrap items-center gap-1.5 mt-1.5">
 			if isRefund {
@@ -600,15 +600,21 @@ templ txChips(tx *models.Transaction, v *txView) {
 					Scheduled · { tx.ScheduledTo.Format("Jan 2") }
 				</span>
 			}
-			if tx.RecurrentTx != nil {
+			if tx.RecurrentTxID != "" {
 				<a
-					href={ templ.SafeURL("/recurrent-tx#" + RecurrentTxID(tx.RecurrentTx.ID)) }
+					href={ RecurrentTxURL(tx.RecurrentTxID) }
 					title="See the recurring transaction"
 					class="chip transition-colors hover:bg-zinc-700 hover:text-zinc-200"
 				>
 					@icons.Repeat("12")
 					Recurring
 				</a>
+				if tx.RecurrentAuto {
+					<span class="chip bg-violet-400/10 text-violet-300" title="Its recurring transaction fulfills it on its day">
+						@icons.Zap("12")
+						Auto
+					</span>
+				}
 			}
 			if tx.NeedsReview {
 				<span tabindex="0" class="group/popup relative chip bg-amber-400/10 text-amber-300 outline-none">
@@ -1138,6 +1144,10 @@ func getTransactionMenuItems(tx *models.Transaction) []templ.Component {
 	} else if canPairTransfer(tx) {
 		links = append(links,
 			txMenuItem("Pair transfer…", "get", fmt.Sprintf("/transactions/%s/transfer-pair", tx.ID), icons.Transfer("16")))
+	}
+	if CanMatchRecurrent(tx) {
+		links = append(links,
+			txMenuItem("Match to scheduled…", "get", fmt.Sprintf("/transactions/%s/recurrent-match", tx.ID), icons.Repeat("16")))
 	}
 
 	// Adjustments are signed, which the form can't edit; fix the balance

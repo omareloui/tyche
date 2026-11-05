@@ -76,18 +76,20 @@ templ RecurrentTxDetails(d *RecurrentTxDetailsData) {
 				@rtxDetailsHero(rt, &v, d.Def, ended)
 				@rtxDetailsActions(rt, ended)
 				@rtxDetailsMoney(d)
-				@rtxDetailsTxs("Upcoming", d.Upcoming) {
+				@rtxDetailsTxs("Upcoming", d.Upcoming, skipURLs(rt)) {
 					if len(d.Upcoming) == 0 {
 						<p class="text-sm text-zinc-500">
 							if ended {
 								Ended { rt.StopsAt.Format("Jan 2, 2006") }.
+							} else if rt.IsPaused() {
+								Paused since { rt.PausedAt.Format("Jan 2, 2006") }.
 							} else {
 								Nothing scheduled ahead.
 							}
 						</p>
 					}
 				}
-				@rtxDetailsTxs("History", d.Past) {
+				@rtxDetailsTxs("History", d.Past, nil) {
 					if len(d.Past) == 0 {
 						<p class="text-sm text-zinc-500">None done yet.</p>
 					}
@@ -135,34 +137,54 @@ templ rtxDetailsHero(rt *models.RecurrentTx, v *txView, def *models.Currency, en
 templ rtxDetailsActions(rt *models.RecurrentTx, ended bool) {
 	{{ slot := "#" + components.DrawerSlot }}
 	<div class="flex flex-wrap gap-2">
-		<button type="button" hx-get={ fmt.Sprintf("/recurrent-tx/%s/edit", rt.ID) } hx-target={ slot } hx-swap="innerHTML" class="txd-action">
-			@icons.Pencil("14")
-			Edit
-		</button>
-		if !ended && !rt.FullyScheduled() {
+		if rt.IsGamyaa() {
+			<button type="button" hx-get={ accountDetailsURL(rt.GamyaaAccountID) } hx-target={ slot } hx-swap="innerHTML" class="txd-action">
+				@icons.Users("14")
+				Gam'yaa details
+			</button>
+			<p class="basis-full text-sm text-zinc-500">Its installments change through the gam'yaa's transactions.</p>
+		} else {
+			<button type="button" hx-get={ fmt.Sprintf("/recurrent-tx/%s/edit", rt.ID) } hx-target={ slot } hx-swap="innerHTML" class="txd-action">
+				@icons.Pencil("14")
+				Edit
+			</button>
+			if rt.IsPaused() {
+				<button
+					type="button"
+					hx-put={ fmt.Sprintf("/recurrent-tx/%s/resume?from=%s", rt.ID, RecurrentTxDetailsFrom) }
+					hx-target={ slot }
+					hx-swap="innerHTML"
+					class="txd-action"
+				>
+					@icons.Play("14")
+					Resume
+				</button>
+			} else if !ended && !rt.FullyScheduled() {
+				<button
+					type="button"
+					hx-put={ fmt.Sprintf("/recurrent-tx/%s/pause?from=%s", rt.ID, RecurrentTxDetailsFrom) }
+					hx-confirm="Pause it? Its scheduled transactions from today on are deleted, and resuming starts again from that day."
+					hx-target={ slot }
+					hx-swap="innerHTML"
+					class="txd-action"
+				>
+					@icons.Pause("14")
+					Pause
+				</button>
+			}
+			// The answer removes the card and closes the drawer.
 			<button
 				type="button"
-				hx-post={ fmt.Sprintf("/recurrent-tx/%s/generate-txs?from=%s", rt.ID, RecurrentTxDetailsFrom) }
-				hx-target={ slot }
-				hx-swap="innerHTML"
-				class="txd-action"
+				hx-delete={ fmt.Sprintf("/recurrent-tx/%s?from=%s", rt.ID, RecurrentTxDetailsFrom) }
+				hx-confirm="Delete it with its upcoming scheduled transactions? Past ones are kept."
+				hx-target={ "#" + RecurrentTxID(rt.ID) }
+				hx-swap="outerHTML"
+				class="txd-action text-red-300!"
 			>
-				@icons.Calendar("14")
-				Schedule more
+				@icons.Trash("14")
+				Delete
 			</button>
 		}
-		// The answer removes the card and closes the drawer.
-		<button
-			type="button"
-			hx-delete={ fmt.Sprintf("/recurrent-tx/%s?from=%s", rt.ID, RecurrentTxDetailsFrom) }
-			hx-confirm="Delete it with its upcoming scheduled transactions? Past ones are kept."
-			hx-target={ "#" + RecurrentTxID(rt.ID) }
-			hx-swap="outerHTML"
-			class="txd-action text-red-300!"
-		>
-			@icons.Trash("14")
-			Delete
-		</button>
 	</div>
 }
 
@@ -195,32 +217,59 @@ func rtxTotal(txs []models.Transaction) float64 {
 }
 
 // rtxDetailsTxs lists transactions, each linking to its details.
-templ rtxDetailsTxs(title string, txs []models.Transaction) {
+// rtxDetailsTxs lists txs, each with a Skip button when skip gives its url.
+templ rtxDetailsTxs(title string, txs []models.Transaction, skip func(*models.Transaction) string) {
 	@txDetailsSection(title) {
 		for _, tx := range txs {
 			{{ v := txMiniView(ctx, &tx) }}
-			<a
-				href={ goalTxURL(&tx) }
-				class="flex items-center gap-3 w-full px-3 py-2 rounded-xl bg-tx-row text-left transition hover:ring-1 hover:ring-zinc-700"
-			>
-				<div class="flex-1 min-w-0">
-					<p class="truncate text-sm">{ formatTxDay(tx.ScheduledTo) }</p>
-					<p class="truncate text-xs text-zinc-500">
-						{ tx.ScheduledTo.Format("Monday, Jan 2, 2006") }
-						if tx.FulfilledAt.IsZero() && tx.ScheduledTo.Before(dateOf(time.Now())) {
-							· <span class="text-red-400">Overdue</span>
+			<div class="flex items-center gap-1.5">
+				<a
+					href={ goalTxURL(&tx) }
+					class="flex flex-1 min-w-0 items-center gap-3 px-3 py-2 rounded-xl bg-tx-row text-left transition hover:ring-1 hover:ring-zinc-700"
+				>
+					<div class="flex-1 min-w-0">
+						<p class="truncate text-sm">{ formatTxDay(tx.ScheduledTo) }</p>
+						<p class="truncate text-xs text-zinc-500">
+							{ tx.ScheduledTo.Format("Monday, Jan 2, 2006") }
+							if tx.FulfilledAt.IsZero() && tx.ScheduledTo.Before(dateOf(time.Now())) {
+								· <span class="text-red-400">Overdue</span>
+							}
+						</p>
+					</div>
+					<p
+						class={
+							"shrink-0 text-sm font-semibold tabular-nums",
+							templ.KV("text-emerald-400", v.tone == txToneIn),
+							templ.KV("text-zinc-400", v.tone == txToneNeutral),
 						}
-					</p>
-				</div>
-				<p
-					class={
-						"shrink-0 text-sm font-semibold tabular-nums",
-						templ.KV("text-emerald-400", v.tone == txToneIn),
-						templ.KV("text-zinc-400", v.tone == txToneNeutral),
-					}
-				>{ v.amount }</p>
-			</a>
+					>{ v.amount }</p>
+				</a>
+				if skip != nil && tx.FulfilledAt.IsZero() {
+					<button
+						type="button"
+						hx-delete={ skip(&tx) }
+						hx-target={ "#" + components.DrawerSlot }
+						hx-swap="innerHTML"
+						title="Skip this one"
+						aria-label={ "Skip " + formatTxDay(tx.ScheduledTo) }
+						class="grid shrink-0 place-items-center size-9 rounded-xl text-zinc-400 cursor-pointer transition-colors hover:bg-white/8 hover:text-zinc-100"
+					>
+						@icons.SkipForward("15")
+					</button>
+				}
+			</div>
 		}
 		{ children... }
+	}
+}
+
+// skipURLs gives the url skipping one of rt's scheduled transactions, nil for
+// a gam'yaa's.
+func skipURLs(rt *models.RecurrentTx) func(*models.Transaction) string {
+	if rt.IsGamyaa() {
+		return nil
+	}
+	return func(tx *models.Transaction) string {
+		return fmt.Sprintf("/recurrent-tx/%s/occurrences/%s?from=%s", rt.ID, tx.ID, RecurrentTxDetailsFrom)
 	}
 }

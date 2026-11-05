@@ -69,6 +69,8 @@ func (r *Repository) ExportDB(ctx context.Context) (string, error) {
 // identity and dropping the devices, then encrypted with the tenant's key
 // when it has one. The replaced database is kept (RestoreBackup).
 func (r *Repository) ImportDB(ctx context.Context, src io.Reader) error {
+	// Its recurrent transactions changed: written again on the next request.
+	defer r.forgetTopUpOf(ctx)
 	provider, oauthID, err := tenantFromCtx(ctx)
 	if err != nil {
 		return err
@@ -118,6 +120,8 @@ func (r *Repository) HasBackup(ctx context.Context) bool {
 // RestoreBackup swaps the tenant's database with the one replaced by the
 // last import, so restoring again undoes it. Its devices are dropped too.
 func (r *Repository) RestoreBackup(ctx context.Context) error {
+	// Its recurrent transactions changed: written again on the next request.
+	defer r.forgetTopUpOf(ctx)
 	provider, oauthID, err := tenantFromCtx(ctx)
 	if err != nil {
 		return err

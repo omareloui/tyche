@@ -14,7 +14,13 @@ import (
 	"go.uber.org/zap"
 )
 
+// CreateTransaction creates tx and the scheduledTxs, and rt, tx being its
+// first occurrence, with its next ones through the schedule horizon.
 func (r *Repository) CreateTransaction(ctx context.Context, tx *models.Transaction, rt *models.RecurrentTx, scheduledTxs []models.Transaction) error {
+	var today time.Time
+	if rt != nil {
+		today = r.userToday(ctx)
+	}
 	return r.transact(ctx, func(qtx *queries.Queries) error {
 		if rt != nil {
 			if err := r.createRecurrentTxWithTxn(qtx, ctx, rt); err != nil {
@@ -32,6 +38,9 @@ func (r *Repository) CreateTransaction(ctx context.Context, tx *models.Transacti
 			}
 		}
 
+		if rt != nil {
+			return r.scheduleRecurrentTxWithTxn(ctx, qtx, rt, today)
+		}
 		return nil
 	})
 }
@@ -386,7 +395,11 @@ func (r *Repository) GetTransaction(ctx context.Context, id string) (*models.Tra
 		return nil, err
 	}
 	l.Info("queried transaction")
-	tx := dbTransactionRowToTransaction(&dbTx)
+	one := []models.Transaction{*dbTransactionRowToTransaction(&dbTx)}
+	if err := markAutoRecurrent(ctx, q, one); err != nil {
+		return nil, err
+	}
+	tx := &one[0]
 
 	if tx.Goal != nil {
 		gl, err := r.GetGoal(ctx, tx.Goal.ID)
