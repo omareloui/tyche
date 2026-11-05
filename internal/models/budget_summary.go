@@ -259,6 +259,16 @@ func (bs *BudgetSummary) Left() float64 {
 	return bs.Budget() - bs.BudgetedSpent()
 }
 
+// Unspent is what the visible budgets have left, each category's on its
+// own: an overspent one doesn't take from the others'.
+func (bs *BudgetSummary) Unspent() float64 {
+	var total float64
+	for _, it := range bs.Budgeted() {
+		total += max(0, it.Left())
+	}
+	return total
+}
+
 // Ahead tells whether the budgets are spent faster than the month passes.
 func (bs *BudgetSummary) Ahead() bool {
 	return bs.Left() >= 0 && bs.Pct() > bs.MonthPct()

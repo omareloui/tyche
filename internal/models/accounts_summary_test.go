@@ -86,6 +86,17 @@ func TestNewAccountsSummaryWith(t *testing.T) {
 	}
 }
 
+func TestAccountsSummaryShown(t *testing.T) {
+	s := &AccountsSummary{NetWorth: 1000, BudgetLeft: 300}
+	if s.Shown() != 1000 {
+		t.Errorf("shown = %v, want 1000", s.Shown())
+	}
+	s.With.BudgetLeft = true
+	if s.Shown() != 700 {
+		t.Errorf("shown less the budget left = %v, want 700", s.Shown())
+	}
+}
+
 func TestNewAccountsSummaryEmpty(t *testing.T) {
 	s := NewAccountsSummary(nil, Currency{String: "EGP"}, AccountsSummaryWith{}, MonthStart(1), day("2026-11-05"), nil)
 	if s.Accounts != 0 || s.History != nil || s.HasCredit() || s.Share(10) != 0 {

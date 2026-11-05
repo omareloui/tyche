@@ -42,9 +42,11 @@ func (c *CardsSummary) UsedPct() float64 {
 }
 
 // AccountsSummaryWith are the accounts out of the balance a summary counts
-// too: the ones excluded from it, the goals'.
+// too (the ones excluded from it, the goals'), and whether its net worth
+// leaves out what the month's budgets have left to spend.
 type AccountsSummaryWith struct {
 	Excluded, Goals bool
+	BudgetLeft      bool
 }
 
 // AccountsSummary is the accounts counted in the balance (not archived nor
@@ -74,6 +76,17 @@ type AccountsSummary struct {
 	// balances (both positive).
 	OwedToYou, YouOwe float64
 	Partial           bool
+	// BudgetLeft is what the current month's budgets have left to spend,
+	// whether With.BudgetLeft or not.
+	BudgetLeft float64
+}
+
+// Shown is the net worth shown: less the budgets' left when asked.
+func (s *AccountsSummary) Shown() float64 {
+	if s.With.BudgetLeft {
+		return s.NetWorth - s.BudgetLeft
+	}
+	return s.NetWorth
 }
 
 // NewAccountsSummary sums accs (the live ones and the goals', card

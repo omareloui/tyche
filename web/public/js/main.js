@@ -263,8 +263,9 @@ document.addEventListener("click", (e) => {
   loadCpSummary(summary.dataset.month);
 });
 
-// The accounts summary counts the accounts out of the balance it's asked to
-// per browser ("excluded", "goals"), kept in localStorage and sent as `with`.
+// The accounts summary's options per browser: counting the accounts out of
+// the balance ("excluded", "goals"), leaving out the budgets' left
+// ("budget"), kept in localStorage and sent as `with`.
 const accSummaryWithKey = "tyche:acc-summary-with";
 
 function accSummaryWith() {

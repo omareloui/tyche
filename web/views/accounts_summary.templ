@@ -46,14 +46,22 @@ templ AccountsSummary(s *models.AccountsSummary) {
 					@icons.Scale("14")
 					Net worth
 				</h2>
-				if s.Excluded > 0 || s.Goals > 0 {
+				if s.Excluded > 0 || s.Goals > 0 || s.BudgetLeft > 0 {
 					<div class="flex flex-wrap items-center gap-1.5 text-xs">
-						<span class="text-zinc-500">Include</span>
+						if s.Excluded > 0 || s.Goals > 0 {
+							<span class="text-zinc-500">Include</span>
+						}
 						if s.Excluded > 0 {
-							@accSummaryWithToggle("excluded", "Not in balance", s.Excluded, s.With.Excluded)
+							@accSummaryWithToggle("excluded", "Not in balance", fmt.Sprintf("%d %s", s.Excluded, plural(s.Excluded, "account", "accounts")), s.With.Excluded)
 						}
 						if s.Goals > 0 {
-							@accSummaryWithToggle("goals", "Goals", s.Goals, s.With.Goals)
+							@accSummaryWithToggle("goals", "Goals", fmt.Sprintf("%d %s", s.Goals, plural(s.Goals, "account", "accounts")), s.With.Goals)
+						}
+						if s.BudgetLeft > 0 {
+							if s.Excluded > 0 || s.Goals > 0 {
+								<span aria-hidden="true" class="mx-0.5 h-4 border-l border-zinc-700"></span>
+							}
+							@accSummaryWithToggle("budget", "After budgets", "Take out what this month’s budgets still have left to spend", s.With.BudgetLeft)
 						}
 					</div>
 				}
@@ -65,9 +73,15 @@ templ AccountsSummary(s *models.AccountsSummary) {
 				</div>
 			} else {
 				<div class="grid gap-1">
-					<p class={ "sensitive text-3xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)", templ.KV("text-red-400", s.NetWorth < 0) }>
-						{ s.Currency.Format(s.NetWorth) }
+					<p class={ "sensitive text-3xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)", templ.KV("text-red-400", s.Shown() < 0) }>
+						{ s.Currency.Format(s.Shown()) }
 					</p>
+					if s.With.BudgetLeft && s.BudgetLeft > 0 {
+						<p class="text-sm text-zinc-500">
+							after <span class="sensitive tabular-nums text-amber-300">{ s.Currency.Format(s.BudgetLeft) }</span> left in this month’s budgets
+							· <span class="sensitive tabular-nums">{ s.Currency.Format(s.NetWorth) }</span> in all
+						</p>
+					}
 					<p class="flex flex-wrap gap-x-3 gap-y-1 text-sm text-zinc-500">
 						<span>{ strconv.Itoa(s.Accounts) } { plural(s.Accounts, "account", "accounts") }</span>
 						<span><span class="sensitive tabular-nums text-emerald-300">{ s.Currency.Format(s.Assets) }</span> assets</span>
@@ -109,14 +123,14 @@ templ AccountsSummary(s *models.AccountsSummary) {
 	</div>
 }
 
-// accSummaryWithToggle counts the accounts out of the balance named key in
-// the summary, or leaves them out again (main.js).
-templ accSummaryWithToggle(key, label string, n int, on bool) {
+// accSummaryWithToggle turns the summary's option key on or off (main.js):
+// counting accounts out of the balance, leaving out the budgets' left.
+templ accSummaryWithToggle(key, label, title string, on bool) {
 	<button
 		type="button"
 		data-acc-summary-with={ key }
 		aria-pressed={ fmt.Sprint(on) }
-		title={ fmt.Sprintf("%d %s", n, plural(n, "account", "accounts")) }
+		title={ title }
 		class={
 			"flex items-center gap-1 rounded-full px-2.5 py-1 ring-1 cursor-pointer transition-colors",
 			templ.KV("ring-sky-400/60 bg-sky-400/15 text-sky-200", on),

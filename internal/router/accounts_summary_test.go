@@ -123,6 +123,31 @@ func TestAccountsSummary(t *testing.T) {
 		}
 	})
 
+	t.Run("less the budget left", func(t *testing.T) {
+		cats, err := repo.GetCategories(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var food models.Category
+		for _, c := range cats {
+			if c.HasKind(models.ExpenseTxKind) {
+				food = c
+				break
+			}
+		}
+		food.BudgetAmount, food.BudgetCurrency = 200, egp
+		if err := repo.UpdateCategory(ctx, &food); err != nil {
+			t.Fatal(err)
+		}
+		_, body := do("GET", "/accounts/summary?with=budget", nil)
+		// 630 − 200 left (the expense is uncategorized).
+		for _, want := range []string{egp.Format(430), egp.Format(200) + "</span> left in this month", `data-acc-summary-with="budget" aria-pressed="true"`} {
+			if !strings.Contains(body, want) {
+				t.Errorf("summary misses %q", want)
+			}
+		}
+	})
+
 	t.Run("account changes re-render it", func(t *testing.T) {
 		res, body := do("PUT", "/accounts/"+card.ID+"/archive", nil)
 		if res.StatusCode != http.StatusOK {

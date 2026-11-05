@@ -52,5 +52,12 @@ func (r *Repository) GetAccountsSummary(ctx context.Context, def *models.Currenc
 			daily[row.AccountID] = append(daily[row.AccountID], d)
 		}
 	}
-	return models.NewAccountsSummary(accs, *def, with, start, today, daily), nil
+	s := models.NewAccountsSummary(accs, *def, with, start, today, daily)
+
+	bs, err := r.GetBudgetSummary(ctx, time.Time{}, def, nil)
+	if err != nil {
+		return nil, err
+	}
+	s.BudgetLeft = bs.Unspent()
+	return s, nil
 }

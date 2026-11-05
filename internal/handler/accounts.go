@@ -57,6 +57,8 @@ func (h *Handler) AccountsSummary(w http.ResponseWriter, r *http.Request) (templ
 			with.Excluded = true
 		case "goals":
 			with.Goals = true
+		case "budget":
+			with.BudgetLeft = true
 		}
 	}
 	s, err := h.repo.GetAccountsSummary(r.Context(), &getClaims(r.Context()).DefaultCurrency, with)
