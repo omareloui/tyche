@@ -68,15 +68,16 @@ func (r *Repository) GetGoalPaces(ctx context.Context, goals []models.Goal) (mod
 		return nil, err
 	}
 
-	inProgress := map[string]bool{}
+	byID := map[string]*models.Goal{}
 	for i := range goals {
-		inProgress[goals[i].ID] = true
+		byID[goals[i].ID] = &goals[i]
 	}
 
+	// Each currency's contributions at today's rate.
 	paces := models.GoalPaces{}
 	for _, row := range rows {
-		if inProgress[row.GoalID] {
-			paces[row.GoalID] = row.Amount / goalPaceMonths
+		if gl := byID[row.GoalID.String]; gl != nil {
+			paces[gl.ID] += gl.ValueOf(row.Amount, &models.Currency{String: row.Currency}) / goalPaceMonths
 		}
 	}
 	return paces, nil

@@ -89,9 +89,9 @@ LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
 LEFT JOIN account_kinds AS tak ON ta.kind_id = tak.id
 LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
 LEFT JOIN categories AS cat ON t.category_id = cat.id
--- A goal's transactions are the ones in or out of its account, and the
+-- A goal's transactions are the ones in or out of its accounts, and the
 -- payments of the loan it was bought with.
-LEFT JOIN goals AS g ON g.account_id IN (t.account_id, t.to_account_id) OR g.id = t.loan_goal_id
+LEFT JOIN goals AS g ON g.id IN (a.goal_id, ta.goal_id) OR g.id = t.loan_goal_id
 LEFT JOIN currencies AS gc ON g.currency_id = gc.id
 -- Top-level transactions only: reimbursements come nested under their
 -- expense (GetReimbursementsOfMany) and the incoming leg of a transfer pair
@@ -130,8 +130,8 @@ WHERE
         OR (sqlc.narg(category_id) = 'none' AND t.category_id IS NULL))
     AND (sqlc.narg(counterparty_id) IS NULL OR t.counterparty_id = sqlc.narg(counterparty_id)
         OR (sqlc.narg(counterparty_id) = 'none' AND t.counterparty_id IS NULL))
-    AND (sqlc.narg(goal_id) IS NULL OR EXISTS (
-        SELECT 1 FROM goals AS fg WHERE fg.id = sqlc.narg(goal_id) AND (fg.account_id IN (t.account_id, t.to_account_id) OR fg.id = t.loan_goal_id)
+    AND (sqlc.narg(goal_id) IS NULL OR t.loan_goal_id = sqlc.narg(goal_id) OR EXISTS (
+        SELECT 1 FROM accounts AS fa WHERE fa.goal_id = sqlc.narg(goal_id) AND fa.id IN (t.account_id, t.to_account_id)
     ))
     AND (sqlc.narg(fulfilled) IS NULL OR (t.fulfilled_at IS NOT NULL) = sqlc.narg(fulfilled))
     AND (sqlc.narg(needs_review) IS NULL OR (t.needs_review OR EXISTS (
@@ -210,8 +210,8 @@ WHERE
         OR (sqlc.narg(category_id) = 'none' AND t.category_id IS NULL))
     AND (sqlc.narg(counterparty_id) IS NULL OR t.counterparty_id = sqlc.narg(counterparty_id)
         OR (sqlc.narg(counterparty_id) = 'none' AND t.counterparty_id IS NULL))
-    AND (sqlc.narg(goal_id) IS NULL OR EXISTS (
-        SELECT 1 FROM goals AS fg WHERE fg.id = sqlc.narg(goal_id) AND (fg.account_id IN (t.account_id, t.to_account_id) OR fg.id = t.loan_goal_id)
+    AND (sqlc.narg(goal_id) IS NULL OR t.loan_goal_id = sqlc.narg(goal_id) OR EXISTS (
+        SELECT 1 FROM accounts AS fa WHERE fa.goal_id = sqlc.narg(goal_id) AND fa.id IN (t.account_id, t.to_account_id)
     ))
     AND (sqlc.narg(fulfilled) IS NULL OR (t.fulfilled_at IS NOT NULL) = sqlc.narg(fulfilled))
     AND (sqlc.narg(needs_review) IS NULL OR (t.needs_review OR EXISTS (
@@ -328,9 +328,9 @@ LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
 LEFT JOIN account_kinds AS tak ON ta.kind_id = tak.id
 LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
 LEFT JOIN categories AS cat ON t.category_id = cat.id
--- A goal's transactions are the ones in or out of its account, and the
+-- A goal's transactions are the ones in or out of its accounts, and the
 -- payments of the loan it was bought with.
-LEFT JOIN goals AS g ON g.account_id IN (t.account_id, t.to_account_id) OR g.id = t.loan_goal_id
+LEFT JOIN goals AS g ON g.id IN (a.goal_id, ta.goal_id) OR g.id = t.loan_goal_id
 LEFT JOIN currencies AS gc ON g.currency_id = gc.id
 WHERE t.id = sqlc.arg(id) LIMIT 1;
 
@@ -595,9 +595,9 @@ LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
 LEFT JOIN account_kinds AS tak ON ta.kind_id = tak.id
 LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
 LEFT JOIN categories AS cat ON t.category_id = cat.id
--- A goal's transactions are the ones in or out of its account, and the
+-- A goal's transactions are the ones in or out of its accounts, and the
 -- payments of the loan it was bought with.
-LEFT JOIN goals AS g ON g.account_id IN (t.account_id, t.to_account_id) OR g.id = t.loan_goal_id
+LEFT JOIN goals AS g ON g.id IN (a.goal_id, ta.goal_id) OR g.id = t.loan_goal_id
 LEFT JOIN currencies AS gc ON g.currency_id = gc.id
 WHERE t.reimburses_id IN (SELECT value FROM json_each(sqlc.arg(ids)))
 ORDER BY t.scheduled_to DESC, t.created_at DESC;
@@ -662,9 +662,9 @@ LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
 LEFT JOIN account_kinds AS tak ON ta.kind_id = tak.id
 LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
 LEFT JOIN categories AS cat ON t.category_id = cat.id
--- A goal's transactions are the ones in or out of its account, and the
+-- A goal's transactions are the ones in or out of its accounts, and the
 -- payments of the loan it was bought with.
-LEFT JOIN goals AS g ON g.account_id IN (t.account_id, t.to_account_id) OR g.id = t.loan_goal_id
+LEFT JOIN goals AS g ON g.id IN (a.goal_id, ta.goal_id) OR g.id = t.loan_goal_id
 LEFT JOIN currencies AS gc ON g.currency_id = gc.id
 WHERE t.transfer_pair_id IN (SELECT value FROM json_each(sqlc.arg(ids)));
 
@@ -731,9 +731,9 @@ LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
 LEFT JOIN account_kinds AS tak ON ta.kind_id = tak.id
 LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
 LEFT JOIN categories AS cat ON t.category_id = cat.id
--- A goal's transactions are the ones in or out of its account, and the
+-- A goal's transactions are the ones in or out of its accounts, and the
 -- payments of the loan it was bought with.
-LEFT JOIN goals AS g ON g.account_id IN (t.account_id, t.to_account_id) OR g.id = t.loan_goal_id
+LEFT JOIN goals AS g ON g.id IN (a.goal_id, ta.goal_id) OR g.id = t.loan_goal_id
 LEFT JOIN currencies AS gc ON g.currency_id = gc.id
 WHERE
     t.kind = sqlc.arg(kind)

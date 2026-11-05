@@ -62,6 +62,14 @@ func setRates(r rates) {
 	current.Store(&r)
 }
 
+// SetRates replaces the rates in memory (base → quote → rate, lowercase
+// codes), giving back a func restoring the previous ones. For tests.
+func SetRates(r map[string]map[string]float64) (restore func()) {
+	prev := current.Load()
+	setRates(r)
+	return func() { current.Store(prev) }
+}
+
 var defaultURLs = []string{
 	"https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/%s.min.json",
 	"https://latest.currency-api.pages.dev/v1/currencies/%s.min.json",

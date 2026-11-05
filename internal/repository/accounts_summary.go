@@ -38,6 +38,7 @@ func (r *Repository) GetAccountsSummary(ctx context.Context, def *models.Currenc
 		if gl.Account != nil {
 			accs = append(accs, *gl.Account)
 		}
+		accs = append(accs, gl.Holdings...)
 	}
 	loc, err := r.GetTimezone(ctx)
 	if err != nil {
@@ -127,7 +128,7 @@ func (r *Repository) GetAccountsSummary(ctx context.Context, def *models.Currenc
 	goalFlows := map[string][]models.DayFlow{}
 	for _, d := range deposits {
 		goalFlows[d.Source.ID] = append(goalFlows[d.Source.ID], models.DayFlow{Day: d.On, Out: d.SourceTotal})
-		goalFlows[d.Goal.Account.ID] = append(goalFlows[d.Goal.Account.ID], models.DayFlow{Day: d.On, In: d.Amount})
+		goalFlows[d.Target.ID] = append(goalFlows[d.Target.ID], models.DayFlow{Day: d.On, In: d.TargetAmount()})
 	}
 
 	all := map[string][]models.DayFlow{}

@@ -12,13 +12,14 @@ SELECT
     CAST((
         SELECT TOTAL(IIF(t.account_id = a.id, t.amount, -COALESCE(t.to_amount, t.amount)))
         FROM transactions AS t
-        JOIN goals AS gl ON gl.account_id IN (t.account_id, t.to_account_id)
+        JOIN accounts AS ga ON ga.goal_id IS NOT NULL AND ga.id IN (t.account_id, t.to_account_id)
+        JOIN goals AS gl ON gl.id = ga.goal_id
         WHERE
             t.kind = 3
             AND t.fulfilled_at IS NOT NULL
             AND gl.fulfilled_at IS NULL
             AND a.id IN (t.account_id, t.to_account_id)
-            AND gl.account_id != a.id
+            AND ga.id != a.id
     ) AS FLOAT) AS set_aside
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
@@ -43,13 +44,14 @@ SELECT
     CAST((
         SELECT TOTAL(IIF(t.account_id = a.id, t.amount, -COALESCE(t.to_amount, t.amount)))
         FROM transactions AS t
-        JOIN goals AS gl ON gl.account_id IN (t.account_id, t.to_account_id)
+        JOIN accounts AS ga ON ga.goal_id IS NOT NULL AND ga.id IN (t.account_id, t.to_account_id)
+        JOIN goals AS gl ON gl.id = ga.goal_id
         WHERE
             t.kind = 3
             AND t.fulfilled_at IS NOT NULL
             AND gl.fulfilled_at IS NULL
             AND a.id IN (t.account_id, t.to_account_id)
-            AND gl.account_id != a.id
+            AND ga.id != a.id
     ) AS FLOAT) AS set_aside
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
@@ -73,13 +75,14 @@ SELECT
     CAST((
         SELECT TOTAL(IIF(t.account_id = a.id, t.amount, -COALESCE(t.to_amount, t.amount)))
         FROM transactions AS t
-        JOIN goals AS gl ON gl.account_id IN (t.account_id, t.to_account_id)
+        JOIN accounts AS ga ON ga.goal_id IS NOT NULL AND ga.id IN (t.account_id, t.to_account_id)
+        JOIN goals AS gl ON gl.id = ga.goal_id
         WHERE
             t.kind = 3
             AND t.fulfilled_at IS NOT NULL
             AND gl.fulfilled_at IS NULL
             AND a.id IN (t.account_id, t.to_account_id)
-            AND gl.account_id != a.id
+            AND ga.id != a.id
     ) AS FLOAT) AS set_aside
 FROM accounts AS a
 LEFT JOIN account_kinds AS k ON a.kind_id = k.id
@@ -213,7 +216,8 @@ WHERE
     AND NOT EXISTS (SELECT 1 FROM transactions AS t WHERE t.account_id = accounts.id OR t.to_account_id = accounts.id)
     AND NOT EXISTS (SELECT 1 FROM recurrent_txs AS rt WHERE rt.account_id = accounts.id OR rt.to_account_id = accounts.id)
     AND NOT EXISTS (SELECT 1 FROM gamyaas AS g WHERE g.account_id = accounts.id)
-    AND NOT EXISTS (SELECT 1 FROM goals AS gl WHERE gl.account_id = accounts.id);
+    AND NOT EXISTS (SELECT 1 FROM goals AS gl WHERE gl.account_id = accounts.id)
+    AND accounts.goal_id IS NULL;
 
 -- name: GetBalances :many
 SELECT

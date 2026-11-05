@@ -2,11 +2,13 @@ package views
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
@@ -86,13 +88,15 @@ const (
 )
 
 // GoalMoneyFD is a goal's money form: Amount in the side money leaves (the
-// account for a deposit, the goal else), OtherAmount what the other side
-// receives when their currencies differ.
+// account for a deposit, the goal's account HoldingID else), OtherAmount
+// what the account receives when their currencies differ (a deposit goes to
+// the goal's account of its currency, as is).
 type GoalMoneyFD struct {
 	// From is GoalFromDetails when opened from the goal's details.
 	From        string
 	Amount      form.FDInput
 	AccountID   form.FDInput
+	HoldingID   form.FDInput
 	OtherAmount form.FDInput
 	ScheduledTo form.FDInput
 }
@@ -107,6 +111,9 @@ type GoalBuyFD struct {
 	// ScheduleLoan schedules the plan's loan payments, from LoanAccountID.
 	ScheduleLoan  form.FDInput
 	LoanAccountID form.FDInput
+	// Conversions are what each holding with money (by account id) brings
+	// in the goal's currency, converted before buying it.
+	Conversions map[string]*form.FDInput
 }
 
 // GoalMoneyForm moves money between an account and the goal's, as a
@@ -184,14 +191,20 @@ templ goalMoneyHeader(gl *models.Goal, dir GoalMoneyDir) {
 	</div>
 }
 
-// GoalMoneyInputs is the amounts and the account, rendered again when the
-// account (so the currency) changes.
+// GoalMoneyInputs is the amounts and the accounts, rendered again when one
+// of the accounts (so a currency) changes.
 templ GoalMoneyInputs(gl *models.Goal, dir GoalMoneyDir, fd *GoalMoneyFD, accs []models.Account) {
-	{{ accSym := form.GetAccoutSym(accs, fd.AccountID.Value, &gl.Currency) }}
-	{{ sym, otherSym := accSym, gl.Currency.Symbol }}
-	if dir != GoalDeposit {
-		{{ sym, otherSym = gl.Currency.Symbol, accSym }}
+	{{ acc := slicesutils.Find(accs, func(a models.Account) bool { return a.ID == fd.AccountID.Value }) }}
+	{{ src := gl.AccountByID(fd.HoldingID.Value) }}
+	if src == nil {
+		{{ src = gl.Account }}
 	}
+	{{ sym := form.GetAccoutSym(accs, fd.AccountID.Value, &gl.Currency) }}
+	if dir == GoalWithdraw {
+		{{ sym = src.Currency.Symbol }}
+	}
+	{{ funded := gl.Funded() }}
+	{{ otherCur := goalMoneyOtherCurrency(dir, acc, src, funded) }}
 	{{ rest := goalRestIn(gl, accs, fd.AccountID.Value) }}
 	{{ onChange := templ.Attributes{"hx-post": fmt.Sprintf("/goals/%s/money-inputs?dir=%s", gl.ID, dir), "hx-trigger": "change"} }}
 	<div
@@ -203,7 +216,7 @@ templ GoalMoneyInputs(gl *models.Goal, dir GoalMoneyDir, fd *GoalMoneyFD, accs [
 	>
 		if dir == GoalDeleteMove {
 			<p class="text-center text-zinc-400">
-				Move the <span class="sensitive text-zinc-100 tabular-nums">{ gl.ViewBalance() }</span> left in it to an account first. Its transactions stay in the history.
+				Move the <span class="sensitive text-zinc-100 tabular-nums">{ goalFundedText(gl, funded) }</span> left in it to an account first. Its transactions stay in the history.
 			</p>
 		} else {
 			@form.HeroMoneyInput("Amount", "amount", sym, gl.ID, fd.Amount, templ.Attributes{
@@ -211,6 +224,17 @@ templ GoalMoneyInputs(gl *models.Goal, dir GoalMoneyDir, fd *GoalMoneyFD, accs [
 				"hx-post":    fmt.Sprintf("/goals/%s/money-inputs?dir=%s", gl.ID, dir),
 				"hx-trigger": "keyup changed delay:300ms",
 			})
+		}
+		if dir == GoalWithdraw && len(funded) > 1 {
+			<div class="flex flex-wrap items-center justify-center gap-2 max-w-full">
+				<span class="text-sm text-zinc-500">out of</span>
+				@form.Combobox(form.ComboboxProps{
+					Name: "holding_id", ID: gl.ID, Label: "Money", Placeholder: "Select money",
+					Options: goalHoldingOptions(funded), Data: fd.HoldingID, Chip: true, InputAttrs: onChange,
+				})
+			</div>
+		} else if dir == GoalWithdraw {
+			<input type="hidden" name="holding_id" value={ src.ID }/>
 		}
 		<div class="flex flex-wrap items-center justify-center gap-2 max-w-full">
 			<span class="text-sm text-zinc-500">
@@ -223,22 +247,18 @@ templ GoalMoneyInputs(gl *models.Goal, dir GoalMoneyDir, fd *GoalMoneyFD, accs [
 			@form.SelectAccountChip("Account", "account_id", gl.ID, accs, fd.AccountID, onChange)
 		</div>
 		@form.ErrorMessage(fd.AccountID.Error)
-		if otherSym != sym {
+		if otherCur != nil {
 			<label class="flex items-center gap-2 text-sm text-zinc-400">
-				if dir == GoalDeposit {
-					The goal receives
-				} else {
-					The account receives
-				}
+				The account receives
 				<input
 					id={ "to_amount-" + gl.ID }
 					type="text"
 					name="to_amount"
 					value={ fd.OtherAmount.Value }
-					placeholder={ otherSym + " 0.00" }
+					placeholder={ acc.Currency.Symbol + " 0.00" }
 					autocomplete="off"
 					inputmode="decimal"
-					x-mask:dynamic={ fmt.Sprintf("'%s ' + $money($input, '.', ',')", otherSym) }
+					x-mask:dynamic={ fmt.Sprintf("'%s ' + $money($input, '.', ',')", acc.Currency.Symbol) }
 					class="input-field w-48! h-9! text-center tabular-nums font-(family-name:--font-biorhyme-expanded)"
 					if fd.OtherAmount.Error != "" {
 						aria-invalid="true"
@@ -246,6 +266,23 @@ templ GoalMoneyInputs(gl *models.Goal, dir GoalMoneyDir, fd *GoalMoneyFD, accs [
 				/>
 			</label>
 			@form.ErrorMessage(fd.OtherAmount.Error)
+		}
+		if dir == GoalDeleteMove && len(funded) > 1 && acc != nil {
+			<ul class="grid gap-1 text-sm text-zinc-400 tabular-nums">
+				for _, f := range funded {
+					<li class="sensitive">
+						{ f.Currency.Format(f.Amount) }
+						if f.Currency.String != acc.Currency.String {
+							→ { acc.Currency.Format(f.Amount * f.Currency.FxRate(acc.Currency.String)) } at today's rate
+						}
+					</li>
+				}
+			</ul>
+		}
+		if dir == GoalDeposit && acc != nil && acc.Currency.String != gl.Currency.String {
+			<p class="max-w-sm text-center text-sm text-zinc-500">
+				Kept in { strings.ToUpper(acc.Currency.String) }: the goal counts it at today's rate, so it follows the rate until it's bought.
+			</p>
 		}
 		if dir == GoalDeposit && rest > 0 {
 			<button
@@ -258,6 +295,48 @@ templ GoalMoneyInputs(gl *models.Goal, dir GoalMoneyDir, fd *GoalMoneyFD, accs [
 			</button>
 		}
 	</div>
+}
+
+// goalMoneyOtherCurrency is the currency the money form asks what the
+// account receives in (nil when it doesn't): a withdraw's across
+// currencies, or a delete's moving a single account of another currency.
+func goalMoneyOtherCurrency(dir GoalMoneyDir, acc, src *models.Account, funded []models.Account) *models.Currency {
+	if acc == nil {
+		return nil
+	}
+	switch {
+	case dir == GoalWithdraw && src.Currency.String != acc.Currency.String:
+		return &acc.Currency
+	case dir == GoalDeleteMove && len(funded) == 1 && funded[0].Currency.String != acc.Currency.String:
+		return &acc.Currency
+	}
+	return nil
+}
+
+// goalHoldingOptions are the goal's accounts with money to pick one from,
+// named after their currency.
+func goalHoldingOptions(funded []models.Account) []form.ComboOption {
+	opts := make([]form.ComboOption, len(funded))
+	for i, a := range funded {
+		opts[i] = form.ComboOption{
+			Value:  a.ID,
+			Label:  strings.ToUpper(a.Currency.String) + " · " + a.Currency.Format(a.Amount),
+			Search: a.Currency.String,
+		}
+	}
+	return opts
+}
+
+// goalFundedText is the money in the goal's accounts, each in its currency.
+func goalFundedText(gl *models.Goal, funded []models.Account) string {
+	if len(funded) == 0 {
+		return gl.ViewBalance()
+	}
+	parts := make([]string, len(funded))
+	for i, a := range funded {
+		parts[i] = a.Currency.Format(a.Amount)
+	}
+	return strings.Join(parts, " + ")
 }
 
 // GoalBuyForm records buying the goal: an expense out of its account, the
@@ -283,6 +362,9 @@ templ GoalBuyFormFields(gl *models.Goal, fd *GoalBuyFD, cats []models.Category, 
 				<p class="text-sm text-zinc-500">paid from the goal, it counts as spent today</p>
 			}
 		</div>
+		if len(fd.Conversions) > 0 {
+			@goalBuyConversions(gl, fd)
+		}
 		if loan != nil {
 			@goalBuyLoan(gl, fd, loan, accs)
 		}
@@ -322,6 +404,36 @@ templ GoalBuyFormFields(gl *models.Goal, fd *GoalBuyFD, cats []models.Category, 
 			}
 		</div>
 	}
+}
+
+// goalBuyConversions asks what each holding with money brings in the goal's
+// currency, converted to it before buying it (prefilled at today's rate).
+templ goalBuyConversions(gl *models.Goal, fd *GoalBuyFD) {
+	<fieldset class="grid gap-3 rounded-2xl border border-zinc-800 p-4">
+		<legend class="px-1 text-sm text-zinc-400">Converted to { strings.ToUpper(gl.Currency.String) } first</legend>
+		for _, h := range gl.Holdings {
+			if in := fd.Conversions[h.ID]; in != nil {
+				<label class="flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-400">
+					<span class="sensitive tabular-nums">{ h.Currency.Format(h.Amount) } becomes</span>
+					<input
+						type="text"
+						name={ "convert_" + h.ID }
+						value={ in.Value }
+						placeholder={ gl.Currency.Symbol + " 0.00" }
+						autocomplete="off"
+						inputmode="decimal"
+						x-data
+						x-mask:dynamic={ fmt.Sprintf("'%s ' + $money($input, '.', ',')", gl.Currency.Symbol) }
+						class="input-field w-48! h-9! text-center tabular-nums font-(family-name:--font-biorhyme-expanded)"
+						if in.Error != "" {
+							aria-invalid="true"
+						}
+					/>
+				</label>
+				@form.ErrorMessage(in.Error)
+			}
+		}
+	</fieldset>
 }
 
 templ goalBuyHeader(gl *models.Goal) {
@@ -503,6 +615,9 @@ templ goalCard(gl *models.Goal, plan *GoalPlanCard, oob bool) {
 					<p class="text-lg leading-tight truncate">{ gl.Name }</p>
 					<p class="sensitive text-sm text-zinc-500 tabular-nums truncate">
 						<span class="text-zinc-300">{ gl.ViewProgress() }</span> of { gl.ViewAmount() }
+						if gl.FulfilledAt.IsZero() && gl.HasHoldings() {
+							<span title="Part of it is kept in other currencies, counted at today's rates">· at today's rates</span>
+						}
 					</p>
 				</div>
 				@components.EntryMenuTrigger("openMenu", "Goal actions")
@@ -732,7 +847,7 @@ func goalAccentClass(st goalState) string {
 // goalDeposits counts the money put in the goal, fulfilled and scheduled.
 func goalDeposits(gl *models.Goal) (deposits, scheduled int) {
 	for _, tx := range gl.Transactions {
-		if tx.GoalAmount() <= 0 {
+		if gl.TxAmount(&tx) <= 0 {
 			continue
 		}
 		if tx.FulfilledAt.IsZero() {
@@ -747,7 +862,7 @@ func goalDeposits(gl *models.Goal) (deposits, scheduled int) {
 func goalLastDeposit(gl *models.Goal) time.Time {
 	var last time.Time
 	for _, tx := range gl.Transactions {
-		if tx.GoalAmount() > 0 && !tx.FulfilledAt.IsZero() && tx.ScheduledTo.After(last) {
+		if gl.TxAmount(&tx) > 0 && !tx.FulfilledAt.IsZero() && tx.ScheduledTo.After(last) {
 			last = tx.ScheduledTo
 		}
 	}

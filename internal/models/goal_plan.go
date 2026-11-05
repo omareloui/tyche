@@ -401,14 +401,24 @@ func PickGoalSource(accs []Account, amount float64, cur *Currency) GoalSource {
 }
 
 // PlannedDeposit is a goal plan's deposit as it'd be made: Amount (in the
-// goal's currency) into the goal's account, SourceTotal (in its currency)
-// out of Source.
+// goal's currency) towards the goal, SourceTotal (in its currency) out of
+// Source into Target, the goal's account of Source's currency (its own,
+// receiving Amount, until it holds that currency).
 type PlannedDeposit struct {
 	On          time.Time
 	Goal        *Goal
 	Amount      float64
 	Source      *Account
 	SourceTotal float64
+	Target      *Account
+}
+
+// TargetAmount is what Target receives, in its currency.
+func (d *PlannedDeposit) TargetAmount() float64 {
+	if d.Target.Currency.String == d.Source.Currency.String {
+		return d.SourceTotal
+	}
+	return d.Amount
 }
 
 // PlannedDeposits are the deposits the plans of goals (unfulfilled, with a
@@ -436,9 +446,14 @@ func PlannedDeposits(goals []Goal, accs []Account, start MonthStart, now, until 
 			if src.Account == nil {
 				continue
 			}
+			target := gl.AccountIn(src.Account.Currency.String)
+			if target == nil {
+				target = gl.Account
+			}
 			res = append(res, PlannedDeposit{
 				On: on, Goal: gl, Amount: d.Amount,
 				Source: src.Account, SourceTotal: convert(d.Amount, &gl.Currency, &src.Account.Currency),
+				Target: target,
 			})
 		}
 	}

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/a-h/templ"
@@ -354,15 +355,33 @@ func (h Handler) GetGoalMoneyForm(w http.ResponseWriter, r *http.Request) (templ
 		goalMoneyPrefill(r, gl, accs, fd)
 	}
 	if dir == views.GoalWithdraw {
-		fd.Amount.Value = formatFloatIfNonZero(gl.Balance())
-		fd.OtherAmount.Value = goalOtherAmount(gl, accs, fd.AccountID.Value, dir, gl.Balance())
+		src := goalWithdrawSource(gl, "")
+		fd.HoldingID.Value = src.ID
+		// The account of the holding's currency, if any.
+		if a := slicesutils.Find(accs, func(a models.Account) bool { return a.Currency.String == src.Currency.String }); a != nil && src.ID != gl.Account.ID {
+			fd.AccountID.Value = a.ID
+		}
+		fd.Amount.Value = formatFloatIfNonZero(src.Amount)
+		fd.OtherAmount.Value = goalOtherAmount(&src.Currency, accs, fd.AccountID.Value, src.Amount)
 	}
 	return views.GoalMoneyForm(gl, dir, fd, accs), nil
 }
 
+// goalWithdrawSource is the goal's account a withdraw takes from: the one of
+// id, else its own with money, else the first with money, else its own.
+func goalWithdrawSource(gl *models.Goal, id string) *models.Account {
+	if a := gl.AccountByID(id); a != nil {
+		return a
+	}
+	if funded := gl.Funded(); len(funded) > 0 {
+		return gl.AccountByID(funded[0].ID)
+	}
+	return gl.Account
+}
+
 // goalMoneyPrefill fills the deposit form from the query (a plan's next
 // deposit): the account and the amount the goal receives (goal_amount, in
-// its currency).
+// its currency), in the account's currency.
 func goalMoneyPrefill(r *http.Request, gl *models.Goal, accs []models.Account, fd *views.GoalMoneyFD) {
 	q := r.URL.Query()
 	if id := q.Get("account_id"); slicesutils.Find(accs, func(a models.Account) bool { return a.ID == id }) != nil {
@@ -377,10 +396,8 @@ func goalMoneyPrefill(r *http.Request, gl *models.Goal, accs []models.Account, f
 	if a == nil || a.Currency.String == gl.Currency.String {
 		return
 	}
-	// The amount is the account's, the goal receiving the plan's.
 	if rate := gl.Currency.FxRate(a.Currency.String); rate > 0 {
 		fd.Amount.Value = formatFloatIfNonZero(models.RoundCents(amount * rate))
-		fd.OtherAmount.Value = formatFloatIfNonZero(amount)
 	}
 }
 
@@ -394,18 +411,15 @@ func defaultGoalAccount(accs []models.Account) *models.Account {
 	return nil
 }
 
-// goalOtherAmount is amount converted to the other side's currency
-// (formatted for the form), "" when there's no rate or no conversion.
-func goalOtherAmount(gl *models.Goal, accs []models.Account, accID string, dir views.GoalMoneyDir, amount float64) string {
+// goalOtherAmount is amount (of from) converted to the currency of the
+// account of accID (formatted for the form), "" when there's no rate or no
+// conversion.
+func goalOtherAmount(from *models.Currency, accs []models.Account, accID string, amount float64) string {
 	a := slicesutils.Find(accs, func(a models.Account) bool { return a.ID == accID })
-	if a == nil || a.Currency.String == gl.Currency.String || amount == 0 {
+	if a == nil || a.Currency.String == from.String || amount == 0 {
 		return ""
 	}
-	from, to := a.Currency, gl.Currency
-	if dir != views.GoalDeposit {
-		from, to = gl.Currency, a.Currency
-	}
-	rate := from.FxRate(to.String)
+	rate := from.FxRate(a.Currency.String)
 	if rate == 0 {
 		return ""
 	}
@@ -413,7 +427,7 @@ func goalOtherAmount(gl *models.Goal, accs []models.Account, accID string, dir v
 }
 
 // GoalMoneyInputs renders the money form's amounts again for the picked
-// account (so currency).
+// accounts (so currencies).
 func (h Handler) GoalMoneyInputs(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	gl, accs, err := h.goalAndAccounts(r)
 	if err != nil {
@@ -423,23 +437,39 @@ func (h Handler) GoalMoneyInputs(w http.ResponseWriter, r *http.Request) (templ.
 	fd := &views.GoalMoneyFD{
 		Amount:      form.FDInput{Value: r.FormValue("amount")},
 		AccountID:   form.FDInput{Value: r.FormValue("account_id")},
+		HoldingID:   form.FDInput{Value: r.FormValue("holding_id")},
 		OtherAmount: form.FDInput{Value: r.FormValue("to_amount")},
 	}
-	if r.Header.Get("HX-Trigger-Name") == "account_id" || fd.OtherAmount.Value == "" {
-		amt, _ := parseFloatIfExists(fd.Amount.Value)
-		fd.OtherAmount.Value = goalOtherAmount(gl, accs, fd.AccountID.Value, dir, amt)
+	switch dir {
+	case views.GoalWithdraw:
+		src := goalWithdrawSource(gl, fd.HoldingID.Value)
+		fd.HoldingID.Value = src.ID
+		trigger := r.Header.Get("HX-Trigger-Name")
+		if trigger == "holding_id" {
+			fd.Amount.Value = formatFloatIfNonZero(src.Amount)
+		}
+		if trigger == "account_id" || trigger == "holding_id" || fd.OtherAmount.Value == "" {
+			amt, _ := parseFloatIfExists(fd.Amount.Value)
+			fd.OtherAmount.Value = goalOtherAmount(&src.Currency, accs, fd.AccountID.Value, amt)
+		}
+	case views.GoalDeleteMove:
+		if funded := gl.Funded(); len(funded) == 1 {
+			fd.OtherAmount.Value = goalOtherAmount(&funded[0].Currency, accs, fd.AccountID.Value, funded[0].Amount)
+		}
 	}
 	return views.GoalMoneyInputs(gl, dir, fd, accs), nil
 }
 
 // goalMoneyTx builds the transfer of a goal's money form: from the account
-// to the goal's (deposit) or back (withdraw, moving it out before deleting
-// the goal). It answers the form's errors, if any.
+// to the goal (deposit, its account of the same currency set by
+// Repository.DepositToGoal) or from one of the goal's accounts to the
+// account (withdraw). It answers the form's errors, if any.
 func (h Handler) goalMoneyTx(r *http.Request, gl *models.Goal, accs []models.Account, dir views.GoalMoneyDir) (*models.Transaction, *views.GoalMoneyFD) {
 	fd := &views.GoalMoneyFD{
 		From:        goalFrom(r),
 		Amount:      form.FDInput{Value: r.FormValue("amount")},
 		AccountID:   form.FDInput{Value: r.FormValue("account_id")},
+		HoldingID:   form.FDInput{Value: r.FormValue("holding_id")},
 		OtherAmount: form.FDInput{Value: r.FormValue("to_amount")},
 		ScheduledTo: form.FDInput{Value: r.FormValue("scheduled_to")},
 	}
@@ -450,9 +480,6 @@ func (h Handler) goalMoneyTx(r *http.Request, gl *models.Goal, accs []models.Acc
 	}
 
 	amount, err := parseFloatIfExists(fd.Amount.Value)
-	if dir == views.GoalDeleteMove {
-		amount = gl.Balance()
-	}
 	if err != nil || amount <= 0 {
 		fail(&fd.Amount, "Value has to be more than 0")
 	}
@@ -462,21 +489,25 @@ func (h Handler) goalMoneyTx(r *http.Request, gl *models.Goal, accs []models.Acc
 		fail(&fd.AccountID, "This field is required")
 	}
 
+	var src *models.Account
 	otherAmount := amount
-	if acc != nil && acc.Currency.String != gl.Currency.String {
-		otherAmount, err = parseFloatIfExists(fd.OtherAmount.Value)
-		if err != nil || otherAmount <= 0 {
-			fail(&fd.OtherAmount, "Value has to be more than 0")
-		}
-	}
-
 	day := time.Now()
 	if dir == views.GoalDeposit {
 		if day, err = parseDateOnlyIfExists(fd.ScheduledTo.Value); err != nil || day.IsZero() {
 			fail(&fd.ScheduledTo, "This field is required")
 		}
-	} else if amount > gl.Balance() {
-		fail(&fd.Amount, errs.ValidationField{Tag: "gt_goal_balance", Param: gl.ViewBalance()}.String())
+	} else {
+		src = goalWithdrawSource(gl, fd.HoldingID.Value)
+		fd.HoldingID.Value = src.ID
+		if amount > numsutils.Round(src.Amount) {
+			fail(&fd.Amount, errs.ValidationField{Tag: "gt_goal_balance", Param: src.Currency.Format(src.Amount)}.String())
+		}
+		if acc != nil && acc.Currency.String != src.Currency.String {
+			otherAmount, err = parseFloatIfExists(fd.OtherAmount.Value)
+			if err != nil || otherAmount <= 0 {
+				fail(&fd.OtherAmount, "Value has to be more than 0")
+			}
+		}
 	}
 
 	if failed {
@@ -486,22 +517,64 @@ func (h Handler) goalMoneyTx(r *http.Request, gl *models.Goal, accs []models.Acc
 	tx := &models.Transaction{
 		ID:          idgen.New(),
 		Kind:        models.TransferTxKind,
+		Account:     *acc,
 		Amount:      amount,
 		ToAmount:    otherAmount,
 		Description: gl.Name,
 		ScheduledTo: day,
 		CreatedAt:   time.Now(),
 	}
-	if dir == views.GoalDeposit {
-		tx.Account, tx.ToAccount = *acc, gl.Account
-	} else {
-		tx.Account, tx.ToAccount = *gl.Account, acc
+	if dir != views.GoalDeposit {
+		tx.Account, tx.ToAccount = *src, acc
 	}
 	// A withdraw is now, a deposit on the picked day.
 	if dir != views.GoalDeposit || !tx.ScheduledTo.After(h.userToday(r.Context())) {
 		tx.FulfilledAt = tx.CreatedAt
 	}
 	return tx, nil
+}
+
+// goalDeleteTxs are the transfers moving what's left in each of the goal's
+// accounts to the picked account before deleting it: the amount the form
+// says when a single account of another currency has money, else at today's
+// rate. It answers the form's errors, if any.
+func goalDeleteTxs(r *http.Request, gl *models.Goal, accs []models.Account) ([]models.Transaction, *views.GoalMoneyFD) {
+	fd := &views.GoalMoneyFD{
+		AccountID:   form.FDInput{Value: r.FormValue("account_id")},
+		OtherAmount: form.FDInput{Value: r.FormValue("to_amount")},
+	}
+	acc := slicesutils.Find(accs, func(a models.Account) bool { return a.ID == fd.AccountID.Value })
+	if acc == nil {
+		fd.AccountID.Error = "This field is required"
+		return nil, fd
+	}
+	funded := gl.Funded()
+	var txs []models.Transaction
+	for _, src := range funded {
+		to := src.Amount
+		if src.Currency.String != acc.Currency.String {
+			if len(funded) == 1 {
+				amt, err := parseFloatIfExists(fd.OtherAmount.Value)
+				if err != nil || amt <= 0 {
+					fd.OtherAmount.Error = "Value has to be more than 0"
+					return nil, fd
+				}
+				to = amt
+			} else if rate := src.Currency.FxRate(acc.Currency.String); rate > 0 {
+				to = models.RoundCents(src.Amount * rate)
+			} else {
+				fd.AccountID.Error = "No exchange rate from " + strings.ToUpper(src.Currency.String) + ": withdraw it first"
+				return nil, fd
+			}
+		}
+		now := time.Now()
+		txs = append(txs, models.Transaction{
+			ID: idgen.New(), Kind: models.TransferTxKind,
+			Account: src, ToAccount: acc, Amount: src.Amount, ToAmount: to,
+			Description: gl.Name, ScheduledTo: now, FulfilledAt: now, CreatedAt: now,
+		})
+	}
+	return txs, nil
 }
 
 // MoveGoalMoney puts money in the goal or takes some out, a transfer
@@ -523,7 +596,12 @@ func (h Handler) MoveGoalMoney(w http.ResponseWriter, r *http.Request) (templ.Co
 		return views.GoalMoneyFormFields(gl, dir, fd, accs), nil
 	}
 
-	if err = h.repo.CreateTransaction(r.Context(), tx, nil, nil); err != nil {
+	if dir == views.GoalDeposit {
+		err = h.repo.DepositToGoal(r.Context(), gl, tx)
+	} else {
+		err = h.repo.CreateTransaction(r.Context(), tx, nil, nil)
+	}
+	if err != nil {
 		l.Error("moving goal money", zap.Any("tx", tx), zap.String("goal", gl.ID), zap.Error(err))
 		return nil, err
 	}
@@ -569,6 +647,7 @@ func (h Handler) GetGoalFulfillForm(w http.ResponseWriter, r *http.Request) (tem
 		Amount:      form.FDInput{Value: formatFloatIfNonZero(numsutils.Round(min(gl.Balance(), gl.Price)))},
 		Description: form.FDInput{Value: gl.Name},
 		ScheduledTo: form.FDInput{Value: time.Now().Format(time.DateOnly)},
+		Conversions: goalConversionInputs(r, gl, true),
 	}
 	loan := goalLoan(gl)
 	if loan != nil {
@@ -580,6 +659,51 @@ func (h Handler) GetGoalFulfillForm(w http.ResponseWriter, r *http.Request) (tem
 		}
 	}
 	return views.GoalBuyForm(gl, fd, cats, cps, loan, accs), nil
+}
+
+// goalConversionInputs are the buy form's amounts of the goal's holdings
+// with money once converted to its currency (convert_<account id>), at
+// today's rate when prefill.
+func goalConversionInputs(r *http.Request, gl *models.Goal, prefill bool) map[string]*form.FDInput {
+	res := map[string]*form.FDInput{}
+	for _, h := range gl.Holdings {
+		if numsutils.Round(h.Amount) <= 0 {
+			continue
+		}
+		in := &form.FDInput{Value: r.FormValue("convert_" + h.ID)}
+		if prefill {
+			in.Value = formatFloatIfNonZero(numsutils.Round(gl.ValueOf(h.Amount, &h.Currency)))
+		}
+		res[h.ID] = in
+	}
+	return res
+}
+
+// goalConversions are the transfers converting the goal's holdings to its
+// currency before buying it (the buy form's amounts), with what they bring
+// in. Failing, the inputs hold the errors.
+func goalConversions(gl *models.Goal, ins map[string]*form.FDInput, day time.Time) ([]models.Transaction, float64, bool) {
+	var txs []models.Transaction
+	var total float64
+	ok := true
+	for _, h := range gl.Holdings {
+		in := ins[h.ID]
+		if in == nil {
+			continue
+		}
+		amt, err := parseFloatIfExists(in.Value)
+		if err != nil || amt <= 0 {
+			in.Error, ok = "Value has to be more than 0", false
+			continue
+		}
+		total += amt
+		txs = append(txs, models.Transaction{
+			ID: idgen.New(), Kind: models.TransferTxKind,
+			Account: h, ToAccount: gl.Account, Amount: h.Amount, ToAmount: amt,
+			Description: gl.Name, ScheduledTo: day, FulfilledAt: time.Now(), CreatedAt: time.Now(),
+		})
+	}
+	return txs, total, ok
 }
 
 // goalLoan is the loan of the goal's plan, nil without one.
@@ -616,6 +740,7 @@ func (h Handler) FulfillGoal(w http.ResponseWriter, r *http.Request) (templ.Comp
 		ScheduledTo:    form.FDInput{Value: r.FormValue("scheduled_to")},
 		ScheduleLoan:   form.FDInput{Value: r.FormValue("schedule_loan")},
 		LoanAccountID:  form.FDInput{Value: r.FormValue("loan_account_id")},
+		Conversions:    goalConversionInputs(r, gl, false),
 	}
 	loan := goalLoan(gl)
 	withLoan := loan != nil && parseBoolean(fd.ScheduleLoan.Value)
@@ -626,18 +751,22 @@ func (h Handler) FulfillGoal(w http.ResponseWriter, r *http.Request) (templ.Comp
 			fd.LoanAccountID.Error, failed = "This field is required", true
 		}
 	}
+	day, dayErr := parseDateOnlyIfExists(fd.ScheduledTo.Value)
+	conversions, converted, ok := goalConversions(gl, fd.Conversions, day)
+	failed = failed || !ok
+	// What it holds once its holdings are converted.
+	balance := gl.Account.Amount + converted
 	amount, err := parseFloatIfExists(fd.Amount.Value)
 	switch {
 	// A loan with nothing down needs no purchase out of the goal.
 	case withLoan && err == nil && amount == 0:
 	case err != nil || amount <= 0:
 		fd.Amount.Error, failed = "Value has to be more than 0", true
-	case amount > numsutils.Round(gl.Balance()):
-		fd.Amount.Error, failed = errs.ValidationField{Tag: "gt_goal_balance", Param: gl.ViewBalance()}.String(), true
+	case ok && amount > numsutils.Round(balance):
+		fd.Amount.Error, failed = errs.ValidationField{Tag: "gt_goal_balance", Param: gl.Currency.Format(balance)}.String(), true
 	}
-	day, err := parseDateOnlyIfExists(fd.ScheduledTo.Value)
 	switch {
-	case err != nil || day.IsZero():
+	case dayErr != nil || day.IsZero():
 		fd.ScheduledTo.Error, failed = "This field is required", true
 	case day.After(h.userToday(r.Context())):
 		fd.ScheduledTo.Error, failed = errs.ValidationField{Tag: "future_date"}.String(), true
@@ -683,7 +812,7 @@ func (h Handler) FulfillGoal(w http.ResponseWriter, r *http.Request) (templ.Comp
 		purchase = nil
 	}
 
-	if err := h.repo.FulfillGoal(r.Context(), gl, purchase, loanTxs); err != nil {
+	if err := h.repo.FulfillGoal(r.Context(), gl, conversions, purchase, loanTxs); err != nil {
 		l.Error("fulfilling goal", zap.Error(err))
 		return nil, err
 	}
@@ -747,15 +876,26 @@ func (h Handler) GetGoalDeleteForm(w http.ResponseWriter, r *http.Request) (temp
 		return nil, err
 	}
 	fd := &views.GoalMoneyFD{}
-	if a := defaultGoalAccount(accs); a != nil {
-		fd.AccountID.Value = a.ID
+	funded := gl.Funded()
+	if len(funded) > 0 {
+		// The account of the money's currency, if any.
+		if a := slicesutils.Find(accs, func(a models.Account) bool { return a.Currency.String == funded[0].Currency.String }); a != nil {
+			fd.AccountID.Value = a.ID
+		}
 	}
-	fd.OtherAmount.Value = goalOtherAmount(gl, accs, fd.AccountID.Value, views.GoalDeleteMove, gl.Balance())
+	if fd.AccountID.Value == "" {
+		if a := defaultGoalAccount(accs); a != nil {
+			fd.AccountID.Value = a.ID
+		}
+	}
+	if len(funded) == 1 {
+		fd.OtherAmount.Value = goalOtherAmount(&funded[0].Currency, accs, fd.AccountID.Value, funded[0].Amount)
+	}
 	return views.GoalMoneyForm(gl, views.GoalDeleteMove, fd, accs), nil
 }
 
 // DeleteGoal deletes the goal, moving what's left in it to the picked
-// account. Its account is kept (deleted) for its transactions' history.
+// account. Its accounts are kept (deleted) for their transactions' history.
 func (h Handler) DeleteGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	l := logger.FromCtx(r.Context())
 
@@ -764,21 +904,21 @@ func (h Handler) DeleteGoal(w http.ResponseWriter, r *http.Request) (templ.Compo
 		return nil, err
 	}
 
-	var move *models.Transaction
-	if numsutils.Round(gl.Balance()) > 0 {
+	var moves []models.Transaction
+	if len(gl.Funded()) > 0 {
 		var fd *views.GoalMoneyFD
-		if move, fd = h.goalMoneyTx(r, gl, accs, views.GoalDeleteMove); fd != nil {
+		if moves, fd = goalDeleteTxs(r, gl, accs); fd != nil {
 			return views.GoalMoneyFormFields(gl, views.GoalDeleteMove, fd, accs), nil
 		}
 	}
 
-	if err := h.repo.DeleteGoal(r.Context(), gl, move); err != nil {
+	if err := h.repo.DeleteGoal(r.Context(), gl, moves); err != nil {
 		l.Error("deleting goal", zap.Error(err), zap.String("id", gl.ID))
 		return nil, err
 	}
 	l.Info("deleted goal", zap.String("id", gl.ID))
 
-	if move != nil {
+	if len(moves) > 0 {
 		drawerSaved(w, "#"+views.GoalID(gl.ID), "outerHTML")
 		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
 			return nil, err

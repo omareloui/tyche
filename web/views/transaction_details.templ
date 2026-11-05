@@ -596,7 +596,9 @@ func txDetailsKind(tx *models.Transaction) string {
 		return "Goal purchase"
 	case tx.IsLoanPayment():
 		return "Goal loan payment"
-	case tx.IsGoalTx() && tx.GoalAmount() > 0:
+	case tx.IsGoalTx() && tx.ToAccount != nil && tx.Account.IsGoal() && tx.ToAccount.IsGoal():
+		return "Goal conversion"
+	case tx.IsGoalTx() && tx.ToAccount != nil && tx.ToAccount.IsGoal():
 		return "Goal deposit"
 	case tx.IsGoalTx():
 		return "Goal withdrawal"

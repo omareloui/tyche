@@ -163,8 +163,12 @@ func (t *Transaction) IsLocked() bool {
 }
 
 // GoalAmount is what it put towards its goal (negative when taken out), in
-// the goal's currency.
+// the goal's currency (at today's rate, from a holding in another one; see
+// Goal.TxAmount), else in its goal account's.
 func (t *Transaction) GoalAmount() float64 {
+	if t.Goal != nil && t.Goal.Account != nil {
+		return t.Goal.TxAmount(t)
+	}
 	switch {
 	case t.ToAccount != nil && t.ToAccount.IsGoal():
 		return t.ToAmount

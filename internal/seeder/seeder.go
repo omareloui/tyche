@@ -50,6 +50,7 @@ func (s *Seeder) Seed(ctx context.Context, db *sql.DB, oauthID string) {
 	s.currencies(ctx, q)
 	s.accountKinds(ctx, q)
 	s.goalAccounts(ctx, q)
+	s.goalHoldings(ctx, tx, q)
 
 	l.Debug("ensured seeding currencies, account kinds, and transaction kinds", zap.String("oauthID", oauthID))
 

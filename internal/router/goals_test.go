@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/a-h/templ"
+	"github.com/omareloui/tyche/internal/fxrate"
 	"github.com/omareloui/tyche/internal/handler"
 	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/models"
@@ -58,6 +59,7 @@ func TestGoalLifecycle(t *testing.T) {
 
 	bank := newTestAccount(t, repo, ctx, "Bank", "EGP", models.AccKindBankAcc, 1000)
 	usd := newTestAccount(t, repo, ctx, "Dollars", "USD", models.AccKindBankAcc, 100)
+	t.Cleanup(fxrate.SetRates(map[string]map[string]float64{"usd": {"egp": 48}}))
 	egp, err := repo.GetCurrencyByString(ctx, "EGP")
 	if err != nil {
 		t.Fatal(err)
@@ -144,20 +146,85 @@ func TestGoalLifecycle(t *testing.T) {
 		t.Errorf("progress = %v, want 500", p)
 	}
 
-	// Another currency: the goal receives to_amount.
+	// Another currency: kept in a holding of its own, worth it at today's
+	// rate.
 	if _, err := money(httptest.NewRecorder(), "POST", "/goals/x/money?dir=deposit", gl.ID, url.Values{
-		"amount": {"10"}, "account_id": {usd.ID}, "to_amount": {"480"}, "scheduled_to": {today},
+		"amount": {"10"}, "account_id": {usd.ID}, "scheduled_to": {today},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if u := amountOf(usd.ID); u.Amount != 90 {
-		t.Errorf("usd after deposit = %v, want 90", u.Amount)
+	if u := amountOf(usd.ID); u.Amount != 90 || u.SetAside != 10 {
+		t.Errorf("usd after deposit = %v (set aside %v), want 90 (10)", u.Amount, u.SetAside)
 	}
-	if p := goal().Progress(); p != 980 {
+	gl = goal()
+	if len(gl.Holdings) != 1 || gl.Holdings[0].Amount != 10 || gl.Holdings[0].Currency.String != usd.Currency.String || gl.Account.Amount != 500 {
+		t.Fatalf("bad holdings %+v (own %v)", gl.Holdings, gl.Account.Amount)
+	}
+	if a := amountOf(gl.Holdings[0].ID); !a.IsGoal() || a.Name != "Goal: Laptop (USD)" {
+		t.Errorf("bad holding account %+v", a)
+	}
+	if p := gl.Progress(); p != 980 {
 		t.Errorf("progress = %v, want 980", p)
 	}
+	// It follows the rate.
+	fxrate.SetRates(map[string]map[string]float64{"usd": {"egp": 50}})
+	if p := goal().Progress(); p != 1000 {
+		t.Errorf("progress at a new rate = %v, want 1000", p)
+	}
+	fxrate.SetRates(map[string]map[string]float64{"usd": {"egp": 48}})
+	// A second deposit of the currency goes to the same holding.
+	if _, err := money(httptest.NewRecorder(), "POST", "/goals/x/money?dir=deposit", gl.ID, url.Values{
+		"amount": {"5"}, "account_id": {usd.ID}, "scheduled_to": {today},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if gl = goal(); len(gl.Holdings) != 1 || gl.Holdings[0].Amount != 15 {
+		t.Fatalf("holdings after a second deposit %+v", gl.Holdings)
+	}
+	// Withdrawing from the holding: capped at it, in its currency.
+	usdHolding := gl.Holdings[0].ID
+	if c, err := money(httptest.NewRecorder(), "POST", "/goals/x/money?dir=withdraw", gl.ID, url.Values{
+		"amount": {"20"}, "account_id": {usd.ID}, "holding_id": {usdHolding},
+	}); err != nil || c == nil {
+		t.Fatalf("withdrawing too much from the holding: %v", err)
+	}
+	if _, err := money(httptest.NewRecorder(), "POST", "/goals/x/money?dir=withdraw", gl.ID, url.Values{
+		"amount": {"5"}, "account_id": {usd.ID}, "holding_id": {usdHolding},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if u := amountOf(usd.ID); u.Amount != 90 || u.SetAside != 10 {
+		t.Errorf("usd after withdraw = %v (set aside %v), want 90 (10)", u.Amount, u.SetAside)
+	}
+	if p := goal().Progress(); p != 980 {
+		t.Errorf("progress after the holding's withdraw = %v, want 980", p)
+	}
+	// The forms and details show the money per currency.
+	if body := render(callHandler(ctx, h.GetGoalMoneyForm)(httptest.NewRecorder(), "GET", "/goals/x/money-form?dir=withdraw", gl.ID, nil)); !strings.Contains(body, `name="holding_id"`) {
+		t.Error("the withdraw form doesn't offer the holdings")
+	}
+	if body := render(callHandler(ctx, h.GoalMoneyInputs)(httptest.NewRecorder(), "POST", "/goals/x/money-inputs?dir=withdraw", gl.ID, url.Values{
+		"holding_id": {usdHolding}, "account_id": {bank.ID}, "amount": {"5"},
+	})); !strings.Contains(body, `name="to_amount"`) || !strings.Contains(body, "240") {
+		t.Errorf("withdrawing dollars to an EGP account doesn't ask what it receives: %s", body)
+	}
+	if body := render(callHandler(ctx, h.GoalDetails)(httptest.NewRecorder(), "GET", "/goals/x/details", gl.ID, nil)); !strings.Contains(body, "today&#39;s rates") && !strings.Contains(body, "today's rates") {
+		t.Error("the details don't show the holdings")
+	}
+	if body := render(callHandler(ctx, h.GetGoalFulfillForm)(httptest.NewRecorder(), "GET", "/goals/x/fulfill-form", gl.ID, nil)); !strings.Contains(body, `name="convert_`+usdHolding+`"`) {
+		t.Error("the buy form doesn't convert the holding")
+	}
 
-	// Deposits are transfers: nothing spent, and they're locked.
+	paces, err := repo.GetGoalPaces(ctx, []models.Goal{*goal()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := paces[gl.ID]; p < 326.66 || p > 326.67 {
+		t.Errorf("pace = %v, want 980 / 3", p)
+	}
+
+	// Deposits and withdraws are transfers: nothing spent, and they're
+	// locked.
 	txs, err := repo.GetTransactions(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -170,7 +237,7 @@ func TestGoalLifecycle(t *testing.T) {
 			t.Error("a goal's transaction is editable")
 		}
 		body := render(callHandler(ctx, h.TransactionDetails)(httptest.NewRecorder(), "GET", "/transactions/x", tx.ID, nil))
-		if !strings.Contains(body, "Goal deposit") || !strings.Contains(body, "of E£ 800 saved") {
+		if !strings.Contains(body, "Goal deposit") && !strings.Contains(body, "Goal withdrawal") || !strings.Contains(body, "of E£ 800 saved") {
 			t.Errorf("the details don't show the goal's progress: %s", body)
 		}
 	}
@@ -207,11 +274,14 @@ func TestGoalLifecycle(t *testing.T) {
 	render(callHandler(ctx, h.GetGoalFulfillForm)(httptest.NewRecorder(), "GET", "/goals/x/fulfill-form", gl.ID, nil))
 	render(callHandler(ctx, h.Goals)(httptest.NewRecorder(), "GET", "/goals", "", nil))
 
-	// Buying it: an expense out of its account.
+	// Buying it: the holding converted, then an expense out of its account.
 	if _, err := callHandler(ctx, h.FulfillGoal)(httptest.NewRecorder(), "PUT", "/goals/x/fulfill", gl.ID, url.Values{
-		"amount": {"700"}, "description": {"Laptop"}, "scheduled_to": {today},
+		"amount": {"700"}, "description": {"Laptop"}, "scheduled_to": {today}, "convert_" + usdHolding: {"480"},
 	}); err != nil {
 		t.Fatal(err)
+	}
+	if a := amountOf(usdHolding); a.Amount != 0 {
+		t.Errorf("holding after buying = %v, want 0", a.Amount)
 	}
 	gl = goal()
 	if gl.FulfilledAt.IsZero() || gl.Balance() != 80 || gl.Progress() != 780 {
@@ -220,6 +290,15 @@ func TestGoalLifecycle(t *testing.T) {
 	if b := amountOf(bank.ID); b.SetAside != 0 {
 		t.Errorf("set aside for a bought goal = %v, want 0", b.SetAside)
 	}
+	if u := amountOf(usd.ID); u.SetAside != 0 {
+		t.Errorf("usd set aside for a bought goal = %v, want 0", u.SetAside)
+	}
+	// It doesn't follow the rate anymore.
+	fxrate.SetRates(map[string]map[string]float64{"usd": {"egp": 50}})
+	if p := goal().Progress(); p != 780 {
+		t.Errorf("bought goal's progress at a new rate = %v, want 780", p)
+	}
+	fxrate.SetRates(map[string]map[string]float64{"usd": {"egp": 48}})
 	var purchase *models.Transaction
 	txs, err = repo.GetTransactions(ctx)
 	if err != nil {
@@ -242,8 +321,8 @@ func TestGoalLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	gl = goal()
-	if !gl.FulfilledAt.IsZero() || gl.Balance() != 780 {
-		t.Errorf("unfulfilled goal: fulfilled %v, balance %v", gl.FulfilledAt, gl.Balance())
+	if !gl.FulfilledAt.IsZero() || gl.Balance() != 780 || gl.Account.Amount != 300 || gl.Holdings[0].Amount != 10 {
+		t.Errorf("unfulfilled goal: fulfilled %v, balance %v (own %v, holdings %+v)", gl.FulfilledAt, gl.Balance(), gl.Account.Amount, gl.Holdings)
 	}
 
 	// Deleting it moves what's left, keeping the history.
@@ -258,6 +337,9 @@ func TestGoalLifecycle(t *testing.T) {
 	if a := amountOf(gl.Account.ID); !a.IsDeleted() || a.Amount != 0 {
 		t.Errorf("goal account after deleting it: deleted %v, amount %v", a.DeletedAt, a.Amount)
 	}
+	if a := amountOf(usdHolding); !a.IsDeleted() || a.Amount != 0 {
+		t.Errorf("goal holding after deleting it: deleted %v, amount %v", a.DeletedAt, a.Amount)
+	}
 	if gls, _ := repo.GetGoals(ctx); len(gls) != 0 {
 		t.Errorf("got %d goals after deleting it", len(gls))
 	}
@@ -265,8 +347,9 @@ func TestGoalLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(txs) != 4 {
-		t.Errorf("got %d transactions after deleting the goal, want its 4 kept", len(txs))
+	// 3 deposits, 2 withdraws and a move out of each of its accounts.
+	if len(txs) != 7 {
+		t.Errorf("got %d transactions after deleting the goal, want its 7 kept", len(txs))
 	}
 
 	// Its name is free again.

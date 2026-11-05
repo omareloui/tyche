@@ -54,7 +54,11 @@ SELECT
 FROM goals AS gl
 LEFT JOIN currencies AS c ON c.id = gl.currency_id
 JOIN accounts AS ga ON ga.id = gl.account_id
-LEFT JOIN transactions AS t ON gl.account_id IN (t.account_id, t.to_account_id) OR t.loan_goal_id = gl.id -- deposits, withdrawals, purchase, loan payments
+-- deposits, withdrawals, conversions, purchase (in or out of its accounts),
+-- loan payments
+LEFT JOIN transactions AS t ON gl.account_id IN (t.account_id, t.to_account_id) OR t.loan_goal_id = gl.id OR EXISTS (
+    SELECT 1 FROM accounts AS gh WHERE gh.goal_id = gl.id AND gh.id IN (t.account_id, t.to_account_id)
+)
 LEFT JOIN accounts AS a ON a.id = t.account_id
 LEFT JOIN currencies AS ac ON ac.id = a.currency_id
 ORDER BY gl.created_at DESC;
@@ -100,7 +104,11 @@ SELECT
 FROM goals AS gl
 LEFT JOIN currencies AS c ON c.id = gl.currency_id
 JOIN accounts AS ga ON ga.id = gl.account_id
-LEFT JOIN transactions AS t ON gl.account_id IN (t.account_id, t.to_account_id) OR t.loan_goal_id = gl.id -- deposits, withdrawals, purchase, loan payments
+-- deposits, withdrawals, conversions, purchase (in or out of its accounts),
+-- loan payments
+LEFT JOIN transactions AS t ON gl.account_id IN (t.account_id, t.to_account_id) OR t.loan_goal_id = gl.id OR EXISTS (
+    SELECT 1 FROM accounts AS gh WHERE gh.goal_id = gl.id AND gh.id IN (t.account_id, t.to_account_id)
+)
 LEFT JOIN accounts AS a ON a.id = t.account_id
 LEFT JOIN currencies AS ac ON ac.id = a.currency_id
 WHERE gl.fulfilled_at IS NULL
@@ -147,7 +155,11 @@ SELECT
 FROM goals AS gl
 LEFT JOIN currencies AS c ON c.id = gl.currency_id
 JOIN accounts AS ga ON ga.id = gl.account_id
-LEFT JOIN transactions AS t ON gl.account_id IN (t.account_id, t.to_account_id) OR t.loan_goal_id = gl.id -- deposits, withdrawals, purchase, loan payments
+-- deposits, withdrawals, conversions, purchase (in or out of its accounts),
+-- loan payments
+LEFT JOIN transactions AS t ON gl.account_id IN (t.account_id, t.to_account_id) OR t.loan_goal_id = gl.id OR EXISTS (
+    SELECT 1 FROM accounts AS gh WHERE gh.goal_id = gl.id AND gh.id IN (t.account_id, t.to_account_id)
+)
 LEFT JOIN accounts AS a ON a.id = t.account_id
 LEFT JOIN currencies AS ac ON ac.id = a.currency_id
 WHERE gl.id = sqlc.arg(id);
@@ -198,18 +210,24 @@ DELETE FROM goals
 WHERE id = sqlc.arg(id);
 
 -- name: GetGoalContributionsSince :many
--- Money put towards each goal since a date (deposits net of withdrawals), in
--- the goal's currency.
+-- Money put towards each goal since a date (deposits net of withdrawals), per
+-- currency of its accounts. Conversions between its accounts are left out.
 SELECT
-    gl.id AS goal_id,
-    CAST(TOTAL(IIF(t.to_account_id = gl.account_id, COALESCE(t.to_amount, t.amount), -t.amount)) AS FLOAT) AS amount
+    ga.goal_id AS goal_id,
+    gc.string AS currency,
+    CAST(TOTAL(IIF(t.to_account_id = ga.id, COALESCE(t.to_amount, t.amount), -t.amount)) AS FLOAT) AS amount
 FROM transactions AS t
-JOIN goals AS gl ON gl.account_id IN (t.account_id, t.to_account_id)
+JOIN accounts AS ga ON ga.goal_id IS NOT NULL AND ga.id IN (t.account_id, t.to_account_id)
+JOIN currencies AS gc ON gc.id = ga.currency_id
 WHERE
     t.kind = 3
     AND t.fulfilled_at IS NOT NULL
     AND t.scheduled_to >= sqlc.arg(since)
-GROUP BY gl.id;
+    AND NOT EXISTS (
+        SELECT 1 FROM accounts AS o
+        WHERE o.goal_id = ga.goal_id AND o.id != ga.id AND o.id IN (t.account_id, t.to_account_id)
+    )
+GROUP BY ga.goal_id, gc.string;
 
 -- name: UpdateGoalAccount :exec
 -- Keeps a goal's account in sync with it.
@@ -241,3 +259,71 @@ WHERE loan_goal_id = sqlc.arg(goal_id) AND fulfilled_at IS NULL;
 UPDATE transactions
 SET loan_goal_id = NULL
 WHERE loan_goal_id = sqlc.arg(goal_id);
+
+-- name: SetAccountGoal :exec
+-- Ties an account to the goal it holds money of.
+UPDATE accounts
+SET goal_id = sqlc.arg(goal_id)
+WHERE id = sqlc.arg(id);
+
+-- name: GetGoalHoldings :many
+-- The live accounts of goals besides their own: the money put in from other
+-- currencies, one account per currency.
+SELECT
+    sqlc.embed(a),
+    sqlc.embed(c)
+FROM accounts AS a
+JOIN currencies AS c ON c.id = a.currency_id
+WHERE
+    a.goal_id IS NOT NULL
+    AND a.deleted_at IS NULL
+    AND (sqlc.narg(goal_id) IS NULL OR a.goal_id = sqlc.narg(goal_id))
+    AND NOT EXISTS (SELECT 1 FROM goals AS gl WHERE gl.account_id = a.id)
+ORDER BY a.created_at;
+
+-- name: GetGoalConversionIDs :many
+-- The transfers between the goal's accounts: its holdings converted to its
+-- currency when buying it.
+SELECT t.id FROM transactions AS t
+JOIN accounts AS a ON a.id = t.account_id
+JOIN accounts AS ta ON ta.id = t.to_account_id
+WHERE a.goal_id = sqlc.arg(goal_id) AND ta.goal_id = sqlc.arg(goal_id);
+
+-- name: GetGoalsToSplit :many
+-- The goals whose own account isn't tied to them yet (made before goals held
+-- money per currency), with its currency.
+SELECT gl.id, gl.name, gl.account_id, gl.fulfilled_at, a.currency_id, c.string AS currency
+FROM goals AS gl
+JOIN accounts AS a ON a.id = gl.account_id
+JOIN currencies AS c ON c.id = a.currency_id
+WHERE a.goal_id IS NULL;
+
+-- name: GetGoalAccountTransfers :many
+-- The fulfilled or scheduled transfers in or out of an account with the
+-- other side's currency, oldest first.
+SELECT
+    t.id,
+    t.account_id,
+    t.to_account_id,
+    t.amount,
+    t.to_amount,
+    t.fulfilled_at,
+    oc.id AS other_currency_id,
+    oc.string AS other_currency
+FROM transactions AS t
+JOIN accounts AS o ON o.id = IIF(t.account_id = sqlc.arg(id), t.to_account_id, t.account_id)
+JOIN currencies AS oc ON oc.id = o.currency_id
+WHERE t.kind = 3 AND (t.account_id = sqlc.arg(id) OR t.to_account_id = sqlc.arg(id))
+ORDER BY t.scheduled_to, t.created_at;
+
+-- name: MoveTransferTo :exec
+-- Points a transfer's to side at another account.
+UPDATE transactions
+SET to_account_id = sqlc.arg(to_account_id), to_amount = sqlc.arg(to_amount)
+WHERE id = sqlc.arg(id);
+
+-- name: MoveTransferFrom :exec
+-- Points a transfer's from side at another account.
+UPDATE transactions
+SET account_id = sqlc.arg(account_id), amount = sqlc.arg(amount)
+WHERE id = sqlc.arg(id);

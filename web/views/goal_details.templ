@@ -100,6 +100,29 @@ templ goalDetailsHero(gl *models.Goal, st goalState) {
 			</div>
 		}
 		@goalProgressBar(gl)
+		if gl.FulfilledAt.IsZero() && gl.HasHoldings() {
+			@goalHoldings(gl)
+		}
+	</div>
+}
+
+// goalHoldings is what the goal holds in each currency, the other ones at
+// today's rate (moving with it until bought), and the ones without a rate.
+templ goalHoldings(gl *models.Goal) {
+	<div class="grid gap-1.5 rounded-xl bg-zinc-800/40 px-3 py-2.5 text-sm">
+		for _, a := range gl.Funded() {
+			<div class="flex items-center justify-between gap-3 tabular-nums">
+				<span class="sensitive text-zinc-300">{ a.Currency.Format(a.Amount) }</span>
+				if a.Currency.String != gl.Currency.String {
+					if rate := a.Currency.FxRate(gl.Currency.String); rate > 0 {
+						<span class="sensitive text-zinc-500">≈ { gl.Currency.Format(a.Amount * rate) } today</span>
+					} else {
+						<span class="text-amber-300">no rate, counted as 0</span>
+					}
+				}
+			</div>
+		}
+		<p class="text-xs text-zinc-500">Money kept in other currencies counts at today's rates until it's bought.</p>
 	</div>
 }
 
@@ -364,7 +387,7 @@ func goalHistory(gl *models.Goal) []models.Transaction {
 }
 
 // goalTxLabel says what the transaction did to the goal.
-func goalTxLabel(tx *models.Transaction, accNames map[string]string) string {
+func goalTxLabel(gl *models.Goal, tx *models.Transaction, accNames map[string]string) string {
 	name := func(a *models.Account) string {
 		switch {
 		case a == nil:
@@ -381,10 +404,21 @@ func goalTxLabel(tx *models.Transaction, accNames map[string]string) string {
 		return "Loan payment · " + name(&tx.Account)
 	case tx.IsGoalPurchase():
 		return "Bought it"
-	case tx.GoalAmount() >= 0:
+	case gl.IsConversion(tx):
+		return "Converted from " + strings.ToUpper(tx.Account.Currency.String)
+	case gl.TxAmount(tx) >= 0:
 		return "From " + name(&tx.Account)
 	}
 	return "To " + name(tx.ToAccount)
+}
+
+// goalTxMoney is what the transaction moved in or out of the goal's account,
+// in that account's currency (negative when out).
+func goalTxMoney(gl *models.Goal, tx *models.Transaction) (float64, *models.Currency) {
+	if tx.ToAccount != nil && gl.OwnsAccount(tx.ToAccount.ID) {
+		return tx.ToAmount, &tx.ToAccount.Currency
+	}
+	return -tx.Amount, &tx.Account.Currency
 }
 
 // goalTxURL opens the transaction's details on the transactions page.
@@ -398,13 +432,14 @@ templ goalDetailsHistory(gl *models.Goal, accNames map[string]string) {
 			<p class="text-sm text-zinc-500">Nothing in it yet. Every deposit, withdrawal and the purchase shows up here.</p>
 		} else {
 			for _, tx := range goalHistory(gl) {
-				{{ amount := tx.GoalAmount() }}
+				{{ amount, cur := goalTxMoney(gl, &tx) }}
+				{{ conversion := gl.IsConversion(&tx) }}
 				<a
 					href={ goalTxURL(&tx) }
 					class="flex items-center gap-3 w-full px-3 py-2 rounded-xl bg-tx-row text-left transition hover:ring-1 hover:ring-zinc-700"
 				>
 					<div class="flex-1 min-w-0">
-						<p class="truncate text-sm">{ goalTxLabel(&tx, accNames) }</p>
+						<p class="truncate text-sm">{ goalTxLabel(gl, &tx, accNames) }</p>
 						<p class="truncate text-xs text-zinc-500">
 							{ formatTxDay(tx.ScheduledTo) }
 							if tx.FulfilledAt.IsZero() {
@@ -412,19 +447,26 @@ templ goalDetailsHistory(gl *models.Goal, accNames map[string]string) {
 							}
 						</p>
 					</div>
-					<p
-						class={ "sensitive shrink-0 text-sm font-semibold tabular-nums",
-							templ.KV("text-emerald-400", amount >= 0 && !tx.FulfilledAt.IsZero() && !tx.IsLoanPayment()),
-							templ.KV("text-zinc-400", amount < 0 || tx.FulfilledAt.IsZero() || tx.IsLoanPayment()) }
-					>
-						if tx.IsLoanPayment() {
-							−{ tx.Account.Currency.Format(tx.Amount) }
-						} else if amount >= 0 {
-							+{ gl.Currency.Format(amount) }
-						} else {
-							−{ gl.Currency.Format(-amount) }
+					<div class="shrink-0 text-right">
+						<p
+							class={ "sensitive text-sm font-semibold tabular-nums",
+								templ.KV("text-emerald-400", amount >= 0 && !tx.FulfilledAt.IsZero() && !tx.IsLoanPayment() && !conversion),
+								templ.KV("text-zinc-400", amount < 0 || tx.FulfilledAt.IsZero() || tx.IsLoanPayment() || conversion) }
+						>
+							if tx.IsLoanPayment() {
+								−{ tx.Account.Currency.Format(tx.Amount) }
+							} else if conversion {
+								{ tx.Account.Currency.Format(tx.Amount) } → { cur.Format(amount) }
+							} else if amount >= 0 {
+								+{ cur.Format(amount) }
+							} else {
+								−{ cur.Format(-amount) }
+							}
+						</p>
+						if !tx.IsLoanPayment() && !conversion && cur.String != gl.Currency.String {
+							<p class="sensitive text-xs text-zinc-500 tabular-nums">≈ { gl.Currency.Format(gl.ValueOf(amount, cur)) } today</p>
 						}
-					</p>
+					</div>
 				</a>
 			}
 		}

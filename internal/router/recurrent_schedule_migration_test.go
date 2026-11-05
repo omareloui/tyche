@@ -68,7 +68,7 @@ func TestRecurrentScheduleMigration(t *testing.T) {
 		t.Errorf("details view = %d, %v", n, err)
 	}
 
-	if err := goose.Down(db, "sql/schema"); err != nil {
+	if err := goose.DownTo(db, "sql/schema", 20261109000000); err != nil {
 		t.Fatalf("down: %v", err)
 	}
 	var last time.Time

@@ -40,7 +40,7 @@ func (r *Repository) GetGoals(ctx context.Context) ([]models.Goal, error) {
 		return nil, err
 	}
 	l.Debug("fetched goals")
-	return dbGoalRowsToGoals(dbGoals), nil
+	return goalsWithHoldings(ctx, q, dbGoals, "")
 }
 
 func (r *Repository) GetUnfulfilledGoals(ctx context.Context) ([]models.Goal, error) {
@@ -57,7 +57,7 @@ func (r *Repository) GetUnfulfilledGoals(ctx context.Context) ([]models.Goal, er
 		return nil, err
 	}
 	l.Debug("fetched unfulfilled goals")
-	return dbGoalRowsToGoals(dbGoals), nil
+	return goalsWithHoldings(ctx, q, dbGoals, "")
 }
 
 func (r *Repository) GetGoal(ctx context.Context, id string) (*models.Goal, error) {
@@ -70,7 +70,10 @@ func (r *Repository) GetGoal(ctx context.Context, id string) (*models.Goal, erro
 	if err != nil {
 		return nil, err
 	}
-	gls := dbGoalRowsToGoals(dbGls)
+	gls, err := goalsWithHoldings(ctx, q, dbGls, id)
+	if err != nil {
+		return nil, err
+	}
 	if len(gls) == 0 {
 		return nil, errGoalNotFound
 	}
@@ -86,7 +89,7 @@ func (r *Repository) CreateGoal(ctx context.Context, gl *models.Goal) error {
 			l.Error("getting the goal account kind", zap.Error(err))
 			return err
 		}
-		accID, err := createGoalAccountWithTxn(ctx, qtx, kindID, gl.Name, gl.Currency.ID)
+		accID, err := createGoalAccountWithTxn(ctx, qtx, kindID, models.GoalAccountName(gl.Name), gl.Currency.ID)
 		if err != nil {
 			return err
 		}
@@ -101,17 +104,64 @@ func (r *Repository) CreateGoal(ctx context.Context, gl *models.Goal) error {
 			l.Error("creating goal", zap.Error(err))
 			return err
 		}
-		return nil
+		return setAccountGoalWithTxn(ctx, qtx, accID, gl.ID)
 	})
 }
 
-// createGoalAccountWithTxn creates the hidden account of a goal, returning
-// its id.
+func setAccountGoalWithTxn(ctx context.Context, qtx *queries.Queries, accID, goalID string) error {
+	if err := qtx.SetAccountGoal(ctx, queries.SetAccountGoalParams{
+		ID:     accID,
+		GoalID: sql.NullString{String: goalID, Valid: true},
+	}); err != nil {
+		logger.FromCtx(ctx).Error("tying account to goal", zap.Error(err), zap.String("goal", goalID))
+		return err
+	}
+	return nil
+}
+
+// goalAccountInWithTxn is the goal's account of the currency, its own or a
+// holding, created when it has none yet.
+func goalAccountInWithTxn(ctx context.Context, qtx *queries.Queries, gl *models.Goal, cur *models.Currency) (*models.Account, error) {
+	if a := gl.AccountIn(cur.String); a != nil {
+		return a, nil
+	}
+	kindID, err := qtx.GetAccountKindID(ctx, int64(models.AccKindGoal))
+	if err != nil {
+		return nil, err
+	}
+	id, err := createGoalAccountWithTxn(ctx, qtx, kindID, models.GoalHoldingName(gl.Name, cur.String), cur.ID)
+	if err != nil {
+		return nil, err
+	}
+	if err := setAccountGoalWithTxn(ctx, qtx, id, gl.ID); err != nil {
+		return nil, err
+	}
+	a := models.Account{ID: id, Name: models.GoalHoldingName(gl.Name, cur.String), Currency: *cur, Kind: models.AccountKind{Enum: models.AccKindGoal}, ExcludeFromBalance: true}
+	gl.Holdings = append(gl.Holdings, a)
+	return &gl.Holdings[len(gl.Holdings)-1], nil
+}
+
+// DepositToGoal puts money from tx's account in the goal: tx goes to the
+// goal's account of the same currency (a new holding when it has none), the
+// money keeping its currency.
+func (r *Repository) DepositToGoal(ctx context.Context, gl *models.Goal, tx *models.Transaction) error {
+	return r.transact(ctx, func(qtx *queries.Queries) error {
+		to, err := goalAccountInWithTxn(ctx, qtx, gl, &tx.Account.Currency)
+		if err != nil {
+			return err
+		}
+		tx.ToAccount, tx.ToAmount = to, tx.Amount
+		return r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, tx)
+	})
+}
+
+// createGoalAccountWithTxn creates a hidden account of a goal, named name,
+// returning its id.
 func createGoalAccountWithTxn(ctx context.Context, qtx *queries.Queries, kindID, name, currencyID string) (string, error) {
 	id := idgen.New()
 	if err := qtx.CreateAccount(ctx, queries.CreateAccountParams{
 		ID:                 id,
-		Name:               models.GoalAccountName(name),
+		Name:               name,
 		KindID:             kindID,
 		CurrencyID:         currencyID,
 		ExcludeFromBalance: true,
@@ -146,7 +196,7 @@ func (r *Repository) UpdateGoal(ctx context.Context, gl *models.Goal) error {
 			if err != nil {
 				return err
 			}
-			if n > 0 {
+			if n > 0 || len(prev.Holdings) > 0 {
 				return ErrGoalCurrencyUsed
 			}
 		}
@@ -166,6 +216,16 @@ func (r *Repository) UpdateGoal(ctx context.Context, gl *models.Goal) error {
 		}); err != nil {
 			l.Error("updating goal account", zap.Error(err))
 			return goalNameErr(err)
+		}
+		for _, h := range prev.Holdings {
+			if err := qtx.UpdateGoalAccount(ctx, queries.UpdateGoalAccountParams{
+				ID:         h.ID,
+				Name:       models.GoalHoldingName(gl.Name, h.Currency.String),
+				CurrencyID: h.Currency.ID,
+			}); err != nil {
+				l.Error("updating goal holding", zap.Error(err))
+				return goalNameErr(err)
+			}
 		}
 		return nil
 	})
@@ -196,12 +256,18 @@ func setGoalPlanWithTxn(ctx context.Context, q *queries.Queries, id string, plan
 }
 
 // FulfillGoal records buying the goal, an expense out of its account, and
-// marks it achieved. A plan's loan payments are scheduled with it, linked to
-// the goal (loan_goal_id).
-func (r *Repository) FulfillGoal(ctx context.Context, gl *models.Goal, purchase *models.Transaction, loanTxs []models.Transaction) error {
+// marks it achieved. Its holdings are converted to its currency first
+// (conversions, transfers from them to its account). A plan's loan payments
+// are scheduled with it, linked to the goal (loan_goal_id).
+func (r *Repository) FulfillGoal(ctx context.Context, gl *models.Goal, conversions []models.Transaction, purchase *models.Transaction, loanTxs []models.Transaction) error {
 	l := logger.FromCtx(ctx)
 	id := gl.ID
 	return r.transact(ctx, func(qtx *queries.Queries) error {
+		for i := range conversions {
+			if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, &conversions[i]); err != nil {
+				return err
+			}
+		}
 		if purchase != nil {
 			if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, purchase); err != nil {
 				return err
@@ -234,8 +300,9 @@ func (r *Repository) FulfillGoal(ctx context.Context, gl *models.Goal, purchase 
 }
 
 // UnfulfillGoal undoes buying the goal: its purchase is deleted, the money
-// going back to its account, with its loan's payments not paid yet (the paid
-// ones are unlinked, kept as plain expenses).
+// going back to its account, then its holdings' conversions, the money going
+// back to them, with its loan's payments not paid yet (the paid ones are
+// unlinked, kept as plain expenses).
 func (r *Repository) UnfulfillGoal(ctx context.Context, gl *models.Goal) error {
 	l := logger.FromCtx(ctx)
 	id := gl.ID
@@ -270,6 +337,20 @@ func (r *Repository) UnfulfillGoal(ctx context.Context, gl *models.Goal) error {
 			l.Error("getting goal purchase", zap.Error(err))
 			return err
 		}
+		convIDs, err := qtx.GetGoalConversionIDs(ctx, sql.NullString{String: id, Valid: true})
+		if err != nil {
+			l.Error("getting goal conversions", zap.Error(err))
+			return err
+		}
+		for _, txID := range convIDs {
+			row, err := qtx.GetTransaction(ctx, txID)
+			if err != nil {
+				return err
+			}
+			if err := r.deleteTransactionWithTxn(ctx, qtx, dbTransactionRowToTransaction(&row)); err != nil {
+				return err
+			}
+		}
 		if err := qtx.UnfulfillGoal(ctx, id); err != nil {
 			l.Error("unfulfilling goal", zap.Error(err))
 			return err
@@ -279,13 +360,14 @@ func (r *Repository) UnfulfillGoal(ctx context.Context, gl *models.Goal) error {
 	})
 }
 
-// DeleteGoal deletes the goal, after moving what's left in it with withdraw
-// (if any). Its account is soft deleted, keeping its transactions' history.
-func (r *Repository) DeleteGoal(ctx context.Context, gl *models.Goal, withdraw *models.Transaction) error {
+// DeleteGoal deletes the goal, after moving what's left in it with
+// withdraws (one per account with money). Its accounts are soft deleted,
+// keeping their transactions' history.
+func (r *Repository) DeleteGoal(ctx context.Context, gl *models.Goal, withdraws []models.Transaction) error {
 	l := logger.FromCtx(ctx)
 	return r.transact(ctx, func(qtx *queries.Queries) error {
-		if withdraw != nil {
-			if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, withdraw); err != nil {
+		for i := range withdraws {
+			if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, &withdraws[i]); err != nil {
 				return err
 			}
 		}
@@ -296,6 +378,12 @@ func (r *Repository) DeleteGoal(ctx context.Context, gl *models.Goal, withdraw *
 		if gl.Account != nil {
 			if err := qtx.DeleteAccount(ctx, gl.Account.ID); err != nil {
 				l.Error("deleting goal account", zap.Error(err))
+				return err
+			}
+		}
+		for _, h := range gl.Holdings {
+			if err := qtx.DeleteAccount(ctx, h.ID); err != nil {
+				l.Error("deleting goal holding", zap.Error(err))
 				return err
 			}
 		}
@@ -329,7 +417,24 @@ func dbGoalToGoal(dbGl *queries.Goal, cur *queries.Currency) *models.Goal {
 	return &gl
 }
 
-func dbGoalRowsToGoals[T queries.GetGoalsRow | queries.GetGoalRow | queries.GetUnfulfilledGoalsRow](dbGls []T) []models.Goal {
+// goalsWithHoldings is the goals of the rows with their holdings (of the
+// goal of id, every goal's when empty).
+func goalsWithHoldings[T queries.GetGoalsRow | queries.GetGoalRow | queries.GetUnfulfilledGoalsRow](ctx context.Context, q *queries.Queries, dbGls []T, id string) ([]models.Goal, error) {
+	rows, err := q.GetGoalHoldings(ctx, sql.NullString{String: id, Valid: id != ""})
+	if err != nil {
+		logger.FromCtx(ctx).Error("fetching goal holdings", zap.Error(err))
+		return nil, err
+	}
+	holdings := map[string][]models.Account{}
+	for _, row := range rows {
+		a := dbAccountToAccount(&row.Account, &row.Currency, nil, nil, false)
+		a.Kind.Enum = models.AccKindGoal
+		holdings[row.Account.GoalID.String] = append(holdings[row.Account.GoalID.String], *a)
+	}
+	return dbGoalRowsToGoals(dbGls, holdings), nil
+}
+
+func dbGoalRowsToGoals[T queries.GetGoalsRow | queries.GetGoalRow | queries.GetUnfulfilledGoalsRow](dbGls []T, holdings map[string][]models.Account) []models.Goal {
 	gls := []models.Goal{}
 
 	for _, _dbGl := range dbGls {
@@ -339,6 +444,7 @@ func dbGoalRowsToGoals[T queries.GetGoalsRow | queries.GetGoalRow | queries.GetU
 			gl := dbGoalToGoal(&dbGl.Goal, &dbGl.Currency)
 			gl.Account = dbAccountToAccount(&dbGl.Account, &dbGl.Currency, nil, nil, false)
 			gl.Account.Kind.Enum = models.AccKindGoal
+			gl.Holdings = holdings[gl.ID]
 			gls = append(gls, *gl)
 			glIdx = len(gls) - 1
 		}
@@ -390,11 +496,13 @@ func dbGoalRowsToGoals[T queries.GetGoalsRow | queries.GetGoalRow | queries.GetU
 		}
 
 		tx := dbTransactionToTransaction(&_tx, &acc, &accCurr, nil, nil, nil, nil, nil, nil)
-		if acc.ID == gl.Account.ID {
-			tx.Account = *gl.Account
+		if a := gl.AccountByID(acc.ID); a != nil {
+			tx.Account = *a
 		}
-		if tx.ToAccount != nil && tx.ToAccount.ID == gl.Account.ID {
-			tx.ToAccount = gl.Account
+		if tx.ToAccount != nil {
+			if a := gl.AccountByID(tx.ToAccount.ID); a != nil {
+				tx.ToAccount = a
+			}
 		}
 		if tx.IsGoalPurchase() && !tx.FulfilledAt.IsZero() {
 			gl.Purchased += tx.Amount
