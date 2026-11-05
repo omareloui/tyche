@@ -459,8 +459,9 @@ templ transaction(tx *models.Transaction, def *models.Currency) {
 				templ.KV("bg-zinc-950 border border-dashed border-zinc-700", v.isScheduled),
 			}
 		>
-			@txSelBox()
-			@txTile(tx, &v)
+			@txSelTile(false) {
+				@txTile(tx, &v)
+			}
 			<div class="flex-1 min-w-0">
 				<p class="truncate leading-snug">{ v.title }</p>
 				{{ meta := txMeta(&v) }}
@@ -784,6 +785,8 @@ templ transferPair(out *models.Transaction, def *models.Currency) {
 			txMenuDetails(out.ID),
 			components.EntryMenuSeparator(),
 			txMenuItem("Unlink transfer", "delete", fmt.Sprintf("/transactions/%s/transfer-pair", out.ID), icons.Unlink("16")),
+			components.EntryMenuSeparator(),
+			txMenuSelect(),
 		})
 		<div
 			data-tx-row
@@ -792,8 +795,9 @@ templ transferPair(out *models.Transaction, def *models.Currency) {
 			x-bind="swipe"
 			class="relative flex items-center gap-3 sm:gap-4 px-3 sm:px-4 py-3 rounded-2xl bg-tx-row cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60"
 		>
-			@txSelBox()
-			@txTile(out, &v)
+			@txSelTile(false) {
+				@txTile(out, &v)
+			}
 			<div class="flex-1 min-w-0">
 				<p class="truncate leading-snug">{ v.title }</p>
 				{{ meta := txMeta(&v) }}
@@ -872,10 +876,11 @@ templ transferLeg(tx *models.Transaction, def *models.Currency) {
 			tabindex="0"
 			class="relative flex items-center gap-3 px-4 py-2 rounded-xl bg-tx-row cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60"
 		>
-			@txSelBox()
-			<div class="grid place-items-center shrink-0 w-9 h-9 rounded-lg bg-sky-400/10 text-sky-400">
-				@accKindIcon(tx.Account.Kind.Enum, "18")
-			</div>
+			@txSelTile(true) {
+				<div class="grid place-items-center shrink-0 w-9 h-9 rounded-lg bg-sky-400/10 text-sky-400">
+					@accKindIcon(tx.Account.Kind.Enum, "18")
+				</div>
+			}
 			<div class="flex-1 min-w-0">
 				<p class="truncate">
 					if sent {
@@ -950,14 +955,15 @@ templ reimbursement(tx *models.Transaction, def *models.Currency) {
 			tabindex="0"
 			class={ "relative flex items-center gap-3 px-4 py-2 rounded-xl bg-tx-row cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60", templ.KV("opacity-70", v.isScheduled) }
 		>
-			@txSelBox()
-			<div class="grid place-items-center shrink-0 w-9 h-9 rounded-lg bg-emerald-400/10 text-emerald-400">
-				if v.counterparty != nil {
-					@components.CounterpartyIcon(v.counterparty.Name, v.counterparty.Icon, v.counterparty.Color, "w-5 h-5 text-[11px]")
-				} else {
-					@icons.Users("18")
-				}
-			</div>
+			@txSelTile(true) {
+				<div class="grid place-items-center shrink-0 w-9 h-9 rounded-lg bg-emerald-400/10 text-emerald-400">
+					if v.counterparty != nil {
+						@components.CounterpartyIcon(v.counterparty.Name, v.counterparty.Icon, v.counterparty.Color, "w-5 h-5 text-[11px]")
+					} else {
+						@icons.Users("18")
+					}
+				</div>
+			}
 			<div class="flex-1 min-w-0">
 				<p class="truncate">{ v.title }</p>
 				<p class="text-xs text-zinc-500 truncate">
@@ -993,7 +999,7 @@ templ txUndoToast() {
 		x-show="$store.txs.toast"
 		x-transition.opacity.duration.150ms
 		role="status"
-		:class="($store.txSel.on || $store.txSel.notice) && 'mb-20'"
+		:class="($store.txSel.on || $store.txSel.notice) && 'mb-[calc(7rem+env(safe-area-inset-bottom))] md:mb-16'"
 		class="fixed z-60 bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 max-w-[calc(100vw-2rem)] pl-2 pr-1.5 py-1.5 rounded-full bg-zinc-800 ring-1 ring-zinc-700 shadow-xl shadow-black/50"
 	>
 		<span aria-hidden="true" class="relative grid place-items-center shrink-0 size-8">
@@ -1039,6 +1045,15 @@ func txMenuDelete() templ.Component {
 		components.WithEntryMenuItemIcon(icons.Trash("16")),
 		components.WithEntryMenuItemShortcut("Del"),
 		components.WithEntryMenuItemDanger(),
+	)
+}
+
+// txMenuSelect starts selecting rows with this one (txSel, transactions.js).
+func txMenuSelect() templ.Component {
+	return components.EntryMenuItem("Select",
+		templ.Attributes{"@click": "openMenu = false; $store.txSel.toggle($el.closest('[data-sel-ids]'))"},
+		components.WithEntryMenuItemIcon(icons.CheckCheck("16")),
+		components.WithEntryMenuItemShortcut("X"),
 	)
 }
 
@@ -1132,7 +1147,7 @@ func getTransactionMenuItems(tx *models.Transaction) []templ.Component {
 		edit = append(edit, txMenuEdit(tx), txMenuDuplicate(tx.ID))
 	}
 
-	return txMenuGroups([]templ.Component{txMenuDetails(tx.ID)}, status, links, edit, []templ.Component{txMenuDelete()})
+	return txMenuGroups([]templ.Component{txMenuDetails(tx.ID)}, status, links, edit, []templ.Component{txMenuSelect(), txMenuDelete()})
 }
 
 // canPairTransfer reports whether tx can be paired by hand with the other
@@ -1155,7 +1170,7 @@ func getTransferLegMenuItems(tx *models.Transaction) []templ.Component {
 			txMenuItem("Unlink transfer", "delete", fmt.Sprintf("/transactions/%s/transfer-pair", tx.ID), icons.Unlink("16")),
 		},
 		[]templ.Component{txMenuEdit(tx)},
-		[]templ.Component{txMenuDelete()},
+		[]templ.Component{txMenuSelect(), txMenuDelete()},
 	)
 }
 
@@ -1175,7 +1190,7 @@ func getReimbursementMenuItems(tx *models.Transaction) []templ.Component {
 			txMenuItem("Unlink reimbursement", "delete", fmt.Sprintf("/transactions/%s/reimburses", tx.ID), icons.Unlink("16")),
 		},
 		[]templ.Component{txMenuEdit(tx)},
-		[]templ.Component{txMenuDelete()},
+		[]templ.Component{txMenuSelect(), txMenuDelete()},
 	)
 }
 

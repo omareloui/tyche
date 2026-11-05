@@ -219,11 +219,6 @@ document.addEventListener("alpine:init", () => {
       return this.all ? this.total : Object.keys(this.sel).length;
     },
 
-    start() {
-      this.on = true;
-      this.refresh();
-    },
-
     clear() {
       this.on = false;
       this.sel = {};
@@ -295,7 +290,7 @@ document.addEventListener("alpine:init", () => {
 
     countText() {
       if (this.all) return `All ${this.total} selected`;
-      return this.count ? `${this.count} selected` : "Select transactions";
+      return this.count ? `${this.count} selected` : "Tap transactions to select them";
     },
 
     // refresh reads the list's counts again and paints the rows.
@@ -395,7 +390,7 @@ document.addEventListener("alpine:init", () => {
 
     // onSelectClick, before anything in the row gets the click: while
     // selecting, a click anywhere on a row toggles it; out of it, on a row's
-    // check (txSelBox) starts selecting.
+    // tile turned check (txSelTile) starts selecting.
     onSelectClick(e) {
       const sel = Alpine.store("txSel");
       const box = e.target.closest?.("[data-sel-box]");
@@ -478,6 +473,10 @@ document.addEventListener("alpine:init", () => {
           if (!("review" in d)) return;
           txRequest("PUT", txURL(d.id, "reviewed"), row);
           break;
+        case " ":
+          // Space only selects while selecting, else it scrolls the page.
+          if (!Alpine.store("txSel").on) return;
+        // falls through
         case "x":
         case "X": {
           const wrap = t.closest?.("[data-sel-ids]");

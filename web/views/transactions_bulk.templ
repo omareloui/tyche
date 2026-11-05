@@ -79,15 +79,20 @@ func txBulkTitle(n int) string {
 }
 
 // txSelectionBar is the selected rows' actions (the txSel store,
-// transactions.js), at the bottom of the screen within thumb's reach.
+// transactions.js): a frosted pill floating at the bottom of the screen
+// (over the phones' tab bar), how many and selecting more, then Edit,
+// Delete and Done, icons only on phones.
 templ txSelectionBar() {
 	<div
 		x-cloak
 		x-show="$store.txSel.on || $store.txSel.notice"
-		x-transition.opacity.duration.150ms
-		class="fixed z-50 inset-x-0 bottom-0 sm:bottom-6 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 sm:w-max sm:max-w-[calc(100vw-2rem)]"
+		x-transition:enter="transition duration-200 ease-out"
+		x-transition:enter-start="translate-y-4 opacity-0"
+		x-transition:leave="transition duration-150 ease-in"
+		x-transition:leave-end="translate-y-4 opacity-0"
+		class="fixed z-51 left-1/2 -translate-x-1/2 w-max max-w-[calc(100vw-1.5rem)] bottom-[calc(4.75rem+env(safe-area-inset-bottom))] md:bottom-6"
 	>
-		<div class="grid gap-1 px-3 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] sm:p-1.5 bg-zinc-900 sm:bg-zinc-800 border-t sm:border-0 border-zinc-800 sm:ring-1 sm:ring-zinc-700 sm:rounded-3xl shadow-xl shadow-black/50">
+		<div class="grid gap-1 p-1.5 rounded-[1.75rem] bg-zinc-800/25 backdrop-blur-2xl backdrop-saturate-200 ring-1 ring-white/15 shadow-lg shadow-black/30">
 			// Errors of the bulk deletes land here, then show as the notice.
 			<div id="tx-sel-sink" hidden></div>
 			<p
@@ -95,55 +100,68 @@ templ txSelectionBar() {
 				x-show="$store.txSel.notice"
 				x-text="$store.txSel.notice"
 				role="status"
-				class="px-2 pt-1 text-sm text-zinc-300"
+				class="px-3 py-1.5 text-sm text-zinc-200"
 			></p>
 			<div x-show="$store.txSel.on" class="flex items-center gap-1">
-				<button
-					type="button"
-					@click="$store.txSel.clear()"
-					aria-label="Stop selecting"
-					title="Stop selecting (Esc)"
-					class="grid place-items-center shrink-0 size-10 rounded-full text-zinc-400 cursor-pointer transition-colors hover:bg-white/5 hover:text-white"
-				>
-					@icons.X("18")
-				</button>
-				<div class="flex-1 min-w-0 sm:min-w-32 px-1">
+				<div class="min-w-0 md:min-w-40 pl-3 pr-2 leading-tight [text-shadow:0_1px_2px_rgb(0_0_0/0.5)]">
 					<p class="font-semibold tabular-nums truncate" x-text="$store.txSel.countText()"></p>
 					<button
 						type="button"
 						x-show="$store.txSel.canSelectMore()"
 						@click="$store.txSel.selectMore()"
 						x-text="$store.txSel.moreText()"
-						class="block max-w-full truncate text-sm text-violet-300 cursor-pointer hover:underline"
+						class="block max-w-full truncate text-sm font-semibold text-violet-300 cursor-pointer hover:underline"
 					></button>
 				</div>
 				<button
 					type="button"
 					@click="$store.txSel.edit()"
 					:disabled="!$store.txSel.count"
-					class="inline-flex items-center gap-1.5 shrink-0 h-10 px-4 rounded-full font-semibold text-zinc-200 cursor-pointer transition-colors hover:bg-white/5 disabled:opacity-40 disabled:pointer-events-none"
+					aria-label="Edit"
+					title="Edit"
+					class="tx-sel-action text-zinc-100"
 				>
-					@icons.Pencil("16")
-					Edit
+					@icons.Pencil("18")
+					<span class="hidden md:inline">Edit</span>
 				</button>
 				<button
 					type="button"
 					@click="$store.txSel.remove()"
 					:disabled="!$store.txSel.count"
-					class="inline-flex items-center gap-1.5 shrink-0 h-10 px-4 rounded-full font-semibold text-red-300 cursor-pointer transition-colors hover:bg-red-400/10 disabled:opacity-40 disabled:pointer-events-none"
+					aria-label="Delete"
+					title="Delete (Del)"
+					class="tx-sel-action text-red-300 hover:bg-red-400/15!"
 				>
-					@icons.Trash("16")
-					Delete
+					@icons.Trash("18")
+					<span class="hidden md:inline">Delete</span>
+				</button>
+				<button
+					type="button"
+					@click="$store.txSel.clear()"
+					aria-label="Done"
+					title="Stop selecting (Esc)"
+					class="tx-sel-action text-zinc-400"
+				>
+					@icons.X("18")
+					<span class="hidden md:inline">Done</span>
 				</button>
 			</div>
 		</div>
 	</div>
 }
 
-// txSelBox is a row's selection check, over the corner of its tile: shown
-// while selecting, or hovering the row with a mouse (main.css).
-templ txSelBox() {
-	<span data-sel-box aria-hidden="true">
-		@icons.Check("12")
-	</span>
+// txSelTile is a row's tile that turns into its selection check while
+// selecting, or hovering it with a mouse (main.css); small for the nested
+// rows'.
+templ txSelTile(small bool) {
+	<div data-sel-tile class={ "relative shrink-0", templ.KV("rounded-lg", small), templ.KV("rounded-xl", !small) }>
+		{ children... }
+		<span data-sel-box aria-hidden="true">
+			if small {
+				@icons.Check("16")
+			} else {
+				@icons.Check("20")
+			}
+		</span>
+	</div>
 }
