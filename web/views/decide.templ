@@ -247,9 +247,10 @@ func NewWorkSettingsFD(ws *models.WorkSettings) *WorkSettingsFD {
 }
 
 // WishlistBuySheet opens the prefilled transaction form (a form.SheetForm
-// drawer) of its own over the page, right away.
+// drawer) of its own over the page, right away, kept out of the url (?new
+// would reopen the page's own create form).
 templ WishlistBuySheet(f templ.Component) {
-	<div x-data="{openCreateForm: true}">
+	<div x-data="{openCreateForm: true}" data-drawer-no-url>
 		@f
 	</div>
 }

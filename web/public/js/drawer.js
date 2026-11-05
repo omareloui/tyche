@@ -292,7 +292,14 @@ function drawerBase() {
       const fetched = drawerHistory.fetched;
       drawerHistory.fetched = null;
       let form = null;
-      if (this.isStatic()) form = root.getAttribute("x-model") === "openCreateForm" ? NEW_PARAM : null;
+      // A page's create form is ?new, unless it's one opened over the page
+      // with a prefill of its own (data-drawer-no-url, e.g. buying a wish),
+      // which ?new would reopen as the page's.
+      if (this.isStatic())
+        form =
+          root.getAttribute("x-model") === "openCreateForm" && !root.closest("[data-drawer-no-url]")
+            ? NEW_PARAM
+            : null;
       else if (!urlParam) form = formPath(fetched);
       drawerHistory.opened(root, (e) => this.back(e), urlParam || null, urlValue, form);
       if (!root.contains(document.activeElement)) this.opener = document.activeElement;
