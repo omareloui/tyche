@@ -229,7 +229,7 @@ templ txShortcuts() {
 	// Swiping has no visible cue on touch screens, told once.
 	<p
 		x-data="{ hint: false }"
-		x-init="try { hint = !localStorage.getItem('tx-swipe-hint') } catch {}"
+		x-init="hint = (() => { try { return !localStorage.getItem('tx-swipe-hint') } catch { return false } })()"
 		x-cloak
 		x-show="hint"
 		class="sm:hidden flex items-center gap-2 text-xs text-zinc-500"
