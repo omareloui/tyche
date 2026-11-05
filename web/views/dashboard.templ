@@ -334,7 +334,7 @@ templ dashFlowChart(f *models.Flow, def *models.Currency) {
 			<div class="grow min-w-0">
 				<div class="relative h-48">
 					@dashGridLines(axisMax)
-					<div class="relative flex h-full justify-around">
+					<div x-data="chartScrub" x-bind="scrub" class="relative flex h-full justify-around touch-pan-y">
 						for i, m := range f.Months {
 							@flowMonth(m, axisMax, i == len(f.Months)-1, def)
 						}
@@ -352,10 +352,10 @@ templ dashFlowChart(f *models.Flow, def *models.Currency) {
 
 templ flowMonth(m models.MonthFlow, axisMax float64, current bool, def *models.Currency) {
 	<div tabindex="0" class="group relative flex-1 flex items-end justify-center gap-0.5 h-full outline-none">
-		<div class="absolute inset-y-0 inset-x-1 rounded-lg transition-colors group-hover:bg-white/4 group-focus:bg-white/4"></div>
+		<div class="absolute inset-y-0 inset-x-1 rounded-lg transition-colors group-hover:bg-white/4 group-focus:bg-white/4 group-[.is-active]:bg-white/4"></div>
 		<div class="relative w-3 sm:w-4 rounded-t-[4px] bg-emerald-400" style={ components.HeightPct(axisPct(m.In, axisMax)) }></div>
 		<div class="relative w-3 sm:w-4 rounded-t-[4px] bg-rose-400" style={ components.HeightPct(axisPct(max(m.Out, 0), axisMax)) }></div>
-		<div class="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 hidden group-hover:block group-focus:block z-10">
+		<div class="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 hidden group-hover:block group-focus:block group-[.is-active]:block z-10 pointer-events-none">
 			<div class="glass-tooltip">
 				<p class="text-zinc-400">
 					{ m.Month.Format("January") }
@@ -405,7 +405,7 @@ templ dashPaceChart(f *models.Flow, def *models.Currency) {
 							style={ paceDotStyle(len(cur)-1, last(cur), days, axisMax) }
 						></span>
 					}
-					<div class="absolute inset-0 flex">
+					<div x-data="chartScrub" x-bind="scrub" class="absolute inset-0 flex touch-pan-y">
 						for i := range days {
 							@paceDay(i, days, cur, prev, f, def)
 						}
@@ -430,8 +430,8 @@ templ dashPaceChart(f *models.Flow, def *models.Currency) {
 // paceDay is a day's hover target with its tooltip.
 templ paceDay(i, days int, cur, prev []float64, f *models.Flow, def *models.Currency) {
 	<div class="group relative flex-1 h-full">
-		<div class="absolute inset-y-0 left-1/2 border-l border-zinc-500/60 hidden group-hover:block"></div>
-		<div class={ "absolute bottom-full mb-1 hidden group-hover:block z-10", tooltipSide(i, days) }>
+		<div class="absolute inset-y-0 left-1/2 border-l border-zinc-500/60 hidden group-hover:block group-[.is-active]:block"></div>
+		<div class={ "absolute bottom-full mb-1 hidden group-hover:block group-[.is-active]:block z-10 pointer-events-none", tooltipSide(i, days) }>
 			<div class="glass-tooltip">
 				<p class="text-zinc-400">
 					{ fmt.Sprintf("Day %d", i+1) }

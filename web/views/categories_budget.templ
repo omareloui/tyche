@@ -237,7 +237,7 @@ templ budgetBurnUp(bs *models.BudgetSummary) {
 								style={ paceDotStyle(len(cum)-1, last(cum), days, axisMax) }
 							></span>
 						}
-						<div class="absolute inset-0 flex">
+						<div x-data="chartScrub" x-bind="scrub" class="absolute inset-0 flex touch-pan-y">
 							for i := range days {
 								@budgetDay(bs, i, cum, pace)
 							}
@@ -258,8 +258,8 @@ templ budgetBurnUp(bs *models.BudgetSummary) {
 templ budgetDay(bs *models.BudgetSummary, i int, cum, pace []float64) {
 	{{ days := bs.Days() }}
 	<div class="group relative flex-1 h-full">
-		<div class="absolute inset-y-0 left-1/2 border-l border-zinc-500/60 hidden group-hover:block"></div>
-		<div class={ "absolute bottom-full mb-1 hidden group-hover:block z-10", tooltipSide(i, days) }>
+		<div class="absolute inset-y-0 left-1/2 border-l border-zinc-500/60 hidden group-hover:block group-[.is-active]:block"></div>
+		<div class={ "absolute bottom-full mb-1 hidden group-hover:block group-[.is-active]:block z-10 pointer-events-none", tooltipSide(i, days) }>
 			<div class="glass-tooltip">
 				<p class="text-zinc-400">{ bs.Period.From.AddDate(0, 0, i).Format("Mon, Jan 2") }</p>
 				if i < len(cum) {
