@@ -61,6 +61,16 @@
 		"source": "https://cdn.jsdelivr.net/npm/simple-icons@14/icons/primevideo.svg"
 	},
 	{
+		"title": "PwC",
+		"hex": "FD5108",
+		"source": "https://commons.wikimedia.org/wiki/File:PwC_2025_Logo.svg",
+		"aliases": {
+			"aka": [
+				"PricewaterhouseCoopers"
+			]
+		}
+	},
+	{
 		"title": "Seoudi",
 		"hex": "00572D",
 		"source": "https://www.seoudisupermarket.com/_nuxt/c47ef65d11c7f8e31cac9baee901dcc7.svg#i-logo",
