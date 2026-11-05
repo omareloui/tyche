@@ -1,0 +1,271 @@
+package views
+
+import (
+	"fmt"
+	"strconv"
+
+	"github.com/omareloui/tyche/internal/formatters"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+// AccountsChangedEvent re-renders the accounts summary after an account
+// changes.
+const AccountsChangedEvent = "accounts-changed"
+
+templ accountsSummaryLazy() {
+	<div
+		id="accounts-summary"
+		hx-get="/accounts/summary"
+		hx-trigger="load"
+		hx-vals="js:{with: accSummaryWith().join(',')}"
+		hx-swap="outerHTML"
+		hx-on::response-error="this.classList.remove('animate-pulse'); this.classList.add('grid', 'place-items-center', 'text-sm', 'text-zinc-500'); this.textContent = 'Couldn’t load the summary, refresh to try again'"
+		aria-busy="true"
+		class="h-56 mb-6 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800 animate-pulse"
+	></div>
+}
+
+// AccountsSummary is the net worth of the accounts in the balance, its last
+// months, what they hold per kind and currency and the cards' and debts'
+// state, each in its own collapsible section.
+templ AccountsSummary(s *models.AccountsSummary) {
+	<div
+		id="accounts-summary"
+		class="mb-6"
+		data-acc-summary
+		hx-get="/accounts/summary"
+		hx-trigger={ AccountsChangedEvent + " from:body" }
+		hx-vals="js:{with: accSummaryWith().join(',')}"
+		hx-swap="outerHTML"
+	>
+		@components.GlassCard("grid content-start gap-5 p-5 sm:p-6", "bg-sky-400/10", "bg-teal-400/6") {
+			<div class="flex flex-wrap items-center justify-between gap-3">
+				<h2 class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-sky-300">
+					@icons.Scale("14")
+					Net worth
+				</h2>
+				if s.Excluded > 0 || s.Goals > 0 {
+					<div class="flex flex-wrap items-center gap-1.5 text-xs">
+						<span class="text-zinc-500">Include</span>
+						if s.Excluded > 0 {
+							@accSummaryWithToggle("excluded", "Not in balance", s.Excluded, s.With.Excluded)
+						}
+						if s.Goals > 0 {
+							@accSummaryWithToggle("goals", "Goals", s.Goals, s.With.Goals)
+						}
+					</div>
+				}
+			</div>
+			if s.Accounts == 0 {
+				<div class="grid place-items-center gap-2 py-8 text-center">
+					<p class="text-zinc-400">No accounts in your balance</p>
+					<p class="text-sm text-zinc-500">Archived accounts aren’t counted, the ones out of the balance only when included above.</p>
+				</div>
+			} else {
+				<div class="grid gap-1">
+					<p class={ "sensitive text-3xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)", templ.KV("text-red-400", s.NetWorth < 0) }>
+						{ s.Currency.Format(s.NetWorth) }
+					</p>
+					<p class="flex flex-wrap gap-x-3 gap-y-1 text-sm text-zinc-500">
+						<span>{ strconv.Itoa(s.Accounts) } { plural(s.Accounts, "account", "accounts") }</span>
+						<span><span class="sensitive tabular-nums text-emerald-300">{ s.Currency.Format(s.Assets) }</span> assets</span>
+						if s.Owed > 0 {
+							<span><span class="sensitive tabular-nums text-rose-300">{ s.Currency.Format(s.Owed) }</span> owed</span>
+						}
+						if s.SetAside > 0 {
+							<span><span class="sensitive tabular-nums text-zinc-300">+{ s.Currency.Format(s.SetAside) }</span> set aside for goals</span>
+						}
+					</p>
+				</div>
+				if s.History != nil && len(s.History.Balance) > 1 {
+					@budgetCollapse("acc-history", budgetSummaryTitle("Over time")) {
+						<div class="[--accent:var(--color-sky-400)]">
+							@balanceChart(&s.Currency, s.History, "at today’s rates")
+						</div>
+					}
+				}
+				if len(s.ByKind) > 0 {
+					@budgetCollapse("acc-kinds", budgetSummaryTitle("By kind")) {
+						@accSummaryKinds(s)
+					}
+				}
+				if len(s.ByCurrency) > 1 {
+					@budgetCollapse("acc-currencies", budgetSummaryTitle("By currency")) {
+						@accSummaryCurrencies(s)
+					}
+				}
+				if s.HasCredit() {
+					@budgetCollapse("acc-credit", budgetSummaryTitle("Cards and debts")) {
+						@accSummaryCredit(s)
+					}
+				}
+				if s.Partial {
+					<p class="text-xs text-amber-300">Some rates are unavailable, those accounts aren’t counted.</p>
+				}
+			}
+		}
+	</div>
+}
+
+// accSummaryWithToggle counts the accounts out of the balance named key in
+// the summary, or leaves them out again (main.js).
+templ accSummaryWithToggle(key, label string, n int, on bool) {
+	<button
+		type="button"
+		data-acc-summary-with={ key }
+		aria-pressed={ fmt.Sprint(on) }
+		title={ fmt.Sprintf("%d %s", n, plural(n, "account", "accounts")) }
+		class={
+			"flex items-center gap-1 rounded-full px-2.5 py-1 ring-1 cursor-pointer transition-colors",
+			templ.KV("ring-sky-400/60 bg-sky-400/15 text-sky-200", on),
+			templ.KV("ring-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200", !on),
+		}
+	>
+		if on {
+			@icons.Check("12")
+		} else {
+			@icons.Plus("12")
+		}
+		{ label }
+	</button>
+}
+
+// accSummaryKinds is the assets per account kind: a stacked bar, then a row
+// each.
+templ accSummaryKinds(s *models.AccountsSummary) {
+	<div class="grid gap-4">
+		<div class="flex gap-0.5 h-3 overflow-hidden rounded-full bg-zinc-800">
+			for _, k := range s.ByKind {
+				<div
+					class={ "h-full bg-(--accent)", accKindAccentClass(k.Kind) }
+					style={ fmt.Sprintf("flex:%.4f 1 0", k.Amount) }
+					title={ accKindShortName(k.Kind) }
+				></div>
+			}
+		</div>
+		<ul class="grid gap-3 sm:grid-cols-2 sm:gap-x-8">
+			for _, k := range s.ByKind {
+				<li class={ "flex items-center gap-3 min-w-0", accKindAccentClass(k.Kind) }>
+					<div class="grid place-items-center shrink-0 size-8 rounded-xl bg-(--accent)/15 text-(--accent)">
+						@accKindIcon(k.Kind, "16")
+					</div>
+					<div class="flex-1 min-w-0">
+						<p class="truncate text-sm">{ accKindShortName(k.Kind) }</p>
+						<p class="text-xs text-zinc-500">{ strconv.Itoa(k.Accounts) } { plural(k.Accounts, "account", "accounts") }</p>
+					</div>
+					<div class="shrink-0 text-right tabular-nums">
+						<p class="sensitive text-sm font-semibold">{ s.Currency.Format(k.Amount) }</p>
+						<p class="text-xs text-zinc-500">{ fmt.Sprintf("%.0f%%", s.Share(k.Amount)) }</p>
+					</div>
+				</li>
+			}
+		</ul>
+	</div>
+}
+
+// accSummaryColors tint the currencies' segments, in order.
+var accSummaryColors = []string{"bg-sky-400", "bg-amber-300", "bg-emerald-400", "bg-violet-400", "bg-rose-400", "bg-teal-400"}
+
+func accSummaryColor(i int) string {
+	return accSummaryColors[i%len(accSummaryColors)]
+}
+
+// accSummaryCurrencies is the assets per currency: a stacked bar, then a row
+// each with what they hold in it and its rate.
+templ accSummaryCurrencies(s *models.AccountsSummary) {
+	<div class="grid gap-4">
+		<div class="flex gap-0.5 h-3 overflow-hidden rounded-full bg-zinc-800">
+			for i, c := range s.ByCurrency {
+				<div class={ "h-full", accSummaryColor(i) } style={ fmt.Sprintf("flex:%.4f 1 0", c.Amount) } title={ c.Currency.String }></div>
+			}
+		</div>
+		<ul class="grid gap-3 sm:grid-cols-2 sm:gap-x-8">
+			for i, c := range s.ByCurrency {
+				<li class="flex items-center gap-3 min-w-0">
+					<span class={ "size-2.5 shrink-0 rounded-full", accSummaryColor(i) }></span>
+					<div class="flex-1 min-w-0">
+						<p class="truncate text-sm">
+							{ c.Currency.String }
+							<span class="sensitive text-zinc-500 tabular-nums">· { c.Currency.Format(c.Native) }</span>
+						</p>
+						if c.Currency.String != s.Currency.String {
+							if rate := currencyRate(&c.Currency, &s.Currency); rate > 0 {
+								<p class="text-xs text-zinc-500 tabular-nums">1 { unitPrefix(&c.Currency) }{ c.Currency.String } = { s.Currency.Symbol } { formatters.FormatRate(rate) }</p>
+							}
+						}
+					</div>
+					<div class="shrink-0 text-right tabular-nums">
+						<p class="sensitive text-sm font-semibold">{ s.Currency.Format(c.Amount) }</p>
+						<p class="text-xs text-zinc-500">{ fmt.Sprintf("%.0f%%", s.Share(c.Amount)) }</p>
+					</div>
+				</li>
+			}
+		</ul>
+	</div>
+}
+
+// accSummaryCredit is what the cards owe against their limits, the next
+// statement to pay, and the debts both ways.
+templ accSummaryCredit(s *models.AccountsSummary) {
+	<div class="grid gap-4">
+		if c := s.Cards; c.Cards > 0 {
+			<div class="grid gap-2">
+				<div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-sm">
+					<span class="flex items-center gap-2 text-zinc-300">
+						@icons.Card("16")
+						{ strconv.Itoa(c.Cards) } { plural(c.Cards, "card", "cards") }
+					</span>
+					<span class="text-zinc-400">
+						<span class="sensitive tabular-nums text-zinc-200">{ s.Currency.Format(c.Owed) }</span> owed
+						if c.Limit > 0 {
+							of <span class="sensitive tabular-nums">{ s.Currency.Format(c.Limit) }</span>
+						}
+					</span>
+				</div>
+				if c.Limit > 0 {
+					{{ pct := c.UsedPct() }}
+					<div class="h-2 rounded-full bg-zinc-800 overflow-hidden" title={ fmt.Sprintf("%.0f%% of the limits used", pct) }>
+						<div class={ "h-full rounded-full", templ.KV("bg-violet-400", pct < 80), templ.KV("bg-red-400", pct >= 80) } style={ fmt.Sprintf("width:%.1f%%", pct) }></div>
+					</div>
+					<p class="text-xs text-zinc-500">{ fmt.Sprintf("%.0f%% of the limits used", pct) }</p>
+				}
+				if a := c.NextDue; a != nil {
+					{{ st := a.Statement }}
+					<p
+						class={
+							"flex items-center gap-1.5 w-fit px-2.5 py-1.5 rounded-xl text-xs",
+							templ.KV("bg-amber-400/10 text-amber-200", st.Status() == models.StatementDue),
+							templ.KV("bg-red-400/10 text-red-300", st.Status() == models.StatementDueSoon || st.Status() == models.StatementOverdue),
+						}
+					>
+						@icons.Clock("12")
+						<span>
+							Pay <span class="sensitive font-semibold tabular-nums">{ st.ViewDue() }</span> on { a.Name }
+							if st.DaysLeft() < 0 {
+								· overdue since { st.DueOn.Format("Jan 2") }
+							} else {
+								{ dueIn(st.DaysLeft()) }
+							}
+						</span>
+					</p>
+				}
+			</div>
+		}
+		if s.OwedToYou > 0 || s.YouOwe > 0 {
+			<div class="flex flex-wrap gap-x-6 gap-y-1 text-sm [--accent:var(--color-amber-400)]">
+				<span class="flex items-center gap-2 text-(--accent)">
+					@icons.Debt("16")
+					<span class="text-zinc-300">Debts</span>
+				</span>
+				if s.OwedToYou > 0 {
+					<span class="text-zinc-400"><span class="sensitive tabular-nums text-emerald-300">{ s.Currency.Format(s.OwedToYou) }</span> owed to you</span>
+				}
+				if s.YouOwe > 0 {
+					<span class="text-zinc-400"><span class="sensitive tabular-nums text-rose-300">{ s.Currency.Format(s.YouOwe) }</span> you owe</span>
+				}
+			</div>
+		}
+	</div>
+}

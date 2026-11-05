@@ -263,6 +263,34 @@ document.addEventListener("click", (e) => {
   loadCpSummary(summary.dataset.month);
 });
 
+// The accounts summary counts the accounts out of the balance it's asked to
+// per browser ("excluded", "goals"), kept in localStorage and sent as `with`.
+const accSummaryWithKey = "tyche:acc-summary-with";
+
+function accSummaryWith() {
+  try {
+    const keys = JSON.parse(localStorage.getItem(accSummaryWithKey));
+    return Array.isArray(keys) ? keys : [];
+  } catch {
+    return [];
+  }
+}
+
+document.addEventListener("click", (e) => {
+  const toggle = e.target.closest("[data-acc-summary] [data-acc-summary-with]");
+  if (!toggle) return;
+  const key = toggle.dataset.accSummaryWith;
+  const keys = accSummaryWith().filter((k) => k !== key);
+  if (toggle.getAttribute("aria-pressed") !== "true") keys.push(key);
+  try {
+    localStorage.setItem(accSummaryWithKey, JSON.stringify(keys));
+  } catch {}
+  htmx.ajax("GET", `/accounts/summary?${new URLSearchParams({ with: keys.join(",") })}`, {
+    target: "#accounts-summary",
+    swap: "outerHTML",
+  });
+});
+
 // Tooltips holding amounts (title) swap to their data-hidden-title while the
 // navbar's eye toggle hides the amounts, set on hover before they show.
 document.addEventListener(

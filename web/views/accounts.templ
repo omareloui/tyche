@@ -71,6 +71,7 @@ templ Accounts(
 		CreateAccountForm(fd, aknds, curs, cps, &claims.DefaultCurrency)) {
 		@components.DrawerOnLoad(accountDetailsURLIf(openID))
 		if len(accounts) > 0 {
+			@accountsSummaryLazy()
 			<div class="flex justify-end -mt-3 mb-4">
 				<a
 					href="/accounts/fix-balances"
@@ -733,6 +734,8 @@ func accKindAccentClass(k models.AccKind) string {
 		return "[--accent:var(--color-amber-400)]"
 	case models.AccKindGamyaa:
 		return "[--accent:var(--color-teal-400)]"
+	case models.AccKindGoal:
+		return "[--accent:var(--color-rose-400)]"
 	}
 	return "[--accent:var(--color-violet-400)]"
 }
@@ -749,6 +752,8 @@ templ accKindIcon(k models.AccKind, size string) {
 			@icons.Debt(size)
 		case models.AccKindGamyaa:
 			@icons.Users(size)
+		case models.AccKindGoal:
+			@icons.Target(size)
 	}
 }
 

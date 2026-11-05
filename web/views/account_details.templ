@@ -264,72 +264,80 @@ func accountChartMonths(h *models.AccountHistory) []struct {
 	return res
 }
 
-// accountChart's hover targets show their tooltips on hover, and under a
-// finger on touch screens (chartScrub, main.js).
 templ accountDetailsChart(a *models.Account, h *models.AccountHistory) {
+	@txDetailsSection("Balance") {
+		@balanceChart(&a.Currency, h, "")
+	}
+}
+
+// balanceChart is a balance day by day (h) in cur, in the --accent color,
+// note ending its footer. Its hover targets show their tooltips on hover,
+// and under a finger on touch screens (chartScrub, main.js).
+templ balanceChart(cur *models.Currency, h *models.AccountHistory, note string) {
 	{{ lo, hi := h.Range() }}
 	{{ n := len(h.Balance) }}
 	{{ t := min(h.TodayIdx(), n-1) }}
 	{{ samples := accountChartSamples(h) }}
-	@txDetailsSection("Balance") {
-		<div class="grid gap-2 p-4 rounded-2xl bg-zinc-800/30 ring-1 ring-zinc-800">
-			<div class="flex justify-between gap-3 text-xs text-zinc-500 tabular-nums">
-				<span class="sensitive">{ a.Currency.Format(hi) }</span>
-				<span>{ accountChartSpan(h) }</span>
-			</div>
-			<div class="relative h-36">
-				if lo < 0 && hi > 0 {
-					<div
-						aria-hidden="true"
-						class="absolute inset-x-0 border-t border-dashed border-zinc-700"
-						style={ templ.SafeCSS(fmt.Sprintf("top:%.2f%%;", accountChartY(0, lo, hi))) }
-					></div>
-				}
-				<svg viewBox="0 0 100 100" preserveAspectRatio="none" class="absolute inset-0 size-full overflow-visible" aria-hidden="true">
-					<polygon points={ accountChartArea(h, lo, hi) } class="fill-(--accent)/10"></polygon>
-					<polyline points={ accountChartPoints(h, 0, t, lo, hi) } fill="none" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke" class="stroke-(--accent)"></polyline>
-					if h.HasProjection() {
-						<polyline points={ accountChartPoints(h, t, n-1, lo, hi) } fill="none" stroke-width="2" stroke-dasharray="4 4" stroke-linejoin="round" vector-effect="non-scaling-stroke" class="stroke-(--accent) opacity-60"></polyline>
-					}
-				</svg>
-				<span
+	<div class="grid gap-2 p-4 rounded-2xl bg-zinc-800/30 ring-1 ring-zinc-800">
+		<div class="flex justify-between gap-3 text-xs text-zinc-500 tabular-nums">
+			<span class="sensitive">{ cur.Format(hi) }</span>
+			<span>{ accountChartSpan(h) }</span>
+		</div>
+		<div class="relative h-36">
+			if lo < 0 && hi > 0 {
+				<div
 					aria-hidden="true"
-					class="absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-(--accent) ring-2 ring-zinc-900"
-					style={ templ.SafeCSS(fmt.Sprintf("left:%.2f%%;top:%.2f%%;", accountChartX(t, n), accountChartY(h.Balance[t], lo, hi))) }
-				></span>
-				<div x-data="chartScrub" x-bind="scrub" class="absolute inset-0 flex touch-pan-y">
-					for k, i := range samples {
-						<div class="group relative flex-1 h-full">
-							<div class="absolute inset-y-0 left-1/2 border-l border-zinc-500/60 hidden group-hover:block group-[.is-active]:block"></div>
-							<div class={ "absolute bottom-full mb-1 hidden group-hover:block group-[.is-active]:block z-10 pointer-events-none", tooltipSide(k, len(samples)) }>
-								<div class="glass-tooltip whitespace-nowrap">
-									<p class="text-zinc-400">
-										{ h.DayOf(i).Format("Mon, Jan 2") }
-										if h.IsProjected(i) {
-											· scheduled
-										}
-									</p>
-									<p class="sensitive tabular-nums">{ a.Currency.Format(h.Balance[i]) }</p>
-								</div>
+					class="absolute inset-x-0 border-t border-dashed border-zinc-700"
+					style={ templ.SafeCSS(fmt.Sprintf("top:%.2f%%;", accountChartY(0, lo, hi))) }
+				></div>
+			}
+			<svg viewBox="0 0 100 100" preserveAspectRatio="none" class="absolute inset-0 size-full overflow-visible" aria-hidden="true">
+				<polygon points={ accountChartArea(h, lo, hi) } class="fill-(--accent)/10"></polygon>
+				<polyline points={ accountChartPoints(h, 0, t, lo, hi) } fill="none" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke" class="stroke-(--accent)"></polyline>
+				if h.HasProjection() {
+					<polyline points={ accountChartPoints(h, t, n-1, lo, hi) } fill="none" stroke-width="2" stroke-dasharray="4 4" stroke-linejoin="round" vector-effect="non-scaling-stroke" class="stroke-(--accent) opacity-60"></polyline>
+				}
+			</svg>
+			<span
+				aria-hidden="true"
+				class="absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-(--accent) ring-2 ring-zinc-900"
+				style={ templ.SafeCSS(fmt.Sprintf("left:%.2f%%;top:%.2f%%;", accountChartX(t, n), accountChartY(h.Balance[t], lo, hi))) }
+			></span>
+			<div x-data="chartScrub" x-bind="scrub" class="absolute inset-0 flex touch-pan-y">
+				for k, i := range samples {
+					<div class="group relative flex-1 h-full">
+						<div class="absolute inset-y-0 left-1/2 border-l border-zinc-500/60 hidden group-hover:block group-[.is-active]:block"></div>
+						<div class={ "absolute bottom-full mb-1 hidden group-hover:block group-[.is-active]:block z-10 pointer-events-none", tooltipSide(k, len(samples)) }>
+							<div class="glass-tooltip whitespace-nowrap">
+								<p class="text-zinc-400">
+									{ h.DayOf(i).Format("Mon, Jan 2") }
+									if h.IsProjected(i) {
+										· scheduled
+									}
+								</p>
+								<p class="sensitive tabular-nums">{ cur.Format(h.Balance[i]) }</p>
 							</div>
 						</div>
-					}
-				</div>
-			</div>
-			<div class="relative h-4 text-xs text-zinc-500">
-				for _, m := range accountChartMonths(h) {
-					<span class="absolute -translate-x-1/2 first:translate-x-0" style={ templ.SafeCSS(fmt.Sprintf("left:%.2f%%;", m.X)) }>{ m.Label }</span>
+					</div>
 				}
 			</div>
-			<p class="text-xs text-zinc-500 tabular-nums">
-				Lowest <span class="sensitive text-zinc-300">{ a.Currency.Format(minOf(h.Balance)) }</span>
-				· highest <span class="sensitive text-zinc-300">{ a.Currency.Format(maxOf(h.Balance)) }</span>
-				if h.HasProjection() {
-					· dashed: scheduled
-				}
-			</p>
 		</div>
-	}
+		<div class="relative h-4 text-xs text-zinc-500">
+			for _, m := range accountChartMonths(h) {
+				<span class="absolute -translate-x-1/2 first:translate-x-0" style={ templ.SafeCSS(fmt.Sprintf("left:%.2f%%;", m.X)) }>{ m.Label }</span>
+			}
+		</div>
+		<p class="text-xs text-zinc-500 tabular-nums">
+			Lowest <span class="sensitive text-zinc-300">{ cur.Format(minOf(h.Balance)) }</span>
+			· highest <span class="sensitive text-zinc-300">{ cur.Format(maxOf(h.Balance)) }</span>
+			if h.HasProjection() {
+				· dashed: scheduled
+			}
+			if note != "" {
+				· { note }
+			}
+		</p>
+	</div>
 }
 
 func minOf(vs []float64) float64 {

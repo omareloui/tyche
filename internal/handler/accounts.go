@@ -49,6 +49,23 @@ func (h *Handler) Accounts(w http.ResponseWriter, r *http.Request) (templ.Compon
 	return views.Accounts(claims, balances, fd, deps.knds, deps.shownCurs, deps.accs, deps.cps, openID), nil
 }
 
+func (h *Handler) AccountsSummary(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	var with models.AccountsSummaryWith
+	for v := range strings.SplitSeq(r.URL.Query().Get("with"), ",") {
+		switch strings.TrimSpace(v) {
+		case "excluded":
+			with.Excluded = true
+		case "goals":
+			with.Goals = true
+		}
+	}
+	s, err := h.repo.GetAccountsSummary(r.Context(), &getClaims(r.Context()).DefaultCurrency, with)
+	if err != nil {
+		return nil, err
+	}
+	return views.AccountsSummary(s), nil
+}
+
 // The transactions an account's details list: its last fulfilled ones, and
 // its scheduled ones due within accountUpcomingDays (overdue included), the
 // first accountUpcomingTxs of them.
@@ -157,6 +174,7 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 	}
 	l.Info("created account", zap.Any("account", a))
 	drawerCreated(w)
+	addHXTrigger(w, views.AccountsChangedEvent)
 
 	// Refetched for a gam'yaa's progress or a card's statement.
 	if a.Gamyaa != nil || a.Cycle.IsSet() {
@@ -277,6 +295,7 @@ func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Com
 // list, e.g. when archived or its kind changed.
 func (h *Handler) renderUpdatedAccount(w http.ResponseWriter, r *http.Request, prev *models.Account) (templ.Component, error) {
 	l := logger.FromCtx(r.Context())
+	addHXTrigger(w, views.AccountsChangedEvent)
 
 	a, err := h.repo.GetAccount(r.Context(), prev.ID)
 	if err != nil {
@@ -455,6 +474,7 @@ func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) (templ.C
 		return nil, err
 	}
 	l.Info("deleted account", zap.String("id", a.ID))
+	addHXTrigger(w, views.AccountsChangedEvent)
 
 	if r.Method == http.MethodPost {
 		// From the delete drawer.
