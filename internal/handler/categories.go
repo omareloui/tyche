@@ -49,22 +49,9 @@ func (h Handler) Categories(w http.ResponseWriter, r *http.Request) (templ.Compo
 
 func (h Handler) CategoriesBudget(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	claims := getClaims(r.Context())
-
-	// Zero for the current month.
-	var month time.Time
-	if v := r.URL.Query().Get("month"); v != "" {
-		m, err := time.Parse("2006-01", v)
-		if err != nil {
-			return nil, resperr.New(http.StatusUnprocessableEntity, "invalid month")
-		}
-		month = m
-	}
-
-	var hidden []string
-	for id := range strings.SplitSeq(r.URL.Query().Get("hide"), ",") {
-		if id = strings.TrimSpace(id); id != "" {
-			hidden = append(hidden, id)
-		}
+	month, hidden, err := summaryParams(r)
+	if err != nil {
+		return nil, err
 	}
 
 	bs, err := h.repo.GetBudgetSummary(r.Context(), month, &claims.DefaultCurrency, hidden)
@@ -72,6 +59,22 @@ func (h Handler) CategoriesBudget(w http.ResponseWriter, r *http.Request) (templ
 		return nil, err
 	}
 	return views.CategoriesBudget(bs), nil
+}
+
+// summaryParams are a summary's month (zero for the current one) and hidden
+// ids, from the query string.
+func summaryParams(r *http.Request) (month time.Time, hidden []string, err error) {
+	if v := r.URL.Query().Get("month"); v != "" {
+		if month, err = time.Parse("2006-01", v); err != nil {
+			return month, nil, resperr.New(http.StatusUnprocessableEntity, "invalid month")
+		}
+	}
+	for id := range strings.SplitSeq(r.URL.Query().Get("hide"), ",") {
+		if id = strings.TrimSpace(id); id != "" {
+			hidden = append(hidden, id)
+		}
+	}
+	return month, hidden, nil
 }
 
 func (h Handler) Category(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

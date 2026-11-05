@@ -36,34 +36,62 @@ templ MerchantSpendingChart(ms *models.MerchantSpending) {
 						at { strconv.Itoa(len(ms.Items)) } { pluralWord(len(ms.Items), "merchant", "merchants") }
 					</span>
 				</p>
-				<div x-data="{ all: false }" class="grid gap-1">
-					<ul class="grid gap-1">
-						for i, it := range ms.Items {
-							if i < models.MerchantSpendingTop {
-								<li>
-									@merchantSpendLink(ms, it, i+1)
-								</li>
-							} else {
-								<li x-show="all" x-cloak>
-									@merchantSpendLink(ms, it, i+1)
-								</li>
-							}
-						}
-					</ul>
-					if more := len(ms.Items) - models.MerchantSpendingTop; more > 0 {
-						<button
-							type="button"
-							@click="all = !all"
-							class="justify-self-start mt-1 px-2 py-1 rounded-lg text-sm text-sky-400 hover:text-sky-300 hover:bg-zinc-800/60 cursor-pointer"
-						>
-							<span x-show="!all">Show { strconv.Itoa(more) } more</span>
-							<span x-show="all" x-cloak>Show less</span>
-						</button>
-					}
-				</div>
+				@MerchantSpendList(ms, false)
 			}
 		}
 	</div>
+}
+
+// MerchantSpendList is the merchants ranked, the top ones then the rest
+// behind "Show more"; hideable adds a button hiding each from the
+// counterparties summary (main.js).
+templ MerchantSpendList(ms *models.MerchantSpending, hideable bool) {
+	<div x-data="{ all: false }" class="grid gap-1">
+		<ul class="grid gap-1">
+			for i, it := range ms.Items {
+				if i < models.MerchantSpendingTop {
+					<li>
+						@merchantSpendRow(ms, it, i+1, hideable)
+					</li>
+				} else {
+					<li x-show="all" x-cloak>
+						@merchantSpendRow(ms, it, i+1, hideable)
+					</li>
+				}
+			}
+		</ul>
+		if more := len(ms.Items) - models.MerchantSpendingTop; more > 0 {
+			<button
+				type="button"
+				@click="all = !all"
+				class="justify-self-start mt-1 px-2 py-1 rounded-lg text-sm text-sky-400 hover:text-sky-300 hover:bg-zinc-800/60 cursor-pointer"
+			>
+				<span x-show="!all">Show { strconv.Itoa(more) } more</span>
+				<span x-show="all" x-cloak>Show less</span>
+			</button>
+		}
+	</div>
+}
+
+templ merchantSpendRow(ms *models.MerchantSpending, it models.MerchantSpend, rank int, hideable bool) {
+	if hideable {
+		<div class="group flex items-center gap-1">
+			<div class="flex-1 min-w-0">
+				@merchantSpendLink(ms, it, rank)
+			</div>
+			<button
+				type="button"
+				data-cp-summary-toggle={ it.Counterparty.ID }
+				aria-label={ "Hide " + it.Counterparty.Name }
+				title={ "Hide " + it.Counterparty.Name }
+				class="shrink-0 p-1 rounded text-zinc-500 cursor-pointer hover:text-zinc-200 hover:bg-zinc-800 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
+			>
+				@icons.EyeOff("13")
+			</button>
+		</div>
+	} else {
+		@merchantSpendLink(ms, it, rank)
+	}
 }
 
 // merchantSpendLink is a merchant's row: its icon, name and share of the

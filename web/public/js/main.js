@@ -219,6 +219,50 @@ document.addEventListener("click", (e) => {
   loadBudgetSummary(summary.dataset.month);
 });
 
+// The counterparties summary hides merchants per browser the same way, their
+// ids kept in localStorage and sent as `hide`.
+const cpSummaryHiddenKey = "tyche:cp-summary-hidden";
+
+function cpSummaryHidden() {
+  try {
+    const ids = JSON.parse(localStorage.getItem(cpSummaryHiddenKey));
+    return Array.isArray(ids) ? ids : [];
+  } catch {
+    return [];
+  }
+}
+
+function loadCpSummary(month) {
+  const params = new URLSearchParams({ month, hide: cpSummaryHidden().join(",") });
+  htmx.ajax("GET", `/counterparties/summary?${params}`, {
+    target: "#counterparties-summary",
+    swap: "outerHTML",
+  });
+}
+
+document.addEventListener("click", (e) => {
+  const summary = e.target.closest("[data-cp-summary]");
+  if (!summary) return;
+
+  const nav = e.target.closest("[data-cp-summary-month]");
+  if (nav) {
+    loadCpSummary(nav.dataset.cpSummaryMonth);
+    return;
+  }
+
+  const toggle = e.target.closest("[data-cp-summary-toggle]");
+  if (!toggle) return;
+  const id = toggle.dataset.cpSummaryToggle;
+  const ids = cpSummaryHidden();
+  const i = ids.indexOf(id);
+  if (i === -1) ids.push(id);
+  else ids.splice(i, 1);
+  try {
+    localStorage.setItem(cpSummaryHiddenKey, JSON.stringify(ids));
+  } catch {}
+  loadCpSummary(summary.dataset.month);
+});
+
 // Tooltips holding amounts (title) swap to their data-hidden-title while the
 // navbar's eye toggle hides the amounts, set on hover before they show.
 document.addEventListener(

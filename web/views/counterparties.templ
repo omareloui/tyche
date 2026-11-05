@@ -385,6 +385,9 @@ templ counterpartiesList(counterparties []models.Counterparty) {
 		class="grid gap-6"
 	>
 		if len(counterparties) > 0 {
+			if slices.ContainsFunc(counterparties, func(cp models.Counterparty) bool { return cp.IsMerchant }) {
+				@counterpartiesSummaryLazy()
+			}
 			<div class="grid gap-3">
 				@counterpartiesSearch()
 				if slices.ContainsFunc(counterparties, func(cp models.Counterparty) bool { return cp.IsMerchant }) {

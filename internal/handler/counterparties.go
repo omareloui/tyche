@@ -50,6 +50,20 @@ func (h Handler) Counterparties(w http.ResponseWriter, r *http.Request) (templ.C
 	return views.Counterparties(getClaims(r.Context()), b, h.mapCounterpartyToFD(dfltCounterparty(), &errs.ValidationError{}, models.CounterpartyLabels(cp)), cp, cats, openID), nil
 }
 
+func (h Handler) CounterpartiesSummary(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	claims := getClaims(r.Context())
+	month, hidden, err := summaryParams(r)
+	if err != nil {
+		return nil, err
+	}
+
+	cs, err := h.repo.GetCounterpartySummary(r.Context(), month, &claims.DefaultCurrency, hidden)
+	if err != nil {
+		return nil, err
+	}
+	return views.CounterpartiesSummary(cs), nil
+}
+
 func (h Handler) Counterparty(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	id := r.PathValue("id")
 	if id == "" {
@@ -320,6 +334,7 @@ func (h Handler) EditCounterparty(w http.ResponseWriter, r *http.Request) (templ
 		return nil, err
 	}
 	l.Info("updated counterparty")
+	addHXTrigger(w, views.CounterpartiesChangedEvent)
 
 	if views.CounterpartiesListID(cp) == views.CounterpartiesListID(prev) {
 		drawerSaved(w, "#"+views.CounterpartyWrapperID(id), "innerHTML")
@@ -347,6 +362,7 @@ func (h Handler) DeleteCounterparty(w http.ResponseWriter, r *http.Request) (tem
 		return nil, err
 	}
 	l.Info("deleted counterparty")
+	addHXTrigger(w, views.CounterpartiesChangedEvent)
 
 	return nil, nil
 }
@@ -453,6 +469,7 @@ func (h Handler) SetCounterpartyLabels(w http.ResponseWriter, r *http.Request) (
 		return nil, err
 	}
 	l.Info("set counterparty labels", zap.String("id", id), zap.Strings("labels", cp.Labels))
+	addHXTrigger(w, views.CounterpartiesChangedEvent)
 
 	if err := renderToBody(w, r, views.CounterpartyReplaceOOB(cp)); err != nil {
 		l.Error("rendering counterparty oob", zap.Error(err))
@@ -548,6 +565,7 @@ func (h Handler) MergeCounterparty(w http.ResponseWriter, r *http.Request) (temp
 		return nil, err
 	}
 	l.Info("merged counterparties", zap.String("from", id), zap.String("into", intoID))
+	addHXTrigger(w, views.CounterpartiesChangedEvent)
 
 	// Drop the merged counterparty's card, and update the one merged into.
 	drawerSaved(w, "#"+views.CounterpartyWrapperID(id), "outerHTML")

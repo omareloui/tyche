@@ -1,0 +1,161 @@
+package views
+
+import (
+	"fmt"
+	"strconv"
+
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+// CounterpartiesChangedEvent re-renders the counterparties summary after a
+// counterparty changes.
+const CounterpartiesChangedEvent = "counterparties-changed"
+
+// counterpartiesSummaryLazy loads the counterparties summary, with the
+// merchants hidden in this browser (main.js).
+templ counterpartiesSummaryLazy() {
+	<div
+		id="counterparties-summary"
+		hx-get="/counterparties/summary"
+		hx-trigger="load"
+		hx-vals="js:{hide: cpSummaryHidden().join(',')}"
+		hx-swap="outerHTML"
+		hx-on::response-error="this.classList.remove('animate-pulse'); this.classList.add('grid', 'place-items-center', 'text-sm', 'text-zinc-500'); this.textContent = 'Couldn’t load the spending summary, refresh to try again'"
+		aria-busy="true"
+		class="h-72 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800 animate-pulse"
+	></div>
+}
+
+// CounterpartiesSummary is a month's merchant spending: the merchants ranked
+// and per label. A merchant's eye button hides it from
+// every chart, or shows it back (main.js); a label filters the page's cards.
+templ CounterpartiesSummary(cs *models.CounterpartySummary) {
+	<div
+		id="counterparties-summary"
+		data-cp-summary
+		data-month={ cs.Month.Format("2006-01") }
+		hx-get={ "/counterparties/summary?month=" + cs.Month.Format("2006-01") }
+		hx-trigger={ CounterpartiesChangedEvent + " from:body" }
+		hx-vals="js:{hide: cpSummaryHidden().join(',')}"
+		hx-swap="outerHTML"
+	>
+		@components.GlassCard("grid content-start gap-5 p-5 sm:p-6", "bg-fuchsia-400/10", "bg-sky-400/10") {
+			<div class="flex flex-wrap items-center justify-between gap-3">
+				<h2 class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-fuchsia-300">
+					@icons.Tag("14")
+					Merchant spending
+					if !cs.Period.IsCalendar() {
+						<span class="font-normal normal-case tracking-normal text-zinc-500">· { cs.Period.RangeLabel() }</span>
+					}
+				</h2>
+				<div class="flex items-center gap-1 rounded-full bg-zinc-900/60 ring-1 ring-zinc-800 px-2 py-1 shrink-0 text-base">
+					@cpSummaryMonthNav(cs.Prev, "Previous month", "M3.828 7l4.95 4.95-1.414 1.414L1 7 7.364.636 8.778 2.05z")
+					<span class="min-w-20 text-center" title={ cs.Period.RangeLabel() }>{ shortMonth(cs.Month) }</span>
+					@cpSummaryMonthNav(cs.Next, "Next month", "M6.172 7L1.222 2.05 2.636.636 9 7l-6.364 6.364-1.414-1.414z")
+				</div>
+			</div>
+			if len(cs.Items) == 0 && len(cs.Hidden) == 0 {
+				<div class="grid place-items-center gap-2 py-10 text-center">
+					<p class="text-zinc-400">No merchant spending this month</p>
+					<p class="text-sm text-zinc-500">Spending at counterparties marked as merchants shows here.</p>
+				</div>
+			} else {
+				<p>
+					<span class="sensitive text-2xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">{ cs.Currency.Format(cs.Total()) }</span>
+					<span class="text-sm text-zinc-500">
+						at { strconv.Itoa(len(cs.Items)) } { plural(len(cs.Items), "merchant", "merchants") }
+						if len(cs.Hidden) > 0 {
+							{ fmt.Sprintf("· %d hidden", len(cs.Hidden)) }
+						}
+					</span>
+				</p>
+				if len(cs.Items) > 0 {
+					@budgetCollapse("cp-merchants", budgetSummaryTitle("By merchant")) {
+						@components.MerchantSpendList(&cs.MerchantSpending, true)
+					}
+				}
+				if cs.HasLabels() {
+					@budgetCollapse("cp-labels", budgetSummaryTitle("By label")) {
+						@cpSummaryLabels(cs)
+					}
+				}
+				if len(cs.Hidden) > 0 {
+					<div class="flex flex-wrap items-center gap-2 text-sm">
+						<span class="text-zinc-500">Hidden:</span>
+						for _, it := range cs.Hidden {
+							<button
+								type="button"
+								data-cp-summary-toggle={ it.Counterparty.ID }
+								title={ "Show " + it.Counterparty.Name + " again" }
+								class="flex items-center gap-1.5 rounded-full px-2.5 py-1 ring-1 ring-zinc-800 text-zinc-400 cursor-pointer hover:bg-zinc-800 hover:text-zinc-200"
+							>
+								{ it.Counterparty.Name }
+								<span class="sensitive tabular-nums text-zinc-500">{ cs.Currency.Format(it.Amount) }</span>
+								@icons.Plus("12")
+							</button>
+						}
+					</div>
+				}
+				if cs.Partial {
+					<p class="text-xs text-amber-300">Some rates are unavailable, those amounts aren’t counted.</p>
+				}
+			}
+		}
+	</div>
+}
+
+templ cpSummaryMonthNav(month, label, path string) {
+	<button
+		type="button"
+		aria-label={ label }
+		title={ label }
+		class="p-1.5 rounded-full enabled:cursor-pointer enabled:hover:bg-zinc-700 disabled:opacity-30"
+		if month == "" {
+			disabled
+		} else {
+			data-cp-summary-month={ month }
+		}
+	>
+		<svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor" aria-hidden="true">
+			<path d={ path }></path>
+		</svg>
+	</button>
+}
+
+// cpSummaryLabels is a bar per label of the month's merchants, a merchant
+// counting in each of its labels; clicking one filters the cards by it.
+templ cpSummaryLabels(cs *models.CounterpartySummary) {
+	<ul class="grid gap-3 sm:grid-cols-2 sm:gap-x-8">
+		for _, l := range cs.Labels {
+			<li class="grid gap-1.5">
+				<div class="flex items-baseline justify-between gap-3 text-sm">
+					if l.Label == "" {
+						<span class="truncate text-zinc-500">No label</span>
+					} else {
+						<button
+							type="button"
+							data-label={ l.Label }
+							@click="toggleLabel($el.dataset.label)"
+							:class="labels.includes($el.dataset.label.toLowerCase()) ? 'text-violet-300 underline' : ''"
+							title={ "Show only the " + l.Label + " counterparties" }
+							class="truncate cursor-pointer hover:underline"
+						>{ l.Label }</button>
+					}
+					<span class="shrink-0 text-zinc-400">
+						<span class="text-xs text-zinc-600">{ strconv.Itoa(l.Merchants) } · </span>
+						<span class="sensitive tabular-nums">{ cs.Currency.Format(l.Amount) }</span>
+						<span class="text-xs text-zinc-500 tabular-nums">{ fmt.Sprintf("%.0f%%", cs.Share(l.Amount)) }</span>
+					</span>
+				</div>
+				<div class="h-2 rounded-full bg-zinc-800/60">
+					<div
+						class={ "h-full rounded-full", templ.KV("bg-violet-400", l.Label != ""), templ.KV("bg-zinc-500", l.Label == "") }
+						style={ fmt.Sprintf("width:%.2f%%", max(cs.LabelBarPct(l.Amount), 1.5)) }
+					></div>
+				</div>
+			</li>
+		}
+	</ul>
+}

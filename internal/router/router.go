@@ -138,6 +138,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("GET /counterparties", handle(h.Counterparties))
 	mux.Handle("POST /counterparties", handle(h.CreateCounterparty))
 	mux.Handle("POST /counterparties/quick", handle(h.QuickCreateCounterparty))
+	mux.Handle("GET /counterparties/summary", handle(h.CounterpartiesSummary))
 	mux.Handle("GET /counterparties/{id}", handle(h.Counterparty))
 	mux.Handle("GET /counterparties/{id}/details", handle(h.CounterpartyDetails))
 	mux.Handle("GET /counterparties/{id}/edit", handle(h.GetEditCounterparty))
