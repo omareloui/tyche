@@ -62,6 +62,62 @@ document.addEventListener("htmx:confirm", (e) => {
   }).then((ok) => ok && e.detail.issueRequest(true));
 });
 
+// Inputs re-rendered by the server as they're typed in (the amounts' keyup
+// posts, e.g. /tx-inputs) would get back the value sent once the answer
+// lands, losing what was typed meanwhile (hx-sync drops the requests of
+// those keystrokes while one is in flight). The text inputs of the target
+// are noted when the request leaves; the ones typed in since keep their
+// value (and caret) through the swap, then fire their trigger again so
+// what the server derives from them (a transfer's received amount) follows.
+(() => {
+  const typed = "input[id]:not([type=hidden],[type=checkbox],[type=radio],[type=file]), textarea[id]";
+  const sent = new WeakMap();
+  const edits = new WeakMap();
+
+  document.addEventListener("htmx:beforeRequest", (e) => {
+    const { target, xhr } = e.detail;
+    if (!target || !xhr) return;
+    const values = new Map();
+    target.querySelectorAll(typed).forEach((i) => values.set(i, i.value));
+    if (target.matches(typed)) values.set(target, target.value);
+    sent.set(xhr, values);
+  });
+
+  document.addEventListener("htmx:beforeSwap", (e) => {
+    const values = sent.get(e.detail.xhr);
+    if (!values) return;
+    const edited = [];
+    values.forEach((v, i) => {
+      if (!i.isConnected || i.value === v) return;
+      const focused = document.activeElement === i;
+      edited.push({ id: i.id, value: i.value, focused, start: focused ? i.selectionStart : null, end: focused ? i.selectionEnd : null });
+    });
+    if (edited.length) edits.set(e.detail.xhr, edited);
+  });
+
+  // afterSwap fires once per element swapped in: restore on the first.
+  document.addEventListener("htmx:afterSwap", (e) => {
+    const edited = edits.get(e.detail.xhr);
+    if (!edited) return;
+    edits.delete(e.detail.xhr);
+    for (const { id, value, focused, start, end } of edited) {
+      const i = document.getElementById(id);
+      if (!i || i.value === value) continue;
+      i.value = value;
+      if (focused) {
+        i.focus();
+        try {
+          i.setSelectionRange(start, end);
+        } catch {}
+      }
+      const trigger = i.getAttribute("hx-trigger") ?? "";
+      for (const ev of ["keyup", "input"]) {
+        if (new RegExp(`(^|[\\s,])${ev}\\b`).test(trigger)) htmx.trigger(i, ev);
+      }
+    }
+  });
+})();
+
 // Clicking the backdrop (outside the dialog's box) cancels.
 document.addEventListener("click", (e) => {
   const dialog = e.target;
