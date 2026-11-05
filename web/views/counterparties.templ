@@ -475,14 +475,18 @@ templ counterpartiesEmpty() {
 var counterpartiesRatingFilters = [][2]string{{"", "Any"}, {"3", "3+"}, {"4", "4+"}, {"5", "5"}, {"unrated", "Unrated"}}
 
 // counterpartiesRatingBar sorts the cards by name or rating and filters them
-// by stars.
+// by stars; picking a least number of stars sorts by rating.
 templ counterpartiesRatingBar() {
 	<div class="flex flex-wrap items-center gap-2">
 		<div role="group" aria-label="Filter by rating" class="flex flex-wrap items-center gap-1.5">
 			for _, f := range counterpartiesRatingFilters {
 				<button
 					type="button"
-					@click={ fmt.Sprintf("stars = %q", f[0]) }
+					if f[0] != "" && f[0] != "unrated" {
+						@click={ fmt.Sprintf("stars = %q; sort = 'rating'", f[0]) }
+					} else {
+						@click={ fmt.Sprintf("stars = %q", f[0]) }
+					}
 					:aria-pressed={ fmt.Sprintf("stars === %q", f[0]) }
 					:class={ fmt.Sprintf("stars === %q ? 'bg-zinc-200 text-zinc-900' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'", f[0]) }
 					class="inline-flex items-center gap-1 h-8 px-3 rounded-full text-sm cursor-pointer transition-colors"
