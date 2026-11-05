@@ -84,6 +84,18 @@ func (gl *Goal) ViewAmount() string {
 	return gl.Currency.Format(gl.Price)
 }
 
+// ScheduledDeposits is what its scheduled (not yet fulfilled) transactions
+// will put in it.
+func (gl *Goal) ScheduledDeposits() float64 {
+	var sum float64
+	for _, tx := range gl.Transactions {
+		if tx.FulfilledAt.IsZero() && tx.GoalAmount() > 0 {
+			sum += tx.GoalAmount()
+		}
+	}
+	return sum
+}
+
 // Progress is the money saved: its account's balance plus what buying it
 // took out of it.
 func (gl *Goal) Progress() float64 {

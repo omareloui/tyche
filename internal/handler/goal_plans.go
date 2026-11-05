@@ -217,7 +217,7 @@ func (h Handler) goalPlanCards(r *http.Request, gls []models.Goal) (map[string]*
 		}
 		// Scheduled deposits are counted as made, so they're not asked again.
 		card := &views.GoalPlanCard{}
-		pr, err := gl.Plan.Project(gl.Price, gl.Progress()+goalScheduledDeposits(gl), now)
+		pr, err := gl.Plan.Project(gl.Price, gl.Progress()+gl.ScheduledDeposits(), now)
 		if err != nil {
 			card.Problem = "The plan doesn't work out anymore, edit it."
 			cards[gl.ID] = card
@@ -232,18 +232,6 @@ func (h Handler) goalPlanCards(r *http.Request, gls []models.Goal) (map[string]*
 		cards[gl.ID] = card
 	}
 	return cards, nil
-}
-
-// goalScheduledDeposits is the money scheduled to go in the goal, not in
-// yet.
-func goalScheduledDeposits(gl *models.Goal) float64 {
-	sum := 0.0
-	for _, tx := range gl.Transactions {
-		if tx.FulfilledAt.IsZero() && tx.GoalAmount() > 0 {
-			sum += tx.GoalAmount()
-		}
-	}
-	return sum
 }
 
 // goalNextDepositURL opens the deposit drawer filled with the plan's next

@@ -90,6 +90,32 @@ func (rt *RecurrentTx) NextOn() time.Time {
 	return next.Truncate(24 * time.Hour)
 }
 
+// maxOccurrences caps OccurrencesBetween, e.g. a daily one last scheduled
+// long ago.
+const maxOccurrences = 5000
+
+// OccurrencesBetween are the dates of the transactions it would generate
+// next (after its last scheduled one), after after and before until, until
+// it stops: the ones it hasn't scheduled yet.
+func (rt *RecurrentTx) OccurrencesBetween(after, until time.Time) []time.Time {
+	if rt.Every == 0 || rt.LastTransactionScheduledTo.IsZero() {
+		return nil
+	}
+	c := *rt
+	var res []time.Time
+	for range maxOccurrences {
+		next := c.NextOn()
+		if !next.Before(until) || (!rt.StopsAt.IsZero() && next.After(rt.StopsAt)) {
+			break
+		}
+		if next.After(after) {
+			res = append(res, next)
+		}
+		c.LastTransactionScheduledTo = next
+	}
+	return res
+}
+
 // FullyScheduled tells if every transaction until it stops is scheduled, so
 // there's no more to schedule.
 func (rt *RecurrentTx) FullyScheduled() bool {

@@ -266,14 +266,14 @@ func accountChartMonths(h *models.AccountHistory) []struct {
 
 templ accountDetailsChart(a *models.Account, h *models.AccountHistory) {
 	@txDetailsSection("Balance") {
-		@balanceChart(&a.Currency, h, "")
+		@balanceChart(&a.Currency, h, "scheduled", "")
 	}
 }
 
 // balanceChart is a balance day by day (h) in cur, in the --accent color,
-// note ending its footer. Its hover targets show their tooltips on hover,
+// its days after today (dashed) named projected, note ending its footer. Its hover targets show their tooltips on hover,
 // and under a finger on touch screens (chartScrub, main.js).
-templ balanceChart(cur *models.Currency, h *models.AccountHistory, note string) {
+templ balanceChart(cur *models.Currency, h *models.AccountHistory, projected, note string) {
 	{{ lo, hi := h.Range() }}
 	{{ n := len(h.Balance) }}
 	{{ t := min(h.TodayIdx(), n-1) }}
@@ -312,7 +312,7 @@ templ balanceChart(cur *models.Currency, h *models.AccountHistory, note string) 
 								<p class="text-zinc-400">
 									{ h.DayOf(i).Format("Mon, Jan 2") }
 									if h.IsProjected(i) {
-										· scheduled
+										· { projected }
 									}
 								</p>
 								<p class="sensitive tabular-nums">{ cur.Format(h.Balance[i]) }</p>
@@ -331,7 +331,7 @@ templ balanceChart(cur *models.Currency, h *models.AccountHistory, note string) 
 			Lowest <span class="sensitive text-zinc-300">{ cur.Format(minOf(h.Balance)) }</span>
 			· highest <span class="sensitive text-zinc-300">{ cur.Format(maxOf(h.Balance)) }</span>
 			if h.HasProjection() {
-				· dashed: scheduled
+				· dashed: { projected }
 			}
 			if note != "" {
 				· { note }

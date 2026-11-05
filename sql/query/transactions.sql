@@ -857,6 +857,41 @@ WHERE
 GROUP BY day, t.category_id, cur.id
 ORDER BY day;
 
+-- name: GetScheduledCategorySpending :many
+-- The unfulfilled expenses per day (scheduled_to's, overdue ones counted on
+-- from_date), category and currency before to_date: what's already planned
+-- out of the budgets, for the accounts summary's forecast.
+SELECT
+    CAST(MAX(SUBSTR(t.scheduled_to, 1, 10), SUBSTR(sqlc.arg(from_date), 1, 10)) AS TEXT) AS day,
+    CAST(IFNULL(t.category_id, '') AS TEXT) AS category_id,
+    sqlc.embed(cur),
+    CAST(TOTAL(t.amount) AS FLOAT) AS total
+FROM transactions AS t
+JOIN accounts AS a ON t.account_id = a.id
+JOIN currencies AS cur ON a.currency_id = cur.id
+WHERE
+    t.kind = 1
+    AND t.fulfilled_at IS NULL
+    AND t.category_id IS NOT NULL
+    AND t.scheduled_to < sqlc.arg(to_date)
+GROUP BY day, t.category_id, cur.id
+ORDER BY day;
+
+-- name: GetScheduledIncomes :many
+-- The unfulfilled incomes scheduled from from_date to to_date (exclusive),
+-- for the accounts summary's forecast to tell a salary already scheduled.
+SELECT
+    t.amount,
+    sqlc.embed(cur)
+FROM transactions AS t
+JOIN accounts AS a ON t.account_id = a.id
+JOIN currencies AS cur ON a.currency_id = cur.id
+WHERE
+    t.kind = 2
+    AND t.fulfilled_at IS NULL
+    AND t.scheduled_to >= sqlc.arg(from_date)
+    AND t.scheduled_to < sqlc.arg(to_date);
+
 -- name: GetFirstFulfilledTransactionDate :one
 SELECT CAST(IFNULL(MIN(SUBSTR(scheduled_to, 1, 10)), '') AS TEXT)
 FROM transactions

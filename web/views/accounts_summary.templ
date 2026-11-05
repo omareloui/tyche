@@ -95,8 +95,9 @@ templ AccountsSummary(s *models.AccountsSummary) {
 				</div>
 				if s.History != nil && len(s.History.Balance) > 1 {
 					@budgetCollapse("acc-history", budgetSummaryTitle("Over time")) {
-						<div class="[--accent:var(--color-sky-400)]">
-							@balanceChart(&s.Currency, s.History, "at today’s rates")
+						<div class="grid gap-2 [--accent:var(--color-sky-400)]">
+							@accSummaryForecastInfo(s)
+							@balanceChart(&s.Currency, s.History, "forecast", "at today’s rates")
 						</div>
 					}
 				}
@@ -121,6 +122,70 @@ templ AccountsSummary(s *models.AccountsSummary) {
 			}
 		}
 	</div>
+}
+
+// accSummaryForecastInfo tells what the chart's forecast (dashed) is made of,
+// in a tooltip shown on hover or focus, and toggled by a tap.
+templ accSummaryForecastInfo(s *models.AccountsSummary) {
+	{{ in := s.Info }}
+	<div x-data="{ open: false }" class="group/info relative justify-self-end" @click.outside="open = false" @keydown.escape="open = false">
+		<button
+			type="button"
+			@click="open = !open"
+			:aria-expanded="open"
+			class="flex items-center gap-1 text-xs text-zinc-500 cursor-pointer hover:text-zinc-300 focus-visible:text-zinc-300"
+		>
+			@icons.Info("13")
+			How the forecast works
+		</button>
+		<div
+			class="absolute right-0 top-full mt-1.5 z-20 hidden w-80 max-w-[calc(100vw-2rem)] group-hover/info:block group-focus-within/info:block"
+			:class="open && '!block'"
+		>
+			<div class="glass-tooltip grid gap-2 text-left whitespace-normal">
+				<p class="text-zinc-300">
+					The dashed line goes on to { in.To.Format("Jan 2") } (the end of next month) from today’s balance, at today’s rates:
+				</p>
+				<ul class="grid gap-1.5 text-zinc-400">
+					@accForecastLine("Scheduled transactions", "On their dates, overdue ones tomorrow.", &s.Currency, in.Scheduled, true)
+					@accForecastLine(fmt.Sprintf("Recurrent transactions not scheduled yet (%d)", in.RecurrentCount), "Their next ones, as if scheduled.", &s.Currency, in.Recurrent, in.RecurrentCount > 0)
+					@accForecastLine("This month’s budgets", "What they have left, spread over the days left.", &s.Currency, -in.BudgetsLeft, true)
+					@accForecastLine("Next month’s budgets", "Spread over its days.", &s.Currency, -in.BudgetsNext, true)
+					if s.Salary > 0 {
+						@accForecastLine("Salary", "On "+s.SalaryOn.Format("Jan 2")+", the first day of next month.", &s.Currency, s.Salary, true)
+					} else if s.SalaryScheduled {
+						<li>Salary: already scheduled next month, not counted again.</li>
+					} else {
+						<li>Salary: not set, add it in <a href={ templ.SafeURL(SettingsURL(SettingsWork)) } class="text-sky-300 hover:underline">Settings</a>.</li>
+					}
+					if in.GoalDepositCount > 0 {
+						@accForecastLine(fmt.Sprintf("Goal plans’ deposits (%d)", in.GoalDepositCount), accGoalsNote(s), &s.Currency, in.GoalDeposits, true)
+					}
+				</ul>
+				<p class="text-zinc-500">Budgets are less what’s already scheduled in their categories, so nothing counts twice.</p>
+			</div>
+		</div>
+	</div>
+}
+
+templ accForecastLine(label, note string, cur *models.Currency, amount float64, show bool) {
+	if show {
+		<li class="grid gap-0.5">
+			<span class="flex justify-between gap-3">
+				<span class="text-zinc-300">{ label }</span>
+				<span class={ "sensitive shrink-0 tabular-nums", templ.KV("text-emerald-300", amount > 0), templ.KV("text-rose-300", amount < 0) }>{ formatSignedAmount(amount, cur) }</span>
+			</span>
+			<span class="text-xs text-zinc-500">{ note }</span>
+		</li>
+	}
+}
+
+// accGoalsNote tells where the goal plans' deposits go.
+func accGoalsNote(s *models.AccountsSummary) string {
+	if s.With.Goals {
+		return "On the first payday (your month’s first day) after the plan asks each, from the account “Save next” picks into the goal: counting the goals, they stay in the net worth."
+	}
+	return "On the first payday (your month’s first day) after the plan asks each, from the account “Save next” picks, out of the net worth (include the goals to keep them)."
 }
 
 // accSummaryWithToggle turns the summary's option key on or off (main.js):

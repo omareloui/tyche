@@ -94,6 +94,11 @@ func (h *AccountHistory) DayOf(i int) time.Time {
 	return h.From.AddDate(0, 0, i)
 }
 
+// Index is the index of day's balance (out of range when not in it).
+func (h *AccountHistory) Index(day time.Time) int {
+	return daysFrom(h.From, day)
+}
+
 // TodayIdx is the index of today's balance.
 func (h *AccountHistory) TodayIdx() int {
 	return max(daysFrom(h.From, h.Today), 0)

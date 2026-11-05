@@ -139,9 +139,16 @@ func TestAccountsSummary(t *testing.T) {
 		if err := repo.UpdateCategory(ctx, &food); err != nil {
 			t.Fatal(err)
 		}
-		_, body := do("GET", "/accounts/summary?with=budget", nil)
+		_, body := do("GET", "/accounts/summary", nil)
+		// Forecast either way, its parts told.
+		for _, want := range []string{"dashed: forecast", "How the forecast works", "This month’s budgets", egp.Format(200)} {
+			if !strings.Contains(body, want) {
+				t.Errorf("summary without the budgets misses %q", want)
+			}
+		}
+		_, body = do("GET", "/accounts/summary?with=budget", nil)
 		// 630 − 200 left (the expense is uncategorized).
-		for _, want := range []string{egp.Format(430), egp.Format(200) + "</span> left in this month", `data-acc-summary-with="budget" aria-pressed="true"`} {
+		for _, want := range []string{egp.Format(430), egp.Format(200) + "</span> left in this month", `data-acc-summary-with="budget" aria-pressed="true"`, "dashed: forecast"} {
 			if !strings.Contains(body, want) {
 				t.Errorf("summary misses %q", want)
 			}

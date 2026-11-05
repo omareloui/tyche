@@ -2,6 +2,7 @@ package models
 
 import (
 	"cmp"
+	"math"
 	"slices"
 	"time"
 )
@@ -39,6 +40,21 @@ func (c *CardsSummary) UsedPct() float64 {
 		return 0
 	}
 	return min(100, c.Owed/c.Limit*100)
+}
+
+// ForecastInfo is what the summary's forecast is made of, in its currency:
+// the money each part moves in and out of the counted accounts (net).
+type ForecastInfo struct {
+	// To is the forecast's last day.
+	To time.Time
+	// Scheduled is the scheduled transactions', Recurrent the recurrent
+	// transactions' occurrences not scheduled yet (RecurrentCount of them),
+	// GoalDeposits the goal plans' deposits (GoalDepositCount of them).
+	Scheduled, Recurrent, GoalDeposits float64
+	RecurrentCount, GoalDepositCount   int
+	// BudgetsLeft and BudgetsNext are the budgets spent: what this month's
+	// have left, next month's, each less its expenses already scheduled.
+	BudgetsLeft, BudgetsNext float64
 }
 
 // AccountsSummaryWith are the accounts out of the balance a summary counts
@@ -79,6 +95,17 @@ type AccountsSummary struct {
 	// BudgetLeft is what the current month's budgets have left to spend,
 	// whether With.BudgetLeft or not.
 	BudgetLeft float64
+	// Salary is the monthly salary the forecast counts, in Currency, on
+	// SalaryOn (0 when not counted); SalaryScheduled tells it's set but
+	// already scheduled as an income.
+	Salary          float64
+	SalaryOn        time.Time
+	SalaryScheduled bool
+	// Info is what the forecast is made of.
+	Info ForecastInfo
+
+	// rates are the counted accounts' rates to Currency, by id.
+	rates map[string]float64
 }
 
 // Shown is the net worth shown: less the budgets' left when asked.
@@ -92,8 +119,9 @@ func (s *AccountsSummary) Shown() float64 {
 // NewAccountsSummary sums accs (the live ones and the goals', card
 // statements attached) in def, their balances worked back from today through daily, the money each
 // moved per day (by account id) since AccountHistoryFrom.
-func NewAccountsSummary(accs []Account, def Currency, with AccountsSummaryWith, start MonthStart, today time.Time, daily map[string][]DayFlow) *AccountsSummary {
-	s := &AccountsSummary{Currency: def, With: with}
+func NewAccountsSummary(accs []Account, def Currency, with AccountsSummaryWith, start MonthStart, today, to time.Time, daily, scheduled map[string][]DayFlow) *AccountsSummary {
+	s := &AccountsSummary{Currency: def, With: with, rates: map[string]float64{}}
+	s.Info.To = dateOnly(to)
 	from := AccountHistoryFrom(start, today)
 
 	kinds := map[AccKind]int{}
@@ -118,6 +146,7 @@ func NewAccountsSummary(accs []Account, def Currency, with AccountsSummaryWith, 
 			continue
 		}
 		s.Accounts++
+		s.rates[a.ID] = rate
 		amount := a.Amount * rate
 		s.NetWorth += amount
 		if !with.Goals {
@@ -164,7 +193,7 @@ func NewAccountsSummary(accs []Account, def Currency, with AccountsSummaryWith, 
 			}
 		}
 
-		h := NewAccountHistory(start, a.Amount, daily[a.ID], nil, from, today, today)
+		h := NewAccountHistory(start, a.Amount, daily[a.ID], scheduled[a.ID], from, today, to)
 		if s.History == nil {
 			s.History = &AccountHistory{From: h.From, Today: h.Today, To: h.To, Start: start, Balance: make([]float64, len(h.Balance))}
 		}
@@ -176,6 +205,100 @@ func NewAccountsSummary(accs []Account, def Currency, with AccountsSummaryWith, 
 	slices.SortStableFunc(s.ByKind, func(a, b KindShare) int { return cmp.Compare(b.Amount, a.Amount) })
 	slices.SortStableFunc(s.ByCurrency, func(a, b CurrencyShare) int { return cmp.Compare(b.Amount, a.Amount) })
 	return s
+}
+
+// Forecast takes the budgets' spending out of the history's projection:
+// what cur (today's month) has left spread over the days after today, and
+// next's budgets over its days, each category's less its expenses already
+// scheduled in the month (part of the projection already).
+func (s *AccountsSummary) Forecast(cur, next *BudgetSummary, scheduled []DayCategoryTotal) {
+	h := s.History
+	if h == nil || !h.HasProjection() {
+		return
+	}
+	t := h.TodayIdx()
+	burn := make([]float64, len(h.Balance))
+	for k, bs := range []*BudgetSummary{cur, next} {
+		if bs == nil {
+			continue
+		}
+		total := &s.Info.BudgetsLeft
+		if k == 1 {
+			total = &s.Info.BudgetsNext
+		}
+		first := max(h.Index(bs.Period.From), t+1)
+		last := min(h.Index(bs.Period.Last()), len(burn)-1)
+		if first > last {
+			continue
+		}
+		for _, it := range bs.Budgeted() {
+			left := it.Budget - it.Spent
+			for _, sc := range scheduled {
+				if sc.CategoryID != it.Category.ID || !bs.Period.Contains(sc.Day) {
+					continue
+				}
+				if amount, ok := Convert(sc.Amount, &sc.Currency, s.Currency.String); ok {
+					left -= amount
+				}
+			}
+			if left <= 0 {
+				continue
+			}
+			*total += left
+			perDay := left / float64(last-first+1)
+			for i := first; i <= last; i++ {
+				burn[i] += perDay
+			}
+		}
+	}
+	var spent float64
+	for i := t + 1; i < len(h.Balance); i++ {
+		spent += burn[i]
+		h.Balance[i] -= spent
+	}
+}
+
+// SalaryMatch is how close (a share of it) a scheduled income has to be to
+// the salary to take it for the salary.
+const SalaryMatch = 0.1
+
+// ForecastSalary adds salary (in Currency) to the history's projection on
+// day, unless one of incomes (scheduled in its month) already looks like it.
+func (s *AccountsSummary) ForecastSalary(salary float64, day time.Time, incomes []Balance) {
+	h := s.History
+	if h == nil || salary <= 0 {
+		return
+	}
+	i := h.Index(day)
+	if i <= h.TodayIdx() || i >= len(h.Balance) {
+		return
+	}
+	for _, in := range incomes {
+		if amount, ok := Convert(in.Amount, &in.Currency, s.Currency.String); ok && math.Abs(amount-salary) <= salary*SalaryMatch {
+			s.SalaryScheduled = true
+			return
+		}
+	}
+	for ; i < len(h.Balance); i++ {
+		h.Balance[i] += salary
+	}
+	s.Salary, s.SalaryOn = salary, dateOnly(day)
+}
+
+// NetFlow is what flows (by account id, in the accounts' currencies) move
+// in and out of the counted accounts, net, in Currency.
+func (s *AccountsSummary) NetFlow(flows map[string][]DayFlow) float64 {
+	var net float64
+	for id, days := range flows {
+		rate, ok := s.rates[id]
+		if !ok {
+			continue
+		}
+		for _, d := range days {
+			net += (d.In - d.Out) * rate
+		}
+	}
+	return net
 }
 
 // Share is the amount's percentage of the assets.

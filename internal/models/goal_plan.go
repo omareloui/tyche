@@ -400,6 +400,61 @@ func PickGoalSource(accs []Account, amount float64, cur *Currency) GoalSource {
 	return src
 }
 
+// PlannedDeposit is a goal plan's deposit as it'd be made: Amount (in the
+// goal's currency) into the goal's account, SourceTotal (in its currency)
+// out of Source.
+type PlannedDeposit struct {
+	On          time.Time
+	Goal        *Goal
+	Amount      float64
+	Source      *Account
+	SourceTotal float64
+}
+
+// PlannedDeposits are the deposits the plans of goals (unfulfilled, with a
+// plan and an account) ask for until until (exclusive), each from the
+// account PickGoalSource picks among accs, scheduled ones counted as made.
+// Each is made on the first payday (the first day of the user's month,
+// starting on start) on or after the day the plan asks it, its salary in.
+func PlannedDeposits(goals []Goal, accs []Account, start MonthStart, now, until time.Time) []PlannedDeposit {
+	var res []PlannedDeposit
+	for i := range goals {
+		gl := &goals[i]
+		if gl.Plan == nil || !gl.FulfilledAt.IsZero() || gl.Account == nil {
+			continue
+		}
+		pr, err := gl.Plan.Project(gl.Price, gl.Progress()+gl.ScheduledDeposits(), now)
+		if err != nil {
+			continue
+		}
+		for _, d := range pr.Deposits() {
+			on := Payday(start, d.On)
+			if !on.Before(until) {
+				break
+			}
+			src := PickGoalSource(accs, d.Amount, &gl.Currency)
+			if src.Account == nil {
+				continue
+			}
+			res = append(res, PlannedDeposit{
+				On: on, Goal: gl, Amount: d.Amount,
+				Source: src.Account, SourceTotal: convert(d.Amount, &gl.Currency, &src.Account.Currency),
+			})
+		}
+	}
+	return res
+}
+
+// Payday is the first day of a user's month (starting on start) on or after
+// t's day.
+func Payday(start MonthStart, t time.Time) time.Time {
+	p := start.Of(t)
+	if p.From.Equal(dateOnly(t)) {
+		return p.From
+	}
+	return p.Next().From
+}
+
 // boolOrder sorts true first.
 func boolOrder(first bool) int {
 	if first {

@@ -329,6 +329,38 @@ FROM (
 GROUP BY e.account_id, e.day
 ORDER BY e.day;
 
+-- name: GetAccountsScheduledDailyNet :many
+-- GetAccountScheduledDailyNet of every account at once, like
+-- GetAccountsDailyNet: the accounts summary's forecast.
+SELECT
+    CAST(e.account_id AS TEXT) AS account_id,
+    CAST(e.day AS TEXT) AS day,
+    CAST(TOTAL(MAX(e.effect, 0)) AS FLOAT) AS money_in,
+    CAST(TOTAL(MAX(-e.effect, 0)) AS FLOAT) AS money_out
+FROM (
+    SELECT
+        t.account_id AS account_id,
+        SUBSTR(t.scheduled_to, 1, 10) AS day,
+        IIF(t.kind IN (2, 5, 6), t.amount, -t.amount) AS effect
+    FROM transactions AS t
+    WHERE
+        t.fulfilled_at IS NULL
+        AND JULIANDAY(t.scheduled_to) < JULIANDAY(sqlc.arg(until))
+    UNION ALL
+    SELECT
+        t.to_account_id AS account_id,
+        SUBSTR(t.scheduled_to, 1, 10) AS day,
+        COALESCE(t.to_amount, t.amount) AS effect
+    FROM transactions AS t
+    WHERE
+        t.kind IN (3, 4)
+        AND t.to_account_id IS NOT NULL
+        AND t.fulfilled_at IS NULL
+        AND JULIANDAY(t.scheduled_to) < JULIANDAY(sqlc.arg(until))
+) AS e
+GROUP BY e.account_id, e.day
+ORDER BY e.day;
+
 -- name: GetAccountTxStats :one
 -- How many fulfilled transactions touched the account, and the dates of the
 -- first and last.
