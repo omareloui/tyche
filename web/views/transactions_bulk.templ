@@ -43,7 +43,7 @@ templ TxBulkEditForm(fd *TxBulkEditFD, cats []models.Category, cps []models.Coun
 		<input type="hidden" name="n" value={ fmt.Sprint(fd.N) }/>
 		<input type="hidden" name="locked" value={ fd.Locked }/>
 		if fd.Locked != "" {
-			<p role="status" class="flex gap-2.5 rounded-xl bg-amber-400/8 ring-1 ring-amber-400/20 px-4 py-3 text-sm text-amber-200">
+			<p role="status" class="flex gap-2.5 rounded-xl bg-amber-400/8 border border-amber-400/20 px-4 py-3 text-sm text-amber-200">
 				@icons.Info("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
 				<span>Left out, as they can't be edited: { fd.Locked }.</span>
 			</p>
