@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"math"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -941,16 +942,30 @@ func shortMonth(month time.Time) string {
 	return month.Format("Jan 2006")
 }
 
-// categoryTxsURL lists the month's transactions of the item's category, empty
-// for "Other" and uncategorized spending.
+// categoryTxsURL lists the month's transactions of the item's category (the
+// uncategorized expenses for uncategorized spending), empty for "Other".
 func categoryTxsURL(cs *models.CategorySpending, it models.CategorySpend) string {
-	if it.Category == nil {
-		return ""
+	switch {
+	case it.Category != nil:
+		return CategoryTxsURL(it.Category.ID, cs.Period)
+	case it.Uncategorized:
+		return CategoryTxsURL(models.TxFilterNone, cs.Period)
 	}
-	return fmt.Sprintf("/transactions?%s=%s&%s=%s&%s=%s",
-		models.TxFilterCategory, it.Category.ID,
-		models.TxFilterFrom, cs.Period.From.Format(time.DateOnly),
-		models.TxFilterTo, cs.Period.Last().Format(time.DateOnly))
+	return ""
+}
+
+// CategoryTxsURL lists the period's transactions of a category, or the
+// uncategorized expenses for models.TxFilterNone.
+func CategoryTxsURL(id string, p models.Period) string {
+	v := url.Values{
+		models.TxFilterCategory: {id},
+		models.TxFilterFrom:     {p.From.Format(time.DateOnly)},
+		models.TxFilterTo:       {p.Last().Format(time.DateOnly)},
+	}
+	if id == models.TxFilterNone {
+		v.Set(models.TxFilterKind, models.ExpenseTxKind.String())
+	}
+	return "/transactions?" + v.Encode()
 }
 
 func budgetFill(hex string, over bool) string {

@@ -552,6 +552,55 @@ input[type="number"] {
   }
 }
 
+/* A row's selection check (txSelBox) over its tile's corner: shown while
+   selecting (txSel, transactions.js) or hovering the row with a mouse,
+   filled on the selected rows (data-selected, on the row's wrapper). */
+[data-sel-box] {
+  position: absolute;
+  z-index: 1;
+  top: 0.25rem;
+  left: 0.25rem;
+  display: none;
+  place-items: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 9999px;
+  border: 2px solid var(--color-zinc-500);
+  background-color: var(--color-zinc-900);
+  color: transparent;
+  cursor: pointer;
+}
+
+.tx-selecting [data-sel-box] {
+  display: grid;
+}
+
+@media (hover: hover) {
+  [data-tx-row]:hover > [data-sel-box] {
+    display: grid;
+  }
+}
+
+[data-selected] > [data-tx-row] > [data-sel-box] {
+  display: grid;
+  border-color: var(--color-violet-400);
+  background-color: var(--color-violet-400);
+  color: var(--color-zinc-950);
+}
+
+[data-selected] > [data-tx-row] {
+  box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--color-violet-400) 70%, transparent);
+  background-color: color-mix(in oklab, var(--color-violet-400) 8%, #141417);
+}
+
+/* Holding a row selects it (txRow), not its text nor the browser's menu. */
+@media (pointer: coarse) {
+  [data-tx-row] {
+    -webkit-touch-callout: none;
+    user-select: none;
+  }
+}
+
 /* The undo toast's countdown ring (txUndoToast), draining clockwise from
    full, restarted by each delete. */
 .tx-undo-track,

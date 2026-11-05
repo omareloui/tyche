@@ -456,58 +456,107 @@ func (r *Repository) deleteTransactionWithTxn(ctx context.Context, qtx *queries.
 
 func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transaction, tx *models.Transaction) error {
 	return r.transact(ctx, func(qtx *queries.Queries) error {
-		l := logger.FromCtx(ctx)
+		return r.updateTransactionWithTxn(ctx, qtx, oldTx, tx)
+	})
+}
 
-		var catID, cpID, toAccID sql.NullString
-
-		if tx.Category != nil {
-			catID.Valid = tx.Category.ID != ""
-			catID.String = tx.Category.ID
-		}
-		if tx.Counterparty != nil {
-			cpID.Valid = tx.Counterparty.ID != ""
-			cpID.String = tx.Counterparty.ID
-		}
-		if tx.ToAccount != nil {
-			toAccID.Valid = tx.ToAccount.ID != ""
-			toAccID.String = tx.ToAccount.ID
-		}
-
-		if err := qtx.UpdateTransaction(ctx, queries.UpdateTransactionParams{
-			ID:             tx.ID,
-			AccountID:      tx.Account.ID,
-			Amount:         tx.Amount,
-			Kind:           int64(tx.Kind),
-			CategoryID:     catID,
-			CounterpartyID: cpID,
-			ToAccountID:    toAccID,
-			ToAmount:       sql.NullFloat64{Float64: tx.ToAmount, Valid: tx.ToAmount != 0},
-			Description:    sql.NullString{String: tx.Description, Valid: tx.Description != ""},
-			ScheduledTo:    tx.ScheduledTo,
-		}); err != nil {
-			l.Error("updating transaction", zap.Error(err), zap.Any("new_transaction", tx), zap.Any("old_transaction", oldTx))
-			return err
-		}
-		l.Debug("updated transaction", zap.Any("new_transaction", tx), zap.Any("old_transaction", oldTx))
-
-		if err := r.syncReimbursementsOnUpdateWithTxn(qtx, ctx, oldTx, tx); err != nil {
-			return err
-		}
-		if err := r.syncTransferPairOnUpdateWithTxn(qtx, ctx, oldTx, tx); err != nil {
-			return err
-		}
-
-		if !oldTx.FulfilledAt.IsZero() {
-			if err := r.undoTxToAccountWithTxn(qtx, ctx, oldTx); err != nil {
+// BulkUpdateTransactions saves every news[i] over olds[i] at once, all or
+// none, marking them reviewed too when asked.
+func (r *Repository) BulkUpdateTransactions(ctx context.Context, olds, news []*models.Transaction, reviewed bool) error {
+	return r.transact(ctx, func(qtx *queries.Queries) error {
+		for i := range news {
+			if err := r.updateTransactionWithTxn(ctx, qtx, olds[i], news[i]); err != nil {
 				return err
 			}
-			if err := r.applyTxToAccountWithTxn(qtx, ctx, tx); err != nil {
-				return err
+			if reviewed && olds[i].NeedsReview {
+				if err := qtx.MarkTransactionReviewed(ctx, news[i].ID); err != nil {
+					logger.FromCtx(ctx).Error("marking transaction as reviewed", zap.Error(err), zap.String("id", news[i].ID))
+					return err
+				}
 			}
 		}
-
 		return nil
 	})
+}
+
+// GetFilteredTransactionIDs is the ids of the transactions the filter matches
+// (both legs of a transfer pair), and how many rows the list shows of them,
+// up to limit rows (-1 for all).
+func (r *Repository) GetFilteredTransactionIDs(ctx context.Context, f models.TxFilter, limit int) ([]string, int, error) {
+	p := txFilterParams(&f)
+	p.Lim = int64(limit)
+	switch f.Status {
+	case models.TxStatusFulfilled:
+		p.Fulfilled = true
+	case models.TxStatusScheduled:
+		p.Fulfilled = false
+	}
+	txs, err := r.listTransactions(ctx, p)
+	if err != nil {
+		return nil, 0, err
+	}
+	ids := make([]string, 0, len(txs))
+	for _, t := range txs {
+		ids = append(ids, t.ID)
+		if t.IsTransferLeg() {
+			ids = append(ids, t.TransferPairID)
+		}
+	}
+	return ids, len(txs), nil
+}
+
+func (r *Repository) updateTransactionWithTxn(ctx context.Context, qtx *queries.Queries, oldTx *models.Transaction, tx *models.Transaction) error {
+	l := logger.FromCtx(ctx)
+
+	var catID, cpID, toAccID sql.NullString
+
+	if tx.Category != nil {
+		catID.Valid = tx.Category.ID != ""
+		catID.String = tx.Category.ID
+	}
+	if tx.Counterparty != nil {
+		cpID.Valid = tx.Counterparty.ID != ""
+		cpID.String = tx.Counterparty.ID
+	}
+	if tx.ToAccount != nil {
+		toAccID.Valid = tx.ToAccount.ID != ""
+		toAccID.String = tx.ToAccount.ID
+	}
+
+	if err := qtx.UpdateTransaction(ctx, queries.UpdateTransactionParams{
+		ID:             tx.ID,
+		AccountID:      tx.Account.ID,
+		Amount:         tx.Amount,
+		Kind:           int64(tx.Kind),
+		CategoryID:     catID,
+		CounterpartyID: cpID,
+		ToAccountID:    toAccID,
+		ToAmount:       sql.NullFloat64{Float64: tx.ToAmount, Valid: tx.ToAmount != 0},
+		Description:    sql.NullString{String: tx.Description, Valid: tx.Description != ""},
+		ScheduledTo:    tx.ScheduledTo,
+	}); err != nil {
+		l.Error("updating transaction", zap.Error(err), zap.Any("new_transaction", tx), zap.Any("old_transaction", oldTx))
+		return err
+	}
+	l.Debug("updated transaction", zap.Any("new_transaction", tx), zap.Any("old_transaction", oldTx))
+
+	if err := r.syncReimbursementsOnUpdateWithTxn(qtx, ctx, oldTx, tx); err != nil {
+		return err
+	}
+	if err := r.syncTransferPairOnUpdateWithTxn(qtx, ctx, oldTx, tx); err != nil {
+		return err
+	}
+
+	if !oldTx.FulfilledAt.IsZero() {
+		if err := r.undoTxToAccountWithTxn(qtx, ctx, oldTx); err != nil {
+			return err
+		}
+		if err := r.applyTxToAccountWithTxn(qtx, ctx, tx); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (r *Repository) FulfillTransaction(ctx context.Context, tx *models.Transaction) error {

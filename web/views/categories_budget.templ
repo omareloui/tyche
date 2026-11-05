@@ -2,7 +2,6 @@ package views
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/models"
@@ -339,11 +338,7 @@ templ budgetBullet(bs *models.BudgetSummary, it models.BudgetSummaryItem, maxSpe
 		<div class="flex items-baseline justify-between gap-3 text-sm">
 			<span class="flex items-center gap-2 min-w-0">
 				<span class="size-2.5 shrink-0 rounded-full" style={ "background-color:" + hex }></span>
-				if href := budgetTxsURL(bs, it); href != "" {
-					<a href={ templ.SafeURL(href) } class="truncate hover:underline">{ it.Name }</a>
-				} else {
-					<span class="truncate">{ it.Name }</span>
-				}
+				<a href={ templ.SafeURL(budgetTxsURL(bs, it)) } class="truncate hover:underline">{ it.Name }</a>
 				<button
 					type="button"
 					data-budget-toggle={ it.Key() }
@@ -427,14 +422,8 @@ func budgetDayLabel(bs *models.BudgetSummary, i int) string {
 	return fmt.Sprint(i + 1)
 }
 
-// budgetTxsURL lists the month's transactions of the item's category, empty
-// for uncategorized spending.
+// budgetTxsURL lists the month's transactions of the item's category, or the
+// uncategorized expenses.
 func budgetTxsURL(bs *models.BudgetSummary, it models.BudgetSummaryItem) string {
-	if it.Category == nil {
-		return ""
-	}
-	return fmt.Sprintf("/transactions?%s=%s&%s=%s&%s=%s",
-		models.TxFilterCategory, it.Category.ID,
-		models.TxFilterFrom, bs.Period.From.Format(time.DateOnly),
-		models.TxFilterTo, bs.Period.Last().Format(time.DateOnly))
+	return CategoryTxsURL(it.Key(), bs.Period)
 }

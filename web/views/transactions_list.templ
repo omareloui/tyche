@@ -226,7 +226,7 @@ templ txReviewBanner(count int, f *models.TxFilter) {
 // txSummary answers what the filters ask: how many transactions match and
 // what they earn and spend, all of them, not just the months loaded.
 templ txSummary(s *models.TxSummary, chips []TxFilterChip, def *models.Currency) {
-	<div class="flex flex-wrap items-center gap-x-6 gap-y-3 p-4 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800">
+	<div id="tx-summary" data-total={ fmt.Sprint(s.Count) } class="flex flex-wrap items-center gap-x-6 gap-y-3 p-4 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800">
 		<div class="flex-1 min-w-40">
 			<p class="font-semibold">
 				{ fmt.Sprint(s.Count) } { plural(s.Count, "transaction", "transactions") }
@@ -425,6 +425,7 @@ func txRowAttrs(tx *models.Transaction, v *txView) templ.Attributes {
 		"data-tx":      true,
 		"data-id":      tx.ID,
 		"data-label":   v.title,
+		"data-sel-ids": tx.ID,
 		"hx-indicator": "this",
 	}
 	if tx.FulfilledAt.IsZero() {
@@ -440,6 +441,7 @@ templ transaction(tx *models.Transaction, def *models.Currency) {
 	{{ v := newTxView(ctx, tx) }}
 	<div
 		{ txRowAttrs(tx, &v)... }
+		data-sel-top
 		hx-target="this"
 		hx-swap="outerHTML"
 		class="relative"
@@ -457,6 +459,7 @@ templ transaction(tx *models.Transaction, def *models.Currency) {
 				templ.KV("bg-zinc-950 border border-dashed border-zinc-700", v.isScheduled),
 			}
 		>
+			@txSelBox()
 			@txTile(tx, &v)
 			<div class="flex-1 min-w-0">
 				<p class="truncate leading-snug">{ v.title }</p>
@@ -768,6 +771,9 @@ templ transferPair(out *models.Transaction, def *models.Currency) {
 	{{ in := out.TransferPair }}
 	<div
 		id={ "tx-pair-" + out.ID }
+		data-sel-ids={ out.ID + " " + in.ID }
+		data-sel-top
+		data-label={ v.title }
 		hx-target="this"
 		hx-swap="outerHTML"
 		hx-indicator="this"
@@ -783,8 +789,10 @@ templ transferPair(out *models.Transaction, def *models.Currency) {
 			data-tx-row
 			data-details={ out.ID }
 			tabindex="0"
+			x-bind="swipe"
 			class="relative flex items-center gap-3 sm:gap-4 px-3 sm:px-4 py-3 rounded-2xl bg-tx-row cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60"
 		>
+			@txSelBox()
 			@txTile(out, &v)
 			<div class="flex-1 min-w-0">
 				<p class="truncate leading-snug">{ v.title }</p>
@@ -862,8 +870,9 @@ templ transferLeg(tx *models.Transaction, def *models.Currency) {
 			data-tx-row
 			data-details={ tx.ID }
 			tabindex="0"
-			class="flex items-center gap-3 px-4 py-2 rounded-xl bg-tx-row cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60"
+			class="relative flex items-center gap-3 px-4 py-2 rounded-xl bg-tx-row cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60"
 		>
+			@txSelBox()
 			<div class="grid place-items-center shrink-0 w-9 h-9 rounded-lg bg-sky-400/10 text-sky-400">
 				@accKindIcon(tx.Account.Kind.Enum, "18")
 			</div>
@@ -939,8 +948,9 @@ templ reimbursement(tx *models.Transaction, def *models.Currency) {
 			data-tx-row
 			data-details={ tx.ID }
 			tabindex="0"
-			class={ "flex items-center gap-3 px-4 py-2 rounded-xl bg-tx-row cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60", templ.KV("opacity-70", v.isScheduled) }
+			class={ "relative flex items-center gap-3 px-4 py-2 rounded-xl bg-tx-row cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60", templ.KV("opacity-70", v.isScheduled) }
 		>
+			@txSelBox()
 			<div class="grid place-items-center shrink-0 w-9 h-9 rounded-lg bg-emerald-400/10 text-emerald-400">
 				if v.counterparty != nil {
 					@components.CounterpartyIcon(v.counterparty.Name, v.counterparty.Icon, v.counterparty.Color, "w-5 h-5 text-[11px]")
@@ -983,6 +993,7 @@ templ txUndoToast() {
 		x-show="$store.txs.toast"
 		x-transition.opacity.duration.150ms
 		role="status"
+		:class="($store.txSel.on || $store.txSel.notice) && 'mb-20'"
 		class="fixed z-60 bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 max-w-[calc(100vw-2rem)] pl-2 pr-1.5 py-1.5 rounded-full bg-zinc-800 ring-1 ring-zinc-700 shadow-xl shadow-black/50"
 	>
 		<span aria-hidden="true" class="relative grid place-items-center shrink-0 size-8">

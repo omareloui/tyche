@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"net/http"
 	"net/url"
@@ -12,7 +11,6 @@ import (
 	"time"
 
 	"github.com/a-h/templ"
-	"github.com/oklog/ulid"
 	"github.com/omareloui/tyche/internal/errs"
 	"github.com/omareloui/tyche/internal/fxrate"
 	"github.com/omareloui/tyche/internal/idgen"
@@ -125,14 +123,18 @@ func (h Handler) txFilterChips(ctx context.Context, f *models.TxFilter) []views.
 		}
 		add(label, models.TxFilterAccount)
 	}
-	if f.CategoryID != "" {
+	if f.CategoryID == models.TxFilterNone {
+		add("Uncategorized", models.TxFilterCategory)
+	} else if f.CategoryID != "" {
 		label := "Unknown"
 		if cat, err := h.repo.GetCategory(ctx, f.CategoryID); err == nil {
 			label = cat.Name
 		}
 		add(label, models.TxFilterCategory)
 	}
-	if f.CounterpartyID != "" {
+	if f.CounterpartyID == models.TxFilterNone {
+		add("No counterparty", models.TxFilterCounterparty)
+	} else if f.CounterpartyID != "" {
 		label := "Unknown"
 		if cp, err := h.repo.GetCounterparty(ctx, f.CounterpartyID); err == nil {
 			label = cp.Name
@@ -373,7 +375,7 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 	tx.CreatedAt = oldTx.CreatedAt
 	// The form only edits the date, keep the original time of day so the
 	// transaction keeps its order within the day.
-	tx.ScheduledTo = keepTimeOfDay(tx.ScheduledTo, oldTx.ScheduledTo)
+	tx.ScheduledTo = models.KeepTimeOfDay(tx.ScheduledTo, oldTx.ScheduledTo)
 
 	if err := h.repo.UpdateTransaction(r.Context(), oldTx, tx); err != nil {
 		var valerr *errs.ValidationError
@@ -580,41 +582,22 @@ func (h Handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) (temp
 	return h.deleteTransactions(w, r, []*models.Transaction{tx})
 }
 
-// maxBatchDelete caps the transactions deleted at once (the undo toast's).
-const maxBatchDelete = 500
-
-// DeleteTransactions deletes the transactions of the form's ids at once, the
-// ones waiting out the undo toast (transactions.js). Ids already gone are
-// skipped.
+// DeleteTransactions deletes the selected transactions at once (bulkTxs):
+// the ones waiting out the undo toast (transactions.js), or every one the
+// filter matches. Ids already gone are skipped.
 func (h Handler) DeleteTransactions(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	if err := r.ParseForm(); err != nil {
-		return nil, resperr.New(http.StatusBadRequest, "Invalid form.")
+	txs, err := h.bulkTxs(r)
+	if err != nil {
+		return nil, err
 	}
-	ids := slices.Clone(r.PostForm["id"])
-	slices.Sort(ids)
-	ids = slices.Compact(ids)
-	if len(ids) == 0 || len(ids) > maxBatchDelete {
-		return nil, resperr.New(http.StatusUnprocessableEntity, "Invalid transactions to delete.")
+	// Goals' purchases are undone from their goal: left out of a selection
+	// (shown back as the list re-renders), refused alone.
+	if n := len(txs); n > 1 {
+		txs = slices.DeleteFunc(txs, func(tx *models.Transaction) bool { return tx.IsGoalPurchase() && tx.Goal != nil })
+		if len(txs) == 0 {
+			return nil, errGoalPurchaseDelete
+		}
 	}
-
-	l := logger.FromCtx(r.Context())
-
-	txs := make([]*models.Transaction, 0, len(ids))
-	for _, id := range ids {
-		if _, err := ulid.ParseStrict(id); err != nil {
-			return nil, errs.ErrInvalidID
-		}
-		tx, err := h.repo.GetTransaction(r.Context(), id)
-		if errors.Is(err, sql.ErrNoRows) {
-			continue
-		}
-		if err != nil {
-			l.Error("fetching transaction", zap.Error(err), zap.String("id", id))
-			return nil, err
-		}
-		txs = append(txs, tx)
-	}
-
 	return h.deleteTransactions(w, r, txs)
 }
 

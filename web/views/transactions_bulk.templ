@@ -1,0 +1,149 @@
+package views
+
+import (
+	"fmt"
+
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+// TxBulkEditFD is the bulk edit form of the selected transactions: empty
+// fields keep what they have, models.TxFilterNone removes it.
+type TxBulkEditFD struct {
+	// N is how many rows are selected, for the title.
+	N                            int
+	Category, Counterparty, Date string
+	Reviewed                     bool
+	Error                        string
+}
+
+// TxBulkEdit is the bulk edit form in a drawer.
+templ TxBulkEdit(fd *TxBulkEditFD, cats []models.Category, cps []models.Counterparty) {
+	@components.Drawer(components.DrawerProps{Label: "Edit transactions"}) {
+		@TxBulkEditForm(fd, cats, cps)
+	}
+}
+
+// TxBulkEditForm is TxBulkEdit's form alone, answered with what went wrong.
+// The selection goes along with it (txSelectionValues, transactions.js).
+templ TxBulkEditForm(fd *TxBulkEditFD, cats []models.Category, cps []models.Counterparty) {
+	@form.DrawerForm(form.DrawerFormProps{
+		Title: txBulkTitle(fd.N), Method: "post", URL: "/transactions/bulk-edit",
+		Submit: "Apply",
+		Attrs: map[string]any{
+			"data-tx-bulk": true,
+			"hx-vals":      "js:txSelectionValues()",
+		},
+	}) {
+		<input type="hidden" name="n" value={ fmt.Sprint(fd.N) }/>
+		<p class="text-sm text-zinc-500">Only what you pick changes, the rest stays as it is. Transactions it doesn't fit (e.g. a category of another kind, goals’) are skipped.</p>
+		@form.Field("Category", "category_id", "bulk", icons.Tag("15"), "") {
+			@form.Combobox(form.ComboboxProps{
+				Name: "category_id", ID: "bulk", Label: "Category", Placeholder: "Keep as is",
+				Options: append([]form.ComboOption{{Value: models.TxFilterNone, Label: "Remove the category"}}, categoryComboOptions(cats)...),
+				Data:    form.FDInput{Value: fd.Category}, Nullable: true, NullLabel: "Keep as is", Searchable: true,
+			})
+		}
+		@form.Field("Counterparty", "counterparty_id", "bulk", icons.User("15"), "") {
+			@form.Combobox(form.ComboboxProps{
+				Name: "counterparty_id", ID: "bulk", Label: "Counterparty", Placeholder: "Keep as is",
+				Options: append([]form.ComboOption{{Value: models.TxFilterNone, Label: "Remove the counterparty"}}, counterpartyComboOptions(cps, fd.Counterparty)...),
+				Data:    form.FDInput{Value: fd.Counterparty}, Nullable: true, NullLabel: "Keep as is", Searchable: true,
+			})
+		}
+		@form.Field("Move to", "scheduled_to", "bulk", icons.Calendar("15"), "") {
+			@form.Control("text", "scheduled_to", "Keep the date", "bulk", form.FDInput{Value: fd.Date}, map[string]any{
+				"autocomplete":    "off",
+				"x-mask":          "9999-99-99",
+				"data-datepicker": true,
+			})
+		}
+		{{ reviewed := "" }}
+		if fd.Reviewed {
+			{{ reviewed = "on" }}
+		}
+		@form.Toggle("Mark as reviewed", "reviewed", "bulk", icons.Check("15"), form.FDInput{Value: reviewed}, nil)
+		if fd.Error != "" {
+			<p role="alert" class="rounded-xl bg-red-400/10 px-4 py-3 text-sm text-red-300">{ fd.Error }</p>
+		}
+	}
+}
+
+func txBulkTitle(n int) string {
+	if n <= 0 {
+		return "Edit transactions"
+	}
+	return fmt.Sprintf("Edit %d %s", n, plural(n, "transaction", "transactions"))
+}
+
+// txSelectionBar is the selected rows' actions (the txSel store,
+// transactions.js), at the bottom of the screen within thumb's reach.
+templ txSelectionBar() {
+	<div
+		x-cloak
+		x-show="$store.txSel.on || $store.txSel.notice"
+		x-transition.opacity.duration.150ms
+		class="fixed z-50 inset-x-0 bottom-0 sm:bottom-6 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 sm:w-max sm:max-w-[calc(100vw-2rem)]"
+	>
+		<div class="grid gap-1 px-3 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] sm:p-1.5 bg-zinc-900 sm:bg-zinc-800 border-t sm:border-0 border-zinc-800 sm:ring-1 sm:ring-zinc-700 sm:rounded-3xl shadow-xl shadow-black/50">
+			// Errors of the bulk deletes land here, then show as the notice.
+			<div id="tx-sel-sink" hidden></div>
+			<p
+				id="tx-sel-msg"
+				x-show="$store.txSel.notice"
+				x-text="$store.txSel.notice"
+				role="status"
+				class="px-2 pt-1 text-sm text-zinc-300"
+			></p>
+			<div x-show="$store.txSel.on" class="flex items-center gap-1">
+				<button
+					type="button"
+					@click="$store.txSel.clear()"
+					aria-label="Stop selecting"
+					title="Stop selecting (Esc)"
+					class="grid place-items-center shrink-0 size-10 rounded-full text-zinc-400 cursor-pointer transition-colors hover:bg-white/5 hover:text-white"
+				>
+					@icons.X("18")
+				</button>
+				<div class="flex-1 min-w-0 sm:min-w-32 px-1">
+					<p class="font-semibold tabular-nums truncate" x-text="$store.txSel.countText()"></p>
+					<button
+						type="button"
+						x-show="$store.txSel.canSelectMore()"
+						@click="$store.txSel.selectMore()"
+						x-text="$store.txSel.moreText()"
+						class="block max-w-full truncate text-sm text-violet-300 cursor-pointer hover:underline"
+					></button>
+				</div>
+				<button
+					type="button"
+					@click="$store.txSel.edit()"
+					:disabled="!$store.txSel.count"
+					class="inline-flex items-center gap-1.5 shrink-0 h-10 px-4 rounded-full font-semibold text-zinc-200 cursor-pointer transition-colors hover:bg-white/5 disabled:opacity-40 disabled:pointer-events-none"
+				>
+					@icons.Pencil("16")
+					Edit
+				</button>
+				<button
+					type="button"
+					@click="$store.txSel.remove()"
+					:disabled="!$store.txSel.count"
+					class="inline-flex items-center gap-1.5 shrink-0 h-10 px-4 rounded-full font-semibold text-red-300 cursor-pointer transition-colors hover:bg-red-400/10 disabled:opacity-40 disabled:pointer-events-none"
+				>
+					@icons.Trash("16")
+					Delete
+				</button>
+			</div>
+		</div>
+	</div>
+}
+
+// txSelBox is a row's selection check, over the corner of its tile: shown
+// while selecting, or hovering the row with a mouse (main.css).
+templ txSelBox() {
+	<span data-sel-box aria-hidden="true">
+		@icons.Check("12")
+	</span>
+}

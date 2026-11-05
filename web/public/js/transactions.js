@@ -1,11 +1,43 @@
-// Transactions page: deleting with undo, swiping rows on touch screens and
-// keyboard shortcuts. Every action answers the whole list (HX-Retarget), so
-// requests just need some target.
+// Transactions page: deleting with undo, swiping rows on touch screens,
+// selecting rows to edit or delete them together, and keyboard shortcuts.
+// Every action answers the whole list (HX-Retarget), so requests just need
+// some target.
 
 const UNDO_MS = 5000;
 // txDeleteSeq tells the deletes sent apart, for their answers.
 let txDeleteSeq = 0;
 const SWIPE_PX = 90;
+// HOLD_MS is how long holding a row (touch) takes to select it.
+const HOLD_MS = 450;
+
+// txRowIds are the transactions of a row (its wrapper, [data-sel-ids]): one,
+// or both legs of a transfer pair.
+function txRowIds(el) {
+  return (el?.dataset.selIds ?? el?.dataset.id ?? "").split(" ").filter(Boolean);
+}
+
+// txSend sends a request whose answer (the list, HX-Retarget) doesn't go
+// to a row, resolving to whether it went through and the error message.
+function txSend(verb, url, values) {
+  const key = String(++txDeleteSeq);
+  return new Promise((resolve) => {
+    const done = (e) => {
+      if (e.detail.requestConfig?.headers?.["X-Tx-Req"] !== key) return;
+      document.removeEventListener("htmx:afterRequest", done);
+      const xhr = e.detail.xhr;
+      const ok = !!xhr && xhr.status > 0 && xhr.status < 400;
+      resolve({ ok, error: ok ? "" : xhr?.responseText?.trim() || "Something went wrong, try again." });
+    };
+    document.addEventListener("htmx:afterRequest", done);
+    htmx.ajax(verb, url, { target: "#tx-sel-sink", swap: "innerHTML", values, headers: { "X-Tx-Req": key } });
+  });
+}
+
+// txSelectionValues is the selection (txSel) as sent with a bulk action:
+// its rows' ids, or every row the page's filter matches.
+function txSelectionValues() {
+  return Alpine.store("txSel").values();
+}
 
 function txURL(id, action) {
   return action ? `/transactions/${id}/${action}` : `/transactions/${id}`;
@@ -47,7 +79,8 @@ document.addEventListener("alpine:init", () => {
   // undoing is instant and the list re-rendering (other actions, the delete's
   // answer) never shows them back.
   Alpine.store("txs", {
-    // pending is the deletes the toast offers to undo, as {id, label}.
+    // pending is the deletes the toast offers to undo, as {ids, el, label}:
+    // the row's transactions and its element's id.
     pending: [],
     timer: null,
     // toast is the shown toast: its text, and a key restarting its countdown.
@@ -56,25 +89,30 @@ document.addEventListener("alpine:init", () => {
     left: 0,
     deadline: 0,
     ticker: null,
-    // hidden is every id hidden: pending ones and sent ones (gone from the
-    // list once answered; shown again if the delete fails).
+    // hidden is every row hidden, by element id: pending ones and sent ones
+    // (gone from the list once answered; shown again if the delete fails).
     hidden: new Set(),
 
     remove(el) {
-      const { id, label } = el?.dataset ?? {};
-      if (!id || this.hidden.has(id)) return;
-      // The focus in the row (e.g. its menu's Delete) goes on to the next
+      this.removeMany([el]);
+    },
+
+    // removeMany deletes rows (their wrappers) with one undo.
+    removeMany(els) {
+      const rows = els.filter((el) => el?.id && txRowIds(el).length && !this.hidden.has(el.id));
+      if (!rows.length) return;
+      // The focus in a row (e.g. its menu's Delete) goes on to the next
       // row, as deleting with the key does, rather than to the page.
-      if (el.contains(document.activeElement))
-        txNeighbor(el.querySelector("[data-tx-row]"))?.focus({ preventScroll: true });
-      this.pending.push({ id, label });
-      this.hide([id]);
+      const focused = rows.find((el) => el.contains(document.activeElement));
+      if (focused) txNeighbor(focused.querySelector("[data-tx-row]"))?.focus({ preventScroll: true });
+      for (const el of rows) this.pending.push({ ids: txRowIds(el), el: el.id, label: el.dataset.label });
+      this.hide(rows.map((el) => el.id));
       clearTimeout(this.timer);
       this.timer = setTimeout(() => this.commit(), UNDO_MS);
       this.countDown();
       const n = this.pending.length;
       this.toast = {
-        text: n === 1 ? `Deleted “${label}”` : `Deleted ${n} transactions`,
+        text: n === 1 ? `Deleted “${this.pending[0].label}”` : `Deleted ${n} transactions`,
         key: (this.toast?.key ?? 0) + 1,
       };
     },
@@ -95,7 +133,7 @@ document.addEventListener("alpine:init", () => {
     undo() {
       clearTimeout(this.timer);
       this.stopCountDown();
-      this.show(this.pending.map((p) => p.id));
+      this.show(this.pending.map((p) => p.el));
       this.pending = [];
       this.toast = null;
     },
@@ -103,7 +141,8 @@ document.addEventListener("alpine:init", () => {
     commit() {
       clearTimeout(this.timer);
       this.stopCountDown();
-      const ids = this.pending.map((p) => p.id);
+      const ids = this.pending.flatMap((p) => p.ids);
+      const els = this.pending.map((p) => p.el);
       this.pending = [];
       this.toast = null;
       if (!ids.length) return;
@@ -112,7 +151,7 @@ document.addEventListener("alpine:init", () => {
       const done = (e) => {
         if (e.detail.requestConfig?.headers?.["X-Tx-Delete"] !== key) return;
         document.removeEventListener("htmx:afterRequest", done);
-        if (!e.detail.successful) this.show(ids);
+        if (!e.detail.successful) this.show(els);
       };
       document.addEventListener("htmx:afterRequest", done);
       htmx.ajax("POST", "/transactions/delete", {
@@ -128,7 +167,7 @@ document.addEventListener("alpine:init", () => {
       clearTimeout(this.timer);
       this.stopCountDown();
       if (this.pending.length) {
-        const body = new URLSearchParams(this.pending.map((p) => ["id", p.id]));
+        const body = new URLSearchParams(this.pending.flatMap((p) => p.ids.map((id) => ["id", id])));
         fetch("/transactions/delete", { method: "POST", body, keepalive: true });
       }
       this.pending = [];
@@ -153,7 +192,163 @@ document.addEventListener("alpine:init", () => {
         style.id = "tx-hidden";
         document.head.append(style);
       }
-      style.textContent = [...this.hidden].map((id) => `#tx-${CSS.escape(id)}{display:none!important}`).join("");
+      style.textContent = [...this.hidden].map((id) => `#${CSS.escape(id)}{display:none!important}`).join("");
+    },
+  });
+
+  // txSel is the rows selected to edit or delete together: some rows (by
+  // their wrapper's id, [data-sel-ids]), or all of the rows the filter
+  // matches, loaded or not (the summary's count, sent as the filter and
+  // checked by the server). Rows show it as data-selected (paint), kept
+  // across the list's re-renders; changing the filters clears it.
+  Alpine.store("txSel", {
+    on: false,
+    // sel maps the selected rows' element ids to their transactions' ids.
+    sel: {},
+    all: false,
+    // total is how many rows the filter matches, loaded is how many (top
+    // level) rows are; both read from the list (refresh).
+    total: 0,
+    loaded: 0,
+    // last is the row toggled last, where a shift-click range starts.
+    last: null,
+    notice: "",
+    noticeTimer: null,
+
+    get count() {
+      return this.all ? this.total : Object.keys(this.sel).length;
+    },
+
+    start() {
+      this.on = true;
+      this.refresh();
+    },
+
+    clear() {
+      this.on = false;
+      this.sel = {};
+      this.all = false;
+      this.last = null;
+      this.paint();
+    },
+
+    // rows are the selectable rows loaded, nested ones (transfer sides,
+    // reimbursements) included; top only the list's own.
+    rows(top = false) {
+      const hidden = Alpine.store("txs").hidden;
+      const sel = top ? "#tx-list [data-sel-top]" : "#tx-list [data-sel-ids]";
+      return [...document.querySelectorAll(sel)].filter((el) => !hidden.has(el.id));
+    },
+
+    // toggle selects or unselects a row; range selects the rows from the one
+    // toggled last to it.
+    toggle(el, range = false) {
+      if (!el?.id) return;
+      this.on = true;
+      if (this.all) {
+        // Unselecting one of all: the loaded ones less it.
+        this.all = false;
+        this.selectLoaded();
+      }
+      const rows = this.rows().filter((r) => txShown(r.querySelector("[data-tx-row]")));
+      const from = range && this.last ? rows.findIndex((r) => r.id === this.last) : -1;
+      const to = rows.indexOf(el);
+      if (from !== -1 && to !== -1) {
+        for (const r of rows.slice(Math.min(from, to), Math.max(from, to) + 1)) this.sel[r.id] = txRowIds(r);
+      } else if (this.sel[el.id]) {
+        delete this.sel[el.id];
+      } else {
+        this.sel[el.id] = txRowIds(el);
+      }
+      this.last = el.id;
+      this.refresh();
+    },
+
+    selectLoaded() {
+      for (const r of this.rows(true)) this.sel[r.id] = txRowIds(r);
+      this.refresh();
+    },
+
+    hasMore() {
+      return (document.getElementById("tx-until")?.dataset.until ?? "all") !== "all";
+    },
+
+    // canSelectMore offers the loaded rows not selected yet, then all of the
+    // filter's when there are more to load.
+    canSelectMore() {
+      if (this.all) return false;
+      return this.count < this.loaded || (this.hasMore() && this.total > this.count);
+    },
+
+    moreText() {
+      if (this.count < this.loaded) return this.hasMore() ? `Select the ${this.loaded} loaded` : `Select all ${this.loaded}`;
+      return `Select all ${this.total} matching`;
+    },
+
+    selectMore() {
+      if (this.count < this.loaded) this.selectLoaded();
+      else {
+        this.all = true;
+        this.paint();
+      }
+    },
+
+    countText() {
+      if (this.all) return `All ${this.total} selected`;
+      return this.count ? `${this.count} selected` : "Select transactions";
+    },
+
+    // refresh reads the list's counts again and paints the rows.
+    refresh() {
+      this.loaded = this.rows(true).length;
+      this.total = Number(document.getElementById("tx-summary")?.dataset.total ?? 0);
+      this.paint();
+    },
+
+    paint() {
+      for (const el of document.querySelectorAll("#tx-list [data-sel-ids]")) {
+        const on = this.on && (!!this.sel[el.id] || (this.all && el.hasAttribute("data-sel-top")));
+        el.toggleAttribute("data-selected", on);
+      }
+    },
+
+    values() {
+      if (this.all) {
+        const v = Object.fromEntries(new URLSearchParams(location.search));
+        return { ...v, all: "1", expect: String(this.total) };
+      }
+      return { id: [...new Set(Object.values(this.sel).flat())] };
+    },
+
+    edit() {
+      if (!this.count) return;
+      htmx.ajax("GET", `/transactions/bulk-edit?n=${this.count}`, { target: "#drawer", swap: "innerHTML" });
+    },
+
+    // remove deletes the selected rows with an undo; all of the filter's
+    // (not all loaded) once confirmed.
+    async remove() {
+      if (!this.count) return;
+      if (!this.all) {
+        const els = Object.keys(this.sel)
+          .map((id) => document.getElementById(id))
+          .filter(Boolean);
+        this.clear();
+        Alpine.store("txs").removeMany(els);
+        return;
+      }
+      const n = this.total;
+      if (!(await askConfirm(`Delete all ${n} transactions matching the filters? This can't be undone.`, { label: "Delete", del: true })))
+        return;
+      const { ok, error } = await txSend("POST", "/transactions/delete", this.values());
+      if (ok) this.clear();
+      this.notify(ok ? `Deleted ${n} transactions` : error);
+    },
+
+    notify(text) {
+      this.notice = text;
+      clearTimeout(this.noticeTimer);
+      this.noticeTimer = setTimeout(() => (this.notice = ""), 5000);
     },
   });
 
@@ -179,6 +374,7 @@ document.addEventListener("alpine:init", () => {
     // account, a month…), keeping the other filters set.
     filterBy(set) {
       closeTxDetails();
+      Alpine.store("txSel").clear();
       const params = new URLSearchParams(location.search);
       params.delete("tx");
       for (const [k, v] of Object.entries(set)) params.set(k, v);
@@ -197,6 +393,24 @@ document.addEventListener("alpine:init", () => {
       htmx.ajax("GET", txURL(id, "edit"), { target: "#tx-details", swap: "innerHTML" });
     },
 
+    // onSelectClick, before anything in the row gets the click: while
+    // selecting, a click anywhere on a row toggles it; out of it, on a row's
+    // check (txSelBox) starts selecting.
+    onSelectClick(e) {
+      const sel = Alpine.store("txSel");
+      const box = e.target.closest?.("[data-sel-box]");
+      const row = e.target.closest?.("[data-tx-row]");
+      if (!row || (!sel.on && !box)) return;
+      // A menu opened before selecting still works.
+      if (!box && e.target.closest("[role=menu]")) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const wrap = row.closest("[data-sel-ids]");
+      // The click ending a hold already selected it (txRow).
+      if (Date.now() - Number(wrap?.dataset.heldAt ?? 0) < 600) return;
+      sel.toggle(wrap, e.shiftKey);
+    },
+
     // onClick opens the details of the row clicked, unless on one of its
     // controls, selecting its text or ending a swipe.
     onClick(e) {
@@ -210,6 +424,11 @@ document.addEventListener("alpine:init", () => {
       if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
       const t = e.target;
       if (this.openCreateForm || document.querySelector("[data-tx-details], #drawer [data-drawer]")) return;
+      if (e.key === "Escape" && Alpine.store("txSel").on && !t.closest?.("input, textarea, select, [role=listbox], [role=menu]")) {
+        e.preventDefault();
+        Alpine.store("txSel").clear();
+        return;
+      }
       if (e.key === "/" && !t.closest?.("input, textarea, select, [contenteditable]")) {
         e.preventDefault();
         this.$refs.q?.focus();
@@ -259,8 +478,19 @@ document.addEventListener("alpine:init", () => {
           if (!("review" in d)) return;
           txRequest("PUT", txURL(d.id, "reviewed"), row);
           break;
+        case "x":
+        case "X": {
+          const wrap = t.closest?.("[data-sel-ids]");
+          if (!wrap) return;
+          Alpine.store("txSel").toggle(wrap, e.shiftKey);
+          break;
+        }
         case "Delete":
         case "Backspace":
+          if (Alpine.store("txSel").on) {
+            Alpine.store("txSel").remove();
+            break;
+          }
           if (!row) return;
           this.focusRow(t, 1) || this.focusRow(t, -1);
           Alpine.store("txs").remove(row);
@@ -421,9 +651,10 @@ document.addEventListener("alpine:init", () => {
     x0: null,
     y0: null,
     swiping: false,
+    holdTimer: null,
 
     // swipe binds the row to the pointer, with x-bind to keep each row's
-    // markup short.
+    // markup short. Holding it still selects it (txSel).
     swipe: {
       "@pointerdown"(e) {
         this.down(e);
@@ -436,6 +667,10 @@ document.addEventListener("alpine:init", () => {
       },
       "@pointercancel"() {
         this.cancel();
+      },
+      // Holding a row is selecting it, not the browser's menu.
+      "@contextmenu"(e) {
+        if (this.holdTimer || Date.now() - Number(this.$root.dataset.heldAt ?? 0) < 1000) e.preventDefault();
       },
       ":style"() {
         return this.dx ? `transform: translateX(${this.dx}px)` : "";
@@ -457,6 +692,22 @@ document.addEventListener("alpine:init", () => {
       this.x0 = e.clientX;
       this.y0 = e.clientY;
       this.swiping = false;
+      clearTimeout(this.holdTimer);
+      this.holdTimer = setTimeout(() => this.hold(), HOLD_MS);
+    },
+
+    // hold selects the row held, without the click ending it toggling it
+    // back (txPage.onSelectClick) nor opening its details.
+    hold() {
+      this.holdTimer = null;
+      if (this.swiping) return;
+      const wrap = this.$root;
+      wrap.dataset.heldAt = Date.now();
+      wrap.dataset.swipedAt = Date.now();
+      const sel = Alpine.store("txSel");
+      if (!sel.sel[wrap.id] || !sel.on) sel.toggle(wrap);
+      navigator.vibrate?.(10);
+      this.cancel();
     },
 
     // swipeLayer is revealed under the row while swiping, created on the
@@ -496,6 +747,12 @@ document.addEventListener("alpine:init", () => {
       if (this.x0 === null) return;
       const dx = e.clientX - this.x0;
       const dy = e.clientY - this.y0;
+      if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+        clearTimeout(this.holdTimer);
+        this.holdTimer = null;
+      }
+      // Selecting, rows don't swipe.
+      if (Alpine.store("txSel").on) return;
       if (!this.swiping) {
         // Scrolling, leave it to the page.
         if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) return this.cancel();
@@ -508,6 +765,8 @@ document.addEventListener("alpine:init", () => {
     },
 
     up() {
+      clearTimeout(this.holdTimer);
+      this.holdTimer = null;
       if (this.x0 === null) return;
       // The click ending a swipe doesn't open the details (txPage.onClick).
       if (this.swiping) this.$root.dataset.swipedAt = Date.now();
@@ -521,6 +780,8 @@ document.addEventListener("alpine:init", () => {
     },
 
     cancel() {
+      clearTimeout(this.holdTimer);
+      this.holdTimer = null;
       if (this.swiping) {
         this.dx = 0;
         this.paintSwipe();
@@ -550,6 +811,27 @@ document.addEventListener("htmx:configRequest", (e) => {
       if (typeof v === "string" && v.trim() === "") delete e.detail.parameters[k];
     }
   }
+});
+
+// The selection follows the list's re-renders (and chunks loaded), cleared
+// when the filters change, as the rows it had may be gone.
+document.addEventListener("htmx:afterSettle", () => {
+  const sel = window.Alpine?.store("txSel");
+  if (sel?.on) sel.refresh();
+});
+document.addEventListener("htmx:afterRequest", (e) => {
+  const cfg = e.detail.requestConfig;
+  if (cfg?.verb !== "get" || cfg.path?.split("?")[0] !== "/transactions") return;
+  window.Alpine?.store("txSel")?.clear();
+});
+// A bulk edit got saved (handler.BulkEditTransactions).
+document.addEventListener("tx-bulk-done", (e) => {
+  const sel = Alpine.store("txSel");
+  const { updated = 0, skipped = 0 } = e.detail ?? {};
+  sel.clear();
+  let text = `Updated ${updated} ${updated === 1 ? "transaction" : "transactions"}`;
+  if (skipped) text += ` · ${skipped} skipped where it didn't fit`;
+  sel.notify(text);
 });
 
 // TX_STOPS are where j/k move the focus: the rows and the upcoming

@@ -168,9 +168,11 @@ type CategoryTotal struct {
 type CategorySpend struct {
 	// Category is nil for uncategorized spending, or "Other".
 	Category *Category
-	Name     string
-	Color    string
-	Amount   float64
+	// Uncategorized tells the uncategorized spending from "Other".
+	Uncategorized bool
+	Name          string
+	Color         string
+	Amount        float64
 }
 
 // CategorySpending is a month's spending per category, in Currency, most
@@ -206,9 +208,9 @@ func NewCategorySpending(p Period, def Currency, cats []Category, totals []Categ
 			cs.Items[i].Amount += amount
 			continue
 		}
-		it := CategorySpend{Name: "Uncategorized", Color: "gray", Amount: amount}
+		it := CategorySpend{Name: "Uncategorized", Color: "gray", Amount: amount, Uncategorized: true}
 		if cat := byID[t.CategoryID]; cat != nil {
-			it.Category, it.Name, it.Color = cat, cat.Name, cat.Color
+			it.Category, it.Name, it.Color, it.Uncategorized = cat, cat.Name, cat.Color, false
 		}
 		idx[t.CategoryID] = len(cs.Items)
 		cs.Items = append(cs.Items, it)

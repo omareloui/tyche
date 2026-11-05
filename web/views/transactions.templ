@@ -39,12 +39,19 @@ templ Transactions(
 	cps []models.Counterparty, gls []models.Goal, openTx string) {
 	@layouts.WithCreateForm(claims, "Transactions", balances,
 		txCreateSlot(CreateTransactionForm(fd, accounts, knds, cats, cps, &claims.DefaultCurrency))) {
-		<div x-data="txPage" @keydown.window="onKey($event)" @click="onClick($event)">
+		<div
+			x-data="txPage"
+			@keydown.window="onKey($event)"
+			@click.capture="onSelectClick($event)"
+			@click="onClick($event)"
+			:class="$store.txSel.on && 'tx-selecting'"
+		>
 			<div id="tx-body" class="contents">
 				@TxBody(list, accounts, knds, cats, cps, gls)
 			</div>
 			@txDetailsSlot(openTx)
 			@txUndoToast()
+			@txSelectionBar()
 		</div>
 	}
 }
@@ -173,6 +180,17 @@ templ txFilterBar(f *models.TxFilter, start models.MonthStart, accs []models.Acc
 					class="grid place-items-center min-w-5 h-5 px-1 rounded-full bg-(--accent) text-xs font-semibold text-zinc-950"
 				></span>
 			</button>
+			<button
+				type="button"
+				@click="$store.txSel.on ? $store.txSel.clear() : $store.txSel.start()"
+				:aria-pressed="$store.txSel.on"
+				title="Select transactions to edit or delete them together (x)"
+				:class="$store.txSel.on ? 'border-zinc-400 text-white' : 'border-zinc-700 text-zinc-400'"
+				class="flex items-center gap-2 shrink-0 h-12 px-4 rounded-2xl border-2 bg-zinc-800/40 cursor-pointer transition-colors hover:border-zinc-500 hover:text-white"
+			>
+				@icons.CheckCheck("18")
+				<span class="hidden sm:inline">Select</span>
+			</button>
 		</div>
 		// Shortcuts sit up here: the list scrolls on forever.
 		@txShortcuts()
@@ -180,8 +198,10 @@ templ txFilterBar(f *models.TxFilter, start models.MonthStart, accs []models.Acc
 			<div class="flex flex-wrap items-center gap-2 pt-1">
 				@txFilterCombo(models.TxFilterKind, "Kind", "Any kind", f.KindValue(), false, txKindFilterOptions(knds))
 				@txFilterCombo(models.TxFilterAccount, "Account", "Any account", f.AccountID, true, txAccountFilterOptions(accs))
-				@txFilterCombo(models.TxFilterCategory, "Category", "Any category", f.CategoryID, true, categoryComboOptions(cats))
-				@txFilterCombo(models.TxFilterCounterparty, "Counterparty", "Any counterparty", f.CounterpartyID, true, counterpartyComboOptions(cps, f.CounterpartyID))
+				@txFilterCombo(models.TxFilterCategory, "Category", "Any category", f.CategoryID, true,
+					append([]form.ComboOption{{Value: models.TxFilterNone, Label: "Uncategorized"}}, categoryComboOptions(cats)...))
+				@txFilterCombo(models.TxFilterCounterparty, "Counterparty", "Any counterparty", f.CounterpartyID, true,
+					append([]form.ComboOption{{Value: models.TxFilterNone, Label: "No counterparty"}}, counterpartyComboOptions(cps, f.CounterpartyID)...))
 				if len(gls) > 0 {
 					@txFilterCombo(models.TxFilterGoal, "Goal", "Any goal", f.GoalID, true, goalComboOptions(gls))
 				}
@@ -225,7 +245,7 @@ templ txShortcuts() {
 		x-show="hint"
 		class="sm:hidden flex items-center gap-2 text-xs text-zinc-500"
 	>
-		<span class="flex-1">Swipe a transaction right to fulfill or mark it reviewed, left to delete it.</span>
+		<span class="flex-1">Swipe a transaction right to fulfill or mark it reviewed, left to delete it. Hold it to select several.</span>
 		<button
 			type="button"
 			@click="hint = false; try { localStorage.setItem('tx-swipe-hint', '1') } catch {}"
@@ -243,6 +263,7 @@ templ txShortcuts() {
 		<span><kbd class="kbd">f</kbd> fulfill</span>
 		<span><kbd class="kbd">r</kbd> reviewed</span>
 		<span><kbd class="kbd">⌫</kbd> delete</span>
+		<span><kbd class="kbd">x</kbd> select</span>
 		<span><kbd class="kbd">n</kbd> new</span>
 	</p>
 }

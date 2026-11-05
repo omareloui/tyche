@@ -126,8 +126,10 @@ WHERE
         OR EXISTS (
             SELECT 1 FROM transactions AS pt WHERE pt.id = t.transfer_pair_id AND pt.account_id = sqlc.narg(account_id)
         ))
-    AND (sqlc.narg(category_id) IS NULL OR t.category_id = sqlc.narg(category_id))
-    AND (sqlc.narg(counterparty_id) IS NULL OR t.counterparty_id = sqlc.narg(counterparty_id))
+    AND (sqlc.narg(category_id) IS NULL OR t.category_id = sqlc.narg(category_id)
+        OR (sqlc.narg(category_id) = 'none' AND t.category_id IS NULL))
+    AND (sqlc.narg(counterparty_id) IS NULL OR t.counterparty_id = sqlc.narg(counterparty_id)
+        OR (sqlc.narg(counterparty_id) = 'none' AND t.counterparty_id IS NULL))
     AND (sqlc.narg(goal_id) IS NULL OR EXISTS (
         SELECT 1 FROM goals AS fg WHERE fg.id = sqlc.narg(goal_id) AND (fg.account_id IN (t.account_id, t.to_account_id) OR fg.id = t.loan_goal_id)
     ))
@@ -204,8 +206,10 @@ WHERE
         OR EXISTS (
             SELECT 1 FROM transactions AS pt WHERE pt.id = t.transfer_pair_id AND pt.account_id = sqlc.narg(account_id)
         ))
-    AND (sqlc.narg(category_id) IS NULL OR t.category_id = sqlc.narg(category_id))
-    AND (sqlc.narg(counterparty_id) IS NULL OR t.counterparty_id = sqlc.narg(counterparty_id))
+    AND (sqlc.narg(category_id) IS NULL OR t.category_id = sqlc.narg(category_id)
+        OR (sqlc.narg(category_id) = 'none' AND t.category_id IS NULL))
+    AND (sqlc.narg(counterparty_id) IS NULL OR t.counterparty_id = sqlc.narg(counterparty_id)
+        OR (sqlc.narg(counterparty_id) = 'none' AND t.counterparty_id IS NULL))
     AND (sqlc.narg(goal_id) IS NULL OR EXISTS (
         SELECT 1 FROM goals AS fg WHERE fg.id = sqlc.narg(goal_id) AND (fg.account_id IN (t.account_id, t.to_account_id) OR fg.id = t.loan_goal_id)
     ))

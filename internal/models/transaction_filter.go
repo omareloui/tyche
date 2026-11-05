@@ -42,6 +42,10 @@ const (
 	TxFilterMax          = "max"
 )
 
+// TxFilterNone is the value of the category and counterparty filters
+// matching the transactions without one.
+const TxFilterNone = UncategorizedKey
+
 const txFilterDate = "2006-01-02"
 
 // TxFilter is what the transactions list is narrowed by, kept in the page's
