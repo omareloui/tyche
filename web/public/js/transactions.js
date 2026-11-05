@@ -315,9 +315,22 @@ document.addEventListener("alpine:init", () => {
       return { id: [...new Set(Object.values(this.sel).flat())] };
     },
 
+    // edit opens the bulk edit drawer, which first drops the rows that can't
+    // be edited (tx-sel-drop).
     edit() {
       if (!this.count) return;
-      htmx.ajax("GET", `/transactions/bulk-edit?n=${this.count}`, { target: "#drawer", swap: "innerHTML" });
+      htmx.ajax("POST", "/transactions/bulk-edit/form", { target: "#drawer", swap: "innerHTML", values: this.values() });
+    },
+
+    // drop unselects the rows holding any of ids (e.g. the ones that can't
+    // be edited); all of the filter's stay so, the server leaving them out.
+    drop(ids) {
+      if (this.all || !ids?.length) return;
+      const out = new Set(ids);
+      for (const [key, rowIds] of Object.entries(this.sel)) {
+        if (rowIds.some((id) => out.has(id))) delete this.sel[key];
+      }
+      this.paint();
     },
 
     // remove deletes the selected rows with an undo; all of the filter's
@@ -822,6 +835,13 @@ document.addEventListener("htmx:afterRequest", (e) => {
   const cfg = e.detail.requestConfig;
   if (cfg?.verb !== "get" || cfg.path?.split("?")[0] !== "/transactions") return;
   window.Alpine?.store("txSel")?.clear();
+});
+// Opening the bulk edit dropped rows that can't be edited
+// (handler.BulkEditTransactionsForm), telling why when none could.
+document.addEventListener("tx-sel-drop", (e) => {
+  const sel = Alpine.store("txSel");
+  sel.drop(e.detail?.ids);
+  if (e.detail?.message) sel.notify(e.detail.message);
 });
 // A bulk edit got saved (handler.BulkEditTransactions).
 document.addEventListener("tx-bulk-done", (e) => {

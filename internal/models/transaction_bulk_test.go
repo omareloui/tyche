@@ -84,3 +84,13 @@ func TestTxFilterNone(t *testing.T) {
 		t.Errorf("category = %q", f.CategoryID)
 	}
 }
+
+func TestDescribeBulkLocks(t *testing.T) {
+	got := DescribeBulkLocks(map[TxBulkLock]int{TxBulkLockGoal: 1, TxBulkLockAdjustment: 2, TxBulkLockDeleted: 3})
+	if want := "2 balance corrections, 1 goal transaction, 3 transactions of deleted accounts"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if got := DescribeBulkLocks(nil); got != "" {
+		t.Errorf("none: got %q", got)
+	}
+}

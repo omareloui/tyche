@@ -17,6 +17,9 @@ type TxBulkEditFD struct {
 	Category, Counterparty, Date string
 	Reviewed                     bool
 	Error                        string
+	// Locked tells the selected ones left out as they can't be edited,
+	// e.g. "2 balance corrections" (models.DescribeBulkLocks).
+	Locked string
 }
 
 // TxBulkEdit is the bulk edit form in a drawer.
@@ -34,10 +37,17 @@ templ TxBulkEditForm(fd *TxBulkEditFD, cats []models.Category, cps []models.Coun
 		Submit: "Apply",
 		Attrs: map[string]any{
 			"data-tx-bulk": true,
-			"hx-vals":      "js:txSelectionValues()",
+			"hx-vals":      "js:{...txSelectionValues()}",
 		},
 	}) {
 		<input type="hidden" name="n" value={ fmt.Sprint(fd.N) }/>
+		<input type="hidden" name="locked" value={ fd.Locked }/>
+		if fd.Locked != "" {
+			<p role="status" class="flex gap-2.5 rounded-xl bg-amber-400/8 ring-1 ring-amber-400/20 px-4 py-3 text-sm text-amber-200">
+				@icons.Info("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
+				<span>Left out, as they can't be edited: { fd.Locked }.</span>
+			</p>
+		}
 		<p class="text-sm text-zinc-500">Only what you pick changes, the rest stays as it is. Transactions it doesn't fit (e.g. a category of another kind, goals’) are skipped.</p>
 		@form.Field("Category", "category_id", "bulk", icons.Tag("15"), "") {
 			@form.Combobox(form.ComboboxProps{

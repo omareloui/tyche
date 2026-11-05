@@ -2,6 +2,7 @@ package handler
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -91,15 +92,57 @@ func (h Handler) bulkTxs(r *http.Request) ([]*models.Transaction, error) {
 	return txs, nil
 }
 
-// GetBulkEditTransactions is the bulk edit drawer of the n selected rows
-// (the selection itself is added when sending it, transactions.js).
-func (h Handler) GetBulkEditTransactions(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+// txSelDropEvent drops rows from the selection (transactions.js), with a
+// notice telling why, if any.
+const txSelDropEvent = "tx-sel-drop"
+
+// BulkEditTransactionsForm is the bulk edit drawer of the selection
+// (bulkTxs). The ones that can't be bulk edited (models.Transaction.BulkLock)
+// are dropped from the selection, the drawer telling which; when none can,
+// no drawer opens and the selection's notice tells it instead.
+func (h Handler) BulkEditTransactionsForm(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	txs, err := h.bulkTxs(r)
+	if err != nil {
+		return nil, err
+	}
+	locks := map[models.TxBulkLock]int{}
+	dropped := []string{}
+	editable := 0
+	for _, tx := range txs {
+		if lock := tx.BulkLock(); lock != models.TxBulkLockNone {
+			locks[lock]++
+			dropped = append(dropped, tx.ID)
+			continue
+		}
+		editable++
+	}
+	locked := models.DescribeBulkLocks(locks)
+
+	if editable == 0 {
+		w.Header().Set("HX-Reswap", "none")
+		setHXTriggerJSON(w, map[string]any{txSelDropEvent: map[string]any{
+			"ids": dropped, "message": "These can't be edited: " + locked + ".",
+		}})
+		return templ.NopComponent, nil
+	}
+	if len(dropped) > 0 {
+		setHXTriggerJSON(w, map[string]any{txSelDropEvent: map[string]any{"ids": dropped}})
+	}
+
 	cats, cps, err := h.bulkEditDeps(r)
 	if err != nil {
 		return nil, err
 	}
-	n, _ := strconv.Atoi(r.URL.Query().Get("n"))
-	return views.TxBulkEdit(&views.TxBulkEditFD{N: n}, cats, cps), nil
+	return views.TxBulkEdit(&views.TxBulkEditFD{N: editable, Locked: locked}, cats, cps), nil
+}
+
+// setHXTriggerJSON sets the answer's HX-Trigger to events with details.
+func setHXTriggerJSON(w http.ResponseWriter, events map[string]any) {
+	b, err := json.Marshal(events)
+	if err != nil {
+		return
+	}
+	w.Header().Set("HX-Trigger", string(b))
 }
 
 func (h Handler) bulkEditDeps(r *http.Request) ([]models.Category, []models.Counterparty, error) {
@@ -133,6 +176,7 @@ func (h Handler) BulkEditTransactions(w http.ResponseWriter, r *http.Request) (t
 		Reviewed:     r.PostForm.Get("reviewed") != "",
 	}
 	fd.N, _ = strconv.Atoi(r.PostForm.Get("n"))
+	fd.Locked = r.PostForm.Get("locked")
 	answer := func(msg string) (templ.Component, error) {
 		fd.Error = msg
 		return views.TxBulkEditForm(fd, cats, cps), nil
@@ -185,6 +229,11 @@ func (h Handler) BulkEditTransactions(w http.ResponseWriter, r *http.Request) (t
 	skipped := 0
 	fulfilled := false
 	for _, old := range olds {
+		// Told on opening the form (BulkEditTransactionsForm), left out
+		// silently, e.g. of all of the filter's.
+		if old.BulkLock() != models.TxBulkLockNone {
+			continue
+		}
 		tx, skips := edit.Apply(old, today)
 		if len(skips) > 0 {
 			skipped++
@@ -203,8 +252,10 @@ func (h Handler) BulkEditTransactions(w http.ResponseWriter, r *http.Request) (t
 	l.Info("bulk updated transactions", zap.Int("count", len(news)), zap.Int("skipped", skipped))
 
 	hxRetargetTxList(w)
-	w.Header().Set("HX-Trigger", fmt.Sprintf(`{%q: {}, %q: {"updated": %d, "skipped": %d}}`,
-		drawerSavedEvent, txBulkDoneEvent, len(news), skipped))
+	setHXTriggerJSON(w, map[string]any{
+		drawerSavedEvent: map[string]any{},
+		txBulkDoneEvent:  map[string]any{"updated": len(news), "skipped": skipped},
+	})
 	if fulfilled {
 		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
 			return nil, err

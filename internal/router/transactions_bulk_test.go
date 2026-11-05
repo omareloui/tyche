@@ -87,7 +87,7 @@ func TestTransactionsBulk(t *testing.T) {
 	render(bulk(w, "POST", "/transactions/bulk-edit", "", url.Values{
 		"id": {e1.ID, i1.ID}, "category_id": {food.ID}, "counterparty_id": {shop.ID},
 	}))
-	if got := w.Header().Get("HX-Trigger"); !strings.Contains(got, `"updated": 2, "skipped": 1`) {
+	if got := w.Header().Get("HX-Trigger"); !strings.Contains(got, `"tx-bulk-done":{"skipped":1,"updated":2}`) {
 		t.Errorf("HX-Trigger = %q, want 2 updated, 1 skipped", got)
 	}
 	if tx := mustTx(t, repo.GetTransaction, ctx, e1.ID); tx.Category == nil || tx.Category.ID != food.ID || tx.Counterparty == nil || tx.Counterparty.ID != shop.ID {
@@ -140,6 +140,28 @@ func TestTransactionsBulk(t *testing.T) {
 	}
 	if want := 1000.0 + 50; acc.Amount != want {
 		t.Errorf("balance = %v, want %v", acc.Amount, want)
+	}
+
+	// Opening the form drops (and tells) the ones that can't be edited.
+	adj := create(models.AdjustmentTxKind, 5, nil, true)
+	form := callHandler(ctx, h.BulkEditTransactionsForm)
+	w = httptest.NewRecorder()
+	body := render(form(w, "POST", "/transactions/bulk-edit/form", "", url.Values{"id": {i1.ID, adj.ID}}))
+	if got := w.Header().Get("HX-Trigger"); !strings.Contains(got, "tx-sel-drop") || !strings.Contains(got, adj.ID) || strings.Contains(got, i1.ID) {
+		t.Errorf("HX-Trigger = %q, want the adjustment dropped", got)
+	}
+	if !strings.Contains(body, "1 balance correction") || !strings.Contains(body, "Edit 1 transaction") {
+		t.Errorf("form doesn't tell the adjustment left out: %s", body)
+	}
+	w = httptest.NewRecorder()
+	render(form(w, "POST", "/transactions/bulk-edit/form", "", url.Values{"id": {adj.ID}}))
+	if w.Header().Get("HX-Reswap") != "none" || !strings.Contains(w.Header().Get("HX-Trigger"), "can't be edited") {
+		t.Errorf("only locked ones: headers = %v", w.Header())
+	}
+	// Left out of the edit even when sent (all of the filter's).
+	render(bulk(httptest.NewRecorder(), "POST", "/transactions/bulk-edit", "", url.Values{"id": {adj.ID}, "category_id": {food.ID}}))
+	if tx := mustTx(t, repo.GetTransaction, ctx, adj.ID); tx.Category != nil {
+		t.Errorf("adjustment edited: %+v", tx.Category)
 	}
 }
 

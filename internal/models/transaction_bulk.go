@@ -1,7 +1,9 @@
 package models
 
 import (
+	"fmt"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -31,6 +33,55 @@ const (
 	TxBulkSkipAhead        TxBulkSkip = "fulfilled can't be ahead"
 )
 
+// TxBulkLock is why a transaction can't be bulk edited at all, empty when
+// it can.
+type TxBulkLock string
+
+const (
+	TxBulkLockNone       TxBulkLock = ""
+	TxBulkLockAdjustment TxBulkLock = "adjustment"
+	TxBulkLockGoal       TxBulkLock = "goal"
+	TxBulkLockDeleted    TxBulkLock = "deleted"
+)
+
+// BulkLock is why tx can't be bulk edited: a balance correction (signed,
+// made by fixing balances), a goal's (made by its actions) or a deleted
+// account's.
+func (t *Transaction) BulkLock() TxBulkLock {
+	switch {
+	case t.Kind == AdjustmentTxKind:
+		return TxBulkLockAdjustment
+	case t.IsGoalTx():
+		return TxBulkLockGoal
+	case t.IsLocked():
+		return TxBulkLockDeleted
+	}
+	return TxBulkLockNone
+}
+
+// DescribeBulkLocks tells how many of each lock there are, e.g. "2 balance
+// corrections, 1 goal transaction".
+func DescribeBulkLocks(counts map[TxBulkLock]int) string {
+	names := []struct {
+		lock         TxBulkLock
+		one, several string
+	}{
+		{TxBulkLockAdjustment, "balance correction", "balance corrections"},
+		{TxBulkLockGoal, "goal transaction", "goal transactions"},
+		{TxBulkLockDeleted, "transaction of a deleted account", "transactions of deleted accounts"},
+	}
+	var parts []string
+	for _, n := range names {
+		switch c := counts[n.lock]; {
+		case c == 1:
+			parts = append(parts, "1 "+n.one)
+		case c > 1:
+			parts = append(parts, fmt.Sprintf("%d %s", c, n.several))
+		}
+	}
+	return strings.Join(parts, ", ")
+}
+
 func (e *TxBulkEdit) IsZero() bool {
 	return e.Category == nil && !e.ClearCategory && e.Counterparty == nil &&
 		!e.ClearCounterparty && e.Date == nil && !e.Reviewed
@@ -40,7 +91,7 @@ func (e *TxBulkEdit) IsZero() bool {
 // it for locked ones). today is the user's, as Handler.userToday: a fulfilled
 // transaction can't move ahead of it.
 func (e *TxBulkEdit) Apply(tx *Transaction, today time.Time) (*Transaction, []TxBulkSkip) {
-	if tx.IsLocked() || tx.Kind == AdjustmentTxKind {
+	if tx.BulkLock() != TxBulkLockNone {
 		return nil, []TxBulkSkip{TxBulkSkipLocked}
 	}
 	out := *tx
