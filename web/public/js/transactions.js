@@ -719,6 +719,9 @@ document.addEventListener("alpine:init", () => {
       const sel = Alpine.store("txSel");
       if (!sel.sel[wrap.id] || !sel.on) sel.toggle(wrap);
       navigator.vibrate?.(10);
+      // Moving the finger on, before lifting it, selects the rows it goes
+      // over.
+      txDragSelect(wrap, this.x0, this.y0);
       this.cancel();
     },
 
@@ -852,6 +855,99 @@ document.addEventListener("tx-bulk-done", (e) => {
   if (skipped) text += ` · ${skipped} skipped where it didn't fit`;
   sel.notify(text);
 });
+
+// TX_DRAG_EDGE is how close (px) to the list's visible edges (under the
+// header, above the selection bar) a drag selecting rows scrolls the page,
+// faster the closer, up to TX_DRAG_SPEED px a frame.
+const TX_DRAG_EDGE = 80;
+const TX_DRAG_SPEED = 18;
+
+// txDragSelect selects, from a row held (txRow.hold) until the finger
+// lifts, the rows from it to the one under the finger; the ones it leaves
+// go back to how they were. Near the top or bottom it scrolls the page,
+// selecting on. It's touch only: it stops the page from scrolling under
+// the finger meanwhile (a non-passive touchmove, as the rows' touch-action
+// lets them pan).
+function txDragSelect(anchor, x, y) {
+  const sel = Alpine.store("txSel");
+  const before = { ...sel.sel };
+  let last = anchor;
+  let raf = 0;
+  let pending = false;
+  // moved tells the finger left where it held, before which it doesn't
+  // scroll (e.g. holding a row by the bottom edge).
+  const x0 = x;
+  const y0 = y;
+  let moved = false;
+
+  const rows = () => sel.rows().filter((r) => txShown(r.querySelector("[data-tx-row]")));
+
+  // update selects the range from the anchor to the row at (x, y).
+  const update = () => {
+    pending = false;
+    const hit = document.elementFromPoint(x, y)?.closest("#tx-list [data-sel-ids]");
+    if (hit) last = hit;
+    const list = rows();
+    const a = list.indexOf(anchor);
+    const b = list.indexOf(last);
+    if (a === -1 || b === -1) return;
+    const [from, to] = a < b ? [a, b] : [b, a];
+    list.forEach((r, i) => {
+      if (i >= from && i <= to) sel.sel[r.id] = txRowIds(r);
+      else if (before[r.id]) sel.sel[r.id] = before[r.id];
+      else delete sel.sel[r.id];
+    });
+    sel.refresh();
+  };
+  const schedule = () => {
+    if (!pending) {
+      pending = true;
+      requestAnimationFrame(update);
+    }
+  };
+
+  // scroll moves the page while the finger is near an edge.
+  const scroll = () => {
+    raf = requestAnimationFrame(scroll);
+    if (!moved) return;
+    const header = document.querySelector("header")?.getBoundingClientRect();
+    const bar = document.getElementById("tx-sel-bar")?.getBoundingClientRect();
+    const top = header?.height ? Math.max(0, header.bottom) : 0;
+    const bottom = bar?.height ? bar.top : innerHeight;
+    let dy = 0;
+    if (y < top + TX_DRAG_EDGE) dy = -TX_DRAG_SPEED * Math.min(1, (top + TX_DRAG_EDGE - y) / TX_DRAG_EDGE);
+    else if (y > bottom - TX_DRAG_EDGE) dy = TX_DRAG_SPEED * Math.min(1, (y - bottom + TX_DRAG_EDGE) / TX_DRAG_EDGE);
+    if (dy) {
+      const was = scrollY;
+      scrollBy(0, dy);
+      if (scrollY !== was) update();
+    }
+  };
+
+  const move = (e) => {
+    const t = e.touches[0];
+    if (!t) return;
+    if (e.cancelable) e.preventDefault();
+    x = t.clientX;
+    y = t.clientY;
+    moved ||= Math.hypot(x - x0, y - y0) > 10;
+    schedule();
+  };
+  const end = () => {
+    cancelAnimationFrame(raf);
+    document.removeEventListener("touchmove", move);
+    document.removeEventListener("touchend", end);
+    document.removeEventListener("touchcancel", end);
+    // The click lifting the finger doesn't toggle the row it's on
+    // (txPage.onSelectClick).
+    last.dataset.heldAt = Date.now();
+    anchor.dataset.heldAt = Date.now();
+  };
+  document.addEventListener("touchmove", move, { passive: false });
+  document.addEventListener("touchend", end);
+  document.addEventListener("touchcancel", end);
+  raf = requestAnimationFrame(scroll);
+}
 
 // TX_STOPS are where j/k move the focus: the rows and the upcoming
 // section's header.

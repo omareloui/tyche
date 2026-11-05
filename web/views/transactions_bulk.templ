@@ -94,6 +94,7 @@ func txBulkTitle(n int) string {
 // Delete and Done, icons only on phones.
 templ txSelectionBar() {
 	<div
+		id="tx-sel-bar"
 		x-cloak
 		x-show="$store.txSel.on || $store.txSel.notice"
 		x-transition:enter="transition duration-200 ease-out"
