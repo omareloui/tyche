@@ -210,3 +210,34 @@ func TestCheckAffordability(t *testing.T) {
 		}
 	})
 }
+
+// With months starting on the 26th, a goal's last deposit (on the 1st) is
+// in the month before its plan is done, like the goal plans' money counts
+// it: the month after takes nothing.
+func TestAffordMonthStart26(t *testing.T) {
+	today := time.Date(2026, 11, 6, 0, 0, 0, 0, time.UTC)
+	start := models.MonthStart(26)
+	gl := goalWithSaved("tv", 9000, 0)
+	gl.Plan = &models.GoalPlan{Monthly: 3000, StartsOn: today}
+	goals := []models.Goal{gl}
+	ws := &models.WorkSettings{MonthlySalary: 10000, Currency: egp, HoursPerWeek: 40}
+
+	ms := models.PlanMilestones(&models.Goal{Currency: egp}, ws, nil, goals, start, today)
+	if len(ms) == 0 || !ms[len(ms)-1].On.Equal(time.Date(2027, 1, 26, 0, 0, 0, 0, time.UTC)) {
+		t.Fatalf("milestones = %+v", ms)
+	}
+	done := ms[len(ms)-1].On
+	if m := models.NewGoalPlanMoney(&models.Goal{Currency: egp}, ws, nil, goals, start, today, done); m.OtherPlans != 0 {
+		t.Errorf("plans' money then = %+v", m)
+	}
+	a, _ := models.CheckAffordability(models.Purchase{Price: 100, Currency: egp, On: done}, models.AffordContext{
+		Balances: []models.Balance{{Amount: 1000, Currency: egp}}, Goals: goals, Work: ws,
+		Start: start, Today: today, Currency: &egp,
+	})
+	if a.Month == nil || !a.Month.Payday.Equal(done) || len(a.Month.Goals) != 0 {
+		t.Errorf("month on %v = %+v", done, a.Month)
+	}
+	if len(a.FreeDates) != 1 || !a.FreeDates[0].On.Equal(done) {
+		t.Errorf("FreeDates = %+v, want %v", a.FreeDates, done)
+	}
+}

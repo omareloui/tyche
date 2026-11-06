@@ -1,8 +1,8 @@
 // moneyInputs backs a price form (see views.purchaseInputs): the amounts'
 // mask follows the picked currency's symbol, or a percentage for fields with
 // a unit toggle set to %, and it tracks the payment mode, the installment
-// strategy and what a known amount is given by (months or per month) to show
-// their fields.
+// strategy, what a known amount is given by (months or per month) and what
+// a plan saves by (monthly amount or months) to show their fields.
 document.addEventListener("alpine:init", () => {
   Alpine.data("moneyInputs", (syms = {}, sym = "", mode = "cash", strategy = "known") => ({
     syms,
@@ -10,12 +10,14 @@ document.addEventListener("alpine:init", () => {
     mode,
     strategy,
     termBy: "months",
+    planBy: "monthly",
 
     // tick changes with every edit, for the bindings reading the inputs.
     tick: 0,
 
     init() {
       this.termBy = this.$root.querySelector('[name="term_by"]:checked')?.value ?? "months";
+      this.planBy = this.$root.querySelector('[name="plan_by"]:checked')?.value ?? "monthly";
       const bump = () => this.tick++;
       this.$root.addEventListener("input", bump);
       this.$root.addEventListener("change", bump);
@@ -62,6 +64,7 @@ document.addEventListener("alpine:init", () => {
       if (name === "mode") this.mode = e.target.value;
       if (name === "strategy") this.strategy = e.target.value;
       if (name === "term_by") this.termBy = e.target.value;
+      if (name === "plan_by") this.planBy = e.target.value;
       if (name.endsWith("_unit")) {
         this.remask(this.$root.querySelectorAll(`[name="${name.slice(0, -"_unit".length)}"]`));
       }

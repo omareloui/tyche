@@ -1,45 +1,38 @@
 package handler
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/errs"
+	"github.com/omareloui/tyche/internal/idgen"
+	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views"
 	"github.com/omareloui/tyche/web/views/form"
+	"go.uber.org/zap"
 )
 
-// Afford checks a purchase from the afford form.
+// Afford plans the purchase from the "Plan it" form.
 func (h Handler) Afford(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	if err := r.ParseForm(); err != nil {
 		return nil, err
 	}
-
-	curs, err := h.repo.GetCurrencies(r.Context())
+	pi, err := h.planIt(r)
 	if err != nil {
 		return nil, err
 	}
-
-	claims := getClaims(r.Context())
-	p, err := mapFDToPurchase(r, curs, &claims.DefaultCurrency)
-	if err != nil {
-		return views.AffordHint("Check the numbers, some aren't valid."), nil
+	if pi.problem != "" {
+		return views.AffordHint(pi.problem), nil
 	}
-	if p.Price <= 0 {
-		return views.AffordResult(nil, nil), nil
-	}
-	if p.Plan != nil {
-		if ve := p.Plan.Validate(p.Price); len(ve) > 0 {
-			return views.AffordHint(planProblem(ve)), nil
-		}
-	}
-
-	return h.affordResult(r, p)
+	return pi.result(), nil
 }
 
 // PlanPreview sums up the plan being filled in a form.
@@ -96,56 +89,78 @@ func planProblem(ve errs.ValidationErrors) string {
 	return ""
 }
 
-// AffordDrawer renders the afford drawer, prefilled from a wishlist item if
-// asked, with its result.
+// AffordDrawer renders the "Plan it" drawer, prefilled from a wishlist item
+// if asked (a wish cooling off planned for the day it's ready), with its
+// result.
 func (h Handler) AffordDrawer(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	curs, err := h.repo.GetCurrencies(r.Context())
 	if err != nil {
 		return nil, err
 	}
-
 	claims := getClaims(r.Context())
-	p := &models.Purchase{Currency: claims.DefaultCurrency}
-	name := ""
 
+	fd := &views.PlanItFD{AmountFD: &form.AmountFD{CurrencyID: form.FDInput{Value: claims.DefaultCurrency.ID}}}
+	plan := &models.GoalPlan{}
 	if id := r.URL.Query().Get("wishlist_id"); id != "" {
 		item, err := h.repo.GetWishlistItem(r.Context(), id)
 		if err != nil {
 			return nil, err
 		}
-		name = item.Name
-		purchase := item.Purchase()
-		p = &purchase
-		// A wish still cooling off is checked on the day it's ready.
-		y, m, d := item.ReadyAt().Date()
-		if ready := time.Date(y, m, d, 0, 0, 0, 0, time.UTC); item.Status == models.WishlistWaiting && ready.After(h.userToday(r.Context())) {
-			p.On = ready
+		fd.Name.Value, fd.WishlistID = item.Name, item.ID
+		fd.AmountFD.Amount.Value = formatFloatIfNonZero(item.Price)
+		fd.AmountFD.CurrencyID.Value = item.Currency.ID
+		if item.Plan != nil {
+			loan := *item.Plan
+			plan.Mode, plan.Loan = models.GoalPlanInstallments, &loan
 		}
 	}
 
-	result, err := h.affordResult(r, p)
+	r.Form = url.Values{"amount": {fd.AmountFD.Amount.Value}, "currency_id": {fd.AmountFD.CurrencyID.Value}, "name": {fd.Name.Value}}
+	pi, err := h.planIt(r)
 	if err != nil {
 		return nil, err
 	}
+	plan.Monthly = pi.money.Free()
+	if plan.Loan == nil {
+		// A fifth down, to start from the usual bank loan.
+		plan.Loan = &models.InstallmentPlan{Strategy: models.StrategyFlat, DownPayment: 20, DownPaymentPct: true}
+	}
+	pi.plan = plan
+	fd.Plan = mapGoalPlanToFD(plan, nil)
+	fd.Plan.Milestones = models.PlanMilestones(pi.goal, pi.ws, pi.ctx.Categories, pi.ctx.Goals, claims.MonthStart, time.Now())
+	fd.Plan.Currency = pi.goal.Currency
+
 	ws, err := h.repo.GetWorkSettings(r.Context())
 	if err != nil {
 		return nil, err
 	}
-	fd := mapPurchaseToFD(p, nil)
-	fd.On = &form.FDInput{}
-	if !p.On.IsZero() {
-		fd.On.Value = p.On.Format(time.DateOnly)
+	var result templ.Component = views.AffordHint("Enter a price to plan it.")
+	if pi.goal.Price > 0 {
+		result = pi.result()
 	}
-	return views.AffordDrawer(fd, name, curs, &claims.DefaultCurrency, ws, result), nil
+	return views.AffordDrawer(fd, curs, &claims.DefaultCurrency, ws, pi.money, result), nil
 }
 
-func (h Handler) affordResult(r *http.Request, p *models.Purchase) (templ.Component, error) {
-	if p.Price <= 0 {
-		return views.AffordResult(nil, nil), nil
-	}
+// planIt is a "Plan it" form read: the purchase as a goal starting from the
+// money free now, its plan, and what it's weighed against.
+type planIt struct {
+	h       Handler
+	r       *http.Request
+	goal    *models.Goal
+	plan    *models.GoalPlan
+	money   models.GoalPlanMoney
+	ctx     models.AffordContext
+	ws      *models.WorkSettings
+	problem string
+}
+
+func (h Handler) planIt(r *http.Request) (*planIt, error) {
 	ctx := r.Context()
 	claims := getClaims(ctx)
-
+	curs, err := h.repo.GetCurrencies(ctx)
+	if err != nil {
+		return nil, err
+	}
 	balances, err := h.repo.GetBalances(ctx)
 	if err != nil {
 		return nil, err
@@ -173,15 +188,128 @@ func (h Handler) affordResult(r *http.Request, p *models.Purchase) (templ.Compon
 		return nil, err
 	}
 
-	a, err := models.CheckAffordability(*p, models.AffordContext{
+	pi := &planIt{h: h, r: r, ws: ws, ctx: models.AffordContext{
 		Balances: balances, BudgetLeft: bs.Unspent(), Categories: cats,
 		Goals: goals, Paces: paces, Work: ws,
 		Start: claims.MonthStart, Today: h.userToday(ctx), Currency: &claims.DefaultCurrency,
-	})
+	}}
+
+	price, err := parseFloatIfExists(r.FormValue("amount"))
 	if err != nil {
-		return views.AffordHint(err.Error()), nil
+		pi.problem = "Check the price."
+		price = 0
 	}
-	return views.AffordResult(&a, ws), nil
+	cur := claims.DefaultCurrency
+	if c := slicesutils.Find(curs, func(c models.Currency) bool { return c.ID == r.FormValue("currency_id") }); c != nil {
+		cur = *c
+	}
+	// It starts from the money free now, as a goal would from its savings.
+	free, _ := models.Convert(pi.ctx.Spendable(), &claims.DefaultCurrency, cur.String)
+	free = math.Max(0, free)
+	pi.goal = &models.Goal{
+		Name: r.FormValue("name"), Price: price, Currency: cur,
+		Account: &models.Account{Amount: free, Currency: cur, Kind: models.AccountKind{Enum: models.AccKindGoal}},
+	}
+	if pi.plan, err = mapFDToGoalPlan(r); err != nil && pi.problem == "" {
+		pi.problem = "Check the numbers, some aren't valid."
+	}
+	pi.money = models.NewGoalPlanMoney(pi.goal, ws, cats, goals, claims.MonthStart, time.Now(), pi.plan.StartsOn)
+	if pi.problem == "" && price <= 0 {
+		pi.problem = "Enter a price to plan it."
+	}
+	return pi, nil
+}
+
+// result is the plan's options and the picked one weighed on the day it's
+// bought: the month its target is saved, today when it is already.
+func (pi *planIt) result() templ.Component {
+	opts := pi.h.goalPlanOptions(pi.goal, pi.plan)
+	var a *models.Affordability
+	if pr := opts.Picked(); pr != nil {
+		p := models.Purchase{Price: pi.goal.Price, Currency: pi.goal.Currency}
+		if pr.Loan != nil {
+			loan := pr.Loan.Plan
+			p.Plan = &loan
+		}
+		if pr.Left > 0.005 {
+			p.On = pr.BuyOn
+		}
+		if res, err := models.CheckAffordability(p, pi.ctx); err == nil {
+			a = &res
+		}
+	}
+	return views.PlanItResult(pi.goal, pi.money, opts, a, pi.ws)
+}
+
+// SaveAffordGoal saves the planned purchase as a goal with its plan (for the
+// wish it's planned for, if any), opening its details.
+func (h Handler) SaveAffordGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	l := logger.FromCtx(r.Context())
+	if err := r.ParseForm(); err != nil {
+		return nil, err
+	}
+	pi, err := h.planIt(r)
+	if err != nil {
+		return nil, err
+	}
+	if pi.problem != "" {
+		return views.AffordHint(pi.problem), nil
+	}
+	if strings.TrimSpace(pi.goal.Name) == "" {
+		return views.AffordHint("Name it to save it as a goal."), nil
+	}
+
+	gl := &models.Goal{ID: idgen.New(), Name: pi.goal.Name, Price: pi.goal.Price, Currency: models.Currency{ID: pi.goal.Currency.ID}, CreatedAt: time.Now()}
+	plan := pi.plan
+	// A new goal starts with nothing saved.
+	fd := mapGoalPlanToFD(plan, nil)
+	switch h.checkGoalPlan(r, plan, nil, gl.Price, 0, fd) {
+	case "":
+	case planLoanProblem:
+		return views.AffordHint(planProblem(goalLoanProblems(plan.Loan, gl.Price))), nil
+	default:
+		for _, msg := range []string{fd.StartsOn.Error, fd.Monthly.Error, fd.Months.Error} {
+			if msg != "" {
+				return views.AffordHint(msg + "."), nil
+			}
+		}
+	}
+	if plan.Mode == models.GoalPlanSave {
+		plan.Loan = nil
+	}
+
+	if err := gl.SanitizeAndValidate(h.sani, h.valid); err != nil {
+		var valerr errs.ValidationError
+		if errors.As(err, &valerr) {
+			return views.AffordHint("Check the name and the price."), nil
+		}
+		return nil, err
+	}
+	wishID := r.FormValue("wishlist_id")
+	if wishID != "" {
+		if item, err := h.repo.GetWishlistItem(r.Context(), wishID); err != nil || item.Status != models.WishlistWaiting {
+			wishID = ""
+		}
+	}
+	if wishID != "" {
+		err = h.repo.CreateGoalFromWish(r.Context(), gl, wishID)
+	} else {
+		err = h.repo.CreateGoal(r.Context(), gl)
+	}
+	if err != nil {
+		var valerr *errs.ValidationError
+		if errors.As(err, &valerr) {
+			return views.AffordHint("A goal with that name exists already."), nil
+		}
+		return nil, err
+	}
+	if err := h.repo.SetGoalPlan(r.Context(), gl.ID, plan); err != nil {
+		return nil, err
+	}
+	l.Info("saved a plan as a goal", zap.String("goal", gl.ID), zap.String("wish", wishID))
+
+	hxRespondWithRedirect(w, "/goals?"+views.GoalDetailsParam+"="+gl.ID)
+	return nil, nil
 }
 
 // mapPurchaseToFD fills the purchase's form, with the plan's problems if

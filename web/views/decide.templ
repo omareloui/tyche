@@ -21,8 +21,6 @@ type PurchaseFD struct {
 	AmountFD *form.AmountFD
 	Mode     form.FDInput
 	Plan     InstallmentPlanFD
-	// On is the day it's bought, nil for forms without it.
-	On *form.FDInput
 }
 
 type WorkSettingsFD struct {
@@ -30,8 +28,8 @@ type WorkSettingsFD struct {
 	HoursPerWeek form.FDInput
 }
 
-// AffordURL opens the "Can I afford it?" drawer, prefilled from the wish
-// itemID, if any.
+// AffordURL opens the "Plan it" drawer, prefilled from the wish itemID, if
+// any.
 func AffordURL(itemID string) string {
 	if itemID == "" {
 		return "/decide/afford"
@@ -39,43 +37,101 @@ func AffordURL(itemID string) string {
 	return "/decide/afford?wishlist_id=" + itemID
 }
 
-// AffordDrawer is the "Can I afford it?" calculator, in a drawer, checking
-// the purchase as it's typed, with the cost in work hours.
-templ AffordDrawer(fd *PurchaseFD, name string, curs []models.Currency, defaultCur *models.Currency, ws *models.WorkSettings, result templ.Component) {
-	@components.Drawer(components.DrawerProps{Label: "Can I afford it?"}) {
-		<div class="drawer-panel flex flex-col flex-1 min-h-0 [--accent:var(--color-sky-400)]">
+// PlanItFD is the "Plan it" form: what it is, its price and the plan.
+type PlanItFD struct {
+	Name     form.FDInput
+	AmountFD *form.AmountFD
+	// WishlistID is the wish it's planned for, if any.
+	WishlistID string
+	Plan       *GoalPlanFD
+}
+
+// AffordDrawer plans a purchase like a goal, from the money free now (the
+// balance less the budgets and goal deposits left): by a monthly amount or
+// the day it's bought, saving it all or with a down payment and a loan,
+// weighed as it's typed against every month's money. It can be saved as a
+// goal.
+templ AffordDrawer(fd *PlanItFD, curs []models.Currency, defaultCur *models.Currency, ws *models.WorkSettings, money models.GoalPlanMoney, result templ.Component) {
+	{{ mode := fd.Plan.Mode.Value }}
+	if mode == "" {
+		{{ mode = models.GoalPlanSave.String() }}
+	}
+	@components.Drawer(components.DrawerProps{Label: "Plan it"}) {
+		<div class="drawer-panel flex flex-col flex-1 min-h-0 [--accent:var(--color-violet-400)]">
 			<header class="flex items-start gap-3 px-5 sm:px-6 pt-5 pb-4">
 				<div class="flex-1 min-w-0">
 					<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-(--accent)">
-						@icons.Scale("14")
-						Can I afford it?
+						@icons.Target("14")
+						Plan it
 					</p>
-					if name != "" {
-						<h2 title={ name } class="mt-1 text-lg font-bold leading-snug break-words line-clamp-2">{ name }</h2>
+					if fd.WishlistID != "" {
+						<h2 title={ fd.Name.Value } class="mt-1 text-lg font-bold leading-snug break-words line-clamp-2">{ fd.Name.Value }</h2>
 					} else {
-						<p class="mt-1 text-sm text-zinc-500">Enter a price to see what it does to your balance and goals.</p>
+						<p class="mt-1 text-sm text-zinc-500">When can you get it, and what does it do to your money and goals?</p>
 					}
 				</div>
 				@components.DrawerClose()
 			</header>
-			<div id="afford" class="flex-1 grid grid-cols-1 auto-rows-max content-start gap-5 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
-				<form
-					hx-post="/decide/afford"
-					hx-trigger="input delay:400ms, change"
-					hx-target="#afford-result"
-					hx-swap="innerHTML"
-					class="grid gap-4"
-					@submit.prevent
-				>
-					@purchaseInputs(fd, "afford", curs, defaultCur, false)
-				</form>
-				<div id="afford-result">
-					@result
+			<form
+				id="afford"
+				hx-post="/decide/afford"
+				hx-trigger="input delay:400ms, change"
+				hx-target="#afford-result"
+				hx-swap="innerHTML"
+				class="flex-1 flex flex-col min-h-0"
+				@submit.prevent
+			>
+				<div class="flex-1 grid grid-cols-1 auto-rows-max content-start gap-5 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
+					<div x-data={ moneyInputsData(curs, fd.AmountFD.CurrencyID.Value, defaultCur, mode, fd.Plan.Loan.strategy()) } @change="onChange($event)" class="grid gap-5">
+						if fd.WishlistID != "" {
+							<input type="hidden" name="wishlist_id" value={ fd.WishlistID }/>
+							<input type="hidden" name="name" value={ fd.Name.Value }/>
+						} else {
+							@form.Field("What is it?", "name", "afford", icons.Star("15"), fd.Name.Error) {
+								@form.Control("text", "name", "e.g. A new laptop", "afford", fd.Name, nil)
+							}
+						}
+						@plainAmountInputs("Price", icons.Tag("15"), fd.AmountFD, "afford", curs, defaultCur, false)
+						@planInputs(fd.Plan, "afford", mode)
+					</div>
+					<div id="afford-result">
+						@result
+					</div>
+					@WorkSettingsSummary(ws)
 				</div>
-				@WorkSettingsSummary(ws)
-			</div>
+				<footer class="flex items-center justify-end gap-3 px-5 sm:px-6 py-4 border-t border-zinc-800">
+					<p id="afford-save-error" class="mr-auto text-sm text-red-400"></p>
+					<button
+						type="button"
+						hx-post="/decide/goal"
+						hx-target="#afford-save-error"
+						hx-swap="innerHTML"
+						class="btn-primary"
+					>
+						@icons.Target("18")
+						Save as a goal
+					</button>
+				</footer>
+			</form>
 		</div>
 	}
+}
+
+// PlanItResult is the plan's options (saving it all or a down payment and
+// a loan, from the money free now) and the picked one weighed on the day
+// it's bought.
+templ PlanItResult(gl *models.Goal, money models.GoalPlanMoney, opts GoalPlanOptions, a *models.Affordability, ws *models.WorkSettings) {
+	<div class="grid gap-4">
+		if gl.Progress() > 0.005 {
+			<p class="text-sm text-zinc-500">
+				Starting from the <span class="sensitive text-zinc-300 tabular-nums">{ gl.Currency.Format(gl.Progress()) }</span> free now: your balance less this month's budgets and goal deposits left.
+			</p>
+		}
+		@GoalPlanPreview(gl, money, opts)
+		if a != nil {
+			@AffordResult(a, ws)
+		}
+	</div>
 }
 
 // purchaseInputs are a price, its currency and how it's paid: cash, or by
@@ -92,36 +148,9 @@ templ purchaseInputs(fd *PurchaseFD, id string, curs []models.Currency, defaultC
 			{Value: PayCash, Label: "Cash"},
 			{Value: PayInstallments, Label: "Installments"},
 		}, form.FDInput{Value: mode}, nil)
-		if fd.On != nil {
-			@purchaseDate(*fd.On, id)
-		}
 		<div x-show={ fmt.Sprintf("mode === '%s'", PayInstallments) } x-cloak>
 			@installmentPlanInputs(&fd.Plan, id, withPreview)
 		</div>
-	</div>
-}
-
-// purchaseDate is the day it's bought, or a plan starts, empty for today.
-templ purchaseDate(data form.FDInput, id string) {
-	<div class="grid gap-2">
-		<div class="flex items-end gap-2">
-			<div class="flex-1 min-w-0">
-				<label for={ "on-" + id } class="input-label">
-					@icons.Calendar("15")
-					<span x-text={ fmt.Sprintf("mode === '%s' ? 'Start on' : 'Buy on'", PayInstallments) }>Buy on</span>
-				</label>
-				@form.Control("text", "on", "Today", id, data, templ.Attributes{
-					"autocomplete":           "off",
-					"x-mask":                 "9999-99-99",
-					"data-datepicker":        true,
-					"data-datepicker-change": true,
-					"data-afford-on":         true,
-				})
-			</div>
-			<button type="button" class="wl-action h-11" onclick="setAffordOn('')">Today</button>
-		</div>
-		<p class="text-sm text-zinc-500">A later day counts the money free every month until then: your salary less the budgets and the goals' plans.</p>
-		@form.ErrorMessage(data.Error)
 	</div>
 }
 
@@ -192,10 +221,10 @@ templ AffordResult(a *models.Affordability, ws *models.WorkSettings) {
 					</ul>
 				}
 				if !a.Earliest.IsZero() {
-					<button type="button" class="mt-2 inline-flex items-center gap-1.5 text-sm font-medium underline-offset-2 hover:underline cursor-pointer" onclick={ templ.JSFuncCall("setAffordOn", a.Earliest.Format(time.DateOnly)) }>
+					<p class="mt-2 flex items-center gap-1.5 text-sm font-medium">
 						@icons.Calendar("14")
-						It fits from { affordDay(a.Earliest) }, check then
-					</button>
+						It fits from { affordDay(a.Earliest) }
+					</p>
 				}
 			</div>
 			@affordBalance(a)
@@ -305,9 +334,9 @@ templ affordMonth(a *models.Affordability) {
 			</dl>
 			if len(a.FreeDates) > 0 {
 				<div class="flex flex-wrap items-center gap-2">
-					<span class="text-sm text-zinc-500">Check it</span>
+					<span class="text-sm text-zinc-500">Start saving</span>
 					for _, f := range a.FreeDates {
-						<button type="button" class="wl-action" onclick={ templ.JSFuncCall("setAffordOn", f.On.Format(time.DateOnly)) }>
+						<button type="button" class="wl-action" onclick={ templ.JSFuncCall("setPlanStart", f.On.Format(time.DateOnly)) }>
 							@icons.Target("14")
 							{ goalFreeLabel(&f) } · { affordDay(f.On) }
 						</button>

@@ -3,6 +3,7 @@ package views
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/omareloui/tyche/internal/models"
@@ -15,21 +16,56 @@ import (
 // loan of the installments mode.
 type GoalPlanFD struct {
 	// From is GoalFromDetails when opened from the goal's details.
-	From    string
+	From string
+	// StartsOn is the day saving starts, empty for today, and Milestones
+	// the days the other goals' plans free money from (in Currency, the
+	// goal's).
+	StartsOn   form.FDInput
+	Milestones []models.PlanMilestone
+	Currency   models.Currency
+	// By is PlanByMonthly or PlanByMonths: what's given, the monthly amount
+	// or the number of months (Months), the other worked out.
+	By      form.FDInput
 	Monthly form.FDInput
+	Months  form.FDInput
 	Mode    form.FDInput
 	Loan    InstallmentPlanFD
+}
+
+// What a plan is given by.
+const (
+	PlanByMonthly = "monthly"
+	PlanByMonths  = "months"
+)
+
+func (fd *GoalPlanFD) by() string {
+	if fd.By.Value == PlanByMonths {
+		return PlanByMonths
+	}
+	return PlanByMonthly
 }
 
 // GoalPlanOptions are the ways to pay for a goal at the plan's monthly
 // amount: saving the whole price, or a down payment and a loan.
 type GoalPlanOptions struct {
-	Mode    models.GoalPlanMode
+	Mode models.GoalPlanMode
+	// Monthly is the amount put aside every month: the plan's, or the
+	// picked option's worked out from its months for a sized one.
 	Monthly float64
+	// Months is a sized plan's.
+	Months int
 	// Save and Loan are nil without a monthly amount, Loan also with a
 	// LoanProblem.
 	Save, Loan  *models.GoalProjection
 	LoanProblem string
+}
+
+// Picked is the projection of the option picked, nil without one.
+func (o *GoalPlanOptions) Picked() *models.GoalProjection {
+	if o.Mode == models.GoalPlanInstallments {
+		return o.Loan
+	}
+	return o.Save
 }
 
 // GoalPlanCard is a planned goal's projection and next deposit, on its card.
@@ -73,39 +109,7 @@ templ GoalPlanFormFields(gl *models.Goal, fd *GoalPlanFD, money models.GoalPlanM
 	}) {
 		@goalFromInput(fd.From)
 		<div x-data={ goalPlanData(gl, mode, fd.Loan.strategy()) } data-price={ fmt.Sprint(gl.Price) } @change="onChange($event)" class="grid gap-5">
-			@goalPlanMoney(money)
-			<div class="grid gap-2">
-				@form.Field("Put aside every month", "monthly", id, icons.PiggyBank("15"), fd.Monthly.Error) {
-					@form.Control("text", "monthly", "", id, fd.Monthly, templ.Attributes{
-						"autocomplete":   "off",
-						"inputmode":      "decimal",
-						"data-money":     true,
-						"x-mask:dynamic": moneyMask,
-						":placeholder":   "money(1000)",
-						"x-ref":          "monthly",
-					})
-				}
-				if money.Free() > 0 {
-					<button
-						type="button"
-						@click={ fmt.Sprintf("$refs.monthly.value = '%.2f'; $refs.monthly.dispatchEvent(new Event('input', {bubbles: true})); $refs.monthly.focus()", money.Free()) }
-						class="justify-self-start inline-flex items-center gap-1.5 h-8 px-3 rounded-full border border-zinc-700 text-sm text-zinc-300 cursor-pointer transition-colors hover:border-(--accent) hover:text-(--accent)"
-					>
-						@icons.Sparkles("14")
-						Use all that's free · <span class="sensitive tabular-nums">{ money.Currency.Format(money.Free()) }</span>
-					</button>
-				}
-			</div>
-			@form.SegmentedRadio("How to pay for it", "mode", id, []form.RadioOption{
-				{Value: models.GoalPlanSave.String(), Label: "Save it all"},
-				{Value: models.GoalPlanInstallments.String(), Label: "Down payment + loan"},
-			}, form.FDInput{Value: mode}, nil)
-			<div x-show={ fmt.Sprintf("mode === '%s'", models.GoalPlanInstallments) } x-cloak class="grid gap-2">
-				<p class="text-sm text-zinc-500">
-					Save the down payment (and the fees paid on the day), then the loan's payments come out of the same monthly amount. Leave the months empty to take the shortest loan it pays.
-				</p>
-				@installmentPlanInputs(&fd.Loan, id, false)
-			</div>
+			@planInputs(fd, id, mode)
 			<div
 				hx-post={ goalPlanURL(gl) + "/preview" }
 				hx-trigger="input delay:400ms from:closest form, change from:closest form"
@@ -117,6 +121,130 @@ templ GoalPlanFormFields(gl *models.Goal, fd *GoalPlanFD, money models.GoalPlanM
 			</div>
 		</div>
 	}
+}
+
+// planInputs are a plan's: the day saving starts, the monthly amount put
+// aside or the months to save over, and how it's paid for: saving it all,
+// or a down payment then a loan. They expect a moneyInputs scope.
+templ planInputs(fd *GoalPlanFD, id string, mode string) {
+	@form.Field("Start saving on", "starts_on", id, icons.Calendar("15"), fd.StartsOn.Error) {
+		@form.Control("text", "starts_on", "Today", id, fd.StartsOn, templ.Attributes{
+			"autocomplete":           "off",
+			"x-mask":                 "9999-99-99",
+			"data-datepicker":        true,
+			"data-datepicker-change": true,
+			"data-plan-starts-on":    true,
+			"x-ref":                  "startsOn",
+		})
+		<p class="mt-1 text-xs text-zinc-500">The first deposit's day. Later on frees more of your month when other goals are done by then.</p>
+	}
+	if len(fd.Milestones) > 0 {
+		@planTimeline(fd)
+	}
+	<div class="grid gap-2">
+		<div class="flex items-center justify-between gap-3">
+			<span class="text-sm font-medium text-zinc-400">Save by</span>
+			@unitToggle("plan_by", id, fd.by(), []form.RadioOption{
+				{Value: PlanByMonthly, Label: "Monthly amount"},
+				{Value: PlanByMonths, Label: "Months"},
+			})
+		</div>
+		<div x-show={ fmt.Sprintf("planBy === '%s'", PlanByMonthly) }>
+			@form.Field("Put aside every month", "monthly", id, icons.PiggyBank("15"), fd.Monthly.Error) {
+				@form.Control("text", "monthly", "", id, fd.Monthly, templ.Attributes{
+					"autocomplete":   "off",
+					"inputmode":      "decimal",
+					"data-money":     true,
+					"x-mask:dynamic": moneyMask,
+					":placeholder":   "money(1000)",
+					"x-ref":          "monthly",
+				})
+			}
+		</div>
+		<div x-show={ fmt.Sprintf("planBy === '%s'", PlanByMonths) } x-cloak>
+			@form.Field("Months to save over", "months", id, icons.Calendar("15"), fd.Months.Error) {
+				@form.Control("text", "months", "e.g. 12", id, fd.Months, templ.Attributes{
+					"inputmode": "numeric", "autocomplete": "off", "x-mask": "999",
+				})
+			}
+		</div>
+	</div>
+	@form.SegmentedRadio("How to pay for it", "mode", id, []form.RadioOption{
+		{Value: models.GoalPlanSave.String(), Label: "Save it all"},
+		{Value: models.GoalPlanInstallments.String(), Label: "Down payment + loan"},
+	}, form.FDInput{Value: mode}, nil)
+	<div x-show={ fmt.Sprintf("mode === '%s'", models.GoalPlanInstallments) } x-cloak class="grid gap-2">
+		<p class="text-sm text-zinc-500">
+			Save the down payment (and the fees paid on the day), then the loan's payments come out of the same monthly amount. Leave the months empty to take the shortest loan it pays.
+		</p>
+		@installmentPlanInputs(&fd.Loan, id, false)
+	</div>
+}
+
+// planTimeline is when the other goals' plans free money, each starting the
+// saving then on a click.
+templ planTimeline(fd *GoalPlanFD) {
+	<div class="grid gap-1.5 -mt-2">
+		<p class="text-xs text-zinc-500">When your other plans free money</p>
+		<div class="no-scrollbar overflow-x-auto overscroll-x-contain">
+			<ol class="relative flex gap-2 min-w-max pt-3">
+				<div aria-hidden="true" class="absolute top-[5px] inset-x-3 h-px bg-zinc-800"></div>
+				<li>
+					@planMilestoneButton("", "Today", "", "")
+				</li>
+				for _, m := range fd.Milestones {
+					<li>
+						@planMilestoneButton(m.On.Format(time.DateOnly), m.On.Format("Jan 2006"), planMilestoneLabel(&m), fd.Currency.Format(m.Free)+" free")
+					</li>
+				}
+			</ol>
+		</div>
+	</div>
+}
+
+templ planMilestoneButton(day, when, label, free string) {
+	<button
+		type="button"
+		@click={ fmt.Sprintf("$refs.startsOn.value = '%s'; $refs.startsOn.dispatchEvent(new Event('change', {bubbles: true}))", day) }
+		:class={ fmt.Sprintf("{'is-active': (tick, $refs.startsOn.value === '%s')}", day) }
+		class="plan-milestone"
+	>
+		<span aria-hidden="true" class="plan-milestone-dot"></span>
+		<span class="text-xs text-zinc-500">{ when }</span>
+		if label != "" {
+			<span class="text-sm text-zinc-200">{ label }</span>
+		}
+		if free != "" {
+			<span class="sensitive text-xs tabular-nums text-(--accent)">{ free }</span>
+		}
+	</button>
+}
+
+// planMilestoneLabel names what frees the money then, e.g. "TV done · Car
+// saved", or "First free money".
+func planMilestoneLabel(m *models.PlanMilestone) string {
+	names := func(gls []*models.Goal) string {
+		s := make([]string, len(gls))
+		for i, g := range gls {
+			s[i] = g.Name
+		}
+		return strings.Join(s, ", ")
+	}
+	var parts []string
+	if len(m.Done) > 0 {
+		parts = append(parts, names(m.Done)+" done")
+	}
+	if len(m.Saved) > 0 {
+		parts = append(parts, names(m.Saved)+" saved")
+	}
+	if len(parts) == 0 && m.FirstFree {
+		return "First free money"
+	}
+	label := strings.Join(parts, " · ")
+	if m.FirstFree {
+		label += " · first free money"
+	}
+	return label
 }
 
 // goalPlanData starts the form's moneyInputs scope in the goal's currency.
@@ -148,17 +276,32 @@ templ goalPlanMoney(m models.GoalPlanMoney) {
 			</span>
 		</p>
 	} else {
-		<dl class="grid gap-1.5 px-4 py-3 rounded-2xl bg-zinc-800/30 ring-1 ring-zinc-800 text-sm tabular-nums">
-			@goalPlanMoneyRow("Salary", m.Currency.Format(m.Salary), "")
-			@goalPlanMoneyRow("Budgets", "− "+m.Currency.Format(m.Budgets), "")
-			if m.OtherPlans > 0 {
-				@goalPlanMoneyRow("Other goals' plans", "− "+m.Currency.Format(m.OtherPlans), "")
+		<div class="grid gap-2">
+			<dl class="grid gap-1.5 px-4 py-3 rounded-2xl bg-zinc-800/30 ring-1 ring-zinc-800 text-sm tabular-nums">
+				if !m.IsCurrent(time.Now()) {
+					<p class="text-xs font-semibold uppercase tracking-wider text-zinc-500">In { m.Month.RangeLabel() }</p>
+				}
+				@goalPlanMoneyRow("Salary", m.Currency.Format(m.Salary), "")
+				@goalPlanMoneyRow("Budgets", "− "+m.Currency.Format(m.Budgets), "")
+				if m.OtherPlans > 0 {
+					@goalPlanMoneyRow("Other goals' plans", "− "+m.Currency.Format(m.OtherPlans), "")
+				}
+				<div class="flex items-center justify-between gap-3 pt-1.5 border-t border-zinc-800">
+					<dt class="font-medium text-zinc-200">Free every month</dt>
+					<dd class="sensitive font-bold text-(--accent)">{ m.Currency.Format(m.Free()) }</dd>
+				</div>
+			</dl>
+			if m.Free() > 0 {
+				<button
+					type="button"
+					@click={ fmt.Sprintf("planBy = '%s'; $root.querySelector('[name=plan_by][value=%s]').checked = true; $refs.monthly.value = '%.2f'; $refs.monthly.dispatchEvent(new Event('input', {bubbles: true})); $refs.monthly.focus()", PlanByMonthly, PlanByMonthly, m.Free()) }
+					class="justify-self-start inline-flex items-center gap-1.5 h-8 px-3 rounded-full border border-zinc-700 text-sm text-zinc-300 cursor-pointer transition-colors hover:border-(--accent) hover:text-(--accent)"
+				>
+					@icons.Sparkles("14")
+					Use all that's free · <span class="sensitive tabular-nums">{ m.Currency.Format(m.Free()) }</span>
+				</button>
 			}
-			<div class="flex items-center justify-between gap-3 pt-1.5 border-t border-zinc-800">
-				<dt class="font-medium text-zinc-200">Free every month</dt>
-				<dd class="sensitive font-bold text-(--accent)">{ m.Currency.Format(m.Free()) }</dd>
-			</div>
-		</dl>
+		</div>
 	}
 }
 
@@ -176,8 +319,9 @@ templ GoalPlanHint(msg string) {
 // GoalPlanPreview compares saving the whole price with a down payment and a
 // loan, the picked one highlighted.
 templ GoalPlanPreview(gl *models.Goal, money models.GoalPlanMoney, opts GoalPlanOptions) {
-	if opts.Monthly <= 0 {
-		@GoalPlanHint("Enter how much to put aside every month to see when you'd get it.")
+	@goalPlanMoney(money)
+	if opts.Save == nil && opts.Loan == nil && opts.LoanProblem == "" {
+		@GoalPlanHint("Enter how much to put aside every month, or the months to save over, to see when you'd get it.")
 	} else {
 		<div class="grid gap-3">
 			if money.HasSalary() && opts.Monthly > money.Free()+0.005 {
@@ -190,7 +334,7 @@ templ GoalPlanPreview(gl *models.Goal, money models.GoalPlanMoney, opts GoalPlan
 				@goalOptionCard("Save it all", opts.Mode == models.GoalPlanSave) {
 					if opts.Save != nil {
 						{{ pr := opts.Save }}
-						@goalOptionOwn(pr)
+						@goalOptionOwn(pr, &gl.Currency)
 						<p class="text-sm text-zinc-400">
 							if pr.SaveMonths > 0 {
 								{ fmt.Sprint(pr.SaveMonths) } { plural(pr.SaveMonths, "month", "months") } of saving
@@ -206,7 +350,7 @@ templ GoalPlanPreview(gl *models.Goal, money models.GoalPlanMoney, opts GoalPlan
 						<p class="text-sm text-zinc-500">{ opts.LoanProblem }</p>
 					} else if opts.Loan != nil {
 						{{ pr := opts.Loan }}
-						@goalOptionOwn(pr)
+						@goalOptionOwn(pr, &gl.Currency)
 						<p class="text-sm text-zinc-400">
 							<span class="sensitive tabular-nums">{ gl.Currency.Format(pr.Target) }</span> down
 							if pr.SaveMonths > 0 {
@@ -262,7 +406,7 @@ templ goalOptionCard(title string, picked bool) {
 	</div>
 }
 
-templ goalOptionOwn(pr *models.GoalProjection) {
+templ goalOptionOwn(pr *models.GoalProjection, cur *models.Currency) {
 	<p class="text-xs text-zinc-500">Yours by</p>
 	<p class="text-xl font-bold font-(family-name:--font-biorhyme-expanded)">
 		if pr.Left <= 0.005 {
@@ -271,6 +415,11 @@ templ goalOptionOwn(pr *models.GoalProjection) {
 			{ pr.BuyOn.Format("Jan 2006") }
 		}
 	</p>
+	if pr.Plan.IsSized() && pr.Left > 0.005 {
+		<p class="text-sm text-zinc-300">
+			<span class="sensitive font-semibold tabular-nums">{ cur.Format(pr.Plan.Monthly) }</span> a month
+		</p>
+	}
 }
 
 // monthsApart is how many months from goes before to.

@@ -125,8 +125,9 @@ func (c *AffordContext) timeline(until time.Time) (tl []MonthMoney, dueNow float
 		}
 	}
 
-	// Each outlay is made on the first payday on or after its day, the ones
-	// asked by today out of the balance.
+	// Each outlay comes out of the month it's in (from its payday), like
+	// the goal plans' month's money, the ones of this month or asked by
+	// today out of the balance.
 	type goalOutlays struct {
 		gl     *Goal
 		byDay  map[time.Time]float64
@@ -139,11 +140,11 @@ func (c *AffordContext) timeline(until time.Time) (tl []MonthMoney, dueNow float
 		g := goalOutlays{gl: gl, byDay: map[time.Time]float64{}, loan: map[time.Time]bool{}}
 		for _, o := range planOutlays(gl, today) {
 			amount := convert(o.Amount, &gl.Currency, c.Currency)
-			if !dateOnly(o.On).After(today) {
+			on := c.Start.Of(dateOnly(o.On)).From
+			if !dateOnly(o.On).After(today) || !on.After(today) {
 				dueNow += amount
 				continue
 			}
-			on := Payday(c.Start, o.On)
 			g.byDay[on] += amount
 			g.loan[on] = g.loan[on] || o.Loan
 			if on.After(g.lastOn) {
@@ -235,4 +236,15 @@ func run(start float64, tl []MonthMoney, on time.Time, onDay float64, sch *Insta
 	}
 	r.BalanceAfterAll = bal
 	return r
+}
+
+// Spendable is the money free now: the balance less this month's budgets
+// left and the goal deposits asked by today.
+func (c *AffordContext) Spendable() float64 {
+	var bal float64
+	for _, b := range c.Balances {
+		bal += convert(b.Amount, &b.Currency, c.Currency)
+	}
+	_, dueNow, _ := c.timeline(dateOnly(c.Today))
+	return RoundCents(bal - c.BudgetLeft - dueNow)
 }

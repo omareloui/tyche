@@ -45,6 +45,42 @@ type GoalPlan struct {
 	// progress then, to tell if it's on track.
 	StartsOn   time.Time `json:"starts_on"`
 	StartSaved float64   `json:"start_saved"`
+	// Months, when set, is how many monthly deposits save the target:
+	// Monthly is then worked out from it (Sized), what's left of the target
+	// since StartsOn spread over them.
+	Months int `json:"months,omitempty"`
+}
+
+// IsSized tells if it's planned by its number of months rather than by a
+// monthly amount.
+func (p *GoalPlan) IsSized() bool {
+	return p != nil && p.Months > 0
+}
+
+// Sized is the plan with its monthly amount worked out from Months for the
+// price: the target (the price, or the loan's down payment and fees on the
+// day) less what was saved when it started, over Months deposits, rounded
+// up to the cent. The plan as is when not sized or nothing's left (Monthly
+// still paying a loan).
+func (p *GoalPlan) Sized(price float64) *GoalPlan {
+	if !p.IsSized() {
+		return p
+	}
+	q := *p
+	target := price
+	if q.IsInstallments() {
+		loan := *q.Loan
+		if loan.Months == 0 && (loan.Strategy != StrategyKnownAmount || loan.Amount <= 0) {
+			loan.Months = 1
+		}
+		if s, err := loan.Schedule(price); err == nil {
+			target = s.PaidOnDay()
+		}
+	}
+	if left := target - q.StartSaved; left > 0.005 {
+		q.Monthly = math.Ceil(left/float64(q.Months)*100-1e-6) / 100
+	}
+	return &q
 }
 
 var (
@@ -65,6 +101,7 @@ func (p *GoalPlan) LoanSchedule(price float64) (*InstallmentSchedule, error) {
 	if !p.IsInstallments() {
 		return nil, nil
 	}
+	p = p.Sized(price)
 	return FitLoan(*p.Loan, price, p.Monthly)
 }
 
@@ -144,6 +181,7 @@ type GoalProjection struct {
 // amount (in one deposit or many, in a month or ahead) moves the next
 // deposits on, and missed months are asked again now.
 func (p *GoalPlan) Project(price, saved float64, now time.Time) (*GoalProjection, error) {
+	p = p.Sized(price)
 	if p.Monthly <= 0 {
 		return nil, ErrPlanNoMonthly
 	}
@@ -252,8 +290,13 @@ func (pr *GoalProjection) schedule() []GoalDeposit {
 		return true
 	}
 
+	// The first deposit is on the day saving starts, today at the earliest.
+	first := pr.now
+	if pr.Plan.StartsOn.After(first) {
+		first = pr.Plan.StartsOn
+	}
 	if due := float64(elapsed+1)*m - paid; due > 0.005 {
-		add(due, pr.now)
+		add(due, first)
 	}
 	for month := elapsed + 1; left > 0.005 && month <= elapsed+maxLoanMonths*2; month++ {
 		amount := float64(month+1)*m - paid
@@ -274,6 +317,7 @@ func (p *GoalPlan) Outlay(gl *Goal, now time.Time) float64 {
 	if p == nil {
 		return 0
 	}
+	p = p.Sized(gl.Price)
 	loan, err := p.LoanSchedule(gl.Price)
 	if err != nil {
 		loan = nil
@@ -303,18 +347,56 @@ func (p *GoalPlan) target(price float64, loan *InstallmentSchedule) float64 {
 // GoalPlanMoney is a month's money free for a goal, in its currency.
 type GoalPlanMoney struct {
 	Currency Currency
+	// Month is the user's month it's of.
+	Month Period
 	// Salary is 0 when not set.
 	Salary float64
 	// Budgets are the expense categories' budgets of a month.
 	Budgets float64
-	// OtherPlans are what the other goals' plans take every month.
+	// OtherPlans are what the other goals' plans take that month.
 	OtherPlans float64
 }
 
-// NewGoalPlanMoney is what's left of the salary for gl after the budgets
-// and the other goals' plans.
-func NewGoalPlanMoney(gl *Goal, ws *WorkSettings, cats []Category, goals []Goal, now time.Time) GoalPlanMoney {
-	m := GoalPlanMoney{Currency: gl.Currency}
+// NewGoalPlanMoney is what's left of the salary for gl in the user's month
+// on is in (months starting on start) after the budgets and what the other
+// goals' plans take that month: their deposits until saved, then their
+// loans' payments, so a goal done by then takes nothing.
+func NewGoalPlanMoney(gl *Goal, ws *WorkSettings, cats []Category, goals []Goal, start MonthStart, now, on time.Time) GoalPlanMoney {
+	if on.Before(now) {
+		on = now
+	}
+	return monthMoneyOf(gl, ws, cats, otherOutlays(gl, goals, now), start.Of(dateOnly(on)))
+}
+
+// goalOutlay is one of another goal's plan's deposits or loan payments, in
+// the planned goal's currency.
+type goalOutlay struct {
+	goal   *Goal
+	on     time.Time
+	amount float64
+	loan   bool
+}
+
+// otherOutlays are the outlays of the plans of the goals but gl, in its
+// currency.
+func otherOutlays(gl *Goal, goals []Goal, now time.Time) []goalOutlay {
+	var res []goalOutlay
+	for i := range goals {
+		other := &goals[i]
+		if other.ID == gl.ID {
+			continue
+		}
+		for _, o := range planOutlays(other, now) {
+			res = append(res, goalOutlay{goal: other, on: dateOnly(o.On), amount: convert(o.Amount, &other.Currency, &gl.Currency), loan: o.Loan})
+		}
+	}
+	return res
+}
+
+// monthMoneyOf is gl's money of the user's month p, the other goals taking
+// their outlays in it.
+func monthMoneyOf(gl *Goal, ws *WorkSettings, cats []Category, outs []goalOutlay, p Period) GoalPlanMoney {
+	m := GoalPlanMoney{Currency: gl.Currency, Month: p}
 	if ws.IsSet() {
 		m.Salary = convert(ws.MonthlySalary, &ws.Currency, &gl.Currency)
 	}
@@ -323,13 +405,95 @@ func NewGoalPlanMoney(gl *Goal, ws *WorkSettings, cats []Category, goals []Goal,
 			m.Budgets += convert(c.BudgetAmount, c.BudgetCurrency, &gl.Currency)
 		}
 	}
-	for i := range goals {
-		other := &goals[i]
-		if other.ID != gl.ID && other.Plan != nil {
-			m.OtherPlans += convert(other.Plan.Outlay(other, now), &other.Currency, &gl.Currency)
+	for _, o := range outs {
+		if p.Contains(o.on) {
+			m.OtherPlans += o.amount
 		}
 	}
+	m.OtherPlans = RoundCents(m.OtherPlans)
 	return m
+}
+
+// PlanMilestone is a day saving for a goal could start on: the first day
+// of the user's month after some of the other goals' plans stop taking
+// money (Done) or stop saving, their loans still paid (Saved), or the first
+// one with money free (FirstFree). Free is that month's.
+type PlanMilestone struct {
+	On          time.Time
+	Done, Saved []*Goal
+	FirstFree   bool
+	Free        float64
+}
+
+// PlanMilestones are the days the other goals' plans free money from, in
+// order, with the first month money is free when none is now (and a salary
+// is set).
+func PlanMilestones(gl *Goal, ws *WorkSettings, cats []Category, goals []Goal, start MonthStart, now time.Time) []PlanMilestone {
+	outs := otherOutlays(gl, goals, now)
+	type ends struct{ saving, all time.Time }
+	last := map[*Goal]*ends{}
+	var order []*Goal
+	for _, o := range outs {
+		e := last[o.goal]
+		if e == nil {
+			e = &ends{}
+			last[o.goal] = e
+			order = append(order, o.goal)
+		}
+		if o.on.After(e.all) {
+			e.all = o.on
+		}
+		if !o.loan && o.on.After(e.saving) {
+			e.saving = o.on
+		}
+	}
+
+	byDay := map[time.Time]*PlanMilestone{}
+	at := func(on time.Time) *PlanMilestone {
+		if byDay[on] == nil {
+			byDay[on] = &PlanMilestone{On: on}
+		}
+		return byDay[on]
+	}
+	var lastDay time.Time
+	for _, g := range order {
+		e := last[g]
+		done := start.Of(e.all).Next().From
+		at(done).Done = append(at(done).Done, g)
+		if done.After(lastDay) {
+			lastDay = done
+		}
+		// Saved, then a loan paid on after.
+		if saved := start.Of(e.saving).Next().From; !e.saving.IsZero() && saved.Before(done) {
+			at(saved).Saved = append(at(saved).Saved, g)
+		}
+	}
+
+	money := func(on time.Time) float64 {
+		return monthMoneyOf(gl, ws, cats, outs, start.Of(on)).Free()
+	}
+	if ws.IsSet() && money(dateOnly(now)) <= 0 {
+		p := start.Of(dateOnly(now)).Next()
+		for i := 0; i < maxLoanMonths && !p.From.After(lastDay); i, p = i+1, p.Next() {
+			if money(p.From) > 0 {
+				at(p.From).FirstFree = true
+				break
+			}
+		}
+	}
+
+	res := make([]PlanMilestone, 0, len(byDay))
+	for _, m := range byDay {
+		m.Free = money(m.On)
+		res = append(res, *m)
+	}
+	slices.SortFunc(res, func(a, b PlanMilestone) int { return a.On.Compare(b.On) })
+	return res
+}
+
+// IsCurrent tells if it's the money of the user's month now is in.
+func (m GoalPlanMoney) IsCurrent(now time.Time) bool {
+	return m.Month.Contains(dateOnly(now))
 }
 
 func (m GoalPlanMoney) HasSalary() bool {

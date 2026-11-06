@@ -118,18 +118,6 @@ templ Wishlist(items []models.WishlistItem, ws *models.WorkSettings, defaultCur 
 			<div class="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl border border-dashed border-zinc-800">
 				<p class="max-w-md text-sm text-zinc-500">Want something? Add it and wait a week or a month. If you still want it then, buy it or save for it.</p>
 				<div class="flex flex-wrap items-center gap-2">
-					if len(items) == 0 {
-						<button
-							hx-get={ AffordURL("") }
-							hx-target={ "#" + components.DrawerSlot }
-							hx-swap="innerHTML"
-							data-opens-drawer
-							class="wl-action"
-						>
-							@icons.Scale("14")
-							Can I afford it?
-						</button>
-					}
 					<button type="button" @click="openWishForm=true" class="btn-primary">
 						@icons.Plus("18")
 						Add a wish
@@ -192,19 +180,6 @@ templ wishlistSummary(s models.WishlistStats, defaultCur *models.Currency) {
 				@statTile(strconv.Itoa(s.Bought), "Bought", "text-sky-400")
 				@statTile(strconv.Itoa(s.Abandoned), "Let go", "text-emerald-400")
 			</div>
-		</div>
-		<div class="relative flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-zinc-800">
-			<p class="text-sm text-zinc-500">Thinking of buying something?</p>
-			<button
-				hx-get={ AffordURL("") }
-				hx-target={ "#" + components.DrawerSlot }
-				hx-swap="innerHTML"
-				data-opens-drawer
-				class="wl-action"
-			>
-				@icons.Scale("14")
-				Can I afford it?
-			</button>
 		</div>
 	</section>
 }
@@ -295,8 +270,8 @@ templ WishlistItem(item *models.WishlistItem, ws *models.WorkSettings) {
 							data-opens-drawer
 							class="wl-action"
 						>
-							@icons.Scale("14")
-							Can I afford it?
+							@icons.Target("14")
+							Plan it
 						</button>
 						<button
 							hx-get={ fmt.Sprintf("/wishlist/%s/buy", item.ID) }

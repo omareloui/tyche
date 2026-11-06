@@ -336,6 +336,31 @@ input[type="number"] {
     @apply whitespace-nowrap rounded-xl bg-zinc-900/55 backdrop-blur-md backdrop-saturate-150 ring-1 ring-white/10 shadow-xl shadow-black/40 px-2.5 py-1.5 text-sm leading-tight;
   }
 
+  /* Scrolls without showing a scrollbar. */
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .plan-milestone {
+    @apply relative grid justify-items-start gap-0.5 min-w-28 max-w-44 px-3 py-2 rounded-2xl border border-zinc-800 bg-zinc-800/30 text-left cursor-pointer transition-colors hover:border-zinc-600;
+  }
+
+  .plan-milestone.is-active {
+    @apply border-(--accent) bg-(--accent)/8;
+  }
+
+  .plan-milestone-dot {
+    @apply absolute -top-[11px] left-3 size-2 rounded-full bg-zinc-600 ring-4 ring-zinc-900;
+  }
+
+  .plan-milestone.is-active .plan-milestone-dot {
+    @apply bg-(--accent);
+  }
+
   .goals-tab {
     @apply inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full border border-zinc-700 text-sm text-zinc-400 cursor-pointer transition-colors hover:text-white hover:border-zinc-500;
   }

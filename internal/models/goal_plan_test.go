@@ -216,18 +216,31 @@ func TestGoalPlanMoney(t *testing.T) {
 	car := models.Goal{ID: "car", Price: 1_000_000, Currency: egp, Plan: &models.GoalPlan{Monthly: 50_000}}
 	goals := []models.Goal{
 		car,
-		{ID: "phone", Price: 30_000, Currency: egp, Plan: &models.GoalPlan{Monthly: 5_000}},
+		{ID: "phone", Price: 30_000, Currency: egp, Plan: &models.GoalPlan{Monthly: 5_000, StartsOn: now}},
 		// Saved already, so it takes nothing.
 		{ID: "tv", Price: 1_000, Currency: egp, Account: &models.Account{Amount: 1_000}, Plan: &models.GoalPlan{Monthly: 500}},
 		{ID: "trip", Price: 10_000, Currency: egp},
 	}
 
-	m := models.NewGoalPlanMoney(&car, ws, cats, goals, now)
-	if m.Salary != 80_000 || m.Budgets != 20_000 || m.OtherPlans != 5_000 || m.Free() != 55_000 {
+	m := models.NewGoalPlanMoney(&car, ws, cats, goals, models.MonthStart(1), now, now)
+	if m.Salary != 80_000 || m.Budgets != 20_000 || m.OtherPlans != 5_000 || m.Free() != 55_000 || !m.IsCurrent(now) {
 		t.Errorf("%+v, free %v", m, m.Free())
 	}
+	// The phone is saved for in 6 months: nothing taken after.
+	if m := models.NewGoalPlanMoney(&car, ws, cats, goals, models.MonthStart(1), now, now.AddDate(0, 6, 0)); m.OtherPlans != 0 || m.Free() != 60_000 {
+		t.Errorf("6 months on %+v", m)
+	}
 
-	if m := models.NewGoalPlanMoney(&car, &models.WorkSettings{}, cats, goals, now); m.HasSalary() || m.Free() != 0 {
+	// The phone's last deposit is in April: free from May.
+	ms := models.PlanMilestones(&car, ws, cats, goals, models.MonthStart(1), now)
+	if len(ms) != 1 || !ms[0].On.Equal(time.Date(2027, 5, 1, 0, 0, 0, 0, time.UTC)) || len(ms[0].Done) != 1 || ms[0].Done[0].ID != "phone" || ms[0].Free != 60_000 {
+		t.Errorf("milestones = %+v", ms)
+	}
+	if ms := models.PlanMilestones(&car, ws, cats, goals[2:], models.MonthStart(1), now); len(ms) != 0 {
+		t.Errorf("milestones without plans = %+v", ms)
+	}
+
+	if m := models.NewGoalPlanMoney(&car, &models.WorkSettings{}, cats, goals, models.MonthStart(1), now, now); m.HasSalary() || m.Free() != 0 {
 		t.Errorf("without a salary %+v", m)
 	}
 }
@@ -271,5 +284,82 @@ func TestPickGoalSource(t *testing.T) {
 	}
 	if src := models.PickGoalSource(nil, 1, &egp); src.Account != nil || src.Available != 0 {
 		t.Errorf("no accounts %+v", src)
+	}
+}
+
+func TestGoalPlanSized(t *testing.T) {
+	now := time.Date(2026, 11, 6, 0, 0, 0, 0, time.UTC)
+
+	// 9,000 left over 4 months: 2,250 a month.
+	p := &models.GoalPlan{Months: 4, StartsOn: now, StartSaved: 3000}
+	pr, err := p.Project(12000, 3000, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pr.Plan.Monthly != 2250 || pr.SaveMonths != 4 || !pr.BuyOn.Equal(time.Date(2027, 2, 1, 0, 0, 0, 0, time.UTC)) {
+		t.Errorf("projection = %+v", pr)
+	}
+
+	// Starting later: the first deposit on its day.
+	later := time.Date(2027, 1, 15, 0, 0, 0, 0, time.UTC)
+	p = &models.GoalPlan{Monthly: 3000, StartsOn: later}
+	pr, err = p.Project(9000, 0, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := pr.Deposits(); len(d) != 3 || !d[0].On.Equal(later) || !pr.BuyOn.Equal(time.Date(2027, 3, 1, 0, 0, 0, 0, time.UTC)) {
+		t.Errorf("deposits = %+v, buy on %v", d, pr.BuyOn)
+	}
+
+	// With a loan, only the down payment is saved.
+	loan := &models.InstallmentPlan{Months: 10, DownPayment: 20, DownPaymentPct: true}
+	p = &models.GoalPlan{Mode: models.GoalPlanInstallments, Loan: loan, Months: 4, StartsOn: now}
+	if got := p.Sized(12000).Monthly; got != 600 {
+		t.Errorf("monthly = %v, want 600 (2,400 down over 4 months)", got)
+	}
+
+	// Saved already: the plan as is.
+	p = &models.GoalPlan{Months: 4, StartsOn: now, StartSaved: 12000, Monthly: 500}
+	if got := p.Sized(12000).Monthly; got != 500 {
+		t.Errorf("monthly = %v, want the stored 500", got)
+	}
+}
+
+func TestPlanMilestones(t *testing.T) {
+	egp := models.Currency{ID: "egp", String: "EGP"}
+	now := time.Date(2026, 11, 15, 0, 0, 0, 0, time.UTC)
+	ws := &models.WorkSettings{MonthlySalary: 10_000, Currency: egp, HoursPerWeek: 40}
+	goals := []models.Goal{
+		// 12,000 at 6,000 a month: November, December.
+		{ID: "tv", Name: "TV", Price: 12_000, Currency: egp, Plan: &models.GoalPlan{Monthly: 6_000, StartsOn: now}},
+		// 5,000 down at 5,000 a month (November), then 3 payments of 4,000.
+		{ID: "car", Name: "Car", Price: 17_000, Currency: egp, Plan: &models.GoalPlan{
+			Mode: models.GoalPlanInstallments, Monthly: 5_000, StartsOn: now,
+			Loan: &models.InstallmentPlan{Months: 3, DownPayment: 5_000},
+		}},
+	}
+	ms := models.PlanMilestones(&models.Goal{Currency: egp}, ws, nil, goals, models.MonthStart(1), now)
+	day := func(y int, m time.Month) time.Time { return time.Date(y, m, 1, 0, 0, 0, 0, time.UTC) }
+	// November takes 11,000: nothing free. December: TV 6,000 + the car's
+	// first payment 4,000. January: the TV's saved, the car's 4,000 left.
+	want := []struct {
+		on        time.Time
+		done      int
+		saved     int
+		firstFree bool
+		free      float64
+	}{
+		{day(2026, 12), 0, 1, false, 0},
+		{day(2027, 1), 1, 0, true, 6_000},
+		{day(2027, 3), 1, 0, false, 10_000},
+	}
+	if len(ms) != len(want) {
+		t.Fatalf("milestones = %+v", ms)
+	}
+	for i, w := range want {
+		m := ms[i]
+		if !m.On.Equal(w.on) || len(m.Done) != w.done || len(m.Saved) != w.saved || m.FirstFree != w.firstFree || m.Free != w.free {
+			t.Errorf("milestone %d = %+v, want %+v", i, m, w)
+		}
 	}
 }

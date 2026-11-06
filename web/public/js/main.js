@@ -427,10 +427,10 @@ document.addEventListener("alpine:init", () => {
   }));
 });
 
-// setAffordOn checks the afford drawer's purchase on day (yyyy-mm-dd, empty
-// for today), e.g. from the result's "check it then" buttons.
-function setAffordOn(day) {
-  const el = document.querySelector("[data-afford-on]");
+// setPlanStart starts the "Plan it" drawer's saving on day (yyyy-mm-dd),
+// e.g. from the result's "after <goal>" buttons.
+function setPlanStart(day) {
+  const el = document.querySelector("#afford [data-plan-starts-on]");
   if (!el) return;
   el.value = day;
   el.dispatchEvent(new Event("change", { bubbles: true }));

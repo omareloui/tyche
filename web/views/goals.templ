@@ -62,6 +62,19 @@ templ Goals(
 						x-cloak
 					}
 				>
+					<div class="flex justify-end -mt-3 mb-4">
+						<button
+							type="button"
+							hx-get={ AffordURL("") }
+							hx-target={ "#" + components.DrawerSlot }
+							hx-swap="innerHTML"
+							data-opens-drawer
+							class="inline-flex items-center gap-1.5 text-sm text-zinc-400 transition-colors hover:text-white cursor-pointer"
+						>
+							@icons.Scale("16")
+							Plan a purchase
+						</button>
+					</div>
 					@goalsList(goals, plans, &claims.DefaultCurrency)
 				</div>
 				<div

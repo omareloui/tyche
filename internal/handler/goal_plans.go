@@ -15,39 +15,66 @@ import (
 	"go.uber.org/zap"
 )
 
-// goalPlanDeps are a goal and the month's money free for its plan.
-func (h Handler) goalPlanDeps(r *http.Request) (*models.Goal, models.GoalPlanMoney, error) {
+// goalPlanEnv is a goal and what its plan's month's money is worked out
+// from.
+type goalPlanEnv struct {
+	goal  *models.Goal
+	ws    *models.WorkSettings
+	cats  []models.Category
+	goals []models.Goal
+	start models.MonthStart
+}
+
+// milestones are the days the other goals' plans free money from.
+func (e *goalPlanEnv) milestones(fd *views.GoalPlanFD) {
+	fd.Milestones = models.PlanMilestones(e.goal, e.ws, e.cats, e.goals, e.start, time.Now())
+	fd.Currency = e.goal.Currency
+}
+
+// money is the goal's month's money free when saving starts on on (today
+// when zero or past).
+func (e *goalPlanEnv) money(on time.Time) models.GoalPlanMoney {
+	return models.NewGoalPlanMoney(e.goal, e.ws, e.cats, e.goals, e.start, time.Now(), on)
+}
+
+// goalPlanDeps are a goal and what its plan's money is worked out from.
+func (h Handler) goalPlanDeps(r *http.Request) (*goalPlanEnv, error) {
 	id := r.PathValue("id")
 	if id == "" {
-		return nil, models.GoalPlanMoney{}, errs.ErrInvalidID
+		return nil, errs.ErrInvalidID
 	}
 	gl, err := h.repo.GetGoal(r.Context(), id)
 	if err != nil {
-		return nil, models.GoalPlanMoney{}, err
+		return nil, err
 	}
+	return h.goalPlanEnvOf(r, gl)
+}
+
+func (h Handler) goalPlanEnvOf(r *http.Request, gl *models.Goal) (*goalPlanEnv, error) {
 	ws, err := h.repo.GetWorkSettings(r.Context())
 	if err != nil {
-		return nil, models.GoalPlanMoney{}, err
+		return nil, err
 	}
 	cats, err := h.repo.GetCategories(r.Context())
 	if err != nil {
-		return nil, models.GoalPlanMoney{}, err
+		return nil, err
 	}
 	gls, err := h.repo.GetGoals(r.Context())
 	if err != nil {
-		return nil, models.GoalPlanMoney{}, err
+		return nil, err
 	}
-	return gl, models.NewGoalPlanMoney(gl, ws, cats, gls, time.Now()), nil
+	return &goalPlanEnv{goal: gl, ws: ws, cats: cats, goals: gls, start: getClaims(r.Context()).MonthStart}, nil
 }
 
 // GetGoalPlanForm is the drawer planning how to save for the goal.
 func (h Handler) GetGoalPlanForm(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	gl, money, err := h.goalPlanDeps(r)
+	env, err := h.goalPlanDeps(r)
 	if err != nil {
 		return nil, err
 	}
+	gl := env.goal
 
-	plan := &models.GoalPlan{Monthly: money.Free()}
+	plan := &models.GoalPlan{Monthly: env.money(time.Time{}).Free()}
 	if gl.Plan != nil {
 		*plan = *gl.Plan
 	} else if item, err := h.repo.GetWishlistItemByGoal(r.Context(), gl.ID); err != nil {
@@ -63,13 +90,14 @@ func (h Handler) GetGoalPlanForm(w http.ResponseWriter, r *http.Request) (templ.
 	}
 	fd := mapGoalPlanToFD(plan, nil)
 	fd.From = goalFrom(r)
-	return views.GoalPlanForm(gl, fd, money, h.goalPlanOptions(gl, plan)), nil
+	env.milestones(fd)
+	return views.GoalPlanForm(gl, fd, env.money(plan.StartsOn), h.goalPlanOptions(gl, plan)), nil
 }
 
 // GoalPlanPreview compares saving the whole price with a down payment and a
 // loan, for the plan being filled.
 func (h Handler) GoalPlanPreview(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	gl, money, err := h.goalPlanDeps(r)
+	env, err := h.goalPlanDeps(r)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +108,7 @@ func (h Handler) GoalPlanPreview(w http.ResponseWriter, r *http.Request) (templ.
 	if err != nil {
 		return views.GoalPlanHint("Check the numbers, some aren't valid."), nil
 	}
-	return views.GoalPlanPreview(gl, money, h.goalPlanOptions(gl, plan)), nil
+	return views.GoalPlanPreview(env.goal, env.money(plan.StartsOn), h.goalPlanOptions(env.goal, plan)), nil
 }
 
 // goalLoanProblems are the loan's problems for the price. Its months can be
@@ -95,14 +123,24 @@ func goalLoanProblems(loan *models.InstallmentPlan, price float64) errs.Validati
 
 // goalPlanOptions works the goal out by saving the whole price and by the
 // plan's loan, from its progress.
-func (h Handler) goalPlanOptions(gl *models.Goal, plan *models.GoalPlan) views.GoalPlanOptions {
+func (h Handler) goalPlanOptions(gl *models.Goal, plan *models.GoalPlan) (opts views.GoalPlanOptions) {
 	now := time.Now()
-	opts := views.GoalPlanOptions{Mode: plan.Mode, Monthly: plan.Monthly}
-	if plan.Monthly <= 0 {
+	opts = views.GoalPlanOptions{Mode: plan.Mode, Monthly: plan.Monthly, Months: plan.Months}
+	if !plan.IsSized() && plan.Monthly <= 0 {
 		return opts
 	}
-	// As if saved now, as saving it starts it over.
-	plan = &models.GoalPlan{Mode: plan.Mode, Monthly: plan.Monthly, Loan: plan.Loan, StartsOn: now, StartSaved: gl.Progress()}
+	// As if saved now, as saving it starts it over, from its start day.
+	starts := now
+	if plan.StartsOn.After(now) {
+		starts = plan.StartsOn
+	}
+	plan = &models.GoalPlan{Mode: plan.Mode, Monthly: plan.Monthly, Months: plan.Months, Loan: plan.Loan, StartsOn: starts, StartSaved: gl.Progress()}
+	defer func() {
+		// A sized plan's monthly amount is the picked option's.
+		if pr := opts.Picked(); plan.IsSized() && pr != nil {
+			opts.Monthly = pr.Plan.Monthly
+		}
+	}()
 
 	save := *plan
 	save.Mode = models.GoalPlanSave
@@ -133,43 +171,39 @@ func (h Handler) goalPlanOptions(gl *models.Goal, plan *models.GoalPlan) views.G
 func (h Handler) SetGoalPlan(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	l := logger.FromCtx(r.Context())
 
-	gl, money, err := h.goalPlanDeps(r)
+	env, err := h.goalPlanDeps(r)
 	if err != nil {
 		return nil, err
 	}
+	gl := env.goal
 	if err := r.ParseForm(); err != nil {
 		return nil, err
 	}
 
 	plan, err := mapFDToGoalPlan(r)
+	keepTyped := func(fd *views.GoalPlanFD) {
+		fd.By.Value = r.FormValue("plan_by")
+		fd.Monthly.Value = r.FormValue("monthly")
+		fd.Months.Value = r.FormValue("months")
+		fd.StartsOn.Value = r.FormValue("starts_on")
+	}
 	fd := mapGoalPlanToFD(plan, nil)
-	fd.Monthly.Value = r.FormValue("monthly")
-	failed := false
-	if err != nil {
-		fd.Monthly.Error, failed = "Check the numbers, some aren't valid", true
-	} else if plan.Monthly <= 0 {
-		fd.Monthly.Error, failed = "Value has to be more than 0", true
-	}
-	if !failed && plan.Mode == models.GoalPlanInstallments {
-		if ve := goalLoanProblems(plan.Loan, gl.Price); len(ve) > 0 {
-			fd = mapGoalPlanToFD(plan, ve)
-			fd.Monthly.Value = r.FormValue("monthly")
-			failed = true
-		} else if _, err := plan.LoanSchedule(gl.Price); err != nil {
-			fd.Monthly.Error, failed = "It doesn't cover the loan's payments", true
-		}
-	}
-	if failed {
+	keepTyped(fd)
+	if msg := h.checkGoalPlan(r, plan, err, gl.Price, gl.Progress(), fd); msg != "" {
 		fd.From = goalFrom(r)
-		return views.GoalPlanFormFields(gl, fd, money, h.goalPlanOptions(gl, plan)), nil
+		if msg == planLoanProblem {
+			fd = mapGoalPlanToFD(plan, goalLoanProblems(plan.Loan, gl.Price))
+			keepTyped(fd)
+			fd.From = goalFrom(r)
+		}
+		env.milestones(fd)
+		return views.GoalPlanFormFields(gl, fd, env.money(plan.StartsOn), h.goalPlanOptions(gl, plan)), nil
 	}
 
 	if plan.Mode == models.GoalPlanSave {
 		// Only the loan's mode keeps it.
 		plan.Loan = nil
 	}
-	plan.StartsOn = time.Now()
-	plan.StartSaved = gl.Progress()
 	if err := h.repo.SetGoalPlan(r.Context(), gl.ID, plan); err != nil {
 		l.Error("saving goal plan", zap.Error(err), zap.String("id", gl.ID))
 		return nil, err
@@ -181,6 +215,58 @@ func (h Handler) SetGoalPlan(w http.ResponseWriter, r *http.Request) (templ.Comp
 		return nil, err
 	}
 	return h.goalAnswer(w, r)
+}
+
+// planLoanProblem tells checkGoalPlan's caller the loan's fields have the
+// problems.
+const planLoanProblem = "loan"
+
+// checkGoalPlan checks a plan read from its form (err its parsing error)
+// for a price, saved now, setting the problems on fd; on success it starts
+// the plan (StartsOn the day saving starts, today at the earliest) and keeps
+// the monthly amount a sized plan comes to, paying its loan. It answers the
+// problem, "" when none.
+func (h Handler) checkGoalPlan(r *http.Request, plan *models.GoalPlan, err error, price, saved float64, fd *views.GoalPlanFD) string {
+	today := h.userToday(r.Context())
+	sized := r.FormValue("plan_by") == views.PlanByMonths
+	switch {
+	case err != nil && errors.Is(err, errInvalidStartsOn):
+		fd.StartsOn.Error = "Check the day"
+	case err != nil:
+		fd.Monthly.Error = "Check the numbers, some aren't valid"
+		fd.Months.Error = fd.Monthly.Error
+	case !plan.StartsOn.IsZero() && plan.StartsOn.Before(today):
+		fd.StartsOn.Error = "Pick today or a day ahead"
+	case sized && plan.Months <= 0:
+		fd.Months.Error = "Value has to be more than 0"
+	case !sized && plan.Monthly <= 0:
+		fd.Monthly.Error = "Value has to be more than 0"
+	}
+	if fd.StartsOn.Error != "" || fd.Monthly.Error != "" || fd.Months.Error != "" {
+		return "invalid"
+	}
+	if plan.Mode == models.GoalPlanInstallments && len(goalLoanProblems(plan.Loan, price)) > 0 {
+		return planLoanProblem
+	}
+
+	if plan.StartsOn.IsZero() || plan.StartsOn.Before(time.Now()) {
+		plan.StartsOn = time.Now()
+	}
+	plan.StartSaved = saved
+	plan.Monthly = plan.Sized(price).Monthly
+	switch {
+	case plan.Monthly <= 0:
+		fd.Months.Error = "It's saved already, plan it by a monthly amount"
+	case plan.Mode == models.GoalPlanInstallments:
+		if _, err := plan.LoanSchedule(price); err != nil {
+			fd.Monthly.Error = "It doesn't cover the loan's payments"
+			fd.Months.Error = fd.Monthly.Error
+		}
+	}
+	if fd.Monthly.Error != "" || fd.Months.Error != "" {
+		return "invalid"
+	}
+	return ""
 }
 
 // DeleteGoalPlan drops the goal's plan.
@@ -256,24 +342,41 @@ func mapGoalPlanToFD(plan *models.GoalPlan, ve errs.ValidationErrors) *views.Goa
 	if loan == nil {
 		loan = &models.InstallmentPlan{}
 	}
-	return &views.GoalPlanFD{
+	fd := &views.GoalPlanFD{
+		By:      form.FDInput{Value: views.PlanByMonthly},
 		Monthly: form.FDInput{Value: formatFloatIfNonZero(plan.Monthly)},
 		Mode:    form.FDInput{Value: plan.Mode.String()},
 		Loan:    mapPlanToFD(loan, ve),
 	}
+	if plan.IsSized() {
+		fd.By.Value = views.PlanByMonths
+		fd.Months.Value = formatIntIfNonZero(plan.Months)
+	}
+	// A plan starting later shows its day, one started already today.
+	if plan.StartsOn.After(time.Now()) {
+		fd.StartsOn.Value = plan.StartsOn.Format(time.DateOnly)
+	}
+	return fd
 }
 
 // mapFDToGoalPlan reads the plan form: the monthly amount, the mode and the
 // loan (always read, so switching modes keeps it).
 func mapFDToGoalPlan(r *http.Request) (*models.GoalPlan, error) {
-	monthly, err := parseFloatIfExists(r.FormValue("monthly"))
-	if err != nil {
-		return &models.GoalPlan{}, err
+	plan := &models.GoalPlan{Mode: models.GoalPlanModeFromString(r.FormValue("mode"))}
+	var err error
+	if plan.StartsOn, err = parseDateOnlyIfExists(r.FormValue("starts_on")); err != nil {
+		return plan, errInvalidStartsOn
 	}
-	loan, err := mapFDToInstallmentPlan(r)
-	return &models.GoalPlan{
-		Mode:    models.GoalPlanModeFromString(r.FormValue("mode")),
-		Monthly: monthly,
-		Loan:    loan,
-	}, err
+	if r.FormValue("plan_by") == views.PlanByMonths {
+		// Its monthly amount is worked out from the months.
+		if plan.Months, err = parseIntIfExists(r.FormValue("months")); err != nil {
+			return plan, err
+		}
+	} else if plan.Monthly, err = parseFloatIfExists(r.FormValue("monthly")); err != nil {
+		return plan, err
+	}
+	plan.Loan, err = mapFDToInstallmentPlan(r)
+	return plan, err
 }
+
+var errInvalidStartsOn = errors.New("invalid start day")

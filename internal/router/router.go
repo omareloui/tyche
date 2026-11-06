@@ -140,6 +140,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("GET /decide", http.RedirectHandler("/goals?tab=wishlist", http.StatusFound))
 	mux.Handle("GET /decide/afford", handle(h.AffordDrawer))
 	mux.Handle("POST /decide/afford", handle(h.Afford))
+	mux.Handle("POST /decide/goal", handle(h.SaveAffordGoal))
 	mux.Handle("POST /decide/plan-preview", handle(h.PlanPreview))
 
 	mux.Handle("POST /wishlist", handle(h.CreateWishlistItem))
