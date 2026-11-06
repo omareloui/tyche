@@ -2,6 +2,7 @@ package views
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/omareloui/tyche/internal/formatters"
@@ -15,11 +16,22 @@ const (
 	UnitPct    = "pct"
 )
 
+// What a known amount plan is given by, the other worked out from the price
+// (or the total).
+const (
+	TermByMonths = "months"
+	TermByAmount = "amount"
+)
+
 // InstallmentPlanFD is a models.InstallmentPlan's fields.
 type InstallmentPlanFD struct {
 	Strategy          form.FDInput
 	Installments      form.FDInput
 	InstallmentAmount form.FDInput
+	// TermBy is what a known amount plan is given by: TermByMonths or
+	// TermByAmount, and Total what its payments add up to when over the price.
+	TermBy            form.FDInput
+	Total             form.FDInput
 	Rate              form.FDInput
 	RatePeriod        form.FDInput
 	DownPayment       form.FDInput
@@ -33,6 +45,13 @@ type InstallmentPlanFD struct {
 	GraceMonths       form.FDInput
 }
 
+func (fd *InstallmentPlanFD) termBy() string {
+	if fd.TermBy.Value == TermByAmount {
+		return TermByAmount
+	}
+	return TermByMonths
+}
+
 func (fd *InstallmentPlanFD) strategy() string {
 	if fd.Strategy.Value == "" {
 		return models.StrategyKnownAmount.String()
@@ -43,7 +62,7 @@ func (fd *InstallmentPlanFD) strategy() string {
 // hasExtras tells if any of the less common fields is filled or wrong, to
 // show them open.
 func (fd *InstallmentPlanFD) hasExtras() bool {
-	for _, f := range []form.FDInput{fd.DownPayment, fd.AdminFee, fd.MonthlyFee, fd.InsuranceRate, fd.BalloonPct, fd.GraceMonths} {
+	for _, f := range []form.FDInput{fd.AdminFee, fd.MonthlyFee, fd.InsuranceRate, fd.BalloonPct, fd.GraceMonths} {
 		if (f.Value != "" && f.Value != "0") || f.Error != "" {
 			return true
 		}
@@ -54,10 +73,10 @@ func (fd *InstallmentPlanFD) hasExtras() bool {
 // pctMask keeps a percentage's digits and dot.
 const pctMask = "$input.replace(/[^0-9.]/g, '')"
 
-// unitMask is the money or percentage mask, after the unit picked in a
-// unitToggle.
+// unitMask is the money or percentage (up to 99%) mask, after the unit
+// picked in a unitToggle.
 func unitMask(unitName string) string {
-	return fmt.Sprintf("unitOf('%s') === '%s' ? %s : %s", unitName, UnitPct, pctMask, moneyMask)
+	return fmt.Sprintf("unitOf('%s') === '%s' ? '99%%' : %s", unitName, UnitPct, moneyMask)
 }
 
 templ installmentPlanInputs(fd *InstallmentPlanFD, id string, withPreview bool) {
@@ -83,14 +102,22 @@ templ installmentPlanInputs(fd *InstallmentPlanFD, id string, withPreview bool) 
 			</div>
 		</fieldset>
 		<div class="grid gap-2">
-			<div class="grid grid-cols-[1fr_auto_1fr] items-start gap-3">
-				@form.Field("Months", "installments", id, icons.Calendar("15"), "") {
-					@form.Control("text", "installments", "e.g. 12", id, form.FDInput{Value: fd.Installments.Value}, templ.Attributes{
-						"inputmode": "numeric", "autocomplete": "off", "x-mask": "999",
-					})
-				}
-				<span x-show="strategy === 'known'" class="self-end pb-2.5 text-sm text-zinc-500">or</span>
-				<div x-show="strategy === 'known'">
+			<div x-show="strategy === 'known'" class="flex items-center justify-between gap-3">
+				<span class="text-sm font-medium text-zinc-400">Given by</span>
+				@unitToggle("term_by", id, fd.termBy(), []form.RadioOption{
+					{Value: TermByMonths, Label: "Months"},
+					{Value: TermByAmount, Label: "Per month"},
+				})
+			</div>
+			<div class="grid grid-cols-2 items-start gap-3">
+				<div x-show={ fmt.Sprintf("strategy !== 'known' || termBy === '%s'", TermByMonths) }>
+					@form.Field("Months", "installments", id, icons.Calendar("15"), "") {
+						@form.Control("text", "installments", "e.g. 12", id, form.FDInput{Value: fd.Installments.Value}, templ.Attributes{
+							"inputmode": "numeric", "autocomplete": "off", "x-mask": "999",
+						})
+					}
+				</div>
+				<div x-show={ fmt.Sprintf("strategy === 'known' && termBy === '%s'", TermByAmount) } x-cloak>
 					@form.Field("Per month", "installment_amount", id, icons.Coins("15"), "") {
 						@form.Control("text", "installment_amount", "", id, form.FDInput{Value: fd.InstallmentAmount.Value}, templ.Attributes{
 							"inputmode":      "decimal",
@@ -101,7 +128,17 @@ templ installmentPlanInputs(fd *InstallmentPlanFD, id string, withPreview bool) 
 						})
 					}
 				</div>
-				<span x-show="strategy !== 'known'" x-cloak></span>
+				<div x-show="strategy === 'known'">
+					@form.Field("Total, if over the price", "installments_total", id, icons.Tag("15"), "") {
+						@form.Control("text", "installments_total", "", id, form.FDInput{Value: fd.Total.Value}, templ.Attributes{
+							"inputmode":      "decimal",
+							"autocomplete":   "off",
+							"data-money":     true,
+							"x-mask:dynamic": moneyMask,
+							":placeholder":   "'Optional'",
+						})
+					}
+				</div>
 				<div x-show="strategy !== 'known'" x-cloak>
 					@form.Field("Interest", "rate", id, icons.Hash("15"), "") {
 						<div class="flex gap-2">
@@ -118,12 +155,14 @@ templ installmentPlanInputs(fd *InstallmentPlanFD, id string, withPreview bool) 
 					}
 				</div>
 			</div>
-			<p x-show="strategy === 'known'" class="text-sm text-zinc-500">Fill in the months or the amount per month, the other is worked out from the price. Both if it costs more than the price.</p>
+			<p x-show="strategy === 'known'" class="text-sm text-zinc-500">The other is worked out from the price. Fill in the total too when the payments add up to more than it.</p>
 			<p x-show="strategy !== 'known'" x-cloak class="text-sm text-zinc-500">The yearly rate banks quote, or the monthly one of credit card plans.</p>
 			@form.ErrorMessage(fd.Installments.Error)
 			@form.ErrorMessage(fd.InstallmentAmount.Error)
+			@form.ErrorMessage(fd.Total.Error)
 			@form.ErrorMessage(fd.Rate.Error)
 		</div>
+		@planUnitField("Down payment", "down_payment", "down_payment_unit", id, fd.DownPayment, fd.DownPaymentUnit, "Paid on the day", true)
 		<details
 			class="group rounded-2xl border border-zinc-800 bg-zinc-800/20"
 			if fd.hasExtras() {
@@ -131,13 +170,12 @@ templ installmentPlanInputs(fd *InstallmentPlanFD, id string, withPreview bool) 
 			}
 		>
 			<summary class="flex items-center justify-between gap-2 px-4 py-3 list-none cursor-pointer select-none text-zinc-300 [&::-webkit-details-marker]:hidden">
-				<span>Down payment, fees and more</span>
+				<span>Fees and more</span>
 				@icons.ChevronDown("16", &templ.Attributes{"class": "text-zinc-500 transition-transform group-open:rotate-180"})
 			</summary>
 			<div class="grid sm:grid-cols-2 gap-4 px-4 pb-4">
-				@planUnitField("Down payment", "down_payment", "down_payment_unit", id, fd.DownPayment, fd.DownPaymentUnit, "Paid on the day")
 				<div class="grid gap-2">
-					@planUnitField("Admin fee", "admin_fee", "admin_fee_unit", id, fd.AdminFee, fd.AdminFeeUnit, "One-time, % of what's borrowed")
+					@planUnitField("Admin fee", "admin_fee", "admin_fee_unit", id, fd.AdminFee, fd.AdminFeeUnit, "One-time, % of what's borrowed", false)
 					@form.Toggle("Added to the loan", "admin_fee_financed", id, nil, fd.AdminFeeFinanced, nil)
 				</div>
 				@form.Field("Monthly fee", "monthly_fee", id, icons.Coins("15"), fd.MonthlyFee.Error) {
@@ -182,8 +220,9 @@ templ installmentPlanInputs(fd *InstallmentPlanFD, id string, withPreview bool) 
 	</div>
 }
 
-// planUnitField is an amount or a percentage, picked by a unit toggle.
-templ planUnitField(label, name, unitName, id string, data, unit form.FDInput, hint string) {
+// planUnitField is an amount or a percentage, picked by a unit toggle. A
+// percentage ofPrice shows its amount under it.
+templ planUnitField(label, name, unitName, id string, data, unit form.FDInput, hint string, ofPrice bool) {
 	@form.Field(label, name, id, icons.Coins("15"), data.Error) {
 		<div class="flex gap-2">
 			<div class="flex-1 min-w-0">
@@ -199,7 +238,14 @@ templ planUnitField(label, name, unitName, id string, data, unit form.FDInput, h
 				{Value: UnitPct, Label: "%"},
 			})
 		</div>
-		<p class="mt-1 text-xs text-zinc-500">{ hint }</p>
+		<p class="mt-1 text-xs text-zinc-500">
+			{ hint }
+			if ofPrice {
+				<span x-show={ fmt.Sprintf("pctOfPrice('%s')", name) } x-cloak>
+					· <span class="text-zinc-300 tabular-nums" x-text={ fmt.Sprintf("pctOfPrice('%s')", name) }></span>
+				</span>
+			}
+		</p>
 	}
 }
 
@@ -251,6 +297,12 @@ templ PlanPreview(s *models.InstallmentSchedule, sym, problem string) {
 // planBreakdown is a plan's totals and its payment schedule, bought on
 // start, its amounts blurred with the hidden amounts when sensitive.
 templ planBreakdown(s *models.InstallmentSchedule, sym string, start time.Time, sensitive bool) {
+	@planBreakdownShort(s, sym, start, sensitive, nil)
+}
+
+// planBreakdownShort is planBreakdown marking the payments more than what's
+// free in their month (short, by payment).
+templ planBreakdownShort(s *models.InstallmentSchedule, sym string, start time.Time, sensitive bool, short []bool) {
 	{{ sens := templ.KV("sensitive", sensitive) }}
 	<div class="grid gap-3">
 		<dl class="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -288,10 +340,16 @@ templ planBreakdown(s *models.InstallmentSchedule, sym string, start time.Time, 
 								<td class={ "px-3 py-1.5 text-right text-zinc-500", sens }>{ formatters.FormatNum(s.Financed) }</td>
 							</tr>
 						}
-						for _, row := range s.Rows {
+						for i, row := range s.Rows {
+							{{ isShort := i < len(short) && short[i] }}
 							<tr>
 								<td class="px-3 py-1.5 text-zinc-400">{ start.AddDate(0, row.Month, 0).Format("Jan 2006") }</td>
-								<td class={ "px-3 py-1.5 text-right", sens }>{ formatters.FormatNum(row.Payment) }</td>
+								<td
+									class={ "px-3 py-1.5 text-right", sens, templ.KV("text-amber-300", isShort) }
+									if isShort {
+										title="More than what's free that month"
+									}
+								>{ formatters.FormatNum(row.Payment) }</td>
 								<td class={ "px-3 py-1.5 text-right", sens }>{ formatters.FormatNum(row.Interest) }</td>
 								<td class={ "px-3 py-1.5 text-right hidden sm:table-cell", sens }>{ formatters.FormatNum(row.Principal) }</td>
 								<td class={ "px-3 py-1.5 text-right hidden sm:table-cell", sens }>{ formatters.FormatNum(row.Fees) }</td>
@@ -301,7 +359,12 @@ templ planBreakdown(s *models.InstallmentSchedule, sym string, start time.Time, 
 					</tbody>
 				</table>
 			</div>
-			<p class="mt-1.5 text-xs text-zinc-500">In { sym }. Your bank's numbers may differ by rounding.</p>
+			<p class="mt-1.5 text-xs text-zinc-500">
+				In { sym }. Your bank's numbers may differ by rounding.
+				if slices.Contains(short, true) {
+					<span class="text-amber-300">Amber payments are more than what's free that month.</span>
+				}
+			</p>
 		</details>
 	</div>
 }

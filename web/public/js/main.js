@@ -427,6 +427,15 @@ document.addEventListener("alpine:init", () => {
   }));
 });
 
+// setAffordOn checks the afford drawer's purchase on day (yyyy-mm-dd, empty
+// for today), e.g. from the result's "check it then" buttons.
+function setAffordOn(day) {
+  const el = document.querySelector("[data-afford-on]");
+  if (!el) return;
+  el.value = day;
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
 // goalsPage is the goals page's tabs (goals.templ): the open one, kept in the
 // url as ?tab= (none = the goals), and the counts on them, recounted from the
 // cards after every swap as goals and wishes come and go out of band.

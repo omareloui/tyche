@@ -72,7 +72,7 @@ templ GoalPlanFormFields(gl *models.Goal, fd *GoalPlanFD, money models.GoalPlanM
 		CancelClick: goalBackCancel(gl.ID, fd.From),
 	}) {
 		@goalFromInput(fd.From)
-		<div x-data={ goalPlanData(gl, mode, fd.Loan.strategy()) } @change="onChange($event)" class="grid gap-5">
+		<div x-data={ goalPlanData(gl, mode, fd.Loan.strategy()) } data-price={ fmt.Sprint(gl.Price) } @change="onChange($event)" class="grid gap-5">
 			@goalPlanMoney(money)
 			<div class="grid gap-2">
 				@form.Field("Put aside every month", "monthly", id, icons.PiggyBank("15"), fd.Monthly.Error) {

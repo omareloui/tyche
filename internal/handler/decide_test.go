@@ -23,6 +23,21 @@ func TestMapFDToPurchase(t *testing.T) {
 		{
 			name: "known amount drops the rate",
 			form: url.Values{"strategy": {"known"}, "installments": {"12"}, "installment_amount": {"E£ 1,100"}, "rate": {"10"}},
+			want: &models.InstallmentPlan{Months: 12},
+		},
+		{
+			name: "known amount by months with a total",
+			form: url.Values{"strategy": {"known"}, "term_by": {"months"}, "installments": {"12"}, "installment_amount": {"E£ 900"}, "installments_total": {"E£ 13,200"}},
+			want: &models.InstallmentPlan{Months: 12, Amount: 1100},
+		},
+		{
+			name: "known amount per month",
+			form: url.Values{"strategy": {"known"}, "term_by": {"amount"}, "installments": {"12"}, "installment_amount": {"E£ 1,500"}},
+			want: &models.InstallmentPlan{Amount: 1500},
+		},
+		{
+			name: "known amount per month with a total",
+			form: url.Values{"strategy": {"known"}, "term_by": {"amount"}, "installment_amount": {"E£ 1,100"}, "installments_total": {"E£ 13,200"}},
 			want: &models.InstallmentPlan{Months: 12, Amount: 1100},
 		},
 		{
@@ -73,6 +88,19 @@ func TestMapFDToPurchase(t *testing.T) {
 			fd := mapPurchaseToFD(p, nil)
 			if (p.Plan != nil) != (fd.Mode.Value == views.PayInstallments) {
 				t.Errorf("mode = %q", fd.Mode.Value)
+			}
+			if p.Plan != nil && p.Plan.Strategy == models.StrategyKnownAmount {
+				back := url.Values{
+					"mode": {views.PayInstallments}, "amount": {"12000"}, "strategy": {"known"},
+					"term_by": {fd.Plan.TermBy.Value}, "installments": {fd.Plan.Installments.Value},
+					"installment_amount": {fd.Plan.InstallmentAmount.Value}, "installments_total": {fd.Plan.Total.Value},
+				}
+				r := httptest.NewRequest("POST", "/", strings.NewReader(back.Encode()))
+				r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				again, err := mapFDToPurchase(r, []models.Currency{egp}, &egp)
+				if err != nil || again.Plan == nil || *again.Plan != *p.Plan {
+					t.Errorf("filled back = %+v (%v), want %+v", again.Plan, err, p.Plan)
+				}
 			}
 		})
 	}

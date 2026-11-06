@@ -21,6 +21,8 @@ type PurchaseFD struct {
 	AmountFD *form.AmountFD
 	Mode     form.FDInput
 	Plan     InstallmentPlanFD
+	// On is the day it's bought, nil for forms without it.
+	On *form.FDInput
 }
 
 type WorkSettingsFD struct {
@@ -90,9 +92,36 @@ templ purchaseInputs(fd *PurchaseFD, id string, curs []models.Currency, defaultC
 			{Value: PayCash, Label: "Cash"},
 			{Value: PayInstallments, Label: "Installments"},
 		}, form.FDInput{Value: mode}, nil)
+		if fd.On != nil {
+			@purchaseDate(*fd.On, id)
+		}
 		<div x-show={ fmt.Sprintf("mode === '%s'", PayInstallments) } x-cloak>
 			@installmentPlanInputs(&fd.Plan, id, withPreview)
 		</div>
+	</div>
+}
+
+// purchaseDate is the day it's bought, or a plan starts, empty for today.
+templ purchaseDate(data form.FDInput, id string) {
+	<div class="grid gap-2">
+		<div class="flex items-end gap-2">
+			<div class="flex-1 min-w-0">
+				<label for={ "on-" + id } class="input-label">
+					@icons.Calendar("15")
+					<span x-text={ fmt.Sprintf("mode === '%s' ? 'Start on' : 'Buy on'", PayInstallments) }>Buy on</span>
+				</label>
+				@form.Control("text", "on", "Today", id, data, templ.Attributes{
+					"autocomplete":           "off",
+					"x-mask":                 "9999-99-99",
+					"data-datepicker":        true,
+					"data-datepicker-change": true,
+					"data-afford-on":         true,
+				})
+			</div>
+			<button type="button" class="wl-action h-11" onclick="setAffordOn('')">Today</button>
+		</div>
+		<p class="text-sm text-zinc-500">A later day counts the money free every month until then: your salary less the budgets and the goals' plans.</p>
+		@form.ErrorMessage(data.Error)
 	</div>
 }
 
@@ -148,51 +177,62 @@ templ AffordResult(a *models.Affordability, ws *models.WorkSettings) {
 		@AffordHint("The verdict shows up here.")
 	} else {
 		<div class="grid gap-4">
-			<div class={ "flex items-start gap-3 px-4 py-3 rounded-2xl ring-1", verdictClass(a.Verdict) }>
-				<div class="min-w-0">
-					<p class="font-semibold">{ a.Verdict.String() }</p>
-					if len(a.Reasons) > 0 {
-						<ul class="mt-1 text-sm opacity-80 list-disc pl-4">
-							for _, reason := range a.Reasons {
-								<li>{ reason }</li>
-							}
-						</ul>
+			<div class={ "px-4 py-3 rounded-2xl ring-1", verdictClass(a.Verdict) }>
+				<p class="font-semibold">
+					{ a.Verdict.String() }
+					if !a.IsToday() {
+						<span class="font-normal opacity-80">on { affordDay(a.On) }</span>
 					}
-				</div>
+				</p>
+				if len(a.Reasons) > 0 {
+					<ul class="mt-1 text-sm opacity-80 list-disc pl-4">
+						for _, reason := range a.Reasons {
+							<li>{ reason }</li>
+						}
+					</ul>
+				}
+				if !a.Earliest.IsZero() {
+					<button type="button" class="mt-2 inline-flex items-center gap-1.5 text-sm font-medium underline-offset-2 hover:underline cursor-pointer" onclick={ templ.JSFuncCall("setAffordOn", a.Earliest.Format(time.DateOnly)) }>
+						@icons.Calendar("14")
+						It fits from { affordDay(a.Earliest) }, check then
+					</button>
+				}
 			</div>
+			@affordBalance(a)
 			<dl class="grid grid-cols-2 sm:grid-cols-3 gap-2">
-				@affordStat("Balance now", a.Currency.Format(a.BalanceNow), "sensitive")
 				if a.Purchase.IsInstallments() {
 					if a.PaidOnDay > 0 {
 						@affordStat("Paid on the day", a.Currency.Format(a.PaidOnDay), "")
+						@affordStat("Left after it", a.Currency.Format(a.BalanceAfter), "sensitive "+amountClass(a.BalanceAfter))
 					}
-					@affordStat("After the 1st payment", a.Currency.Format(a.BalanceAfter), "sensitive "+amountClass(a.BalanceAfter))
-					@affordStat("After all of them", a.Currency.Format(a.BalanceAfterAll), "sensitive "+amountClass(a.BalanceAfterAll))
+					@affordStat("After the last payment", a.Currency.Format(a.BalanceAfterAll), "sensitive "+amountClass(a.BalanceAfterAll))
+					if a.MinBalance < a.BalanceAfter-0.005 && a.MinBalance < a.BalanceAfterAll-0.005 {
+						@affordStat("Lowest, "+a.MinOn.Format("Jan 2006"), a.Currency.Format(a.MinBalance), "sensitive "+amountClass(a.MinBalance))
+					}
 					@affordStat("In total", a.Currency.Format(a.TotalCost), "")
 					if a.Extra > 0.005 {
 						@affordStat("Over the cash price", a.Currency.Format(a.Extra), "text-amber-300")
 					}
 				} else {
-					@affordStat("After buying", a.Currency.Format(a.BalanceAfter), "sensitive "+amountClass(a.BalanceAfter))
+					@affordStat("Left after buying", a.Currency.Format(a.BalanceAfter), "sensitive "+amountClass(a.BalanceAfter))
 				}
 				if a.SalaryShare > 0 {
 					@affordStat(salaryShareLabel(a), fmt.Sprintf("%.0f%%", a.SalaryShare*100), "")
 				}
 			</dl>
 			if a.Schedule != nil {
-				@planBreakdown(a.Schedule, a.Purchase.Currency.Symbol, time.Now(), false)
+				@planBreakdownShort(a.Schedule, a.Purchase.Currency.Symbol, a.On, false, a.Short)
 			}
+			@affordMonth(a)
 			if a.WorkHours > 0 {
 				<p class="flex items-center gap-2 text-zinc-300">
 					@icons.Clock("16", &templ.Attributes{"class": "shrink-0 text-(--accent)"})
 					<span>That's <span class="font-semibold tabular-nums">{ ws.ViewHours(a.WorkHours) }</span> of work.</span>
 				</p>
-			} else if !ws.IsSet() {
-				<p class="text-sm text-zinc-500">Set your salary to see it in work hours.</p>
 			}
 			if len(a.Goals) > 0 {
 				<div class="grid gap-2">
-					<p class="text-xs font-semibold uppercase tracking-wider text-zinc-500">Your goals</p>
+					<p class="text-xs font-semibold uppercase tracking-wider text-zinc-500">Your goals with no plan</p>
 					for _, g := range a.Goals {
 						@goalImpact(&g)
 					}
@@ -200,6 +240,110 @@ templ AffordResult(a *models.Affordability, ws *models.WorkSettings) {
 			}
 		</div>
 	}
+}
+
+// affordBalance works out the balance on the day: today's, less this
+// month's budgets left and the goals' deposits due, plus the money free
+// on the paydays until then.
+templ affordBalance(a *models.Affordability) {
+	if a.BudgetLeft > 0.005 || a.GoalsDue > 0.005 || a.Paydays > 0 {
+		<dl class="grid gap-1.5 px-4 py-3 rounded-2xl bg-zinc-800/30 ring-1 ring-zinc-800 text-sm tabular-nums">
+			@goalPlanMoneyRow("Balance now", a.Currency.Format(a.BalanceNow), "")
+			if a.BudgetLeft > 0.005 {
+				@goalPlanMoneyRow("Left in this month's budgets", "− "+a.Currency.Format(a.BudgetLeft), "")
+			}
+			if a.GoalsDue > 0.005 {
+				@goalPlanMoneyRow("Goal deposits due now", "− "+a.Currency.Format(a.GoalsDue), "")
+			}
+			if a.Paydays > 0 {
+				@goalPlanMoneyRow(fmt.Sprintf("Free over %d %s", a.Paydays, plural(a.Paydays, "month", "months")), signedAmount(&a.Currency, a.FreeUntil), "")
+			}
+			<div class="flex items-center justify-between gap-3 pt-1.5 border-t border-zinc-800">
+				<dt class="font-medium text-zinc-200">
+					if a.IsToday() {
+						Yours to spend today
+					} else {
+						Yours on { affordDay(a.On) }
+					}
+				</dt>
+				<dd class={ "sensitive font-bold text-(--accent)", amountClass(a.BalanceOn) }>{ a.Currency.Format(a.BalanceOn) }</dd>
+			</div>
+		</dl>
+	} else {
+		<dl class="grid grid-cols-1">
+			@affordStat("Balance now", a.Currency.Format(a.BalanceNow), "sensitive")
+		</dl>
+	}
+}
+
+// affordMonth is a month's money around the day, like a goal plan's: the
+// salary less the budgets and each goal's plan, and when the goals stop
+// taking money.
+templ affordMonth(a *models.Affordability) {
+	if !a.HasSalary {
+		<p class="flex items-start gap-2 px-4 py-3 rounded-2xl bg-zinc-800/30 ring-1 ring-zinc-800 text-sm text-zinc-400">
+			@icons.Wallet("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
+			<span>
+				Set your monthly salary in <a href={ SettingsURL(SettingsWork) } class="text-(--accent) underline-offset-2 hover:underline">Settings</a> to count what's free every month after your budgets and goals. Until then it all comes out of your balance.
+			</span>
+		</p>
+	} else if m := a.Month; m != nil {
+		<div class="grid gap-2">
+			<p class="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+				Every month, from { affordDay(m.Payday) }
+			</p>
+			<dl class="grid gap-1.5 px-4 py-3 rounded-2xl bg-zinc-800/30 ring-1 ring-zinc-800 text-sm tabular-nums">
+				@goalPlanMoneyRow("Salary", a.Currency.Format(m.Salary), "")
+				@goalPlanMoneyRow("Budgets", "− "+a.Currency.Format(m.Budgets), "")
+				for _, g := range m.Goals {
+					@goalPlanMoneyRow(goalOutlayLabel(&g), "− "+a.Currency.Format(g.Amount), "")
+				}
+				<div class="flex items-center justify-between gap-3 pt-1.5 border-t border-zinc-800">
+					<dt class="font-medium text-zinc-200">Free</dt>
+					<dd class={ "sensitive font-bold text-(--accent)", amountClass(m.Free()) }>{ a.Currency.Format(m.Free()) }</dd>
+				</div>
+			</dl>
+			if len(a.FreeDates) > 0 {
+				<div class="flex flex-wrap items-center gap-2">
+					<span class="text-sm text-zinc-500">Check it</span>
+					for _, f := range a.FreeDates {
+						<button type="button" class="wl-action" onclick={ templ.JSFuncCall("setAffordOn", f.On.Format(time.DateOnly)) }>
+							@icons.Target("14")
+							{ goalFreeLabel(&f) } · { affordDay(f.On) }
+						</button>
+					}
+				</div>
+			}
+		</div>
+	}
+}
+
+func affordDay(t time.Time) string {
+	if t.Year() != time.Now().Year() {
+		return t.Format("Jan 2, 2006")
+	}
+	return t.Format("Jan 2")
+}
+
+func signedAmount(cur *models.Currency, v float64) string {
+	if v < 0 {
+		return "− " + cur.Format(-v)
+	}
+	return "+ " + cur.Format(v)
+}
+
+func goalOutlayLabel(g *models.GoalOutlay) string {
+	if g.Loan {
+		return g.Goal.Name + " · loan"
+	}
+	return g.Goal.Name + " · saving"
+}
+
+func goalFreeLabel(f *models.GoalFreeDate) string {
+	if f.Loan {
+		return "After " + f.Goal.Name + "'s loan"
+	}
+	return "After " + f.Goal.Name
 }
 
 templ affordStat(label, value, valueClass string) {

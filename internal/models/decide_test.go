@@ -84,14 +84,27 @@ func goalWithSaved(id string, price, saved float64) models.Goal {
 }
 
 func TestCheckAffordability(t *testing.T) {
+	today := time.Date(2026, 11, 6, 0, 0, 0, 0, time.UTC)
+	dec1, jan1 := time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC), time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
 	balances := []models.Balance{{Amount: 10000, Currency: egp}}
 	ws := &models.WorkSettings{MonthlySalary: 52000, Currency: egp, HoursPerWeek: 40}
 	goals := []models.Goal{goalWithSaved("car", 100000, 20000), goalWithSaved("trip", 5000, 5000)}
-	paces := models.GoalPaces{"car": 2000}
+	ctx := func(ws *models.WorkSettings, budget float64, goals []models.Goal) models.AffordContext {
+		c := models.AffordContext{
+			Balances: balances, Goals: goals, Paces: models.GoalPaces{"car": 2000}, Work: ws,
+			Start: models.MonthStart(1), Today: today, Currency: &egp,
+		}
+		if budget > 0 {
+			c.Categories = []models.Category{{BudgetAmount: budget, BudgetCurrency: &egp, Kinds: []models.TxKind{models.ExpenseTxKind}}}
+		}
+		return c
+	}
 
-	t.Run("cash", func(t *testing.T) {
-		a, _ := models.CheckAffordability(models.Purchase{Price: 3000, Currency: egp}, balances, goals, paces, ws, &egp)
-		if a.BalanceNow != 10000 || a.BalanceAfter != 7000 || a.BalanceAfterAll != 7000 || a.Extra != 0 || a.PaidOnDay != 3000 {
+	t.Run("cash today", func(t *testing.T) {
+		c := ctx(ws, 0, goals)
+		c.BudgetLeft = 1000
+		a, _ := models.CheckAffordability(models.Purchase{Price: 3000, Currency: egp}, c)
+		if a.BalanceNow != 10000 || a.BalanceOn != 9000 || a.BalanceAfter != 6000 || a.PaidOnDay != 3000 || !a.IsToday() {
 			t.Errorf("balances = %+v", a)
 		}
 		if !near(a.WorkHours, 10) {
@@ -110,28 +123,72 @@ func TestCheckAffordability(t *testing.T) {
 		}
 	})
 
-	t.Run("installments", func(t *testing.T) {
-		p := models.Purchase{Price: 12000, Currency: egp, Plan: &models.InstallmentPlan{Months: 12, Amount: 1100}}
-		a, err := models.CheckAffordability(p, balances, nil, nil, ws, &egp)
+	t.Run("not today, later", func(t *testing.T) {
+		salary := &models.WorkSettings{MonthlySalary: 10000, Currency: egp, HoursPerWeek: 40}
+		p := models.Purchase{Price: 20000, Currency: egp}
+		a, _ := models.CheckAffordability(p, ctx(salary, 4000, nil))
+		if a.Verdict != models.VerdictNo || !a.Earliest.Equal(jan1) {
+			t.Errorf("Verdict = %v, Earliest = %v, want no until %v", a.Verdict, a.Earliest, jan1)
+		}
+		if a.Month == nil || a.Month.Free() != 6000 {
+			t.Errorf("Month = %+v, want 6,000 free", a.Month)
+		}
+
+		p.On = jan1.AddDate(0, 0, 14)
+		a, _ = models.CheckAffordability(p, ctx(salary, 4000, nil))
+		if a.Verdict == models.VerdictNo || a.BalanceOn != 22000 || a.Paydays != 2 || !a.Earliest.IsZero() {
+			t.Errorf("on %v: %+v", p.On, a)
+		}
+	})
+
+	planned := func() []models.Goal {
+		gl := goalWithSaved("laptop", 12000, 0)
+		gl.Plan = &models.GoalPlan{Monthly: 6000, StartsOn: today}
+		return []models.Goal{gl}
+	}
+	salary := &models.WorkSettings{MonthlySalary: 10000, Currency: egp, HoursPerWeek: 40}
+
+	t.Run("after a goal's plan is done", func(t *testing.T) {
+		a, _ := models.CheckAffordability(models.Purchase{Price: 9000, Currency: egp}, ctx(salary, 4000, planned()))
+		// This month's deposit comes out of the balance, December's out of
+		// its salary, then the 6,000 are free.
+		if a.GoalsDue != 6000 || a.BalanceOn != 4000 || a.Verdict != models.VerdictNo || !a.Earliest.Equal(jan1) {
+			t.Errorf("affordability = %+v", a)
+		}
+		if len(a.FreeDates) != 1 || !a.FreeDates[0].On.Equal(jan1) || a.FreeDates[0].Loan {
+			t.Errorf("FreeDates = %+v", a.FreeDates)
+		}
+		if a.Month == nil || !a.Month.Payday.Equal(dec1) || a.Month.Free() != 0 || len(a.Month.Goals) != 1 {
+			t.Errorf("Month = %+v", a.Month)
+		}
+		if len(a.Goals) != 0 {
+			t.Errorf("planned goals weighed by pace: %+v", a.Goals)
+		}
+	})
+
+	t.Run("installments short in a month", func(t *testing.T) {
+		p := models.Purchase{Price: 12000, Currency: egp, Plan: &models.InstallmentPlan{Months: 12}}
+		a, err := models.CheckAffordability(p, ctx(salary, 4000, planned()))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !near(a.FirstPayment, 1100) || !near(a.TotalCost, 13200) || !near(a.Extra, 1200) || !near(a.BalanceAfter, 8900) || !near(a.BalanceAfterAll, -3200) || a.PaidOnDay != 0 {
+		// December has nothing free: its payment comes out of the balance.
+		if a.ShortMonths != 1 || a.MinBalance != 3000 || a.Verdict != models.VerdictCareful || len(a.Short) != 12 || !a.Short[0] || a.Short[1] {
 			t.Errorf("affordability = %+v", a)
 		}
-		if a.Verdict != models.VerdictCareful {
-			t.Errorf("Verdict = %v, want careful", a.Verdict)
+		if !near(a.BalanceAfterAll, 4000+11*6000-12000) {
+			t.Errorf("BalanceAfterAll = %v", a.BalanceAfterAll)
 		}
 	})
 
 	t.Run("down payment and a pricey plan", func(t *testing.T) {
 		plan := &models.InstallmentPlan{Strategy: models.StrategyFlat, Months: 12, Rate: 30, DownPayment: 2000, AdminFee: 100}
-		a, err := models.CheckAffordability(models.Purchase{Price: 6000, Currency: egp, Plan: plan}, balances, nil, nil, ws, &egp)
+		a, err := models.CheckAffordability(models.Purchase{Price: 6000, Currency: egp, Plan: plan}, ctx(ws, 0, nil))
 		if err != nil {
 			t.Fatal(err)
 		}
 		// 4,000 financed at 30% flat: 1,200 interest, 433.33 a month.
-		if !near(a.PaidOnDay, 2100) || !near(a.FirstPayment, 5200.0/12) || !near(a.TotalCost, 7300) {
+		if !near(a.PaidOnDay, 2100) || !near(a.FirstPayment, 5200.0/12) || !near(a.TotalCost, 7300) || !near(a.BalanceAfter, 7900) {
 			t.Errorf("affordability = %+v", a)
 		}
 		if a.Verdict != models.VerdictCareful || a.Schedule.APR < 30 {
@@ -139,16 +196,16 @@ func TestCheckAffordability(t *testing.T) {
 		}
 	})
 
-	t.Run("too expensive", func(t *testing.T) {
-		a, _ := models.CheckAffordability(models.Purchase{Price: 20000, Currency: egp}, balances, nil, nil, ws, &egp)
-		if a.Verdict != models.VerdictNo {
-			t.Errorf("Verdict = %v, want no", a.Verdict)
+	t.Run("no salary: the balance only", func(t *testing.T) {
+		noSalary := &models.WorkSettings{HoursPerWeek: 40}
+		p := models.Purchase{Price: 12000, Currency: egp, Plan: &models.InstallmentPlan{Months: 12, Amount: 1100}}
+		a, _ := models.CheckAffordability(p, ctx(noSalary, 4000, nil))
+		if a.HasSalary || a.Month != nil || !near(a.BalanceAfterAll, -3200) || a.Verdict != models.VerdictNo || !a.Earliest.IsZero() {
+			t.Errorf("affordability = %+v", a)
 		}
-	})
 
-	t.Run("cheap, no salary, no pace", func(t *testing.T) {
-		a, _ := models.CheckAffordability(models.Purchase{Price: 100, Currency: egp}, balances, goals, nil, &models.WorkSettings{HoursPerWeek: 40}, &egp)
-		if a.Verdict != models.VerdictYes || a.WorkHours != 0 || a.SalaryShare != 0 || a.Goals[0].DelayMonths != -1 {
+		a, _ = models.CheckAffordability(models.Purchase{Price: 100, Currency: egp}, ctx(noSalary, 0, goals))
+		if a.Verdict != models.VerdictYes || a.WorkHours != 0 || a.SalaryShare != 0 || !near(a.Goals[0].DelayMonths, 0.05) {
 			t.Errorf("affordability = %+v", a)
 		}
 	})

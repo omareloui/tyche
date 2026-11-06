@@ -2,7 +2,9 @@ package handler
 
 import (
 	"fmt"
+	"math"
 	"net/http"
+	"time"
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/errs"
@@ -74,6 +76,7 @@ func (h Handler) PlanPreview(w http.ResponseWriter, r *http.Request) (templ.Comp
 var planFieldLabels = map[string]string{
 	"Installments":      "Months",
 	"InstallmentAmount": "Per month",
+	"Total":             "Total",
 	"Rate":              "Interest",
 	"DownPayment":       "Down payment",
 	"AdminFee":          "Admin fee",
@@ -85,7 +88,7 @@ var planFieldLabels = map[string]string{
 
 // planProblem is the first of a plan's problems, as text.
 func planProblem(ve errs.ValidationErrors) string {
-	for _, key := range []string{"Installments", "InstallmentAmount", "Rate", "DownPayment", "AdminFee", "MonthlyFee", "InsuranceRate", "BalloonPct", "GraceMonths"} {
+	for _, key := range []string{"Installments", "InstallmentAmount", "Total", "Rate", "DownPayment", "AdminFee", "MonthlyFee", "InsuranceRate", "BalloonPct", "GraceMonths"} {
 		if msg := ve.MsgFor(key); msg != "" {
 			return fmt.Sprintf("%s: %s.", planFieldLabels[key], msg)
 		}
@@ -113,6 +116,11 @@ func (h Handler) AffordDrawer(w http.ResponseWriter, r *http.Request) (templ.Com
 		name = item.Name
 		purchase := item.Purchase()
 		p = &purchase
+		// A wish still cooling off is checked on the day it's ready.
+		y, m, d := item.ReadyAt().Date()
+		if ready := time.Date(y, m, d, 0, 0, 0, 0, time.UTC); item.Status == models.WishlistWaiting && ready.After(h.userToday(r.Context())) {
+			p.On = ready
+		}
 	}
 
 	result, err := h.affordResult(r, p)
@@ -123,36 +131,53 @@ func (h Handler) AffordDrawer(w http.ResponseWriter, r *http.Request) (templ.Com
 	if err != nil {
 		return nil, err
 	}
-	return views.AffordDrawer(mapPurchaseToFD(p, nil), name, curs, &claims.DefaultCurrency, ws, result), nil
+	fd := mapPurchaseToFD(p, nil)
+	fd.On = &form.FDInput{}
+	if !p.On.IsZero() {
+		fd.On.Value = p.On.Format(time.DateOnly)
+	}
+	return views.AffordDrawer(fd, name, curs, &claims.DefaultCurrency, ws, result), nil
 }
 
 func (h Handler) affordResult(r *http.Request, p *models.Purchase) (templ.Component, error) {
 	if p.Price <= 0 {
 		return views.AffordResult(nil, nil), nil
 	}
+	ctx := r.Context()
+	claims := getClaims(ctx)
 
-	balances, err := h.repo.GetBalances(r.Context())
+	balances, err := h.repo.GetBalances(ctx)
+	if err != nil {
+		return nil, err
+	}
+	all, err := h.repo.GetGoals(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// The goals saving, and the ones still paying their loan off.
+	goals := slicesutils.Filter(all, func(gl models.Goal) bool { return gl.FulfilledAt.IsZero() || gl.PayingOff() })
+	paces, err := h.repo.GetGoalPaces(ctx, goals)
+	if err != nil {
+		return nil, err
+	}
+	ws, err := h.repo.GetWorkSettings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	cats, err := h.repo.GetCategories(ctx)
+	if err != nil {
+		return nil, err
+	}
+	bs, err := h.repo.GetBudgetSummary(ctx, time.Time{}, &claims.DefaultCurrency, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	goals, err := h.repo.GetUnfulfilledGoals(r.Context())
-	if err != nil {
-		return nil, err
-	}
-
-	paces, err := h.repo.GetGoalPaces(r.Context(), goals)
-	if err != nil {
-		return nil, err
-	}
-
-	ws, err := h.repo.GetWorkSettings(r.Context())
-	if err != nil {
-		return nil, err
-	}
-
-	claims := getClaims(r.Context())
-	a, err := models.CheckAffordability(*p, balances, goals, paces, ws, &claims.DefaultCurrency)
+	a, err := models.CheckAffordability(*p, models.AffordContext{
+		Balances: balances, BudgetLeft: bs.Unspent(), Categories: cats,
+		Goals: goals, Paces: paces, Work: ws,
+		Start: claims.MonthStart, Today: h.userToday(ctx), Currency: &claims.DefaultCurrency,
+	})
 	if err != nil {
 		return views.AffordHint(err.Error()), nil
 	}
@@ -192,10 +217,20 @@ func mapPlanToFD(plan *models.InstallmentPlan, ve errs.ValidationErrors) views.I
 		}
 		return form.FDInput{Value: views.UnitAmount}
 	}
+	// A known amount plan with both its months and amount was given a total.
+	termBy, total := views.TermByMonths, 0.0
+	switch {
+	case plan.Months > 0 && plan.Amount > 0:
+		total = models.RoundCents(float64(plan.Months) * plan.Amount)
+	case plan.Amount > 0:
+		termBy = views.TermByAmount
+	}
 	return views.InstallmentPlanFD{
 		Strategy:          form.FDInput{Value: plan.Strategy.String()},
 		Installments:      form.FDInput{Value: formatIntIfNonZero(plan.Months), Error: ve.MsgFor("Installments")},
 		InstallmentAmount: form.FDInput{Value: formatFloatIfNonZero(plan.Amount), Error: ve.MsgFor("InstallmentAmount")},
+		TermBy:            form.FDInput{Value: termBy},
+		Total:             form.FDInput{Value: formatFloatIfNonZero(total), Error: ve.MsgFor("Total")},
 		Rate:              form.FDInput{Value: formatFloatIfNonZero(plan.Rate), Error: ve.MsgFor("Rate")},
 		RatePeriod:        form.FDInput{Value: plan.RatePeriod.String()},
 		DownPayment:       form.FDInput{Value: formatFloatIfNonZero(plan.DownPayment), Error: ve.MsgFor("DownPayment")},
@@ -218,7 +253,12 @@ func mapFDToPurchase(r *http.Request, curs []models.Currency, dflt *models.Curre
 		return nil, err
 	}
 
-	p := &models.Purchase{Price: price, Currency: *dflt}
+	on, err := parseDateOnlyIfExists(r.FormValue("on"))
+	if err != nil {
+		return nil, err
+	}
+
+	p := &models.Purchase{Price: price, Currency: *dflt, On: on}
 	if cur := slicesutils.Find(curs, func(c models.Currency) bool { return c.ID == r.FormValue("currency_id") }); cur != nil {
 		p.Currency = *cur
 	}
@@ -270,8 +310,25 @@ func mapFDToInstallmentPlan(r *http.Request) (*models.InstallmentPlan, error) {
 	}
 	// The amount and the rate only apply to their strategies.
 	if plan.Strategy == models.StrategyKnownAmount {
-		plan.Amount = float("installment_amount")
 		plan.Rate = 0
+		termPlan(plan, r.FormValue("term_by"), float("installment_amount"), float("installments_total"))
 	}
 	return plan, err
+}
+
+// termPlan sets a known amount plan's term from what it's given by: its
+// months (the amount worked out from the total, else from the price) or its
+// amount per month (the months from the total, else from the price).
+func termPlan(plan *models.InstallmentPlan, termBy string, amount, total float64) {
+	if termBy == views.TermByAmount {
+		plan.Months, plan.Amount = 0, amount
+		if total > 0 && amount > 0 {
+			plan.Months = int(math.Ceil(total/amount - 0.005))
+		}
+		return
+	}
+	plan.Amount = 0
+	if total > 0 && plan.Months > 0 {
+		plan.Amount = models.RoundCents(total / float64(plan.Months))
+	}
 }
