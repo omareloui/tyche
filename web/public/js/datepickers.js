@@ -12,11 +12,17 @@ function loadDatePickers(root = document) {
     const picker = new Litepicker({ element: el });
     keepInViewport(picker);
     // Litepicker sets the value silently, data-datepicker-change opts into a
-    // change event (e.g. for hx-trigger="change").
+    // change event (e.g. for hx-trigger="change"). Litepicker reads the input
+    // again on change and selects it, so the change it sends (or one sent by
+    // a script setting the value) mustn't send another.
     if ("datepickerChange" in el.dataset) {
-      picker.on("selected", () =>
-        el.dispatchEvent(new Event("change", { bubbles: true })),
-      );
+      let sent = el.value;
+      el.addEventListener("change", () => (sent = el.value));
+      picker.on("selected", () => {
+        if (el.value === sent) return;
+        sent = el.value;
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+      });
     }
     el.dataset.datepickerReady = "";
   }
