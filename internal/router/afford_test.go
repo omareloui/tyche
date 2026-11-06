@@ -1,6 +1,8 @@
 package router_test
 
 import (
+	"errors"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -8,6 +10,7 @@ import (
 	"time"
 
 	"github.com/omareloui/tyche/internal/handler"
+	"github.com/omareloui/tyche/internal/resperr"
 	"github.com/omareloui/tyche/internal/sanitizer"
 	"github.com/omareloui/tyche/internal/valid"
 )
@@ -51,6 +54,15 @@ func TestAffordOnADay(t *testing.T) {
 	})
 	if !strings.Contains(body, "12 payments") {
 		t.Errorf("per month didn't work the months out:\n%s", body)
+	}
+
+	// Without a name, a 422 the button shows.
+	_, err := callHandler(ctx, h.SaveAffordGoal)(httptest.NewRecorder(), "POST", "/decide/goal", "", url.Values{
+		"amount": {"3000"}, "mode": {"save"}, "plan_by": {"monthly"}, "monthly": {"500"},
+	})
+	var re *resperr.RespError
+	if !errors.As(err, &re) || re.Code != http.StatusUnprocessableEntity {
+		t.Errorf("without a name: %v", err)
 	}
 
 	// Saved as a goal with its plan.

@@ -319,75 +319,77 @@ templ GoalPlanHint(msg string) {
 // GoalPlanPreview compares saving the whole price with a down payment and a
 // loan, the picked one highlighted.
 templ GoalPlanPreview(gl *models.Goal, money models.GoalPlanMoney, opts GoalPlanOptions) {
-	@goalPlanMoney(money)
-	if opts.Save == nil && opts.Loan == nil && opts.LoanProblem == "" {
-		@GoalPlanHint("Enter how much to put aside every month, or the months to save over, to see when you'd get it.")
-	} else {
-		<div class="grid gap-3">
-			if money.HasSalary() && opts.Monthly > money.Free()+0.005 {
-				<p class="flex items-center gap-2 text-sm text-amber-300">
-					@icons.Warning("16", &templ.Attributes{"class": "shrink-0"})
-					<span>That's more than the <span class="sensitive tabular-nums">{ money.Currency.Format(money.Free()) }</span> free every month.</span>
-				</p>
-			}
-			<div class="grid sm:grid-cols-2 gap-3">
-				@goalOptionCard("Save it all", opts.Mode == models.GoalPlanSave) {
-					if opts.Save != nil {
-						{{ pr := opts.Save }}
-						@goalOptionOwn(pr, &gl.Currency)
-						<p class="text-sm text-zinc-400">
-							if pr.SaveMonths > 0 {
-								{ fmt.Sprint(pr.SaveMonths) } { plural(pr.SaveMonths, "month", "months") } of saving
-							} else {
-								Already saved
-							}
-						</p>
-						<p class="sensitive text-sm text-zinc-500 tabular-nums">{ gl.Currency.Format(pr.TotalCost) } in total, nothing extra</p>
-					}
+	<div class="grid gap-4">
+		@goalPlanMoney(money)
+		if opts.Save == nil && opts.Loan == nil && opts.LoanProblem == "" {
+			@GoalPlanHint("Enter how much to put aside every month, or the months to save over, to see when you'd get it.")
+		} else {
+			<div class="grid gap-3">
+				if money.HasSalary() && opts.Monthly > money.Free()+0.005 {
+					<p class="flex items-center gap-2 text-sm text-amber-300">
+						@icons.Warning("16", &templ.Attributes{"class": "shrink-0"})
+						<span>That's more than the <span class="sensitive tabular-nums">{ money.Currency.Format(money.Free()) }</span> free every month.</span>
+					</p>
 				}
-				@goalOptionCard("Down payment + loan", opts.Mode == models.GoalPlanInstallments) {
-					if opts.LoanProblem != "" {
-						<p class="text-sm text-zinc-500">{ opts.LoanProblem }</p>
-					} else if opts.Loan != nil {
-						{{ pr := opts.Loan }}
-						@goalOptionOwn(pr, &gl.Currency)
-						<p class="text-sm text-zinc-400">
-							<span class="sensitive tabular-nums">{ gl.Currency.Format(pr.Target) }</span> down
-							if pr.SaveMonths > 0 {
-								in { fmt.Sprint(pr.SaveMonths) } { plural(pr.SaveMonths, "month", "months") }
-							} else {
-								already saved
-							}
-						</p>
-						<p class="text-sm text-zinc-400">
-							then <span class="sensitive tabular-nums">{ planMonthly(pr.Loan, gl.Currency.Symbol) }</span> × { fmt.Sprint(len(pr.Loan.Rows)) } to { pr.DoneOn.Format("Jan 2006") }
-						</p>
-						<p class="sensitive text-sm text-zinc-500 tabular-nums">
-							{ gl.Currency.Format(pr.TotalCost) } in total
-							if pr.Extra > 0.005 {
-								· <span class="text-zinc-300">{ gl.Currency.Format(pr.Extra) }</span> extra · <span class={ aprClass(pr.Loan.APR) }>{ models.ViewRate(pr.Loan.APR) }</span> a year
-							}
-						</p>
-						if pr.LoanOverMonthly {
-							<p class="text-sm text-amber-300">Its payments are more than your monthly amount.</p>
+				<div class="grid sm:grid-cols-2 gap-3">
+					@goalOptionCard("Save it all", opts.Mode == models.GoalPlanSave) {
+						if opts.Save != nil {
+							{{ pr := opts.Save }}
+							@goalOptionOwn(pr, &gl.Currency)
+							<p class="text-sm text-zinc-400">
+								if pr.SaveMonths > 0 {
+									{ fmt.Sprint(pr.SaveMonths) } { plural(pr.SaveMonths, "month", "months") } of saving
+								} else {
+									Already saved
+								}
+							</p>
+							<p class="sensitive text-sm text-zinc-500 tabular-nums">{ gl.Currency.Format(pr.TotalCost) } in total, nothing extra</p>
 						}
+					}
+					@goalOptionCard("Down payment + loan", opts.Mode == models.GoalPlanInstallments) {
+						if opts.LoanProblem != "" {
+							<p class="text-sm text-zinc-500">{ opts.LoanProblem }</p>
+						} else if opts.Loan != nil {
+							{{ pr := opts.Loan }}
+							@goalOptionOwn(pr, &gl.Currency)
+							<p class="text-sm text-zinc-400">
+								<span class="sensitive tabular-nums">{ gl.Currency.Format(pr.Target) }</span> down
+								if pr.SaveMonths > 0 {
+									in { fmt.Sprint(pr.SaveMonths) } { plural(pr.SaveMonths, "month", "months") }
+								} else {
+									already saved
+								}
+							</p>
+							<p class="text-sm text-zinc-400">
+								then <span class="sensitive tabular-nums">{ planMonthly(pr.Loan, gl.Currency.Symbol) }</span> × { fmt.Sprint(len(pr.Loan.Rows)) } to { pr.DoneOn.Format("Jan 2006") }
+							</p>
+							<p class="sensitive text-sm text-zinc-500 tabular-nums">
+								{ gl.Currency.Format(pr.TotalCost) } in total
+								if pr.Extra > 0.005 {
+									· <span class="text-zinc-300">{ gl.Currency.Format(pr.Extra) }</span> extra · <span class={ aprClass(pr.Loan.APR) }>{ models.ViewRate(pr.Loan.APR) }</span> a year
+								}
+							</p>
+							if pr.LoanOverMonthly {
+								<p class="text-sm text-amber-300">Its payments are more than your monthly amount.</p>
+							}
+						}
+					}
+				</div>
+				if opts.Save != nil && opts.Loan != nil {
+					{{ sooner := monthsApart(opts.Loan.BuyOn, opts.Save.BuyOn) }}
+					if sooner > 0 {
+						<p class="text-sm text-zinc-400">
+							The loan gets it { fmt.Sprint(sooner) } { plural(sooner, "month", "months") } sooner
+							if opts.Loan.Extra > 0.005 {
+								and costs <span class="sensitive tabular-nums">{ gl.Currency.Format(opts.Loan.Extra) }</span> more
+							}
+						</p>
+						<p class="text-xs text-zinc-500">You'd be paying until { opts.Loan.DoneOn.Format("Jan 2006") } instead of owning it outright by { opts.Save.BuyOn.Format("Jan 2006") }</p>
 					}
 				}
 			</div>
-			if opts.Save != nil && opts.Loan != nil {
-				{{ sooner := monthsApart(opts.Loan.BuyOn, opts.Save.BuyOn) }}
-				if sooner > 0 {
-					<p class="text-sm text-zinc-400">
-						The loan gets it { fmt.Sprint(sooner) } { plural(sooner, "month", "months") } sooner
-						if opts.Loan.Extra > 0.005 {
-							and costs <span class="sensitive tabular-nums">{ gl.Currency.Format(opts.Loan.Extra) }</span> more
-						}
-					</p>
-					<p class="text-xs text-zinc-500">You'd be paying until { opts.Loan.DoneOn.Format("Jan 2006") } instead of owning it outright by { opts.Save.BuyOn.Format("Jan 2006") }</p>
-				}
-			}
-		</div>
-	}
+		}
+	</div>
 }
 
 templ goalOptionCard(title string, picked bool) {
@@ -445,6 +447,12 @@ templ goalPlanSummary(gl *models.Goal, card *GoalPlanCard, inDetails bool) {
 				@goalPlanStatus(gl, pr)
 			</div>
 			<div class="flex flex-wrap items-center gap-1.5">
+				if pr.Plan.StartsOn.After(time.Now()) && pr.Left > 0.005 {
+					<span class="chip text-(--accent)">
+						@icons.PiggyBank("12")
+						Starts saving { affordDay(pr.Plan.StartsOn) }
+					</span>
+				}
 				<span class="chip">
 					@icons.Calendar("12")
 					if pr.Left > 0.005 {

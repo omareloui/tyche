@@ -93,14 +93,14 @@ templ AffordDrawer(fd *PlanItFD, curs []models.Currency, defaultCur *models.Curr
 						}
 						@plainAmountInputs("Price", icons.Tag("15"), fd.AmountFD, "afford", curs, defaultCur, false)
 						@planInputs(fd.Plan, "afford", mode)
-					</div>
-					<div id="afford-result">
-						@result
+						<div id="afford-result">
+							@result
+						</div>
 					</div>
 					@WorkSettingsSummary(ws)
 				</div>
 				<footer class="flex items-center justify-end gap-3 px-5 sm:px-6 py-4 border-t border-zinc-800">
-					<p id="afford-save-error" class="mr-auto text-sm text-red-400"></p>
+					<div id="afford-save-error" role="alert" class="mr-auto text-sm text-red-400"></div>
 					<button
 						type="button"
 						hx-post="/decide/goal"
@@ -121,6 +121,18 @@ templ AffordDrawer(fd *PlanItFD, curs []models.Currency, defaultCur *models.Curr
 // a loan, from the money free now) and the picked one weighed on the day
 // it's bought.
 templ PlanItResult(gl *models.Goal, money models.GoalPlanMoney, opts GoalPlanOptions, a *models.Affordability, ws *models.WorkSettings) {
+	if gl.Price <= 0 {
+		// What's free shows before the price is in.
+		<div class="grid gap-4">
+			@goalPlanMoney(money)
+			@AffordHint("Enter a price to plan it.")
+		</div>
+	} else {
+		@planItResult(gl, money, opts, a, ws)
+	}
+}
+
+templ planItResult(gl *models.Goal, money models.GoalPlanMoney, opts GoalPlanOptions, a *models.Affordability, ws *models.WorkSettings) {
 	<div class="grid gap-4">
 		if gl.Progress() > 0.005 {
 			<p class="text-sm text-zinc-500">

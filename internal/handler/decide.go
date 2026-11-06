@@ -14,6 +14,7 @@ import (
 	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/resperr"
 	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views"
 	"github.com/omareloui/tyche/web/views/form"
@@ -29,7 +30,7 @@ func (h Handler) Afford(w http.ResponseWriter, r *http.Request) (templ.Component
 	if err != nil {
 		return nil, err
 	}
-	if pi.problem != "" {
+	if pi.problem != "" && pi.goal.Price > 0 {
 		return views.AffordHint(pi.problem), nil
 	}
 	return pi.result(), nil
@@ -134,10 +135,7 @@ func (h Handler) AffordDrawer(w http.ResponseWriter, r *http.Request) (templ.Com
 	if err != nil {
 		return nil, err
 	}
-	var result templ.Component = views.AffordHint("Enter a price to plan it.")
-	if pi.goal.Price > 0 {
-		result = pi.result()
-	}
+	result := pi.result()
 	return views.AffordDrawer(fd, curs, &claims.DefaultCurrency, ws, pi.money, result), nil
 }
 
@@ -223,6 +221,9 @@ func (h Handler) planIt(r *http.Request) (*planIt, error) {
 // result is the plan's options and the picked one weighed on the day it's
 // bought: the month its target is saved, today when it is already.
 func (pi *planIt) result() templ.Component {
+	if pi.goal.Price <= 0 {
+		return views.PlanItResult(pi.goal, pi.money, views.GoalPlanOptions{}, nil, pi.ws)
+	}
 	opts := pi.h.goalPlanOptions(pi.goal, pi.plan)
 	var a *models.Affordability
 	if pr := opts.Picked(); pr != nil {
@@ -241,6 +242,11 @@ func (pi *planIt) result() templ.Component {
 	return views.PlanItResult(pi.goal, pi.money, opts, a, pi.ws)
 }
 
+// saveGoalProblem is a "Save as a goal" problem, shown by the button.
+func saveGoalProblem(msg string) error {
+	return resperr.New(http.StatusUnprocessableEntity, msg)
+}
+
 // SaveAffordGoal saves the planned purchase as a goal with its plan (for the
 // wish it's planned for, if any), opening its details.
 func (h Handler) SaveAffordGoal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -253,10 +259,10 @@ func (h Handler) SaveAffordGoal(w http.ResponseWriter, r *http.Request) (templ.C
 		return nil, err
 	}
 	if pi.problem != "" {
-		return views.AffordHint(pi.problem), nil
+		return nil, saveGoalProblem(pi.problem)
 	}
 	if strings.TrimSpace(pi.goal.Name) == "" {
-		return views.AffordHint("Name it to save it as a goal."), nil
+		return nil, saveGoalProblem("Name it to save it as a goal.")
 	}
 
 	gl := &models.Goal{ID: idgen.New(), Name: pi.goal.Name, Price: pi.goal.Price, Currency: models.Currency{ID: pi.goal.Currency.ID}, CreatedAt: time.Now()}
@@ -266,11 +272,11 @@ func (h Handler) SaveAffordGoal(w http.ResponseWriter, r *http.Request) (templ.C
 	switch h.checkGoalPlan(r, plan, nil, gl.Price, 0, fd) {
 	case "":
 	case planLoanProblem:
-		return views.AffordHint(planProblem(goalLoanProblems(plan.Loan, gl.Price))), nil
+		return nil, saveGoalProblem(planProblem(goalLoanProblems(plan.Loan, gl.Price)))
 	default:
 		for _, msg := range []string{fd.StartsOn.Error, fd.Monthly.Error, fd.Months.Error} {
 			if msg != "" {
-				return views.AffordHint(msg + "."), nil
+				return nil, saveGoalProblem(msg + ".")
 			}
 		}
 	}
@@ -281,7 +287,7 @@ func (h Handler) SaveAffordGoal(w http.ResponseWriter, r *http.Request) (templ.C
 	if err := gl.SanitizeAndValidate(h.sani, h.valid); err != nil {
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
-			return views.AffordHint("Check the name and the price."), nil
+			return nil, saveGoalProblem("Check the name and the price.")
 		}
 		return nil, err
 	}
@@ -299,7 +305,7 @@ func (h Handler) SaveAffordGoal(w http.ResponseWriter, r *http.Request) (templ.C
 	if err != nil {
 		var valerr *errs.ValidationError
 		if errors.As(err, &valerr) {
-			return views.AffordHint("A goal with that name exists already."), nil
+			return nil, saveGoalProblem("A goal with that name exists already.")
 		}
 		return nil, err
 	}

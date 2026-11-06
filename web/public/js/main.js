@@ -449,8 +449,17 @@ document.addEventListener("alpine:init", () => {
     init() {
       // ?new is the goal's create form.
       if (new URL(location.href).searchParams.has("new")) this.setTab("goals");
+      // A card swapped in place moves to its section (data-section) when
+      // it changed, e.g. a plan starting later.
+      this.resection = () => {
+        for (const card of document.querySelectorAll("#goals-list [data-goal][data-section]")) {
+          const grid = document.getElementById(`goals-${card.dataset.section}`);
+          if (grid && card.parentElement !== grid) grid.prepend(card);
+        }
+      };
+      document.addEventListener("htmx:afterSettle", this.resection);
       this.recount = () => {
-        this.counts.goals = document.querySelectorAll("#goals-active [data-goal]").length;
+        this.counts.goals = document.querySelectorAll("#goals-active [data-goal], #goals-planned [data-goal]").length;
         this.counts.wishlist = document.querySelectorAll("#wishlist [data-wl][data-waiting]").length;
       };
       this.recount();
@@ -459,6 +468,7 @@ document.addEventListener("alpine:init", () => {
 
     destroy() {
       document.removeEventListener("htmx:afterSettle", this.recount);
+      document.removeEventListener("htmx:afterSettle", this.resection);
     },
 
     setTab(t) {
