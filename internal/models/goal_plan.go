@@ -248,12 +248,22 @@ func (pr *GoalProjection) Behind() float64 {
 	return math.Max(0, pr.Due-pr.Saved)
 }
 
-// Ahead is what's saved over the due amount and this month's deposit.
+// PlanAheadMin is the share of the monthly amount a goal must be ahead by
+// to show as ahead, so a deposit a little over it (e.g. rounded up, or a
+// holding's rate moving) reads as on track.
+const PlanAheadMin = 0.05
+
+// Ahead is what's saved over the due amount and this month's deposit, 0
+// when less than PlanAheadMin of the monthly amount.
 func (pr *GoalProjection) Ahead() float64 {
 	if pr.Left <= 0.005 {
 		return 0
 	}
-	return math.Max(0, pr.Saved-pr.Due-pr.Plan.Monthly)
+	ahead := pr.Saved - pr.Due - pr.Plan.Monthly
+	if ahead < pr.Plan.Monthly*PlanAheadMin {
+		return 0
+	}
+	return ahead
 }
 
 // NextDeposit is the plan's next deposit and its day: today while this

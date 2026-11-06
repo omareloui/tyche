@@ -196,6 +196,11 @@ func TestGoalPlanProject(t *testing.T) {
 		if pr.Behind() != 0 || !approx(pr.Ahead(), 1_500, 0.01) {
 			t.Errorf("behind %v, ahead %v", pr.Behind(), pr.Ahead())
 		}
+		// A little over this month's deposit is on track.
+		pr, _ = p.Project(100_000, 4_540, models.MonthStart(1), now)
+		if pr.Behind() != 0 || pr.Ahead() != 0 {
+			t.Errorf("behind %v, ahead %v", pr.Behind(), pr.Ahead())
+		}
 	})
 
 	t.Run("needs a monthly amount", func(t *testing.T) {
