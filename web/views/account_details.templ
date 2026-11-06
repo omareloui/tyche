@@ -124,8 +124,8 @@ templ accountDetailsHero(a *models.Account, def *models.Currency) {
 				}
 			}
 			if a.SetAside > 0 {
-				<p class="sensitive text-sm text-zinc-500 tabular-nums">
-					+ { a.ViewSetAside() } set aside for goals · { a.ViewInBank() } in the bank
+				<p class="text-sm text-zinc-500 tabular-nums">
+					<span class="sensitive">+ { a.ViewSetAside() }</span> set aside for goals · <span class="sensitive">{ a.ViewInBank() }</span> in the bank
 				</p>
 			}
 		</div>

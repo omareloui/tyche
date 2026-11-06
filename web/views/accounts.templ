@@ -453,13 +453,13 @@ templ Account(a *models.Account, defaultCur *models.Currency) {
 					}
 				}
 				if a.SetAside > 0 {
-					<p title="Moved to goals in progress, still in the bank" class="sensitive flex items-center gap-1 text-sm text-zinc-500 tabular-nums">
+					<p title="Moved to goals in progress, still in the bank" class="flex items-center gap-1 text-sm text-zinc-500 tabular-nums">
 						@icons.Target("12")
-						+ { a.ViewSetAside() } set aside for goals
+						<span class="sensitive">+ { a.ViewSetAside() }</span> set aside for goals
 					</p>
-					<p title="Its balance plus what's set aside for goals" class="sensitive flex items-center gap-1 text-sm text-zinc-400 tabular-nums">
+					<p title="Its balance plus what's set aside for goals" class="flex items-center gap-1 text-sm text-zinc-400 tabular-nums">
 						@icons.Bank("12")
-						{ a.ViewInBank() } in the bank
+						<span class="sensitive">{ a.ViewInBank() }</span> in the bank
 					</p>
 				}
 			</div>

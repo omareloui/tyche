@@ -238,7 +238,7 @@ templ rtxDetailsTxs(title string, txs []models.Transaction, skip func(*models.Tr
 					</div>
 					<p
 						class={
-							"shrink-0 text-sm font-semibold tabular-nums",
+							"sensitive shrink-0 text-sm font-semibold tabular-nums",
 							templ.KV("text-emerald-400", v.tone == txToneIn),
 							templ.KV("text-zinc-400", v.tone == txToneNeutral),
 						}
