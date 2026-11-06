@@ -18,14 +18,15 @@ type navLink struct {
 }
 
 // primaryNav are always in sight, moreNav are behind "More". The phone's
-// bottom bar takes mobileNav and puts the rest under "More".
+// bottom bar takes mobileNav, primaryNav's first ones in the same order, and
+// puts the rest under "More".
 var (
 	primaryNav = []navLink{
 		{"/", "Home", icons.Home},
 		{"/transactions", "Transactions", icons.ArrowUpDown},
-		{"/recurrent-tx", "Recurring", icons.Repeat},
 		{"/accounts", "Accounts", icons.Bank},
 		{"/goals", "Goals", icons.Target},
+		{"/recurrent-tx", "Recurring", icons.Repeat},
 	}
 	moreNav = []navLink{
 		{"/categories", "Categories", icons.Tag},
@@ -414,7 +415,7 @@ func activeIn(path string, links []navLink) *navLink {
 // sheetNav are the pages in the phone's "More" sheet: what the bottom bar
 // lacks.
 func sheetNav(claims *jwt.AccessClaims) []navLink {
-	return slices.Concat([]navLink{primaryNav[2]}, moreNavFor(claims))
+	return slices.Concat(primaryNav[len(mobileNav):], moreNavFor(claims))
 }
 
 func moreNavFor(claims *jwt.AccessClaims) []navLink {
