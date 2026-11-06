@@ -215,10 +215,11 @@ func TestPlannedDeposits(t *testing.T) {
 		t.Fatalf("deposits = %+v", got)
 	}
 
-	// Months starting on the 26th: November's on Nov 26, December's (asked
-	// on Dec 1) on Dec 26, after the forecast's end.
+	// Months starting on the 26th: November's (due now) on the next payday,
+	// Nov 26, so is December's (its month starting then); January's on Dec
+	// 26, the forecast's end.
 	got = PlannedDeposits(goals, []Account{bank}, MonthStart(26), now, day("2026-12-26"))
-	if len(got) != 1 || !got[0].On.Equal(day("2026-11-26")) {
+	if len(got) != 2 || !got[0].On.Equal(day("2026-11-26")) || !got[1].On.Equal(day("2026-11-26")) {
 		t.Errorf("deposits from the 26th = %+v", got)
 	}
 }

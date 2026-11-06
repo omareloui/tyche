@@ -133,6 +133,36 @@ func (gl *Goal) ScheduledDeposits() float64 {
 	return sum
 }
 
+// PaidSince is what was put in it since from (net of what was taken out,
+// scheduled deposits counted as made), in its currency at today's rates.
+func (gl *Goal) PaidSince(from time.Time) float64 {
+	var sum float64
+	for _, tx := range gl.Transactions {
+		if tx.ScheduledTo.Before(from) {
+			continue
+		}
+		if amt := gl.TxAmount(&tx); !tx.FulfilledAt.IsZero() || amt > 0 {
+			sum += amt
+		}
+	}
+	return sum
+}
+
+// PlanBaseline is what it held before the user's month (starting on start)
+// startsOn is in, at today's rates: what a plan starting then counts its
+// deposits from, so a rate moving doesn't read as money put in or out.
+func (gl *Goal) PlanBaseline(start MonthStart, startsOn time.Time) float64 {
+	return gl.Progress() + gl.ScheduledDeposits() - gl.PaidSince(start.Of(startsOn).From)
+}
+
+// ProjectPlan works its plan out from its progress, scheduled deposits
+// counted as made, from its baseline.
+func (gl *Goal) ProjectPlan(start MonthStart, now time.Time) (*GoalProjection, error) {
+	p := *gl.Plan
+	p.StartSaved = gl.PlanBaseline(start, p.StartsOn)
+	return p.Project(gl.Price, gl.Progress()+gl.ScheduledDeposits(), start, now)
+}
+
 // Progress is the money saved, in its currency: its accounts' balances at
 // today's rates plus what buying it took out of it.
 func (gl *Goal) Progress() float64 {

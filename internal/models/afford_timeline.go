@@ -77,7 +77,7 @@ type datedOutlay struct {
 
 // planOutlays are a goal plan's deposits still to make and its loan's
 // payments, or the payments left of the loan it was bought with.
-func planOutlays(gl *Goal, now time.Time) []datedOutlay {
+func planOutlays(gl *Goal, start MonthStart, now time.Time) []datedOutlay {
 	if gl.Plan == nil {
 		return nil
 	}
@@ -94,7 +94,7 @@ func planOutlays(gl *Goal, now time.Time) []datedOutlay {
 		}
 		return res
 	}
-	pr, err := gl.Plan.Project(gl.Price, gl.Progress()+gl.ScheduledDeposits(), now)
+	pr, err := gl.ProjectPlan(start, now)
 	if err != nil {
 		return nil
 	}
@@ -102,7 +102,7 @@ func planOutlays(gl *Goal, now time.Time) []datedOutlay {
 		res = append(res, datedOutlay{On: d.On, Amount: d.Amount})
 	}
 	for _, r := range pr.Loan.rows() {
-		res = append(res, datedOutlay{On: pr.BuyOn.AddDate(0, r.Month, 0), Amount: r.Payment, Loan: true})
+		res = append(res, datedOutlay{On: pr.LoanPaymentOn(r.Month), Amount: r.Payment, Loan: true})
 	}
 	return res
 }
@@ -138,7 +138,7 @@ func (c *AffordContext) timeline(until time.Time) (tl []MonthMoney, dueNow float
 	for i := range c.Goals {
 		gl := &c.Goals[i]
 		g := goalOutlays{gl: gl, byDay: map[time.Time]float64{}, loan: map[time.Time]bool{}}
-		for _, o := range planOutlays(gl, today) {
+		for _, o := range planOutlays(gl, c.Start, today) {
 			amount := convert(o.Amount, &gl.Currency, c.Currency)
 			on := c.Start.Of(dateOnly(o.On)).From
 			if !dateOnly(o.On).After(today) || !on.After(today) {

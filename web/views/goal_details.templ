@@ -250,12 +250,12 @@ templ goalDetailsPlan(gl *models.Goal, card *GoalPlanCard, st goalState) {
 				</div>
 				{{ deposits := pr.Deposits() }}
 				if len(deposits) > 0 {
-					@goalDepositsSchedule(gl, deposits)
+					@goalDepositsSchedule(gl, pr, deposits)
 				}
 				if pr.Loan != nil {
 					<div class="grid gap-2 mt-2">
-						<p class="text-sm text-zinc-300">The loan, from { pr.BuyOn.Format("Jan 2006") }</p>
-						@planBreakdown(pr.Loan, gl.Currency.Symbol, pr.BuyOn, true)
+						<p class="text-sm text-zinc-300">The loan, from { pr.MonthOf(pr.BuyOn).Format("Jan 2006") }</p>
+						@planBreakdown(pr.Loan, gl.Currency.Symbol, pr.MonthOf(pr.BuyOn), true)
 					</div>
 				}
 			}
@@ -293,7 +293,7 @@ type goalMilestone struct {
 
 func goalMilestones(gl *models.Goal, pr *models.GoalProjection) []goalMilestone {
 	ms := []goalMilestone{
-		{On: pr.Plan.StartsOn, Title: "Plan started", Done: true, Note: gl.Currency.Format(pr.Plan.StartSaved) + " saved then"},
+		{On: pr.Plan.StartsOn, Title: "Plan started", Done: true, Note: gl.Currency.Format(pr.Plan.StartSaved) + " saved before"},
 		{On: time.Now(), Title: "Today", Done: true, Note: gl.Currency.Format(gl.Progress()) + " saved"},
 	}
 	saved := "Fully saved, buy it"
@@ -328,21 +328,22 @@ templ goalPlanTimeline(gl *models.Goal, pr *models.GoalProjection) {
 					<p class={ "text-sm", templ.KV("text-zinc-200", m.Done), templ.KV("text-zinc-400", !m.Done) }>{ m.Title }</p>
 					<p class="sensitive text-xs text-zinc-500 tabular-nums truncate">{ m.Note }</p>
 				</div>
-				<p class="text-xs text-zinc-500 tabular-nums">{ goalMilestoneDay(m.On) }</p>
+				<p class="text-xs text-zinc-500 tabular-nums">{ goalMilestoneDay(m.On, pr.MonthOf(m.On)) }</p>
 			</li>
 		}
 	</ol>
 }
 
-func goalMilestoneDay(t time.Time) string {
+// goalMilestoneDay is "Now" for today, else the user's month it's in.
+func goalMilestoneDay(t, month time.Time) string {
 	if dateOf(t).Equal(dateOf(time.Now())) {
 		return "Now"
 	}
-	return t.Format("Jan 2006")
+	return month.Format("Jan 2006")
 }
 
 // goalDepositsSchedule lists the plan's deposits still to make.
-templ goalDepositsSchedule(gl *models.Goal, rows []models.GoalDeposit) {
+templ goalDepositsSchedule(gl *models.Goal, pr *models.GoalProjection, rows []models.GoalDeposit) {
 	<details class="group/sched" open?={ len(rows) <= 6 }>
 		<summary class="flex items-center gap-2 list-none cursor-pointer select-none text-sm text-zinc-400 hover:text-zinc-200 [&::-webkit-details-marker]:hidden">
 			@icons.PiggyBank("14")
@@ -361,7 +362,7 @@ templ goalDepositsSchedule(gl *models.Goal, rows []models.GoalDeposit) {
 				<tbody class="divide-y divide-zinc-800/80">
 					for _, row := range rows {
 						<tr>
-							<td class="px-3 py-1.5 text-zinc-400">{ goalDepositDay(row.On) }</td>
+							<td class="px-3 py-1.5 text-zinc-400">{ goalDepositDay(row.On, pr.MonthOf(row.On)) }</td>
 							<td class="sensitive px-3 py-1.5 text-right">{ gl.Currency.Format(row.Amount) }</td>
 							<td class="sensitive px-3 py-1.5 text-right text-zinc-500">{ gl.Currency.Format(row.Saved) }</td>
 						</tr>
@@ -372,11 +373,12 @@ templ goalDepositsSchedule(gl *models.Goal, rows []models.GoalDeposit) {
 	</details>
 }
 
-func goalDepositDay(t time.Time) string {
+// goalDepositDay is "This month" for today, else the user's month it's in.
+func goalDepositDay(t, month time.Time) string {
 	if dateOf(t).Equal(dateOf(time.Now())) {
 		return "This month"
 	}
-	return t.Format("Jan 2006")
+	return month.Format("Jan 2006")
 }
 
 // goalHistory is the goal's transactions, the latest first.

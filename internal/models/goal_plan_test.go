@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/omareloui/tyche/internal/fxrate"
 	"github.com/omareloui/tyche/internal/models"
 )
 
@@ -70,7 +71,7 @@ func TestGoalPlanProject(t *testing.T) {
 
 	t.Run("save the price", func(t *testing.T) {
 		p := models.GoalPlan{Monthly: 50_000, StartsOn: now}
-		pr, err := p.Project(1_000_000, 0, now)
+		pr, err := p.Project(1_000_000, 0, models.MonthStart(1), now)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -85,7 +86,7 @@ func TestGoalPlanProject(t *testing.T) {
 
 	t.Run("this month's deposit is in", func(t *testing.T) {
 		p := models.GoalPlan{Monthly: 50_000, StartsOn: now}
-		pr, err := p.Project(1_000_000, 50_000, now)
+		pr, err := p.Project(1_000_000, 50_000, models.MonthStart(1), now)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -102,7 +103,7 @@ func TestGoalPlanProject(t *testing.T) {
 		p := models.GoalPlan{Monthly: 1_000, StartsOn: now}
 		// 1k this month and 1.5k scheduled: this month is in, and there are
 		// fewer deposits left (97.5k: 97 × 1k and 500).
-		pr, _ := p.Project(100_000, 2_500, now)
+		pr, _ := p.Project(100_000, 2_500, models.MonthStart(1), now)
 		amount, day := pr.NextDeposit()
 		if amount != 1_000 || !day.Equal(time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)) || pr.SaveMonths != 98 {
 			t.Errorf("next %v on %v, %d deposits", amount, day, pr.SaveMonths)
@@ -116,7 +117,7 @@ func TestGoalPlanProject(t *testing.T) {
 			Loan:     &models.InstallmentPlan{Strategy: models.StrategyFlat, Rate: 18, DownPayment: 20, DownPaymentPct: true, AdminFee: 1, AdminFeePct: true},
 			StartsOn: now,
 		}
-		pr, err := p.Project(1_000_000, 0, now)
+		pr, err := p.Project(1_000_000, 0, models.MonthStart(1), now)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -132,7 +133,7 @@ func TestGoalPlanProject(t *testing.T) {
 			t.Errorf("next %v", amount)
 		}
 		// Ahead: the 18k left next month.
-		pr, _ = p.Project(1_000_000, 190_000, now)
+		pr, _ = p.Project(1_000_000, 190_000, models.MonthStart(1), now)
 		if rows := pr.Deposits(); len(rows) != 1 || rows[0].Amount != 18_000 || !rows[0].On.Equal(time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)) {
 			t.Errorf("last deposits %+v", rows)
 		}
@@ -140,7 +141,7 @@ func TestGoalPlanProject(t *testing.T) {
 
 	t.Run("deposits", func(t *testing.T) {
 		p := models.GoalPlan{Monthly: 1_000, StartsOn: now}
-		pr, _ := p.Project(3_500, 400, now)
+		pr, _ := p.Project(3_500, 400, models.MonthStart(1), now)
 		rows := pr.Deposits()
 		if len(rows) != 4 || rows[0].Amount != 600 || !rows[0].On.Equal(now) || rows[3].Amount != 500 ||
 			!rows[3].On.Equal(time.Date(2027, 2, 1, 0, 0, 0, 0, time.UTC)) || !approx(rows[3].Saved, 3_500, 0.01) {
@@ -155,7 +156,7 @@ func TestGoalPlanProject(t *testing.T) {
 		// Started in September, 4 months' worth in already (in any number of
 		// deposits, this month or before): this month is covered.
 		p := models.GoalPlan{Monthly: 1_000, StartsOn: now.AddDate(0, -2, 0)}
-		pr, _ := p.Project(10_000, 4_000, now)
+		pr, _ := p.Project(10_000, 4_000, models.MonthStart(1), now)
 		amount, day := pr.NextDeposit()
 		if amount != 1_000 || !day.Equal(time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)) {
 			t.Errorf("next %v on %v", amount, day)
@@ -164,13 +165,13 @@ func TestGoalPlanProject(t *testing.T) {
 			t.Errorf("%d months, buy on %v", pr.SaveMonths, pr.BuyOn)
 		}
 		// Far ahead, it's only fewer deposits left, from next month.
-		pr, _ = p.Project(29_988, 24_500, now)
+		pr, _ = p.Project(29_988, 24_500, models.MonthStart(1), now)
 		if rows := pr.Deposits(); len(rows) != 6 || !rows[0].On.Equal(time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)) || rows[5].Amount != 488 ||
 			!pr.BuyOn.Equal(time.Date(2027, 5, 1, 0, 0, 0, 0, time.UTC)) {
 			t.Errorf("rows %+v, buy on %v", rows, pr.BuyOn)
 		}
 		// A part of a month ahead tops it up.
-		pr, _ = p.Project(10_000, 3_400, now)
+		pr, _ = p.Project(10_000, 3_400, models.MonthStart(1), now)
 		if amount, day := pr.NextDeposit(); amount != 600 || !day.Equal(time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)) {
 			t.Errorf("next %v on %v", amount, day)
 		}
@@ -178,7 +179,7 @@ func TestGoalPlanProject(t *testing.T) {
 
 	t.Run("missed months are asked now", func(t *testing.T) {
 		p := models.GoalPlan{Monthly: 1_000, StartsOn: now.AddDate(0, -2, 0)}
-		pr, _ := p.Project(10_000, 500, now)
+		pr, _ := p.Project(10_000, 500, models.MonthStart(1), now)
 		rows := pr.Deposits()
 		if len(rows) < 2 || rows[0].Amount != 2_500 || !rows[0].On.Equal(now) || !rows[1].On.Equal(time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)) {
 			t.Errorf("rows = %+v", rows)
@@ -187,18 +188,18 @@ func TestGoalPlanProject(t *testing.T) {
 
 	t.Run("on track", func(t *testing.T) {
 		p := models.GoalPlan{Monthly: 1_000, StartsOn: now.AddDate(0, -3, 0), StartSaved: 500}
-		pr, _ := p.Project(100_000, 2_000, now)
+		pr, _ := p.Project(100_000, 2_000, models.MonthStart(1), now)
 		if !approx(pr.Due, 3_500, 0.01) || !approx(pr.Behind(), 1_500, 0.01) || pr.Ahead() != 0 {
 			t.Errorf("due %v, behind %v, ahead %v", pr.Due, pr.Behind(), pr.Ahead())
 		}
-		pr, _ = p.Project(100_000, 6_000, now)
+		pr, _ = p.Project(100_000, 6_000, models.MonthStart(1), now)
 		if pr.Behind() != 0 || !approx(pr.Ahead(), 1_500, 0.01) {
 			t.Errorf("behind %v, ahead %v", pr.Behind(), pr.Ahead())
 		}
 	})
 
 	t.Run("needs a monthly amount", func(t *testing.T) {
-		if _, err := (&models.GoalPlan{}).Project(100, 0, now); !errors.Is(err, models.ErrPlanNoMonthly) {
+		if _, err := (&models.GoalPlan{}).Project(100, 0, models.MonthStart(1), now); !errors.Is(err, models.ErrPlanNoMonthly) {
 			t.Errorf("err = %v", err)
 		}
 	})
@@ -292,7 +293,7 @@ func TestGoalPlanSized(t *testing.T) {
 
 	// 9,000 left over 4 months: 2,250 a month.
 	p := &models.GoalPlan{Months: 4, StartsOn: now, StartSaved: 3000}
-	pr, err := p.Project(12000, 3000, now)
+	pr, err := p.Project(12000, 3000, models.MonthStart(1), now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -303,7 +304,7 @@ func TestGoalPlanSized(t *testing.T) {
 	// Starting later: the first deposit on its day.
 	later := time.Date(2027, 1, 15, 0, 0, 0, 0, time.UTC)
 	p = &models.GoalPlan{Monthly: 3000, StartsOn: later}
-	pr, err = p.Project(9000, 0, now)
+	pr, err = p.Project(9000, 0, models.MonthStart(1), now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -362,4 +363,101 @@ func TestPlanMilestones(t *testing.T) {
 			t.Errorf("milestone %d = %+v, want %+v", i, m, w)
 		}
 	}
+}
+
+// TestGoalProjectPlan checks a plan counts its deposits from the first day
+// of its first user month, at today's rates.
+func TestGoalProjectPlan(t *testing.T) {
+	day := func(m time.Month, d int) time.Time { return time.Date(2026, m, d, 0, 0, 0, 0, time.UTC) }
+	egp := models.Currency{ID: "egp", String: "EGP"}
+	usd := models.Currency{ID: "usd", String: "USD"}
+	start := models.MonthStart(26)
+	now := day(time.November, 6)
+
+	// 932 USD put in on Nov 3, the plan saved later that day.
+	goal := func(deposits ...models.Transaction) *models.Goal {
+		holding := models.Account{ID: "gl-usd", Currency: usd}
+		gl := &models.Goal{
+			ID: "car", Price: 1_000_000, Currency: egp,
+			Account:  &models.Account{ID: "gl-egp", Currency: egp},
+			Holdings: []models.Account{holding},
+			Plan:     &models.GoalPlan{Mode: models.GoalPlanSave, Monthly: 50_000, StartsOn: day(time.November, 3).Add(18 * time.Hour)},
+		}
+		for _, tx := range deposits {
+			if tx.FulfilledAt.IsZero() {
+				gl.Transactions = append(gl.Transactions, tx)
+				continue
+			}
+			for _, acc := range append([]*models.Account{gl.Account}, &gl.Holdings[0]) {
+				if acc.ID == tx.ToAccount.ID {
+					acc.Amount += tx.ToAmount
+				}
+			}
+			gl.Transactions = append(gl.Transactions, tx)
+		}
+		return gl
+	}
+	deposit := func(on time.Time, to models.Account, amount float64, fulfilled bool) models.Transaction {
+		tx := models.Transaction{
+			Account: models.Account{ID: "bank", Currency: to.Currency}, Amount: amount,
+			ToAccount: &to, ToAmount: amount, ScheduledTo: on,
+		}
+		if fulfilled {
+			tx.FulfilledAt = on
+		}
+		return tx
+	}
+	usdIn := func(on time.Time) models.Transaction {
+		return deposit(on, models.Account{ID: "gl-usd", Currency: usd}, 932, true)
+	}
+
+	for _, tt := range []struct {
+		rate   float64
+		amount float64
+		on     time.Time
+	}{
+		// Worth more than the monthly amount: nothing asked until
+		// December's (Nov 26), topping November's up to two months.
+		{55.83, models.RoundCents(100_000 - 932*55.83), day(time.November, 26)},
+		// Worth less: only what November misses, asked today.
+		{50, 3_400, now},
+	} {
+		t.Cleanup(fxrate.SetRates(map[string]map[string]float64{"usd": {"egp": tt.rate}}))
+		pr, err := goal(usdIn(day(time.November, 3))).ProjectPlan(start, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if amount, on := pr.NextDeposit(); amount != tt.amount || !on.Equal(tt.on) || pr.Behind() != 0 || pr.Plan.StartSaved != 0 {
+			t.Errorf("at %v: next = %v on %v, want %v on %v; behind %v, baseline %v", tt.rate, amount, on, tt.amount, tt.on, pr.Behind(), pr.Plan.StartSaved)
+		}
+	}
+	pr, _ := (&models.GoalPlan{Monthly: 1, StartsOn: now}).Project(100, 0, start, now)
+	if got := pr.MonthOf(day(time.November, 26)); !got.Equal(day(time.December, 1)) {
+		t.Errorf("month of Nov 26 = %v, want December", got)
+	}
+
+	t.Run("the month before is saved already", func(t *testing.T) {
+		t.Cleanup(fxrate.SetRates(map[string]map[string]float64{"usd": {"egp": 50}}))
+		pr, _ := goal(usdIn(day(time.October, 20))).ProjectPlan(start, now)
+		if amount, on := pr.NextDeposit(); amount != 50_000 || !on.Equal(now) {
+			t.Errorf("next = %v on %v, want 50000 now", amount, on)
+		}
+		if pr.Plan.StartSaved != 46_600 {
+			t.Errorf("baseline = %v, want 46600", pr.Plan.StartSaved)
+		}
+	})
+
+	t.Run("a scheduled deposit counts as made", func(t *testing.T) {
+		pr, _ := goal(deposit(day(time.November, 10), models.Account{ID: "gl-egp", Currency: egp}, 50_000, false)).ProjectPlan(start, now)
+		if amount, on := pr.NextDeposit(); amount != 50_000 || !on.Equal(day(time.November, 26)) {
+			t.Errorf("next = %v on %v, want 50000 on Nov 26", amount, on)
+		}
+	})
+
+	t.Run("calendar months", func(t *testing.T) {
+		pr, _ := goal(deposit(day(time.November, 2), models.Account{ID: "gl-egp", Currency: egp}, 50_000, true)).ProjectPlan(models.MonthStart(1), now)
+		if amount, on := pr.NextDeposit(); amount != 50_000 || !on.Equal(day(time.December, 1)) {
+			t.Errorf("next = %v on %v, want 50000 on Dec 1", amount, on)
+		}
+	})
 }

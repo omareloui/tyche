@@ -91,7 +91,7 @@ func (h Handler) GetGoalPlanForm(w http.ResponseWriter, r *http.Request) (templ.
 	fd := mapGoalPlanToFD(plan, nil)
 	fd.From = goalFrom(r)
 	env.milestones(fd)
-	return views.GoalPlanForm(gl, fd, env.money(plan.StartsOn), h.goalPlanOptions(gl, plan)), nil
+	return views.GoalPlanForm(gl, fd, env.money(plan.StartsOn), h.goalPlanOptions(gl, plan, env.start)), nil
 }
 
 // GoalPlanPreview compares saving the whole price with a down payment and a
@@ -109,7 +109,7 @@ func (h Handler) GoalPlanPreview(w http.ResponseWriter, r *http.Request) (templ.
 		opts := views.GoalPlanOptions{Mode: models.GoalPlanModeFromString(r.FormValue("mode"))}
 		return views.GoalPlanPreviewAnswer(env.goal, env.money(time.Time{}), opts, "Check the numbers, some aren't valid."), nil
 	}
-	return views.GoalPlanPreviewAnswer(env.goal, env.money(plan.StartsOn), h.goalPlanOptions(env.goal, plan), ""), nil
+	return views.GoalPlanPreviewAnswer(env.goal, env.money(plan.StartsOn), h.goalPlanOptions(env.goal, plan, env.start), ""), nil
 }
 
 // goalLoanProblems are the loan's problems for the price. Its months can be
@@ -123,8 +123,9 @@ func goalLoanProblems(loan *models.InstallmentPlan, price float64) errs.Validati
 }
 
 // goalPlanOptions works the goal out by saving the whole price and by the
-// plan's loan, from its progress.
-func (h Handler) goalPlanOptions(gl *models.Goal, plan *models.GoalPlan) (opts views.GoalPlanOptions) {
+// plan's loan, from its progress (scheduled deposits counted as made), in
+// the user's months starting on start.
+func (h Handler) goalPlanOptions(gl *models.Goal, plan *models.GoalPlan, start models.MonthStart) (opts views.GoalPlanOptions) {
 	now := time.Now()
 	opts = views.GoalPlanOptions{Mode: plan.Mode, Monthly: plan.Monthly, Months: plan.Months}
 	if !plan.IsSized() && plan.Monthly <= 0 {
@@ -135,7 +136,7 @@ func (h Handler) goalPlanOptions(gl *models.Goal, plan *models.GoalPlan) (opts v
 	if plan.StartsOn.After(now) {
 		starts = plan.StartsOn
 	}
-	plan = &models.GoalPlan{Mode: plan.Mode, Monthly: plan.Monthly, Months: plan.Months, Loan: plan.Loan, StartsOn: starts, StartSaved: gl.Progress()}
+	plan = &models.GoalPlan{Mode: plan.Mode, Monthly: plan.Monthly, Months: plan.Months, Loan: plan.Loan, StartsOn: starts, StartSaved: gl.PlanBaseline(start, starts)}
 	defer func() {
 		// A sized plan's monthly amount is the picked option's.
 		if pr := opts.Picked(); plan.IsSized() && pr != nil {
@@ -145,7 +146,8 @@ func (h Handler) goalPlanOptions(gl *models.Goal, plan *models.GoalPlan) (opts v
 
 	save := *plan
 	save.Mode = models.GoalPlanSave
-	opts.Save, _ = save.Project(gl.Price, gl.Progress(), now)
+	saved := gl.Progress() + gl.ScheduledDeposits()
+	opts.Save, _ = save.Project(gl.Price, saved, start, now)
 
 	if plan.Loan == nil {
 		return opts
@@ -156,7 +158,7 @@ func (h Handler) goalPlanOptions(gl *models.Goal, plan *models.GoalPlan) (opts v
 	}
 	loan := *plan
 	loan.Mode = models.GoalPlanInstallments
-	pr, err := loan.Project(gl.Price, gl.Progress(), now)
+	pr, err := loan.Project(gl.Price, saved, start, now)
 	switch {
 	case errors.Is(err, models.ErrPlanMonthlyTooLow):
 		opts.LoanProblem = "Your monthly amount doesn't cover this loan's payments, even over 50 years."
@@ -190,7 +192,7 @@ func (h Handler) SetGoalPlan(w http.ResponseWriter, r *http.Request) (templ.Comp
 	}
 	fd := mapGoalPlanToFD(plan, nil)
 	keepTyped(fd)
-	if msg := h.checkGoalPlan(r, plan, err, gl.Price, gl.Progress(), fd); msg != "" {
+	if msg := h.checkGoalPlan(r, plan, err, gl, fd); msg != "" {
 		fd.From = goalFrom(r)
 		if msg == planLoanProblem {
 			fd = mapGoalPlanToFD(plan, goalLoanProblems(plan.Loan, gl.Price))
@@ -198,7 +200,7 @@ func (h Handler) SetGoalPlan(w http.ResponseWriter, r *http.Request) (templ.Comp
 			fd.From = goalFrom(r)
 		}
 		env.milestones(fd)
-		return views.GoalPlanFormFields(gl, fd, env.money(plan.StartsOn), h.goalPlanOptions(gl, plan)), nil
+		return views.GoalPlanFormFields(gl, fd, env.money(plan.StartsOn), h.goalPlanOptions(gl, plan, env.start)), nil
 	}
 
 	if plan.Mode == models.GoalPlanSave {
@@ -223,12 +225,14 @@ func (h Handler) SetGoalPlan(w http.ResponseWriter, r *http.Request) (templ.Comp
 const planLoanProblem = "loan"
 
 // checkGoalPlan checks a plan read from its form (err its parsing error)
-// for a price, saved now, setting the problems on fd; on success it starts
-// the plan (StartsOn the day saving starts, today at the earliest) and keeps
+// for gl, setting the problems on fd; on success it starts the plan
+// (StartsOn the day saving starts, today at the earliest, StartSaved its
+// baseline then) and keeps
 // the monthly amount a sized plan comes to, paying its loan. It answers the
 // problem, "" when none.
-func (h Handler) checkGoalPlan(r *http.Request, plan *models.GoalPlan, err error, price, saved float64, fd *views.GoalPlanFD) string {
+func (h Handler) checkGoalPlan(r *http.Request, plan *models.GoalPlan, err error, gl *models.Goal, fd *views.GoalPlanFD) string {
 	today := h.userToday(r.Context())
+	price := gl.Price
 	sized := r.FormValue("plan_by") == views.PlanByMonths
 	switch {
 	case err != nil && errors.Is(err, errInvalidStartsOn):
@@ -253,7 +257,7 @@ func (h Handler) checkGoalPlan(r *http.Request, plan *models.GoalPlan, err error
 	if plan.StartsOn.IsZero() || plan.StartsOn.Before(time.Now()) {
 		plan.StartsOn = time.Now()
 	}
-	plan.StartSaved = saved
+	plan.StartSaved = gl.PlanBaseline(getClaims(r.Context()).MonthStart, plan.StartsOn)
 	plan.Monthly = plan.Sized(price).Monthly
 	switch {
 	case plan.Monthly <= 0:
@@ -310,7 +314,7 @@ func (h Handler) goalPlanCards(r *http.Request, gls []models.Goal) (map[string]*
 		}
 		// Scheduled deposits are counted as made, so they're not asked again.
 		card := &views.GoalPlanCard{}
-		pr, err := gl.Plan.Project(gl.Price, gl.Progress()+gl.ScheduledDeposits(), now)
+		pr, err := gl.ProjectPlan(getClaims(r.Context()).MonthStart, now)
 		if err != nil {
 			card.Problem = "The plan doesn't work out anymore, edit it."
 			cards[gl.ID] = card

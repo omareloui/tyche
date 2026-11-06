@@ -41,6 +41,11 @@ func (s MonthStart) For(month time.Time) Period {
 	return p
 }
 
+// Plus is the period k months after the one t's day is in.
+func (s MonthStart) Plus(t time.Time, k int) Period {
+	return s.For(s.Of(t).Month.AddDate(0, k, 0))
+}
+
 // Of is the period t's day is in.
 func (s MonthStart) Of(t time.Time) Period {
 	day := dateOnly(t)

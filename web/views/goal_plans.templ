@@ -240,7 +240,7 @@ templ planTimeline(fd *GoalPlanFD) {
 				</li>
 				for _, m := range fd.Milestones {
 					<li>
-						@planMilestoneButton(m.On.Format(time.DateOnly), m.On.Format("Jan 2006"), planMilestoneLabel(&m), fd.Currency.Format(m.Free)+" free")
+						@planMilestoneButton(m.On.Format(time.DateOnly), m.Month.Format("Jan 2006"), planMilestoneLabel(&m), fd.Currency.Format(m.Free)+" free")
 					</li>
 				}
 			</ol>
@@ -420,7 +420,7 @@ templ goalPlanPreview(gl *models.Goal, money models.GoalPlanMoney, opts GoalPlan
 						}
 					</p>
 					<p class="text-sm text-zinc-400">
-						then <span class="sensitive tabular-nums">{ planMonthly(pr.Loan, gl.Currency.Symbol) }</span> × { fmt.Sprint(len(pr.Loan.Rows)) } to { pr.DoneOn.Format("Jan 2006") }
+						then <span class="sensitive tabular-nums">{ planMonthly(pr.Loan, gl.Currency.Symbol) }</span> × { fmt.Sprint(len(pr.Loan.Rows)) } to { pr.MonthOf(pr.DoneOn).Format("Jan 2006") }
 					</p>
 					<p class="sensitive text-sm text-zinc-500 tabular-nums">
 						{ gl.Currency.Format(pr.TotalCost) } in total
@@ -436,7 +436,7 @@ templ goalPlanPreview(gl *models.Goal, money models.GoalPlanMoney, opts GoalPlan
 		</div>
 		if pr := opts.Picked(); !empty && pr != nil {
 			if rows := pr.Deposits(); len(rows) > 1 {
-				@goalDepositsSchedule(gl, rows)
+				@goalDepositsSchedule(gl, pr, rows)
 			}
 		}
 		if empty {
@@ -450,7 +450,7 @@ templ goalPlanPreview(gl *models.Goal, money models.GoalPlanMoney, opts GoalPlan
 						and costs <span class="sensitive tabular-nums">{ gl.Currency.Format(opts.Loan.Extra) }</span> more
 					}
 				</p>
-				<p class="text-xs text-zinc-500">You'd be paying until { opts.Loan.DoneOn.Format("Jan 2006") } instead of owning it outright by { opts.Save.BuyOn.Format("Jan 2006") }</p>
+				<p class="text-xs text-zinc-500">You'd be paying until { opts.Loan.MonthOf(opts.Loan.DoneOn).Format("Jan 2006") } instead of owning it outright by { opts.Save.MonthOf(opts.Save.BuyOn).Format("Jan 2006") }</p>
 			}
 		}
 	</div>
@@ -486,7 +486,7 @@ templ goalOptionOwn(pr *models.GoalProjection, cur *models.Currency) {
 		if pr.Left <= 0.005 {
 			Now
 		} else {
-			{ pr.BuyOn.Format("Jan 2006") }
+			{ pr.MonthOf(pr.BuyOn).Format("Jan 2006") }
 		}
 	</p>
 	if pr.Plan.IsSized() && pr.Left > 0.005 {
@@ -513,7 +513,7 @@ templ goalPlanSummary(gl *models.Goal, card *GoalPlanCard, inDetails bool) {
 				<p class="text-zinc-500 tabular-nums">
 					<span class="sensitive text-zinc-200">{ gl.Currency.Format(pr.Plan.Monthly) }</span>/mo
 					if pr.Left > 0.005 {
-						· { goalPlanBuyLabel(pr) } { pr.BuyOn.Format("Jan 2006") }
+						· { goalPlanBuyLabel(pr) } { pr.MonthOf(pr.BuyOn).Format("Jan 2006") }
 					}
 				</p>
 				@goalPlanStatus(gl, pr)
@@ -542,7 +542,7 @@ templ goalPlanSummary(gl *models.Goal, card *GoalPlanCard, inDetails bool) {
 			</div>
 			if pr.Loan != nil {
 				<p class="text-xs text-zinc-500 tabular-nums">
-					<span class="sensitive">{ gl.Currency.Format(pr.Target) }</span> down, then <span class="sensitive">{ planMonthly(pr.Loan, gl.Currency.Symbol) }</span> × { fmt.Sprint(len(pr.Loan.Rows)) } to { pr.DoneOn.Format("Jan 2006") }
+					<span class="sensitive">{ gl.Currency.Format(pr.Target) }</span> down, then <span class="sensitive">{ planMonthly(pr.Loan, gl.Currency.Symbol) }</span> × { fmt.Sprint(len(pr.Loan.Rows)) } to { pr.MonthOf(pr.DoneOn).Format("Jan 2006") }
 				</p>
 			}
 			if card.Next > 0 {
@@ -563,7 +563,7 @@ templ goalPlanSummary(gl *models.Goal, card *GoalPlanCard, inDetails bool) {
 						</button>
 						<span class="text-xs text-zinc-500 truncate">
 							if card.NextOn.After(time.Now()) {
-								{ card.NextOn.Format("January") }'s ·
+								{ card.Projection.MonthOf(card.NextOn).Format("January") }'s ·
 							}
 							from { card.Source.Account.Name }
 						</span>

@@ -239,7 +239,7 @@ func (pi *planIt) outcome() views.PlanItOutcome {
 		}
 		return out
 	}
-	out.Opts = pi.h.goalPlanOptions(pi.goal, pi.plan)
+	out.Opts = pi.h.goalPlanOptions(pi.goal, pi.plan, pi.ctx.Start)
 	if pr := out.Opts.Picked(); pr != nil {
 		p := models.Purchase{Price: pi.goal.Price, Currency: pi.goal.Currency}
 		if pr.Loan != nil {
@@ -283,7 +283,7 @@ func (h Handler) SaveAffordGoal(w http.ResponseWriter, r *http.Request) (templ.C
 	plan := pi.plan
 	// A new goal starts with nothing saved.
 	fd := mapGoalPlanToFD(plan, nil)
-	switch h.checkGoalPlan(r, plan, nil, gl.Price, 0, fd) {
+	switch h.checkGoalPlan(r, plan, nil, gl, fd) {
 	case "":
 	case planLoanProblem:
 		return nil, saveGoalProblem(planProblem(goalLoanProblems(plan.Loan, gl.Price)))
