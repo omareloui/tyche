@@ -114,6 +114,30 @@ func (h *Handler) DashboardCategories(w http.ResponseWriter, r *http.Request) (t
 	return views.DashCategories(cs), nil
 }
 
+// DashboardNetWorth is the accounts summary's net worth over time, with the
+// options picked on the accounts page in this browser.
+func (h *Handler) DashboardNetWorth(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	s, err := h.repo.GetAccountsSummary(r.Context(), &getClaims(r.Context()).DefaultCurrency, accountsSummaryWith(r))
+	if err != nil {
+		return nil, err
+	}
+	return views.DashNetWorth(s), nil
+}
+
+// DashboardBudgetPace is this month's budgeted spending against spending the
+// budgets evenly, without the categories hidden from the budget summary.
+func (h *Handler) DashboardBudgetPace(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	_, hidden, err := summaryParams(r)
+	if err != nil {
+		return nil, err
+	}
+	bs, err := h.repo.GetBudgetSummary(r.Context(), time.Time{}, &getClaims(r.Context()).DefaultCurrency, hidden)
+	if err != nil {
+		return nil, err
+	}
+	return views.DashBudgetPace(bs), nil
+}
+
 func (h *Handler) DashboardGoals(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	goals, err := h.repo.GetUnfulfilledGoals(r.Context())
 	if err != nil {

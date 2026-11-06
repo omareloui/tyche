@@ -61,6 +61,10 @@ templ Dashboard(d DashboardData) {
 					@dashPaceChart(d.Flow, def)
 				</div>
 				<div class="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-2">
+					@dashLazyWith("/dashboard/net-worth", "h-80", "revealed", "js:{with: accSummaryWith().join(',')}")
+					@dashLazyWith("/dashboard/budget-pace", "h-80", "revealed", "js:{hide: budgetHidden().join(',')}")
+				</div>
+				<div class="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-2">
 					@dashLazy("/dashboard/budgets", "h-72", "load")
 					@dashLazy("/dashboard/categories", "h-72", "load")
 				</div>
@@ -82,9 +86,17 @@ templ Dashboard(d DashboardData) {
 
 // dashLazy is a placeholder replaced by url's widget on trigger.
 templ dashLazy(url, class, trigger string) {
+	@dashLazyWith(url, class, trigger, "")
+}
+
+// dashLazyWith is dashLazy sending vals (hx-vals) with its request.
+templ dashLazyWith(url, class, trigger, vals string) {
 	<div
 		hx-get={ url }
 		hx-trigger={ trigger }
+		if vals != "" {
+			hx-vals={ vals }
+		}
 		hx-swap="outerHTML"
 		hx-on::response-error="this.classList.remove('animate-pulse'); this.classList.add('grid', 'place-items-center', 'text-sm', 'text-zinc-500'); this.textContent = 'Couldn’t load this, refresh to try again'"
 		aria-busy="true"
@@ -511,6 +523,69 @@ templ paceDay(i, days int, cur, prev []float64, f *models.Flow, def *models.Curr
 
 // DashBudgets is the current month's budgets with what's safe to spend a
 // day.
+// DashNetWorth is the accounts summary's net worth over its last months,
+// forecast to the end of next month, with the options the accounts page has
+// in this browser.
+templ DashNetWorth(s *models.AccountsSummary) {
+	@components.GlassCard("grid content-start gap-4 p-5 sm:p-6", "bg-sky-400/10") {
+		@dashCardHeader("Net worth over time", "text-sky-300", "/accounts", icons.Scale("14"))
+		if s.Accounts == 0 || s.History == nil || len(s.History.Balance) < 2 {
+			<div class="grid place-items-center gap-2 py-8 text-center">
+				<p class="text-zinc-400">No history yet</p>
+				<a href="/accounts" class="text-sm text-violet-300 hover:underline">Add an account →</a>
+			</div>
+		} else {
+			<div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+				<p>
+					<span class={ "sensitive text-2xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)", templ.KV("text-red-400", s.Shown() < 0) }>{ s.Currency.Format(s.Shown()) }</span>
+					<span class="text-sm text-zinc-500">
+						if s.With.BudgetLeft && s.BudgetLeft > 0 {
+							after this month’s budgets
+						} else {
+							today
+						}
+					</span>
+				</p>
+				@accSummaryForecastInfo(s)
+			</div>
+			<div class="[--accent:var(--color-sky-400)]">
+				@balanceChart(&s.Currency, s.History, "forecast", "at today’s rates")
+			</div>
+			if s.Partial {
+				<p class="text-xs text-amber-300">Some rates are unavailable, those accounts aren’t counted.</p>
+			}
+		}
+	}
+}
+
+// DashBudgetPace is this month's budgeted spending against spending the
+// budgets evenly, without the categories hidden on the categories page.
+templ DashBudgetPace(bs *models.BudgetSummary) {
+	@components.GlassCard("grid content-start gap-4 p-5 sm:p-6", "bg-amber-400/10") {
+		@dashCardHeader("Budget pace · "+bs.Month.Format("January"), "text-amber-300", "/categories", icons.Hourglass("14"))
+		if bs.Budget() == 0 {
+			<div class="grid place-items-center gap-2 py-8 text-center">
+				<p class="text-zinc-400">No budgets shown</p>
+				<a href="/categories" class="text-sm text-violet-300 hover:underline">Set one on a category →</a>
+			</div>
+		} else {
+			<div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+				<p>
+					<span class="sensitive text-2xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">{ bs.Currency.Format(bs.BudgetedSpent()) }</span>
+					<span class="text-sm text-zinc-500">
+						of <span class="sensitive">{ bs.Currency.Format(bs.Budget()) }</span>
+						{ fmt.Sprintf("· %.0f%% used", bs.Pct()) }
+					</span>
+				</p>
+				<span class="text-sm">
+					@budgetStatus(bs.Left(), bs.Ahead(), &bs.Currency)
+				</span>
+			</div>
+			@budgetBurnUp(bs)
+		}
+	}
+}
+
 templ DashBudgets(b *models.Budgets) {
 	@components.GlassCard("grid content-start gap-4 p-5 sm:p-6", "bg-amber-400/10") {
 		@dashCardHeader("Budgets · "+b.Period.Month.Format("January"), "text-amber-300", "/categories", icons.Coins("14"))

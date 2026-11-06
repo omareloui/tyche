@@ -50,6 +50,15 @@ func (h *Handler) Accounts(w http.ResponseWriter, r *http.Request) (templ.Compon
 }
 
 func (h *Handler) AccountsSummary(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	s, err := h.repo.GetAccountsSummary(r.Context(), &getClaims(r.Context()).DefaultCurrency, accountsSummaryWith(r))
+	if err != nil {
+		return nil, err
+	}
+	return views.AccountsSummary(s), nil
+}
+
+// accountsSummaryWith reads the accounts summary's options from `with`.
+func accountsSummaryWith(r *http.Request) models.AccountsSummaryWith {
 	var with models.AccountsSummaryWith
 	for v := range strings.SplitSeq(r.URL.Query().Get("with"), ",") {
 		switch strings.TrimSpace(v) {
@@ -61,11 +70,7 @@ func (h *Handler) AccountsSummary(w http.ResponseWriter, r *http.Request) (templ
 			with.BudgetLeft = true
 		}
 	}
-	s, err := h.repo.GetAccountsSummary(r.Context(), &getClaims(r.Context()).DefaultCurrency, with)
-	if err != nil {
-		return nil, err
-	}
-	return views.AccountsSummary(s), nil
+	return with
 }
 
 // The transactions an account's details list: its last fulfilled ones, and
