@@ -903,3 +903,41 @@ WHERE
 SELECT CAST(IFNULL(MIN(SUBSTR(scheduled_to, 1, 10)), '') AS TEXT)
 FROM transactions
 WHERE fulfilled_at IS NOT NULL;
+
+-- name: GetUnbudgetedScheduledOutflows :many
+-- The unfulfilled money scheduled to leave the balance before to_date (the
+-- overdue included) that no budget covers, per currency, for the
+-- dashboard's safe to spend: expenses of a category without a budget (or
+-- none), but a goal's loan payments (its plan asks them), and transfers /
+-- debts to an account out of the balance (a gam'yaa, a goal, lent money).
+SELECT
+    sqlc.embed(cur),
+    CAST(TOTAL(t.amount) AS FLOAT) AS total
+FROM transactions AS t
+JOIN accounts AS a ON t.account_id = a.id
+JOIN currencies AS cur ON a.currency_id = cur.id
+LEFT JOIN categories AS cat ON t.category_id = cat.id
+LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
+WHERE
+    t.fulfilled_at IS NULL
+    AND t.scheduled_to < sqlc.arg(to_date)
+    AND a.is_archived IS FALSE
+    AND a.exclude_from_balance IS FALSE
+    AND a.deleted_at IS NULL
+    AND (
+        (
+            t.kind = 1
+            AND t.loan_goal_id IS NULL
+            AND (cat.id IS NULL OR cat.budget_currency_id IS NULL OR IFNULL(cat.budget_amount, 0) <= 0)
+        )
+        OR (
+            t.kind IN (3, 4)
+            AND (
+                ta.id IS NULL
+                OR ta.is_archived IS TRUE
+                OR ta.exclude_from_balance IS TRUE
+                OR ta.deleted_at IS NOT NULL
+            )
+        )
+    )
+GROUP BY cur.id;

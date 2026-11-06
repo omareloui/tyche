@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -148,6 +149,45 @@ type planIt struct {
 	problem string
 }
 
+// affordContext is what's weighed against the money: the balances, this
+// month's budgets left, the goals saving or paying a loan off and the work
+// settings.
+func (h Handler) affordContext(ctx context.Context) (models.AffordContext, error) {
+	claims := getClaims(ctx)
+	balances, err := h.repo.GetBalances(ctx)
+	if err != nil {
+		return models.AffordContext{}, err
+	}
+	all, err := h.repo.GetGoals(ctx)
+	if err != nil {
+		return models.AffordContext{}, err
+	}
+	// The goals saving, and the ones still paying their loan off.
+	goals := slicesutils.Filter(all, func(gl models.Goal) bool { return gl.FulfilledAt.IsZero() || gl.PayingOff() })
+	paces, err := h.repo.GetGoalPaces(ctx, goals)
+	if err != nil {
+		return models.AffordContext{}, err
+	}
+	ws, err := h.repo.GetWorkSettings(ctx)
+	if err != nil {
+		return models.AffordContext{}, err
+	}
+	cats, err := h.repo.GetCategories(ctx)
+	if err != nil {
+		return models.AffordContext{}, err
+	}
+	bs, err := h.repo.GetBudgetSummary(ctx, time.Time{}, &claims.DefaultCurrency, nil)
+	if err != nil {
+		return models.AffordContext{}, err
+	}
+	return models.AffordContext{
+		Balances: balances, BudgetLeft: bs.Unspent(), Categories: cats,
+		Goals: goals, Paces: paces, Work: ws,
+		Start: claims.MonthStart, Today: h.userToday(ctx), Currency: &claims.DefaultCurrency,
+	}, nil
+}
+
+
 func (h Handler) planIt(r *http.Request) (*planIt, error) {
 	ctx := r.Context()
 	claims := getClaims(ctx)
@@ -155,38 +195,12 @@ func (h Handler) planIt(r *http.Request) (*planIt, error) {
 	if err != nil {
 		return nil, err
 	}
-	balances, err := h.repo.GetBalances(ctx)
+	ac, err := h.affordContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	all, err := h.repo.GetGoals(ctx)
-	if err != nil {
-		return nil, err
-	}
-	// The goals saving, and the ones still paying their loan off.
-	goals := slicesutils.Filter(all, func(gl models.Goal) bool { return gl.FulfilledAt.IsZero() || gl.PayingOff() })
-	paces, err := h.repo.GetGoalPaces(ctx, goals)
-	if err != nil {
-		return nil, err
-	}
-	ws, err := h.repo.GetWorkSettings(ctx)
-	if err != nil {
-		return nil, err
-	}
-	cats, err := h.repo.GetCategories(ctx)
-	if err != nil {
-		return nil, err
-	}
-	bs, err := h.repo.GetBudgetSummary(ctx, time.Time{}, &claims.DefaultCurrency, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	pi := &planIt{h: h, r: r, ws: ws, ctx: models.AffordContext{
-		Balances: balances, BudgetLeft: bs.Unspent(), Categories: cats,
-		Goals: goals, Paces: paces, Work: ws,
-		Start: claims.MonthStart, Today: h.userToday(ctx), Currency: &claims.DefaultCurrency,
-	}}
+	ws, cats, goals := ac.Work, ac.Categories, ac.Goals
+	pi := &planIt{h: h, r: r, ws: ws, ctx: ac}
 
 	price, err := parseFloatIfExists(r.FormValue("amount"))
 	if err != nil {

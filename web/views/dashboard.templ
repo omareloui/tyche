@@ -53,6 +53,7 @@ templ Dashboard(d DashboardData) {
 			<div class="grid grid-cols-1 gap-4 sm:gap-5">
 				@dashGreeting(d.Claims)
 				@dashHero(d, def)
+				@dashLazy("/dashboard/safe-to-spend", "h-32", "load")
 				@dashFxRates(d.Currencies, def, d.RatesAt)
 				@dashAlerts(d.NeedsReview, d.SMSAttention, d.Cards)
 				<div class="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-2">
@@ -158,6 +159,63 @@ templ dashHero(d DashboardData, def *models.Currency) {
 			@dashDelta("Spending", cur.Out, prevToDate.Out, false, def)
 			@dashDelta("Income", cur.In, prevToDate.In, true, def)
 		</div>
+	}
+}
+
+// DashSafeToSpend is what can be spent a day until the end of the month,
+// with what's set aside from the balance for it.
+templ DashSafeToSpend(s models.SafeToSpend, def *models.Currency) {
+	{{ free := s.Free() }}
+	@components.GlassCard("grid gap-4 p-5 sm:p-6", "bg-emerald-400/10") {
+		<div class="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
+			<div class="min-w-0">
+				<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-emerald-400">
+					@icons.Banknote("14")
+					Safe to spend today
+				</p>
+				<p class={ "sensitive mt-1 text-3xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)", templ.KV("text-red-400", free < 0) }>
+					{ def.Format(s.PerDay()) }
+				</p>
+				<p class="text-sm text-zinc-500">
+					if free < 0 {
+						<span class="sensitive text-red-400">over by { def.Format(-free) } this month</span>
+					} else {
+						a day for { fmt.Sprint(s.DaysLeft()) } { plural(s.DaysLeft(), "day", "days") } left, through { s.Period.Last().Format("Jan 2") }
+					}
+				</p>
+			</div>
+			<div
+				class="flex flex-wrap gap-2 text-sm"
+				title="Your balance less what this month already asks for: the budgets left, the goal plans' deposits and payments due, and the scheduled money no budget covers (uncategorized or unbudgeted expenses, transfers to gam'yaas, goals or lent money), over the days left"
+			>
+				@safeToSpendPart("Balance", def.Format(s.Balance), "", "")
+				if s.BudgetLeft > 0.005 {
+					@safeToSpendPart("Budgets left", "− "+def.Format(s.BudgetLeft), "/categories", "")
+				}
+				if s.GoalsDue > 0.005 {
+					@safeToSpendPart("Goals", "− "+def.Format(s.GoalsDue), "/goals", "")
+				}
+				if s.Bills > 0.005 {
+					@safeToSpendPart("Bills", "− "+def.Format(s.Bills), "/transactions", "")
+				}
+				@safeToSpendPart("Free", def.Format(free), "", templ.KV("text-red-400", free < 0))
+			</div>
+		</div>
+	}
+}
+
+templ safeToSpendPart(label, value, href string, valueClass any) {
+	{{ cls := "flex items-baseline gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900/60 ring-1 ring-zinc-800" }}
+	if href != "" {
+		<a href={ templ.SafeURL(href) } class={ cls, "transition-colors hover:ring-zinc-600" }>
+			<span class="text-zinc-400">{ label }</span>
+			<span class={ "sensitive font-semibold tabular-nums", valueClass }>{ value }</span>
+		</a>
+	} else {
+		<p class={ cls }>
+			<span class="text-zinc-400">{ label }</span>
+			<span class={ "sensitive font-semibold tabular-nums", valueClass }>{ value }</span>
+		</p>
 	}
 }
 

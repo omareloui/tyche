@@ -77,6 +77,23 @@ func (h *Handler) DashboardBudgets(w http.ResponseWriter, r *http.Request) (temp
 	return views.DashBudgets(b), nil
 }
 
+// DashboardSafeToSpend is what can be spent a day until the end of the
+// user's month once its budgets, goal deposits and unbudgeted bills are
+// set aside.
+func (h *Handler) DashboardSafeToSpend(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	ctx := r.Context()
+	claims := getClaims(ctx)
+	ac, err := h.affordContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	bills, err := h.repo.GetUnbudgetedScheduledOutflows(ctx, ac.Start.Of(ac.Today).To)
+	if err != nil {
+		return nil, err
+	}
+	return views.DashSafeToSpend(models.NewSafeToSpend(ac, bills), &claims.DefaultCurrency), nil
+}
+
 func (h *Handler) DashboardCategories(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	claims := getClaims(r.Context())
 

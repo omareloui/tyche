@@ -400,3 +400,22 @@ func badgeTruncate(s string, n int) string {
 	}
 	return strings.TrimSpace(string(r[:n-1])) + "…"
 }
+
+// GetUnbudgetedScheduledOutflows is the money scheduled to leave the
+// balance before to that no budget covers, per currency (see the query).
+func (r *Repository) GetUnbudgetedScheduledOutflows(ctx context.Context, to time.Time) ([]models.Balance, error) {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := q.GetUnbudgetedScheduledOutflows(ctx, to)
+	if err != nil {
+		logger.FromCtx(ctx).Error("querying unbudgeted scheduled outflows", zap.Error(err))
+		return nil, err
+	}
+	res := make([]models.Balance, 0, len(rows))
+	for _, row := range rows {
+		res = append(res, models.Balance{Amount: row.Total, Currency: *dbCurrencyToCurrency(&row.Currency, false)})
+	}
+	return res, nil
+}

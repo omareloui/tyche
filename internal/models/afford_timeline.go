@@ -241,10 +241,16 @@ func run(start float64, tl []MonthMoney, on time.Time, onDay float64, sch *Insta
 // Spendable is the money free now: the balance less this month's budgets
 // left and the goal deposits asked by today.
 func (c *AffordContext) Spendable() float64 {
-	var bal float64
+	bal, dueNow := c.spendableParts()
+	return RoundCents(bal - c.BudgetLeft - dueNow)
+}
+
+// spendableParts are the balance and the goal deposits asked by today, in
+// the default currency.
+func (c *AffordContext) spendableParts() (bal, dueNow float64) {
 	for _, b := range c.Balances {
 		bal += convert(b.Amount, &b.Currency, c.Currency)
 	}
-	_, dueNow, _ := c.timeline(dateOnly(c.Today))
-	return RoundCents(bal - c.BudgetLeft - dueNow)
+	_, dueNow, _ = c.timeline(dateOnly(c.Today))
+	return bal, dueNow
 }
