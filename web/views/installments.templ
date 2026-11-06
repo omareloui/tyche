@@ -79,7 +79,10 @@ func unitMask(unitName string) string {
 	return fmt.Sprintf("unitOf('%s') === '%s' ? '99%%' : %s", unitName, UnitPct, moneyMask)
 }
 
-templ installmentPlanInputs(fd *InstallmentPlanFD, id string, withPreview bool) {
+// installmentPlanInputs are a plan's fields. forGoal is a goal plan's
+// loan: its down payment is the form's (saved first), its months can be
+// left out.
+templ installmentPlanInputs(fd *InstallmentPlanFD, id string, withPreview, forGoal bool) {
 	<div class="grid gap-4">
 		<fieldset>
 			<legend class="input-label">How the bank or shop charges it</legend>
@@ -111,8 +114,8 @@ templ installmentPlanInputs(fd *InstallmentPlanFD, id string, withPreview bool) 
 			</div>
 			<div class="grid grid-cols-2 items-start gap-3">
 				<div x-show={ fmt.Sprintf("strategy !== 'known' || termBy === '%s'", TermByMonths) }>
-					@form.Field("Months", "installments", id, icons.Calendar("15"), "") {
-						@form.Control("text", "installments", "e.g. 12", id, form.FDInput{Value: fd.Installments.Value}, templ.Attributes{
+					@form.Field(loanMonthsLabel(forGoal), "installments", id, icons.Calendar("15"), "") {
+						@form.Control("text", "installments", loanMonthsPlaceholder(forGoal), id, form.FDInput{Value: fd.Installments.Value}, templ.Attributes{
 							"inputmode": "numeric", "autocomplete": "off", "x-mask": "999",
 						})
 					}
@@ -162,7 +165,11 @@ templ installmentPlanInputs(fd *InstallmentPlanFD, id string, withPreview bool) 
 			@form.ErrorMessage(fd.Total.Error)
 			@form.ErrorMessage(fd.Rate.Error)
 		</div>
-		@planUnitField("Down payment", "down_payment", "down_payment_unit", id, fd.DownPayment, fd.DownPaymentUnit, "Paid on the day", true)
+		if forGoal {
+			<p x-show="strategy !== 'known' || termBy === 'months'" class="-mt-2 text-xs text-zinc-500">Leave the months empty for the shortest loan your monthly amount pays.</p>
+		} else {
+			@planUnitField("Down payment", "down_payment", "down_payment_unit", id, fd.DownPayment, fd.DownPaymentUnit, "Paid on the day", true)
+		}
 		<details
 			class="group rounded-2xl border border-zinc-800 bg-zinc-800/20"
 			if fd.hasExtras() {
@@ -218,6 +225,20 @@ templ installmentPlanInputs(fd *InstallmentPlanFD, id string, withPreview bool) 
 			></div>
 		}
 	</div>
+}
+
+func loanMonthsLabel(forGoal bool) string {
+	if forGoal {
+		return "Loan months"
+	}
+	return "Months"
+}
+
+func loanMonthsPlaceholder(forGoal bool) string {
+	if forGoal {
+		return "Shortest"
+	}
+	return "e.g. 12"
 }
 
 // planUnitField is an amount or a percentage, picked by a unit toggle. A

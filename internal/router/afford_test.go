@@ -35,6 +35,31 @@ func TestAffordOnADay(t *testing.T) {
 	if body := render(callHandler(ctx, h.AffordDrawer), "GET", "/decide/afford", nil); !strings.Contains(body, `name="starts_on"`) || !strings.Contains(body, `name="plan_by"`) || !strings.Contains(body, `name="term_by"`) {
 		t.Error("the drawer has no start day, save by or term toggles")
 	}
+	// What's free above the monthly amount, the option cards picking the
+	// mode, the verdict above the loan's details.
+	drawer := render(callHandler(ctx, h.AffordDrawer), "GET", "/decide/afford", nil)
+	for _, want := range []string{`id="afford-money"`, `id="afford-mode-installments"`, `for="afford-mode-installments"`, `id="afford-verdict"`} {
+		if !strings.Contains(drawer, want) {
+			t.Errorf("the drawer has no %s", want)
+		}
+	}
+	if strings.Index(drawer, `id="afford-money"`) > strings.Index(drawer, `name="monthly"`) {
+		t.Error("what's free comes after the monthly amount")
+	}
+	if strings.Index(drawer, `id="afford-verdict"`) > strings.Index(drawer, `name="down_payment"`) {
+		t.Error("the verdict and its payments come after the loan's details")
+	}
+	if strings.Index(drawer, `name="down_payment"`) > strings.Index(drawer, `name="strategy"`) {
+		t.Error("the down payment comes after the loan's strategy")
+	}
+	// Before a price, the cards still pick the mode, what's free out of band.
+	noPrice := render(callHandler(ctx, h.Afford), "POST", "/decide/afford", url.Values{"mode": {"installments"}})
+	if !strings.Contains(noPrice, `for="afford-mode-save"`) || !strings.Contains(noPrice, "Enter a price to plan it.") {
+		t.Errorf("no cards before the price:\n%s", noPrice)
+	}
+	if !strings.Contains(noPrice, `id="afford-money" hx-swap-oob="true"`) || !strings.Contains(noPrice, `id="afford-verdict" hx-swap-oob="true"`) {
+		t.Errorf("what's free and the verdict aren't out of band:\n%s", noPrice)
+	}
 
 	body := render(callHandler(ctx, h.Afford), "POST", "/decide/afford", url.Values{
 		"amount": {"300"}, "mode": {"save"}, "plan_by": {"months"}, "months": {"3"}, "starts_on": {"2030-01-15"},

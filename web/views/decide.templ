@@ -51,7 +51,7 @@ type PlanItFD struct {
 // the day it's bought, saving it all or with a down payment and a loan,
 // weighed as it's typed against every month's money. It can be saved as a
 // goal.
-templ AffordDrawer(fd *PlanItFD, curs []models.Currency, defaultCur *models.Currency, ws *models.WorkSettings, money models.GoalPlanMoney, result templ.Component) {
+templ AffordDrawer(fd *PlanItFD, curs []models.Currency, defaultCur *models.Currency, ws *models.WorkSettings, out PlanItOutcome) {
 	{{ mode := fd.Plan.Mode.Value }}
 	if mode == "" {
 		{{ mode = models.GoalPlanSave.String() }}
@@ -92,10 +92,7 @@ templ AffordDrawer(fd *PlanItFD, curs []models.Currency, defaultCur *models.Curr
 							}
 						}
 						@plainAmountInputs("Price", icons.Tag("15"), fd.AmountFD, "afford", curs, defaultCur, false)
-						@planInputs(fd.Plan, "afford", mode)
-						<div id="afford-result">
-							@result
-						</div>
+						@planInputs(fd.Plan, PlanItFormID, mode, out.Money, planItOptionsSlot(out, ws))
 					</div>
 					@WorkSettingsSummary(ws)
 				</div>
@@ -117,31 +114,61 @@ templ AffordDrawer(fd *PlanItFD, curs []models.Currency, defaultCur *models.Curr
 	}
 }
 
-// PlanItResult is the plan's options (saving it all or a down payment and
-// a loan, from the money free now) and the picked one weighed on the day
-// it's bought.
-templ PlanItResult(gl *models.Goal, money models.GoalPlanMoney, opts GoalPlanOptions, a *models.Affordability, ws *models.WorkSettings) {
-	if gl.Price <= 0 {
-		// What's free shows before the price is in.
-		<div class="grid gap-4">
-			@goalPlanMoney(money)
-			@AffordHint("Enter a price to plan it.")
-		</div>
-	} else {
-		@planItResult(gl, money, opts, a, ws)
-	}
+// PlanItFormID is the "Plan it" form's id, prefixing its fields'.
+const PlanItFormID = "afford"
+
+// PlanItOutcome is a "Plan it" form worked out: the purchase as a goal, the
+// money free in the month saving starts, the plan's options and the picked
+// one weighed on the day it's bought (nil without one), or Hint until there
+// is something to work out.
+type PlanItOutcome struct {
+	Goal   *models.Goal
+	Money  models.GoalPlanMoney
+	Opts   GoalPlanOptions
+	Afford *models.Affordability
+	Hint   string
 }
 
-templ planItResult(gl *models.Goal, money models.GoalPlanMoney, opts GoalPlanOptions, a *models.Affordability, ws *models.WorkSettings) {
+// PlanItResult answers the "Plan it" form: its options, with what's free
+// and the verdict out of band.
+templ PlanItResult(out PlanItOutcome, ws *models.WorkSettings) {
+	@planItOptions(out)
+	@planMoneySlot(PlanItFormID, out.Money, true)
+	@planItVerdict(out, ws, true)
+}
+
+// planItOptionsSlot is the options and, under them, the picked one's
+// verdict with its payments, above the loan's details.
+templ planItOptionsSlot(out PlanItOutcome, ws *models.WorkSettings) {
 	<div class="grid gap-4">
-		if gl.Progress() > 0.005 {
+		<div id="afford-result">
+			@planItOptions(out)
+		</div>
+		@planItVerdict(out, ws, false)
+	</div>
+}
+
+templ planItOptions(out PlanItOutcome) {
+	<div class="grid gap-3">
+		if out.Goal.Price > 0 && out.Goal.Progress() > 0.005 {
 			<p class="text-sm text-zinc-500">
-				Starting from the <span class="sensitive text-zinc-300 tabular-nums">{ gl.Currency.Format(gl.Progress()) }</span> free now: your balance less this month's budgets and goal deposits left.
+				Starting from the <span class="sensitive text-zinc-300 tabular-nums">{ out.Goal.Currency.Format(out.Goal.Progress()) }</span> free now: your balance less this month's budgets and goal deposits left.
 			</p>
 		}
-		@GoalPlanPreview(gl, money, opts)
-		if a != nil {
-			@AffordResult(a, ws)
+		@goalPlanPreview(out.Goal, out.Money, out.Opts, out.Hint)
+	</div>
+}
+
+// planItVerdict is the picked option weighed on the day it's bought.
+templ planItVerdict(out PlanItOutcome, ws *models.WorkSettings, oob bool) {
+	<div
+		id="afford-verdict"
+		if oob {
+			hx-swap-oob="true"
+		}
+	>
+		if out.Afford != nil {
+			@AffordResult(out.Afford, ws)
 		}
 	</div>
 }
@@ -161,7 +188,7 @@ templ purchaseInputs(fd *PurchaseFD, id string, curs []models.Currency, defaultC
 			{Value: PayInstallments, Label: "Installments"},
 		}, form.FDInput{Value: mode}, nil)
 		<div x-show={ fmt.Sprintf("mode === '%s'", PayInstallments) } x-cloak>
-			@installmentPlanInputs(&fd.Plan, id, withPreview)
+			@installmentPlanInputs(&fd.Plan, id, withPreview, false)
 		</div>
 	</div>
 }

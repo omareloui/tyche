@@ -69,6 +69,13 @@ func TestGoalPlanMoneyOfStartMonth(t *testing.T) {
 	if body := preview(""); !strings.Contains(body, "Other goals&#39; plans") {
 		t.Errorf("this month has no other plans:\n%.3000s", body)
 	}
+	if body := preview(""); !strings.Contains(body, `id="plan-`+car.ID+`-money" hx-swap-oob="true"`) {
+		t.Errorf("what's free isn't out of band:\n%.3000s", body)
+	}
+	// 6,000 at 1,000 a month: the deposits listed under the cards.
+	if body := preview(""); !strings.Contains(body, "Saving schedule · 6 deposits") {
+		t.Errorf("no saving schedule:\n%.3000s", body)
+	}
 	if gls, err = repo.GetGoals(ctx); err != nil {
 		t.Fatal(err)
 	}

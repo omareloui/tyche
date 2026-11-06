@@ -106,9 +106,10 @@ func (h Handler) GoalPlanPreview(w http.ResponseWriter, r *http.Request) (templ.
 	}
 	plan, err := mapFDToGoalPlan(r)
 	if err != nil {
-		return views.GoalPlanHint("Check the numbers, some aren't valid."), nil
+		opts := views.GoalPlanOptions{Mode: models.GoalPlanModeFromString(r.FormValue("mode"))}
+		return views.GoalPlanPreviewAnswer(env.goal, env.money(time.Time{}), opts, "Check the numbers, some aren't valid."), nil
 	}
-	return views.GoalPlanPreview(env.goal, env.money(plan.StartsOn), h.goalPlanOptions(env.goal, plan)), nil
+	return views.GoalPlanPreviewAnswer(env.goal, env.money(plan.StartsOn), h.goalPlanOptions(env.goal, plan), ""), nil
 }
 
 // goalLoanProblems are the loan's problems for the price. Its months can be

@@ -30,10 +30,7 @@ func (h Handler) Afford(w http.ResponseWriter, r *http.Request) (templ.Component
 	if err != nil {
 		return nil, err
 	}
-	if pi.problem != "" && pi.goal.Price > 0 {
-		return views.AffordHint(pi.problem), nil
-	}
-	return pi.result(), nil
+	return views.PlanItResult(pi.outcome(), pi.ws), nil
 }
 
 // PlanPreview sums up the plan being filled in a form.
@@ -135,8 +132,7 @@ func (h Handler) AffordDrawer(w http.ResponseWriter, r *http.Request) (templ.Com
 	if err != nil {
 		return nil, err
 	}
-	result := pi.result()
-	return views.AffordDrawer(fd, curs, &claims.DefaultCurrency, ws, pi.money, result), nil
+	return views.AffordDrawer(fd, curs, &claims.DefaultCurrency, ws, pi.outcome()), nil
 }
 
 // planIt is a "Plan it" form read: the purchase as a goal starting from the
@@ -218,15 +214,19 @@ func (h Handler) planIt(r *http.Request) (*planIt, error) {
 	return pi, nil
 }
 
-// result is the plan's options and the picked one weighed on the day it's
-// bought: the month its target is saved, today when it is already.
-func (pi *planIt) result() templ.Component {
-	if pi.goal.Price <= 0 {
-		return views.PlanItResult(pi.goal, pi.money, views.GoalPlanOptions{}, nil, pi.ws)
+// outcome is the plan's options and the picked one weighed on the day it's
+// bought: the month its target is saved, today when it is already. A
+// problem leaves the options empty, told as the hint.
+func (pi *planIt) outcome() views.PlanItOutcome {
+	out := views.PlanItOutcome{Goal: pi.goal, Money: pi.money, Hint: pi.problem}
+	if pi.problem != "" {
+		if pi.plan != nil {
+			out.Opts.Mode = pi.plan.Mode
+		}
+		return out
 	}
-	opts := pi.h.goalPlanOptions(pi.goal, pi.plan)
-	var a *models.Affordability
-	if pr := opts.Picked(); pr != nil {
+	out.Opts = pi.h.goalPlanOptions(pi.goal, pi.plan)
+	if pr := out.Opts.Picked(); pr != nil {
 		p := models.Purchase{Price: pi.goal.Price, Currency: pi.goal.Currency}
 		if pr.Loan != nil {
 			loan := pr.Loan.Plan
@@ -236,10 +236,10 @@ func (pi *planIt) result() templ.Component {
 			p.On = pr.BuyOn
 		}
 		if res, err := models.CheckAffordability(p, pi.ctx); err == nil {
-			a = &res
+			out.Afford = &res
 		}
 	}
-	return views.PlanItResult(pi.goal, pi.money, opts, a, pi.ws)
+	return out
 }
 
 // saveGoalProblem is a "Save as a goal" problem, shown by the button.
