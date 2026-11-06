@@ -1,14 +1,45 @@
 package components
 
+import "github.com/omareloui/tyche/web/views/icons"
+
 templ MainHeader(text string) {
 	<h1 class="text-2xl sm:text-3xl font-bold mb-6 font-(family-name:--font-biorhyme-expanded)">{ text }</h1>
 }
 
-templ HeaderWithAddButton(text string, onClick string) {
-	<div class="flex justify-between align-middle mb-6">
+// PageHeader is the page's title with its actions (children) on the right.
+templ PageHeader(text string) {
+	<div class="flex items-center justify-between gap-4 mb-6">
 		<h1 class="text-2xl sm:text-3xl font-bold font-(family-name:--font-biorhyme-expanded)">{ text }</h1>
-		<button class="cursor-pointer transition-transform hover:scale-120" @click={ onClick }>
-			<img src="/icons/add.svg" class="h-8 object-cover"/>
-		</button>
+		{ children... }
 	</div>
+}
+
+// AddButton is the page's create button: a labeled pill, only its icon on
+// phones. labelExpr, when set, is an Alpine expression changing the label.
+templ AddButton(label, labelExpr, onClick string) {
+	<button
+		type="button"
+		class="btn-add"
+		@click={ onClick }
+		aria-label={ label }
+		title={ label }
+		if labelExpr != "" {
+			:aria-label={ labelExpr }
+			:title={ labelExpr }
+		}
+	>
+		@icons.Plus("18")
+		<span
+			class="btn-add-label"
+			if labelExpr != "" {
+				x-text={ labelExpr }
+			}
+		>{ label }</span>
+	</button>
+}
+
+templ HeaderWithAddButton(text, label, onClick string) {
+	@PageHeader(text) {
+		@AddButton(label, "", onClick)
+	}
 }

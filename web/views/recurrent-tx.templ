@@ -29,7 +29,7 @@ templ RecurrentTxs(
 	claims *jwt.AccessClaims, balances []models.Balance, rtxs []models.RecurrentTx,
 	fd *TransactionFD, accs []models.Account, knds []models.TxKind,
 	cats []models.Category, cps []models.Counterparty, openID string) {
-	@layouts.WithCreateForm(claims, "Recurring", balances,
+	@layouts.WithCreateForm(claims, "Recurring", "New recurring", balances,
 		CreateRecurrentTxForm(fd, accs, knds, cats, cps, &claims.DefaultCurrency)) {
 		@rtxsList(rtxs, &claims.DefaultCurrency, false)
 		@components.DrawerOnLoad(recurrentTxDetailsURLIf(openID))

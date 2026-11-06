@@ -61,13 +61,18 @@ func (h Handler) Goals(w http.ResponseWriter, r *http.Request) (templ.Component,
 	claims := getClaims(r.Context())
 	// ?goal= opens the goal's details, e.g. when reloading the page.
 	openID := r.URL.Query().Get(views.GoalDetailsParam)
+	// ?tab= is the open tab, the goals unless it's the wishlist.
+	tab := views.GoalsTabGoals
+	if r.URL.Query().Get("tab") == views.GoalsTabWishlist {
+		tab = views.GoalsTabWishlist
+	}
 
 	wishes := views.GoalsWishes{
 		Items: items,
 		Work:  ws,
 		FD:    mapWishlistItemToFD(dfltWishlistItem(&claims.DefaultCurrency), &errs.ValidationError{}),
 	}
-	return views.Goals(claims, b, h.mapGlToFD(dfltGoal(&claims.DefaultCurrency), &errs.ValidationError{}), gls, cards, curs, wishes, openID), nil
+	return views.Goals(claims, b, h.mapGlToFD(dfltGoal(&claims.DefaultCurrency), &errs.ValidationError{}), gls, cards, curs, wishes, tab, openID), nil
 }
 
 func (h Handler) Goal(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

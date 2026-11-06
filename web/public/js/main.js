@@ -427,6 +427,41 @@ document.addEventListener("alpine:init", () => {
   }));
 });
 
+// goalsPage is the goals page's tabs (goals.templ): the open one, kept in the
+// url as ?tab= (none = the goals), and the counts on them, recounted from the
+// cards after every swap as goals and wishes come and go out of band.
+document.addEventListener("alpine:init", () => {
+  Alpine.data("goalsPage", (tab = "goals") => ({
+    tab,
+    openCreateForm: false,
+    openWishForm: false,
+    counts: { goals: 0, wishlist: 0 },
+
+    init() {
+      // ?new is the goal's create form.
+      if (new URL(location.href).searchParams.has("new")) this.setTab("goals");
+      this.recount = () => {
+        this.counts.goals = document.querySelectorAll("#goals-active [data-goal]").length;
+        this.counts.wishlist = document.querySelectorAll("#wishlist [data-wl][data-waiting]").length;
+      };
+      this.recount();
+      document.addEventListener("htmx:afterSettle", this.recount);
+    },
+
+    destroy() {
+      document.removeEventListener("htmx:afterSettle", this.recount);
+    },
+
+    setTab(t) {
+      this.tab = t;
+      const url = new URL(location.href);
+      if (t === "goals") url.searchParams.delete("tab");
+      else url.searchParams.set("tab", t);
+      history.replaceState(history.state, "", url);
+    },
+  }));
+});
+
 // chartScrub shows a chart's tooltips under a finger on touch screens, where
 // group-hover never applies (Tailwind's hover needs a hover-capable pointer):
 // touching or dragging across the chart marks the target under the finger

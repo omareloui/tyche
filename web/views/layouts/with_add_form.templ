@@ -5,7 +5,7 @@ import "github.com/omareloui/tyche/internal/models"
 import "github.com/omareloui/tyche/web/views/components"
 
 templ WithCreateForm(
-	claims *jwt.AccessClaims, pageTitle string, balances []models.Balance,
+	claims *jwt.AccessClaims, pageTitle, addLabel string, balances []models.Balance,
 	form templ.Component,
 ) {
 	@Main(claims, pageTitle, balances) {
@@ -14,7 +14,7 @@ templ WithCreateForm(
 		// url so a reload doesn't open it again.
 		<div x-data="{openCreateForm:false}" x-init="createFormFromURL($data)">
 			@components.Container() {
-				@components.HeaderWithAddButton(pageTitle, "openCreateForm=true")
+				@components.HeaderWithAddButton(pageTitle, addLabel, "openCreateForm=true")
 				{ children... }
 			}
 			@form

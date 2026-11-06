@@ -25,7 +25,7 @@ templ Categories(
 	knds []models.TxKind,
 	categories []models.Category,
 	curs []models.Currency) {
-	@layouts.WithCreateForm(claims, "Categories", balances,
+	@layouts.WithCreateForm(claims, "Categories", "New category", balances,
 		CreateCategoryForm(fd, knds, curs, &claims.DefaultCurrency)) {
 		@categoriesBudgetLazy()
 		@categoriesList(categories)

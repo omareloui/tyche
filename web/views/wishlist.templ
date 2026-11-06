@@ -105,43 +105,9 @@ templ Wishlist(items []models.WishlistItem, ws *models.WorkSettings, defaultCur 
 		}
 		class="grid gap-6"
 	>
-		<div class="flex flex-wrap items-end justify-between gap-4">
-			<div>
-				<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
-					@icons.Hourglass("16")
-					Wishlist
-					<button type="button" @click="openWishForm=true" aria-label="Add a wish" title="Add a wish" class="grid place-items-center size-6 rounded-full text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/50">
-						@icons.Plus("14")
-					</button>
-				</h2>
-				if s.Bought+s.Abandoned > 0 {
-					<p class="mt-1 text-sm text-zinc-500 tabular-nums">
-						You let go of { fmt.Sprintf("%.0f%%", s.AbandonRate()) } of your wishes
-						if s.Saved > 0 {
-							, keeping <span class="text-emerald-400">{ defaultCur.Format(s.Saved) }</span>
-						}
-					</p>
-				}
-			</div>
-			<div class="flex flex-wrap items-center gap-2">
-				<button
-					hx-get={ AffordURL("") }
-					hx-target={ "#" + components.DrawerSlot }
-					hx-swap="innerHTML"
-					data-opens-drawer
-					class="wl-action"
-				>
-					@icons.Scale("14")
-					Can I afford it?
-				</button>
-				@statTile(strconv.Itoa(s.Waiting), "Waiting", "text-zinc-100")
-				if s.Saving > 0 {
-					@statTile(strconv.Itoa(s.Saving), "Saving", "text-violet-400")
-				}
-				@statTile(strconv.Itoa(s.Bought), "Bought", "text-sky-400")
-				@statTile(strconv.Itoa(s.Abandoned), "Let go", "text-emerald-400")
-			</div>
-		</div>
+		if len(items) > 0 {
+			@wishlistSummary(s, defaultCur)
+		}
 		if len(ready) > 0 {
 			@wishlistGroup("Ready to decide", icons.Sparkles("16"), ready, ws)
 		}
@@ -151,10 +117,24 @@ templ Wishlist(items []models.WishlistItem, ws *models.WorkSettings, defaultCur 
 		if len(ready)+len(cooling) == 0 {
 			<div class="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl border border-dashed border-zinc-800">
 				<p class="max-w-md text-sm text-zinc-500">Want something? Add it and wait a week or a month. If you still want it then, buy it or save for it.</p>
-				<button type="button" @click="openWishForm=true" class="btn-primary">
-					@icons.Plus("18")
-					Add a wish
-				</button>
+				<div class="flex flex-wrap items-center gap-2">
+					if len(items) == 0 {
+						<button
+							hx-get={ AffordURL("") }
+							hx-target={ "#" + components.DrawerSlot }
+							hx-swap="innerHTML"
+							data-opens-drawer
+							class="wl-action"
+						>
+							@icons.Scale("14")
+							Can I afford it?
+						</button>
+					}
+					<button type="button" @click="openWishForm=true" class="btn-primary">
+						@icons.Plus("18")
+						Add a wish
+					</button>
+				</div>
 			</div>
 		}
 		if len(decided) > 0 {
@@ -171,6 +151,61 @@ templ Wishlist(items []models.WishlistItem, ws *models.WorkSettings, defaultCur 
 				</div>
 			</details>
 		}
+	</section>
+}
+
+// wishlistSummary is the wishlist's stats, like the goals' summary: what
+// letting go of wishes kept once some were decided, else the waiting ones.
+templ wishlistSummary(s models.WishlistStats, defaultCur *models.Currency) {
+	<section class="relative overflow-hidden grid grid-cols-1 gap-5 p-5 sm:p-6 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800 [--accent:var(--color-emerald-400)]">
+		<div aria-hidden="true" class="pointer-events-none absolute -top-24 -right-16 size-64 rounded-full bg-(--accent)/15 blur-3xl"></div>
+		<div aria-hidden="true" class="pointer-events-none absolute -bottom-28 -left-20 size-56 rounded-full bg-amber-300/10 blur-3xl"></div>
+		<div class="relative flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+			if s.Bought+s.Abandoned > 0 {
+				<div class="min-w-0">
+					<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-(--accent)">
+						@icons.PiggyBank("14")
+						Kept by letting go
+					</p>
+					<p class="sensitive mt-1 text-3xl sm:text-4xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">
+						{ defaultCur.Format(s.Saved) }
+					</p>
+					<p class="text-sm text-zinc-500 tabular-nums">
+						You let go of { fmt.Sprintf("%.0f%%", s.AbandonRate()) } of the wishes you decided on
+					</p>
+				</div>
+			} else {
+				<div class="min-w-0">
+					<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-amber-300">
+						@icons.Hourglass("14")
+						Cooling off
+					</p>
+					<p class="mt-1 text-2xl font-bold font-(family-name:--font-biorhyme-expanded)">Wait, then decide</p>
+					<p class="text-sm text-zinc-500">Still want it once it cooled off? Buy it or save for it.</p>
+				</div>
+			}
+			<div class="grid grid-flow-col auto-cols-fr gap-2 w-full sm:w-auto">
+				@statTile(strconv.Itoa(s.Waiting), "Waiting", "text-zinc-100")
+				if s.Saving > 0 {
+					@statTile(strconv.Itoa(s.Saving), "Saving", "text-violet-400")
+				}
+				@statTile(strconv.Itoa(s.Bought), "Bought", "text-sky-400")
+				@statTile(strconv.Itoa(s.Abandoned), "Let go", "text-emerald-400")
+			</div>
+		</div>
+		<div class="relative flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-zinc-800">
+			<p class="text-sm text-zinc-500">Thinking of buying something?</p>
+			<button
+				hx-get={ AffordURL("") }
+				hx-target={ "#" + components.DrawerSlot }
+				hx-swap="innerHTML"
+				data-opens-drawer
+				class="wl-action"
+			>
+				@icons.Scale("14")
+				Can I afford it?
+			</button>
+		</div>
 	</section>
 }
 
@@ -196,6 +231,9 @@ templ WishlistItem(item *models.WishlistItem, ws *models.WorkSettings) {
 		hx-target="#wishlist"
 		hx-swap="outerHTML"
 		data-wl
+		if item.Status == models.WishlistWaiting {
+			data-waiting
+		}
 		class="relative min-w-0"
 		x-data="{openMenu: false}"
 	>

@@ -137,7 +137,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("DELETE /goals/{id}", handle(h.DeleteGoal))
 
 	// The wishlist moved to the goals page.
-	mux.Handle("GET /decide", http.RedirectHandler("/goals", http.StatusFound))
+	mux.Handle("GET /decide", http.RedirectHandler("/goals?tab=wishlist", http.StatusFound))
 	mux.Handle("GET /decide/afford", handle(h.AffordDrawer))
 	mux.Handle("POST /decide/afford", handle(h.Afford))
 	mux.Handle("POST /decide/plan-preview", handle(h.PlanPreview))

@@ -49,4 +49,12 @@ func TestGoalDetailsURL(t *testing.T) {
 	if body := render(callHandler(ctx, h.GoalDetails), "/goals/"+id+"/details", id); !strings.Contains(body, `data-url-param="goal" data-url-value="`+id+`"`) {
 		t.Error("details don't keep ?goal= in the url")
 	}
+
+	// ?tab= opens the wishlist tab, its add button creating a wish.
+	if body := render(callHandler(ctx, h.Goals), "/goals", ""); !strings.Contains(body, `goalsPage(&#39;goals&#39;)`) || !strings.Contains(body, ">New goal</span>") {
+		t.Error("/goals doesn't open the goals tab")
+	}
+	if body := render(callHandler(ctx, h.Goals), "/goals?tab=wishlist", ""); !strings.Contains(body, `goalsPage(&#39;wishlist&#39;)`) || !strings.Contains(body, ">New wish</span>") {
+		t.Error("?tab=wishlist doesn't open the wishlist tab")
+	}
 }

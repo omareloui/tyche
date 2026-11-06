@@ -111,11 +111,21 @@ input[type="number"] {
   background-color: var(--accent);
 }
 
+.btn-add {
+  @apply inline-flex shrink-0 items-center justify-center gap-1.5 size-10 rounded-full font-semibold text-zinc-950 cursor-pointer transition hover:brightness-110 active:scale-[.98] sm:w-auto sm:pl-3.5 sm:pr-4;
+  background-color: var(--accent);
+}
+
+.btn-add-label {
+  @apply hidden sm:inline;
+}
+
 .btn-ghost {
   @apply inline-flex items-center justify-center gap-2 h-11 px-5 rounded-xl text-zinc-300 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white;
 }
 
 .btn-primary:focus-visible,
+.btn-add:focus-visible,
 .btn-ghost:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -324,6 +334,14 @@ input[type="number"] {
   /* Frosted chart tooltip, the chart showing through blurred. */
   .glass-tooltip {
     @apply whitespace-nowrap rounded-xl bg-zinc-900/55 backdrop-blur-md backdrop-saturate-150 ring-1 ring-white/10 shadow-xl shadow-black/40 px-2.5 py-1.5 text-sm leading-tight;
+  }
+
+  .goals-tab {
+    @apply inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full border border-zinc-700 text-sm text-zinc-400 cursor-pointer transition-colors hover:text-white hover:border-zinc-500;
+  }
+
+  .goals-tab[aria-selected="true"] {
+    @apply bg-zinc-100 text-zinc-950 border-zinc-100 hover:text-zinc-950;
   }
 
   .chip {

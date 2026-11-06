@@ -67,7 +67,7 @@ templ Accounts(
 	fd *AccountFD, aknds []models.AccountKind,
 	curs []models.Currency, accounts []models.Account,
 	cps []models.Counterparty, openID string) {
-	@layouts.WithCreateForm(claims, "Accounts", balances,
+	@layouts.WithCreateForm(claims, "Accounts", "New account", balances,
 		CreateAccountForm(fd, aknds, curs, cps, &claims.DefaultCurrency)) {
 		@components.DrawerOnLoad(accountDetailsURLIf(openID))
 		if len(accounts) > 0 {

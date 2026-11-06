@@ -37,7 +37,7 @@ templ Transactions(
 	fd *TransactionFD, accounts []models.Account,
 	knds []models.TxKind, cats []models.Category,
 	cps []models.Counterparty, gls []models.Goal, openTx string) {
-	@layouts.WithCreateForm(claims, "Transactions", balances,
+	@layouts.WithCreateForm(claims, "Transactions", "New transaction", balances,
 		txCreateSlot(CreateTransactionForm(fd, accounts, knds, cats, cps, &claims.DefaultCurrency))) {
 		<div
 			x-data="txPage"
