@@ -418,6 +418,7 @@ templ accountDetailsTxs(title string, a *models.Account, txs []models.Transactio
 						"shrink-0 text-sm font-semibold tabular-nums",
 						templ.KV("text-emerald-400", m.tone == txToneIn),
 						templ.KV("text-zinc-400", m.tone == txToneNeutral),
+						templ.KV("sensitive", m.sensitive),
 					}
 				>{ m.amount }</p>
 			</a>
@@ -429,6 +430,7 @@ templ accountDetailsTxs(title string, a *models.Account, txs []models.Transactio
 // accountMove is a transaction as it moved an account's money.
 type accountMove struct {
 	title, other, amount, tone string
+	sensitive                  bool
 }
 
 // accountTxMove is what tx did to the account id: the amount signed as it
@@ -436,7 +438,7 @@ type accountMove struct {
 // other account of a transfer or debt.
 func accountTxMove(ctx context.Context, tx *models.Transaction, id string) accountMove {
 	v := newTxView(ctx, tx)
-	m := accountMove{title: counterpartyTxTitle(tx, &v), tone: txToneOut}
+	m := accountMove{title: counterpartyTxTitle(tx, &v), tone: txToneOut, sensitive: v.sensitive}
 	if tx.Counterparty != nil && tx.Counterparty.Name != m.title {
 		m.other = tx.Counterparty.Name
 	}

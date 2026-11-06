@@ -9,6 +9,7 @@ import (
 	"github.com/omareloui/tyche/internal/errpage"
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/logger"
+	"github.com/omareloui/tyche/internal/salaryctx"
 	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/internal/tzctx"
 	"github.com/omareloui/tyche/web/views"
@@ -94,10 +95,11 @@ func Auth(refresh TokenRefresher) func(http.Handler) http.Handler {
 	}
 }
 
-// withClaims is ctx holding the access claims, and the user's time zone for
-// the templates.
+// withClaims is ctx holding the access claims, and the user's time zone and
+// salary for the templates.
 func withClaims(ctx context.Context, claims *jwt.AccessClaims) context.Context {
 	ctx = context.WithValue(ctx, AccessClaimsCtxKey{}, claims)
+	ctx = salaryctx.With(ctx, claims.Salary)
 	return tzctx.With(ctx, claims.Location())
 }
 

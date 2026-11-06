@@ -65,7 +65,7 @@ templ TxDetailsPanel(d *models.TxDetails, def *models.Currency) {
 				<p class="text-sm text-zinc-400 truncate">
 					{ txDetailsKind(tx) }
 					if v.subtitle != "" {
-						· { v.subtitle }
+						· <span class={ templ.KV("sensitive", v.subtitleSensitive) }>{ v.subtitle }</span>
 					}
 				</p>
 			</div>
@@ -144,7 +144,7 @@ templ TxEditPanel(tx *models.Transaction, fd *TransactionFD,
 
 templ txDetailsHero(tx *models.Transaction, v *txView, def *models.Currency) {
 	<div class="grid gap-3">
-		<div>
+		<div class={ templ.KV("sensitive", v.sensitive) }>
 			if v.original != "" {
 				<p class="text-sm text-zinc-500 line-through tabular-nums">{ v.original }</p>
 			}
@@ -290,10 +290,11 @@ templ txDetailsFields(d *models.TxDetails, v *txView) {
 			}
 		}
 		if tx.ToAccount != nil && tx.ToAmount != 0 && (tx.Kind == models.TransferTxKind || tx.Kind == models.DebtTxKind) {
+			{{ hide := txSalaryLike(ctx, tx) }}
 			@txDetailsRow("Sent", icons.ArrowUpDown("15")) {
-				<span class="tabular-nums">{ tx.ViewAmount() }</span>
+				<span class={ "tabular-nums", templ.KV("sensitive", hide) }>{ tx.ViewAmount() }</span>
 				<span class="text-zinc-500">→</span>
-				<span class="tabular-nums">{ tx.ViewToAmount() }</span>
+				<span class={ "tabular-nums", templ.KV("sensitive", hide) }>{ tx.ViewToAmount() }</span>
 			}
 		}
 		if tx.Category != nil {
@@ -469,17 +470,18 @@ templ txDetailsMonth(d *models.TxDetails, def *models.Currency) {
 templ txDetailsLinked(d *models.TxDetails, def *models.Currency) {
 	{{ tx := d.Tx }}
 	if len(tx.Reimbursements) > 0 {
+		{{ hide := txSalaryLike(ctx, tx) }}
 		@txDetailsSection("Paid back") {
 			<div class="flex justify-between px-3 text-sm text-zinc-400">
 				<span>Paid</span>
-				<span class="tabular-nums">{ "-" + tx.ViewAmount() }</span>
+				<span class={ "tabular-nums", templ.KV("sensitive", hide) }>{ "-" + tx.ViewAmount() }</span>
 			</div>
 			for _, rt := range tx.Reimbursements {
 				@txDetailsMini(&rt)
 			}
 			<div class="flex justify-between px-3 text-sm font-semibold">
 				<span>Net</span>
-				<span class="tabular-nums">{ "-" + tx.ViewNetAmount() }</span>
+				<span class={ "tabular-nums", templ.KV("sensitive", hide) }>{ "-" + tx.ViewNetAmount() }</span>
 			</div>
 		}
 	}
@@ -513,7 +515,7 @@ templ txDetailsSMS(d *models.TxDetails) {
 						<span>{ m.ReceivedAt.Format("Jan 2 2006, 3:04pm") }</span>
 					</p>
 				}
-				<p class="whitespace-pre-wrap break-words text-sm text-zinc-200">
+				<p class={ "whitespace-pre-wrap break-words text-sm text-zinc-200", templ.KV("sensitive", txSalaryLike(ctx, d.Tx)) }>
 					if d.SMS != nil {
 						{ d.SMS.Body }
 					} else {
@@ -559,6 +561,7 @@ templ txDetailsMini(tx *models.Transaction) {
 				"shrink-0 text-sm font-semibold tabular-nums",
 				templ.KV("text-emerald-400", v.tone == txToneIn),
 				templ.KV("text-zinc-400", v.tone == txToneNeutral),
+				templ.KV("sensitive", v.sensitive),
 			}
 		>{ v.amount }</p>
 	</button>

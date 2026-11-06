@@ -241,13 +241,8 @@ func (h *Handler) SetWorkSettings(w http.ResponseWriter, r *http.Request) (templ
 		return nil, err
 	}
 	logger.FromCtx(ctx).Info("saved work settings")
-
-	d, err := h.settingsData(ctx)
-	if err != nil {
-		return nil, err
-	}
-	d.Saved = views.SettingsWork
-	return views.SettingsWorkCard(d), nil
+	// The salary rides in the claims, to blur the transactions about as big.
+	return h.settingsSaved(w, r, views.SettingsWork, views.SettingsWorkCard)
 }
 
 // parseWorkSettings reads the salary form, the settings nil when invalid.

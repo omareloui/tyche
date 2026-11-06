@@ -79,6 +79,7 @@ func dbUserToUser(dbU *queries.User, dfltCur *queries.Currency, dfltAcc *queries
 		PictureHash:   dbU.PictureHash.String,
 		StartOfPeriod: uint8(dbU.StartOfPeriod),
 		Timezone:      dbU.Timezone,
+		MonthlySalary: dbU.MonthlySalary.Float64,
 		DefaultCurrency: models.Currency{
 			ID: dbU.DefaultCurrencyID,
 		},
@@ -90,6 +91,7 @@ func dbUserToUser(dbU *queries.User, dfltCur *queries.Currency, dfltAcc *queries
 	if dfltCur != nil {
 		u.DefaultCurrency = *dbCurrencyToCurrency(dfltCur, true)
 	}
+	u.SalaryCurrency = u.DefaultCurrency.String
 
 	if dfltAcc != nil {
 		u.DefaultAccount = dbAccountToAccount(dfltAcc, nil, nil, nil, true)
@@ -115,7 +117,11 @@ func dbUserRowToUser(dbU queries.GetUserByOAuthIDRow) *models.User {
 		ExpirationDate:     dbU.AccountExpirationDate,
 		CreatedAt:          dbU.AccountCreatedAt.Time,
 	}
-	return dbUserToUser(&dbU.User, &dbU.Currency, &acc)
+	u := dbUserToUser(&dbU.User, &dbU.Currency, &acc)
+	if dbU.SalaryCurrencyString.Valid {
+		u.SalaryCurrency = dbU.SalaryCurrencyString.String
+	}
+	return u
 }
 
 // GetTimezone is the time zone of the user's sms, the default one if the

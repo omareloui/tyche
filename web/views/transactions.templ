@@ -472,7 +472,7 @@ templ ReimbursePicker(tx *models.Transaction, exps []models.ReimbursableExpense,
 		<div class="flex items-center justify-between gap-4">
 			<p>
 				Which expense does <span class="font-semibold">{ v.title }</span>
-				<span class="tabular-nums text-emerald-400">{ v.amount }</span> pay back?
+				<span class={ "tabular-nums text-emerald-400", templ.KV("sensitive", v.sensitive) }>{ v.amount }</span> pay back?
 			</p>
 			<button hx-get={ fmt.Sprintf("/transactions/%s", tx.ID) } class="cursor-pointer text-sm text-zinc-400 hover:text-zinc-200">Cancel</button>
 		</div>
@@ -530,10 +530,10 @@ templ TransferPairPicker(tx *models.Transaction, cands []models.Transaction, err
 			<p>
 				if tx.Kind == models.IncomeTxKind {
 					Where did <span class="font-semibold">{ v.title }</span>
-					<span class="tabular-nums text-emerald-400">{ v.amount }</span> into { tx.Account.Name } come from?
+					<span class={ "tabular-nums text-emerald-400", templ.KV("sensitive", v.sensitive) }>{ v.amount }</span> into { tx.Account.Name } come from?
 				} else {
 					Where did <span class="font-semibold">{ v.title }</span>
-					<span class="tabular-nums">{ v.amount }</span> from { tx.Account.Name } go?
+					<span class={ "tabular-nums", templ.KV("sensitive", v.sensitive) }>{ v.amount }</span> from { tx.Account.Name } go?
 				}
 			</p>
 			<button hx-get={ fmt.Sprintf("/transactions/%s", tx.ID) } class="cursor-pointer text-sm text-zinc-400 hover:text-zinc-200">Cancel</button>
@@ -576,7 +576,7 @@ templ TransferPairPicker(tx *models.Transaction, cands []models.Transaction, err
 								· { c.Account.Name }
 							</p>
 						</div>
-						<p class={ "shrink-0 font-semibold tabular-nums", templ.KV("text-emerald-400", cv.tone == txToneIn) }>{ cv.amount }</p>
+						<p class={ "shrink-0 font-semibold tabular-nums", templ.KV("text-emerald-400", cv.tone == txToneIn), templ.KV("sensitive", cv.sensitive) }>{ cv.amount }</p>
 					</button>
 				</li>
 			}
@@ -602,7 +602,7 @@ templ RecurrentMatchPicker(tx *models.Transaction, cands []models.Transaction) {
 		<div class="flex items-center justify-between gap-4">
 			<p>
 				Which scheduled one did <span class="font-semibold">{ v.title }</span>
-				<span class={ "tabular-nums", templ.KV("text-emerald-400", v.tone == txToneIn) }>{ v.amount }</span> pay?
+				<span class={ "tabular-nums", templ.KV("text-emerald-400", v.tone == txToneIn), templ.KV("sensitive", v.sensitive) }>{ v.amount }</span> pay?
 			</p>
 			<button hx-get={ fmt.Sprintf("/transactions/%s", tx.ID) } class="cursor-pointer text-sm text-zinc-400 hover:text-zinc-200">Cancel</button>
 		</div>
@@ -636,7 +636,7 @@ templ RecurrentMatchPicker(tx *models.Transaction, cands []models.Transaction) {
 								}
 							</p>
 						</div>
-						<p class={ "shrink-0 font-semibold tabular-nums", templ.KV("text-emerald-400", cv.tone == txToneIn) }>{ cv.amount }</p>
+						<p class={ "shrink-0 font-semibold tabular-nums", templ.KV("text-emerald-400", cv.tone == txToneIn), templ.KV("sensitive", cv.sensitive) }>{ cv.amount }</p>
 					</button>
 				</li>
 			}

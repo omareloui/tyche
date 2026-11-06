@@ -16,10 +16,12 @@ SELECT
     accounts.is_archived AS account_is_archived,
     accounts.exclude_from_balance AS account_exclude_from_balance,
     accounts.expiration_date AS account_expiration_date,
-    accounts.created_at AS account_created_at
+    accounts.created_at AS account_created_at,
+    salary_currency.string AS salary_currency_string
 FROM user
 LEFT JOIN currencies ON user.default_currency_id = currencies.id
 LEFT JOIN accounts ON user.default_account_id = accounts.id
+LEFT JOIN currencies AS salary_currency ON salary_currency.id = user.salary_currency_id
 WHERE user.oauth_id = sqlc.arg(oauth_id) LIMIT 1;
 
 

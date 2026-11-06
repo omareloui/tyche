@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"time"
 
 	"github.com/omareloui/tyche/internal/idgen"
@@ -57,7 +58,11 @@ type User struct {
 	StartOfPeriod   uint8    `validate:"required,min=1,max=31"`
 	// Timezone is the user's IANA time zone (e.g. Africa/Cairo).
 	Timezone string
-	SeededAt        time.Time
+	// MonthlySalary is 0 when not set, in SalaryCurrency (a currency code,
+	// the default currency's when not picked).
+	MonthlySalary  float64
+	SalaryCurrency string
+	SeededAt       time.Time
 	// Onboarded is whether the user finished (or skipped) the onboarding at
 	// /welcome, shown on signing in until then.
 	Onboarded bool
@@ -104,4 +109,26 @@ func UserFromGoogleUserBody(googleU io.Reader) (*User, error) {
 		LastName:      usr.LastName,
 		Picture:       usr.Picture,
 	}, nil
+}
+
+// SalaryLikeShare is how big a share of the monthly salary an amount has to
+// be to be blurred with the balances: likely the salary itself, or most of
+// it moved on.
+const SalaryLikeShare = 0.4
+
+// Salary is the user's monthly salary, its Amount 0 when not set.
+type Salary struct {
+	Amount float64
+	// Currency is a currency code, e.g. EGP.
+	Currency string
+}
+
+// IsLike is whether amount (in cur) is at least SalaryLikeShare of the
+// salary, false when it isn't set or there's no rate.
+func (s Salary) IsLike(amount float64, cur *Currency) bool {
+	if s.Amount <= 0 || cur == nil || cur.String == "" {
+		return false
+	}
+	v, ok := Convert(math.Abs(amount), cur, s.Currency)
+	return ok && v >= s.Amount*SalaryLikeShare
 }

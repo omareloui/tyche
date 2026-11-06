@@ -362,6 +362,7 @@ templ counterpartyDetailsRecent(d *CounterpartyDetailsData) {
 							"shrink-0 text-sm font-semibold tabular-nums",
 							templ.KV("text-emerald-400", v.tone == txToneIn),
 							templ.KV("text-zinc-400", v.tone == txToneNeutral),
+							templ.KV("sensitive", v.sensitive),
 						}
 					>{ v.amount }</p>
 				</a>

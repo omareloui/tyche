@@ -57,6 +57,9 @@ type AccessClaims struct {
 	// Timezone is the user's IANA time zone, "" in tokens issued before it
 	// was added.
 	Timezone string
+	// Salary is the user's monthly salary, its amount 0 when not set (or in
+	// tokens issued before it was added).
+	Salary models.Salary
 }
 
 // Location is the user's time zone, the default one when unknown.
@@ -150,6 +153,8 @@ func ParseAccessClaims(token string) (*AccessClaims, error) {
 
 	monthStart, _ := (*claims)["month_start"].(float64)
 	timezone, _ := (*claims)["timezone"].(string)
+	salary, _ := (*claims)["salary"].(float64)
+	salaryCur, _ := (*claims)["salary_currency"].(string)
 
 	return &AccessClaims{
 		ID:              (*claims)["id"].(string),
@@ -165,6 +170,7 @@ func ParseAccessClaims(token string) (*AccessClaims, error) {
 		// Tokens issued before it was added have none: 1st of the month.
 		MonthStart: models.MonthStart(monthStart),
 		Timezone:   timezone,
+		Salary:     models.Salary{Amount: salary, Currency: salaryCur},
 	}, nil
 }
 
@@ -303,6 +309,10 @@ func newToken(kind TokenType, usr *models.User) (string, time.Time, error) {
 		if usr.DefaultAccount != nil {
 			(*claims)["default_account_id"] = usr.DefaultAccount.ID
 			(*claims)["default_account_name"] = usr.DefaultAccount.Name
+		}
+		if usr.MonthlySalary > 0 {
+			(*claims)["salary"] = usr.MonthlySalary
+			(*claims)["salary_currency"] = usr.SalaryCurrency
 		}
 	}
 

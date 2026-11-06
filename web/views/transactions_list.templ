@@ -9,6 +9,7 @@ import (
 
 	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/salaryctx"
 	"github.com/omareloui/tyche/internal/tzctx"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
@@ -536,7 +537,7 @@ templ transaction(tx *models.Transaction, def *models.Currency) {
 				{{ meta := txMeta(&v) }}
 				<p class={ "flex gap-1 min-w-0 text-sm text-zinc-500", templ.KV("md:hidden", meta == "") }>
 					if meta != "" {
-						<span class="truncate shrink-0 max-w-[70%] md:max-w-full">{ meta }</span>
+						<span class={ "truncate shrink-0 max-w-[70%] md:max-w-full", templ.KV("sensitive", v.subtitleSensitive) }>{ meta }</span>
 						<span class="md:hidden shrink-0">·</span>
 					}
 					<span class="md:hidden flex gap-1 min-w-0">
@@ -563,7 +564,7 @@ templ transaction(tx *models.Transaction, def *models.Currency) {
 					<span class="truncate">{ v.account }</span>
 				}
 			</button>
-			<div class="shrink-0 text-right tabular-nums">
+			<div class={ "shrink-0 text-right tabular-nums", templ.KV("sensitive", v.sensitive) }>
 				if v.original != "" {
 					<p class="text-xs text-zinc-500 line-through">{ v.original }</p>
 				}
@@ -689,13 +690,13 @@ templ txChips(tx *models.Transaction, v *txView) {
 				<span tabindex="0" class="group/popup relative chip bg-amber-400/10 text-amber-300 outline-none">
 					@icons.Message("12")
 					Needs review
-					@txSMSPopup(tx.SMSBody, "From SMS, needs review")
+					@txSMSPopup(tx.SMSBody, "From SMS, needs review", txSalaryLike(ctx, tx))
 				</span>
 			} else if tx.FromSMS {
 				<span tabindex="0" class="group/popup relative chip outline-none">
 					@icons.Message("12")
 					SMS
-					@txSMSPopup(tx.SMSBody, "")
+					@txSMSPopup(tx.SMSBody, "", txSalaryLike(ctx, tx))
 				</span>
 			}
 			if tx.Goal != nil {
@@ -792,10 +793,10 @@ templ TxReviewCategoryPicker(tx *models.Transaction, cats []models.Category) {
 }
 
 // txSMSPopup shows the SMS a transaction was created from on hovering its
-// parent group.
-templ txSMSPopup(body, hint string) {
+// parent group, blurred with the balances when hide (it has the amount).
+templ txSMSPopup(body, hint string, hide bool) {
 	@components.HoverPopup("w-72 max-w-[80vw] px-3 py-2 text-sm text-zinc-200") {
-		<p class="whitespace-pre-wrap break-words">{ body }</p>
+		<p class={ "whitespace-pre-wrap break-words", templ.KV("sensitive", hide) }>{ body }</p>
 		if hint != "" {
 			<p class="mt-2 text-xs text-amber-400">{ hint }</p>
 		}
@@ -824,17 +825,18 @@ templ txGoalPopup(gl *models.Goal) {
 // reimbursementsBreakdown shows how an expense's net amount came to be: what
 // got paid, minus each reimbursement.
 templ reimbursementsBreakdown(tx *models.Transaction, def *models.Currency) {
+	{{ hide := txSalaryLike(ctx, tx) }}
 	<div x-cloak x-show="openReimbursements" x-transition class="ml-6 md:ml-16 mt-2 grid grid-cols-1 gap-2 border-l-2 border-emerald-400/20 pl-4">
 		<div class="flex justify-between px-4 text-sm text-zinc-400">
 			<span>Paid</span>
-			<span class="tabular-nums">{ "-" + tx.ViewAmount() }</span>
+			<span class={ "tabular-nums", templ.KV("sensitive", hide) }>{ "-" + tx.ViewAmount() }</span>
 		</div>
 		for _, rt := range tx.Reimbursements {
 			@reimbursement(&rt, def)
 		}
 		<div class="flex justify-between px-4 text-sm font-semibold">
 			<span>Net</span>
-			<span class="tabular-nums">{ "-" + tx.ViewNetAmount() }</span>
+			<span class={ "tabular-nums", templ.KV("sensitive", hide) }>{ "-" + tx.ViewNetAmount() }</span>
 		</div>
 	</div>
 }
@@ -878,7 +880,7 @@ templ transferPair(out *models.Transaction, def *models.Currency) {
 				{{ meta := txMeta(&v) }}
 				<p class={ "flex gap-1 min-w-0 text-sm text-zinc-500", templ.KV("md:hidden", meta == "") }>
 					if meta != "" {
-						<span class="truncate shrink-0 max-w-[70%] md:max-w-full">{ meta }</span>
+						<span class={ "truncate shrink-0 max-w-[70%] md:max-w-full", templ.KV("sensitive", v.subtitleSensitive) }>{ meta }</span>
 						<span class="md:hidden shrink-0">·</span>
 					}
 					<span class="md:hidden flex gap-1 min-w-0">
@@ -916,7 +918,7 @@ templ transferPair(out *models.Transaction, def *models.Currency) {
 					<p class="truncate">→ { v.toAccount }</p>
 				</div>
 			</div>
-			<p class="shrink-0 text-right tabular-nums font-semibold sm:font-(family-name:--font-biorhyme-expanded) sm:text-[15px] text-zinc-400">{ v.amount }</p>
+			<p class={ "shrink-0 text-right tabular-nums font-semibold sm:font-(family-name:--font-biorhyme-expanded) sm:text-[15px] text-zinc-400", templ.KV("sensitive", v.sensitive) }>{ v.amount }</p>
 			@components.EntryMenuTrigger("openMenu", "Transfer actions")
 		</div>
 		<div x-cloak x-show="openTransferPair" x-transition class="ml-6 md:ml-16 mt-2 grid grid-cols-1 gap-2 border-l-2 border-sky-400/20 pl-4">
@@ -979,13 +981,13 @@ templ transferLeg(tx *models.Transaction, def *models.Currency) {
 							<span tabindex="0" class="group/popup relative chip bg-amber-400/10 text-amber-300 outline-none">
 								@icons.Message("12")
 								Needs review
-								@txSMSPopup(tx.SMSBody, "From SMS, needs review")
+								@txSMSPopup(tx.SMSBody, "From SMS, needs review", txSalaryLike(ctx, tx))
 							</span>
 						} else {
 							<span tabindex="0" class="group/popup relative chip outline-none">
 								@icons.Message("12")
 								SMS
-								@txSMSPopup(tx.SMSBody, "")
+								@txSMSPopup(tx.SMSBody, "", txSalaryLike(ctx, tx))
 							</span>
 						}
 					</div>
@@ -993,7 +995,7 @@ templ transferLeg(tx *models.Transaction, def *models.Currency) {
 					<div class="mt-1"><span class="chip bg-amber-400/10 text-amber-300">Needs review</span></div>
 				}
 			</div>
-			<div class="shrink-0 text-right tabular-nums">
+			<div class={ "shrink-0 text-right tabular-nums", templ.KV("sensitive", v.sensitive) }>
 				if sent {
 					<p class="font-semibold">{ "-" + tx.ViewAmount() }</p>
 				} else {
@@ -1050,7 +1052,7 @@ templ reimbursement(tx *models.Transaction, def *models.Currency) {
 					</div>
 				}
 			</div>
-			<div class="shrink-0 text-right tabular-nums">
+			<div class={ "shrink-0 text-right tabular-nums", templ.KV("sensitive", v.sensitive) }>
 				<p class="font-semibold text-emerald-400">{ v.amount }</p>
 				{{ conv := txConverted(tx, def) }}
 				if conv != "" {
@@ -1507,9 +1509,35 @@ type txView struct {
 	tone        string
 	isScheduled bool
 	isOverdue   bool
+	// sensitive is whether it's about the salary or more (txSalaryLike),
+	// blurred with the balances; subtitleSensitive whether its subtitle
+	// holds an amount too.
+	sensitive         bool
+	subtitleSensitive bool
 }
 
 func newTxView(ctx context.Context, tx *models.Transaction) txView {
+	v := buildTxView(ctx, tx)
+	v.sensitive = txSalaryLike(ctx, tx)
+	v.subtitleSensitive = v.sensitive && (strings.HasPrefix(v.subtitle, "Sent ") || strings.HasPrefix(v.subtitle, "Fees "))
+	return v
+}
+
+// txSalaryLike is whether tx moved about the user's salary or more, of any
+// kind (e.g. the salary itself, or most of it moved to savings), so its
+// amount is blurred with the balances even though transactions' aren't.
+func txSalaryLike(ctx context.Context, tx *models.Transaction) bool {
+	if salaryctx.IsLike(ctx, tx.Amount, &tx.Account.Currency) {
+		return true
+	}
+	if tx.ToAccount != nil && salaryctx.IsLike(ctx, tx.ToAmount, &tx.ToAccount.Currency) {
+		return true
+	}
+	in := tx.TransferPair
+	return in != nil && salaryctx.IsLike(ctx, in.Amount, &in.Account.Currency)
+}
+
+func buildTxView(ctx context.Context, tx *models.Transaction) txView {
 	v := txView{
 		title:       tx.Description,
 		account:     tx.Account.DisplayName(),
