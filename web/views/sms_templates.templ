@@ -14,6 +14,7 @@ import (
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/smsparser"
 	"github.com/omareloui/tyche/internal/tzctx"
+	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
 	"github.com/omareloui/tyche/web/views/layouts"
@@ -60,12 +61,8 @@ templ SMSTemplates(claims *jwt.AccessClaims, balances []models.Balance, lists SM
 					class="grid gap-10 min-w-0"
 				>
 					@smsTemplatesSearch()
-					@smsTemplateList(models.SMSTemplateMine, "Mine", "Only for you, tried before the shared ones.", lists.Mine, true)
-					if claims.IsAdmin() {
-						@smsTemplateList(models.SMSTemplateShared, "Shared", "Used for every user. Seeded ones keep your edits.", lists.Shared, true)
-					} else {
-						@smsTemplateList(models.SMSTemplateShared, "Shared", "Used for every user. Override one to read its SMS your own way.", lists.Shared, false)
-					}
+					@SMSTemplateSection(models.SMSTemplateMine, claims.IsAdmin(), lists.Mine)
+					@SMSTemplateSection(models.SMSTemplateShared, claims.IsAdmin(), lists.Shared)
 				</div>
 			</div>
 			<div class="lg:sticky lg:top-22">
@@ -152,10 +149,15 @@ templ sandboxResult(res *SMSSandboxResult) {
 					@scopeChip(res.Match.Template.Scope)
 				</p>
 				if res.IsAdmin || res.Match.Template.Scope == models.SMSTemplateMine {
-					<a href={ editTemplateURL(res.Match.Template) } class="inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-white">
-						@icons.Pencil("14")
-						Edit
-					</a>
+					<div class="flex items-center gap-1">
+						if res.Match.Template.Scope == models.SMSTemplateShared {
+							@overrideLink(res.Match.Template)
+						}
+						<a { drawerLinkAttrs(editTemplateURL(res.Match.Template))... } class="inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-white">
+							@icons.Pencil("14")
+							Edit
+						</a>
+					</div>
 				} else {
 					@overrideLink(res.Match.Template)
 				}
@@ -313,8 +315,25 @@ templ smsTemplatesSearch() {
 
 // smsTemplateList lists templates, editable unless they're shared and the
 // user isn't an admin.
+// SMSTemplateSection is the list of a scope's templates, answered again when
+// one of them is saved.
+templ SMSTemplateSection(scope models.SMSTemplateScope, isAdmin bool, rows []SMSTemplateRow) {
+	if scope == models.SMSTemplateMine {
+		@smsTemplateList(scope, "Mine", "Only for you, tried before the shared ones.", rows, true)
+	} else if isAdmin {
+		@smsTemplateList(scope, "Shared", "Used for every user. Seeded ones keep your edits; override one to try a variant before it.", rows, true)
+	} else {
+		@smsTemplateList(scope, "Shared", "Used for every user. Override one to read its SMS your own way.", rows, false)
+	}
+}
+
+// SMSTemplateSectionID is the id of a scope's SMSTemplateSection.
+func SMSTemplateSectionID(scope models.SMSTemplateScope) string {
+	return "sms-templates-" + string(scope)
+}
+
 templ smsTemplateList(scope models.SMSTemplateScope, title, desc string, rows []SMSTemplateRow, editable bool) {
-	<section class="grid gap-4 min-w-0">
+	<section id={ SMSTemplateSectionID(scope) } class="grid gap-4 min-w-0">
 		<header class="flex flex-wrap items-end justify-between gap-3">
 			<div class="min-w-0">
 				<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
@@ -325,7 +344,7 @@ templ smsTemplateList(scope models.SMSTemplateScope, title, desc string, rows []
 				<p class="text-sm text-zinc-600">{ desc }</p>
 			</div>
 			if editable {
-				<a href={ newTemplateURL(scope, "", "") } class="btn-ghost h-9!">
+				<a { drawerLinkAttrs(newTemplateURL(scope, "", ""))... } class="btn-ghost h-9!">
 					@icons.Plus("15")
 					New
 				</a>
@@ -392,7 +411,10 @@ templ smsTemplateRow(row SMSTemplateRow, editable bool) {
 				</p>
 			</div>
 			if editable {
-				<a href={ editTemplateURL(&row.SMSTemplate) } aria-label="Edit" title="Edit" class="grid place-items-center shrink-0 w-8 h-8 rounded-full text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white">
+				if row.Scope == models.SMSTemplateShared {
+					@overrideLink(&row.SMSTemplate)
+				}
+				<a { drawerLinkAttrs(editTemplateURL(&row.SMSTemplate))... } aria-label="Edit" title="Edit" class="grid place-items-center shrink-0 w-8 h-8 rounded-full text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white">
 					@icons.Pencil("15")
 				</a>
 				<button
@@ -434,16 +456,16 @@ templ scopeChip(scope models.SMSTemplateScope) {
 	}
 }
 
-// overrideLink copies a shared template into the user's, which are tried
-// first.
+// overrideLink copies a shared template into the user's (tried first), with
+// a higher priority.
 templ overrideLink(t *models.SMSTemplate) {
 	<a
-		href={ templ.SafeURL("/sms/templates/new?" + url.Values{"copy": {t.ID}}.Encode()) }
-		title="Copy into your templates, yours are tried first"
-		class="inline-flex items-center gap-1 shrink-0 h-8 px-3 rounded-full text-sm text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+		{ drawerLinkAttrs("/sms/templates/new?" + url.Values{"copy": {t.ID}}.Encode())... }
+		aria-label="Override"
+		title="Override: copy into your templates, yours are tried first"
+		class="grid place-items-center shrink-0 w-8 h-8 rounded-full text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
 	>
-		@icons.Pencil("14")
-		Override
+		@icons.Copy("15")
 	</a>
 }
 
@@ -456,12 +478,31 @@ templ backLink(href templ.SafeURL, label string) {
 	</a>
 }
 
-// NewTemplateURL opens the form of a new template, prefilled with the sms.
+// NewTemplateURL opens the templates page with the form of a new template,
+// prefilled with the sms.
 func NewTemplateURL(sender, sms string) templ.SafeURL {
-	return newTemplateURL(models.SMSTemplateMine, sender, sms)
+	return templ.SafeURL(SMSTemplatesFormURL(newTemplateURL(models.SMSTemplateMine, sender, sms)))
 }
 
-func newTemplateURL(scope models.SMSTemplateScope, sender, sms string) templ.SafeURL {
+// SMSTemplatesFormURL is the templates page opening the form drawer at path
+// (drawer.js' ?form=).
+func SMSTemplatesFormURL(path string) string {
+	return "/sms/templates?" + url.Values{"form": {path}}.Encode()
+}
+
+// drawerLinkAttrs make a link open the form drawer at path, its href the
+// page opening it (a new tab, a reload).
+func drawerLinkAttrs(path string) templ.Attributes {
+	return templ.Attributes{
+		"href":              templ.SafeURL(SMSTemplatesFormURL(path)),
+		"hx-get":            path,
+		"hx-target":         "#" + components.DrawerSlot,
+		"hx-swap":           "innerHTML",
+		"data-opens-drawer": true,
+	}
+}
+
+func newTemplateURL(scope models.SMSTemplateScope, sender, sms string) string {
 	q := url.Values{"scope": {string(scope)}}
 	if sender != "" {
 		q.Set("sender", sender)
@@ -469,11 +510,11 @@ func newTemplateURL(scope models.SMSTemplateScope, sender, sms string) templ.Saf
 	if sms != "" {
 		q.Set("sms", sms)
 	}
-	return templ.SafeURL("/sms/templates/new?" + q.Encode())
+	return "/sms/templates/new?" + q.Encode()
 }
 
-func editTemplateURL(t *models.SMSTemplate) templ.SafeURL {
-	return templ.SafeURL(fmt.Sprintf("/sms/templates/%s/%s/edit", t.Scope, t.ID))
+func editTemplateURL(t *models.SMSTemplate) string {
+	return fmt.Sprintf("/sms/templates/%s/%s/edit", t.Scope, t.ID)
 }
 
 templ smsTemplateDocs() {
@@ -485,7 +526,13 @@ templ smsTemplateDocs() {
 			</h2>
 			<p class="text-zinc-500">The SMS text with placeholders. It has to match the whole SMS; spaces match any spaces, and the spaces around placeholders are optional.</p>
 		</header>
-		<dl class="grid gap-2">
+		@smsTemplateSyntax()
+	</aside>
+}
+
+// smsTemplateSyntax lists the placeholders and fields of a template.
+templ smsTemplateSyntax() {
+	<dl class="grid gap-2">
 			@docItem("{{field}}", "Reads a field, see below.")
 			@docItem("{{counterparty:merchant}}", "Creates the counterparty as a merchant (with its brand icon) if it's new.")
 			@docItem("{{date:MM/DD/YYYY}}", "A date in this format (DD, MM, MMM, YY, YYYY) instead of detecting it.")
@@ -503,7 +550,6 @@ templ smsTemplateDocs() {
 			}
 		</div>
 		<p class="text-zinc-500">The account, counterparty and note can also be fixed values (e.g. "Cash" for ATM withdrawals). Dates come in your time zone set on the SMS page.</p>
-	</aside>
 }
 
 templ docItem(code, desc string) {
@@ -607,40 +653,46 @@ func txKindComboOptions(kinds []models.TxKind) []form.ComboOption {
 // smsTemplateKinds are the transaction kinds a template can make.
 var smsTemplateKinds = []models.TxKind{models.ExpenseTxKind, models.IncomeTxKind, models.TransferTxKind, models.RefundTxKind}
 
-templ EditSMSTemplatePage(claims *jwt.AccessClaims, balances []models.Balance, fd *SMSTemplateFD, preview *SMSTemplatePreviewData) {
-	@layouts.WithTitle(claims, "SMS Template", balances) {
-		<div class="grid gap-6">
-			@backLink("/sms/templates", "SMS templates")
-			<div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
-				@SMSTemplateForm(fd, preview)
-				<div class="lg:sticky lg:top-22">
-					@smsTemplateDocs()
-				</div>
-			</div>
-		</div>
+// SMSTemplateDrawer is the form of a new template or of one to edit, in a
+// drawer.
+templ SMSTemplateDrawer(fd *SMSTemplateFD, preview *SMSTemplatePreviewData) {
+	@components.Drawer(components.DrawerProps{Label: fd.title()}) {
+		@SMSTemplateForm(fd, preview)
 	}
 }
 
+func (fd *SMSTemplateFD) title() string {
+	if fd.IsNew {
+		return "New template"
+	}
+	return "Edit template"
+}
+
+func (fd *SMSTemplateFD) method() string {
+	if fd.IsNew {
+		return "post"
+	}
+	return "put"
+}
+
+func (fd *SMSTemplateFD) url() string {
+	if fd.IsNew {
+		return "/sms/templates"
+	}
+	return fmt.Sprintf("/sms/templates/%s/%s", fd.Scope, fd.ID)
+}
+
+// SMSTemplateForm is SMSTemplateDrawer's form alone, answered with its
+// errors.
 templ SMSTemplateForm(fd *SMSTemplateFD, preview *SMSTemplatePreviewData) {
-	<form
-		if fd.IsNew {
-			hx-post="/sms/templates"
-		} else {
-			hx-put={ fmt.Sprintf("/sms/templates/%s/%s", fd.Scope, fd.ID) }
-		}
-		hx-target="this"
-		hx-swap="outerHTML"
-		x-data={ fmt.Sprintf("{action: %q}", cmp.Or(string(fd.Action), string(models.SMSTemplateTransaction))) }
-		class="grid gap-6 min-w-0"
-	>
-		<header class="flex flex-wrap items-center justify-between gap-3">
-			<h1 class="text-2xl font-bold font-(family-name:--font-biorhyme-expanded)">
-				if fd.IsNew {
-					New template
-				} else {
-					Edit template
-				}
-			</h1>
+	@form.DrawerForm(form.DrawerFormProps{
+		Title:  fd.title(),
+		Method: fd.method(),
+		URL:    fd.url(),
+		Submit: "Save",
+		Attrs:  templ.Attributes{"x-data": fmt.Sprintf("{action: %q}", cmp.Or(string(fd.Action), string(models.SMSTemplateTransaction)))},
+	}) {
+		<div class="flex flex-wrap items-center gap-3">
 			if fd.IsNew && fd.IsAdmin {
 				@form.SegmentedRadio("", "scope", "tmpl", []form.RadioOption{
 					{Label: "Mine", Value: string(models.SMSTemplateMine)},
@@ -652,7 +704,7 @@ templ SMSTemplateForm(fd *SMSTemplateFD, preview *SMSTemplatePreviewData) {
 				}
 				@scopeChip(fd.Scope)
 			}
-		</header>
+		</div>
 		<div class="grid gap-4 sm:grid-cols-2">
 			@form.Field("Name", "name", "tmpl", nil, fd.Errors["Name"]) {
 				@form.Control("text", "name", "Credit card purchase", "tmpl", fd.input("Name", fd.Name), templ.Attributes{"required": true, "autocomplete": "off"})
@@ -735,11 +787,19 @@ templ SMSTemplateForm(fd *SMSTemplateFD, preview *SMSTemplatePreviewData) {
 			</div>
 			@form.Toggle("Enabled", "is_enabled", "tmpl", nil, form.FDInput{Value: enabledValue(fd.IsEnabled)}, nil)
 		</div>
-		<div class="flex justify-end gap-2">
-			<a href="/sms/templates" class="btn-ghost">Cancel</a>
-			<button type="submit" class="btn-primary">Save</button>
-		</div>
-	</form>
+		<details class="group rounded-2xl bg-zinc-700/20 ring-1 ring-zinc-800 text-sm">
+			<summary class="flex items-center list-none [&::-webkit-details-marker]:hidden gap-2 px-4 py-3 cursor-pointer text-zinc-400 hover:text-white">
+				@icons.Hash("15")
+				Template syntax
+				<span class="ml-auto transition-transform group-open:rotate-180">
+					@icons.ChevronDown("15")
+				</span>
+			</summary>
+			<div class="grid gap-4 px-4 pb-4">
+				@smsTemplateSyntax()
+			</div>
+		</details>
+	}
 }
 
 templ actionRadio(label string, action models.SMSTemplateAction) {

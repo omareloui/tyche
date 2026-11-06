@@ -231,7 +231,7 @@ func TestIngestSMS(t *testing.T) {
 		defer res.Body.Close()
 		b, _ := io.ReadAll(res.Body)
 		body := string(b)
-		want := "/sms/templates/new?" + url.Values{"scope": {"mine"}, "sender": {"HSBC"}, "sms": {"Your OTP is 1234"}}.Encode()
+		want := "/sms/templates?" + url.Values{"form": {"/sms/templates/new?" + url.Values{"scope": {"mine"}, "sender": {"HSBC"}, "sms": {"Your OTP is 1234"}}.Encode()}}.Encode()
 		if !strings.Contains(body, html.EscapeString(want)) {
 			t.Errorf("no make template link %q", want)
 		}

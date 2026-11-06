@@ -85,10 +85,8 @@ func (h *Handler) SMSTemplateSandbox(w http.ResponseWriter, r *http.Request) (te
 
 func (h *Handler) NewSMSTemplate(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	ctx := r.Context()
-
-	b, err := h.repo.GetBalances(ctx)
-	if err != nil {
-		return nil, err
+	if smsTemplateFormPage(w, r) {
+		return nil, nil
 	}
 
 	q := r.URL.Query()
@@ -99,13 +97,15 @@ func (h *Handler) NewSMSTemplate(w http.ResponseWriter, r *http.Request) (templ.
 
 	var t *models.SMSTemplate
 	if id := q.Get("copy"); id != "" {
-		// overriding a shared template, the user's ones are tried first
+		// overriding a shared template: the user's ones are tried first, and
+		// a higher priority tries it before the original among its scope
 		shared, err := h.smsTemplates.Get(id)
 		if err != nil {
 			return nil, resperr.New(http.StatusNotFound, "sms template not found")
 		}
 		t = shared
 		t.ID, t.SeedKey, t.Name = "", "", t.Name+" (mine)"
+		t.Priority++
 	} else {
 		sample := strings.TrimSpace(q.Get("sms"))
 		sender := strings.TrimSpace(q.Get("sender"))
@@ -125,15 +125,12 @@ func (h *Handler) NewSMSTemplate(w http.ResponseWriter, r *http.Request) (templ.
 	fd.IsNew = true
 	fd.IsAdmin = getClaims(ctx).IsAdmin()
 
-	return views.EditSMSTemplatePage(getClaims(ctx), b, fd, h.previewSMSTemplate(fd)), nil
+	return views.SMSTemplateDrawer(fd, h.previewSMSTemplate(fd)), nil
 }
 
 func (h *Handler) EditSMSTemplate(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	ctx := r.Context()
-
-	b, err := h.repo.GetBalances(ctx)
-	if err != nil {
-		return nil, err
+	if smsTemplateFormPage(w, r) {
+		return nil, nil
 	}
 
 	t, err := h.getSMSTemplate(r)
@@ -141,9 +138,42 @@ func (h *Handler) EditSMSTemplate(w http.ResponseWriter, r *http.Request) (templ
 		return nil, err
 	}
 	fd := views.NewSMSTemplateFD(t)
-	fd.IsAdmin = getClaims(ctx).IsAdmin()
+	fd.IsAdmin = getClaims(r.Context()).IsAdmin()
 
-	return views.EditSMSTemplatePage(getClaims(ctx), b, fd, h.previewSMSTemplate(fd)), nil
+	return views.SMSTemplateDrawer(fd, h.previewSMSTemplate(fd)), nil
+}
+
+// smsTemplateFormPage sends a navigation to a form drawer (a link opened in
+// a new tab, an old bookmark) to the templates page opening it, telling
+// whether it did.
+func smsTemplateFormPage(w http.ResponseWriter, r *http.Request) bool {
+	if r.Header.Get("HX-Request") != "" && r.Header.Get("HX-Boosted") == "" {
+		return false
+	}
+	page := views.SMSTemplatesFormURL(r.URL.RequestURI())
+	if r.Header.Get("HX-Request") != "" {
+		w.Header().Set("HX-Redirect", page)
+		return true
+	}
+	http.Redirect(w, r, page, http.StatusSeeOther)
+	return true
+}
+
+// smsTemplateSaved closes the drawer of a saved template, answering its
+// scope's list again.
+func (h *Handler) smsTemplateSaved(w http.ResponseWriter, r *http.Request, scope models.SMSTemplateScope) (templ.Component, error) {
+	ctx := r.Context()
+	var ts []models.SMSTemplate
+	if scope == models.SMSTemplateShared {
+		ts = h.smsTemplates.List()
+	} else {
+		var err error
+		if ts, err = h.repo.GetSMSTemplates(ctx); err != nil {
+			return nil, err
+		}
+	}
+	drawerSaved(w, "#"+views.SMSTemplateSectionID(scope), "outerHTML")
+	return views.SMSTemplateSection(scope, getClaims(ctx).IsAdmin(), views.NewSMSTemplateRows(ts)), nil
 }
 
 // PreviewSMSTemplate compiles the template in the form and reads its sample.
@@ -185,8 +215,7 @@ func (h *Handler) CreateSMSTemplate(w http.ResponseWriter, r *http.Request) (tem
 	}
 	l.Info("created sms template", zap.String("id", t.ID), zap.String("scope", string(scope)), zap.String("name", t.Name))
 
-	w.Header().Set("HX-Redirect", "/sms/templates")
-	return nil, nil
+	return h.smsTemplateSaved(w, r, scope)
 }
 
 func (h *Handler) UpdateSMSTemplate(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -216,8 +245,7 @@ func (h *Handler) UpdateSMSTemplate(w http.ResponseWriter, r *http.Request) (tem
 	}
 	l.Info("updated sms template", zap.String("id", t.ID), zap.String("scope", string(t.Scope)))
 
-	w.Header().Set("HX-Redirect", "/sms/templates")
-	return nil, nil
+	return h.smsTemplateSaved(w, r, prev.Scope)
 }
 
 func (h *Handler) DeleteSMSTemplate(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
