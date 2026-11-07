@@ -19,6 +19,9 @@ COPY_REGION="${COPY_REGION:-eu-west-1}"
 # Region to copy the /tyche/* SSM params from when missing here (moving region).
 FROM_REGION="${FROM_REGION:-}"
 DOMAIN="${DOMAIN:-tychefortune.com}"
+# Former domains (space separated) Caddy redirects to $DOMAIN, their A records
+# pointing at the instance too.
+REDIRECT_FROM="${REDIRECT_FROM-tyche.omareloui.com}"
 INSTANCE_TYPE="${INSTANCE_TYPE:-t4g.micro}"
 DATA_SIZE_GB="${DATA_SIZE_GB:-5}"
 CLUSTER=tyche
@@ -219,7 +222,7 @@ if [ -n "$IMAGE" ]; then
   log "Registering $FAMILY with $IMAGE"
   TASK_DEF_FILE=$(mktemp)
   sed -e "s|__IMAGE__|$IMAGE|" -e "s|__ACCOUNT__|$ACCOUNT|g" -e "s|__REGION__|$REGION|g" \
-    -e "s|__DOMAIN__|$DOMAIN|g" \
+    -e "s|__DOMAIN__|$DOMAIN|g" -e "s|__REDIRECT_FROM__|$REDIRECT_FROM|g" \
     task-definition.json >"$TASK_DEF_FILE"
   aws ecs register-task-definition --cli-input-json "file://$TASK_DEF_FILE" >/dev/null
   rm -f "$TASK_DEF_FILE"

@@ -48,7 +48,14 @@
       "image": "public.ecr.aws/docker/library/caddy:2-alpine",
       "essential": true,
       "memoryReservation": 64,
-      "command": ["caddy", "reverse-proxy", "--from", "__DOMAIN__", "--to", "localhost:3333"],
+      "environment": [
+        { "name": "DOMAIN", "value": "__DOMAIN__" },
+        { "name": "REDIRECT_FROM", "value": "__REDIRECT_FROM__" }
+      ],
+      "entryPoint": ["sh", "-c"],
+      "command": [
+        "set -e; { printf '%s {\\n\\treverse_proxy localhost:3333\\n}\\n' \"$DOMAIN\"; [ -z \"$REDIRECT_FROM\" ] || printf '%s {\\n\\tredir https://%s{uri} permanent\\n}\\n' \"$REDIRECT_FROM\" \"$DOMAIN\"; } >/etc/caddy/Caddyfile; exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"
+      ],
       "dependsOn": [{ "containerName": "tyche-container", "condition": "START" }],
       "mountPoints": [
         { "sourceVolume": "caddy-data", "containerPath": "/data" },
