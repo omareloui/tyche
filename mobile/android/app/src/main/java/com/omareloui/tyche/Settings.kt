@@ -16,7 +16,7 @@ class Settings(context: Context) {
     private val prefs = context.getSharedPreferences("tyche", Context.MODE_PRIVATE)
 
     var serverUrl: String
-        get() = prefs.getString(KEY_SERVER, "") ?: ""
+        get() = prefs.getString(KEY_SERVER, null)?.let(::migrateServer) ?: DEFAULT_SERVER
         set(value) = prefs.edit().putString(KEY_SERVER, value.trim().trimEnd('/')).apply()
 
     var senders: Set<String>
@@ -134,6 +134,12 @@ class Settings(context: Context) {
 
         fun parseSenders(s: String): Set<String> =
             s.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+
+        const val DEFAULT_SERVER = "https://tychefortune.com"
+        /** Tyche's former url, moved to the new domain (same server, the token still works). */
+        private const val OLD_SERVER = "https://tyche.omareloui.com"
+
+        private fun migrateServer(url: String): String = if (url == OLD_SERVER) DEFAULT_SERVER else url
 
         private const val KEY_SERVER = "server_url"
         private const val KEY_SENDERS = "senders"

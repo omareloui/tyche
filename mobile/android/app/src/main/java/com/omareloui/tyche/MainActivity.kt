@@ -140,7 +140,7 @@ class MainActivity : AppCompatActivity() {
     private fun signIn() {
         val url = serverUrl.text.toString().trim().trimEnd('/')
         if (!url.startsWith("https://") && !url.startsWith("http://")) {
-            toast("Enter the Tyche URL, e.g. https://tyche.example.com")
+            toast("Enter the Tyche URL, e.g. ${Settings.DEFAULT_SERVER}")
             return
         }
         settings.serverUrl = url

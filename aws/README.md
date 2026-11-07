@@ -17,8 +17,8 @@ ADMIN_TENANT_IDS=GL_123 aws/infra/up.sh [image]
 
 `up.sh` creates what's missing (default VPC, security group, IAM roles, SSM params, data volume, instance, Elastic IP, ECR lifecycle, log retention, snapshot policy, task definition, service) and prints the public IP. It can be re-run. Then:
 
-1. Point the A record of `tyche.omareloui.com` to the Elastic IP.
-2. Add `https://tyche.omareloui.com/oauth/cb` (and the mobile callback) to the Google OAuth client's redirect URIs.
+1. Point the A record of `tychefortune.com` to the Elastic IP.
+2. Add `https://tychefortune.com/oauth/cb` (and the mobile callback) to the Google OAuth client's redirect URIs.
 
 ## Restore a snapshot
 

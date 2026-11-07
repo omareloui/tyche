@@ -3,7 +3,7 @@
     <string name="app_name">Tyche SMS</string>
     <string name="wordmark" translatable="false">tyche</string>
     <string name="server_url">Tyche URL</string>
-    <string name="server_url_hint">https://tyche.example.com</string>
+    <string name="server_url_hint">https://tychefortune.com</string>
     <string name="sign_in">Sign in with Google</string>
     <string name="sign_out">Sign out</string>
     <string name="signed_out_title">Bank SMS, straight to Tyche</string>

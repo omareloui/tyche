@@ -18,7 +18,7 @@ AZ="${AZ:-eu-central-1a}"
 COPY_REGION="${COPY_REGION:-eu-west-1}"
 # Region to copy the /tyche/* SSM params from when missing here (moving region).
 FROM_REGION="${FROM_REGION:-}"
-DOMAIN="${DOMAIN:-tyche.omareloui.com}"
+DOMAIN="${DOMAIN:-tychefortune.com}"
 INSTANCE_TYPE="${INSTANCE_TYPE:-t4g.micro}"
 DATA_SIZE_GB="${DATA_SIZE_GB:-5}"
 CLUSTER=tyche
