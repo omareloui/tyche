@@ -3,7 +3,8 @@
     "allow": [
       "Bash(git log:*)",
       "Bash(make:*)",
-      "Bash(go test:*)"
+      "Bash(go test:*)",
+      "Bash(aws/infra/up.sh:*)"
     ],
     "deny": [],
     "ask": []
