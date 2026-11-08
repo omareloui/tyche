@@ -12,8 +12,7 @@ import (
 
 // RunDailyUpkeep runs, on the tenant's first request of the day (in the
 // user's time zone), what's due once a day: TopUpRecurrentTxs, then purging
-// the receipts scanned for a transaction never saved and converting the ones
-// stored before every image was a WebP. What fails is logged:
+// the receipts scanned for a transaction never saved. What fails is logged:
 // the request goes on without.
 func (r *Repository) RunDailyUpkeep(ctx context.Context, tenantID string) {
 	y, m, d := tzctx.In(ctx, time.Now()).Date()
@@ -36,7 +35,6 @@ func (r *Repository) RunDailyUpkeep(ctx context.Context, tenantID string) {
 	}
 	if _, q, err := r.dbFromCtx(ctx); err == nil {
 		purgeOrphanReceipts(ctx, q, time.Now())
-		convertReceipts(ctx, q)
 	}
 }
 
