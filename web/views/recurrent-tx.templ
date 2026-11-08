@@ -189,7 +189,7 @@ templ rtxsList(rtxs []models.RecurrentTx, def *models.Currency, oob bool) {
 				@icons.Repeat("16")
 				Active
 			</h2>
-			<div class="grid sm:grid-cols-2 gap-4">
+			<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
 				for _, rt := range active {
 					@RecurrentTx(&rt)
 				}
@@ -201,7 +201,7 @@ templ rtxsList(rtxs []models.RecurrentTx, def *models.Currency, oob bool) {
 				<h2 class="text-sm font-semibold uppercase tracking-wider">Ended</h2>
 				@icons.ChevronDown("16", &templ.Attributes{"class": "transition-transform group-open:rotate-180"})
 			</summary>
-			<div class="grid sm:grid-cols-2 gap-4">
+			<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
 				for _, rt := range ended {
 					@RecurrentTx(&rt)
 				}
