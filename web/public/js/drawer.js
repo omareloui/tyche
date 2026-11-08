@@ -198,6 +198,13 @@ const drawerHistory = {
     this.drop(this.stack.length - i);
   },
 
+  // overlay gives el, shown over the page or a drawer (the receipt viewer),
+  // an entry while open, so Back closes only it: close is what Back does.
+  overlay(el, open, close) {
+    if (open) this.push({ el, kind: "overlay", back: close });
+    else this.closed(el);
+  },
+
   reset() {
     this.stack = [];
     this.expect = null;

@@ -498,10 +498,11 @@ templ txItemAddForm(url string, fd *TxItemFD) {
 func txItemsSectionID(prefix, id string) string { return prefix + "-items-" + id }
 
 // ReceiptViewer shows a receipt's image full screen while its Alpine scope's
-// full is true, the image only fetched then (the list has one per row).
+// full is true, the image only fetched then (the list has one per row); the
+// browser's Back closes it (drawerHistory.overlay).
 templ ReceiptViewer(url string) {
 	<template x-teleport="body">
-		<div>
+		<div x-init="$watch('full', (v) => drawerHistory.overlay($el, v, () => (full = false)))">
 			<template x-if="full">
 				<div x-transition.opacity @click="full = false" @keydown.escape.window.stop="full = false" class="fixed inset-0 z-[80] grid place-items-center p-4 bg-black/85 cursor-zoom-out">
 					<img src={ url } alt="Receipt" class="block w-auto h-auto max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem)] object-contain rounded-lg"/>
