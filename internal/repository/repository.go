@@ -283,6 +283,11 @@ func exportTo(ctx context.Context, db *sql.DB, dst string, to []byte) error {
 		_, _ = conn.ExecContext(ctx, "DETACH DATABASE export")
 		return fmt.Errorf("exporting the database: %w", err)
 	}
+	// sqlcipher_export leaves free pages behind (over half the file).
+	if _, err := conn.ExecContext(ctx, "VACUUM export"); err != nil {
+		_, _ = conn.ExecContext(ctx, "DETACH DATABASE export")
+		return fmt.Errorf("compacting the export database: %w", err)
+	}
 	if _, err := conn.ExecContext(ctx, "DETACH DATABASE export"); err != nil {
 		return fmt.Errorf("detaching the export database: %w", err)
 	}
