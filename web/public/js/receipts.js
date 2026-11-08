@@ -63,6 +63,21 @@
     htmx.trigger(input.closest("form[hx-trigger='receipt-ready']") ?? input, "receipt-ready");
   });
 
+  // The transactions page's "Scan receipt" (input[data-receipt-quick], which
+  // opens the create form) hands its file to the create form's scan.
+  document.addEventListener("change", (e) => {
+    const quick = e.target;
+    if (!(quick instanceof HTMLInputElement) || !quick.matches("[data-receipt-quick]")) return;
+    const file = quick.files?.[0];
+    quick.value = "";
+    const input = document.querySelector("#tx-create [data-receipt-input]:not([capture])");
+    if (!file || !input) return;
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
   // Once sent, the file isn't posted again with the form.
   document.addEventListener("htmx:afterRequest", (e) => {
     const el = e.detail.elt;

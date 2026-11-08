@@ -137,6 +137,15 @@ func TestReceipts(t *testing.T) {
 	}
 
 	var receiptID string
+	t.Run("the transactions page offers scanning", func(t *testing.T) {
+		_, body := do("GET", "/transactions", nil)
+		for _, want := range []string{"data-receipt-quick", "Scan a receipt", "AI fills in the amount, merchant, date and items."} {
+			if !strings.Contains(body, want) {
+				t.Errorf("no %q in the page", want)
+			}
+		}
+	})
+
 	t.Run("scanning fills the new transaction's form", func(t *testing.T) {
 		res, body := upload("/receipts/scan/0", newForm)
 		if res.StatusCode != http.StatusOK {

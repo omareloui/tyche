@@ -41,6 +41,9 @@ type WelcomeData struct {
 	// Badge is whether the badge step is shown: in the installed app, with
 	// pushes set up.
 	Badge bool
+
+	// Receipts is whether reading receipts is on, offered by the done step.
+	Receipts bool
 	// Requested is the step asked for by a full page load, Recheck whether
 	// to ask for it again from the installed app (whose full page loads
 	// don't say it is, see Badge).
@@ -116,7 +119,7 @@ templ WelcomeBody(d *WelcomeData) {
 		case models.OnboardingBadge:
 			@welcomeBadge(d)
 		case models.OnboardingDone:
-			@welcomeDone()
+			@welcomeDone(d.Receipts)
 	}
 }
 
@@ -412,22 +415,27 @@ type welcomeNextStep struct {
 	Icon              templ.Component
 }
 
-func welcomeNextSteps() []welcomeNextStep {
-	return []welcomeNextStep{
+func welcomeNextSteps(receipts bool) []welcomeNextStep {
+	steps := []welcomeNextStep{
 		{"/sms", "Forward your bank SMS", "Install the Android app: your bank's SMS become transactions on their own.", icons.Smartphone("20")},
+	}
+	if receipts {
+		steps = append(steps, welcomeNextStep{"/transactions?new", "Scan a receipt", "Snap a photo and AI fills in the transaction, line by line.", icons.Sparkles("20")})
+	}
+	return append(steps, []welcomeNextStep{
 		{"/transactions", "Add a transaction", "Log what you spend or earn by hand, or schedule what's coming.", icons.Transfer("20")},
 		{"/categories", "Set budgets", "Give your categories a monthly budget to see how you're pacing.", icons.Tag("20")},
 		{"/goals", "Save for a goal", "Put money aside for something and track how close you are.", icons.Target("20")},
-	}
+	}...)
 }
 
-templ welcomeDone() {
+templ welcomeDone(receipts bool) {
 	@components.GlassCard("p-6 sm:p-8 grid gap-6", "bg-sky-400/10") {
 		@welcomeHeading(icons.Sparkles("32", &templ.Attributes{"class": "text-sky-400"}),
 			"You're all set",
 			"A few things worth doing next:")
 		<ul class="grid gap-2">
-			for _, s := range welcomeNextSteps() {
+			for _, s := range welcomeNextSteps(receipts) {
 				<li>
 					<a
 						href={ templ.SafeURL(s.Href) }

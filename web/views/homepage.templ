@@ -66,6 +66,7 @@ templ HomePage(claims *jwt.AccessClaims, balances []models.Balance) {
 			@landingHero()
 			@landingFeatureGrid()
 			@landingSMS()
+			@landingReceipts()
 			@landingPrivacy()
 			@landingInsights()
 			@landingCTA()
@@ -128,7 +129,7 @@ templ landingHero() {
 						Build your <span class="landing-gradient-text">fortune</span>, one transaction at a time
 					</h1>
 					<p class="mx-auto lg:mx-0 mt-6 max-w-xl text-xl text-zinc-400">
-						Tyche brings your accounts, budgets, goals and bank messages together, so you always know where your money is and where it's going.
+						Tyche brings your accounts, budgets, goals, bank messages and receipts together, so you always know where your money is and where it's going.
 					</p>
 					<div class="mt-9 flex flex-wrap items-center justify-center lg:justify-start gap-3">
 						@landingSignIn("Get started with Google")
@@ -312,8 +313,76 @@ templ landingSMS() {
 	}
 }
 
-templ landingPrivacy() {
+// landingReceiptLine is a line of the landing page's mock receipt.
+type landingReceiptLine struct {
+	Name   string
+	Amount string
+}
+
+var landingReceiptLines = []landingReceiptLine{
+	{"2× Flat white", "190.00"},
+	{"Croissant", "85.00"},
+	{"Water", "25.00"},
+}
+
+templ landingReceipts() {
 	@landingSpotlight(true) {
+		<div>
+			@landingSpotlightCopy(icons.Sparkles, "bg-amber-400/15 text-amber-300", "AI-powered", "Snap a receipt. AI fills in the rest.",
+				"Take a photo of any receipt and Google Gemini reads it into the transaction: the total, the merchant, the day and every line on it.",
+				[]string{
+					"Items, VAT, service, tips and discounts itemized",
+					"The merchant matched, or added with its icon, and its usual category picked",
+					"The receipt kept with the transaction, one tap away",
+				})
+		</div>
+		<div aria-hidden="true" class="relative">
+			<div class="pointer-events-none absolute inset-0 -z-10 m-auto size-72 rounded-full bg-amber-400/10 blur-3xl"></div>
+			<div class="mx-auto max-w-sm space-y-4">
+				<div class="mr-10 -rotate-2 rounded-2xl bg-zinc-100 p-5 font-mono text-sm text-zinc-700 shadow-2xl shadow-black/40">
+					<p class="text-center font-bold tracking-widest text-zinc-900">STARBUCKS</p>
+					<p class="text-center text-xs text-zinc-500">Zamalek · 01/11 09:42</p>
+					<div class="my-3 border-t border-dashed border-zinc-400"></div>
+					<ul class="space-y-1">
+						for _, l := range landingReceiptLines {
+							<li class="flex justify-between gap-4"><span>{ l.Name }</span><span class="tabular-nums">{ l.Amount }</span></li>
+						}
+						<li class="flex justify-between gap-4 text-zinc-500"><span>VAT 14%</span><span class="tabular-nums">42.00</span></li>
+					</ul>
+					<div class="my-3 border-t border-dashed border-zinc-400"></div>
+					<p class="flex justify-between gap-4 font-bold text-zinc-900"><span>TOTAL</span><span class="tabular-nums">EGP 342.00</span></p>
+				</div>
+				<div class="flex justify-center">
+					<span class="inline-flex items-center gap-2 rounded-full bg-amber-400/15 px-3.5 py-1.5 text-sm font-semibold text-amber-300 ring-1 ring-amber-400/30">
+						@icons.Sparkles("15")
+						Read by AI
+					</span>
+				</div>
+				<div class="ml-10">
+					@components.GlassCard("p-4", "bg-amber-400/15") {
+						<div class="flex items-center gap-3">
+							@components.CounterpartyIcon("Starbucks", "starbucks", "006241", "size-11")
+							<div class="min-w-0 flex-1">
+								<p class="truncate leading-tight">Starbucks</p>
+								<p class="mt-1 flex flex-wrap gap-1.5 text-xs">
+									<span class="rounded-full bg-amber-400/15 px-2 py-0.5 text-amber-300">Coffee</span>
+									<span class="inline-flex items-center gap-1 rounded-full bg-zinc-700/50 px-2 py-0.5 text-zinc-300">
+										@icons.Receipt("11")
+										4 lines
+									</span>
+								</p>
+							</div>
+							<span class="font-semibold tabular-nums">−342.00</span>
+						</div>
+					}
+				</div>
+			</div>
+		</div>
+	}
+}
+
+templ landingPrivacy() {
+	@landingSpotlight(false) {
 		@landingSpotlightCopy(icons.Lock, "bg-emerald-400/15 text-emerald-300", "Private", "Your finances stay yours",
 			"Every user gets a database of their own, never shared with anyone else's. Lock it with a password and not even the server can read it.",
 			[]string{
@@ -359,7 +428,7 @@ var landingBars = []landingBar{
 }
 
 templ landingInsights() {
-	@landingSpotlight(false) {
+	@landingSpotlight(true) {
 		@landingSpotlightCopy(icons.Sparkles, "bg-violet-400/15 text-violet-300", "Insights", "See where it all goes",
 			"A dashboard that answers the questions you actually ask: am I spending more than I earn, where does my money go, and will I make it to the end of the month?",
 			[]string{

@@ -40,8 +40,9 @@ templ Transactions(
 	fd *TransactionFD, accounts []models.Account,
 	knds []models.TxKind, cats []models.Category,
 	cps []models.Counterparty, gls []models.Goal, openTx string) {
-	@layouts.WithCreateForm(claims, "Transactions", "New transaction", balances,
-		txCreateSlot(CreateTransactionForm(fd, accounts, knds, cats, cps, &claims.DefaultCurrency))) {
+	@layouts.WithCreateFormActions(claims, "Transactions", "New transaction", balances,
+		txCreateSlot(CreateTransactionForm(fd, accounts, knds, cats, cps, &claims.DefaultCurrency)),
+		txScanAction(fd.Receipt.Enabled)) {
 		<div
 			x-data="txPage"
 			@keydown.window="onKey($event)"
@@ -55,7 +56,7 @@ templ Transactions(
 			@txDetailsSlot(openTx)
 			@txUndoToast()
 			@txSelectionBar()
-			@txShortcutsDialog()
+			@txShortcutsDialog(fd.Receipt.Enabled)
 		</div>
 	}
 }
@@ -278,6 +279,9 @@ type txShortcut struct {
 	Desc string
 }
 
+// txScanShortcut is only listed with receipt scanning on.
+const txScanShortcut = "Scan a receipt"
+
 type txShortcutGroup struct {
 	Title string
 	Items []txShortcut
@@ -308,13 +312,14 @@ var txShortcutGroups = []txShortcutGroup{
 	}},
 	{"Other", []txShortcut{
 		{[]string{"n"}, "New transaction"},
+		{[]string{"s"}, txScanShortcut},
 		{[]string{"?"}, "Show these shortcuts"},
 	}},
 }
 
 // txShortcutsDialog lists the keyboard shortcuts, opened with ? or from
 // txShortcuts' button.
-templ txShortcutsDialog() {
+templ txShortcutsDialog(scan bool) {
 	<dialog
 		id="tx-shortcuts"
 		aria-labelledby="tx-shortcuts-title"
@@ -345,14 +350,16 @@ templ txShortcutsDialog() {
 						<h3 class="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">{ g.Title }</h3>
 						<dl class="grid gap-1.5 text-sm">
 							for _, it := range g.Items {
-								<div class="flex items-center justify-between gap-4">
-									<dt class="text-zinc-300">{ it.Desc }</dt>
-									<dd class="flex shrink-0 gap-1">
-										for _, k := range it.Keys {
-											<kbd class="kbd border-white/15! bg-white/5 text-zinc-200!">{ k }</kbd>
-										}
-									</dd>
-								</div>
+								if it.Desc != txScanShortcut || scan {
+									<div class="flex items-center justify-between gap-4">
+										<dt class="text-zinc-300">{ it.Desc }</dt>
+										<dd class="flex shrink-0 gap-1">
+											for _, k := range it.Keys {
+												<kbd class="kbd border-white/15! bg-white/5 text-zinc-200!">{ k }</kbd>
+											}
+										</dd>
+									</div>
+								}
 							}
 						</dl>
 					</section>

@@ -486,6 +486,12 @@ document.addEventListener("alpine:init", () => {
         case "n":
           this.openCreateForm = true;
           break;
+        case "s": {
+          const scan = document.querySelector("[data-receipt-quick]");
+          if (!scan) return;
+          scan.click();
+          break;
+        }
         case "j":
           this.focusRow(t, 1);
           break;

@@ -101,10 +101,13 @@ templ txItemsField(id string, items []TxItemFD, rec *ReceiptFD) {
 					@icons.ChevronDown("14")
 				</span>
 			</button>
-			if rec.Enabled {
+			if rec.Enabled && !receiptCTA(items, rec) {
 				@receiptScanButtons(id)
 			}
 		</div>
+		if receiptCTA(items, rec) {
+			@receiptScanCard(id)
+		}
 		if rec.Enabled {
 			<div id={ txScanErrorID(id) } class="text-sm text-red-400 empty:hidden" role="alert"></div>
 			if rec.Notice != "" || rec.Warning != "" || rec.Scanned {
@@ -177,6 +180,12 @@ templ txItemsField(id string, items []TxItemFD, rec *ReceiptFD) {
 	</div>
 }
 
+// receiptCTA tells the form shows the receipt scanning as a card: on, and
+// nothing scanned or typed yet.
+func receiptCTA(items []TxItemFD, rec *ReceiptFD) bool {
+	return rec.Enabled && rec.ID == "" && len(items) == 0
+}
+
 // receiptScanButtons take a photo or pick an image, resized then posted
 // with the form's fields (receipts.js) to fill the form from the receipt.
 templ receiptScanButtons(id string) {
@@ -192,28 +201,83 @@ templ receiptScanButtons(id string) {
 				} else {
 					@icons.Image("17")
 				}
-				<input
-					type="file"
-					name="receipt"
-					accept="image/*"
-					if b.capture {
-						capture="environment"
-					}
-					class="sr-only"
-					hx-post={ fmt.Sprintf("/receipts/scan/%s", id) }
-					hx-trigger="receipt-ready"
-					hx-encoding="multipart/form-data"
-					hx-include="closest form"
-					hx-target={ "#" + TxFormBodyID(id) }
-					hx-swap="innerHTML"
-					hx-indicator="closest [data-receipt-scan]"
-					data-receipt-input
-				/>
+				@receiptScanInput(id, b.capture)
 			</label>
 		}
-		<span class="htmx-indicator text-sm text-zinc-400" aria-live="polite">Reading…</span>
+		@receiptScanIndicator()
 	</div>
 	<p class="col-span-full text-xs text-zinc-500 -mt-1 sm:text-right">The photo is sent to Google Gemini to read it.</p>
+}
+
+// receiptScanCard is receiptScanButtons as a card, on a form with nothing
+// scanned or typed yet.
+templ receiptScanCard(id string) {
+	<div class="grid gap-3 p-4 rounded-2xl border border-dashed border-amber-400/30 bg-amber-400/5" data-receipt-scan>
+		<div class="flex items-start gap-3">
+			<span class="grid size-10 shrink-0 place-items-center rounded-xl bg-amber-400/15 text-amber-300">
+				@icons.Sparkles("19")
+			</span>
+			<div class="min-w-0">
+				<p class="font-semibold text-zinc-100">Scan a receipt</p>
+				<p class="text-sm text-zinc-400">AI fills in the amount, merchant, date and items.</p>
+			</div>
+		</div>
+		<div class="flex flex-wrap items-center gap-2">
+			for _, b := range []struct{ label string; capture bool }{{"Take photo", true}, {"Choose image", false}} {
+				<label class="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm text-zinc-200 bg-zinc-800/70 cursor-pointer transition-colors hover:bg-zinc-700 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-zinc-500">
+					if b.capture {
+						@icons.Camera("15")
+					} else {
+						@icons.Image("15")
+					}
+					{ b.label }
+					@receiptScanInput(id, b.capture)
+				</label>
+			}
+			@receiptScanIndicator()
+		</div>
+		<p class="text-xs text-zinc-500">The photo is sent to Google Gemini to read it.</p>
+	</div>
+}
+
+// receiptScanInput is a scan button's file input (capture: the camera).
+templ receiptScanInput(id string, capture bool) {
+	<input
+		type="file"
+		name="receipt"
+		accept="image/*"
+		if capture {
+			capture="environment"
+		}
+		class="sr-only"
+		hx-post={ fmt.Sprintf("/receipts/scan/%s", id) }
+		hx-trigger="receipt-ready"
+		hx-encoding="multipart/form-data"
+		hx-include="closest form"
+		hx-target={ "#" + TxFormBodyID(id) }
+		hx-swap="innerHTML"
+		hx-indicator="closest [data-receipt-scan]"
+		data-receipt-input
+	/>
+}
+
+templ receiptScanIndicator() {
+	<span class="htmx-indicator hidden in-[.htmx-request]:inline-flex items-center gap-2 text-sm text-amber-300" aria-live="polite">
+		<span class="size-3.5 rounded-full border-2 border-current border-t-transparent animate-spin"></span>
+		Reading the receipt with AI…
+	</span>
+}
+
+// txScanAction is the transactions page's "Scan receipt" (when on): the
+// picked image goes into the create form's scan, opening it (receipts.js).
+templ txScanAction(on bool) {
+	if on {
+		<label class="btn-scan" title="Scan a receipt">
+			@icons.Sparkles("17")
+			<span class="btn-add-label">Scan receipt</span>
+			<input type="file" accept="image/*" class="sr-only" aria-label="Scan a receipt" data-receipt-quick @change="openCreateForm = true"/>
+		</label>
+	}
 }
 
 // txItemRow is a line's inputs: an item's name, quantity, unit price and

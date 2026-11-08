@@ -53,6 +53,7 @@ func (h *Handler) Welcome(w http.ResponseWriter, r *http.Request) (templ.Compone
 // the same with its errors).
 func (h *Handler) welcomeStep(w http.ResponseWriter, r *http.Request, d *views.WelcomeData) templ.Component {
 	d.Badge = h.offerBadge(r)
+	d.Receipts = h.ocr != nil
 	w.Header().Set("HX-Retarget", "#"+views.WelcomeTarget)
 	w.Header().Set("HX-Reswap", "innerHTML show:window:top")
 	w.Header().Set("HX-Push-Url", "/welcome?step="+string(d.Step))
@@ -67,7 +68,7 @@ func (h *Handler) offerBadge(r *http.Request) bool {
 
 func (h *Handler) welcomeData(r *http.Request, step models.OnboardingStep) (*views.WelcomeData, error) {
 	ctx := r.Context()
-	d := &views.WelcomeData{Step: step, Badge: h.offerBadge(r)}
+	d := &views.WelcomeData{Step: step, Badge: h.offerBadge(r), Receipts: h.ocr != nil}
 	switch step {
 	case models.OnboardingRegion:
 		return d, h.welcomeRegionData(r, d)
