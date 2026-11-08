@@ -35,7 +35,7 @@ func (r *Repository) SetRegion(ctx context.Context, currID string, loc *time.Loc
 		if err := qtx.SetTimezone(ctx, loc.String()); err != nil {
 			return err
 		}
-		logger.FromCtx(ctx).Info("set the region", zap.String("currency_id", currID), zap.String("timezone", loc.String()))
+		logger.FromCtx(ctx).Info("set the region", zap.String("currency_id", currID))
 		return nil
 	})
 }
@@ -54,7 +54,7 @@ func (r *Repository) SetCurrencyAndTimezone(ctx context.Context, currID string, 
 		if err := qtx.SetTimezone(ctx, loc.String()); err != nil {
 			return err
 		}
-		logger.FromCtx(ctx).Info("set the currency and time zone", zap.String("currency_id", currID), zap.String("timezone", loc.String()))
+		logger.FromCtx(ctx).Info("set the currency and time zone", zap.String("currency_id", currID))
 		return nil
 	})
 }

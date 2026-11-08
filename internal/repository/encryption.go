@@ -38,7 +38,7 @@ func (r *Repository) EnableEncryption(ctx context.Context, password string) (key
 		return nil, "", err
 	}
 
-	l.Info("encrypted the database", zap.String("tenantID", tenantID))
+	l.Info("encrypted the database", zap.String("tenant_id", tenantID))
 	return key, recoveryCode, nil
 }
 
@@ -63,6 +63,6 @@ func (r *Repository) DisableEncryption(ctx context.Context, key []byte) error {
 		return err
 	}
 
-	l.Info("decrypted the database", zap.String("tenantID", tenantID))
+	l.Info("decrypted the database", zap.String("tenant_id", tenantID))
 	return nil
 }

@@ -90,7 +90,6 @@ func (h Handler) Category(w http.ResponseWriter, r *http.Request) (templ.Compone
 		l.Error("fetching category", zap.Error(err))
 		return nil, err
 	}
-	l.Info("fetched category", zap.Any("category", cat))
 
 	return views.Category(cat), nil
 }
@@ -214,7 +213,6 @@ func (h Handler) GetEditCategory(w http.ResponseWriter, r *http.Request) (templ.
 		l.Error("fetching category", zap.Error(err))
 		return nil, err
 	}
-	l.Info("fetched category", zap.Any("category", cat))
 
 	knds := getAllowedKindsForCategories()
 
@@ -267,8 +265,6 @@ func (h Handler) EditCategory(w http.ResponseWriter, r *http.Request) (templ.Com
 		l.Error("sanitizing category", zap.Error(err))
 		return nil, err
 	}
-
-	l.Debug("update category", zap.Any("category", cat))
 
 	if err := h.repo.UpdateCategory(r.Context(), cat); err != nil {
 		l.Error("update category", zap.Error(err))

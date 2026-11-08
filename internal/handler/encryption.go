@@ -276,7 +276,7 @@ func (h *Handler) Unlock(w http.ResponseWriter, r *http.Request) (templ.Componen
 	}
 	if errors.Is(err, vault.ErrWrongSecret) {
 		unlockAttempts.fail(tenantID)
-		l.Warn("wrong vault password", zap.String("tenantID", tenantID))
+		l.Warn("wrong vault password", zap.String("tenant_id", tenantID))
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		return h.unlockView(r, next, "Wrong password or recovery code.", tenantID), nil
 	}
@@ -321,7 +321,7 @@ func (h *Handler) finishUnlock(w http.ResponseWriter, r *http.Request, tenantID 
 		if err != nil {
 			return "", err
 		}
-		l.Info("unlocked the database to sign in from mobile", zap.String("tenantID", tenantID))
+		l.Info("unlocked the database to sign in from mobile", zap.String("tenant_id", tenantID))
 		return mobileRedirectURI + "?code=" + url.QueryEscape(code), nil
 	}
 
@@ -351,7 +351,7 @@ func (h *Handler) finishUnlock(w http.ResponseWriter, r *http.Request, tenantID 
 		}
 	}
 
-	l.Info("unlocked the database", zap.String("tenantID", tenantID))
+	l.Info("unlocked the database", zap.String("tenant_id", tenantID))
 	return next, nil
 }
 

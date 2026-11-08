@@ -147,8 +147,6 @@ func (s *mobileCodeStore) pop(code string) (*mobileCode, bool) {
 // challenge, gets a one time code on its deep link after signing in, then
 // exchanges it with the verifier for a device token in MobileToken.
 func (h *Handler) OAuthMobile(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	l := logger.FromCtx(r.Context())
-
 	challenge := r.URL.Query().Get("challenge")
 	if !isPKCEChallenge(challenge) {
 		return nil, resperr.New(http.StatusBadRequest, "invalid challenge")
@@ -166,7 +164,6 @@ func (h *Handler) OAuthMobile(w http.ResponseWriter, r *http.Request) (templ.Com
 		deviceName: deviceName(r.URL.Query().Get("device_name")),
 		installID:  installID,
 	})
-	l.Debug("going to sign a user from mobile", zap.String("csrfId", csrfId))
 	http.Redirect(w, r, getOAuth2Conf().AuthCodeURL(csrfId), http.StatusTemporaryRedirect)
 	return nil, nil
 }
@@ -232,7 +229,7 @@ func (h *Handler) MobileToken(w http.ResponseWriter, r *http.Request) ([]byte, e
 		return nil, err
 	}
 
-	l.Info("registered mobile device", zap.String("device_id", device.ID), zap.String("oauth_id", code.usr.OAuthID))
+	l.Info("registered mobile device", zap.String("device_id", device.ID), zap.String("tenant_id", models.TenantID(code.usr.OAuthProvider, code.usr.OAuthID)))
 	return json.Marshal(mobileTokenResp{Token: token, DeviceID: device.ID})
 }
 

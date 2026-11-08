@@ -1,7 +1,11 @@
 package middleware
 
 import (
+	"maps"
 	"net/http"
+	"net/url"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/omareloui/tyche/internal/logger"
@@ -29,18 +33,27 @@ func RequestLogger(next http.Handler) http.Handler {
 				panic(panicVal)
 			}
 
-			l.Info(
-				"incoming request",
+			fields := []zap.Field{
 				zap.String("method", r.Method),
-				zap.String("url", r.URL.RequestURI()),
-				// zap.String("user_agent", r.UserAgent()),
+				zap.String("path", r.URL.Path),
 				zap.Int("status_code", lrw.statusCode),
-				zap.Duration("elapsed_ms", time.Since(start)),
-			)
+				// zap.Duration would write seconds in the JSON file.
+				zap.Float64("elapsed_ms", float64(time.Since(start).Microseconds())/1000),
+			}
+			if keys := queryKeys(r.URL.Query()); keys != "" {
+				fields = append(fields, zap.String("query", keys))
+			}
+			l.Info("incoming request", fields...)
 		}()
 
 		next.ServeHTTP(lrw, r)
 	})
+}
+
+// queryKeys are the query's keys, sorted: never its values, which hold
+// searches, amounts and the OAuth code.
+func queryKeys(q url.Values) string {
+	return strings.Join(slices.Sorted(maps.Keys(q)), ",")
 }
 
 type loggingResponseWriter struct {

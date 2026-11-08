@@ -78,7 +78,6 @@ func (h Handler) Counterparty(w http.ResponseWriter, r *http.Request) (templ.Com
 		l.Error("fetching counterparty", zap.Error(err))
 		return nil, err
 	}
-	l.Info("fetched counterparty", zap.Any("counterparty", cp))
 
 	return views.Counterparty(cp), nil
 }
@@ -263,7 +262,6 @@ func (h Handler) GetEditCounterparty(w http.ResponseWriter, r *http.Request) (te
 		l.Error("fetching counterparty", zap.Error(err))
 		return nil, err
 	}
-	l.Info("fetched counterparty", zap.Any("counterparty", cp))
 
 	cats, err := h.repo.GetCategories(r.Context())
 	if err != nil {
@@ -338,8 +336,6 @@ func (h Handler) EditCounterparty(w http.ResponseWriter, r *http.Request) (templ
 		cp.Icon = brandicons.Default().Detect(cp.Name, cp.Aliases)
 	}
 	cp.Color = brandicons.Default().ColorFor(cp.Icon, prev.Color)
-
-	l.Debug("update counterparty", zap.Any("counterparty", cp))
 
 	if err := h.repo.UpdateCounterparty(r.Context(), cp); err != nil {
 		l.Error("update counterparty", zap.Error(err))
@@ -480,7 +476,7 @@ func (h Handler) SetCounterpartyLabels(w http.ResponseWriter, r *http.Request) (
 		l.Error("setting counterparty labels", zap.Error(err))
 		return nil, err
 	}
-	l.Info("set counterparty labels", zap.String("id", id), zap.Strings("labels", cp.Labels))
+	l.Info("set counterparty labels", zap.String("id", id), zap.Int("labels", len(cp.Labels)))
 	addHXTrigger(w, views.CounterpartiesChangedEvent)
 
 	if err := renderToBody(w, r, views.CounterpartyReplaceOOB(cp)); err != nil {

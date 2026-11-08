@@ -3,9 +3,10 @@ package logger
 import (
 	"context"
 	"os"
-	"runtime/debug"
+	"path/filepath"
 	"sync"
 
+	"github.com/omareloui/tyche/internal/buildinfo"
 	"github.com/omareloui/tyche/internal/config"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -18,12 +19,15 @@ var once sync.Once
 
 var logger *zap.Logger
 
+// Dir holds the log files: Dir/tyche.log, rotated into gzipped backups.
+const Dir = "logs"
+
 func Get() *zap.Logger {
 	once.Do(func() {
 		stdout := zapcore.AddSync(os.Stdout)
 
 		file := zapcore.AddSync(&lumberjack.Logger{
-			Filename:   "logs/tyche.log",
+			Filename:   filepath.Join(Dir, "tyche.log"),
 			MaxSize:    5,
 			MaxBackups: 10,
 			MaxAge:     14,
@@ -42,24 +46,13 @@ func Get() *zap.Logger {
 		consoleEncoder := zapcore.NewConsoleEncoder(developmentCfg)
 		fileEncoder := zapcore.NewJSONEncoder(productionCfg)
 
+		// The file's lines say which build wrote them (the admin logs page
+		// spans deploys).
+		commit := buildinfo.Commit[:min(len(buildinfo.Commit), 12)]
 		core := zapcore.NewTee(
 			zapcore.NewCore(consoleEncoder, stdout, level),
-			zapcore.NewCore(fileEncoder, file, level),
+			zapcore.NewCore(fileEncoder, file, level).With([]zap.Field{zap.String("commit", commit)}),
 		)
-		var gitRevision string
-
-		buildInfo, ok := debug.ReadBuildInfo()
-		if ok {
-			for _, v := range buildInfo.Settings {
-				if v.Key == "vcs.revision" {
-					gitRevision = v.Value
-					break
-				}
-			}
-		}
-
-		logger = zap.New(core).
-			With(zap.String("git_revision", gitRevision), zap.String("go_version", buildInfo.GoVersion))
 		logger = zap.New(core)
 	})
 

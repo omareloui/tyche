@@ -177,7 +177,6 @@ func (h Handler) CreateGoal(w http.ResponseWriter, r *http.Request) (templ.Compo
 		l.Error("parsing form to goal", zap.Error(err))
 		return nil, err
 	}
-	l.Debug("parsed form to goal", zap.Any("goal", gl))
 
 	gl.ID = idgen.New()
 	gl.CreatedAt = time.Now()
@@ -214,7 +213,7 @@ func (h Handler) CreateGoal(w http.ResponseWriter, r *http.Request) (templ.Compo
 		l.Error("creating goal", zap.Error(err))
 		return nil, err
 	}
-	l.Info("created goal", zap.Any("goal", gl))
+	l.Info("created goal", zap.String("id", gl.ID))
 	drawerCreated(w)
 
 	if gl, err = h.repo.GetGoal(r.Context(), gl.ID); err != nil {
@@ -274,7 +273,6 @@ func (h Handler) EditGoal(w http.ResponseWriter, r *http.Request) (templ.Compone
 		l.Error("parsing form to goal", zap.Error(err))
 		return nil, err
 	}
-	l.Debug("parsed form to goal", zap.Any("goal", gl))
 
 	gl.ID = id
 
@@ -314,7 +312,7 @@ func (h Handler) EditGoal(w http.ResponseWriter, r *http.Request) (templ.Compone
 		l.Error("updating goal", zap.Error(err))
 		return nil, err
 	}
-	l.Info("updated goal", zap.Any("goal", gl))
+	l.Info("updated goal", zap.String("id", gl.ID))
 	goalSaved(w, r, id)
 
 	if err := h.renderGoalsSummaryOOB(w, r); err != nil {
@@ -621,7 +619,7 @@ func (h Handler) MoveGoalMoney(w http.ResponseWriter, r *http.Request) (templ.Co
 		err = h.repo.CreateTransaction(r.Context(), tx, nil, nil)
 	}
 	if err != nil {
-		l.Error("moving goal money", zap.Any("tx", tx), zap.String("goal", gl.ID), zap.Error(err))
+		l.Error("moving goal money", zap.String("id", tx.ID), zap.String("goal", gl.ID), zap.Error(err))
 		return nil, err
 	}
 	goalSaved(w, r, gl.ID)

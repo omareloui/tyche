@@ -121,12 +121,12 @@ func (tm *TenantManager) GetTenant(provider models.OAuthProvider, oauthID string
 	tenant.migrateOnce.Do(func() {
 		l := logger.Get()
 		if err := tm.runMigrations(db); err != nil {
-			l.Error("failed to run migrations", zap.String("tenantID", tenantID), zap.Error(err))
+			l.Error("failed to run migrations", zap.String("tenant_id", tenantID), zap.Error(err))
 		}
 
 		ctx := logger.WithContext(context.Background(), l)
 		tenant.seeder.Seed(ctx, db, oauthID)
-		l.Info("ensured user database seeded", zap.String("oauthID", oauthID), zap.String("tenantID", tenantID))
+		l.Info("ensured user database seeded", zap.String("tenant_id", tenantID))
 	})
 
 	tm.connections[tenantID] = tenant

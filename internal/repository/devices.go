@@ -25,10 +25,10 @@ func (r *Repository) CreateDevice(ctx context.Context, d *models.Device) error {
 		InstallID: nullString(d.InstallID),
 		TokenID:   nullString(d.TokenID),
 	}); err != nil {
-		l.Error("creating device", zap.Error(err), zap.Any("device", d))
+		l.Error("creating device", zap.Error(err), zap.String("id", d.ID))
 		return err
 	}
-	l.Debug("created device", zap.Any("device", d))
+	l.Debug("created device", zap.String("id", d.ID))
 	return nil
 }
 
@@ -62,10 +62,10 @@ func (r *Repository) RegisterDevice(ctx context.Context, d *models.Device) error
 		Name:    d.Name,
 		TokenID: nullString(d.TokenID),
 	}); err != nil {
-		l.Error("renewing device", zap.Error(err), zap.Any("device", d))
+		l.Error("renewing device", zap.Error(err), zap.String("id", d.ID))
 		return err
 	}
-	l.Debug("renewed device", zap.Any("device", d))
+	l.Debug("renewed device", zap.String("id", d.ID))
 	return nil
 }
 

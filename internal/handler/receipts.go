@@ -44,8 +44,8 @@ type receiptScan struct {
 	size      int64
 	// cached tells it was read before, not counted.
 	cached bool
-	left      int
-	limit     int
+	left   int
+	limit  int
 }
 
 // errScan is a scan that failed for a reason to show the user.
@@ -288,7 +288,7 @@ func (h Handler) ScanReceiptIntoForm(w http.ResponseWriter, r *http.Request) (te
 			cp := dfltCounterparty()
 			cp.ID, cp.Name, cp.IsMerchant = idgen.New(), merchant, true
 			if err := cp.SanitizeAndValidate(h.sani, h.valid); err != nil {
-				logger.FromCtx(ctx).Warn("the receipt's merchant isn't a valid counterparty", zap.Error(err), zap.String("merchant", merchant))
+				logger.FromCtx(ctx).Warn("the receipt's merchant isn't a valid counterparty", zap.Error(err))
 			} else {
 				if cp, err = h.findOrCreateCounterparty(ctx, cp); err != nil {
 					return nil, err

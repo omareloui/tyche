@@ -141,7 +141,7 @@ func (r *Repository) GetTimezone(ctx context.Context) (*time.Location, error) {
 	}
 	loc, err := models.LoadTimezone(name)
 	if err != nil {
-		logger.FromCtx(ctx).Warn("invalid stored time zone, using the default", zap.String("timezone", name))
+		logger.FromCtx(ctx).Warn("invalid stored time zone, using the default")
 		return models.LoadTimezone(models.DefaultTimezone)
 	}
 	return loc, nil

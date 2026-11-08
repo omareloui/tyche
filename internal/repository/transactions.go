@@ -82,10 +82,10 @@ func (r *Repository) createTransactionWithTxn(qtx *queries.Queries, ctx context.
 		FulfilledAt:    sql.NullTime{Time: tx.FulfilledAt, Valid: !tx.FulfilledAt.IsZero()},
 		NeedsReview:    tx.NeedsReview,
 	}); err != nil {
-		l.Error("create transaction", zap.Error(err), zap.Any("transaction", tx))
+		l.Error("create transaction", zap.Error(err), zap.String("id", tx.ID))
 		return err
 	}
-	l.Debug("created transaction", zap.Any("transaction", tx))
+	l.Debug("created transaction", zap.String("id", tx.ID))
 	return writeTxExtrasWithTxn(ctx, qtx, tx, true)
 }
 
@@ -97,10 +97,10 @@ func (r *Repository) createTransactionAndApplyToAccountIfNeededWithTxn(ctx conte
 
 	if !tx.FulfilledAt.IsZero() {
 		if err := r.applyTxToAccountWithTxn(qtx, ctx, tx); err != nil {
-			l.Error("applying transaction", zap.Error(err), zap.Any("transaction", tx))
+			l.Error("applying transaction", zap.Error(err), zap.String("id", tx.ID))
 			return err
 		}
-		l.Debug("applied transaction", zap.Any("transaction", tx))
+		l.Debug("applied transaction", zap.String("id", tx.ID))
 	}
 
 	return nil
@@ -560,10 +560,10 @@ func (r *Repository) updateTransactionWithTxn(ctx context.Context, qtx *queries.
 		Description:    sql.NullString{String: tx.Description, Valid: tx.Description != ""},
 		ScheduledTo:    tx.ScheduledTo,
 	}); err != nil {
-		l.Error("updating transaction", zap.Error(err), zap.Any("new_transaction", tx), zap.Any("old_transaction", oldTx))
+		l.Error("updating transaction", zap.Error(err), zap.String("id", tx.ID))
 		return err
 	}
-	l.Debug("updated transaction", zap.Any("new_transaction", tx), zap.Any("old_transaction", oldTx))
+	l.Debug("updated transaction", zap.String("id", tx.ID))
 
 	if err := writeTxExtrasWithTxn(ctx, qtx, tx, false); err != nil {
 		return err

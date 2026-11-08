@@ -20,8 +20,6 @@ import (
 )
 
 func (h Handler) RecurrenceForm(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	l := logger.FromCtx(r.Context())
-
 	id := r.PathValue("id")
 	fd := h.parseRecurrenceFD(r, &errs.ValidationError{})
 
@@ -29,8 +27,6 @@ func (h Handler) RecurrenceForm(w http.ResponseWriter, r *http.Request) (templ.C
 		fd.Unit.Value = fmt.Sprintf("%d", models.RecurrentUnitMonth)
 		fd.Every.Value = "1"
 	}
-
-	l.Info("responding with", zap.Any("formdata", fd))
 
 	return views.RecurrenceFormBody(id, fd), nil
 }
@@ -193,7 +189,6 @@ func (h Handler) RecurrentTx(w http.ResponseWriter, r *http.Request) (templ.Comp
 		l.Error("fetching recurrent tx", zap.Error(err))
 		return nil, err
 	}
-	l.Info("fetched recurrent tx", zap.Any("recurrent tx", rt))
 
 	return views.RecurrentTx(rt), nil
 }
@@ -285,7 +280,7 @@ func (h Handler) EditRecurrentTx(w http.ResponseWriter, r *http.Request) (templ.
 		l.Error("updating recurrent tx", zap.Error(err))
 		return nil, err
 	}
-	l.Info("updated recurrent tx", zap.Any("recurrent_tx", rt))
+	l.Info("updated recurrent tx", zap.String("id", rt.ID))
 	drawerSaved(w, "#"+views.RecurrentTxID(id), "outerHTML")
 
 	rt, err = h.repo.GetRecurrentTx(r.Context(), id)
@@ -293,7 +288,6 @@ func (h Handler) EditRecurrentTx(w http.ResponseWriter, r *http.Request) (templ.
 		l.Error("fetching recurrent tx", zap.Error(err))
 		return nil, err
 	}
-	l.Debug("fetched recurrent tx", zap.Any("recurrent_tx", rt))
 
 	if err := h.renderRecurrentTxsSummaryOOB(w, r); err != nil {
 		return nil, err

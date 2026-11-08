@@ -110,7 +110,7 @@ func (r *Repository) CreateSMSMessage(ctx context.Context, msg *models.SMSMessag
 			DeviceID:      nullString(msg.DeviceID),
 			TemplateID:    nullString(msg.TemplateID),
 		}); err != nil {
-			l.Error("creating sms message", zap.Error(err), zap.String("hash", msg.Hash))
+			l.Error("creating sms message", zap.Error(err))
 			return err
 		}
 		l.Debug("created sms message", zap.String("id", msg.ID), zap.String("status", string(msg.Status)))

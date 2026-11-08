@@ -28,7 +28,7 @@ func Deleted(isDeleted func(tenantID string) bool, signOut func(w http.ResponseW
 				return
 			}
 
-			logger.FromCtx(ctx).Info("signing out a deleted tenant", zap.String("tenantID", tenantID))
+			logger.FromCtx(ctx).Info("signing out a deleted tenant", zap.String("tenant_id", tenantID))
 			signOut(w)
 			ctx = context.WithValue(ctx, AccessClaimsCtxKey{}, nil)
 			ctx = context.WithValue(ctx, RefreshClaimsCtxKey{}, nil)

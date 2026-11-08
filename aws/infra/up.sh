@@ -195,7 +195,7 @@ if ! aws ecr describe-repositories --repository-names tyche >/dev/null 2>&1; the
 fi
 aws ecr put-lifecycle-policy --repository-name tyche --lifecycle-policy-text file://ecr-lifecycle.json >/dev/null
 aws logs create-log-group --log-group-name /ecs/tyche 2>/dev/null || true
-aws logs put-retention-policy --log-group-name /ecs/tyche --retention-in-days 30
+aws logs put-retention-policy --log-group-name /ecs/tyche --retention-in-days 14
 
 if ! aws iam get-role --role-name AWSDataLifecycleManagerDefaultRole >/dev/null 2>&1; then
   aws dlm create-default-role --resource-type snapshot >/dev/null

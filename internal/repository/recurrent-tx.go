@@ -49,10 +49,10 @@ func (r *Repository) createRecurrentTxWithTxn(qtx *queries.Queries, ctx context.
 		NextOn:         sql.NullTime{Time: rt.NextOn(), Valid: true},
 		AutoFulfill:    rt.AutoFulfill,
 	}); err != nil {
-		l.Error("creating recurrent transaction", zap.Error(err), zap.Any("recurrent tx", rt))
+		l.Error("creating recurrent transaction", zap.Error(err), zap.String("id", rt.ID))
 		return err
 	}
-	l.Debug("created recurrent transaction", zap.Any("recurrent tx", rt))
+	l.Debug("created recurrent transaction", zap.String("id", rt.ID))
 	return writeRecurrentItemsWithTxn(ctx, qtx, rt, false)
 }
 
@@ -190,10 +190,10 @@ func (r *Repository) UpdateRecurrentTx(ctx context.Context, old, rt *models.Recu
 			NextOn:         sql.NullTime{Time: rt.NextOn(), Valid: true},
 			AutoFulfill:    rt.AutoFulfill,
 		}); err != nil {
-			l.Error("updating recurrent tx", zap.Any("recurrent tx", rt), zap.Error(err))
+			l.Error("updating recurrent tx", zap.String("id", rt.ID), zap.Error(err))
 			return err
 		}
-		l.Debug("updated recurrent tx", zap.Any("recurrent tx", rt))
+		l.Debug("updated recurrent tx", zap.String("id", rt.ID))
 
 		if err := writeRecurrentItemsWithTxn(ctx, qtx, rt, true); err != nil {
 			return err

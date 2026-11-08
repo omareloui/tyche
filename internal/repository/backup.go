@@ -395,7 +395,7 @@ func (tm *TenantManager) replace(tenantID, src string, key []byte) error {
 	_ = os.Remove(path + "-journal")
 	if err := exportFile(src, path, nil, key); err != nil {
 		if rerr := os.Rename(bak, path); rerr != nil {
-			logger.Get().Error("restoring the database after a failed import", zap.String("tenantID", tenantID), zap.Error(rerr))
+			logger.Get().Error("restoring the database after a failed import", zap.String("tenant_id", tenantID), zap.Error(rerr))
 		}
 		return err
 	}

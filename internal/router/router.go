@@ -3,6 +3,7 @@ package router
 import (
 	"fmt"
 	"net/http"
+	"net/http/pprof"
 	"path/filepath"
 
 	"github.com/omareloui/tyche/internal/brandicons"
@@ -272,6 +273,18 @@ func New(h *handler.Handler) Router {
 	mux.Handle("POST /admin/tenants/{id}/delete", handle(h.DeleteTenant, middleware.Admin))
 	mux.Handle("GET /admin/receipts", handle(h.AdminReceipts, middleware.Admin))
 	mux.Handle("PUT /admin/receipts/limits/{tenant}", handle(h.SetReceiptLimit, middleware.Admin))
+	mux.Handle("GET /admin/logs", handle(h.AdminLogs, middleware.Admin))
+	mux.Handle("GET /admin/logs/list", handle(h.AdminLogsList, middleware.Admin))
+	// Go's profiles (go tool pprof on a downloaded /admin/debug/pprof/heap).
+	// The index links its profiles by name, served by pprof.Handler.
+	mux.Handle("GET /admin/debug/pprof/{$}", handleHTTP(http.HandlerFunc(pprof.Index), middleware.Admin))
+	mux.Handle("GET /admin/debug/pprof/cmdline", handleHTTP(http.HandlerFunc(pprof.Cmdline), middleware.Admin))
+	mux.Handle("GET /admin/debug/pprof/profile", handleHTTP(http.HandlerFunc(pprof.Profile), middleware.Admin))
+	mux.Handle("GET /admin/debug/pprof/symbol", handleHTTP(http.HandlerFunc(pprof.Symbol), middleware.Admin))
+	mux.Handle("GET /admin/debug/pprof/trace", handleHTTP(http.HandlerFunc(pprof.Trace), middleware.Admin))
+	mux.Handle("GET /admin/debug/pprof/{name}", handleHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pprof.Handler(r.PathValue("name")).ServeHTTP(w, r)
+	}), middleware.Admin))
 
 	static(mux, []string{
 		"styles", "js", "images",
@@ -290,7 +303,8 @@ func New(h *handler.Handler) Router {
 	mux.Handle("GET /offline", middleware.CorrelationID(middleware.RequestLogger(route_handler.RouteHandler(h.Offline))))
 
 	brandIcons := http.StripPrefix("/brand-icons/", http.FileServerFS(brandicons.IconsFS()))
-	mux.Handle("GET /brand-icons/{path...}", middleware.CorrelationID(middleware.RequestLogger(brandIcons)))
+	// Not logged, like static(): the names tell a user's merchants.
+	mux.Handle("GET /brand-icons/{path...}", middleware.CorrelationID(brandIcons))
 
 	mux.Handle("/", handlePub(h.NotFound))
 
@@ -306,7 +320,9 @@ func static(mux *http.ServeMux, paths []string, fspath string) {
 		fileServer.ServeHTTP(w, r)
 	})
 	for _, prefix := range paths {
-		mux.Handle(fmt.Sprintf("GET /%s/{path...}", prefix), middleware.CorrelationID(middleware.RequestLogger(fs)))
+		// Not logged: asset noise, and brand icons' names tell a user's
+		// merchants.
+		mux.Handle(fmt.Sprintf("GET /%s/{path...}", prefix), middleware.CorrelationID(fs))
 	}
 }
 
@@ -318,12 +334,30 @@ func rootFile(mux *http.ServeMux, name, contentType, fspath string) {
 		w.Header().Set("Content-Type", contentType)
 		http.ServeFile(w, r, path)
 	})
-	mux.Handle("GET /"+name, middleware.CorrelationID(middleware.RequestLogger(fs)))
+	mux.Handle("GET /"+name, middleware.CorrelationID(fs))
 }
 
 func handle(h handler.HandlerMethod, appendMiddlewares ...(func(http.Handler) http.Handler)) http.Handler {
 	appendMiddlewares = append(appendMiddlewares, middleware.Protected)
 	return handlePub(h, appendMiddlewares...)
+}
+
+// handleHTTP wraps a plain http.Handler in handle's middlewares.
+func handleHTTP(h http.Handler, appendMiddlewares ...(func(http.Handler) http.Handler)) http.Handler {
+	appendMiddlewares = append(appendMiddlewares, middleware.Protected)
+	for i := len(appendMiddlewares) - 1; i >= 0; i-- {
+		h = appendMiddlewares[i](h)
+	}
+
+	h = upkeep(h)
+	h = badge(h)
+	h = vault(h)
+	h = deleted(h)
+	h = auth(h)
+	h = middleware.RequestLogger(h)
+	h = middleware.CorrelationID(h)
+
+	return h
 }
 
 func handlePubJSON(h handler.HandlerJSONMethod, appendMiddlewares ...(func(http.Handler) http.Handler)) http.Handler {

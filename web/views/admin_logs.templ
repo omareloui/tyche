@@ -1,0 +1,300 @@
+package views
+
+import (
+	"fmt"
+	"net/url"
+	"strconv"
+	"time"
+
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/logview"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/sysinfo"
+	"github.com/omareloui/tyche/internal/tzctx"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+type AdminLogsData struct {
+	Sys    sysinfo.Info
+	Files  []logview.File
+	File   string
+	Filter logview.Filter
+	// Live polls the list (the live file only).
+	Live bool
+	Page logview.Page
+}
+
+// Query is the page's query string, Before taken from before.
+func (d AdminLogsData) Query(before int64) string {
+	v := url.Values{}
+	if d.File != logview.Live {
+		v.Set("file", d.File)
+	}
+	for k, s := range map[string]string{"level": d.Filter.Level, "q": d.Filter.Query, "cid": d.Filter.CorrelationID} {
+		if s != "" {
+			v.Set(k, s)
+		}
+	}
+	if d.Live {
+		v.Set("live", "1")
+	}
+	if before > 0 {
+		v.Set("before", strconv.FormatInt(before, 10))
+	}
+	return v.Encode()
+}
+
+func (d AdminLogsData) listURL(before int64) string {
+	return "/admin/logs/list?" + d.Query(before)
+}
+
+func (d AdminLogsData) cidURL(cid string) string {
+	v := url.Values{"cid": {cid}}
+	if d.File != logview.Live {
+		v.Set("file", d.File)
+	}
+	return "/admin/logs?" + v.Encode()
+}
+
+templ AdminLogs(claims *jwt.AccessClaims, balances []models.Balance, d AdminLogsData) {
+	@layouts.WithTitle(claims, "Logs", balances) {
+		<div class="grid gap-6">
+			@adminRuntime(d.Sys)
+			<section class="grid gap-3 min-w-0">
+				<header class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+					@icons.StickyNote("16")
+					Logs
+				</header>
+				@adminLogsFilters(d)
+				@AdminLogsList(d)
+			</section>
+		</div>
+	}
+}
+
+templ adminRuntime(s sysinfo.Info) {
+	<section class="grid gap-3">
+		<header class="flex flex-wrap items-end justify-between gap-3">
+			<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+				@icons.Zap("16")
+				Runtime
+			</h2>
+			<p class="text-sm text-zinc-600">
+				Profiles: <a href="/admin/debug/pprof/" class="text-zinc-300 underline underline-offset-2">pprof</a>
+				· <a href="/admin/debug/pprof/heap" class="text-zinc-300 underline underline-offset-2">heap</a>
+				(<code>go tool pprof heap</code>)
+			</p>
+		</header>
+		<dl class="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+			@runtimeStat("Process memory", memBytes(s.RSS), "Resident, SQLite included")
+			@runtimeStat("Go heap", memBytes(s.HeapAlloc), "Limit "+memBytes(s.MemLimit))
+			@runtimeStat("Go runtime", memBytes(s.GoSys), "From the OS")
+			if s.HostTotal > 0 {
+				@runtimeStat("Host free", memBytes(s.HostAvailable), "of "+memBytes(s.HostTotal))
+			}
+			if s.CgroupCurrent > 0 {
+				@runtimeStat("Container", memBytes(s.CgroupCurrent), cgroupNote(s))
+			}
+			@runtimeStat("Goroutines", strconv.Itoa(s.Goroutines), fmt.Sprintf("%d GCs, last %s", s.NumGC, s.LastPause.Round(time.Microsecond)))
+			@runtimeStat("Uptime", fmtDuration(s.Uptime), s.GoVersion)
+			@runtimeStat("Commit", s.Commit[:min(len(s.Commit), 12)], "")
+		</dl>
+	</section>
+}
+
+func cgroupNote(s sysinfo.Info) string {
+	limit := "no hard limit"
+	if s.CgroupMax > 0 {
+		limit = "of " + memBytes(s.CgroupMax)
+	}
+	return fmt.Sprintf("%s, %d OOM kills", limit, s.OOMKills)
+}
+
+templ runtimeStat(label, value, note string) {
+	<div class="rounded-xl bg-zinc-900/60 ring-1 ring-zinc-800 px-3 py-2 min-w-0">
+		<dt class="text-xs text-zinc-500">{ label }</dt>
+		<dd class="text-lg font-semibold tabular-nums truncate text-zinc-100">{ value }</dd>
+		if note != "" {
+			<dd class="text-xs text-zinc-600 truncate" title={ note }>{ note }</dd>
+		}
+	</div>
+}
+
+// memBytes shows a memory size, "—" when unknown (0).
+func memBytes(n uint64) string {
+	if n == 0 {
+		return "—"
+	}
+	return fmtBytes(int64(n))
+}
+
+templ adminLogsFilters(d AdminLogsData) {
+	<form
+		hx-get="/admin/logs/list"
+		hx-target="#logs-list"
+		hx-swap="outerHTML"
+		hx-trigger="change, input changed delay:400ms from:find input[name=q], submit"
+		class="flex flex-wrap items-center gap-2"
+	>
+		@form.Combobox(form.ComboboxProps{
+			Name: "file", Label: "File", Options: logFileOptions(d.Files),
+			Data: form.FDInput{Value: d.File}, Chip: true, Searchable: len(d.Files) > 7,
+		})
+		@form.Combobox(form.ComboboxProps{
+			Name: "level", Label: "Lowest level", Options: logLevelOptions(),
+			Data: form.FDInput{Value: d.Filter.Level}, Nullable: true, NullLabel: "All levels", Chip: true,
+		})
+		<input type="search" name="q" value={ d.Filter.Query } placeholder="Search" aria-label="Search" class="input-field w-full! sm:w-64! h-9!"/>
+		if d.Filter.CorrelationID != "" {
+			<input type="hidden" name="cid" value={ d.Filter.CorrelationID }/>
+			<a href={ templ.SafeURL("/admin/logs") } class="h-9 inline-flex items-center gap-1 px-3 rounded-full bg-zinc-800 text-sm text-zinc-200 font-mono hover:bg-zinc-700">
+				{ d.Filter.CorrelationID }
+				@icons.X("14")
+			</a>
+		}
+		<label class="h-9 inline-flex items-center gap-2 px-3 rounded-full bg-zinc-800/60 text-sm text-zinc-300 cursor-pointer select-none">
+			<input type="checkbox" name="live" value="1" checked?={ d.Live } class="accent-emerald-500"/>
+			Live
+		</label>
+	</form>
+}
+
+func logFileOptions(files []logview.File) []form.ComboOption {
+	opts := make([]form.ComboOption, len(files))
+	for i, f := range files {
+		opts[i] = form.ComboOption{Value: f.Name, Label: fileLabel(f)}
+	}
+	return opts
+}
+
+// logLevelOptions are the lowest levels to show, debug being all of them.
+func logLevelOptions() []form.ComboOption {
+	var opts []form.ComboOption
+	for _, l := range logview.Levels[1:5] {
+		opts = append(opts, form.ComboOption{Value: l, Label: l + " and up"})
+	}
+	return opts
+}
+
+func fileLabel(f logview.File) string {
+	if f.Name == logview.Live {
+		return "Current (" + fmtBytes(f.Size) + ")"
+	}
+	return f.ModTime.UTC().Format("Jan 2 15:04") + " UTC (" + fmtBytes(f.Size) + " gz)"
+}
+
+// AdminLogsList is the list, newest first; live it polls itself.
+templ AdminLogsList(d AdminLogsData) {
+	<div
+		id="logs-list"
+		if d.Live && d.File == logview.Live {
+			hx-get={ d.listURL(0) }
+			hx-trigger="every 5s"
+			hx-target="this"
+			hx-swap="outerHTML"
+		}
+		class="grid min-w-0 rounded-xl ring-1 ring-zinc-800 divide-y divide-zinc-800/80 overflow-hidden"
+	>
+		if len(d.Page.Entries) == 0 {
+			<p class="px-4 py-6 text-center text-zinc-500">No logs match.</p>
+		}
+		@AdminLogRows(d)
+	</div>
+}
+
+// AdminLogRows are a page's rows, then the sentinel loading the next one.
+templ AdminLogRows(d AdminLogsData) {
+	for _, e := range d.Page.Entries {
+		@adminLogRow(d, e)
+	}
+	if d.Page.More > 0 {
+		<div
+			hx-get={ d.listURL(d.Page.More) }
+			hx-trigger="revealed"
+			hx-swap="outerHTML"
+			class="px-4 py-3 text-center text-sm text-zinc-500"
+		>Loading older…</div>
+	}
+}
+
+templ adminLogRow(d AdminLogsData, e logview.Entry) {
+	<details class="group min-w-0 bg-zinc-950/40 open:bg-zinc-900/60">
+		<summary class="flex items-baseline gap-3 px-3 py-1.5 cursor-pointer list-none text-sm hover:bg-zinc-900/60">
+			<time
+				if !e.Time.IsZero() {
+					datetime={ e.Time.Format(time.RFC3339Nano) }
+				}
+				class="shrink-0 text-xs text-zinc-500 tabular-nums font-mono"
+			>
+				if !e.Time.IsZero() {
+					{ tzctx.In(ctx, e.Time).Format("Jan 2 15:04:05.000") }
+				}
+			</time>
+			<span class={ "shrink-0 w-12 text-xs font-semibold uppercase", levelClass(e.Level) }>{ e.Level }</span>
+			<span class="min-w-0 truncate group-open:whitespace-normal group-open:break-words text-zinc-200">
+				{ e.Msg }
+				if s := logSummary(e); s != "" {
+					<span class="text-zinc-500">{ s }</span>
+				}
+			</span>
+		</summary>
+		<div class="grid gap-2 px-3 pb-3 pt-1 text-xs">
+			if e.CorrelationID != "" {
+				<p>
+					<a href={ templ.SafeURL(d.cidURL(e.CorrelationID)) } class="font-mono text-sky-400 hover:underline">
+						Request { e.CorrelationID }
+					</a>
+				</p>
+			}
+			if len(e.Fields) > 0 {
+				<dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 font-mono">
+					for _, f := range e.Fields {
+						<dt class="text-zinc-500">{ f.Key }</dt>
+						<dd class="text-zinc-300 break-all whitespace-pre-wrap">{ f.Value }</dd>
+					}
+				</dl>
+			}
+			if e.Stacktrace != "" {
+				<pre class="overflow-x-auto rounded-lg bg-zinc-950 p-2 text-zinc-400">{ e.Stacktrace }</pre>
+			}
+		</div>
+	</details>
+}
+
+func levelClass(l string) string {
+	switch l {
+	case "debug":
+		return "text-zinc-500"
+	case "info":
+		return "text-sky-400"
+	case "warn":
+		return "text-amber-400"
+	}
+	return "text-red-400"
+}
+
+// logSummary shows a request's status, method and path (with its query's
+// keys; older lines have the whole url) on its row, else the error.
+func logSummary(e logview.Entry) string {
+	var method, path, query, status, errMsg string
+	for _, f := range e.Fields {
+		switch f.Key {
+		case "method":
+			method = f.Value
+		case "path", "url":
+			path = f.Value
+		case "query":
+			query = " ?" + f.Value
+		case "status_code":
+			status = f.Value
+		case "error":
+			errMsg = f.Value
+		}
+	}
+	if path != "" {
+		return fmt.Sprintf("%s %s %s%s", status, method, path, query)
+	}
+	return errMsg
+}

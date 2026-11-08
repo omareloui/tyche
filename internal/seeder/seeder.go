@@ -32,7 +32,7 @@ func (s *Seeder) Seed(ctx context.Context, db *sql.DB, oauthID string) {
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		l.Error("starting the seed transaction", zap.String("oauthID", oauthID), zap.Error(err))
+		l.Error("starting the seed transaction", zap.Error(err))
 		return
 	}
 	defer tx.Rollback()
@@ -42,7 +42,7 @@ func (s *Seeder) Seed(ctx context.Context, db *sql.DB, oauthID string) {
 
 	user, err := q.GetUserByOAuthID(ctx, oauthID)
 	if err != nil {
-		l.Warn("couldn't get the user to check seed time", zap.String("oauth", oauthID), zap.Error(err))
+		l.Warn("couldn't get the user to check seed time", zap.Error(err))
 	} else {
 		_user = &user
 	}
@@ -52,18 +52,18 @@ func (s *Seeder) Seed(ctx context.Context, db *sql.DB, oauthID string) {
 	s.goalAccounts(ctx, q)
 	s.goalHoldings(ctx, tx, q)
 
-	l.Debug("ensured seeding currencies, account kinds, and transaction kinds", zap.String("oauthID", oauthID))
+	l.Debug("ensured seeding currencies, account kinds, and transaction kinds")
 
 	if _user == nil || user.User.SeededAt.Time.IsZero() {
 		s.categories(ctx, q)
 		s.accounts(ctx, q)
-		l.Debug("seeded categories, and accounts", zap.String("oauthID", oauthID))
+		l.Debug("seeded categories, and accounts")
 	}
 
 	s.updateSeededAt(ctx, q, oauthID, _user)
 
 	if err := tx.Commit(); err != nil {
-		l.Error("committing the seed transaction", zap.String("oauthID", oauthID), zap.Error(err))
+		l.Error("committing the seed transaction", zap.Error(err))
 	}
 }
 
@@ -74,7 +74,7 @@ func (s *Seeder) updateSeededAt(ctx context.Context, q *queries.Queries, oauthID
 
 	if err := q.UpdateSeededAt(ctx, oauthID); err != nil {
 		l := logger.Get()
-		l.Error("error updating seed time for user", zap.String("oauthID", oauthID), zap.Error(err))
+		l.Error("error updating seed time for user", zap.Error(err))
 	}
 }
 

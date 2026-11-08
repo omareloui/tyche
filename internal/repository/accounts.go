@@ -363,19 +363,19 @@ func (r *Repository) applyTxToAccountWithTxn(qtx *queries.Queries, ctx context.C
 
 	if tx.Kind == models.TransferTxKind || tx.Kind == models.DebtTxKind {
 		if err := r.removeFromAccountWithTxn(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {
-			l.Error("applying transfer: remove from account", zap.Error(err), zap.Any("transaction", tx))
+			l.Error("applying transfer: remove from account", zap.Error(err), zap.String("id", tx.ID))
 			return err
 		}
 		l.Debug("applied transfer: remove from account")
 		if err := r.addToAccountWithTxn(qtx, ctx, tx.ToAccount.ID, tx.ToAmount); err != nil {
-			l.Error("applying transfer: add to account", zap.Error(err), zap.Any("transaction", tx))
+			l.Error("applying transfer: add to account", zap.Error(err), zap.String("id", tx.ID))
 			return err
 		}
 		l.Debug("applied transfer: add to account")
 	} else if tx.Kind == models.AdjustmentTxKind {
 		// Signed, added as is.
 		if err := r.addToAccountWithTxn(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {
-			l.Error("applying adjustment to account", zap.Error(err), zap.Any("transaction", tx))
+			l.Error("applying adjustment to account", zap.Error(err), zap.String("id", tx.ID))
 			return err
 		}
 	} else {
@@ -384,10 +384,10 @@ func (r *Repository) applyTxToAccountWithTxn(qtx *queries.Queries, ctx context.C
 			upBalance = r.addToAccountWithTxn
 		}
 		if err := upBalance(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {
-			l.Error("applying transaction to account", zap.Error(err), zap.Any("transaction", tx))
+			l.Error("applying transaction to account", zap.Error(err), zap.String("id", tx.ID))
 			return err
 		}
-		l.Debug("applied transaction to account", zap.Any("transaction", tx))
+		l.Debug("applied transaction to account", zap.String("id", tx.ID))
 	}
 	return nil
 }
@@ -396,18 +396,18 @@ func (r *Repository) undoTxToAccountWithTxn(qtx *queries.Queries, ctx context.Co
 	l := logger.FromCtx(ctx)
 	if tx.Kind == models.TransferTxKind || tx.Kind == models.DebtTxKind {
 		if err := r.addToAccountWithTxn(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {
-			l.Error("undoing transfer: remove from account", zap.Error(err), zap.Any("transaction", tx))
+			l.Error("undoing transfer: remove from account", zap.Error(err), zap.String("id", tx.ID))
 			return err
 		}
 		l.Debug("undone transfer: remove from account")
 		if err := r.removeFromAccountWithTxn(qtx, ctx, tx.ToAccount.ID, tx.ToAmount); err != nil {
-			l.Error("undoing transfer: add to account", zap.Error(err), zap.Any("transaction", tx))
+			l.Error("undoing transfer: add to account", zap.Error(err), zap.String("id", tx.ID))
 			return err
 		}
 		l.Debug("undone transfer: add to account")
 	} else if tx.Kind == models.AdjustmentTxKind {
 		if err := r.removeFromAccountWithTxn(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {
-			l.Error("undoing adjustment to account", zap.Error(err), zap.Any("transaction", tx))
+			l.Error("undoing adjustment to account", zap.Error(err), zap.String("id", tx.ID))
 			return err
 		}
 	} else {
@@ -416,10 +416,10 @@ func (r *Repository) undoTxToAccountWithTxn(qtx *queries.Queries, ctx context.Co
 			upBalance = r.removeFromAccountWithTxn
 		}
 		if err := upBalance(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {
-			l.Error("undoing transaction to account", zap.Error(err), zap.Any("transaction", tx))
+			l.Error("undoing transaction to account", zap.Error(err), zap.String("id", tx.ID))
 			return err
 		}
-		l.Debug("undone transaction to account", zap.Any("transaction", tx))
+		l.Debug("undone transaction to account", zap.String("id", tx.ID))
 	}
 	return nil
 }
@@ -428,7 +428,7 @@ func (r *Repository) addToAccountWithTxn(qtx *queries.Queries, ctx context.Conte
 	err := qtx.AddToAccount(ctx, queries.AddToAccountParams{ID: id, Amount: amount})
 	if err != nil {
 		l := logger.FromCtx(ctx)
-		l.Error("adding to account", zap.Error(err), zap.String("id", id), zap.Float64("amount", amount))
+		l.Error("adding to account", zap.Error(err), zap.String("id", id))
 		return err
 	}
 	return nil
@@ -438,7 +438,7 @@ func (r *Repository) removeFromAccountWithTxn(qtx *queries.Queries, ctx context.
 	err := qtx.RemoveFromAccount(ctx, queries.RemoveFromAccountParams{ID: id, Amount: amount})
 	if err != nil {
 		l := logger.FromCtx(ctx)
-		l.Error("removing from account", zap.Error(err), zap.String("id", id), zap.Float64("amount", amount))
+		l.Error("removing from account", zap.Error(err), zap.String("id", id))
 		return err
 	}
 	return nil

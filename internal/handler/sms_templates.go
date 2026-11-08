@@ -213,7 +213,7 @@ func (h *Handler) CreateSMSTemplate(w http.ResponseWriter, r *http.Request) (tem
 		l.Error("creating sms template", zap.Error(err), zap.String("scope", string(scope)))
 		return nil, err
 	}
-	l.Info("created sms template", zap.String("id", t.ID), zap.String("scope", string(scope)), zap.String("name", t.Name))
+	l.Info("created sms template", zap.String("id", t.ID), zap.String("scope", string(scope)))
 
 	return h.smsTemplateSaved(w, r, scope)
 }

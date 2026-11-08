@@ -75,7 +75,7 @@ func (r *Repository) CreateGamyaa(ctx context.Context, a *models.Account) error 
 			l.Error("creating gamyaa", zap.Error(err))
 			return err
 		}
-		l.Debug("created gamyaa", zap.Any("gamyaa", g))
+		l.Debug("created gamyaa", zap.String("account_id", a.ID))
 		return nil
 	})
 }

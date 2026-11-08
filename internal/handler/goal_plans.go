@@ -211,7 +211,7 @@ func (h Handler) SetGoalPlan(w http.ResponseWriter, r *http.Request) (templ.Comp
 		l.Error("saving goal plan", zap.Error(err), zap.String("id", gl.ID))
 		return nil, err
 	}
-	l.Info("saved goal plan", zap.String("id", gl.ID), zap.Any("plan", plan))
+	l.Info("saved goal plan", zap.String("id", gl.ID), zap.String("mode", string(plan.Mode)))
 
 	goalSaved(w, r, gl.ID)
 	if err := h.renderGoalsSummaryOOB(w, r); err != nil {

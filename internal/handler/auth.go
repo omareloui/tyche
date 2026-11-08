@@ -34,11 +34,9 @@ const (
 var oauthConf *oauth2.Config
 
 func (h *Handler) OAuth(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	l := logger.FromCtx(r.Context())
 	csrfId := idgen.New()
 	oauthStates.add(csrfId, nil)
 	url := getOAuth2Conf().AuthCodeURL(csrfId)
-	l.Debug("going to sign a user", zap.String("url", url), zap.String("csrfId", csrfId))
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 	return nil, nil
 }
@@ -94,7 +92,7 @@ func (h *Handler) finishOAuth(w http.ResponseWriter, r *http.Request) (templ.Com
 		return nil, err
 	}
 	if encrypted && key == nil {
-		l.Info("signing in to a locked database", zap.String("tenantID", tenantID))
+		l.Info("signing in to a locked database", zap.String("tenant_id", tenantID))
 		return nil, h.startPendingUnlock(w, r, pendingUnlock{provider: models.Google, oauthID: gUsr.OAuthID, gUsr: gUsr, mobile: mobile})
 	}
 	if key != nil {
@@ -123,7 +121,7 @@ func (h *Handler) finishOAuth(w http.ResponseWriter, r *http.Request) (templ.Com
 			l.Error("generating mobile code", zap.Error(err))
 			return nil, err
 		}
-		l.Info("signed user from mobile", zap.String("oauth_id", usr.OAuthID))
+		l.Info("signed user from mobile", zap.String("tenant_id", models.TenantID(usr.OAuthProvider, usr.OAuthID)))
 		http.Redirect(w, r, mobileRedirectURI+"?code="+url.QueryEscape(code), http.StatusTemporaryRedirect)
 		return nil, nil
 	}
@@ -167,14 +165,13 @@ func (h *Handler) OAuthSetup(w http.ResponseWriter, r *http.Request) (templ.Comp
 // or the onboarding until they finish (or skip) it.
 func signInBrowser(w http.ResponseWriter, r *http.Request, usr *models.User) error {
 	l := logger.FromCtx(r.Context())
-	l.Debug("generating cookies for the user", zap.Any("user", usr))
 
 	if _, err := setJWTCookies(w, usr); err != nil {
-		l.Error("error generating jwt cookies", zap.Error(err), zap.Any("user", usr))
+		l.Error("error generating jwt cookies", zap.Error(err), zap.String("tenant_id", models.TenantID(usr.OAuthProvider, usr.OAuthID)))
 		return err
 	}
 
-	l.Info("new user singed", zap.Any("user", usr))
+	l.Info("new user singed", zap.String("tenant_id", models.TenantID(usr.OAuthProvider, usr.OAuthID)))
 
 	next := "/"
 	if !usr.Onboarded {
@@ -218,7 +215,6 @@ func (h *Handler) googleUser(ctx context.Context, code string) (*models.User, er
 		l.Error("parsing json user", zap.Error(err))
 		return nil, err
 	}
-	l.Debug("user info", zap.Any("user", _usr))
 	return _usr, nil
 }
 
@@ -280,7 +276,7 @@ func (h *Handler) RefreshSession(w http.ResponseWriter, r *http.Request) (*jwt.A
 		return nil, jwt.ErrExpiredToken
 	}
 
-	l.Debug("refreshing tokens for user", zap.String("id", claims.ID), zap.String("oauth_id", claims.OAuthID))
+	l.Debug("refreshing tokens for user", zap.String("id", claims.ID))
 
 	// An encrypted database is read with the browser's session, the Vault
 	// middleware sends the user to unlock it when it's locked.
@@ -291,7 +287,7 @@ func (h *Handler) RefreshSession(w http.ResponseWriter, r *http.Request) (*jwt.A
 
 	usr, err := h.repo.GetUserByOAuthID(ctx, claims.OAuthID)
 	if err != nil || usr == nil {
-		l.Error("refreshing token. can't get the user to refresh the token.", zap.String("oauth_id", claims.OAuthID), zap.Error(err))
+		l.Error("refreshing token. can't get the user to refresh the token.", zap.String("tenant_id", models.TenantID(claims.OAuthProvider, claims.OAuthID)), zap.Error(err))
 		unsetCookie(w, refreshTokenCookieName)
 		unsetCookie(w, accessTokenCookieName)
 		return nil, fmt.Errorf("getting the user to refresh the tokens: %w", err)
@@ -299,7 +295,7 @@ func (h *Handler) RefreshSession(w http.ResponseWriter, r *http.Request) (*jwt.A
 
 	tokens, err := setJWTCookies(w, usr)
 	if err != nil {
-		l.Error("error generating jwt cookies", zap.Error(err), zap.Any("user", usr))
+		l.Error("error generating jwt cookies", zap.Error(err), zap.String("tenant_id", models.TenantID(usr.OAuthProvider, usr.OAuthID)))
 		return nil, err
 	}
 

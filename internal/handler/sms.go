@@ -172,7 +172,7 @@ func (h *Handler) processSMS(ctx context.Context, sctx *smsContext, msg *models.
 	if newCp != nil && newCp.ID == "" {
 		newCp.ID = idgen.New()
 		if err := newCp.SanitizeAndValidate(h.sani, h.valid); err != nil {
-			l.Warn("invalid counterparty from sms", zap.Error(err), zap.Any("counterparty", newCp))
+			l.Warn("invalid counterparty from sms", zap.Error(err), zap.String("id", newCp.ID))
 			msg.Status, msg.Error = models.SMSStatusFailed, "invalid counterparty"
 			return nil
 		}
@@ -185,18 +185,18 @@ func (h *Handler) processSMS(ctx context.Context, sctx *smsContext, msg *models.
 	}
 
 	if err := tx.SanitizeAndValidate(h.sani, h.valid); err != nil {
-		l.Warn("invalid transaction from sms", zap.Error(err), zap.Any("transaction", tx))
+		l.Warn("invalid transaction from sms", zap.Error(err), zap.String("id", tx.ID))
 		msg.Status, msg.Error = models.SMSStatusFailed, "invalid transaction"
 		return nil
 	}
 
 	if newCp != nil {
 		if err := h.repo.CreateCounterparty(ctx, newCp); err != nil {
-			l.Error("creating counterparty from sms", zap.Error(err), zap.Any("counterparty", newCp))
+			l.Error("creating counterparty from sms", zap.Error(err), zap.String("id", newCp.ID))
 			msg.Status, msg.Error = models.SMSStatusFailed, "creating counterparty: "+err.Error()
 			return nil
 		}
-		l.Info("created counterparty from sms", zap.String("name", newCp.Name))
+		l.Info("created counterparty from sms", zap.String("id", newCp.ID))
 		// later messages in the same batch match it instead of creating it again
 		sctx.counterparties = append(sctx.counterparties, *newCp)
 	}

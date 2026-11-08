@@ -157,7 +157,7 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 	if err := h.validateAccount(a); err != nil {
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
-			l.Error("validating account", zap.Any("account", a), zap.Any("errors", valerr.Errors))
+			l.Error("validating account", zap.String("id", a.ID), zap.Any("errors", valerr.Errors))
 			return renderForm(&valerr), nil
 		}
 		l.Error("sanitizing account", zap.Error(err))
@@ -176,10 +176,10 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) (templ.C
 		l.Error("duplication error", zap.Error(valerr), zap.Any("errors", valerr.Errors))
 		return renderForm(valerr), nil
 	} else if err != nil {
-		l.Error("creating account", zap.Error(err), zap.Any("account", a))
+		l.Error("creating account", zap.Error(err), zap.String("id", a.ID))
 		return nil, err
 	}
-	l.Info("created account", zap.Any("account", a))
+	l.Info("created account", zap.String("id", a.ID))
 	drawerCreated(w)
 	addHXTrigger(w, views.AccountsChangedEvent)
 
@@ -289,10 +289,10 @@ func (h *Handler) EditAccount(w http.ResponseWriter, r *http.Request) (templ.Com
 		l.Error("duplication error", zap.Error(valerr), zap.Any("errors", valerr.Errors))
 		return views.EditAccountForm(id, h.mapAccToFD(a, valerr, deps), deps.knds, deps.shownCurs, deps.cps, &claims.DefaultCurrency), nil
 	} else if err != nil {
-		l.Error("updating account", zap.Error(err), zap.Any("account", a))
+		l.Error("updating account", zap.Error(err), zap.String("id", a.ID))
 		return nil, err
 	}
-	l.Info("updated account", zap.Any("account", a))
+	l.Info("updated account", zap.String("id", a.ID))
 
 	return h.renderUpdatedAccount(w, r, prev)
 }

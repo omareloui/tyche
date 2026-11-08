@@ -51,7 +51,6 @@ func (h Handler) Currency(w http.ResponseWriter, r *http.Request) (templ.Compone
 		l.Error("fetching currency", zap.Error(err))
 		return nil, err
 	}
-	l.Info("fetched currency", zap.Any("currency", cur))
 
 	claims := getClaims(r.Context())
 	return views.Currency(cur, &claims.DefaultCurrency), nil
@@ -77,7 +76,6 @@ func (h Handler) ChangeIsShownForCurrency(isShown bool) func(w http.ResponseWrit
 			l.Error("fetching currency", zap.Error(err))
 			return nil, err
 		}
-		l.Debug("fetched currency", zap.Any("currency", cur))
 
 		claims := getClaims(r.Context())
 		return views.CurrencyMovedOOB(cur, &claims.DefaultCurrency), nil

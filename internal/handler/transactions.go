@@ -297,8 +297,6 @@ func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (tem
 		return nil, err
 	}
 
-	l.Debug("get edit transaction", zap.Any("transaction", tx))
-
 	if tx.Kind == models.AdjustmentTxKind {
 		return nil, errAdjustmentNotEditable
 	}
@@ -359,8 +357,6 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 		return nil, err
 	}
 
-	l.Debug("update transaction", zap.Any("new_transaction", tx))
-
 	oldTx, err := h.repo.GetTransaction(r.Context(), tx.ID)
 	if err != nil {
 		return nil, err
@@ -419,7 +415,6 @@ func (h Handler) FulfillTransaction(w http.ResponseWriter, r *http.Request) (tem
 		l.Error("fetching transaction", zap.Error(err))
 		return nil, err
 	}
-	l.Debug("fetched transaction", zap.Any("tx", tx))
 
 	tx.FulfilledAt = time.Now()
 
@@ -577,7 +572,6 @@ func (h Handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) (temp
 		l.Error("fetching transaction", zap.Error(err))
 		return nil, err
 	}
-	l.Debug("fetched transaction", zap.Any("transaction", tx))
 
 	return h.deleteTransactions(w, r, []*models.Transaction{tx})
 }
@@ -680,7 +674,6 @@ func (h Handler) getAndRenderBalancesOOB(w http.ResponseWriter, r *http.Request)
 		l.Error("fetching balances", zap.Error(err))
 		return err
 	}
-	l.Debug("fetched balances", zap.Any("balances", balances))
 
 	if err = renderToBody(w, r, views.BalanceOOB(balances, &getClaims(r.Context()).DefaultCurrency)); err != nil {
 		l.Error("rendering balance OOB")
@@ -827,8 +820,6 @@ func (h Handler) mapFDToTransaction(r *http.Request, isRecurrent bool) (*models.
 		toAcc = &models.Account{ID: toAccId}
 	}
 
-	var rt *models.RecurrentTx
-
 	tx := &models.Transaction{
 		Account:      models.Account{ID: r.FormValue("account_id")},
 		Amount:       amount,
@@ -847,7 +838,7 @@ func (h Handler) mapFDToTransaction(r *http.Request, isRecurrent bool) (*models.
 		tx.RecurrentTx, err = h.mapFDAndTxToRecurrentTx(r, tx)
 		l := logger.FromCtx(r.Context())
 		if err != nil {
-			l.Error("parsing recurrent transaction", zap.Error(err), zap.Any("recurrent tx", rt))
+			l.Error("parsing recurrent transaction", zap.Error(err))
 			return nil, err
 		}
 		l.Debug("parsed recurrent transaction")

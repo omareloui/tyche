@@ -276,7 +276,7 @@ func (h *Handler) AddPasskey(w http.ResponseWriter, r *http.Request) (templ.Comp
 		}
 		return nil, err
 	}
-	logger.FromCtx(ctx).Info("added a passkey", zap.String("tenantID", tenantID))
+	logger.FromCtx(ctx).Info("added a passkey", zap.String("tenant_id", tenantID))
 	return h.passkeysSection(r, tenantID, "")
 }
 
@@ -367,7 +367,7 @@ func (h *Handler) UnlockPasskey(w http.ResponseWriter, r *http.Request) ([]byte,
 
 	failed := func(msg string, err error) error {
 		unlockAttempts.fail(tenantID)
-		l.Warn("passkey unlock failed", zap.String("tenantID", tenantID), zap.Error(err))
+		l.Warn("passkey unlock failed", zap.String("tenant_id", tenantID), zap.Error(err))
 		return resperr.New(http.StatusUnprocessableEntity, msg)
 	}
 
