@@ -10,6 +10,14 @@
   "background_color": "#09090b",
   "theme_color": "#09090b",
   "categories": ["finance"],
+  "share_target": {
+    "action": "/share-receipt",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "files": [{ "name": "receipt", "accept": ["image/*", ".heic", ".heif"] }]
+    }
+  },
   "icons": [
     { "src": "/favicons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/favicons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },

@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -63,10 +64,20 @@ func TestPWA(t *testing.T) {
 			t.Fatalf("got %d %q", res.StatusCode, res.Header.Get("Content-Type"))
 		}
 		var m struct {
-			Icons []struct{ Src string } `json:"icons"`
+			Icons       []struct{ Src string } `json:"icons"`
+			ShareTarget struct {
+				Action string `json:"action"`
+				Method string `json:"method"`
+			} `json:"share_target"`
 		}
 		if err := json.Unmarshal([]byte(body), &m); err != nil {
 			t.Fatal(err)
+		}
+		if m.ShareTarget.Action != "/share-receipt" || m.ShareTarget.Method != "POST" {
+			t.Errorf("share_target: got %+v", m.ShareTarget)
+		}
+		if !strings.Contains(swBody(t), `"`+m.ShareTarget.Action+`"`) {
+			t.Error("sw.js doesn't take the share_target's posts")
 		}
 		for _, ic := range m.Icons {
 			if res, _ := get(ic.Src, nil); res.StatusCode != http.StatusOK {
@@ -96,6 +107,18 @@ func TestPWA(t *testing.T) {
 		}
 	})
 
+	t.Run("a share without a service worker opens the create form", func(t *testing.T) {
+		client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		res, err := client.Post(srv.URL+"/share-receipt", "multipart/form-data; boundary=x", strings.NewReader("--x--\r\n"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if res.StatusCode != http.StatusSeeOther || res.Header.Get("Location") != "/transactions?new" {
+			t.Fatalf("got %d %q", res.StatusCode, res.Header.Get("Location"))
+		}
+	})
+
 	t.Run("offline page never shows the user", func(t *testing.T) {
 		for _, c := range []*http.Cookie{nil, access} {
 			res, body := get("/offline", c)
@@ -114,4 +137,13 @@ func TestPWA(t *testing.T) {
 			t.Fatal("no manifest link")
 		}
 	})
+}
+
+func swBody(t *testing.T) string {
+	t.Helper()
+	b, err := os.ReadFile("web/public/sw.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
 }

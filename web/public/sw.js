@@ -1,6 +1,8 @@
 // Tyche's service worker: makes the app installable, answers page loads
-// without a network with the offline page and shows the badge's pushes. Only static files and /offline
-// are ever cached, never a page or partial (they hold the user's data).
+// without a network with the offline page, takes images shared to the app
+// and shows the badge's pushes. Only static files and /offline are ever
+// cached, never a page or partial (they hold the user's data); a shared image
+// is only kept until the transactions page picks it up.
 // Bump CACHE when changing PRECACHE.
 const CACHE = "tyche-static-v3";
 const OFFLINE = "/offline";
@@ -44,16 +46,40 @@ self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== BADGE_STATE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== BADGE_STATE && k !== SHARED).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
 
+// An image shared to the app (the manifest's share_target posts it here) is
+// kept for the transactions page, which opens the create form and scans it
+// (receipts.js), then deletes it.
+const SHARED = "tyche-shared";
+const SHARED_URL = "/__shared-receipt";
+const SHARE_ACTION = "/share-receipt";
+
+async function takeShare(req) {
+  try {
+    const file = (await req.formData()).getAll("receipt").find((f) => f instanceof File && f.size > 0);
+    const c = await caches.open(SHARED);
+    if (file) {
+      const headers = { "Content-Type": file.type || "application/octet-stream", "X-File-Name": encodeURIComponent(file.name || "receipt") };
+      await c.put(SHARED_URL, new Response(file, { headers }));
+      return Response.redirect("/transactions?new&shared=receipt", 303);
+    }
+  } catch {}
+  return Response.redirect("/transactions?new", 303);
+}
+
 self.addEventListener("fetch", (e) => {
   const req = e.request;
-  if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== location.origin) return;
+  if (req.method === "POST" && url.pathname === SHARE_ACTION) {
+    e.respondWith(takeShare(req));
+    return;
+  }
+  if (req.method !== "GET") return;
 
   if (req.mode === "navigate") {
     e.respondWith(fetch(req).catch(() => caches.match(OFFLINE)));

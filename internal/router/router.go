@@ -281,6 +281,10 @@ func New(h *handler.Handler) Router {
 	// served from the root.
 	rootFile(mux, "sw.js", "text/javascript; charset=utf-8", "./web/public")
 	rootFile(mux, "manifest.webmanifest", "application/manifest+json", "./web/public")
+	// Images shared to the installed app (the manifest's share_target) are
+	// taken by the service worker; without one controlling the page yet the
+	// post lands here, opening the create form without the image.
+	mux.Handle("POST /share-receipt", http.RedirectHandler("/transactions?new", http.StatusSeeOther))
 	// Cached by the service worker for everyone: no auth/vault middlewares,
 	// which could answer it with a redirect to sign in or unlock.
 	mux.Handle("GET /offline", middleware.CorrelationID(middleware.RequestLogger(route_handler.RouteHandler(h.Offline))))

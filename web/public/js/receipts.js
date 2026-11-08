@@ -73,6 +73,17 @@
     htmx.trigger(input.closest("form[hx-trigger='receipt-ready']") ?? input, "receipt-ready");
   });
 
+  // scanInCreateForm hands a file to the transactions page's create form's
+  // scan (its gallery input), when scanning is on.
+  function scanInCreateForm(file) {
+    const input = document.querySelector("#tx-create [data-receipt-input]:not([capture])");
+    if (!file || !input) return;
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
   // The transactions page's "Scan receipt" (input[data-receipt-quick], which
   // opens the create form) hands its file to the create form's scan.
   document.addEventListener("change", (e) => {
@@ -80,13 +91,39 @@
     if (!(quick instanceof HTMLInputElement) || !quick.matches("[data-receipt-quick]")) return;
     const file = quick.files?.[0];
     quick.value = "";
-    const input = document.querySelector("#tx-create [data-receipt-input]:not([capture])");
-    if (!file || !input) return;
-    const dt = new DataTransfer();
-    dt.items.add(file);
-    input.files = dt.files;
-    input.dispatchEvent(new Event("change", { bubbles: true }));
+    scanInCreateForm(file);
   });
+
+  // An image shared to the installed app: the service worker (sw.js) keeps
+  // it and opens /transactions?new&shared=receipt, the create form opening
+  // by ?new; the image is scanned there, then dropped (a reload doesn't scan
+  // it again).
+  const SHARED = "tyche-shared";
+  const SHARED_URL = "/__shared-receipt";
+
+  async function takeShared() {
+    let res;
+    try {
+      const c = await caches.open(SHARED);
+      res = await c.match(SHARED_URL);
+      await c.delete(SHARED_URL);
+    } catch {
+      return;
+    }
+    if (!res) return;
+    const name = decodeURIComponent(res.headers.get("X-File-Name") || "receipt");
+    const blob = await res.blob();
+    scanInCreateForm(new File([blob], name, { type: blob.type }));
+  }
+
+  const url = new URL(location.href);
+  if (url.searchParams.get("shared") === "receipt") {
+    url.searchParams.delete("shared");
+    history.replaceState(history.state, "", url.pathname + url.search.replace(/=(?=&|$)/g, "") + url.hash);
+    // After htmx and Alpine set the page up (the form's inputs post by htmx).
+    if (document.readyState === "complete") takeShared();
+    else window.addEventListener("load", takeShared, { once: true });
+  }
 
   // Once sent, the file isn't posted again with the form.
   document.addEventListener("htmx:afterRequest", (e) => {
