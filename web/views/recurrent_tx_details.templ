@@ -76,6 +76,9 @@ templ RecurrentTxDetails(d *RecurrentTxDetailsData) {
 				@rtxDetailsHero(rt, &v, d.Def, ended)
 				@rtxDetailsActions(rt, ended)
 				@rtxDetailsMoney(d)
+				if !rt.IsGamyaa() || len(rt.Items) > 0 {
+					@RecurrentTxDetailsItems(rt, nil)
+				}
 				@rtxDetailsTxs("Upcoming", d.Upcoming, skipURLs(rt)) {
 					if len(d.Upcoming) == 0 {
 						<p class="text-sm text-zinc-500">

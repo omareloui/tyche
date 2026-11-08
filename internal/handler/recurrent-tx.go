@@ -247,6 +247,8 @@ func (h Handler) EditRecurrentTx(w http.ResponseWriter, r *http.Request) (templ.
 	rt.ID = id
 	rt.StartsAt = old.StartsAt
 	rt.PausedAt = old.PausedAt
+	models.NormalizeTxItems(tx.Items, &old.Account.Currency)
+	rt.Items = models.SortTxItems(tx.Items)
 
 	// The schedule is counted again from the next day picked, when it or the
 	// frequency changed.
@@ -457,6 +459,7 @@ func (h Handler) mapRecurrentTxToFD(rt *models.RecurrentTx, valerr *errs.Validat
 			Kind: form.FDInput{Value: rt.Kind.String(), Error: valerr.Errors.MsgFor("Kind")},
 		},
 		Description: form.FDInput{Value: rt.Description, Error: valerr.Errors.MsgFor("Description")},
+		Items:       txItemsToFD(rt.Items, valerr),
 	}
 
 	hasToAccount := rt.Kind == models.DebtTxKind || rt.Kind == models.TransferTxKind
@@ -497,8 +500,9 @@ func (h Handler) parseRecurrenceFD(r *http.Request, err *errs.ValidationError) *
 	}
 }
 
-// TopUpRecurrentTxs writes the recurrent transactions' occurrences due of the
-// tenant in ctx, once a day (middleware.RecurrentTopUp).
-func (h *Handler) TopUpRecurrentTxs(ctx context.Context, tenantID string) {
-	h.repo.TopUpRecurrentTxsDaily(ctx, tenantID)
+// DailyUpkeep runs the daily upkeep of the tenant in ctx (writing the
+// recurrent transactions' occurrences due, ...), once a day
+// (middleware.DailyUpkeep).
+func (h *Handler) DailyUpkeep(ctx context.Context, tenantID string) {
+	h.repo.RunDailyUpkeep(ctx, tenantID)
 }

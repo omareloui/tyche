@@ -25,16 +25,17 @@ var auth, deleted, vault func(http.Handler) http.Handler
 // tenant with one (middleware.Badge), set by New.
 var badge func(http.Handler) http.Handler
 
-// recurrent writes the recurrent transactions' occurrences due before the
-// requests of a tenant, once a day (middleware.RecurrentTopUp), set by New.
-var recurrent func(http.Handler) http.Handler
+// upkeep runs a tenant's daily upkeep (the recurrent transactions'
+// occurrences due, ...) before its requests, once a day
+// (middleware.DailyUpkeep), set by New.
+var upkeep func(http.Handler) http.Handler
 
 func New(h *handler.Handler) Router {
 	auth = middleware.Auth(h.RefreshSession)
 	deleted = middleware.Deleted(h.IsTenantDeleted, handler.SignOutDeleted)
 	vault = middleware.Vault(h.OpenVault)
 	badge = middleware.Badge(h.RefreshBadge)
-	recurrent = middleware.RecurrentTopUp(h.TopUpRecurrentTxs)
+	upkeep = middleware.DailyUpkeep(h.DailyUpkeep)
 	mux := http.NewServeMux()
 
 	mux.Handle("GET /{$}", handlePub(h.HomePage))
@@ -104,6 +105,12 @@ func New(h *handler.Handler) Router {
 	mux.Handle("DELETE /transactions/{id}/transfer-pair", handle(h.UnlinkTransferPair))
 	mux.Handle("GET /transactions/{id}/recurrent-match", handle(h.GetRecurrentMatchPicker))
 	mux.Handle("PUT /transactions/{id}/recurrent-match", handle(h.MatchRecurrentOccurrence))
+	mux.Handle("POST /receipts/scan/{id}", handle(h.ScanReceiptIntoForm, middleware.HTMXOnly))
+	mux.Handle("POST /transactions/{id}/receipt", handle(h.ScanReceiptIntoTx, middleware.HTMXOnly))
+	mux.Handle("POST /transactions/{id}/items", handle(h.AddTxItem))
+	mux.Handle("DELETE /transactions/{id}/items/{itemID}", handle(h.DeleteTxItem))
+	mux.Handle("GET /receipts/{id}", handle(h.Receipt))
+	mux.Handle("DELETE /receipts/{id}", handle(h.DeleteReceipt, middleware.HTMXOnly))
 
 	mux.Handle("POST /recurrence-form/", handle(h.RecurrenceForm))
 	mux.Handle("POST /recurrence-form/{id}", handle(h.RecurrenceForm))
@@ -118,6 +125,8 @@ func New(h *handler.Handler) Router {
 	mux.Handle("DELETE /recurrent-tx/{id}/occurrences/{txID}", handle(h.SkipRecurrentOccurrence))
 	mux.Handle("PUT /recurrent-tx/{id}/resume", handle(h.ResumeRecurrentTx))
 	mux.Handle("DELETE /recurrent-tx/{id}", handle(h.DeleteRecurrentTx))
+	mux.Handle("POST /recurrent-tx/{id}/items", handle(h.AddRecurrentTxItem))
+	mux.Handle("DELETE /recurrent-tx/{id}/items/{itemID}", handle(h.DeleteRecurrentTxItem))
 
 	mux.Handle("GET /goals", handle(h.Goals))
 	mux.Handle("POST /goals", handle(h.CreateGoal))
@@ -261,6 +270,8 @@ func New(h *handler.Handler) Router {
 	mux.Handle("POST /admin/fx-rates/refresh", handle(h.RefreshFxRates, middleware.Admin))
 	mux.Handle("GET /admin/tenants", handle(h.AdminTenants, middleware.Admin))
 	mux.Handle("POST /admin/tenants/{id}/delete", handle(h.DeleteTenant, middleware.Admin))
+	mux.Handle("GET /admin/receipts", handle(h.AdminReceipts, middleware.Admin))
+	mux.Handle("PUT /admin/receipts/limits/{tenant}", handle(h.SetReceiptLimit, middleware.Admin))
 
 	static(mux, []string{
 		"styles", "js", "images",
@@ -318,7 +329,7 @@ func handlePubJSON(h handler.HandlerJSONMethod, appendMiddlewares ...(func(http.
 		handler = appendMiddlewares[i](handler)
 	}
 
-	handler = recurrent(handler)
+	handler = upkeep(handler)
 	handler = badge(handler)
 	handler = vault(handler)
 	handler = deleted(handler)
@@ -332,7 +343,7 @@ func handlePubJSON(h handler.HandlerJSONMethod, appendMiddlewares ...(func(http.
 func handleDeviceJSON(h handler.HandlerJSONMethod, verify middleware.DeviceVerifier) http.Handler {
 	var handler http.Handler = route_handler.JSONRouteHandler(h)
 
-	handler = recurrent(handler)
+	handler = upkeep(handler)
 	handler = badge(handler)
 	handler = middleware.DeviceAuth(verify)(handler)
 	handler = middleware.RequestLogger(handler)
@@ -348,7 +359,7 @@ func handlePub(h handler.HandlerMethod, appendMiddlewares ...(func(http.Handler)
 		handler = appendMiddlewares[i](handler)
 	}
 
-	handler = recurrent(handler)
+	handler = upkeep(handler)
 	handler = badge(handler)
 	handler = vault(handler)
 	handler = deleted(handler)

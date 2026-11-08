@@ -1,0 +1,317 @@
+package handler
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/a-h/templ"
+	"github.com/omareloui/tyche/internal/errs"
+	"github.com/omareloui/tyche/internal/idgen"
+	"github.com/omareloui/tyche/internal/logger"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/receiptocr"
+	"github.com/omareloui/tyche/internal/repository"
+	"github.com/omareloui/tyche/internal/resperr"
+	"github.com/omareloui/tyche/internal/slicesutils"
+	"github.com/omareloui/tyche/web/views"
+	"go.uber.org/zap"
+)
+
+const (
+	// maxReceiptBytes is the biggest image a scan takes (receipts.js resizes
+	// them to a few hundred KB first).
+	maxReceiptBytes = 8 << 20
+	// receiptReadTimeout is how long reading a receipt may take.
+	receiptReadTimeout = 50 * time.Second
+)
+
+var receiptTypes = []string{"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}
+
+// receiptScan is a scanned receipt: what was read, the stored image's id and
+// the scans left this month.
+type receiptScan struct {
+	result    *receiptocr.Result
+	receiptID string
+	size      int64
+	left      int
+	limit     int
+}
+
+// errScan is a scan that failed for a reason to show the user.
+type errScan struct{ msg string }
+
+func (e errScan) Error() string { return e.msg }
+
+// readReceiptUpload is the posted image (the first non-empty "receipt"
+// file) and its type.
+func readReceiptUpload(w http.ResponseWriter, r *http.Request) ([]byte, string, error) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxReceiptBytes+1<<20)
+	if err := r.ParseMultipartForm(maxReceiptBytes); err != nil {
+		return nil, "", errScan{"The image is too big or didn't upload, try again."}
+	}
+	for _, fh := range r.MultipartForm.File["receipt"] {
+		if fh.Size == 0 {
+			continue
+		}
+		f, err := fh.Open()
+		if err != nil {
+			return nil, "", err
+		}
+		data, err := io.ReadAll(io.LimitReader(f, maxReceiptBytes+1))
+		f.Close()
+		if err != nil {
+			return nil, "", err
+		}
+		if len(data) > maxReceiptBytes {
+			return nil, "", errScan{"The image is too big."}
+		}
+		ct := http.DetectContentType(data)
+		if !strings.HasPrefix(ct, "image/") {
+			// HEIC isn't sniffed: trust the browser's type for it.
+			ct = strings.ToLower(fh.Header.Get("Content-Type"))
+		}
+		ct, _, _ = strings.Cut(ct, ";")
+		for _, t := range receiptTypes {
+			if ct == t {
+				return data, ct, nil
+			}
+		}
+		return nil, "", errScan{"Pick a photo (JPEG, PNG, WebP or HEIC)."}
+	}
+	return nil, "", errScan{"Pick a photo of the receipt."}
+}
+
+// scanReceipt reads the posted receipt within the tenant's monthly limit,
+// keeping the scan for the usage and the image for its transaction.
+func (h Handler) scanReceipt(w http.ResponseWriter, r *http.Request) (*receiptScan, error) {
+	if h.ocr == nil {
+		return nil, resperr.New(http.StatusNotFound, "Reading receipts is off")
+	}
+	ctx := r.Context()
+	l := logger.FromCtx(ctx)
+	tenantID, err := repository.TenantIDFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	left, limit, err := h.repo.ReceiptScansLeft(ctx, tenantID, h.ocrCfg.ScansPerMonth, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	if left <= 0 {
+		return nil, errScan{fmt.Sprintf("You've scanned %d receipts this month, the most you can. It starts again on the 1st.", limit)}
+	}
+
+	img, contentType, err := readReceiptUpload(w, r)
+	if err != nil {
+		return nil, err
+	}
+
+	readCtx, cancel := context.WithTimeout(ctx, receiptReadTimeout)
+	defer cancel()
+	result, usage, readErr := h.ocr.Read(readCtx, img, contentType)
+	scan := models.ReceiptScan{
+		TenantID:     tenantID,
+		Model:        h.ocr.Model(),
+		InputTokens:  usage.InputTokens,
+		OutputTokens: usage.OutputTokens,
+		CostMicros:   usage.CostMicros(h.ocrCfg.InputPerM, h.ocrCfg.OutputPerM),
+		OK:           readErr == nil,
+	}
+	if readErr != nil {
+		scan.Error = readErr.Error()
+	}
+	if err := h.repo.RecordReceiptScan(ctx, scan); err != nil {
+		l.Error("recording a receipt scan", zap.Error(err))
+	}
+	if scan.Billed() {
+		left--
+	}
+	if errors.Is(readErr, receiptocr.ErrUnreadable) {
+		l.Info("unreadable receipt", zap.Error(readErr))
+		return nil, errScan{"Couldn't read a receipt in the photo. Try again closer, flat and well lit."}
+	}
+	if readErr != nil {
+		l.Error("reading a receipt", zap.Error(readErr))
+		return nil, errScan{"Couldn't read the receipt right now, try again in a bit."}
+	}
+
+	ocrJSON, _ := json.Marshal(result)
+	sum := sha256.Sum256(img)
+	id, err := h.repo.CreateReceipt(ctx, &repository.ScannedReceipt{
+		Data:        img,
+		ContentType: contentType,
+		Hash:        hex.EncodeToString(sum[:8]),
+		Merchant:    result.Merchant,
+		OCRJSON:     string(ocrJSON),
+	})
+	if err != nil {
+		return nil, err
+	}
+	l.Info("scanned a receipt", zap.String("receipt_id", id), zap.Int("items", len(result.Items)), zap.Int("charges", len(result.Charges)))
+	return &receiptScan{result: result, receiptID: id, size: int64(len(img)), left: max(left, 0), limit: limit}, nil
+}
+
+// scanError shows a scan's error in the slot selector, as a 422 swapped
+// inline.
+func scanError(w http.ResponseWriter, slot string, err error) error {
+	var se errScan
+	if !errors.As(err, &se) {
+		return err
+	}
+	w.Header().Set("HX-Retarget", slot)
+	w.Header().Set("HX-Reswap", "innerHTML")
+	return resperr.New(http.StatusUnprocessableEntity, se.msg)
+}
+
+// receiptCurrencyWarning tells the receipt is in another currency than the
+// account, its amounts being taken as is.
+func receiptCurrencyWarning(res *receiptocr.Result, acc *models.Account) string {
+	code := strings.ToUpper(strings.TrimSpace(res.Currency))
+	if code == "" || acc == nil || acc.Currency.String == "" || strings.EqualFold(code, acc.Currency.String) {
+		return ""
+	}
+	return fmt.Sprintf("The receipt is in %s, the account in %s: the amounts were taken as is.", code, acc.Currency.String)
+}
+
+// ScanReceiptIntoForm reads a receipt into the transaction form being
+// filled: its lines and image, and the fields still empty (on a form with no
+// amount yet: kind, amount, date, merchant, description, category).
+func (h Handler) ScanReceiptIntoForm(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	formID := r.PathValue("id")
+	if formID == "" {
+		return nil, errs.ErrInvalidID
+	}
+	slot := "#" + views.TxScanErrorID(formID)
+	scan, err := h.scanReceipt(w, r)
+	if err != nil {
+		return nil, scanError(w, slot, err)
+	}
+	ctx := r.Context()
+	res := scan.result
+
+	isEdit := formID != "0"
+	tx, err := h.mapFDToTransaction(r, !isEdit && r.FormValue("is_recurrent") != "")
+	if err != nil {
+		return nil, err
+	}
+	accs, _, _, _, err := h.getTxDeps(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if a := slicesutils.Find(accs, func(a models.Account) bool { return a.ID == tx.Account.ID }); a != nil {
+		tx.Account = *a
+	}
+
+	fresh := tx.Amount == 0
+	var filled []string
+	if fresh {
+		if tx.Kind != models.ExpenseTxKind && tx.Kind != models.RefundTxKind {
+			tx.Kind = models.ExpenseTxKind
+			tx.ToAccount, tx.ToAmount = nil, 0
+		}
+		if total := res.Total; total > 0 {
+			tx.Amount = tx.Account.Currency.Round(total)
+			filled = append(filled, "amount")
+		}
+		if when := res.When(getClaims(ctx).Location()); !when.IsZero() {
+			day := time.Date(when.Year(), when.Month(), when.Day(), 0, 0, 0, 0, time.UTC)
+			if !day.After(h.userToday(ctx)) {
+				tx.ScheduledTo = day
+				filled = append(filled, "date")
+			}
+		}
+	}
+	if merchant := strings.TrimSpace(res.Merchant); merchant != "" && tx.Kind.CategoryKind() == models.ExpenseTxKind {
+		if tx.Counterparty == nil || tx.Counterparty.ID == "" {
+			cp := dfltCounterparty()
+			cp.ID, cp.Name, cp.IsMerchant = idgen.New(), merchant, true
+			if err := cp.SanitizeAndValidate(h.sani, h.valid); err != nil {
+				logger.FromCtx(ctx).Warn("the receipt's merchant isn't a valid counterparty", zap.Error(err), zap.String("merchant", merchant))
+			} else {
+				if cp, err = h.findOrCreateCounterparty(ctx, cp); err != nil {
+					return nil, err
+				}
+				tx.Counterparty = cp
+				filled = append(filled, "merchant")
+				if tx.Category == nil || tx.Category.ID == "" {
+					tx.Category = cp.DefaultCategoryFor(tx.Kind)
+				}
+			}
+		}
+		if tx.Description == "" {
+			tx.Description = merchant
+		}
+	}
+	tx.Items = res.TxItems()
+	models.NormalizeTxItems(tx.Items, &tx.Account.Currency)
+	tx.Items = models.SortTxItems(tx.Items)
+	filled = append(filled, txItemsCountNotice(len(tx.Items)))
+
+	accs, knds, cats, cps, err := h.getTxDeps(ctx)
+	if err != nil {
+		return nil, err
+	}
+	fd := h.mapTransactionToFD(tx, new(errs.ValidationError))
+	if isEdit {
+		fd.RecurrenceFD = nil
+	}
+	fd.WishlistID = r.FormValue("wishlist_id")
+	fd.Receipt = views.ReceiptFD{
+		Enabled: true,
+		ID:      scan.receiptID,
+		URL:     (&models.Receipt{ID: scan.receiptID, Hash: "new"}).URL(),
+		Size:    models.FormatBytes(scan.size),
+		Notice:  "Read from the receipt: " + strings.Join(filled, ", ") + ".",
+		Warning: receiptCurrencyWarning(res, &tx.Account),
+		Scanned: true,
+		Left:    scan.left,
+		Limit:   scan.limit,
+	}
+	return views.TxFormFields(fd, formID, accs, knds, cats, cps, &getClaims(ctx).DefaultCurrency), nil
+}
+
+func txItemsCountNotice(n int) string {
+	if n == 1 {
+		return "1 line"
+	}
+	return fmt.Sprintf("%d lines", n)
+}
+
+// ScanReceiptIntoTx reads a receipt for a saved transaction from its
+// details: its lines (replacing the ones it had) and image.
+func (h Handler) ScanReceiptIntoTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	tx, err := h.editableTx(r)
+	if err != nil {
+		return nil, err
+	}
+	scan, err := h.scanReceipt(w, r)
+	if err != nil {
+		return nil, scanError(w, "#txd-scan-error-"+tx.ID, err)
+	}
+	items := scan.result.TxItems()
+	models.NormalizeTxItems(items, &tx.Account.Currency)
+	items = models.SortTxItems(items)
+	if err := h.repo.SetTxItems(r.Context(), tx.ID, items, scan.receiptID); err != nil {
+		return nil, err
+	}
+	rec := &views.ReceiptFD{
+		Notice:  "Read " + txItemsCountNotice(len(items)) + " from the receipt.",
+		Warning: receiptCurrencyWarning(scan.result, &tx.Account),
+		Scanned: true,
+		Left:    scan.left,
+		Limit:   scan.limit,
+	}
+	if m := strings.TrimSpace(scan.result.Merchant); m != "" && tx.Counterparty == nil {
+		rec.Notice += " Merchant: " + m + " (set it from Edit)."
+	}
+	return h.txItemsAnswer(w, r, tx.ID, nil, rec)
+}

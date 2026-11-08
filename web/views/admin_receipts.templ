@@ -1,0 +1,392 @@
+package views
+
+import (
+	"fmt"
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+	"time"
+)
+
+// Chart colors, validated on the dark surface (dataviz): a series' blue and
+// orange, and the critical status red for the failed scans.
+const (
+	vizBlue     = "#3987e5"
+	vizOrange   = "#d95926"
+	vizCritical = "#d03b3b"
+)
+
+// AdminReceiptRanges are the monthly charts' ranges.
+var AdminReceiptRanges = []struct{ Key, Label string }{{"12m", "Last 12 months"}, {"all", "All time"}}
+
+type AdminReceiptsData struct {
+	Report models.ReceiptUsageReport
+	// Range is the monthly charts' (AdminReceiptRanges).
+	Range string
+	// Enabled tells reading receipts is on; Model, prices (dollars per
+	// million tokens) and DefaultLimit its config.
+	Enabled      bool
+	Model        string
+	InputPerM    float64
+	OutputPerM   float64
+	DefaultLimit int
+	Now          time.Time
+}
+
+templ AdminReceipts(claims *jwt.AccessClaims, balances []models.Balance, d AdminReceiptsData) {
+	@layouts.WithTitle(claims, "Receipt scans", balances) {
+		<div class="grid gap-6">
+			@adminReceiptsTotals(d)
+			<div class="grid gap-6 lg:grid-cols-2">
+				@adminScansDailyChart(d.Report.Daily)
+				@adminTopTenantsChart(d.Report.Tenants)
+			</div>
+			<div class="flex flex-wrap items-center gap-2" role="group" aria-label="Range">
+				for _, rg := range AdminReceiptRanges {
+					<a
+						href={ templ.SafeURL("/admin/receipts?range=" + rg.Key) }
+						class={ "h-9 inline-flex items-center px-3 rounded-full text-sm transition-colors",
+							templ.KV("bg-zinc-200 text-zinc-900", rg.Key == d.Range),
+							templ.KV("bg-zinc-800/60 text-zinc-300 hover:bg-zinc-800", rg.Key != d.Range) }
+						if rg.Key == d.Range {
+							aria-current="page"
+						}
+					>{ rg.Label }</a>
+				}
+			</div>
+			<div class="grid gap-6 lg:grid-cols-2">
+				@adminCostMonthlyChart(d.Report.Monthly)
+				@adminTokensMonthlyChart(d.Report.Monthly)
+			</div>
+			@adminReceiptTenants(d)
+		</div>
+	}
+}
+
+func usd(v float64) string {
+	switch {
+	case v == 0:
+		return "$0"
+	case v < 0.01:
+		return fmt.Sprintf("$%.4f", v)
+	default:
+		return fmt.Sprintf("$%.2f", v)
+	}
+}
+
+func microsUSD(m int64) string { return usd(float64(m) / 1e6) }
+
+templ adminReceiptsTotals(d AdminReceiptsData) {
+	<section class="grid gap-3">
+		<header class="flex flex-wrap items-end justify-between gap-2">
+			<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+				@icons.Receipt("16")
+				Usage
+			</h2>
+			<p class="text-sm text-zinc-500">
+				if d.Enabled {
+					{ fmt.Sprintf("%s · %s in / %s out per million tokens · %d scans a month by default", d.Model, usd(d.InputPerM), usd(d.OutputPerM), d.DefaultLimit) }
+				} else {
+					Off: set GEMINI_API_KEY to turn it on.
+				}
+			</p>
+		</header>
+		<div class="grid gap-3 sm:grid-cols-3">
+			@adminUsageTile("This month", d.Report.ThisMonth)
+			@adminUsageTile("Last month", d.Report.LastMonth)
+			@adminUsageTile("All time", d.Report.AllTime)
+		</div>
+		<p class="text-xs text-zinc-500">Costs are estimates at the prices set when each scan ran; Google's billing is the source of truth.</p>
+	</section>
+}
+
+templ adminUsageTile(label string, u models.ReceiptUsage) {
+	@components.GlassCard("grid gap-1 p-5") {
+		<p class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ label }</p>
+		<p class="text-3xl font-bold tabular-nums">{ usd(u.Cost()) }</p>
+		<p class="text-sm text-zinc-400 tabular-nums">
+			{ fmt.Sprintf("%d scans", u.Scans) }
+			if u.Failed > 0 {
+				<span class="text-zinc-500">{ fmt.Sprintf(" · %d failed", u.Failed) }</span>
+			}
+		</p>
+		<p class="text-xs text-zinc-500 tabular-nums">
+			{ fmt.Sprintf("%s in · %s out tokens", components.CompactNum(float64(u.InputTokens)), components.CompactNum(float64(u.OutputTokens))) }
+			if u.Scans > 0 {
+				{ " · " + usd(u.AvgCost()) + " a scan" }
+			}
+		</p>
+	}
+}
+
+templ adminChartCard(title string) {
+	@components.GlassCard("grid gap-4 p-5 sm:p-6") {
+		<h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-400">{ title }</h3>
+		{ children... }
+	}
+}
+
+// adminBarPlot is a chart's plot: y axis, grid, the bars (children) and the
+// x labels (every labelEvery-th, nil for none).
+templ adminBarPlot(axisMax float64, labels []string, labelEvery int) {
+	<div class="flex">
+		@dashYAxis(axisMax)
+		<div class="grow min-w-0">
+			<div class="relative h-48">
+				@dashGridLines(axisMax)
+				<div x-data="chartScrub" x-bind="scrub" class="relative flex h-full items-end gap-px touch-pan-y">
+					{ children... }
+				</div>
+			</div>
+			<div class="flex gap-px mt-2 text-xs text-zinc-500">
+				for i, l := range labels {
+					<span class="flex-1 min-w-0 text-center whitespace-nowrap overflow-visible">
+						if labelEvery > 0 && i%labelEvery == 0 {
+							{ l }
+						}
+					</span>
+				}
+			</div>
+		</div>
+	</div>
+}
+
+// adminBar is a bar of stacked segments (bottom first), with its tooltip.
+templ adminBar(segments []adminSegment, axisMax float64, tooltip []string) {
+	<div tabindex="0" class="group relative flex-1 min-w-0 flex flex-col-reverse items-center justify-start h-full outline-none">
+		<div class="absolute inset-0 rounded-md transition-colors group-hover:bg-white/4 group-focus:bg-white/4 group-[.is-active]:bg-white/4"></div>
+		for i, s := range segments {
+			if s.value > 0 {
+				<div
+					class={ "relative w-full max-w-4", templ.KV("rounded-t-[4px]", i == lastNonZero(segments)), templ.KV("mt-[2px]", i > 0) }
+					style={ templ.SafeCSS(fmt.Sprintf("height:%.2f%%;background:%s;", axisPct(s.value, axisMax), s.color)) }
+				></div>
+			}
+		}
+		<div class="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 hidden group-hover:block group-focus:block group-[.is-active]:block z-10 pointer-events-none">
+			<div class="glass-tooltip whitespace-nowrap">
+				for i, t := range tooltip {
+					<p class={ templ.KV("text-zinc-400", i == 0), templ.KV("tabular-nums text-zinc-200", i > 0) }>{ t }</p>
+				}
+			</div>
+		</div>
+	</div>
+}
+
+type adminSegment struct {
+	value float64
+	color string
+}
+
+func lastNonZero(segs []adminSegment) int {
+	last := -1
+	for i, s := range segs {
+		if s.value > 0 {
+			last = i
+		}
+	}
+	return last
+}
+
+// axisOf is the y axis top for the values, at least one per tick so counts
+// keep whole labels.
+func axisOf(vs ...float64) float64 {
+	top := float64(dashAxisTicks)
+	for _, v := range vs {
+		top = max(top, v)
+	}
+	return models.AxisMax(top, dashAxisTicks)
+}
+
+templ vizLegend(label, color string) {
+	<span class="flex items-center gap-1.5 text-xs text-zinc-400">
+		<span class="size-2.5 rounded-full" style={ templ.SafeCSS("background:" + color + ";") }></span>
+		{ label }
+	</span>
+}
+
+templ adminScansDailyChart(days []models.ReceiptUsageBucket) {
+	{{
+	var vals []float64
+	labels := make([]string, len(days))
+	for i, d := range days {
+		vals = append(vals, float64(d.Scans))
+		labels[i] = d.From.Format("Jan 2")
+	}
+	axis := axisOf(vals...)
+	}}
+	@adminChartCard(fmt.Sprintf("Scans a day · last %d days", len(days))) {
+		<div class="flex gap-3">
+			@vizLegend("Read", vizBlue)
+			<span class="flex items-center gap-1.5 text-xs text-zinc-400">
+				<span class="size-2.5 rounded-full" style={ templ.SafeCSS("background:" + vizCritical + ";") }></span>
+				@icons.Warning("12")
+				Failed
+			</span>
+		</div>
+		@adminBarPlot(axis, labels, max(len(days)/6, 1)) {
+			for _, d := range days {
+				@adminBar([]adminSegment{{float64(d.Scans - d.Failed), vizBlue}, {float64(d.Failed), vizCritical}}, axis,
+					[]string{d.From.Format("Mon, Jan 2"), fmt.Sprintf("%d read · %d failed", d.Scans-d.Failed, d.Failed), usd(d.Cost())})
+			}
+		}
+	}
+}
+
+templ adminCostMonthlyChart(months []models.ReceiptUsageBucket) {
+	{{
+	var vals []float64
+	labels := make([]string, len(months))
+	for i, m := range months {
+		vals = append(vals, m.Cost()*100)
+		labels[i] = m.From.Format("Jan")
+	}
+	axis := axisOf(vals...)
+	}}
+	@adminChartCard("Cost a month (US cents)") {
+		@adminBarPlot(axis, labels, max(len(months)/12, 1)) {
+			for _, m := range months {
+				@adminBar([]adminSegment{{m.Cost() * 100, vizBlue}}, axis,
+					[]string{m.From.Format("January 2006"), usd(m.Cost()), fmt.Sprintf("%d scans", m.Scans)})
+			}
+		}
+	}
+}
+
+templ adminTokensMonthlyChart(months []models.ReceiptUsageBucket) {
+	{{
+	var vals []float64
+	labels := make([]string, len(months))
+	for i, m := range months {
+		vals = append(vals, float64(m.InputTokens+m.OutputTokens))
+		labels[i] = m.From.Format("Jan")
+	}
+	axis := axisOf(vals...)
+	}}
+	@adminChartCard("Tokens a month") {
+		<div class="flex gap-3">
+			@vizLegend("Input", vizBlue)
+			@vizLegend("Output (thinking included)", vizOrange)
+		</div>
+		@adminBarPlot(axis, labels, max(len(months)/12, 1)) {
+			for _, m := range months {
+				@adminBar([]adminSegment{{float64(m.InputTokens), vizBlue}, {float64(m.OutputTokens), vizOrange}}, axis,
+					[]string{m.From.Format("January 2006"),
+						fmt.Sprintf("%s in", components.CompactNum(float64(m.InputTokens))),
+						fmt.Sprintf("%s out", components.CompactNum(float64(m.OutputTokens)))})
+			}
+		}
+	}
+}
+
+// adminTopTenantsChart is this month's scans per tenant, the most first.
+templ adminTopTenantsChart(tenants []models.TenantReceiptUsage) {
+	{{
+	var top []models.TenantReceiptUsage
+	for _, t := range tenants {
+		if t.ThisMonth.Scans > 0 && len(top) < 8 {
+			top = append(top, t)
+		}
+	}
+	var most int
+	for _, t := range top {
+		most = max(most, t.ThisMonth.Scans)
+	}
+	}}
+	@adminChartCard("Scans this month · by account") {
+		if len(top) == 0 {
+			<p class="text-sm text-zinc-500">No scans this month yet.</p>
+		} else {
+			<ul class="grid gap-3">
+				for _, t := range top {
+					<li tabindex="0" class="group grid gap-1 outline-none">
+						<div class="flex justify-between gap-3 text-sm">
+							<span class="font-mono text-zinc-300 truncate">{ t.TenantID }</span>
+							<span class="tabular-nums text-zinc-400">{ fmt.Sprintf("%d / %d · %s", t.ThisMonth.Scans, t.Limit, usd(t.ThisMonth.Cost())) }</span>
+						</div>
+						<div class="h-2 rounded-full bg-zinc-800/80 overflow-hidden">
+							<div class="h-full rounded-full" style={ templ.SafeCSS(fmt.Sprintf("width:%.2f%%;background:%s;", float64(t.ThisMonth.Scans)/float64(max(most, 1))*100, vizBlue)) }></div>
+						</div>
+					</li>
+				}
+			</ul>
+		}
+	}
+}
+
+func adminReceiptRowID(id string) string { return "admin-receipts-" + id }
+
+templ adminReceiptTenants(d AdminReceiptsData) {
+	<section class="grid gap-3" x-data="{ q: '' }">
+		<header class="flex flex-wrap items-end justify-between gap-3">
+			<div class="min-w-0">
+				<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+					@icons.Users("16")
+					Accounts
+				</h2>
+				<p class="text-sm text-zinc-600">Limits are scans a calendar month (UTC). Empty a limit to go back to the default.</p>
+			</div>
+			<input type="search" x-model="q" placeholder="Search by account ID" aria-label="Search by account ID" class="input-field w-full sm:w-72 font-mono"/>
+		</header>
+		if len(d.Report.Tenants) == 0 {
+			<p class="text-zinc-500">No scans yet.</p>
+		}
+		<ul class="grid gap-2">
+			for _, t := range d.Report.Tenants {
+				@AdminReceiptTenantRow(t, d.DefaultLimit, "")
+			}
+		</ul>
+	</section>
+}
+
+// AdminReceiptTenantRow is a tenant's usage with its limit's input; saved
+// tells it was just changed.
+templ AdminReceiptTenantRow(t models.TenantReceiptUsage, def int, saved string) {
+	<li
+		id={ adminReceiptRowID(t.TenantID) }
+		data-tenant={ t.TenantID }
+		x-show="!q || $el.dataset.tenant.toLowerCase().includes(q.toLowerCase())"
+		class="grid gap-3 p-4 rounded-2xl bg-zinc-800/30 ring-1 ring-zinc-800 sm:grid-cols-[1fr_auto] sm:items-center"
+	>
+		<div class="grid gap-1 min-w-0">
+			<p class="font-mono text-sm [overflow-wrap:anywhere]">{ t.TenantID }</p>
+			<p class="text-sm text-zinc-400 tabular-nums">
+				{ fmt.Sprintf("This month %d / %d · %s", t.Billed, t.Limit, usd(t.ThisMonth.Cost())) }
+				<span class="text-zinc-500">{ fmt.Sprintf(" · all time %d scans · %s", t.AllTime.Scans, usd(t.AllTime.Cost())) }</span>
+			</p>
+			<p class="text-xs text-zinc-500 tabular-nums">
+				{ fmt.Sprintf("%s in · %s out tokens", components.CompactNum(float64(t.AllTime.InputTokens)), components.CompactNum(float64(t.AllTime.OutputTokens))) }
+				if !t.AllTime.Last.IsZero() {
+					{ " · last scan " + t.AllTime.Last.Format("Jan 2, 2006 15:04") + " UTC" }
+				}
+			</p>
+		</div>
+		<form
+			hx-put={ fmt.Sprintf("/admin/receipts/limits/%s", t.TenantID) }
+			hx-target={ "#" + adminReceiptRowID(t.TenantID) }
+			hx-swap="outerHTML"
+			class="flex items-center gap-2"
+		>
+			<label class="text-sm text-zinc-400" for={ "limit-" + t.TenantID }>Limit</label>
+			<input
+				id={ "limit-" + t.TenantID }
+				type="number"
+				name="limit"
+				min="0"
+				max="100000"
+				inputmode="numeric"
+				if t.Custom {
+					value={ fmt.Sprint(t.Limit) }
+				}
+				placeholder={ fmt.Sprintf("%d (default)", def) }
+				class="input-field w-32! text-center tabular-nums"
+			/>
+			<button type="submit" class="btn-ghost h-11!">Save</button>
+			if saved != "" {
+				<span class="text-sm text-emerald-400" role="status">{ saved }</span>
+			}
+		</form>
+	</li>
+}

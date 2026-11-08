@@ -86,7 +86,7 @@ func (r *Repository) createTransactionWithTxn(qtx *queries.Queries, ctx context.
 		return err
 	}
 	l.Debug("created transaction", zap.Any("transaction", tx))
-	return nil
+	return writeTxExtrasWithTxn(ctx, qtx, tx, true)
 }
 
 func (r *Repository) createTransactionAndApplyToAccountIfNeededWithTxn(ctx context.Context, qtx *queries.Queries, tx *models.Transaction) error {
@@ -198,6 +198,9 @@ func (r *Repository) GetTransactionsPage(ctx context.Context, f models.TxFilter,
 		return nil, err
 	}
 	if err := r.loadTransferPairs(ctx, q, page.Upcoming, page.History); err != nil {
+		return nil, err
+	}
+	if err := loadTxItemCounts(ctx, q, page.Upcoming, page.History); err != nil {
 		return nil, err
 	}
 	if err := r.loadGoalProgress(ctx, page.Upcoming); err != nil {
@@ -399,6 +402,9 @@ func (r *Repository) GetTransaction(ctx context.Context, id string) (*models.Tra
 	if err := markAutoRecurrent(ctx, q, one); err != nil {
 		return nil, err
 	}
+	if err := loadTxItems(ctx, q, one); err != nil {
+		return nil, err
+	}
 	tx := &one[0]
 
 	if tx.Goal != nil {
@@ -552,6 +558,10 @@ func (r *Repository) updateTransactionWithTxn(ctx context.Context, qtx *queries.
 		return err
 	}
 	l.Debug("updated transaction", zap.Any("new_transaction", tx), zap.Any("old_transaction", oldTx))
+
+	if err := writeTxExtrasWithTxn(ctx, qtx, tx, false); err != nil {
+		return err
+	}
 
 	if err := r.syncReimbursementsOnUpdateWithTxn(qtx, ctx, oldTx, tx); err != nil {
 		return err

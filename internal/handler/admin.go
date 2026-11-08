@@ -1,9 +1,12 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/logger"
@@ -141,4 +144,90 @@ func (h Handler) adminTenantsData(r *http.Request) (views.AdminTenantsData, erro
 		Tenants: tenants,
 		Self:    models.TenantID(claims.OAuthProvider, claims.OAuthID),
 	}, nil
+}
+
+// adminReceiptsDays is how many days the admin receipts page's daily chart
+// shows.
+const adminReceiptsDays = 90
+
+// AdminReceipts is the receipt scans' usage: totals, charts and every
+// tenant's with its monthly limit.
+func (h Handler) AdminReceipts(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	b, err := h.repo.GetBalances(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	d, err := h.adminReceiptsData(r)
+	if err != nil {
+		return nil, err
+	}
+	return views.AdminReceipts(getClaims(r.Context()), b, d), nil
+}
+
+func (h Handler) adminReceiptsData(r *http.Request) (views.AdminReceiptsData, error) {
+	ctx := r.Context()
+	now := time.Now().UTC()
+	rng := r.URL.Query().Get("range")
+	if rng != "all" {
+		rng = "12m"
+	}
+	scans, err := h.repo.ReceiptScansSince(ctx, time.Time{})
+	if err != nil {
+		return views.AdminReceiptsData{}, err
+	}
+	limits, err := h.repo.ReceiptLimits(ctx)
+	if err != nil {
+		return views.AdminReceiptsData{}, err
+	}
+	var monthlyFrom time.Time
+	if rng == "12m" {
+		monthlyFrom, _ = models.CalendarMonth(now)
+		monthlyFrom = monthlyFrom.AddDate(0, -11, 0)
+	}
+	return views.AdminReceiptsData{
+		Report:       models.NewReceiptUsageReport(scans, now, now.AddDate(0, 0, -(adminReceiptsDays-1)), monthlyFrom, limits, h.ocrCfg.ScansPerMonth),
+		Range:        rng,
+		Enabled:      h.ocr != nil,
+		Model:        h.ocrCfg.Model,
+		InputPerM:    h.ocrCfg.InputPerM,
+		OutputPerM:   h.ocrCfg.OutputPerM,
+		DefaultLimit: h.ocrCfg.ScansPerMonth,
+		Now:          now,
+	}, nil
+}
+
+// maxReceiptLimit is the most scans a month an admin can give a tenant.
+const maxReceiptLimit = 100000
+
+// SetReceiptLimit sets a tenant's scans a calendar month (empty: back to
+// the default), answering its row.
+func (h Handler) SetReceiptLimit(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	tenantID := r.PathValue("tenant")
+	if !repository.ValidTenantID(tenantID) {
+		return nil, resperr.New(http.StatusNotFound, "No such account")
+	}
+	var limit *int
+	if v := strings.TrimSpace(r.FormValue("limit")); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 || n > maxReceiptLimit {
+			return nil, resperr.New(http.StatusUnprocessableEntity, fmt.Sprintf("The limit is a whole number from 0 to %d.", maxReceiptLimit))
+		}
+		limit = &n
+	}
+	if err := h.repo.SetReceiptLimit(r.Context(), tenantID, limit); err != nil {
+		return nil, err
+	}
+	logger.FromCtx(r.Context()).Info("set a receipt limit", zap.String("tenant_id", tenantID), zap.Any("limit", limit))
+
+	d, err := h.adminReceiptsData(r)
+	if err != nil {
+		return nil, err
+	}
+	row := models.TenantReceiptUsage{TenantID: tenantID, Limit: h.ocrCfg.ScansPerMonth}
+	for _, t := range d.Report.Tenants {
+		if t.TenantID == tenantID {
+			row = t
+		}
+	}
+	return views.AdminReceiptTenantRow(row, d.DefaultLimit, "Saved"), nil
 }

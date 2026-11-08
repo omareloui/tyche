@@ -152,6 +152,10 @@ func (r *Repository) DeleteTenant(ctx context.Context, tenantID string) error {
 	if err := r.vaults.Delete(ctx, tenantID); err != nil {
 		return err
 	}
+	// Its scans stay for the usage history.
+	if err := r.shared.DeleteReceiptLimit(ctx, tenantID); err != nil {
+		return fmt.Errorf("deleting the tenant's receipt limit: %w", err)
+	}
 	logger.FromCtx(ctx).Warn("deleted a tenant", zap.String("tenantID", tenantID))
 	return nil
 }

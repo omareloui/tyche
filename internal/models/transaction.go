@@ -28,13 +28,13 @@ type Transaction struct {
 	RecurrentAuto bool
 	// LoanGoalID is the goal whose loan it pays (one of the payments
 	// scheduled on buying it), its Goal then.
-	LoanGoalID string
-	ScheduledTo   time.Time
-	FulfilledAt   time.Time
-	NeedsReview   bool
-	FromSMS       bool
-	SMSBody       string
-	CreatedAt     time.Time
+	LoanGoalID  string
+	ScheduledTo time.Time
+	FulfilledAt time.Time
+	NeedsReview bool
+	FromSMS     bool
+	SMSBody     string
+	CreatedAt   time.Time
 	// ReimbursesID is the expense this income pays back (part of).
 	ReimbursesID string
 	// Reimbursed is the total of the incomes reimbursing this expense.
@@ -45,18 +45,28 @@ type Transaction struct {
 	TransferPairID string
 	// TransferPair is the incoming leg, nested under the outgoing one.
 	TransferPair *Transaction
+	// Items are its lines (items bought, then charges), in order.
+	Items []TxItem
+	// ItemsCount is how many lines it has, set in lists where the lines
+	// themselves aren't loaded.
+	ItemsCount int
+	// Receipt is its receipt's image, nil when none.
+	Receipt *Receipt
+	// ReceiptID is a scanned receipt to link on saving it.
+	ReceiptID string
 }
 
 type commonFieldsForTxAndRtx struct {
-	ID             string  `validate:"required,ulid"`
-	AccountID      string  `validate:"required,ulid"`
-	Amount         float64 `validate:"required"`
-	Kind           uint8   `validate:"required"`
-	CategoryID     string  `validate:"excluded_if=Kind 3,excluded_if=Kind 4,excluded_if=Kind 6,omitempty,ulid"`
-	CounterpartyID string  `validate:"excluded_if=Kind 3,excluded_if=Kind 4,excluded_if=Kind 6,omitempty,ulid"`
-	ToAccountID    string  `validate:"required_if=Kind 3,required_if=Kind 4,omitempty,ulid"`
-	ToAmount       float64 `validate:"required_if=Kind 3,required_if=Kind 4"`
-	Description    string  `conform:"trim"`
+	ID             string   `validate:"required,ulid"`
+	AccountID      string   `validate:"required,ulid"`
+	Amount         float64  `validate:"required"`
+	Kind           uint8    `validate:"required"`
+	CategoryID     string   `validate:"excluded_if=Kind 3,excluded_if=Kind 4,excluded_if=Kind 6,omitempty,ulid"`
+	CounterpartyID string   `validate:"excluded_if=Kind 3,excluded_if=Kind 4,excluded_if=Kind 6,omitempty,ulid"`
+	ToAccountID    string   `validate:"required_if=Kind 3,required_if=Kind 4,omitempty,ulid"`
+	ToAmount       float64  `validate:"required_if=Kind 3,required_if=Kind 4"`
+	Description    string   `conform:"trim"`
+	Items          []TxItem `validate:"max=200,dive"`
 }
 
 type createTransaction struct {
@@ -124,6 +134,7 @@ func (t *Transaction) toValidate() *createTransaction {
 			ToAccountID:    toAccID,
 			ToAmount:       t.ToAmount,
 			Description:    t.Description,
+			Items:          t.Items,
 		},
 		ScheduledTo: t.ScheduledTo,
 	}

@@ -14,7 +14,7 @@ import (
 // full reset seeds the defaults again, as for a new user.
 func (r *Repository) Reset(ctx context.Context, opts models.ResetOptions) error {
 	// Its recurrent transactions changed: written again on the next request.
-	defer r.forgetTopUpOf(ctx)
+	defer r.forgetDailyUpkeepOf(ctx)
 	l := logger.FromCtx(ctx)
 	opts.Normalize()
 

@@ -2,7 +2,7 @@
 // without a network with the offline page and shows the badge's pushes. Only static files and /offline
 // are ever cached, never a page or partial (they hold the user's data).
 // Bump CACHE when changing PRECACHE.
-const CACHE = "tyche-static-v2";
+const CACHE = "tyche-static-v3";
 const OFFLINE = "/offline";
 
 const PRECACHE = [
@@ -23,6 +23,7 @@ const PRECACHE = [
   "/js/tags-input.js",
   "/js/drawer.js",
   "/js/transactions.js",
+  "/js/receipts.js",
   "/js/money-inputs.js",
   "/js/passkeys.js",
   "/js/badge.js",

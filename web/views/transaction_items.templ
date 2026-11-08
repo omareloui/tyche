@@ -1,0 +1,559 @@
+package views
+
+import (
+	"fmt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+	"strconv"
+)
+
+// TxItemFD is a line's inputs, sent as parallel item_* fields.
+type TxItemFD struct {
+	ID        string
+	Kind      models.TxItemKind
+	Name      string
+	Quantity  string
+	UnitPrice string
+	Total     string
+	Rate      string
+	Included  bool
+	Error     string
+}
+
+// ReceiptFD is the form's receipt scanning: whether it's on, the receipt
+// scanned (to link on saving) and what the scan told.
+type ReceiptFD struct {
+	Enabled bool
+	// ID is the receipt scanned, linked on saving; URL its image.
+	ID  string
+	URL string
+	// Size is the image's size, e.g. "182 KB".
+	Size string
+	// Notice tells what the scan filled in, Warning what to check (e.g.
+	// another currency than the account's).
+	Notice  string
+	Warning string
+	// Left is how many scans are left this month, shown after a scan
+	// (Scanned).
+	Scanned bool
+	Left    int
+	Limit   int
+}
+
+func txItemsID(id string) string { return "tx-items-" + id }
+
+func txScanErrorID(id string) string { return "tx-scan-error-" + id }
+
+// TxFormBodyID is the transaction form's fields, re-rendered by a scan.
+func TxFormBodyID(id string) string { return "tx-form-body-" + id }
+
+// TxScanErrorID is where a scan's error is shown.
+func TxScanErrorID(id string) string { return txScanErrorID(id) }
+
+func formatItemNum(v float64) string {
+	if v == 0 {
+		return ""
+	}
+	return strconv.FormatFloat(v, 'f', -1, 64)
+}
+
+// TxItemsToFD maps lines to their inputs.
+func TxItemsToFD(items []models.TxItem) []TxItemFD {
+	fds := make([]TxItemFD, len(items))
+	for i, it := range items {
+		fd := TxItemFD{
+			ID: it.ID, Kind: it.Kind, Name: it.Name, Included: it.Included,
+			Quantity: formatItemNum(it.Quantity), UnitPrice: formatItemNum(it.UnitPrice), Total: formatItemNum(it.Total),
+		}
+		if it.Rate != nil {
+			fd.Rate = strconv.FormatFloat(*it.Rate, 'f', -1, 64)
+		}
+		if it.Kind.IsCharge() {
+			fd.UnitPrice = ""
+			fd.Quantity = ""
+		}
+		fds[i] = fd
+	}
+	return fds
+}
+
+func txItemsCountLabel(n int) string {
+	if n == 1 {
+		return "1 line"
+	}
+	return fmt.Sprintf("%d lines", n)
+}
+
+// txItemsField edits the transaction's lines (items, then charges) as rows,
+// with the receipt scanning buttons when on. Blank rows are dropped.
+templ txItemsField(id string, items []TxItemFD, rec *ReceiptFD) {
+	{{ open := len(items) > 0 || rec.ID != "" }}
+	<div id={ txItemsID(id) } x-data={ fmt.Sprintf("{open: %t}", open) } data-tx-items class="grid gap-2">
+		<div class="flex items-center justify-between gap-2">
+			<button type="button" @click="open = !open" class="input-label cursor-pointer" :aria-expanded="open">
+				@icons.Receipt("15")
+				Items
+				if len(items) > 0 {
+					<span class="text-zinc-500 font-normal">· { txItemsCountLabel(len(items)) }</span>
+				}
+				<span class="transition-transform" :class="open && 'rotate-180'">
+					@icons.ChevronDown("14")
+				</span>
+			</button>
+			if rec.Enabled {
+				@receiptScanButtons(id)
+			}
+		</div>
+		if rec.Enabled {
+			<div id={ txScanErrorID(id) } class="text-sm text-red-400 empty:hidden" role="alert"></div>
+			if rec.Notice != "" || rec.Warning != "" || rec.Scanned {
+				<div class="grid gap-1 text-sm">
+					if rec.Notice != "" {
+						<p class="text-emerald-400">{ rec.Notice }</p>
+					}
+					if rec.Warning != "" {
+						<p class="inline-flex items-start gap-1.5 text-amber-400">
+							@icons.Warning("14", &templ.Attributes{"class": "mt-1 shrink-0"})
+							{ rec.Warning }
+						</p>
+					}
+					if rec.Scanned {
+						<p class="text-zinc-500">{ fmt.Sprintf("%d of %d scans left this month.", rec.Left, rec.Limit) }</p>
+					}
+				</div>
+			}
+		}
+		<input type="hidden" name="receipt_id" value={ rec.ID }/>
+		<div x-show="open" x-cloak?={ !open } class="grid gap-2">
+			if rec.URL != "" {
+				<div class="flex items-center gap-3 p-2 rounded-xl border border-zinc-800 bg-zinc-900/40" x-data="{full: false}">
+					<button type="button" @click="full = true" class="shrink-0 cursor-zoom-in" aria-label="Open the receipt">
+						<img src={ rec.URL } alt="Scanned receipt" class="w-12 h-16 object-cover rounded-lg bg-zinc-800"/>
+					</button>
+					<div class="flex-1 min-w-0 text-sm">
+						<p class="text-zinc-400">The receipt is saved with the transaction.</p>
+						if rec.Size != "" {
+							<p class="text-xs text-zinc-500 tabular-nums">{ rec.Size }</p>
+						}
+					</div>
+					<template x-teleport="body">
+						<div x-show="full" x-cloak x-transition.opacity @click="full = false" @keydown.escape.window="full = false" class="fixed inset-0 z-[80] grid place-items-center p-4 bg-black/85 cursor-zoom-out">
+							<img src={ rec.URL } alt="Scanned receipt" class="block w-auto h-auto max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem)] object-contain rounded-lg"/>
+						</div>
+					</template>
+				</div>
+			}
+			<div x-ref="rows" class="grid gap-2">
+				for _, it := range items {
+					@txItemRow(it)
+				}
+			</div>
+			<template x-ref="item">
+				@txItemRow(TxItemFD{})
+			</template>
+			<template x-ref="charge">
+				@txItemRow(TxItemFD{Kind: models.TxItemVAT})
+			</template>
+			<div class="flex flex-wrap gap-1">
+				<button
+					type="button"
+					@click="$refs.rows.append($refs.item.content.cloneNode(true)); $nextTick(() => $refs.rows.lastElementChild.querySelector('input[name=item_name]').focus())"
+					class="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm text-zinc-300 cursor-pointer transition-colors hover:bg-zinc-800"
+				>
+					@icons.Plus("15")
+					Add item
+				</button>
+				<button
+					type="button"
+					@click="$refs.rows.append($refs.charge.content.cloneNode(true)); $nextTick(() => $refs.rows.lastElementChild.querySelector('select').focus())"
+					class="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm text-zinc-300 cursor-pointer transition-colors hover:bg-zinc-800"
+				>
+					@icons.Plus("15")
+					Add VAT, service, discount…
+				</button>
+			</div>
+		</div>
+	</div>
+}
+
+// receiptScanButtons take a photo or pick an image, resized then posted
+// with the form's fields (receipts.js) to fill the form from the receipt.
+templ receiptScanButtons(id string) {
+	<div class="flex items-center gap-1" data-receipt-scan>
+		for _, b := range []struct{ label string; capture bool }{{"Take a photo of the receipt", true}, {"Choose a receipt image", false}} {
+			<label
+				title={ b.label }
+				class="relative grid place-items-center w-9 h-9 rounded-lg text-zinc-300 cursor-pointer transition-colors hover:bg-zinc-800 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-zinc-500"
+			>
+				<span class="sr-only">{ b.label }</span>
+				if b.capture {
+					@icons.Camera("17")
+				} else {
+					@icons.Image("17")
+				}
+				<input
+					type="file"
+					name="receipt"
+					accept="image/*"
+					if b.capture {
+						capture="environment"
+					}
+					class="sr-only"
+					hx-post={ fmt.Sprintf("/receipts/scan/%s", id) }
+					hx-trigger="receipt-ready"
+					hx-encoding="multipart/form-data"
+					hx-include="closest form"
+					hx-target={ "#" + TxFormBodyID(id) }
+					hx-swap="innerHTML"
+					hx-indicator="closest [data-receipt-scan]"
+					data-receipt-input
+				/>
+			</label>
+		}
+		<span class="htmx-indicator text-sm text-zinc-400" aria-live="polite">Reading…</span>
+	</div>
+	<p class="col-span-full text-xs text-zinc-500 -mt-1 sm:text-right">The photo is sent to Google Gemini to read it.</p>
+}
+
+// txItemRow is a line's inputs: an item's name, quantity, unit price and
+// total, or a charge's kind, name, rate, amount and whether it's included.
+templ txItemRow(it TxItemFD) {
+	{{ charge := it.Kind.IsCharge() }}
+	<div data-tx-item class="grid gap-2 p-3 rounded-xl border border-zinc-800 bg-zinc-900/40">
+		<input type="hidden" name="item_id" value={ it.ID }/>
+		if !charge {
+			<input type="hidden" name="item_kind" value="0"/>
+			<input type="hidden" name="item_rate" value=""/>
+			<input type="hidden" name="item_included" value=""/>
+		}
+		<div class="flex gap-2">
+			if charge {
+				<select name="item_kind" aria-label="Charge" class="input-field w-32! shrink-0">
+					for _, k := range models.TxItemChargeKinds() {
+						<option value={ strconv.Itoa(int(k)) } selected?={ k == it.Kind }>{ k.String() }</option>
+					}
+				</select>
+			}
+			<input
+				type="text"
+				name="item_name"
+				value={ it.Name }
+				if charge {
+					placeholder="Name as printed (optional)"
+				} else {
+					placeholder="Item, e.g. Milk 1L"
+				}
+				aria-label="Name"
+				autocomplete="off"
+				class="input-field flex-1 min-w-0"
+				if it.Error != "" {
+					aria-invalid="true"
+				}
+			/>
+			<button
+				type="button"
+				@click="$el.closest('[data-tx-item]').remove()"
+				aria-label="Remove line"
+				class="grid place-items-center shrink-0 w-11 h-11 rounded-xl text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white"
+			>
+				@icons.Trash("16")
+			</button>
+		</div>
+		if charge {
+			<div class="grid grid-cols-[5.5rem_1fr] gap-2">
+				<input type="hidden" name="item_quantity" value=""/>
+				<input type="hidden" name="item_unit_price" value=""/>
+				<input type="text" inputmode="decimal" name="item_rate" value={ it.Rate } placeholder="Rate %" aria-label="Rate in %" class="input-field tabular-nums"/>
+				<input type="text" inputmode="decimal" name="item_total" value={ it.Total } placeholder="Amount (from the rate when empty)" aria-label="Amount" class="input-field tabular-nums"/>
+			</div>
+			<label class="inline-flex items-center gap-2 text-sm text-zinc-400 cursor-pointer" x-data={ fmt.Sprintf("{inc: %t}", it.Included) }>
+				<input type="checkbox" x-model="inc" class="accent-emerald-500"/>
+				<input type="hidden" name="item_included" :value="inc ? 'on' : ''" value={ onIfTrue(it.Included) }/>
+				Already included in the prices
+			</label>
+		} else {
+			<div class="grid grid-cols-[4.5rem_1fr_1fr] gap-2">
+				<input type="text" inputmode="decimal" name="item_quantity" value={ it.Quantity } placeholder="Qty" aria-label="Quantity" class="input-field text-center tabular-nums"/>
+				<input type="text" inputmode="decimal" name="item_unit_price" value={ it.UnitPrice } placeholder="Unit price" aria-label="Unit price" class="input-field tabular-nums"/>
+				<input type="text" inputmode="decimal" name="item_total" value={ it.Total } placeholder="Total" aria-label="Total" class="input-field tabular-nums"/>
+			</div>
+		}
+		@form.ErrorMessage(it.Error)
+	</div>
+}
+
+func onIfTrue(b bool) string {
+	if b {
+		return "on"
+	}
+	return ""
+}
+
+// TxItemsList shows the lines: the items, a subtotal when there are charges,
+// the charges, then what they add up to, against amount.
+templ TxItemsList(items []models.TxItem, cur *models.Currency, amount float64, onDelete func(models.TxItem) string) {
+	<ul class="grid grid-cols-1 gap-1">
+		for _, it := range items {
+			if !it.Kind.IsCharge() {
+				@txItemLine(it, cur, onDelete)
+			}
+		}
+	</ul>
+	if models.HasTxItemCharges(items) {
+		<div class="flex justify-between gap-3 px-3 pt-1 text-sm text-zinc-400 border-t border-zinc-800">
+			<span>Subtotal</span>
+			<span class="sensitive tabular-nums">{ cur.Format(models.TxItemsSubtotal(items)) }</span>
+		</div>
+		<ul class="grid grid-cols-1 gap-1">
+			for _, it := range items {
+				if it.Kind.IsCharge() {
+					@txItemLine(it, cur, onDelete)
+				}
+			}
+		</ul>
+	}
+	<div class="flex justify-between gap-3 px-3 pt-1 text-sm font-semibold border-t border-zinc-800">
+		<span>Total</span>
+		<span class="sensitive tabular-nums">{ cur.Format(models.TxItemsTotal(items)) }</span>
+	</div>
+	if models.TxItemsMismatch(items, amount) {
+		<p class="inline-flex items-start gap-1.5 px-3 text-sm text-amber-400">
+			@icons.Warning("14", &templ.Attributes{"class": "mt-1 shrink-0"})
+			{ fmt.Sprintf("The lines add up to %s, the amount is %s.", cur.Format(models.TxItemsTotal(items)), cur.Format(abs(amount))) }
+		</p>
+	}
+}
+
+func abs(v float64) float64 {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
+templ txItemLine(it models.TxItem, cur *models.Currency, onDelete func(models.TxItem) string) {
+	<li class="flex items-center gap-3 min-w-0 px-3 py-1.5 rounded-xl bg-tx-row" data-tx-item-line>
+		<div class="flex-1 min-w-0">
+			<p class="text-sm [overflow-wrap:anywhere]">
+				{ it.Label() }
+				if it.Kind.IsCharge() && it.Name != "" && it.Rate != nil {
+					<span class="text-zinc-500">{ fmt.Sprintf(" · %s%%", strconv.FormatFloat(*it.Rate, 'f', -1, 64)) }</span>
+				}
+				if it.Included {
+					<span class="text-zinc-500"> · included</span>
+				}
+			</p>
+			if !it.Kind.IsCharge() && it.Quantity != 1 {
+				<p class="text-xs text-zinc-500 tabular-nums">{ fmt.Sprintf("%s × %s", strconv.FormatFloat(it.Quantity, 'f', -1, 64), cur.Format(it.UnitPrice)) }</p>
+			}
+		</div>
+		<span
+			class={ "text-sm tabular-nums", templ.KV("text-emerald-400", it.Total < 0), templ.KV("text-zinc-500 line-through decoration-zinc-600", it.Included) }
+		>{ cur.Format(it.Total) }</span>
+		if onDelete != nil {
+			<button
+				type="button"
+				hx-delete={ onDelete(it) }
+				hx-target="closest [data-tx-items-section]"
+				hx-swap="outerHTML"
+				aria-label={ "Remove " + it.Label() }
+				class="grid place-items-center shrink-0 w-8 h-8 rounded-lg text-zinc-500 cursor-pointer transition-colors hover:bg-zinc-700 hover:text-white"
+			>
+				@icons.X("14")
+			</button>
+		}
+	</li>
+}
+
+// TxItemAddForm adds a line from the details (an item or a charge, picked
+// by kind), posted to url; fd is its data, with its error.
+templ txItemAddForm(url string, fd *TxItemFD) {
+	{{ open := fd != nil }}
+	if fd == nil {
+		{{ fd = &TxItemFD{} }}
+	}
+	<div x-data={ fmt.Sprintf("{adding: %t, kind: '%d'}", open, fd.Kind) }>
+		<form
+			x-show="adding"
+			x-cloak?={ !open }
+			hx-post={ url }
+			hx-target="closest [data-tx-items-section]"
+			hx-swap="outerHTML"
+			@keydown.escape.stop="adding = false"
+			class="grid gap-2 p-3 rounded-xl border border-zinc-800 bg-zinc-900/40"
+		>
+			<div class="flex gap-2">
+				<select name="kind" x-model="kind" aria-label="Line" class="input-field w-32! shrink-0">
+					<option value="0">Item</option>
+					for _, k := range models.TxItemChargeKinds() {
+						<option value={ strconv.Itoa(int(k)) }>{ k.String() }</option>
+					}
+				</select>
+				<input
+					type="text"
+					name="name"
+					value={ fd.Name }
+					:placeholder="kind === '0' ? 'Item, e.g. Milk 1L' : 'Name as printed (optional)'"
+					aria-label="Name"
+					autocomplete="off"
+					x-effect="if (adding) $nextTick(() => $el.focus())"
+					class="input-field flex-1 min-w-0"
+				/>
+			</div>
+			<div x-show="kind === '0'" class="grid grid-cols-[4.5rem_1fr_1fr] gap-2">
+				<input type="text" inputmode="decimal" name="quantity" value={ fd.Quantity } placeholder="Qty" aria-label="Quantity" class="input-field text-center tabular-nums"/>
+				<input type="text" inputmode="decimal" name="unit_price" value={ fd.UnitPrice } placeholder="Unit price" aria-label="Unit price" class="input-field tabular-nums"/>
+				<input type="text" inputmode="decimal" name="total" value={ fd.Total } placeholder="Total" aria-label="Total" class="input-field tabular-nums" :disabled="kind !== '0'"/>
+			</div>
+			<div x-show="kind !== '0'" x-cloak class="grid gap-2">
+				<div class="grid grid-cols-[5.5rem_1fr] gap-2">
+					<input type="text" inputmode="decimal" name="rate" value={ fd.Rate } placeholder="Rate %" aria-label="Rate in %" class="input-field tabular-nums"/>
+					<input type="text" inputmode="decimal" name="total" value={ fd.Total } placeholder="Amount (from the rate when empty)" aria-label="Amount" class="input-field tabular-nums" :disabled="kind === '0'"/>
+				</div>
+				<label class="inline-flex items-center gap-2 text-sm text-zinc-400 cursor-pointer">
+					<input type="checkbox" name="included" checked?={ fd.Included } class="accent-emerald-500"/>
+					Already included in the prices
+				</label>
+			</div>
+			@form.ErrorMessage(fd.Error)
+			<div class="flex justify-end gap-2">
+				<button type="button" @click="adding = false" class="btn-ghost h-9!">Cancel</button>
+				<button type="submit" class="btn-primary h-9!">Add</button>
+			</div>
+		</form>
+		<button type="button" x-show="!adding" @click="adding = true" class="txd-action justify-self-start">
+			@icons.Plus("14")
+			Add a line
+		</button>
+	</div>
+}
+
+func txItemsSectionID(prefix, id string) string { return prefix + "-items-" + id }
+
+// TxDetailsItems is the transaction details' lines, receipt and scan; add is
+// the add form's data, open with its error, nil when closed; rec the scan's
+// state.
+templ TxDetailsItems(tx *models.Transaction, add *TxItemFD, rec *ReceiptFD) {
+	{{ locked := tx.IsLocked() }}
+	<div id={ txItemsSectionID("tx", tx.ID) } data-tx-items-section>
+		@txDetailsSection("Items") {
+			if tx.Receipt != nil {
+				<div class="flex items-center gap-3" x-data="{full: false}">
+					<button type="button" @click="full = true" class="shrink-0 cursor-zoom-in" aria-label="Open the receipt">
+						<img src={ tx.Receipt.URL() } alt="Receipt" loading="lazy" class="w-14 h-20 object-cover rounded-lg bg-zinc-800"/>
+					</button>
+					<div class="flex-1 min-w-0 text-sm">
+						<p class="text-zinc-300">Receipt</p>
+						if size := tx.Receipt.ViewSize(); size != "" {
+							<p class="text-xs text-zinc-500 tabular-nums">{ size }</p>
+						}
+					</div>
+					if !locked {
+						<button
+							type="button"
+							hx-delete={ fmt.Sprintf("/receipts/%s", tx.Receipt.ID) }
+							hx-target="closest [data-tx-items-section]"
+							hx-swap="outerHTML"
+							hx-confirm="Delete the receipt's image? Its lines stay."
+							class="txd-action"
+						>
+							@icons.Trash("14")
+							Delete image
+						</button>
+					}
+					<template x-teleport="body">
+						<div x-show="full" x-cloak x-transition.opacity @click="full = false" @keydown.escape.window="full = false" class="fixed inset-0 z-[80] grid place-items-center p-4 bg-black/85 cursor-zoom-out">
+							<img src={ tx.Receipt.URL() } alt="Receipt" class="block w-auto h-auto max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem)] object-contain rounded-lg"/>
+						</div>
+					</template>
+				</div>
+			}
+			if len(tx.Items) == 0 {
+				<p class="text-sm text-zinc-500">No items yet.</p>
+			} else {
+				{{ var onDelete func(models.TxItem) string }}
+				if !locked {
+					{{ onDelete = func(it models.TxItem) string { return fmt.Sprintf("/transactions/%s/items/%s", tx.ID, it.ID) } }}
+				}
+				@TxItemsList(tx.Items, &tx.Account.Currency, tx.Amount, onDelete)
+			}
+			if rec != nil && (rec.Notice != "" || rec.Warning != "" || rec.Scanned) {
+				<div class="grid gap-1 text-sm">
+					if rec.Notice != "" {
+						<p class="text-emerald-400">{ rec.Notice }</p>
+					}
+					if rec.Warning != "" {
+						<p class="text-amber-400">{ rec.Warning }</p>
+					}
+					if rec.Scanned {
+						<p class="text-zinc-500">{ fmt.Sprintf("%d of %d scans left this month.", rec.Left, rec.Limit) }</p>
+					}
+				</div>
+			}
+			if !locked {
+				<div class="flex flex-wrap items-start gap-2">
+					@txItemAddForm(fmt.Sprintf("/transactions/%s/items", tx.ID), add)
+					if rec != nil && rec.Enabled {
+						@detailsScanButtons(tx)
+					}
+				</div>
+				<div id={ "txd-scan-error-" + tx.ID } class="text-sm text-red-400 empty:hidden" role="alert"></div>
+			}
+		}
+	</div>
+}
+
+// detailsScanButtons scan a receipt for a saved transaction: its lines
+// (asked before replacing them) and image.
+templ detailsScanButtons(tx *models.Transaction) {
+	<form
+		hx-post={ fmt.Sprintf("/transactions/%s/receipt", tx.ID) }
+		hx-trigger="receipt-ready"
+		hx-encoding="multipart/form-data"
+		hx-target="closest [data-tx-items-section]"
+		hx-swap="outerHTML"
+		hx-indicator="this"
+		data-receipt-scan
+		if len(tx.Items) > 0 {
+			data-receipt-confirm="Replace the lines with the receipt's?"
+		}
+		class="flex items-center gap-1"
+	>
+		for _, b := range []struct{ label string; capture bool }{{"Take a photo of the receipt", true}, {"Choose a receipt image", false}} {
+			<label title={ b.label } class="txd-action cursor-pointer has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-zinc-500">
+				if b.capture {
+					@icons.Camera("14")
+					Scan receipt
+				} else {
+					@icons.Image("14")
+					<span class="sr-only">{ b.label }</span>
+				}
+				<input type="file" name="receipt" accept="image/*" capture?={ b.capture } class="sr-only" data-receipt-input/>
+			</label>
+		}
+		<span class="htmx-indicator text-sm text-zinc-400" aria-live="polite">Reading…</span>
+	</form>
+	<p class="basis-full text-xs text-zinc-500">The photo is sent to Google Gemini to read it.</p>
+}
+
+// RecurrentTxDetailsItems is the recurrent transaction details' lines, copied
+// to its occurrences; add is the add form's data, nil when closed.
+templ RecurrentTxDetailsItems(rt *models.RecurrentTx, add *TxItemFD) {
+	<div id={ txItemsSectionID("rtx", rt.ID) } data-tx-items-section>
+		@txDetailsSection("Items") {
+			if len(rt.Items) == 0 {
+				<p class="text-sm text-zinc-500">No items yet. They're copied to each transaction.</p>
+			} else {
+				{{ var onDelete func(models.TxItem) string }}
+				if !rt.IsGamyaa() {
+					{{ onDelete = func(it models.TxItem) string { return fmt.Sprintf("/recurrent-tx/%s/items/%s", rt.ID, it.ID) } }}
+				}
+				@TxItemsList(rt.Items, &rt.Account.Currency, rt.Amount, onDelete)
+			}
+			if !rt.IsGamyaa() {
+				@txItemAddForm(fmt.Sprintf("/recurrent-tx/%s/items", rt.ID), add)
+			}
+		}
+	</div>
+}

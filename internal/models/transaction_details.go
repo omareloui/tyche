@@ -5,6 +5,8 @@ import "time"
 // TxDetails is everything the details drawer of a transaction shows.
 type TxDetails struct {
 	Tx *Transaction
+	// ReceiptScan tells receipts can be scanned (reading them is on).
+	ReceiptScan bool
 	// SMS is the message the transaction was created from, if any, and
 	// SMSTemplate the name of the template that read it.
 	SMS         *SMSMessage

@@ -2,14 +2,12 @@ package repository
 
 import (
 	"database/sql"
-	"errors"
 	"time"
 
 	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/queries"
-	"github.com/omareloui/tyche/internal/tzctx"
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
 )
@@ -55,7 +53,7 @@ func (r *Repository) createRecurrentTxWithTxn(qtx *queries.Queries, ctx context.
 		return err
 	}
 	l.Debug("created recurrent transaction", zap.Any("recurrent tx", rt))
-	return nil
+	return writeRecurrentItemsWithTxn(ctx, qtx, rt, false)
 }
 
 func (r *Repository) GetRecurrentTxs(ctx context.Context) ([]models.RecurrentTx, error) {
@@ -89,6 +87,9 @@ func (r *Repository) GetRecurrentTxs(ctx context.Context) ([]models.RecurrentTx,
 			rt.AddOccurrence(o.ScheduledTo, o.FulfilledAt.Valid)
 		}
 	}
+	if err := loadRecurrentTxItems(ctx, q, rts); err != nil {
+		return nil, err
+	}
 
 	return rts, nil
 }
@@ -117,6 +118,9 @@ func (r *Repository) GetRecurrentTx(ctx context.Context, id string) (*models.Rec
 	}
 	for _, o := range occs {
 		rt.AddOccurrence(o.ScheduledTo, o.FulfilledAt.Valid)
+	}
+	if rt.Items, err = recurrentTxItemsOf(ctx, q, id); err != nil {
+		return nil, err
 	}
 
 	return rt, nil
@@ -191,6 +195,9 @@ func (r *Repository) UpdateRecurrentTx(ctx context.Context, old, rt *models.Recu
 		}
 		l.Debug("updated recurrent tx", zap.Any("recurrent tx", rt))
 
+		if err := writeRecurrentItemsWithTxn(ctx, qtx, rt, true); err != nil {
+			return err
+		}
 		if !rt.IsPaused() {
 			return r.scheduleRecurrentTxWithTxn(ctx, qtx, rt, today)
 		}
@@ -306,6 +313,13 @@ func (r *Repository) TopUpRecurrentTxs(ctx context.Context) error {
 // fulfills the due ones when it fulfills them by itself.
 func (r *Repository) scheduleRecurrentTxWithTxn(ctx context.Context, qtx *queries.Queries, rt *models.RecurrentTx, today time.Time) error {
 	l := logger.FromCtx(ctx)
+	if rt.Items == nil {
+		items, err := recurrentTxItemsOf(ctx, qtx, rt.ID)
+		if err != nil {
+			return err
+		}
+		rt.Items = items
+	}
 	rt.ContinueFrom(today)
 	ks := rt.ToSchedule(today, models.ScheduleHorizon(monthStartFromCtx(ctx), today))
 	now := time.Now()
@@ -668,42 +682,4 @@ func dbRecurrentTxDetailsToRecurrentTx(dbRtx queries.RecurrentTxsDetail) *models
 func (r *Repository) GetRecurrentTxTransactions(ctx context.Context, id string) ([]models.Transaction, error) {
 	p := queries.GetTransactionsParams{RecurrentTxID: id, Lim: -1}
 	return r.listTransactions(ctx, p)
-}
-
-// TopUpRecurrentTxsDaily runs TopUpRecurrentTxs on the tenant's first request
-// of the day (in the user's time zone), logging what fails: the request goes
-// on without.
-func (r *Repository) TopUpRecurrentTxsDaily(ctx context.Context, tenantID string) {
-	y, m, d := tzctx.In(ctx, time.Now()).Date()
-	day := time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Format(time.DateOnly)
-
-	r.topUpMu.Lock()
-	if r.toppedUp[tenantID] == day {
-		r.topUpMu.Unlock()
-		return
-	}
-	r.toppedUp[tenantID] = day
-	r.topUpMu.Unlock()
-
-	if err := r.TopUpRecurrentTxs(ctx); err != nil {
-		r.forgetTopUp(tenantID)
-		if !errors.Is(err, ErrTenantLocked) && !errors.Is(err, ErrTenantDeleted) {
-			logger.FromCtx(ctx).Error("writing the recurrent transactions' occurrences", zap.Error(err))
-		}
-	}
-}
-
-// forgetTopUp makes the tenant's next request write its recurrent
-// transactions' occurrences, e.g. after its database got replaced.
-func (r *Repository) forgetTopUp(tenantID string) {
-	r.topUpMu.Lock()
-	delete(r.toppedUp, tenantID)
-	r.topUpMu.Unlock()
-}
-
-// forgetTopUpOf is forgetTopUp of the tenant in ctx.
-func (r *Repository) forgetTopUpOf(ctx context.Context) {
-	if id, err := TenantIDFromCtx(ctx); err == nil {
-		r.forgetTopUp(id)
-	}
 }

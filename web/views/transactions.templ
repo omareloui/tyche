@@ -20,6 +20,9 @@ type TransactionFD struct {
 	Description  form.FDInput
 	// WishlistID is the wishlist item being bought, if any.
 	WishlistID string
+	// Items are its lines, Receipt its receipt scanning.
+	Items   []TxItemFD
+	Receipt ReceiptFD
 }
 
 type TransactionAmountsAndKindFD struct {
@@ -89,6 +92,18 @@ templ transactionFormBody(
 	knds []models.TxKind, cats []models.Category,
 	cps []models.Counterparty,
 	defaultCur *models.Currency) {
+	<div id={ TxFormBodyID(id) } class="contents">
+		@TxFormFields(fd, id, accs, knds, cats, cps, defaultCur)
+	</div>
+}
+
+// TxFormFields are transactionFormBody's fields, re-rendered by a receipt
+// scan.
+templ TxFormFields(
+	fd *TransactionFD, id string, accs []models.Account,
+	knds []models.TxKind, cats []models.Category,
+	cps []models.Counterparty,
+	defaultCur *models.Currency) {
 	if fd.WishlistID != "" {
 		<input type="hidden" name="wishlist_id" value={ fd.WishlistID }/>
 	}
@@ -96,6 +111,7 @@ templ transactionFormBody(
 	@form.Field("Description", "description", id, icons.Pencil("15"), fd.Description.Error) {
 		@form.Control("text", "description", "What was it for?", id, fd.Description, nil)
 	}
+	@txItemsField(id, fd.Items, &fd.Receipt)
 	<div x-data>
 		@form.Field("Date", "scheduled_to", id, icons.Calendar("15"), fd.ScheduledTo.Error) {
 			<div class="flex gap-2">

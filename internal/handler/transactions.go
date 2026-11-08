@@ -550,6 +550,8 @@ func (h Handler) DuplicateTransaction(w http.ResponseWriter, r *http.Request) (t
 	dup.ScheduledTo = time.Now()
 	dup.FulfilledAt = time.Time{}
 	dup.RecurrentTx = nil
+	dup.Items = models.CopyTxItems(tx.Items)
+	dup.Receipt, dup.ReceiptID = nil, ""
 
 	claims := getClaims(r.Context())
 	fd := h.mapTransactionToFD(&dup, new(errs.ValidationError))
@@ -713,6 +715,11 @@ func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationE
 		Description:  form.FDInput{Value: t.Description, Error: err.Errors.MsgFor("Description")},
 		ScheduledTo:  form.FDInput{Value: formatDateOnlyIfNonZero(t.ScheduledTo), Error: err.Errors.MsgFor("ScheduledTo")},
 		RecurrenceFD: &views.RecurrenceFD{},
+		Items:        txItemsToFD(t.Items, err),
+		Receipt:      views.ReceiptFD{Enabled: h.ocr != nil, ID: t.ReceiptID},
+	}
+	if t.ReceiptID != "" {
+		fd.Receipt.URL = (&models.Receipt{ID: t.ReceiptID, Hash: "new"}).URL()
 	}
 
 	hasToAccount := t.Kind == models.DebtTxKind || t.Kind == models.TransferTxKind
@@ -826,6 +833,8 @@ func (h Handler) mapFDToTransaction(r *http.Request, isRecurrent bool) (*models.
 		ToAmount:     toAmount,
 		Description:  r.FormValue("description"),
 		ScheduledTo:  scheduledTo,
+		Items:        parseTxItems(r),
+		ReceiptID:    strings.TrimSpace(r.FormValue("receipt_id")),
 	}
 
 	if isRecurrent {
@@ -935,6 +944,7 @@ func (h Handler) prepareTx(r *http.Request, tx *models.Transaction,
 		return h.mapTransactionToFD(tx, valerr), nil
 	}
 	tx.Account = *a
+	normalizeTxItems(tx)
 
 	if c := slicesutils.Find(cats, func(c models.Category) bool { return tx.Category != nil && c.ID == tx.Category.ID }); c != nil {
 		tx.Category = c

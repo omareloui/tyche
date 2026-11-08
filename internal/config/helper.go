@@ -52,3 +52,15 @@ func getEnvironmentValueFromOptions(key string, options []string) string {
 	}
 	return v
 }
+
+func getEnvironmentFloatWithDefault(key string, dflt float64) float64 {
+	v := os.Getenv(key)
+	if v == "" {
+		return dflt
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		log.Fatalf("%s: %s is invalid number", key, v)
+	}
+	return f
+}

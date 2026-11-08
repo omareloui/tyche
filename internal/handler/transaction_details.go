@@ -52,6 +52,7 @@ func (h Handler) txDetails(ctx context.Context, id string) (*models.TxDetails, e
 	if d.SMS != nil && d.SMS.TemplateID != "" {
 		d.SMSTemplate = h.smsTemplateName(ctx, d.SMS.TemplateID)
 	}
+	d.ReceiptScan = h.ocr != nil
 	return d, nil
 }
 

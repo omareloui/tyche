@@ -20,6 +20,7 @@ import (
 	"github.com/omareloui/tyche/internal/fxrate"
 	"github.com/omareloui/tyche/internal/handler"
 	"github.com/omareloui/tyche/internal/logger"
+	"github.com/omareloui/tyche/internal/receiptocr"
 	"github.com/omareloui/tyche/internal/repository"
 	"github.com/omareloui/tyche/internal/router"
 	"github.com/omareloui/tyche/internal/sanitizer"
@@ -83,6 +84,12 @@ func main() {
 	}
 	go badges.RunReposts(ctx)
 	h := handler.New(repo, valid, sani, fxJob, smsTemplates, badges)
+	// A nil *Client in the interface would read as on.
+	if ocrCfg := config.GetReceiptOCR(); ocrCfg.APIKey != "" {
+		h.SetReceiptOCR(receiptocr.New(ocrCfg.APIKey, ocrCfg.Model, ocrCfg.ThinkingLevel), ocrCfg)
+	} else {
+		h.SetReceiptOCR(nil, ocrCfg)
+	}
 
 	srv := http.Server{
 		Addr:    fmt.Sprintf(":%d", port),

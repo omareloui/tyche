@@ -75,6 +75,9 @@ templ TxDetailsPanel(d *models.TxDetails, def *models.Currency) {
 			@txDetailsHero(tx, &v, def)
 			@txDetailsActions(tx)
 			@txDetailsFields(d, &v)
+			if tx.Kind != models.AdjustmentTxKind && (len(tx.Items) > 0 || tx.Receipt != nil || !tx.IsLocked()) {
+				@TxDetailsItems(tx, nil, &ReceiptFD{Enabled: d.ReceiptScan})
+			}
 			@txDetailsMonth(d, def)
 			@txDetailsLinked(d, def)
 			@txDetailsSMS(d)

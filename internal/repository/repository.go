@@ -32,10 +32,10 @@ type Repository struct {
 	// old cookies or device tokens.
 	deleted map[string]bool
 
-	topUpMu sync.Mutex
-	// toppedUp is the day (in the user's time zone) each tenant's recurrent
-	// transactions' occurrences were last written on (TopUpRecurrentTxsDaily).
-	toppedUp map[string]string
+	upkeepMu sync.Mutex
+	// keptUp is the day (in the user's time zone) each tenant's daily upkeep
+	// last ran on (RunDailyUpkeep).
+	keptUp map[string]string
 }
 
 // ErrTenantLocked is returned when the tenant's database is encrypted and the
@@ -61,7 +61,7 @@ type TenantManager struct {
 }
 
 func New(vaults *vault.Store, shared *sharedqueries.Queries) *Repository {
-	return &Repository{tm: newTenantManager(), vaults: vaults, shared: shared, deleted: make(map[string]bool), toppedUp: make(map[string]string)}
+	return &Repository{tm: newTenantManager(), vaults: vaults, shared: shared, deleted: make(map[string]bool), keptUp: make(map[string]string)}
 }
 
 // TenantExists reports whether the tenant's database was already created.

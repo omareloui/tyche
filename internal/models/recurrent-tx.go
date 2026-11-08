@@ -40,6 +40,8 @@ type RecurrentTx struct {
 	ToAccount    *Account
 	Category     *Category
 	Counterparty *Counterparty
+	// Items are its lines, copied to every occurrence.
+	Items []TxItem
 
 	StartsAt  time.Time
 	StopsAt   time.Time
@@ -231,6 +233,7 @@ func (rt *RecurrentTx) Occurrence(id string, k int, now time.Time) Transaction {
 		ToAccount:    rt.ToAccount,
 		ToAmount:     rt.ToAmount,
 		Description:  rt.Description,
+		Items:        CopyTxItems(rt.Items),
 		RecurrentTx:  &RecurrentTx{ID: rt.ID},
 		ScheduledTo:  rt.OccurrenceOn(k),
 		CreatedAt:    now,
@@ -328,6 +331,7 @@ func (rt *RecurrentTx) toValidate() *createRecurrentTx {
 			ToAccountID:    toAccId,
 			ToAmount:       rt.ToAmount,
 			Description:    rt.Description,
+			Items:          rt.Items,
 		},
 		Unit:     rt.Unit,
 		Every:    rt.Every,

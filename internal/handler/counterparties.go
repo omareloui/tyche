@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -204,7 +205,19 @@ func (h Handler) QuickCreateCounterparty(w http.ResponseWriter, r *http.Request)
 		return nil, resperr.New(http.StatusBadRequest, err.Error())
 	}
 
-	cps, err := h.repo.GetCounterparties(r.Context())
+	cp, err := h.findOrCreateCounterparty(r.Context(), cp)
+	if err != nil {
+		return nil, err
+	}
+	return views.CounterpartyComboOption(cp), nil
+}
+
+// findOrCreateCounterparty is the counterparty named (or aliased) cp's name,
+// unarchived when archived (picked by name again, so it's in use), else cp
+// created.
+func (h Handler) findOrCreateCounterparty(ctx context.Context, cp *models.Counterparty) (*models.Counterparty, error) {
+	l := logger.FromCtx(ctx)
+	cps, err := h.repo.GetCounterparties(ctx)
 	if err != nil {
 		l.Error("fetching counterparties", zap.Error(err))
 		return nil, err
@@ -213,15 +226,15 @@ func (h Handler) QuickCreateCounterparty(w http.ResponseWriter, r *http.Request)
 		return strings.EqualFold(c.Name, cp.Name) ||
 			slices.ContainsFunc(c.Aliases, func(a string) bool { return strings.EqualFold(a, cp.Name) })
 	}); existing != nil {
-		// Picked by name again, so it's in use: back in the pickers.
 		if existing.IsArchived {
-			if err := h.repo.SetCounterpartyArchived(r.Context(), existing.ID, false); err != nil {
+			if err := h.repo.SetCounterpartyArchived(ctx, existing.ID, false); err != nil {
 				l.Error("unarchiving counterparty", zap.Error(err))
 				return nil, err
 			}
+			existing.IsArchived = false
 			l.Info("unarchived quick created counterparty", zap.String("id", existing.ID))
 		}
-		return views.CounterpartyComboOption(existing), nil
+		return existing, nil
 	}
 
 	if cp.IsMerchant {
@@ -229,13 +242,12 @@ func (h Handler) QuickCreateCounterparty(w http.ResponseWriter, r *http.Request)
 	}
 	cp.Color = brandicons.Default().ColorFor(cp.Icon, "")
 
-	if err := h.repo.CreateCounterparty(r.Context(), cp); err != nil {
+	if err := h.repo.CreateCounterparty(ctx, cp); err != nil {
 		l.Error("creating counterparty", zap.Error(err))
 		return nil, err
 	}
 	l.Info("quick created counterparty")
-
-	return views.CounterpartyComboOption(cp), nil
+	return cp, nil
 }
 
 func (h Handler) GetEditCounterparty(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

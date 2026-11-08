@@ -63,7 +63,7 @@ if none "$SG_ID"; then
 fi
 
 # --- Secrets (copied once from FROM_REGION when moving region) -----------
-for name in JWT_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET ADMIN_TENANT_IDS; do
+for name in JWT_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET ADMIN_TENANT_IDS GEMINI_API_KEY; do
   aws ssm get-parameter --name "/tyche/$name" >/dev/null 2>&1 && continue
   type=SecureString
   [ "$name" = ADMIN_TENANT_IDS ] && type=String
@@ -73,9 +73,11 @@ for name in JWT_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET ADMIN_TENANT_IDS; d
       --query Parameter.Value --output text)
   elif [ "$name" = ADMIN_TENANT_IDS ] && [ -n "${ADMIN_TENANT_IDS:-}" ]; then
     value="$ADMIN_TENANT_IDS"
+  elif [ "$name" = GEMINI_API_KEY ] && [ -n "${GEMINI_API_KEY:-}" ]; then
+    value="$GEMINI_API_KEY"
   else
     echo "no /tyche/$name, put it with: aws ssm put-parameter --type $type --name /tyche/$name --value ..." >&2
-    echo "(or set FROM_REGION to copy it, ADMIN_TENANT_IDS for the admins)" >&2
+    echo "(or set FROM_REGION to copy it, ADMIN_TENANT_IDS for the admins, GEMINI_API_KEY for reading receipts)" >&2
     exit 1
   fi
   aws ssm put-parameter --name "/tyche/$name" --type "$type" --value "$value" >/dev/null
