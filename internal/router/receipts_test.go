@@ -100,8 +100,16 @@ func TestReceipts(t *testing.T) {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		return send(req, pair.Access.Encoded)
 	}
+	// Every upload is a new image (no cache hit) but for the ones of img.
+	shot := 0
+	var img []byte
 	upload := func(path string, fields url.Values) (*http.Response, string) {
 		t.Helper()
+		data := img
+		if data == nil {
+			shot++
+			data = append(append([]byte{}, jpeg...), byte(shot))
+		}
 		var buf bytes.Buffer
 		mw := multipart.NewWriter(&buf)
 		for k, vs := range fields {
@@ -116,7 +124,7 @@ func TestReceipts(t *testing.T) {
 		hdr.Set("Content-Disposition", `form-data; name="receipt"; filename="receipt.jpg"`)
 		hdr.Set("Content-Type", "image/jpeg")
 		part, _ := mw.CreatePart(hdr)
-		_, _ = part.Write(jpeg)
+		_, _ = part.Write(data)
 		_ = mw.Close()
 		req, _ := http.NewRequest("POST", srv.URL+path, &buf)
 		req.Header.Set("Content-Type", mw.FormDataContentType())
@@ -250,7 +258,7 @@ func TestReceipts(t *testing.T) {
 	t.Run("the receipt image is served and listed on the row", func(t *testing.T) {
 		req, _ := http.NewRequest("GET", srv.URL+"/receipts/"+receiptID, nil)
 		res, body := send(req, pair.Access.Encoded)
-		if res.StatusCode != http.StatusOK || res.Header.Get("Content-Type") != "image/jpeg" || body != string(jpeg) {
+		if res.StatusCode != http.StatusOK || res.Header.Get("Content-Type") != "image/jpeg" || !strings.HasPrefix(body, string(jpeg)) {
 			t.Errorf("status %d type %q", res.StatusCode, res.Header.Get("Content-Type"))
 		}
 		_, list := do("GET", "/transactions", nil)
@@ -302,9 +310,42 @@ func TestReceipts(t *testing.T) {
 		}
 	})
 
+	t.Run("the same image again comes from the cache, not counted", func(t *testing.T) {
+		img = append(append([]byte{}, jpeg...), 0xAB)
+		defer func() { img = nil }()
+		if res, body := upload("/receipts/scan/0", newForm); res.StatusCode != http.StatusOK {
+			t.Fatalf("status %d: %s", res.StatusCode, body)
+		}
+		reads := ocr.reads
+		res, body := upload("/receipts/scan/0", newForm)
+		if res.StatusCode != http.StatusOK || !strings.Contains(body, "Already read before, not counted.") || !strings.Contains(body, `value="Latte"`) {
+			t.Fatalf("status %d: %s", res.StatusCode, body)
+		}
+		if ocr.reads != reads {
+			t.Error("a cached image was read again")
+		}
+		left, _, err := repo.ReceiptScansLeft(ctx, usrID, 3, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Past the limit, the cache still answers.
+		repoLimit := 0
+		if err := repo.SetReceiptLimit(ctx, usrID, &repoLimit); err != nil {
+			t.Fatal(err)
+		}
+		if res, body := upload("/receipts/scan/0", newForm); res.StatusCode != http.StatusOK {
+			t.Errorf("cached scan past the limit = %d: %s", res.StatusCode, body)
+		}
+		ten := 10
+		_ = repo.SetReceiptLimit(ctx, usrID, &ten)
+		if after, _, _ := repo.ReceiptScansLeft(ctx, usrID, 3, time.Now()); after != left+5 {
+			t.Errorf("scans left %d → %d after cached scans", left, after)
+		}
+	})
+
 	t.Run("the admin page shows the usage", func(t *testing.T) {
 		_, body := do("GET", "/admin/receipts", nil)
-		for _, want := range []string{"Receipt scans", "fake-flash", "4 scans", "1 failed", usrID, "Scans a day", "Tokens a month", "Cost a month"} {
+		for _, want := range []string{"Receipt scans", "fake-flash", "1 failed", "from cache", usrID, "Scans a day", "Tokens a month", "Cost a month"} {
 			if !strings.Contains(body, want) {
 				t.Errorf("admin page misses %q", want)
 			}

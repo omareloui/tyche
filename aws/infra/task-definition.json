@@ -24,7 +24,7 @@
         { "name": "GEMINI_MODEL", "value": "gemini-3.8-flash" },
         { "name": "GEMINI_PRICE_INPUT_PER_M", "value": "0.75" },
         { "name": "GEMINI_PRICE_OUTPUT_PER_M", "value": "3.75" },
-        { "name": "RECEIPT_SCANS_PER_MONTH", "value": "10" }
+        { "name": "RECEIPT_SCANS_PER_MONTH", "value": "50" }
       ],
       "secrets": [
         { "name": "JWT_SECRET", "valueFrom": "arn:aws:ssm:__REGION__:__ACCOUNT__:parameter/tyche/JWT_SECRET" },

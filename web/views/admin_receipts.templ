@@ -111,6 +111,9 @@ templ adminUsageTile(label string, u models.ReceiptUsage) {
 			if u.Failed > 0 {
 				<span class="text-zinc-500">{ fmt.Sprintf(" · %d failed", u.Failed) }</span>
 			}
+			if u.Cached > 0 {
+				<span class="text-zinc-500">{ fmt.Sprintf(" · %d from cache", u.Cached) }</span>
+			}
 		</p>
 		<p class="text-xs text-zinc-500 tabular-nums">
 			{ fmt.Sprintf("%s in · %s out tokens", components.CompactNum(float64(u.InputTokens)), components.CompactNum(float64(u.OutputTokens))) }

@@ -16,11 +16,14 @@ type ReceiptScan struct {
 	CostMicros int64
 	OK         bool
 	Error      string
+	// Cached tells it was answered from what was read off the same image
+	// before (the tenant's receipts), without a call.
+	Cached bool
 }
 
 // Billed tells the scan used tokens, counting toward the monthly limit.
 func (s *ReceiptScan) Billed() bool {
-	return s.OK || s.InputTokens > 0 || s.OutputTokens > 0
+	return !s.Cached && (s.OK || s.InputTokens > 0 || s.OutputTokens > 0)
 }
 
 // CalendarMonth is the calendar month (UTC) t is in, [from, to).
@@ -32,8 +35,10 @@ func CalendarMonth(t time.Time) (from, to time.Time) {
 
 // ReceiptUsage sums scans.
 type ReceiptUsage struct {
-	Scans        int
-	Failed       int
+	Scans  int
+	Failed int
+	// Cached are the scans answered from the cache, in Scans.
+	Cached       int
 	InputTokens  int
 	OutputTokens int
 	CostMicros   int64
@@ -44,6 +49,9 @@ func (u *ReceiptUsage) add(s *ReceiptScan) {
 	u.Scans++
 	if !s.OK {
 		u.Failed++
+	}
+	if s.Cached {
+		u.Cached++
 	}
 	u.InputTokens += s.InputTokens
 	u.OutputTokens += s.OutputTokens

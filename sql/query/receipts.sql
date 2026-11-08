@@ -37,3 +37,11 @@ DELETE FROM receipts WHERE id = sqlc.arg(id);
 -- name: PurgeOrphanReceipts :execrows
 DELETE FROM receipts
 WHERE transaction_id IS NULL AND created_at < sqlc.arg(before);
+
+-- What was read off the same image before, preferring a receipt not linked
+-- yet (reused as is) over one of a transaction (copied).
+-- name: GetReceiptByHash :one
+SELECT * FROM receipts
+WHERE hash = sqlc.arg(hash) AND ocr_json != ''
+ORDER BY transaction_id IS NULL DESC, created_at DESC
+LIMIT 1;

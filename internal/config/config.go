@@ -97,6 +97,6 @@ func GetReceiptOCR() ReceiptOCR {
 		ThinkingLevel: getEnvironmentValueWithDefault("GEMINI_THINKING_LEVEL", "LOW"),
 		InputPerM:     getEnvironmentFloatWithDefault("GEMINI_PRICE_INPUT_PER_M", 0.75),
 		OutputPerM:    getEnvironmentFloatWithDefault("GEMINI_PRICE_OUTPUT_PER_M", 3.75),
-		ScansPerMonth: max(getEnvironmentIntWithDefault("RECEIPT_SCANS_PER_MONTH", 10), 0),
+		ScansPerMonth: max(getEnvironmentIntWithDefault("RECEIPT_SCANS_PER_MONTH", 50), 0),
 	}
 }

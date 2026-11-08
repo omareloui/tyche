@@ -1,5 +1,5 @@
 -- name: AddReceiptScan :exec
-INSERT INTO receipt_scans (id, tenant_id, scanned_at, model, input_tokens, output_tokens, cost_micros, ok, error)
+INSERT INTO receipt_scans (id, tenant_id, scanned_at, model, input_tokens, output_tokens, cost_micros, ok, error, cached)
 VALUES (
     sqlc.arg(id),
     sqlc.arg(tenant_id),
@@ -9,14 +9,17 @@ VALUES (
     sqlc.arg(output_tokens),
     sqlc.arg(cost_micros),
     sqlc.arg(ok),
-    sqlc.arg(error)
+    sqlc.arg(error),
+    sqlc.arg(cached)
 );
 
--- The tenant's billed scans in [from, to): the ones that used tokens.
+-- The tenant's billed scans in [from, to): the ones that used tokens (never
+-- the cached ones).
 -- name: CountReceiptScans :one
 SELECT COUNT(*) FROM receipt_scans
 WHERE tenant_id = sqlc.arg(tenant_id)
     AND scanned_at >= sqlc.arg(from_at) AND scanned_at < sqlc.arg(to_at)
+    AND NOT cached
     AND (ok OR input_tokens > 0 OR output_tokens > 0);
 
 -- Every scan since, oldest first, aggregated by the admin page.

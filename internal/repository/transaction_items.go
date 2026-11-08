@@ -401,6 +401,23 @@ func (r *Repository) CreateReceipt(ctx context.Context, rec *ScannedReceipt) (st
 	return id, nil
 }
 
+// FindReceiptByHash is the receipt of the same image already read (its
+// sha256), nil when none: an unlinked one first, else the latest.
+func (r *Repository) FindReceiptByHash(ctx context.Context, hash string) (*queries.Receipt, error) {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rec, err := q.GetReceiptByHash(ctx, hash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &rec, nil
+}
+
 // GetReceipt is a receipt with its image.
 func (r *Repository) GetReceipt(ctx context.Context, id string) (*queries.Receipt, error) {
 	_, q, err := r.dbFromCtx(ctx)

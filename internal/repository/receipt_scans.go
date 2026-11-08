@@ -27,6 +27,7 @@ func (r *Repository) RecordReceiptScan(ctx context.Context, s models.ReceiptScan
 		CostMicros:   s.CostMicros,
 		Ok:           s.OK,
 		Error:        s.Error,
+		Cached:       s.Cached,
 	})
 }
 
@@ -101,6 +102,7 @@ func (r *Repository) ReceiptScansSince(ctx context.Context, from time.Time) ([]m
 			CostMicros:   row.CostMicros,
 			OK:           row.Ok,
 			Error:        row.Error,
+			Cached:       row.Cached,
 		}
 	}
 	return out, nil

@@ -41,6 +41,8 @@ type receiptScan struct {
 	result    *receiptocr.Result
 	receiptID string
 	size      int64
+	// cached tells it was read before, not counted.
+	cached bool
 	left      int
 	limit     int
 }
@@ -102,17 +104,23 @@ func (h Handler) scanReceipt(w http.ResponseWriter, r *http.Request) (*receiptSc
 		return nil, err
 	}
 
+	img, contentType, err := readReceiptUpload(w, r)
+	if err != nil {
+		return nil, err
+	}
+	sum := sha256.Sum256(img)
+	hash := hex.EncodeToString(sum[:])
+
+	if scan, err := h.cachedReceiptScan(r, tenantID, hash, img, contentType); scan != nil || err != nil {
+		return scan, err
+	}
+
 	left, limit, err := h.repo.ReceiptScansLeft(ctx, tenantID, h.ocrCfg.ScansPerMonth, time.Now())
 	if err != nil {
 		return nil, err
 	}
 	if left <= 0 {
 		return nil, errScan{fmt.Sprintf("You've scanned %d receipts this month, the most you can. It starts again on the 1st.", limit)}
-	}
-
-	img, contentType, err := readReceiptUpload(w, r)
-	if err != nil {
-		return nil, err
 	}
 
 	readCtx, cancel := context.WithTimeout(ctx, receiptReadTimeout)
@@ -145,11 +153,10 @@ func (h Handler) scanReceipt(w http.ResponseWriter, r *http.Request) (*receiptSc
 	}
 
 	ocrJSON, _ := json.Marshal(result)
-	sum := sha256.Sum256(img)
 	id, err := h.repo.CreateReceipt(ctx, &repository.ScannedReceipt{
 		Data:        img,
 		ContentType: contentType,
-		Hash:        hex.EncodeToString(sum[:8]),
+		Hash:        hash,
 		Merchant:    result.Merchant,
 		OCRJSON:     string(ocrJSON),
 	})
@@ -158,6 +165,42 @@ func (h Handler) scanReceipt(w http.ResponseWriter, r *http.Request) (*receiptSc
 	}
 	l.Info("scanned a receipt", zap.String("receipt_id", id), zap.Int("items", len(result.Items)), zap.Int("charges", len(result.Charges)))
 	return &receiptScan{result: result, receiptID: id, size: int64(len(img)), left: max(left, 0), limit: limit}, nil
+}
+
+// cachedReceiptScan answers a scan of an image already read (same sha256,
+// in the tenant's receipts) with what was read then: no call, not counted
+// toward the limit. An unlinked receipt is reused, one of a transaction
+// copied. nil when the image wasn't read before.
+func (h Handler) cachedReceiptScan(r *http.Request, tenantID, hash string, img []byte, contentType string) (*receiptScan, error) {
+	ctx := r.Context()
+	l := logger.FromCtx(ctx)
+	rec, err := h.repo.FindReceiptByHash(ctx, hash)
+	if err != nil || rec == nil {
+		return nil, err
+	}
+	var result receiptocr.Result
+	if err := json.Unmarshal([]byte(rec.OcrJson), &result); err != nil {
+		l.Warn("unreadable cached receipt result, reading it again", zap.Error(err), zap.String("receipt_id", rec.ID))
+		return nil, nil
+	}
+
+	id := rec.ID
+	if rec.TransactionID.Valid {
+		if id, err = h.repo.CreateReceipt(ctx, &repository.ScannedReceipt{
+			Data: img, ContentType: contentType, Hash: hash, Merchant: rec.Merchant, OCRJSON: rec.OcrJson,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	if err := h.repo.RecordReceiptScan(ctx, models.ReceiptScan{TenantID: tenantID, Model: h.ocr.Model(), OK: true, Cached: true}); err != nil {
+		l.Error("recording a cached receipt scan", zap.Error(err))
+	}
+	left, limit, err := h.repo.ReceiptScansLeft(ctx, tenantID, h.ocrCfg.ScansPerMonth, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	l.Info("scanned a receipt from the cache", zap.String("receipt_id", id), zap.String("from", rec.ID))
+	return &receiptScan{result: &result, receiptID: id, size: int64(len(img)), left: left, limit: limit, cached: true}, nil
 }
 
 // scanError shows a scan's error in the slot selector, as a 422 swapped
@@ -270,13 +313,21 @@ func (h Handler) ScanReceiptIntoForm(w http.ResponseWriter, r *http.Request) (te
 		ID:      scan.receiptID,
 		URL:     (&models.Receipt{ID: scan.receiptID, Hash: "new"}).URL(),
 		Size:    models.FormatBytes(scan.size),
-		Notice:  "Read from the receipt: " + strings.Join(filled, ", ") + ".",
+		Notice:  "Read from the receipt: " + strings.Join(filled, ", ") + "." + cachedNotice(scan),
 		Warning: receiptCurrencyWarning(res, &tx.Account),
 		Scanned: true,
 		Left:    scan.left,
 		Limit:   scan.limit,
 	}
 	return views.TxFormFields(fd, formID, accs, knds, cats, cps, &getClaims(ctx).DefaultCurrency), nil
+}
+
+// cachedNotice tells a scan was answered from an earlier one of the image.
+func cachedNotice(scan *receiptScan) string {
+	if scan.cached {
+		return " Already read before, not counted."
+	}
+	return ""
 }
 
 func txItemsCountNotice(n int) string {
@@ -304,7 +355,7 @@ func (h Handler) ScanReceiptIntoTx(w http.ResponseWriter, r *http.Request) (temp
 		return nil, err
 	}
 	rec := &views.ReceiptFD{
-		Notice:  "Read " + txItemsCountNotice(len(items)) + " from the receipt.",
+		Notice:  "Read " + txItemsCountNotice(len(items)) + " from the receipt." + cachedNotice(scan),
 		Warning: receiptCurrencyWarning(scan.result, &tx.Account),
 		Scanned: true,
 		Left:    scan.left,
