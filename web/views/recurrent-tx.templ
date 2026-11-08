@@ -425,10 +425,11 @@ templ rtxSMSMatchHint() {
 				<li>On the same account.</li>
 				<li>A debit for an expense or a transfer out, a credit for an income.</li>
 				<li>Within { fmt.Sprint(int(models.RecurrentMatchWindow.Hours() / 24)) } days of its date, before or after.</li>
-				<li>From the same counterparty, or within { fmt.Sprintf("%.0f%%", models.RecurrentMatchTolerance*100) } of its amount.</li>
+				<li>Within { fmt.Sprintf("%.0f%%", models.RecurrentMatchTolerance*100) } of its amount.</li>
+				<li>From its merchant, when it's paid to one.</li>
 			</ul>
 			<p>
-				It matches one still scheduled, or one that paid by itself (Auto) with no SMS yet; the closest in date wins.
+				It matches one still scheduled, or one that paid by itself (Auto) with no SMS yet; one from the same counterparty wins, then the closest in date.
 				The ones that don't match stay transactions of their own: “Match to scheduled…” in their menu matches them by hand,
 				with any scheduled one on the account within { fmt.Sprint(int(models.RecurrentManualMatchWindow.Hours() / 24)) } days.
 			</p>

@@ -391,6 +391,16 @@ func absDur(d time.Duration) time.Duration {
 	return d
 }
 
+// occurrenceCandidate is a lean occurrence an SMS may pay, its counterparty
+// telling whether it's a merchant.
+func occurrenceCandidate(row *queries.GetRecurrentOccurrenceCandidatesRow) *models.Transaction {
+	tx := leanTransaction(&row.Transaction)
+	if tx.Counterparty != nil {
+		tx.Counterparty.IsMerchant = row.CounterpartyIsMerchant.Bool
+	}
+	return tx
+}
+
 // leanTransaction is a transactions row with only its references' ids.
 func leanTransaction(t *queries.Transaction) *models.Transaction {
 	tx := dbTransactionToTransaction(t, nil, nil, nil, nil, nil, nil, nil, nil)
@@ -448,7 +458,7 @@ func (r *Repository) mergeSMSIntoOccurrenceWithTxn(ctx context.Context, qtx *que
 	}
 	cands := make([]models.Transaction, len(rows))
 	for i := range rows {
-		cands[i] = *leanTransaction(&rows[i])
+		cands[i] = *occurrenceCandidate(&rows[i])
 	}
 	occ := models.PickRecurrentOccurrence(sms, cands)
 	if occ == nil {
@@ -498,7 +508,7 @@ func (r *Repository) GetRecurrentMatchCandidates(ctx context.Context, tx *models
 	}
 	var res []models.Transaction
 	for i := range rows {
-		occ := leanTransaction(&rows[i])
+		occ := occurrenceCandidate(&rows[i])
 		if !models.MayPayOccurrence(tx, occ) {
 			continue
 		}
@@ -559,6 +569,7 @@ func dbRecurrentTxRowToRecurrentTx(row queries.GetRecurrentTxsRow) *models.Recur
 	if rt.Counterparty != nil {
 		rt.Counterparty.Icon = row.CounterpartyIcon.String
 		rt.Counterparty.Color = row.CounterpartyColor.String
+		rt.Counterparty.IsMerchant = row.CounterpartyIsMerchant.Bool
 	}
 	if rt.Category != nil {
 		rt.Category.Color = row.CategoryColor.String

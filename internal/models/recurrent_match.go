@@ -7,14 +7,14 @@ import (
 
 // RecurrentMatchWindow is how far an SMS can be from an occurrence of a
 // recurrent transaction to be taken for its payment on its own.
-const RecurrentMatchWindow = 5 * 24 * time.Hour
+const RecurrentMatchWindow = 2 * 24 * time.Hour
 
 // RecurrentManualMatchWindow is how far the occurrences offered to match an
 // SMS transaction by hand can be.
 const RecurrentManualMatchWindow = 14 * 24 * time.Hour
 
 // RecurrentMatchTolerance is how far off an SMS's amount can be from the
-// occurrence's when their counterparties don't tell.
+// occurrence's to be taken for its payment on its own.
 const RecurrentMatchTolerance = 0.10
 
 // paysKind tells whether an SMS transaction of kind sms can be the payment of
@@ -38,8 +38,9 @@ func MayPayOccurrence(sms, occ *Transaction) bool {
 }
 
 // MatchesRecurrentOccurrence tells whether the SMS transaction sms is likely
-// the payment of occ: within RecurrentMatchWindow of it, of its counterparty
-// or about its amount.
+// the payment of occ: within RecurrentMatchWindow of it, about its amount and,
+// when occ is paid to a merchant, of that merchant (another ride of the same
+// app the same day isn't the subscription).
 func MatchesRecurrentOccurrence(sms, occ *Transaction) bool {
 	if !MayPayOccurrence(sms, occ) {
 		return false
@@ -47,25 +48,36 @@ func MatchesRecurrentOccurrence(sms, occ *Transaction) bool {
 	if d := sms.ScheduledTo.Sub(occ.ScheduledTo); d < -RecurrentMatchWindow || d > RecurrentMatchWindow {
 		return false
 	}
-	sameCp := sms.Counterparty != nil && occ.Counterparty != nil && sms.Counterparty.ID == occ.Counterparty.ID
-	closeAmount := occ.Amount > 0 && math.Abs(sms.Amount-occ.Amount) <= occ.Amount*RecurrentMatchTolerance
-	return sameCp || closeAmount
+	if occ.Counterparty != nil && occ.Counterparty.IsMerchant && !sameCounterparty(sms, occ) {
+		return false
+	}
+	return occ.Amount > 0 && math.Abs(sms.Amount-occ.Amount) <= occ.Amount*RecurrentMatchTolerance
 }
 
-// PickRecurrentOccurrence is the candidate sms most likely pays: the closest
-// in date of the matching ones, then in amount. Nil if none matches.
+// sameCounterparty tells whether a and b have the same counterparty.
+func sameCounterparty(a, b *Transaction) bool {
+	return a.Counterparty != nil && b.Counterparty != nil && a.Counterparty.ID == b.Counterparty.ID
+}
+
+// PickRecurrentOccurrence is the candidate sms most likely pays: of the
+// matching ones, one of its counterparty first, then the closest in date,
+// then in amount. Nil if none matches.
 func PickRecurrentOccurrence(sms *Transaction, candidates []Transaction) *Transaction {
 	var best *Transaction
+	var bestCp bool
 	var bestDays, bestAmount float64
 	for i := range candidates {
 		c := &candidates[i]
 		if !MatchesRecurrentOccurrence(sms, c) {
 			continue
 		}
+		cp := sameCounterparty(sms, c)
 		days := math.Abs(sms.ScheduledTo.Sub(c.ScheduledTo).Hours()) / 24
 		amount := math.Abs(sms.Amount - c.Amount)
-		if best == nil || days < bestDays || (days == bestDays && amount < bestAmount) {
-			best, bestDays, bestAmount = c, days, amount
+		better := best == nil || (cp && !bestCp) ||
+			(cp == bestCp && (days < bestDays || (days == bestDays && amount < bestAmount)))
+		if better {
+			best, bestCp, bestDays, bestAmount = c, cp, days, amount
 		}
 	}
 	return best

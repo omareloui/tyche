@@ -125,7 +125,8 @@ func TestRecurrentToSchedule(t *testing.T) {
 
 func TestMatchesRecurrentOccurrence(t *testing.T) {
 	acc := Account{ID: "a"}
-	netflix := &Counterparty{ID: "nf"}
+	netflix := &Counterparty{ID: "nf", IsMerchant: true}
+	landlord := &Counterparty{ID: "ll"}
 	occ := &Transaction{Account: acc, Kind: ExpenseTxKind, Amount: 300, Counterparty: netflix, ScheduledTo: day("2026-11-10")}
 	at := func(d string, amount float64, cp *Counterparty, kind TxKind) *Transaction {
 		return &Transaction{Account: acc, Kind: kind, Amount: amount, Counterparty: cp, ScheduledTo: day(d)}
@@ -135,17 +136,26 @@ func TestMatchesRecurrentOccurrence(t *testing.T) {
 		sms  *Transaction
 		want bool
 	}{
-		{"same counterparty, new price", at("2026-11-11", 350, netflix, ExpenseTxKind), true},
-		{"close amount, other merchant name", at("2026-11-08", 310, &Counterparty{ID: "x"}, ExpenseTxKind), true},
-		{"far amount, other merchant", at("2026-11-10", 500, &Counterparty{ID: "x"}, ExpenseTxKind), false},
-		{"too late", at("2026-11-16", 300, netflix, ExpenseTxKind), false},
+		{"same merchant, new price within the tolerance", at("2026-11-11", 320, netflix, ExpenseTxKind), true},
+		{"same merchant, far amount", at("2026-11-10", 5, netflix, ExpenseTxKind), false},
+		{"close amount, other merchant", at("2026-11-10", 300, &Counterparty{ID: "x", IsMerchant: true}, ExpenseTxKind), false},
+		{"close amount, no counterparty", at("2026-11-10", 300, nil, ExpenseTxKind), false},
+		{"2 days early", at("2026-11-08", 300, netflix, ExpenseTxKind), true},
+		{"3 days early", at("2026-11-07", 300, netflix, ExpenseTxKind), false},
+		{"too late", at("2026-11-13", 300, netflix, ExpenseTxKind), false},
 		{"credit for an expense", at("2026-11-10", 300, netflix, IncomeTxKind), false},
-		{"other account", &Transaction{Account: Account{ID: "b"}, Kind: ExpenseTxKind, Amount: 300, ScheduledTo: day("2026-11-10")}, false},
+		{"other account", &Transaction{Account: Account{ID: "b"}, Kind: ExpenseTxKind, Amount: 300, Counterparty: netflix, ScheduledTo: day("2026-11-10")}, false},
 	}
 	for _, c := range cases {
 		if got := MatchesRecurrentOccurrence(c.sms, occ); got != c.want {
 			t.Errorf("%s: %v, want %v", c.name, got, c.want)
 		}
+	}
+
+	// Paid to a person (not a merchant), the SMS's counterparty doesn't tell.
+	rent := &Transaction{Account: acc, Kind: ExpenseTxKind, Amount: 5000, Counterparty: landlord, ScheduledTo: day("2026-11-01")}
+	if !MatchesRecurrentOccurrence(at("2026-11-01", 5000, &Counterparty{ID: "bank-name"}, ExpenseTxKind), rent) {
+		t.Error("rent to a person not matching its SMS")
 	}
 
 	transfer := Transaction{Account: acc, Kind: TransferTxKind, Amount: 1000, ToAmount: 1000, ScheduledTo: day("2026-11-01")}
@@ -154,11 +164,20 @@ func TestMatchesRecurrentOccurrence(t *testing.T) {
 	}
 
 	cands := []Transaction{
-		{ID: "far", Account: acc, Kind: ExpenseTxKind, Amount: 300, ScheduledTo: day("2026-11-06")},
+		{ID: "far", Account: acc, Kind: ExpenseTxKind, Amount: 300, ScheduledTo: day("2026-11-08")},
 		{ID: "near", Account: acc, Kind: ExpenseTxKind, Amount: 300, ScheduledTo: day("2026-11-09")},
 	}
 	if got := PickRecurrentOccurrence(at("2026-11-10", 300, nil, ExpenseTxKind), cands); got == nil || got.ID != "near" {
 		t.Errorf("picked %v, want near", got)
+	}
+
+	// Its counterparty wins over a closer one in date.
+	cpCands := []Transaction{
+		{ID: "other", Account: acc, Kind: ExpenseTxKind, Amount: 300, ScheduledTo: day("2026-11-10")},
+		{ID: "mine", Account: acc, Kind: ExpenseTxKind, Amount: 300, Counterparty: landlord, ScheduledTo: day("2026-11-08")},
+	}
+	if got := PickRecurrentOccurrence(at("2026-11-10", 300, landlord, ExpenseTxKind), cpCands); got == nil || got.ID != "mine" {
+		t.Errorf("picked %v, want mine", got)
 	}
 
 	sms := at("2026-11-11", 350, &Counterparty{ID: "sms"}, ExpenseTxKind)

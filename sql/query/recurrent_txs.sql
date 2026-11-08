@@ -47,6 +47,7 @@ SELECT
     tak.enum AS to_account_kind_enum,
     cp.icon AS counterparty_icon,
     cp.color AS counterparty_color,
+    cp.is_merchant AS counterparty_is_merchant,
     cat.color AS category_color
 FROM recurrent_txs_details AS rtd
 LEFT JOIN account_kinds AS ak ON rtd.account_kind_id = ak.id
@@ -63,6 +64,7 @@ SELECT
     tak.enum AS to_account_kind_enum,
     cp.icon AS counterparty_icon,
     cp.color AS counterparty_color,
+    cp.is_merchant AS counterparty_is_merchant,
     cat.color AS category_color
 FROM recurrent_txs_details AS rtd
 LEFT JOIN account_kinds AS ak ON rtd.account_kind_id = ak.id
@@ -118,6 +120,7 @@ SELECT
     tak.enum AS to_account_kind_enum,
     cp.icon AS counterparty_icon,
     cp.color AS counterparty_color,
+    cp.is_merchant AS counterparty_is_merchant,
     cat.color AS category_color
 FROM recurrent_txs_details AS rtd
 LEFT JOIN account_kinds AS ak ON rtd.account_kind_id = ak.id
@@ -181,13 +184,14 @@ WHERE id = sqlc.arg(id);
 -- Occurrences of recurrent txs out of account_id scheduled between since and
 -- until that an SMS may be the payment of: scheduled ones, or fulfilled by
 -- themselves (auto_fulfill) with no SMS yet.
-SELECT t.*
+SELECT sqlc.embed(t), cp.is_merchant AS counterparty_is_merchant
 FROM transactions AS t
 INNER JOIN recurrent_txs AS rt ON t.recurrent_id = rt.id
+LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
 WHERE t.account_id = sqlc.arg(account_id)
     AND t.id != sqlc.arg(id)
     AND t.scheduled_to >= sqlc.arg(since)
-    AND t.scheduled_to < sqlc.arg(until)
+    AND t.scheduled_to <= sqlc.arg(until)
     AND t.transfer_pair_id IS NULL
     AND t.reimburses_id IS NULL
     AND (
@@ -206,7 +210,7 @@ WHERE t.account_id = sqlc.arg(account_id)
     AND t.recurrent_id IS NULL
     AND t.fulfilled_at IS NOT NULL
     AND t.scheduled_to >= sqlc.arg(since)
-    AND t.scheduled_to < sqlc.arg(until)
+    AND t.scheduled_to <= sqlc.arg(until)
     AND t.transfer_pair_id IS NULL
     AND t.reimburses_id IS NULL
     AND EXISTS (SELECT 1 FROM sms_messages AS s WHERE s.transaction_id = t.id)
