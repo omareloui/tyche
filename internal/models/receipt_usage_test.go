@@ -22,11 +22,13 @@ func TestNewReceiptUsageReport(t *testing.T) {
 		{TenantID: "GL_2", ScannedAt: at(11, 2), InputTokens: 900, OutputTokens: 100, CostMicros: 1000, OK: true},
 		{TenantID: "GL_2", ScannedAt: at(11, 5), CostMicros: 0, OK: false, Error: "timeout"},
 		{TenantID: "GL_1", ScannedAt: at(11, 5), InputTokens: 800, OutputTokens: 50, CostMicros: 800, OK: false, Error: "unreadable"},
+		// A cache hit isn't a scan.
+		{TenantID: "GL_1", ScannedAt: at(11, 6), OK: true, Cached: true},
 	}
 	now := at(11, 8)
 	rep := NewReceiptUsageReport(scans, now, now.AddDate(0, 0, -9), time.Time{}, map[string]int{"GL_3": 25}, 10)
 
-	if rep.AllTime.Scans != 5 || rep.AllTime.CostMicros != 4800 || rep.AllTime.Failed != 2 {
+	if rep.AllTime.Scans != 5 || rep.AllTime.CostMicros != 4800 || rep.AllTime.Failed != 2 || rep.AllTime.Cached != 1 || rep.ThisMonth.Cached != 1 {
 		t.Errorf("all time = %+v", rep.AllTime)
 	}
 	if rep.ThisMonth.Scans != 3 || rep.LastMonth.Scans != 1 || rep.ThisMonth.InputTokens != 1700 {
@@ -39,6 +41,9 @@ func TestNewReceiptUsageReport(t *testing.T) {
 	// Oct 30 → Nov 8: 10 days.
 	if len(rep.Daily) != 10 || rep.Daily[0].From != time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC) {
 		t.Fatalf("daily = %d from %v", len(rep.Daily), rep.Daily[0].From)
+	}
+	if rep.Daily[7].Scans != 0 || rep.Daily[7].Cached != 1 {
+		t.Errorf("the cached day = %+v", rep.Daily[7])
 	}
 	if rep.Daily[0].Scans != 1 || rep.Daily[6].Scans != 2 || rep.Daily[6].Failed != 2 || rep.Daily[9].Scans != 0 {
 		t.Errorf("daily = %+v", rep.Daily)

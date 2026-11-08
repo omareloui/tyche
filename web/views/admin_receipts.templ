@@ -289,13 +289,13 @@ templ adminTopTenantsChart(tenants []models.TenantReceiptUsage) {
 	{{
 	var top []models.TenantReceiptUsage
 	for _, t := range tenants {
-		if t.ThisMonth.Scans > 0 && len(top) < 8 {
+		if t.Billed > 0 && len(top) < 8 {
 			top = append(top, t)
 		}
 	}
 	var most int
 	for _, t := range top {
-		most = max(most, t.ThisMonth.Scans)
+		most = max(most, t.Billed)
 	}
 	}}
 	@adminChartCard("Scans this month · by account") {
@@ -307,10 +307,10 @@ templ adminTopTenantsChart(tenants []models.TenantReceiptUsage) {
 					<li tabindex="0" class="group grid gap-1 outline-none">
 						<div class="flex justify-between gap-3 text-sm">
 							<span class="font-mono text-zinc-300 truncate">{ t.TenantID }</span>
-							<span class="tabular-nums text-zinc-400">{ fmt.Sprintf("%d / %d · %s", t.ThisMonth.Scans, t.Limit, usd(t.ThisMonth.Cost())) }</span>
+							<span class="tabular-nums text-zinc-400">{ fmt.Sprintf("%d / %d · %s", t.Billed, t.Limit, usd(t.ThisMonth.Cost())) }</span>
 						</div>
 						<div class="h-2 rounded-full bg-zinc-800/80 overflow-hidden">
-							<div class="h-full rounded-full" style={ templ.SafeCSS(fmt.Sprintf("width:%.2f%%;background:%s;", float64(t.ThisMonth.Scans)/float64(max(most, 1))*100, vizBlue)) }></div>
+							<div class="h-full rounded-full" style={ templ.SafeCSS(fmt.Sprintf("width:%.2f%%;background:%s;", float64(t.Billed)/float64(max(most, 1))*100, vizBlue)) }></div>
 						</div>
 					</li>
 				}

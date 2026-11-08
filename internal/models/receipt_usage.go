@@ -37,7 +37,8 @@ func CalendarMonth(t time.Time) (from, to time.Time) {
 type ReceiptUsage struct {
 	Scans  int
 	Failed int
-	// Cached are the scans answered from the cache, in Scans.
+	// Cached are the scans answered from the cache, apart: they aren't
+	// scans (no call, not counted toward the limit).
 	Cached       int
 	InputTokens  int
 	OutputTokens int
@@ -46,12 +47,13 @@ type ReceiptUsage struct {
 }
 
 func (u *ReceiptUsage) add(s *ReceiptScan) {
+	if s.Cached {
+		u.Cached++
+		return
+	}
 	u.Scans++
 	if !s.OK {
 		u.Failed++
-	}
-	if s.Cached {
-		u.Cached++
 	}
 	u.InputTokens += s.InputTokens
 	u.OutputTokens += s.OutputTokens
