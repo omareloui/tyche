@@ -1031,7 +1031,7 @@ func balanceFD(r *http.Request, a *models.Account, suffix string) *views.Balance
 }
 
 // parseBalanceFix reads fd, a's balance as the bank shows it (e.g.
-// "EGP -1,250.50", what's owed for a credit card).
+// "EGP -1,250.50", a credit card's debt).
 func parseBalanceFix(a *models.Account, fd *views.BalanceFD) (models.BalanceFix, error) {
 	v := strings.TrimSpace(strings.TrimPrefix(fd.Amount.Value, a.Currency.Symbol))
 	n, err := parseFloatIfExists(v)

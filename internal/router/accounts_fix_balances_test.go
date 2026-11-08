@@ -222,12 +222,12 @@ func TestFixBalances(t *testing.T) {
 		}
 	})
 
-	t.Run("adjust a card's owed", func(t *testing.T) {
+	t.Run("adjust a card's debt", func(t *testing.T) {
 		card := &models.Account{ID: idgen.New(), Name: idgen.New(), Amount: -100, Currency: *egp, Kind: cardKind}
 		if err := repo.CreateAccount(ctx, card); err != nil {
 			t.Fatal(err)
 		}
-		r := post("/accounts/"+card.ID+"/adjust", url.Values{"amount": {egp.Symbol + " 250"}})
+		r := post("/accounts/"+card.ID+"/adjust", url.Values{"amount": {egp.Symbol + " -250"}})
 		r.SetPathValue("id", card.ID)
 		if _, err := h.AdjustBalance(httptest.NewRecorder(), r); err != nil {
 			t.Fatal(err)

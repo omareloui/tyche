@@ -531,14 +531,13 @@ document.addEventListener("alpine:init", () => {
 // balanceFix backs a balance typed as the bank shows it (views.balanceStep):
 // the amount input's mask (signed, prefixed with the symbol, the metal
 // unit's digits) and its difference with the current one. cur is in troy
-// ounces for metals; owed (credit cards) colors a rise red.
+// ounces for metals.
 document.addEventListener("alpine:init", () => {
-  Alpine.data("balanceFix", (id, cur, sym, unit = "", owed = false) => ({
+  Alpine.data("balanceFix", (id, cur, sym, unit = "") => ({
     id,
     cur,
     sym,
     unit,
-    owed,
 
     init() {
       if (this.changes) {
@@ -592,7 +591,7 @@ document.addEventListener("alpine:init", () => {
     },
 
     up() {
-      return (this.diff() > 0) !== this.owed;
+      return this.diff() > 0;
     },
   }));
 

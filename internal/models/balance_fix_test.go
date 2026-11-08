@@ -12,7 +12,7 @@ func TestBankEntry(t *testing.T) {
 	}{
 		{name: "bank", kind: AccKindBankAcc, amount: 100, typed: 150, wantEntry: 100, want: 150},
 		{name: "set aside for goals", kind: AccKindBankAcc, amount: 100, aside: 40, typed: 150, wantEntry: 140, want: 110},
-		{name: "card owed", kind: AccKindCreditCard, amount: -100, typed: 250, wantEntry: 100, want: -250},
+		{name: "card owed", kind: AccKindCreditCard, amount: -100, typed: -250, wantEntry: -100, want: -250},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			a := &Account{ID: "x", Amount: c.amount, SetAside: c.aside, Kind: AccountKind{Enum: c.kind}}

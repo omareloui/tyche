@@ -171,14 +171,9 @@ templ AdjustBalanceForm(a *models.Account, fd *BalanceFD) {
 // amount<suffix> and amount_unit<suffix>.
 templ balanceStep(a *models.Account, fd *BalanceFD, suffix string, inputAttrs templ.Attributes) {
 	{{ id := "balance-" + a.ID }}
-	{{ owed := a.Kind.Enum == models.AccKindCreditCard }}
 	<div class="grid grid-cols-1 justify-items-center gap-3" x-data={ balanceFixData(a, fd) }>
 		<label for={ id } class="text-sm text-zinc-400">
-			if owed {
-				What you owe
-			} else {
-				What the bank shows
-			}
+			What the bank shows
 		</label>
 		<input
 			id={ id }
@@ -215,8 +210,8 @@ templ balanceStep(a *models.Account, fd *BalanceFD, suffix string, inputAttrs te
 
 func balanceFixData(a *models.Account, fd *BalanceFD) string {
 	cur, _ := json.Marshal(a.BankEntry())
-	return fmt.Sprintf("balanceFix(%s, %s, %s, %s, %t)",
-		jsString(a.ID), cur, jsString(a.Currency.Symbol), jsString(fd.Unit), a.Kind.Enum == models.AccKindCreditCard)
+	return fmt.Sprintf("balanceFix(%s, %s, %s, %s)",
+		jsString(a.ID), cur, jsString(a.Currency.Symbol), jsString(fd.Unit))
 }
 
 func jsString(s string) string {
