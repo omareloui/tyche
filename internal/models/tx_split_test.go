@@ -69,8 +69,21 @@ func TestTxSplitCompute(t *testing.T) {
 				{Kind: TxItemDelivery, Total: 10},
 			},
 			people: []SplitPerson{ali},
-			// Ali: 300 + 36 + 47.04 - 30 + 10 + 5; the user the rest.
-			want: map[string]float64{SplitMe: 132.68, "ali": 368.04},
+			// Ali: 300 + 36 + 47.04 - 20 + 10 + 5 (the discount without a
+			// rate per head); the user the rest.
+			want: map[string]float64{SplitMe: 122.68, "ali": 378.04},
+		},
+		{
+			name: "a charge's toggle wins over its default",
+			items: []TxItem{
+				{Name: "Steak", Total: 300, SharedWith: with("ali")},
+				{Name: "Salad", Total: 100},
+				{Kind: TxItemVAT, Rate: ptr(14), Total: 56, SplitMode: ChargeSplitEqually},
+				{Kind: TxItemDelivery, Total: 40, SplitMode: ChargeSplitByShare},
+			},
+			people: []SplitPerson{ali},
+			// Ali: 300 + 28 + 30; the user 100 + 28 + 10.
+			want: map[string]float64{SplitMe: 138, "ali": 358},
 		},
 		{
 			name: "charges included in the prices add nothing",
@@ -176,7 +189,7 @@ func TestParseSplitItemShare(t *testing.T) {
 		want   SplitItemShare
 	}{
 		{"nobody is the user's", nil, 0, SplitItemShare{}},
-		{"the user alone is the same", []string{SplitMe}, 0, SplitItemShare{}},
+		{"the user alone is kept, as picked", []string{SplitMe}, 0, SplitItemShare{With: with(SplitMe)}},
 		{"everyone wins", []string{"ali", SplitEveryone}, 0, SplitItemShare{All: true}},
 		{"people not in the split are dropped", []string{"ali", "bob", "ali"}, 0, SplitItemShare{With: with("ali")}},
 		{"the user with others", []string{SplitMe, "sara"}, 0, SplitItemShare{With: with(SplitMe, "sara")}},
@@ -191,5 +204,26 @@ func TestParseSplitItemShare(t *testing.T) {
 				t.Errorf("got %+v, want %+v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestParseChargeSplitMode(t *testing.T) {
+	vat := &TxItem{Kind: TxItemVAT, Rate: ptr(14)}
+	tip := &TxItem{Kind: TxItemTip, SplitMode: ChargeSplitByShare}
+	tests := []struct {
+		it   *TxItem
+		v    string
+		want ChargeSplitMode
+	}{
+		{vat, "share", ChargeSplitDefault},
+		{vat, "equal", ChargeSplitEqually},
+		{tip, "equal", ChargeSplitDefault},
+		{tip, "share", ChargeSplitByShare},
+		{tip, "", ChargeSplitByShare}, // not sent: kept
+	}
+	for _, tt := range tests {
+		if got := ParseChargeSplitMode(tt.it, tt.v); got != tt.want {
+			t.Errorf("%s %q = %v, want %v", tt.it.Label(), tt.v, got, tt.want)
+		}
 	}
 }

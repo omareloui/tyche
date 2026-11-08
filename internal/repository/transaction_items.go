@@ -39,6 +39,7 @@ func dbItemToTxItem(it queries.TransactionItem) models.TxItem {
 		Included:  it.Included,
 		// SharedWith is only loaded for a split (loadTxItemShares).
 		SharedByAll: it.SharedByAll,
+		SplitMode:   models.ChargeSplitModeOf(it.SplitMode),
 	}
 	if it.Rate.Valid {
 		r := it.Rate.Float64
@@ -97,6 +98,7 @@ func createItemWithTxn(ctx context.Context, qtx *queries.Queries, owner itemOwne
 		Rate:          rate,
 		Included:      it.Included,
 		SharedByAll:   it.SharedByAll && owner.txID != "",
+		SplitMode:     int64(it.SplitMode),
 		Position:      int64(position),
 	}); err != nil {
 		logger.FromCtx(ctx).Error("creating item", zap.Error(err), zap.Any("owner", owner))

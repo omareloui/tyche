@@ -38,6 +38,10 @@ VALUES (sqlc.arg(item_id), sqlc.narg(counterparty_id), sqlc.arg(units));
 UPDATE transaction_items SET shared_by_all = sqlc.arg(shared_by_all)
 WHERE id = sqlc.arg(id) AND transaction_id = sqlc.arg(transaction_id);
 
+-- name: SetTxItemSplitMode :exec
+UPDATE transaction_items SET split_mode = sqlc.arg(split_mode)
+WHERE id = sqlc.arg(id) AND transaction_id = sqlc.arg(transaction_id);
+
 -- name: ClearTxItemsSharedByAll :exec
 UPDATE transaction_items SET shared_by_all = FALSE
 WHERE transaction_id = sqlc.arg(transaction_id);
@@ -68,3 +72,7 @@ WHERE transaction_item_shares.counterparty_id = sqlc.arg(from_id)
     AND transaction_item_shares.item_id NOT IN (
         SELECT o.item_id FROM transaction_item_shares AS o WHERE o.counterparty_id = sqlc.arg(to_id)
     );
+
+-- name: CountTxSplitPeople :one
+SELECT COUNT(*) FROM tx_split_people
+WHERE transaction_id = sqlc.arg(transaction_id);

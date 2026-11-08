@@ -413,6 +413,15 @@ func (r *Repository) GetTransaction(ctx context.Context, id string) (*models.Tra
 	}
 	tx := &one[0]
 
+	if tx.Kind == models.ExpenseTxKind && len(tx.Items) > 0 {
+		n, err := q.CountTxSplitPeople(ctx, id)
+		if err != nil {
+			l.Error("counting split people", zap.Error(err), zap.String("id", id))
+			return nil, err
+		}
+		tx.SplitPeople = int(n)
+	}
+
 	if tx.Goal != nil {
 		gl, err := r.GetGoal(ctx, tx.Goal.ID)
 		if err != nil {

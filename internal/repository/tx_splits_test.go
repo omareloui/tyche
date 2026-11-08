@@ -50,6 +50,7 @@ func TestItemSharesKeptOnReplace(t *testing.T) {
 		{ID: "pizza", Name: "Pizza", Total: 60, SharedWith: []models.ItemShare{{Person: models.SplitMe, Units: 1}, {Person: "ali", Units: 1}}},
 		{ID: "fries", Name: "Fries", Total: 30, SharedByAll: true},
 		{ID: "soda", Name: "Soda", Total: 10},
+		{ID: "tip", Kind: models.TxItemTip, Total: 5, SplitMode: models.ChargeSplitByShare},
 	}
 	if err := replaceItemsWithTxn(ctx, q, owner, items); err != nil {
 		t.Fatal(err)
@@ -60,6 +61,7 @@ func TestItemSharesKeptOnReplace(t *testing.T) {
 		{ID: "pizza", Name: "Pizza", Total: 65},
 		{ID: "fries", Name: "Fries", Total: 30},
 		{Name: "Cake", Total: 20},
+		{ID: "tip", Kind: models.TxItemTip, Total: 5},
 	}
 	if err := replaceItemsWithTxn(ctx, q, owner, edited); err != nil {
 		t.Fatal(err)
@@ -80,6 +82,9 @@ func TestItemSharesKeptOnReplace(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, row := range rows {
+		if row.ID == "tip" && models.ChargeSplitModeOf(row.SplitMode) != models.ChargeSplitByShare {
+			t.Errorf("tip split mode = %d, want by share kept", row.SplitMode)
+		}
 		if want := row.ID == "fries"; row.SharedByAll != want {
 			t.Errorf("%s shared by all = %v, want %v", row.Name, row.SharedByAll, want)
 		}

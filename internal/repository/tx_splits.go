@@ -32,7 +32,8 @@ func itemSharesOf(ctx context.Context, q *queries.Queries, txID string) (map[str
 }
 
 // keepItemSharesWithTxn gives the lines about to replace the transaction's
-// the shares the ones with their ids had, unless they come with their own.
+// the shares (and charges' split modes) the ones with their ids had, unless
+// they come with their own.
 func keepItemSharesWithTxn(ctx context.Context, qtx *queries.Queries, txID string, items []models.TxItem) error {
 	old, err := qtx.GetTransactionItemsOf(ctx, sql.NullString{String: txID, Valid: true})
 	if err != nil {
@@ -46,16 +47,23 @@ func keepItemSharesWithTxn(ctx context.Context, qtx *queries.Queries, txID strin
 	if err != nil {
 		return err
 	}
-	all := make(map[string]bool, len(old))
+	byID := make(map[string]queries.TransactionItem, len(old))
 	for _, it := range old {
-		all[it.ID] = it.SharedByAll
+		byID[it.ID] = it
 	}
 	for i := range items {
 		it := &items[i]
-		if it.ID == "" || it.SharedByAll || it.SharedWith != nil {
+		prev, ok := byID[it.ID]
+		if it.ID == "" || !ok {
 			continue
 		}
-		it.SharedByAll = all[it.ID]
+		if it.SplitMode == models.ChargeSplitDefault {
+			it.SplitMode = models.ChargeSplitModeOf(prev.SplitMode)
+		}
+		if it.SharedByAll || it.SharedWith != nil {
+			continue
+		}
+		it.SharedByAll = prev.SharedByAll
 		it.SharedWith = shares[it.ID]
 	}
 	return nil
@@ -115,8 +123,8 @@ func (r *Repository) TxSplitOf(ctx context.Context, tx *models.Transaction) (*mo
 
 // SaveTxSplit writes who the transaction's bill is split with (counterparty
 // ids, in order) and how each of its lines is shared (by line id; lines left
-// out are the user's).
-func (r *Repository) SaveTxSplit(ctx context.Context, txID string, people []string, shares map[string]models.SplitItemShare) error {
+// out are the user's) and each charge's (by line id; left out, kept).
+func (r *Repository) SaveTxSplit(ctx context.Context, txID string, people []string, shares map[string]models.SplitItemShare, charges map[string]models.ChargeSplitMode) error {
 	return r.transact(ctx, func(qtx *queries.Queries) error {
 		l := logger.FromCtx(ctx)
 
@@ -149,6 +157,15 @@ func (r *Repository) SaveTxSplit(ctx context.Context, txID string, people []stri
 			return err
 		}
 		for _, it := range items {
+			if mode, ok := charges[it.ID]; ok && models.TxItemKindOf(it.Kind).IsCharge() {
+				if err := qtx.SetTxItemSplitMode(ctx, queries.SetTxItemSplitModeParams{
+					SplitMode: int64(mode), ID: it.ID, TransactionID: tx,
+				}); err != nil {
+					l.Error("setting charge split mode", zap.Error(err), zap.String("item_id", it.ID))
+					return err
+				}
+				continue
+			}
 			sh, ok := shares[it.ID]
 			if !ok || models.TxItemKindOf(it.Kind).IsCharge() {
 				continue

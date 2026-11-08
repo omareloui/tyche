@@ -126,16 +126,10 @@ templ TxSplitPanel(s *models.TxSplit, cps []models.Counterparty, msg TxSplitMsg)
 					}
 				</ul>
 				if models.HasTxItemCharges(tx.Items) {
-					<ul class="grid grid-cols-1 gap-1">
-						for _, it := range tx.Items {
-							if it.Kind.IsCharge() {
-								<li class="flex items-center justify-between gap-3 px-3 text-sm text-zinc-400">
-									<span class="min-w-0 truncate">
-										{ it.Label() }
-										<span class="text-zinc-500">{ " · " + models.ChargeSplitRule(&it) }</span>
-									</span>
-									<span class={ "sensitive tabular-nums", templ.KV("line-through decoration-zinc-600 text-zinc-500", it.Included) }>{ cur.Format(it.Total) }</span>
-								</li>
+					<ul class="grid grid-cols-1 gap-2">
+						for i := range tx.Items {
+							if tx.Items[i].Kind.IsCharge() {
+								@splitCharge(&tx.Items[i], cur)
 							}
 						}
 					</ul>
@@ -208,7 +202,7 @@ templ splitItem(s *models.TxSplit, it *models.TxItem, cur *models.Currency) {
 			</div>
 			if n := len(picked); n > 1 {
 				<p class="text-xs text-zinc-500 tabular-nums">{ fmt.Sprintf("%s each", cur.Format(cur.Round(it.Total/float64(n)))) }</p>
-			} else if picked[0] == models.SplitEveryone {
+			} else if len(picked) == 1 && picked[0] == models.SplitEveryone {
 				<p class="text-xs text-zinc-500 tabular-nums">{ fmt.Sprintf("%s each", cur.Format(cur.Round(it.Total/float64(len(s.People)+1)))) }</p>
 			}
 		}
@@ -252,6 +246,37 @@ templ splitUnitsRow(name, id, label string, n int, more bool) {
 			<button type="button" @click="step($el, 1)" data-step="1" disabled?={ !more } aria-label={ "One more for " + label } class="split-step">+</button>
 		</span>
 	</li>
+}
+
+// splitCharge is a charge with how it's shared: by what each one's items
+// come to, or equally (charge_<id>, its default from its rate); one
+// included in the prices adds nothing.
+templ splitCharge(it *models.TxItem, cur *models.Currency) {
+	<li class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-3 text-sm text-zinc-400">
+		<span class="min-w-0 truncate">
+			{ it.Label() }
+			if it.Included {
+				<span class="text-zinc-500"> · in the prices</span>
+			}
+		</span>
+		<span class="ml-auto inline-flex items-center gap-3">
+			if !it.Included {
+				{{ byShare := models.ChargeByShare(it) }}
+				<span class="inline-flex p-0.5 rounded-full ring-1 ring-zinc-700" role="radiogroup" aria-label={ "How " + it.Label() + " is shared" }>
+					@splitChargeOption(it.ID, "share", "By share", byShare)
+					@splitChargeOption(it.ID, "equal", "Equally", !byShare)
+				</span>
+			}
+			<span class={ "sensitive tabular-nums", templ.KV("line-through decoration-zinc-600 text-zinc-500", it.Included) }>{ cur.Format(it.Total) }</span>
+		</span>
+	</li>
+}
+
+templ splitChargeOption(id, value, label string, checked bool) {
+	<label class="split-seg">
+		<input type="radio" name={ "charge_" + id } value={ value } checked?={ checked } class="sr-only"/>
+		{ label }
+	</label>
 }
 
 templ splitChip(name, value, label string, checked bool) {

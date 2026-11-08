@@ -83,6 +83,8 @@ type TxItem struct {
 	// SharedWith are who share the item in its transaction's split, by their
 	// units (see TxSplit.Compute). None is the user's alone.
 	SharedWith []ItemShare
+	// SplitMode is how the charge is shared in its transaction's split.
+	SplitMode ChargeSplitMode
 }
 
 // Label is its name, else its kind's with the rate (e.g. "VAT 14%").
@@ -195,7 +197,7 @@ func CopyTxItems(items []TxItem) []TxItem {
 	for i, it := range items {
 		it.ID = idgen.New()
 		// A split is its transaction's, never copied.
-		it.SharedByAll, it.SharedWith = false, nil
+		it.SharedByAll, it.SharedWith, it.SplitMode = false, nil, ChargeSplitDefault
 		if it.Rate != nil {
 			r := *it.Rate
 			it.Rate = &r

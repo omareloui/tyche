@@ -54,6 +54,9 @@ type Transaction struct {
 	Receipt *Receipt
 	// ReceiptID is a scanned receipt to link on saving it.
 	ReceiptID string
+	// SplitPeople is how many people its bill is split with (see TxSplit),
+	// only set on a transaction fetched alone.
+	SplitPeople int
 }
 
 type commonFieldsForTxAndRtx struct {

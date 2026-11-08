@@ -731,15 +731,35 @@ templ txChips(tx *models.Transaction, v *txView) {
 					type="button"
 					@click="openReimbursements = !openReimbursements"
 					:aria-expanded="openReimbursements"
-					title="Show what got paid back"
+					title="Show what got paid back or is pending"
 					class="chip cursor-pointer bg-emerald-400/10 text-emerald-300 transition-colors hover:bg-emerald-400/20"
 				>
 					@icons.Users("12")
-					{ fmt.Sprint(len(tx.Reimbursements)) } paid back
+					{ reimbursementsLabel(tx.Reimbursements) }
 					@icons.ChevronDown("12", &templ.Attributes{":class": "openReimbursements && 'rotate-180'", "class": "transition-transform"})
 				</button>
 			}
 		</div>
+	}
+}
+
+// reimbursementsLabel counts an expense's reimbursements: the paid back
+// ones, and the pending ones (scheduled, e.g. a split's requested shares).
+func reimbursementsLabel(rs []models.Transaction) string {
+	pending := 0
+	for _, r := range rs {
+		if r.FulfilledAt.IsZero() {
+			pending++
+		}
+	}
+	paid := len(rs) - pending
+	switch {
+	case pending == 0:
+		return fmt.Sprintf("%d paid back", paid)
+	case paid == 0:
+		return fmt.Sprintf("%d pending", pending)
+	default:
+		return fmt.Sprintf("%d paid back · %d pending", paid, pending)
 	}
 }
 

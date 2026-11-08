@@ -120,23 +120,58 @@ func (r *SplitResult) ToRequest() []SplitShare {
 	return out
 }
 
-// chargeByShare tells a charge is split by what each one's items come to
-// (a percentage on the prices: VAT, service, discount), else equally per
-// head (tip, delivery, fee, rounding).
-func chargeByShare(k TxItemKind) bool {
-	return k == TxItemVAT || k == TxItemService || k == TxItemDiscount
+// ChargeSplitMode is how a charge of a split bill is shared.
+type ChargeSplitMode uint8
+
+const (
+	// ChargeSplitDefault is by share for a charge with a rate (a percentage
+	// on the prices, e.g. VAT 14%), else equally.
+	ChargeSplitDefault ChargeSplitMode = iota
+	// ChargeSplitByShare follows what each one's items come to.
+	ChargeSplitByShare
+	// ChargeSplitEqually is the same for everyone.
+	ChargeSplitEqually
+)
+
+// ChargeSplitModeOf is a stored mode, the default when unknown.
+func ChargeSplitModeOf(v int64) ChargeSplitMode {
+	if m := ChargeSplitMode(v); m <= ChargeSplitEqually {
+		return m
+	}
+	return ChargeSplitDefault
 }
 
-// ChargeSplitRule says how a charge is split, for the views.
-func ChargeSplitRule(it *TxItem) string {
-	switch {
-	case it.Included:
-		return "in the prices"
-	case chargeByShare(it.Kind):
-		return "by share"
+// ChargeByShare tells the charge is split by what each one's items come to,
+// else equally per head.
+func ChargeByShare(it *TxItem) bool {
+	switch it.SplitMode {
+	case ChargeSplitByShare:
+		return true
+	case ChargeSplitEqually:
+		return false
 	default:
-		return "equally"
+		return it.Rate != nil
 	}
+}
+
+// ParseChargeSplitMode reads a charge's toggle ("share" or "equal"), saved
+// as the default when it's the charge's default.
+func ParseChargeSplitMode(it *TxItem, v string) ChargeSplitMode {
+	var byShare bool
+	switch v {
+	case "share":
+		byShare = true
+	case "equal":
+	default:
+		return it.SplitMode
+	}
+	if byShare == (it.Rate != nil) {
+		return ChargeSplitDefault
+	}
+	if byShare {
+		return ChargeSplitByShare
+	}
+	return ChargeSplitEqually
 }
 
 // units are each head's units of the item (the user first, then the
@@ -176,9 +211,9 @@ func (s *TxSplit) units(it *TxItem, at map[string]int, heads int) []float64 {
 	return u
 }
 
-// Compute works out everyone's share: each item split equally among who
-// shares it, the charges not included in the prices by share or per head
-// (chargeByShare).
+// Compute works out everyone's share: each item split among who shares it,
+// the charges not included in the prices by share or per head
+// (ChargeByShare).
 func (s *TxSplit) Compute() SplitResult {
 	cur := &s.Tx.Account.Currency
 	heads := 1 + len(s.People)
@@ -228,7 +263,7 @@ func (s *TxSplit) Compute() SplitResult {
 		}
 		for o := range shares {
 			part := it.Total / float64(heads)
-			if chargeByShare(it.Kind) && math.Abs(sub) > 0.000001 {
+			if ChargeByShare(it) && math.Abs(sub) > 0.000001 {
 				part = it.Total * shares[o].Subtotal / sub
 			}
 			if math.Abs(part) < 0.000001 {
@@ -265,16 +300,17 @@ func (s *TxSplit) Compute() SplitResult {
 }
 
 // ItemShares is how the item is shared, for its toggles: SplitEveryone, or
-// the ids sharing it (SplitMe when none).
+// the ids picked for it still in the split; none when nobody was (the
+// user's, implicitly).
 func (s *TxSplit) ItemShares(it *TxItem) []string {
 	if it.SharedByAll {
 		return []string{SplitEveryone}
 	}
 	at := s.heads()
 	var ids []string
-	for i, n := range s.units(it, at, len(s.People)+1) {
-		if n > 0 {
-			ids = append(ids, s.headID(i))
+	for _, sh := range it.SharedWith {
+		if _, ok := at[sh.Person]; ok && !slices.Contains(ids, sh.Person) {
+			ids = append(ids, sh.Person)
 		}
 	}
 	return ids
@@ -315,7 +351,7 @@ type SplitItemShare struct {
 // or counterparty ids, with ":<units>" when by units), keeping only the
 // people in the split. Everyone wins over the rest. Shared by its units (qty
 // > 0, ItemByUnits), the people's units are kept up to qty, the user having
-// the rest; else only the user is the same as nobody.
+// the rest; else the user picked alone counts as nobody (kept to show it).
 func ParseSplitItemShare(values []string, people []string, qty float64) SplitItemShare {
 	if slices.Contains(values, SplitEveryone) {
 		return SplitItemShare{All: true}
@@ -339,9 +375,6 @@ func ParseSplitItemShare(values []string, people []string, qty float64) SplitIte
 		u := min(float64(units), left)
 		left -= u
 		with = append(with, ItemShare{Person: id, Units: u})
-	}
-	if qty <= 0 && len(with) == 1 && with[0].Person == SplitMe {
-		return SplitItemShare{}
 	}
 	return SplitItemShare{With: with}
 }

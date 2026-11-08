@@ -404,6 +404,10 @@ input[type="number"] {
     @apply inline-flex items-center gap-1 h-8 px-3 rounded-full border border-zinc-700 text-sm text-zinc-400 cursor-pointer select-none transition-colors hover:border-violet-400 hover:text-violet-300 has-checked:border-violet-400 has-checked:bg-violet-500/20 has-checked:text-violet-200 has-focus-visible:ring-2 has-focus-visible:ring-zinc-500;
   }
 
+  .split-seg {
+    @apply px-2.5 h-7 inline-flex items-center rounded-full text-xs text-zinc-400 cursor-pointer select-none transition-colors hover:text-zinc-200 has-checked:bg-violet-500/25 has-checked:text-violet-200 has-focus-visible:ring-2 has-focus-visible:ring-zinc-500;
+  }
+
   .split-step {
     @apply grid place-items-center w-8 h-8 rounded-full border border-zinc-700 text-base text-zinc-300 cursor-pointer transition-colors hover:border-violet-400 hover:text-violet-300 disabled:opacity-40 disabled:cursor-default disabled:hover:border-zinc-700 disabled:hover:text-zinc-300;
   }

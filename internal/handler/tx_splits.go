@@ -65,7 +65,8 @@ func (h Handler) GetTxSplit(w http.ResponseWriter, r *http.Request) (templ.Compo
 
 // SaveTxSplit saves the split as changed: the people (person, a new one
 // add_person, one to remove) and the items' shares (share_<item id>: ids, or
-// id:units for an item shared by its units).
+// id:units for an item shared by its units) and the charges' split modes
+// (charge_<item id>: share or equal).
 func (h Handler) SaveTxSplit(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	s, err := h.splittableTx(r)
 	if err != nil {
@@ -102,8 +103,10 @@ func (h Handler) SaveTxSplit(w http.ResponseWriter, r *http.Request) (templ.Comp
 	}
 
 	shares := map[string]models.SplitItemShare{}
+	charges := map[string]models.ChargeSplitMode{}
 	for _, it := range s.Tx.Items {
 		if it.Kind.IsCharge() {
+			charges[it.ID] = models.ParseChargeSplitMode(&it, r.FormValue("charge_"+it.ID))
 			continue
 		}
 		var qty float64
@@ -113,7 +116,7 @@ func (h Handler) SaveTxSplit(w http.ResponseWriter, r *http.Request) (templ.Comp
 		shares[it.ID] = models.ParseSplitItemShare(r.Form["share_"+it.ID], people, qty)
 	}
 
-	if err := h.repo.SaveTxSplit(r.Context(), s.Tx.ID, people, shares); err != nil {
+	if err := h.repo.SaveTxSplit(r.Context(), s.Tx.ID, people, shares, charges); err != nil {
 		l.Error("saving split", zap.Error(err))
 		return nil, err
 	}

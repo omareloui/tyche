@@ -578,7 +578,8 @@ templ TxDetailsItems(tx *models.Transaction, add *TxItemFD, rec *ReceiptFD) {
 					}
 				</div>
 			}
-			if tx.CanSplit() && hasProductItems(tx.Items) {
+			// Once split, the split's own section edits it.
+			if tx.CanSplit() && tx.SplitPeople == 0 && hasProductItems(tx.Items) {
 				<button
 					type="button"
 					hx-get={ txSplitURL(tx.ID) }
