@@ -53,6 +53,15 @@ func (h Handler) txDetails(ctx context.Context, id string) (*models.TxDetails, e
 		d.SMSTemplate = h.smsTemplateName(ctx, d.SMS.TemplateID)
 	}
 	d.ReceiptScan = h.ocr != nil
+	if d.Tx.Kind == models.ExpenseTxKind && len(d.Tx.Items) > 0 {
+		s, err := h.repo.TxSplitOf(ctx, d.Tx)
+		if err != nil {
+			return nil, err
+		}
+		if len(s.People) > 0 {
+			d.Split = s
+		}
+	}
 	return d, nil
 }
 

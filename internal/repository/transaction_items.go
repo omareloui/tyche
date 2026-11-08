@@ -37,6 +37,8 @@ func dbItemToTxItem(it queries.TransactionItem) models.TxItem {
 		UnitPrice: it.UnitPrice,
 		Total:     it.Total,
 		Included:  it.Included,
+		// SharedWith is only loaded for a split (loadTxItemShares).
+		SharedByAll: it.SharedByAll,
 	}
 	if it.Rate.Valid {
 		r := it.Rate.Float64
@@ -50,10 +52,15 @@ type itemOwner struct {
 	txID, recurrentID string
 }
 
-// replaceItemsWithTxn writes items over the owner's lines, in order.
+// replaceItemsWithTxn writes items over the owner's lines, in order. A line
+// kept (same id) without shares of its own keeps the ones it had in its
+// transaction's split, as the forms don't send them.
 func replaceItemsWithTxn(ctx context.Context, qtx *queries.Queries, owner itemOwner, items []models.TxItem) error {
 	var err error
 	if owner.txID != "" {
+		if err := keepItemSharesWithTxn(ctx, qtx, owner.txID, items); err != nil {
+			return err
+		}
 		err = qtx.DeleteTransactionItems(ctx, sql.NullString{String: owner.txID, Valid: true})
 	} else {
 		err = qtx.DeleteRecurrentTxItems(ctx, sql.NullString{String: owner.recurrentID, Valid: true})
@@ -89,12 +96,16 @@ func createItemWithTxn(ctx context.Context, qtx *queries.Queries, owner itemOwne
 		Total:         it.Total,
 		Rate:          rate,
 		Included:      it.Included,
+		SharedByAll:   it.SharedByAll && owner.txID != "",
 		Position:      int64(position),
 	}); err != nil {
 		logger.FromCtx(ctx).Error("creating item", zap.Error(err), zap.Any("owner", owner))
 		return err
 	}
-	return nil
+	if owner.txID == "" {
+		return nil
+	}
+	return createItemSharesWithTxn(ctx, qtx, it.ID, it.SharedWith)
 }
 
 // writeTxExtrasWithTxn writes a saved transaction's lines (when set: nil

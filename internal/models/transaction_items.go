@@ -77,6 +77,12 @@ type TxItem struct {
 	// Included tells a charge is already inside the items' prices ("VAT
 	// included"): shown, never summed.
 	Included bool
+	// SharedByAll tells everyone in its transaction's split shares the item
+	// (see TxSplit), e.g. a dish for the table.
+	SharedByAll bool
+	// SharedWith are who share the item in its transaction's split, by their
+	// units (see TxSplit.Compute). None is the user's alone.
+	SharedWith []ItemShare
 }
 
 // Label is its name, else its kind's with the rate (e.g. "VAT 14%").
@@ -178,8 +184,9 @@ func TxItemsMismatch(items []TxItem, amount float64) bool {
 	return math.Abs(TxItemsTotal(items)-math.Abs(amount)) > 0.01
 }
 
-// CopyTxItems copies the items with new IDs, e.g. a recurrent transaction's
-// onto an occurrence or a duplicated transaction's.
+// CopyTxItems copies the items with new IDs (their shares of a split left
+// out), e.g. a recurrent transaction's onto an occurrence or a duplicated
+// transaction's.
 func CopyTxItems(items []TxItem) []TxItem {
 	if len(items) == 0 {
 		return nil
@@ -187,6 +194,8 @@ func CopyTxItems(items []TxItem) []TxItem {
 	cp := make([]TxItem, len(items))
 	for i, it := range items {
 		it.ID = idgen.New()
+		// A split is its transaction's, never copied.
+		it.SharedByAll, it.SharedWith = false, nil
 		if it.Rate != nil {
 			r := *it.Rate
 			it.Rate = &r

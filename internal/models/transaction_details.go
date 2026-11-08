@@ -15,6 +15,8 @@ type TxDetails struct {
 	// RecurrentTxs its other occurrences, newest first.
 	Recurrent    *RecurrentTx
 	RecurrentTxs []Transaction
+	// Split is its bill split with people, nil when it isn't.
+	Split *TxSplit
 	// Reimburses is the expense this income pays back.
 	Reimburses *Transaction
 	// Pair is the other side of the transfer pair it's a side of.

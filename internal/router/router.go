@@ -110,6 +110,9 @@ func New(h *handler.Handler) Router {
 	mux.Handle("POST /transactions/{id}/receipt", handle(h.ScanReceiptIntoTx, middleware.HTMXOnly))
 	mux.Handle("POST /transactions/{id}/items", handle(h.AddTxItem))
 	mux.Handle("DELETE /transactions/{id}/items/{itemID}", handle(h.DeleteTxItem))
+	mux.Handle("GET /transactions/{id}/split", handle(h.GetTxSplit))
+	mux.Handle("PUT /transactions/{id}/split", handle(h.SaveTxSplit, middleware.HTMXOnly))
+	mux.Handle("POST /transactions/{id}/split/request", handle(h.RequestTxSplitPayments, middleware.HTMXOnly))
 	mux.Handle("GET /receipts/{id}", handle(h.Receipt))
 	mux.Handle("DELETE /receipts/{id}", handle(h.DeleteReceipt, middleware.HTMXOnly))
 

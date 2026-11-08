@@ -391,6 +391,16 @@ templ TxItemsList(items []models.TxItem, cur *models.Currency, amount float64, o
 	}
 }
 
+// hasProductItems tells some lines are items, not only charges.
+func hasProductItems(items []models.TxItem) bool {
+	for _, it := range items {
+		if !it.Kind.IsCharge() {
+			return true
+		}
+	}
+	return false
+}
+
 func abs(v float64) float64 {
 	if v < 0 {
 		return -v
@@ -567,6 +577,18 @@ templ TxDetailsItems(tx *models.Transaction, add *TxItemFD, rec *ReceiptFD) {
 						<p class="text-zinc-500">{ fmt.Sprintf("%d of %d scans left this month.", rec.Left, rec.Limit) }</p>
 					}
 				</div>
+			}
+			if tx.CanSplit() && hasProductItems(tx.Items) {
+				<button
+					type="button"
+					hx-get={ txSplitURL(tx.ID) }
+					hx-target="#txd-panel"
+					hx-swap="innerHTML"
+					class="txd-action justify-self-start"
+				>
+					@icons.Users("14")
+					Split the bill
+				</button>
 			}
 			if !locked {
 				<div class="flex flex-wrap items-start gap-2">

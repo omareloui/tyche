@@ -614,8 +614,9 @@ document.addEventListener("alpine:init", () => {
     return {
       ...base,
       id: null,
-      // mode is "view" or "edit"; from is where the edit form was opened
-      // from: "details" goes back to them, "menu" (a row) closes the drawer.
+      // mode is "view", "edit" or "split" (views.TxSplitPanel, saved on
+      // every change); from is where the form was opened from: "details"
+      // goes back to them, "menu" (a row) closes the drawer.
       mode: "view",
       from: null,
 
@@ -624,16 +625,19 @@ document.addEventListener("alpine:init", () => {
         if (!this.drawerRoot().contains(document.activeElement)) this.opener = document.activeElement;
       },
 
-      show(id, mode, from = null) {
-        // A form answered with its errors keeps the values it was opened with.
-        const opening = mode === "edit" && this.mode !== "edit";
-        // Back closes the drawer, or leaves the edit form opened from the
-        // details (its own entry) for them.
+      // form is the url the form was fetched from, the edit form's when
+      // not set, kept in the url to open it again on reloading.
+      show(id, mode, from = null, form = null) {
+        // A form answered with its errors keeps the values it was opened with;
+        // the split's are saved on every change.
+        const opening = (mode === "edit" && this.mode !== "edit") || mode === "split";
+        // Back closes the drawer, or leaves the form opened from the details
+        // (its own entry) for them.
         const root = this.drawerRoot();
         const top = drawerHistory.top();
         if (top?.el !== root) drawerHistory.opened(root, (e) => this.back(e), "tx", id);
-        else if (mode === "edit" && from === "details" && top.kind !== "child")
-          drawerHistory.push({ el: root, kind: "child", back: (e) => this.back(e), form: txURL(id, "edit") });
+        else if (mode !== "view" && from === "details" && top.kind !== "child")
+          drawerHistory.push({ el: root, kind: "child", back: (e) => this.back(e), form: form ?? txURL(id, "edit") });
         else if (mode === "view" && top.kind === "child") drawerHistory.drop(1);
         this.id = id;
         this.mode = mode;
@@ -678,7 +682,7 @@ document.addEventListener("alpine:init", () => {
 
       escape(e) {
         if (e.defaultPrevented || confirmJustClosed() || datepickerOpen()) return;
-        if (this.mode === "edit") this.cancel();
+        if (this.mode !== "view") this.cancel();
         else this.close();
       },
 
@@ -711,6 +715,53 @@ document.addEventListener("alpine:init", () => {
       },
     };
   });
+
+  // splitChips are who had an item of a split bill (views.splitItem):
+  // picking everyone unpicks the others, picking someone unpicks everyone.
+  Alpine.data("splitChips", () => ({
+    pick(e) {
+      const box = e.target;
+      if (!box.checked) return;
+      for (const other of this.$root.querySelectorAll("input[type=checkbox]")) {
+        if (other !== box && (box.value === "all" || other.value === "all")) other.checked = false;
+      }
+    },
+  }));
+
+  // splitUnits are how many of an item's qty units each one had
+  // (views.splitItemUnits): a step changes someone's, within what's left
+  // (the user's), and saves the split.
+  Alpine.data("splitUnits", (qty) => ({
+    inputs() {
+      return [...this.$root.querySelectorAll("input[data-id]")];
+    },
+    count(input) {
+      return Number(input.value.split(":")[1]) || 0;
+    },
+    mine() {
+      return qty - this.inputs().reduce((sum, i) => sum + this.count(i), 0);
+    },
+    step(btn, d) {
+      const input = btn.closest("[data-units]").querySelector("input[data-id]");
+      const n = this.count(input) + d;
+      if (n < 0 || (d > 0 && this.mine() <= 0)) return;
+      input.value = `${input.dataset.id}:${n}`;
+      btn.closest("[data-units]").querySelector("[data-count]").textContent = n;
+      this.refresh();
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    },
+    // refresh dims the steps that can't be taken: − at 0, + with nothing
+    // left (before the answer re-renders them).
+    refresh() {
+      const left = this.mine();
+      this.$root.querySelector("[data-mine]").textContent = left;
+      for (const row of this.$root.querySelectorAll("[data-units]")) {
+        const n = this.count(row.querySelector("input[data-id]"));
+        row.querySelector("[data-step='-1']").disabled = n <= 0;
+        row.querySelector("[data-step='1']").disabled = left <= 0;
+      }
+    },
+  }));
 
   // txRow is a transaction row; swiping it right fulfills it (or marks it
   // reviewed), left deletes it.

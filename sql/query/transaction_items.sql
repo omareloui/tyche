@@ -20,7 +20,7 @@ ORDER BY recurrent_id, position;
 
 -- name: CreateTransactionItem :exec
 INSERT INTO transaction_items (
-    id, transaction_id, recurrent_id, kind, name, quantity, unit_price, total, rate, included, position
+    id, transaction_id, recurrent_id, kind, name, quantity, unit_price, total, rate, included, shared_by_all, position
 ) VALUES (
     sqlc.arg(id),
     sqlc.narg(transaction_id),
@@ -32,6 +32,7 @@ INSERT INTO transaction_items (
     sqlc.arg(total),
     sqlc.narg(rate),
     sqlc.arg(included),
+    sqlc.arg(shared_by_all),
     sqlc.arg(position)
 );
 

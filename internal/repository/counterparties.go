@@ -174,6 +174,15 @@ func (r *Repository) MergeCounterparties(ctx context.Context, fromID, intoID str
 		if err := qtx.ReassignAccountsCounterparty(ctx, queries.ReassignAccountsCounterpartyParams{ToID: to, FromID: from}); err != nil {
 			return err
 		}
+		if err := qtx.ReassignTxSplitPeople(ctx, queries.ReassignTxSplitPeopleParams{ToID: intoID, FromID: fromID}); err != nil {
+			return err
+		}
+		if err := qtx.MergeTxItemShareUnits(ctx, queries.MergeTxItemShareUnitsParams{ToID: to, FromID: from}); err != nil {
+			return err
+		}
+		if err := qtx.ReassignTxItemShares(ctx, queries.ReassignTxItemSharesParams{ToID: to, FromID: from}); err != nil {
+			return err
+		}
 		intoLocs, err := qtx.GetCounterpartyLocationsOf(ctx, intoID)
 		if err != nil {
 			return err

@@ -1,0 +1,366 @@
+package views
+
+import (
+	"fmt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+	"net/url"
+	"slices"
+	"strconv"
+)
+
+// TxSplitMsg is what the split panel tells after an action.
+type TxSplitMsg struct {
+	Notice, Error string
+}
+
+// SplitRequestedNotice tells how many incomes requesting the shares were
+// scheduled.
+func SplitRequestedNotice(n int) string {
+	switch n {
+	case 0:
+		return "Nothing left to request."
+	case 1:
+		return "Scheduled 1 payment to receive. Fulfill it once they pay you."
+	default:
+		return fmt.Sprintf("Scheduled %d payments to receive. Fulfill each once they pay you.", n)
+	}
+}
+
+func txSplitURL(id string) string {
+	return fmt.Sprintf("/transactions/%s/split", url.PathEscape(id))
+}
+
+// splitPeopleOptions are the people (not merchants) not in the split yet.
+func splitPeopleOptions(s *models.TxSplit, cps []models.Counterparty) []form.ComboOption {
+	var people []models.Counterparty
+	for _, cp := range cps {
+		if cp.IsMerchant || slices.ContainsFunc(s.People, func(p models.SplitPerson) bool { return p.ID == cp.ID }) {
+			continue
+		}
+		people = append(people, cp)
+	}
+	return counterpartyComboOptions(people, "")
+}
+
+// TxSplitDrawer is the split of a transaction's bill in the details drawer,
+// opened right in it.
+templ TxSplitDrawer(s *models.TxSplit, cps []models.Counterparty, msg TxSplitMsg) {
+	@txDrawer() {
+		@TxSplitPanel(s, cps, msg)
+	}
+}
+
+// TxSplitPanel splits the transaction's bill: the people it's split with,
+// who had each item (one, some, or everyone) and what everyone owes. Every
+// change is saved at once, answering the panel again; "Request payments"
+// schedules the incomes reimbursing the expense of what's left of the shares.
+templ TxSplitPanel(s *models.TxSplit, cps []models.Counterparty, msg TxSplitMsg) {
+	{{ tx := s.Tx }}
+	{{ cur := &tx.Account.Currency }}
+	{{ res := s.Compute() }}
+	{{ v := newTxView(ctx, tx) }}
+	<form
+		hx-put={ txSplitURL(tx.ID) }
+		hx-trigger="change[!target.hasAttribute('x-model')], submit"
+		hx-target="#txd-panel"
+		hx-swap="innerHTML"
+		x-init={ fmt.Sprintf("show(%q, 'split', 'details', %q)", tx.ID, txSplitURL(tx.ID)) }
+		class="drawer-panel flex flex-col flex-1 min-h-0"
+	>
+		<header class="flex items-center gap-3 px-5 sm:px-6 pt-5 pb-4">
+			<button type="button" @click="cancel()" aria-label="Back to the details" class="grid place-items-center shrink-0 w-9 h-9 -ml-2 rounded-full text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white">
+				@icons.ArrowLeft("18")
+			</button>
+			<div class="flex-1 min-w-0">
+				<h2 class="text-lg font-bold leading-snug">Split the bill</h2>
+				<p class="text-sm text-zinc-400 truncate">
+					{ v.title } · <span class="sensitive tabular-nums">{ tx.ViewAmount() }</span>
+				</p>
+			</div>
+			@components.DrawerClose()
+		</header>
+		<div class="flex-1 grid grid-cols-1 auto-rows-max content-start gap-6 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
+			if msg.Error != "" {
+				<p class="text-sm text-red-400" role="alert">{ msg.Error }</p>
+			}
+			if msg.Notice != "" {
+				<p class="text-sm text-emerald-400" role="status">{ msg.Notice }</p>
+			}
+			@txDetailsSection("People") {
+				<div class="flex flex-wrap items-center gap-2">
+					<span class="split-person">
+						@components.CounterpartyIcon("You", "", "", "w-6 h-6 text-[11px]")
+						You
+					</span>
+					for _, p := range s.People {
+						<span class="split-person">
+							<input type="hidden" name="person" value={ p.ID }/>
+							@components.CounterpartyIcon(p.Name, p.Icon, p.Color, "w-6 h-6 text-[11px]")
+							<span class="truncate max-w-40">{ p.Name }</span>
+							<button type="submit" name="remove" value={ p.ID } aria-label={ "Remove " + p.Name } class="grid place-items-center w-6 h-6 -mr-1.5 rounded-full text-zinc-500 cursor-pointer transition-colors hover:bg-zinc-700 hover:text-white">
+								@icons.X("12")
+							</button>
+						</span>
+					}
+				</div>
+				<div class="max-w-xs">
+					@form.Combobox(form.ComboboxProps{
+						Name: "add_person", ID: tx.ID, Label: "Add someone", Placeholder: "Add someone",
+						Options: splitPeopleOptions(s, cps), Searchable: true,
+						CreateURL: "/counterparties/quick?person",
+					})
+				</div>
+			}
+			@txDetailsSection("Who had what") {
+				if len(s.People) == 0 {
+					<p class="text-sm text-zinc-500">Add who you shared it with, then pick who had each item. The ones you don't pick are yours.</p>
+				}
+				<ul class="grid grid-cols-1 gap-2">
+					for i := range tx.Items {
+						if !tx.Items[i].Kind.IsCharge() {
+							@splitItem(s, &tx.Items[i], cur)
+						}
+					}
+				</ul>
+				if models.HasTxItemCharges(tx.Items) {
+					<ul class="grid grid-cols-1 gap-1">
+						for _, it := range tx.Items {
+							if it.Kind.IsCharge() {
+								<li class="flex items-center justify-between gap-3 px-3 text-sm text-zinc-400">
+									<span class="min-w-0 truncate">
+										{ it.Label() }
+										<span class="text-zinc-500">{ " · " + models.ChargeSplitRule(&it) }</span>
+									</span>
+									<span class={ "sensitive tabular-nums", templ.KV("line-through decoration-zinc-600 text-zinc-500", it.Included) }>{ cur.Format(it.Total) }</span>
+								</li>
+							}
+						}
+					</ul>
+				}
+			}
+			@txDetailsSection("Who owes what") {
+				<ul class="grid grid-cols-1 gap-2">
+					for _, sh := range res.Shares {
+						@splitShare(sh, cur)
+					}
+				</ul>
+				if res.Mismatch {
+					<p class="inline-flex items-start gap-1.5 text-sm text-amber-400">
+						@icons.Warning("14", &templ.Attributes{"class": "mt-1 shrink-0"})
+						{ fmt.Sprintf("The items add up to %s, the amount is %s: the shares follow the items.", cur.Format(res.Total), cur.Format(abs(tx.Amount))) }
+					</p>
+				}
+			}
+		</div>
+		<footer class="flex flex-wrap items-center justify-end gap-2 px-5 sm:px-6 py-4 border-t border-zinc-800">
+			<button type="button" @click="cancel()" class="btn-ghost">Done</button>
+			if req := res.ToRequest(); len(req) > 0 {
+				<button
+					type="button"
+					hx-post={ txSplitURL(tx.ID) + "/request" }
+					hx-confirm={ splitRequestConfirm(req) }
+					hx-disabled-elt="this"
+					class="btn-primary busy-swap"
+				>
+					@icons.Clock("16")
+					Request payments
+				</button>
+			}
+		</footer>
+	</form>
+}
+
+func splitRequestConfirm(req []models.SplitShare) string {
+	if len(req) == 1 {
+		return fmt.Sprintf("Schedule a payment to receive from %s?", req[0].Person.Name)
+	}
+	return fmt.Sprintf("Schedule a payment to receive from each of the %d people?", len(req))
+}
+
+// splitItem is an item with who had it: everyone, or the ones picked (the
+// user when none). Picking everyone unpicks the others and back (splitChips
+// in transactions.js).
+templ splitItem(s *models.TxSplit, it *models.TxItem, cur *models.Currency) {
+	{{ picked := s.ItemShares(it) }}
+	{{ name := "share_" + it.ID }}
+	<li class="grid gap-2 px-3 py-2.5 rounded-xl bg-tx-row">
+		<div class="flex items-start justify-between gap-3">
+			<div class="min-w-0">
+				<p class="text-sm [overflow-wrap:anywhere]">{ it.Label() }</p>
+				if it.Quantity != 1 {
+					<p class="text-xs text-zinc-500 tabular-nums">{ fmt.Sprintf("%s × %s", strconv.FormatFloat(it.Quantity, 'f', -1, 64), cur.Format(it.UnitPrice)) }</p>
+				}
+			</div>
+			<span class="text-sm sensitive tabular-nums">{ cur.Format(it.Total) }</span>
+		</div>
+		if len(s.People) > 0 && models.ItemByUnits(it) {
+			@splitItemUnits(s, it, cur)
+		} else if len(s.People) > 0 {
+			<div x-data="splitChips" @change="pick($event)" class="flex flex-wrap gap-1.5" role="group" aria-label={ "Who had " + it.Label() }>
+				@splitChip(name, models.SplitEveryone, "Everyone", slices.Contains(picked, models.SplitEveryone))
+				@splitChip(name, models.SplitMe, "You", slices.Contains(picked, models.SplitMe))
+				for _, p := range s.People {
+					@splitChip(name, p.ID, p.Name, slices.Contains(picked, p.ID))
+				}
+			</div>
+			if n := len(picked); n > 1 {
+				<p class="text-xs text-zinc-500 tabular-nums">{ fmt.Sprintf("%s each", cur.Format(cur.Round(it.Total/float64(n)))) }</p>
+			} else if picked[0] == models.SplitEveryone {
+				<p class="text-xs text-zinc-500 tabular-nums">{ fmt.Sprintf("%s each", cur.Format(cur.Round(it.Total/float64(len(s.People)+1)))) }</p>
+			}
+		}
+	</li>
+}
+
+// splitItemUnits shares an item with a quantity by its units: how many each
+// one had (splitUnits in transactions.js), the ones nobody took the user's,
+// or everyone's.
+templ splitItemUnits(s *models.TxSplit, it *models.TxItem, cur *models.Currency) {
+	{{ name := "share_" + it.ID }}
+	{{ units := s.ItemUnits(it) }}
+	{{ qty := int(it.Quantity) }}
+	<div class="flex flex-wrap gap-1.5">
+		@splitChip(name, models.SplitEveryone, "Everyone", it.SharedByAll)
+	</div>
+	if it.SharedByAll {
+		<p class="text-xs text-zinc-500 tabular-nums">{ fmt.Sprintf("%s each", cur.Format(cur.Round(it.Total/float64(len(s.People)+1)))) }</p>
+	} else {
+		<ul x-data={ fmt.Sprintf("splitUnits(%d)", qty) } class="grid gap-1" aria-label={ "How many " + it.Label() + " each had" }>
+			for _, p := range s.People {
+				@splitUnitsRow(name, p.ID, p.Name, units[p.ID], units[models.SplitMe] > 0)
+			}
+			<li class="flex items-center justify-between gap-3 text-sm">
+				<span class="text-zinc-400">You</span>
+				<span class="w-[6.5rem] text-center tabular-nums text-zinc-300" data-mine>{ strconv.Itoa(units[models.SplitMe]) }</span>
+			</li>
+		</ul>
+	}
+}
+
+// splitUnitsRow is someone's units of an item, a stepper sending
+// share_<item id> = "<id>:<units>".
+templ splitUnitsRow(name, id, label string, n int, more bool) {
+	<li class="flex items-center justify-between gap-3 text-sm" data-units>
+		<span class="min-w-0 truncate">{ label }</span>
+		<span class="inline-flex items-center gap-1">
+			<input type="hidden" name={ name } value={ fmt.Sprintf("%s:%d", id, n) } data-id={ id }/>
+			<button type="button" @click="step($el, -1)" data-step="-1" disabled?={ n == 0 } aria-label={ "One less for " + label } class="split-step">−</button>
+			<span class="w-6 text-center tabular-nums" data-count>{ strconv.Itoa(n) }</span>
+			<button type="button" @click="step($el, 1)" data-step="1" disabled?={ !more } aria-label={ "One more for " + label } class="split-step">+</button>
+		</span>
+	</li>
+}
+
+templ splitChip(name, value, label string, checked bool) {
+	<label class="split-chip">
+		<input type="checkbox" name={ name } value={ value } checked?={ checked } class="sr-only"/>
+		if value == models.SplitEveryone {
+			@icons.Users("12")
+		}
+		<span class="truncate max-w-32">{ label }</span>
+	</label>
+}
+
+// splitShare is what someone owes, its lines unfolding.
+templ splitShare(sh models.SplitShare, cur *models.Currency) {
+	<li x-data="{open: false}" class="rounded-xl bg-zinc-800/40 ring-1 ring-zinc-800">
+		<button type="button" @click="open = !open" :aria-expanded="open" class="flex items-center gap-3 w-full px-3 py-2.5 text-left cursor-pointer">
+			@components.CounterpartyIcon(sh.Person.Name, sh.Person.Icon, sh.Person.Color, "w-8 h-8 text-xs")
+			<div class="flex-1 min-w-0">
+				<p class="truncate">
+					if sh.Person.IsMe() {
+						Your share
+					} else {
+						{ sh.Person.Name }
+					}
+				</p>
+				if status := splitShareStatus(sh, cur); status != "" {
+					<p class="text-xs text-zinc-500 truncate">{ status }</p>
+				}
+			</div>
+			<span class={ "sensitive tabular-nums font-semibold", templ.KV("text-emerald-400", !sh.Person.IsMe() && sh.Total > 0) }>{ cur.Format(sh.Total) }</span>
+			@icons.ChevronDown("16", &templ.Attributes{"class": "shrink-0 text-zinc-500 transition-transform", ":class": "open && 'rotate-180'"})
+		</button>
+		<ul x-show="open" x-cloak class="grid gap-1 px-3 pb-3 text-sm text-zinc-400">
+			if len(sh.Items) == 0 {
+				<li class="text-zinc-500">No items.</li>
+			}
+			for _, ln := range sh.Items {
+				<li class="flex justify-between gap-3">
+					<span class="min-w-0 truncate">
+						{ ln.Label }
+						if ln.Qty > 0 {
+							<span class="text-zinc-500">{ fmt.Sprintf(" · %s of %s", strconv.FormatFloat(ln.Units, 'f', -1, 64), strconv.FormatFloat(ln.Qty, 'f', -1, 64)) }</span>
+						} else if ln.Of > 1 {
+							<span class="text-zinc-500">{ fmt.Sprintf(" · ÷%d", ln.Of) }</span>
+						}
+					</span>
+					<span class="sensitive tabular-nums">{ cur.Format(ln.Part) }</span>
+				</li>
+			}
+			for _, ln := range sh.Charges {
+				<li class="flex justify-between gap-3 text-zinc-500">
+					<span class="min-w-0 truncate">{ ln.Label }</span>
+					<span class="sensitive tabular-nums">{ cur.Format(ln.Part) }</span>
+				</li>
+			}
+		</ul>
+	</li>
+}
+
+// splitShareStatus tells where someone's share stands: paid, requested, or
+// what's left to request.
+func splitShareStatus(sh models.SplitShare, cur *models.Currency) string {
+	switch {
+	case sh.Person.IsMe():
+		return "Your part of the bill"
+	case sh.Total <= 0:
+		return "Nothing to pay"
+	case sh.Paid > 0 && sh.Paid+0.005 >= sh.Total:
+		return "Paid"
+	case sh.Paid > 0:
+		return fmt.Sprintf("Paid %s of it", cur.Format(sh.Paid))
+	case sh.Left() <= 0.005:
+		return "Requested, not paid yet"
+	case sh.Requested > 0:
+		return fmt.Sprintf("Requested %s, %s more to request", cur.Format(sh.Requested), cur.Format(sh.Left()))
+	default:
+		return "Not requested yet"
+	}
+}
+
+// txDetailsSplit is the transaction details' split of its bill: what each
+// one owes and where their payment stands, editable when it can be split.
+templ txDetailsSplit(s *models.TxSplit) {
+	{{ res := s.Compute() }}
+	{{ cur := &s.Tx.Account.Currency }}
+	@txDetailsSection(fmt.Sprintf("Split with %s", splitPeopleCount(len(s.People)))) {
+		<ul class="grid grid-cols-1 gap-2">
+			for _, sh := range res.Shares {
+				@splitShare(sh, cur)
+			}
+		</ul>
+		if s.Tx.CanSplit() {
+			<button
+				type="button"
+				hx-get={ txSplitURL(s.Tx.ID) }
+				hx-target="#txd-panel"
+				hx-swap="innerHTML"
+				class="txd-action justify-self-start"
+			>
+				@icons.Pencil("14")
+				Edit split
+			</button>
+		}
+	}
+}
+
+func splitPeopleCount(n int) string {
+	if n == 1 {
+		return "1 person"
+	}
+	return fmt.Sprintf("%d people", n)
+}
