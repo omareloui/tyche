@@ -706,14 +706,24 @@ templ txChips(tx *models.Transaction, v *txView) {
 					@txGoalPopup(tx.Goal)
 				</span>
 			}
-			if tx.ItemsCount > 0 || tx.Receipt != nil {
+			if tx.ItemsCount > 0 {
 				<span class="chip" title="Its items, in its details">
 					@icons.Receipt("12")
-					if tx.ItemsCount > 0 {
-						{ txItemsCountLabel(tx.ItemsCount) }
-					} else {
+					{ txItemsCountLabel(tx.ItemsCount) }
+				</span>
+			}
+			if tx.Receipt != nil {
+				<span x-data="{ full: false }" class="contents">
+					<button
+						type="button"
+						@click.stop="full = true"
+						title="Open the receipt"
+						class="chip cursor-zoom-in transition-colors hover:bg-zinc-700 hover:text-zinc-200"
+					>
+						@icons.Image("12")
 						Receipt
-					}
+					</button>
+					@ReceiptViewer(tx.Receipt.URL())
 				</span>
 			}
 			if len(tx.Reimbursements) > 0 {

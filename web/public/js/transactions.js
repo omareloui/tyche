@@ -372,7 +372,7 @@ document.addEventListener("alpine:init", () => {
     // date and amount ranges once each).
     syncFilters(form) {
       const set = (name) => !!form.elements[name]?.value.trim();
-      const keys = ["kind", "account", "category", "counterparty", "goal", "status", "source"];
+      const keys = ["kind", "account", "category", "counterparty", "goal", "status", "source", "receipt"];
       this.activeFilters =
         keys.filter(set).length + (set("from") || set("to")) + (set("min") || set("max"));
       this.reviewOnly = form.elements.status?.value === "review";

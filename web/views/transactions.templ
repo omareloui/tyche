@@ -221,6 +221,10 @@ templ txFilterBar(f *models.TxFilter, start models.MonthStart, accs []models.Acc
 					{Value: string(models.TxSourceSMS), Label: "From SMS", Leading: icons.Smartphone("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 					{Value: string(models.TxSourceManual), Label: "Added by hand", Leading: icons.Pencil("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 				})
+				@txFilterCombo(models.TxFilterReceipt, "Receipt", "Any receipt", string(f.Receipt), false, []form.ComboOption{
+					{Value: string(models.TxReceiptWith), Label: "With a receipt", Leading: icons.Image("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
+					{Value: string(models.TxReceiptWithout), Label: "Without a receipt", Leading: icons.X("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
+				})
 				@txDateRangeFilter(f)
 				@txDatePresets(f, start)
 				@txAmountFilter(models.TxFilterMin, "Min amount", f.MinAmount)
@@ -378,27 +382,71 @@ templ txFilterCombo(name, label, anyLabel, value string, searchable bool, opts [
 	})
 }
 
-// txDateRangeFilter picks the from and to days with one range picker
-// (datepickers.js), the days kept in hidden inputs.
+// txDateRangeFilter picks the from and to days (datepickers.js), the days
+// kept in hidden inputs: a range, or one open-ended bound (on or after a day,
+// on or before one), the mode picked by its select (txDateFilter).
 templ txDateRangeFilter(f *models.TxFilter) {
 	{{ from, to := f.FromString(), f.ToString() }}
-	<div class="relative" x-data>
-		<input type="hidden" name={ models.TxFilterFrom } value={ from } data-filter/>
-		<input type="hidden" name={ models.TxFilterTo } value={ to } data-filter/>
-		@icons.Calendar("16", &templ.Attributes{"class": "pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500"})
-		<input
-			type="text"
-			readonly
-			data-datepicker
-			data-datepicker-range
-			placeholder="Any date"
-			aria-label="Dates"
-			if from != "" || to != "" {
-				value={ from + " → " + to }
-			}
-			class="combo-chip w-52 pl-9! placeholder:text-zinc-500"
-		/>
+	{{ mode := txDateMode(f) }}
+	<div class="flex items-center gap-1" x-data={ fmt.Sprintf("txDateFilter(%q)", mode) }>
+		// Not a filter itself (no name, its change kept from the form): only how
+		// the days are picked.
+		@form.Combobox(form.ComboboxProps{
+			ID: "tx-date-mode", Label: "Dates mode", Options: txDateModeOptions(),
+			Data: form.FDInput{Value: mode}, Chip: true,
+			InputAttrs: templ.Attributes{"@change.stop": "mode = $event.target.value; switchMode()"},
+		})
+		<div class="relative">
+			<input type="hidden" name={ models.TxFilterFrom } value={ from } data-filter/>
+			<input type="hidden" name={ models.TxFilterTo } value={ to } data-filter/>
+			@icons.Calendar("16", &templ.Attributes{"class": "pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500"})
+			<input
+				type="text"
+				readonly
+				x-ref="picker"
+				data-datepicker
+				data-datepicker-range
+				data-datepicker-mode={ mode }
+				:placeholder="mode === 'range' ? 'Any date' : 'Pick a day'"
+				aria-label="Dates"
+				value={ txDateValue(mode, from, to) }
+				class="combo-chip w-52 pl-9! placeholder:text-zinc-500"
+			/>
+		</div>
 	</div>
+}
+
+// txDateModeOptions are how txDateRangeFilter picks the days.
+func txDateModeOptions() []form.ComboOption {
+	return []form.ComboOption{
+		{Value: "range", Label: "Between"},
+		{Value: "from", Label: "On or after"},
+		{Value: "to", Label: "On or before"},
+	}
+}
+
+// txDateMode is the date filter's mode the filter reads as: one bound alone
+// is open-ended.
+func txDateMode(f *models.TxFilter) string {
+	switch {
+	case !f.From.IsZero() && f.To.IsZero():
+		return "from"
+	case f.From.IsZero() && !f.To.IsZero():
+		return "to"
+	}
+	return "range"
+}
+
+func txDateValue(mode, from, to string) string {
+	switch {
+	case mode == "from":
+		return from
+	case mode == "to":
+		return to
+	case from != "" || to != "":
+		return from + " → " + to
+	}
+	return ""
 }
 
 // txDatePresets set the date range to common periods in one click.
@@ -461,7 +509,7 @@ func txFilterKeysButQ() []string {
 	return []string{
 		models.TxFilterKind, models.TxFilterAccount, models.TxFilterCategory,
 		models.TxFilterCounterparty, models.TxFilterGoal, models.TxFilterStatus,
-		models.TxFilterSource, models.TxFilterFrom, models.TxFilterTo,
+		models.TxFilterSource, models.TxFilterReceipt, models.TxFilterFrom, models.TxFilterTo,
 		models.TxFilterMin, models.TxFilterMax,
 	}
 }

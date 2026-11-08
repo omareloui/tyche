@@ -234,7 +234,7 @@ func (r *Repository) GetTransactionsSummary(ctx context.Context, f models.TxFilt
 	p := queries.GetTransactionsSummaryParams{
 		Q: lp.Q, Kind: lp.Kind, AccountID: lp.AccountID, CategoryID: lp.CategoryID,
 		CounterpartyID: lp.CounterpartyID, GoalID: lp.GoalID, NeedsReview: lp.NeedsReview,
-		FromSms: lp.FromSms, FromDate: lp.FromDate, ToDate: lp.ToDate,
+		FromSms: lp.FromSms, HasReceipt: lp.HasReceipt, FromDate: lp.FromDate, ToDate: lp.ToDate,
 		MinAmount: lp.MinAmount, MaxAmount: lp.MaxAmount,
 	}
 	switch f.Status {
@@ -299,6 +299,12 @@ func txFilterParams(f *models.TxFilter) queries.GetTransactionsParams {
 		p.FromSms = true
 	case models.TxSourceManual:
 		p.FromSms = false
+	}
+	switch f.Receipt {
+	case models.TxReceiptWith:
+		p.HasReceipt = true
+	case models.TxReceiptWithout:
+		p.HasReceipt = false
 	}
 	if !f.From.IsZero() {
 		p.FromDate = f.From.UTC()

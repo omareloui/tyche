@@ -142,6 +142,9 @@ WHERE
     AND (sqlc.narg(from_sms) IS NULL OR EXISTS (
         SELECT 1 FROM sms_messages AS sm WHERE sm.transaction_id = t.id
     ) = sqlc.narg(from_sms))
+    AND (sqlc.narg(has_receipt) IS NULL OR EXISTS (
+        SELECT 1 FROM receipts AS rc WHERE rc.transaction_id = t.id
+    ) = sqlc.narg(has_receipt))
     AND (sqlc.narg(from_date) IS NULL OR t.scheduled_to >= sqlc.narg(from_date))
     AND (sqlc.narg(to_date) IS NULL OR t.scheduled_to < sqlc.narg(to_date))
     AND (sqlc.narg(min_amount) IS NULL OR t.amount >= sqlc.narg(min_amount))
@@ -228,6 +231,9 @@ WHERE
     AND (sqlc.narg(from_sms) IS NULL OR EXISTS (
         SELECT 1 FROM sms_messages AS sm WHERE sm.transaction_id = t.id
     ) = sqlc.narg(from_sms))
+    AND (sqlc.narg(has_receipt) IS NULL OR EXISTS (
+        SELECT 1 FROM receipts AS rc WHERE rc.transaction_id = t.id
+    ) = sqlc.narg(has_receipt))
     AND (sqlc.narg(from_date) IS NULL OR t.scheduled_to >= sqlc.narg(from_date))
     AND (sqlc.narg(to_date) IS NULL OR t.scheduled_to < sqlc.narg(to_date))
     AND (sqlc.narg(min_amount) IS NULL OR t.amount >= sqlc.narg(min_amount))

@@ -157,6 +157,12 @@ func (h Handler) txFilterChips(ctx context.Context, f *models.TxFilter) []views.
 	case models.TxSourceManual:
 		add("Added by hand", models.TxFilterSource)
 	}
+	switch f.Receipt {
+	case models.TxReceiptWith:
+		add("With a receipt", models.TxFilterReceipt)
+	case models.TxReceiptWithout:
+		add("Without a receipt", models.TxFilterReceipt)
+	}
 	if !f.From.IsZero() || !f.To.IsZero() {
 		add(views.FormatTxRange(f.From, f.To), models.TxFilterFrom, models.TxFilterTo)
 	}
