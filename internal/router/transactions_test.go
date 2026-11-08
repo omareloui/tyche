@@ -10,6 +10,7 @@ import (
 	"github.com/omareloui/tyche/internal/handler"
 	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/repository"
 	"github.com/omareloui/tyche/internal/sanitizer"
 	"github.com/omareloui/tyche/internal/valid"
 )
@@ -144,7 +145,15 @@ func TestTransactionsPage(t *testing.T) {
 			}
 		}
 	}
-	create(&models.Transaction{Kind: models.ExpenseTxKind, Amount: 500, Description: "rent", ScheduledTo: time.Now().AddDate(0, 1, 0)})
+	// The only one with a receipt's image.
+	receiptID, err := repo.CreateReceipt(ctx, &repository.ScannedReceipt{Data: []byte("jpeg"), ContentType: "image/jpeg", Hash: "h"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	create(&models.Transaction{
+		Kind: models.ExpenseTxKind, Amount: 500, Description: "rent",
+		ScheduledTo: time.Now().AddDate(0, 1, 0), ReceiptID: receiptID,
+	})
 	// Pays back a January expense, from the June chunk.
 	refund := create(&models.Transaction{
 		Kind: models.IncomeTxKind, Amount: 1, Description: "friend",
@@ -249,6 +258,11 @@ func TestTransactionsPage(t *testing.T) {
 			{"from sms", models.TxFilter{Source: models.TxSourceSMS}, 0},
 			{"by hand", models.TxFilter{Source: models.TxSourceManual}, 121},
 			{"dates", models.TxFilter{From: day(time.March, 10), To: day(time.March, 12)}, 3},
+			// The upcoming rent too.
+			{"on or after a day", models.TxFilter{From: day(time.June, 15)}, 7},
+			{"on or before a day", models.TxFilter{To: day(time.January, 3)}, 3},
+			{"with a receipt", models.TxFilter{Receipt: models.TxReceiptWith}, 1},
+			{"without a receipt", models.TxFilter{Receipt: models.TxReceiptWithout}, 120},
 			{"amounts", models.TxFilter{MinAmount: &min, MaxAmount: &max}, 12},
 			{"account", models.TxFilter{AccountID: bank.ID}, 121},
 			{"other account", models.TxFilter{AccountID: idgen.New()}, 0},

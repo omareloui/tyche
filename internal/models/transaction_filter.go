@@ -26,6 +26,15 @@ const (
 	TxSourceManual TxSource = "manual"
 )
 
+// TxReceipt narrows transactions by whether they have a receipt's image.
+type TxReceipt string
+
+const (
+	TxReceiptAny     TxReceipt = ""
+	TxReceiptWith    TxReceipt = "with"
+	TxReceiptWithout TxReceipt = "without"
+)
+
 // Query keys of the transactions filters, also the form field names.
 const (
 	TxFilterQ            = "q"
@@ -36,6 +45,7 @@ const (
 	TxFilterGoal         = "goal"
 	TxFilterStatus       = "status"
 	TxFilterSource       = "source"
+	TxFilterReceipt      = "receipt"
 	TxFilterFrom         = "from"
 	TxFilterTo           = "to"
 	TxFilterMin          = "min"
@@ -59,6 +69,7 @@ type TxFilter struct {
 	GoalID         string
 	Status         TxStatus
 	Source         TxSource
+	Receipt        TxReceipt
 	// From and To are inclusive days, zero for no bound.
 	From, To time.Time
 	// MinAmount and MaxAmount bound the amount, in the account's currency.
@@ -82,6 +93,10 @@ func ParseTxFilter(v url.Values) TxFilter {
 	switch s := TxSource(v.Get(TxFilterSource)); s {
 	case TxSourceSMS, TxSourceManual:
 		f.Source = s
+	}
+	switch s := TxReceipt(v.Get(TxFilterReceipt)); s {
+	case TxReceiptWith, TxReceiptWithout:
+		f.Receipt = s
 	}
 	f.From = parseFilterDate(v.Get(TxFilterFrom))
 	f.To = parseFilterDate(v.Get(TxFilterTo))
@@ -135,6 +150,7 @@ func (f *TxFilter) Values() url.Values {
 	set(TxFilterGoal, f.GoalID)
 	set(TxFilterStatus, string(f.Status))
 	set(TxFilterSource, string(f.Source))
+	set(TxFilterReceipt, string(f.Receipt))
 	set(TxFilterFrom, f.FromString())
 	set(TxFilterTo, f.ToString())
 	set(TxFilterMin, FilterAmountString(f.MinAmount))
@@ -161,7 +177,7 @@ func (f *TxFilter) IsZero() bool {
 func (f *TxFilter) ActiveCount() int {
 	v := f.Values()
 	n := 0
-	for _, k := range []string{TxFilterKind, TxFilterAccount, TxFilterCategory, TxFilterCounterparty, TxFilterGoal, TxFilterStatus, TxFilterSource} {
+	for _, k := range []string{TxFilterKind, TxFilterAccount, TxFilterCategory, TxFilterCounterparty, TxFilterGoal, TxFilterStatus, TxFilterSource, TxFilterReceipt} {
 		if v.Has(k) {
 			n++
 		}
