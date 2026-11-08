@@ -28,7 +28,14 @@ func (h Handler) Currencies(w http.ResponseWriter, r *http.Request) (templ.Compo
 	}
 	l.Debug("fetched currencies")
 
-	return views.Currencies(getClaims(r.Context()), b, currs), nil
+	info, err := h.fxJob.Info(r.Context())
+	if err != nil {
+		l.Error("fetching the fx rates info", zap.Error(err))
+		return nil, err
+	}
+
+	rates := views.FxRatesFreshness{Info: info, Interval: h.fxJob.Interval()}
+	return views.Currencies(getClaims(r.Context()), b, currs, rates), nil
 }
 
 func (h Handler) Currency(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

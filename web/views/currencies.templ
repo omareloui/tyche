@@ -3,19 +3,113 @@ package views
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/omareloui/tyche/internal/formatters"
+	"github.com/omareloui/tyche/internal/fxrate"
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/tzctx"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/icons"
 	"github.com/omareloui/tyche/web/views/layouts"
 )
 
-templ Currencies(claims *jwt.AccessClaims, balances []models.Balance, currencies []models.Currency) {
+templ Currencies(claims *jwt.AccessClaims, balances []models.Balance, currencies []models.Currency, rates FxRatesFreshness) {
 	@layouts.WithTitle(claims, "Currencies", balances) {
-		@currenciesList(currencies, &claims.DefaultCurrency)
+		@currenciesList(currencies, &claims.DefaultCurrency, rates)
 	}
+}
+
+// FxRatesFreshness is when the rates were last fetched, to tell how old they
+// may be.
+type FxRatesFreshness struct {
+	Info     fxrate.Info
+	Interval time.Duration
+}
+
+// fxProviderLag is how far behind the market the provider's rates can be:
+// fawazahmed0's currency-api publishes them once a day.
+const fxProviderLag = 24 * time.Hour
+
+// MaxLag is how old the rates in use can be when fetching works: a day's
+// publication plus the time until the next fetch.
+func (f FxRatesFreshness) MaxLag() time.Duration {
+	return fxProviderLag + f.Interval
+}
+
+// Stale tells the fetches stopped: the last one is over twice the interval
+// ago (or there's none).
+func (f FxRatesFreshness) Stale() bool {
+	return f.Info.FetchedAt.IsZero() || time.Since(f.Info.FetchedAt) > 2*f.Interval
+}
+
+// fmtLag is a duration in days and hours, e.g. "1 day and 6 hours".
+func fmtLag(d time.Duration) string {
+	days, hours := int(d/(24*time.Hour)), int(d%(24*time.Hour)/time.Hour)
+	plural := func(n int, unit string) string {
+		if n == 1 {
+			return "1 " + unit
+		}
+		return fmt.Sprintf("%d %ss", n, unit)
+	}
+	switch {
+	case days == 0:
+		return plural(hours, "hour")
+	case hours == 0:
+		return plural(days, "day")
+	}
+	return plural(days, "day") + " and " + plural(hours, "hour")
+}
+
+templ fxRatesFreshness(f FxRatesFreshness) {
+	<section
+		class={ "flex items-start gap-3 p-4 rounded-2xl text-sm",
+			templ.KV("bg-zinc-700/20 text-zinc-400", !f.Stale()),
+			templ.KV("bg-amber-400/8 text-amber-200", f.Stale()) }
+	>
+		if f.Stale() {
+			@icons.Warning("18", &templ.Attributes{"class": "shrink-0 mt-0.5 text-amber-300"})
+		} else {
+			@icons.Clock("18", &templ.Attributes{"class": "shrink-0 mt-0.5 text-zinc-500"})
+		}
+		<div class="grid gap-1 min-w-0">
+			<p>
+				if f.Info.FetchedAt.IsZero() {
+					The exchange rates haven't been fetched yet.
+				} else {
+					Exchange rates updated
+					<time
+						datetime={ f.Info.FetchedAt.UTC().Format(time.RFC3339) }
+						title={ tzctx.In(ctx, f.Info.FetchedAt).Format("Jan 2, 2006 15:04") }
+						class="font-medium text-zinc-200"
+					>{ timeAgo(f.Info.FetchedAt) }</time>
+					if f.Info.AsOf != "" {
+						<span class="text-zinc-500">· rates of { fmtAsOf(f.Info.AsOf) }</span>
+					}
+				}
+			</p>
+			<p class="text-zinc-500">
+				if f.Stale() && !f.Info.FetchedAt.IsZero() {
+					They should be fetched every { fmtDuration(f.Interval) } but weren't lately, so they may be further behind than usual.
+				} else {
+					The rates source publishes them once a day and they're fetched every { fmtDuration(f.Interval) }, so they can be up to { fmtLag(f.MaxLag()) } behind the market.
+				}
+			</p>
+		</div>
+	</section>
+}
+
+// fmtAsOf is the provider's date (YYYY-MM-DD), e.g. "Nov 7".
+func fmtAsOf(asOf string) string {
+	t, err := time.Parse(time.DateOnly, asOf)
+	if err != nil {
+		return asOf
+	}
+	if t.Year() != time.Now().Year() {
+		return t.Format("Jan 2, 2006")
+	}
+	return t.Format("Jan 2")
 }
 
 // currenciesFilterData filters the cards by the search query and kind pill.
@@ -35,7 +129,7 @@ const currenciesFilterData = `{
 	get filtering() { return this.q.trim() !== '' || this.kind !== '' },
 }`
 
-templ currenciesList(currencies []models.Currency, defaultCur *models.Currency) {
+templ currenciesList(currencies []models.Currency, defaultCur *models.Currency, rates FxRatesFreshness) {
 	<div
 		x-data={ currenciesFilterData }
 		@keydown.slash.window="if (!['INPUT', 'TEXTAREA'].includes($event.target.tagName)) { $event.preventDefault(); $refs.q.focus() }"
@@ -46,6 +140,7 @@ templ currenciesList(currencies []models.Currency, defaultCur *models.Currency) 
 				@defaultCurrencyHero(&cur)
 			}
 		}
+		@fxRatesFreshness(rates)
 		@currenciesToolbar()
 		<section x-show="!filtering || any($el)" class="hidden has-[[data-currency]]:block">
 			<header class="mb-3">
