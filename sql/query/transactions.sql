@@ -150,7 +150,13 @@ WHERE
     AND (sqlc.narg(recurrent_tx_id) IS NULL OR t.recurrent_id = sqlc.narg(recurrent_tx_id))
     AND (sqlc.narg(before) IS NULL OR t.scheduled_to < sqlc.narg(before))
     AND (sqlc.narg(after) IS NULL OR t.scheduled_to >= sqlc.narg(after))
-ORDER BY t.scheduled_to DESC, t.created_at DESC
+-- By day (scheduled_to's date, as the list groups them), then by the time
+-- shown (fulfilled_at, scheduled_to for the scheduled ones): a day picked in
+-- a form is stored at midnight UTC, and julianday compares the times stored
+-- in different zones.
+ORDER BY SUBSTR(t.scheduled_to, 1, 10) DESC,
+    JULIANDAY(COALESCE(t.fulfilled_at, t.scheduled_to)) DESC,
+    t.created_at DESC
 LIMIT sqlc.arg(lim) OFFSET sqlc.arg(off);
 
 -- name: GetTransactionsSummary :many
