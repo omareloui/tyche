@@ -17,6 +17,7 @@ import (
 	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/receiptimg"
 	"github.com/omareloui/tyche/internal/receiptocr"
 	"github.com/omareloui/tyche/internal/repository"
 	"github.com/omareloui/tyche/internal/resperr"
@@ -27,7 +28,7 @@ import (
 
 const (
 	// maxReceiptBytes is the biggest image a scan takes (receipts.js resizes
-	// them to a few hundred KB first).
+	// them to a few hundred KB first, receiptimg the ones it couldn't).
 	maxReceiptBytes = 8 << 20
 	// receiptReadTimeout is how long reading a receipt may take.
 	receiptReadTimeout = 50 * time.Second
@@ -108,10 +109,11 @@ func (h Handler) scanReceipt(w http.ResponseWriter, r *http.Request) (*receiptSc
 	if err != nil {
 		return nil, err
 	}
+	// The upload's hash: the same file hits the cache before converting it.
 	sum := sha256.Sum256(img)
 	hash := hex.EncodeToString(sum[:])
 
-	if scan, err := h.cachedReceiptScan(r, tenantID, hash, img, contentType); scan != nil || err != nil {
+	if scan, err := h.cachedReceiptScan(r, tenantID, hash); scan != nil || err != nil {
 		return scan, err
 	}
 
@@ -121,6 +123,14 @@ func (h Handler) scanReceipt(w http.ResponseWriter, r *http.Request) (*receiptSc
 	}
 	if left <= 0 {
 		return nil, errScan{fmt.Sprintf("You've scanned %d receipts this month, the most you can. It starts again on the 1st.", limit)}
+	}
+
+	// Read and stored as a small WebP, whatever was uploaded (e.g. a HEIC
+	// the browser couldn't shrink); as is when it can't be converted.
+	if webp, err := receiptimg.Normalize(img, contentType); err != nil {
+		l.Warn("converting a receipt's image, keeping it as is", zap.Error(err), zap.String("content_type", contentType), zap.Int("size", len(img)))
+	} else {
+		img, contentType = webp, receiptimg.ContentType
 	}
 
 	readCtx, cancel := context.WithTimeout(ctx, receiptReadTimeout)
@@ -167,11 +177,11 @@ func (h Handler) scanReceipt(w http.ResponseWriter, r *http.Request) (*receiptSc
 	return &receiptScan{result: result, receiptID: id, size: int64(len(img)), left: max(left, 0), limit: limit}, nil
 }
 
-// cachedReceiptScan answers a scan of an image already read (same sha256,
-// in the tenant's receipts) with what was read then: no call, not counted
+// cachedReceiptScan answers a scan of an image already read (same sha256 of
+// the upload, in the tenant's receipts) with what was read then: no call, not counted
 // toward the limit. An unlinked receipt is reused, one of a transaction
 // copied. nil when the image wasn't read before.
-func (h Handler) cachedReceiptScan(r *http.Request, tenantID, hash string, img []byte, contentType string) (*receiptScan, error) {
+func (h Handler) cachedReceiptScan(r *http.Request, tenantID, hash string) (*receiptScan, error) {
 	ctx := r.Context()
 	l := logger.FromCtx(ctx)
 	rec, err := h.repo.FindReceiptByHash(ctx, hash)
@@ -187,7 +197,7 @@ func (h Handler) cachedReceiptScan(r *http.Request, tenantID, hash string, img [
 	id := rec.ID
 	if rec.TransactionID.Valid {
 		if id, err = h.repo.CreateReceipt(ctx, &repository.ScannedReceipt{
-			Data: img, ContentType: contentType, Hash: hash, Merchant: rec.Merchant, OCRJSON: rec.OcrJson,
+			Data: rec.Data, ContentType: rec.ContentType, Hash: hash, Merchant: rec.Merchant, OCRJSON: rec.OcrJson,
 		}); err != nil {
 			return nil, err
 		}
@@ -200,7 +210,7 @@ func (h Handler) cachedReceiptScan(r *http.Request, tenantID, hash string, img [
 		return nil, err
 	}
 	l.Info("scanned a receipt from the cache", zap.String("receipt_id", id), zap.String("from", rec.ID))
-	return &receiptScan{result: &result, receiptID: id, size: int64(len(img)), left: left, limit: limit, cached: true}, nil
+	return &receiptScan{result: &result, receiptID: id, size: int64(len(rec.Data)), left: left, limit: limit, cached: true}, nil
 }
 
 // scanError shows a scan's error in the slot selector, as a 422 swapped

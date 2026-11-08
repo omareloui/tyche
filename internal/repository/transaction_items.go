@@ -10,6 +10,7 @@ import (
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/queries"
+	"github.com/omareloui/tyche/internal/receiptimg"
 	"go.uber.org/zap"
 )
 
@@ -457,5 +458,37 @@ func purgeOrphanReceipts(ctx context.Context, q *queries.Queries, now time.Time)
 	}
 	if n > 0 {
 		logger.FromCtx(ctx).Info("purged orphan receipts", zap.Int64("count", n))
+	}
+}
+
+// receiptsConvertedADay bounds the receipts convertReceipts converts in one
+// daily upkeep, which the tenant's first request of the day waits for.
+const receiptsConvertedADay = 20
+
+// convertReceipts turns the receipts stored before every image was a WebP
+// (e.g. HEIC ones, which most browsers can't show) into one, like a scan
+// stores them now. The ones that can't be converted are left as they are.
+func convertReceipts(ctx context.Context, q *queries.Queries) {
+	l := logger.FromCtx(ctx)
+	recs, err := q.GetReceiptsToConvert(ctx, receiptsConvertedADay)
+	if err != nil {
+		l.Error("querying the receipts to convert", zap.Error(err))
+		return
+	}
+	n := 0
+	for _, rec := range recs {
+		img, err := receiptimg.Normalize(rec.Data, rec.ContentType)
+		if err != nil {
+			l.Warn("converting a receipt's image", zap.Error(err), zap.String("receipt_id", rec.ID), zap.String("content_type", rec.ContentType))
+			continue
+		}
+		if err := q.SetReceiptImage(ctx, queries.SetReceiptImageParams{ID: rec.ID, Data: img, ContentType: receiptimg.ContentType}); err != nil {
+			l.Error("storing a converted receipt", zap.Error(err), zap.String("receipt_id", rec.ID))
+			return
+		}
+		n++
+	}
+	if n > 0 {
+		l.Info("converted receipts to webp", zap.Int("count", n))
 	}
 }

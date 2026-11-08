@@ -1,11 +1,18 @@
 // Receipt scanning: a picked or taken photo (input[data-receipt-input]) is
-// resized to at most RECEIPT_MAX px on its long edge as a JPEG (fewer tokens
-// to read it, a smaller database), put back in its input, then posted by
-// htmx on "receipt-ready": the transaction form's inputs post it with the
-// form's fields (hx-include), the details' scan form on its own.
+// resized to at most RECEIPT_MAX px on its long edge as a WebP (fewer tokens
+// to read it, a smaller database; a JPEG where the browser can't make one,
+// e.g. Safari), put back in its input, then posted by htmx on
+// "receipt-ready": the transaction form's inputs post it with the form's
+// fields (hx-include), the details' scan form on its own. The server
+// converts what it gets the same way (receiptimg), e.g. a HEIC this browser
+// couldn't read.
 (() => {
+  // Same as receiptimg's MaxSide and Quality.
   const RECEIPT_MAX = 1600;
-  const QUALITY = 0.8;
+  const QUALITY = 0.75;
+
+  const encode = (canvas, type, quality) =>
+    new Promise((done) => canvas.toBlob(done, type, quality));
 
   async function resize(file) {
     let bitmap;
@@ -16,7 +23,7 @@
       return file;
     }
     const scale = Math.min(1, RECEIPT_MAX / Math.max(bitmap.width, bitmap.height));
-    if (scale === 1 && file.type === "image/jpeg" && file.size < 600_000) {
+    if (scale === 1 && file.type === "image/webp") {
       bitmap.close();
       return file;
     }
@@ -25,9 +32,12 @@
     canvas.height = Math.round(bitmap.height * scale);
     canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     bitmap.close();
-    const blob = await new Promise((done) => canvas.toBlob(done, "image/jpeg", QUALITY));
+    let blob = await encode(canvas, "image/webp", QUALITY);
+    // Browsers without a WebP encoder hand a PNG instead.
+    if (blob?.type !== "image/webp") blob = await encode(canvas, "image/jpeg", 0.8);
     if (!blob) return file;
-    return new File([blob], "receipt.jpg", { type: "image/jpeg" });
+    const ext = blob.type === "image/webp" ? "webp" : "jpg";
+    return new File([blob], `receipt.${ext}`, { type: blob.type });
   }
 
   // Lines typed in the form, which a scan replaces.

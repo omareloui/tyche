@@ -1,7 +1,9 @@
 # sqlcipher: the sqlite3 driver is built with SQLCipher (see internal/sqlite),
 # linking OpenSSL's libcrypto (headers found through pkg-config when there).
+# nodynamic: the receipts' HEIC / WebP codecs (gen2brain) always use their
+# bundled Go code, never a system libheif / libwebp.
 comma := ,
-export GOFLAGS := -tags=sqlcipher
+export GOFLAGS := -tags=sqlcipher,nodynamic
 export CGO_CFLAGS := $(shell pkg-config --cflags libcrypto 2>/dev/null)
 libcrypto_dir := $(shell pkg-config --variable=libdir libcrypto 2>/dev/null)
 export CGO_LDFLAGS := $(if $(libcrypto_dir),-L$(libcrypto_dir) -Wl$(comma)-rpath$(comma)$(libcrypto_dir))
@@ -13,7 +15,7 @@ build: prebuild
 	@go build -o ./tmp/main ./cmd/tyche
 
 release: prebuild
-	@go build -v -ldflags="-linkmode external -extldflags -static" -tags netgo,sqlcipher -o ./bin/main ./cmd/tyche
+	@go build -v -ldflags="-linkmode external -extldflags -static" -tags netgo,sqlcipher,nodynamic -o ./bin/main ./cmd/tyche
 
 prebuild: templ css sqlgen
 

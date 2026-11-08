@@ -3,6 +3,7 @@ package models
 import (
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/idgen"
@@ -237,7 +238,13 @@ func FormatBytes(n int64) string {
 	}
 }
 
-// URL is where its image is served, cache busted by its hash.
+// URL is where its image is served, cache busted by its version.
 func (r *Receipt) URL() string {
-	return "/receipts/" + r.ID + "?v=" + r.Hash
+	return "/receipts/" + r.ID + "?v=" + ReceiptVersion(r.Hash, r.ContentType)
+}
+
+// ReceiptVersion tells a receipt's image apart: its upload's hash, and its
+// type, as converting a stored one (to WebP) keeps the hash.
+func ReceiptVersion(hash, contentType string) string {
+	return hash + "." + strings.TrimPrefix(contentType, "image/")
 }

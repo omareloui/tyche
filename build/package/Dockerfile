@@ -17,9 +17,10 @@ COPY go.mod go.sum ./
 RUN go mod download && go mod verify
 
 # Compiles the slow parts once into the build cache, a layer of its own kept
-# while go.mod/go.sum don't change: the cgo SQLCipher driver and the templ
-# tool (same tags and env as the build below, so it hits the cache).
-RUN go build -tags netgo,sqlcipher github.com/mattn/go-sqlite3 && \
+# while go.mod/go.sum don't change: the cgo SQLCipher driver, the receipts'
+# HEIC / WebP codecs (wasm turned into Go, big) and the templ tool (same tags
+# and env as the build below, so it hits the cache).
+RUN go build -tags netgo,sqlcipher,nodynamic github.com/mattn/go-sqlite3 github.com/gen2brain/heic github.com/gen2brain/webp && \
   go tool templ version
 
 COPY cmd cmd
@@ -36,7 +37,7 @@ ARG GIT_SHA=dev
 RUN make templ sqlgen && \
   go build \
   -ldflags="-linkmode external -extldflags -static -X github.com/omareloui/tyche/internal/buildinfo.Commit=${GIT_SHA}" \
-  -tags netgo,sqlcipher \
+  -tags netgo,sqlcipher,nodynamic \
   -o /usr/src/bin/tyche \
   ./cmd/tyche && \
   mkdir data logs

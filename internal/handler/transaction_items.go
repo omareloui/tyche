@@ -255,8 +255,8 @@ func (h Handler) DeleteRecurrentTxItem(w http.ResponseWriter, r *http.Request) (
 	return views.RecurrentTxDetailsItems(rt, nil), nil
 }
 
-// Receipt serves a receipt's image, its url versioned by its hash so it's
-// cached for good.
+// Receipt serves a receipt's image, its url versioned (models.ReceiptVersion)
+// so it's cached for good.
 func (h Handler) Receipt(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	rec, err := h.repo.GetReceipt(r.Context(), r.PathValue("id"))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -265,7 +265,7 @@ func (h Handler) Receipt(w http.ResponseWriter, r *http.Request) (templ.Componen
 	if err != nil {
 		return nil, err
 	}
-	etag := strconv.Quote(rec.Hash)
+	etag := strconv.Quote(models.ReceiptVersion(rec.Hash, rec.ContentType))
 	w.Header().Set("ETag", etag)
 	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
 	if r.Header.Get("If-None-Match") == etag {

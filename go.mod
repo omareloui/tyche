@@ -13,13 +13,23 @@ require (
 	github.com/oklog/ulid v1.3.1
 	github.com/pressly/goose/v3 v3.24.1
 	go.uber.org/zap v1.27.0
-	golang.org/x/net v0.54.0
+	golang.org/x/net v0.57.0
 	golang.org/x/oauth2 v0.25.0
-	golang.org/x/text v0.37.0
+	golang.org/x/text v0.41.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 
-require github.com/SherClockHolmes/webpush-go v1.4.0
+require (
+	github.com/SherClockHolmes/webpush-go v1.4.0
+	github.com/gen2brain/heic v0.7.2
+	github.com/gen2brain/webp v0.6.4
+	golang.org/x/image v0.45.0
+)
+
+require (
+	github.com/ebitengine/purego v0.10.1 // indirect
+	github.com/tetratelabs/wazero v1.12.0 // indirect
+)
 
 require (
 	github.com/fxamacker/cbor/v2 v2.9.2 // indirect
@@ -53,11 +63,11 @@ require (
 	github.com/natefinch/atomic v1.0.1 // indirect
 	github.com/sethvargo/go-retry v0.3.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.52.0
-	golang.org/x/mod v0.35.0 // indirect
-	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.45.0 // indirect
-	golang.org/x/tools v0.44.0 // indirect
+	golang.org/x/crypto v0.54.0
+	golang.org/x/mod v0.38.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/tools v0.48.0 // indirect
 )
 
 tool github.com/a-h/templ/cmd/templ

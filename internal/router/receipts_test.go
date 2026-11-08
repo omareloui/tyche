@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/textproto"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -29,12 +30,15 @@ type fakeOCR struct {
 	result *receiptocr.Result
 	err    error
 	reads  int
+	// lastType is the type of the last image read.
+	lastType string
 }
 
 func (f *fakeOCR) Model() string { return "fake-flash" }
 
 func (f *fakeOCR) Read(ctx context.Context, img []byte, ct string) (*receiptocr.Result, receiptocr.Usage, error) {
 	f.reads++
+	f.lastType = ct
 	usage := receiptocr.Usage{InputTokens: 1000, OutputTokens: 200}
 	if f.err != nil {
 		return nil, usage, f.err
@@ -46,6 +50,11 @@ func (f *fakeOCR) Read(ctx context.Context, img []byte, ct string) (*receiptocr.
 var jpeg = append([]byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00}, bytes.Repeat([]byte{1}, 64)...)
 
 func TestReceipts(t *testing.T) {
+	// Read before setupTenant leaves the package's dir.
+	heic, err := os.ReadFile("../receiptimg/testdata/receipt.heic")
+	if err != nil {
+		t.Fatal(err)
+	}
 	repo, ctx, usr := setupTenant(t)
 	usrID := models.TenantID(usr.OAuthProvider, usr.OAuthID)
 	t.Setenv("ADMIN_TENANT_IDS", usrID)
@@ -103,6 +112,7 @@ func TestReceipts(t *testing.T) {
 	// Every upload is a new image (no cache hit) but for the ones of img.
 	shot := 0
 	var img []byte
+	imgType := "image/jpeg"
 	upload := func(path string, fields url.Values) (*http.Response, string) {
 		t.Helper()
 		data := img
@@ -122,7 +132,7 @@ func TestReceipts(t *testing.T) {
 		_, _ = empty.Write(nil)
 		hdr := textproto.MIMEHeader{}
 		hdr.Set("Content-Disposition", `form-data; name="receipt"; filename="receipt.jpg"`)
-		hdr.Set("Content-Type", "image/jpeg")
+		hdr.Set("Content-Type", imgType)
 		part, _ := mw.CreatePart(hdr)
 		_, _ = part.Write(data)
 		_ = mw.Close()
@@ -374,6 +384,25 @@ func TestReceipts(t *testing.T) {
 		tx, _ := repo.GetTransaction(ctx, txID)
 		if len(tx.Items) != 4 || tx.Receipt == nil || tx.Receipt.ID == receiptID {
 			t.Errorf("items = %d, receipt = %+v (old %s)", len(tx.Items), tx.Receipt, receiptID)
+		}
+	})
+
+	t.Run("a heic is read and stored as a webp", func(t *testing.T) {
+		img, imgType = heic, "image/heic"
+		defer func() { img, imgType = nil, "image/jpeg" }()
+		if res, body := upload("/transactions/"+txID+"/receipt", nil); res.StatusCode != http.StatusOK {
+			t.Fatalf("status %d: %s", res.StatusCode, body)
+		}
+		if ocr.lastType != "image/webp" {
+			t.Errorf("read a %q, want image/webp", ocr.lastType)
+		}
+		tx, _ := repo.GetTransaction(ctx, txID)
+		if tx.Receipt == nil || tx.Receipt.ContentType != "image/webp" {
+			t.Fatalf("receipt = %+v", tx.Receipt)
+		}
+		req, _ := http.NewRequest("GET", srv.URL+tx.Receipt.URL(), nil)
+		if res, _ := send(req, pair.Access.Encoded); res.Header.Get("Content-Type") != "image/webp" {
+			t.Errorf("served as %q", res.Header.Get("Content-Type"))
 		}
 	})
 

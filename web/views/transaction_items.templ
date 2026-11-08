@@ -261,8 +261,10 @@ templ receiptScanInput(id string, capture bool) {
 	/>
 }
 
+// receiptScanIndicator shows while its scan reads (hx-indicator: the
+// [data-receipt-scan] around it), not while the form it's in submits.
 templ receiptScanIndicator() {
-	<span class="htmx-indicator hidden in-[.htmx-request]:inline-flex items-center gap-2 text-sm text-amber-300" aria-live="polite">
+	<span class="htmx-indicator hidden in-[[data-receipt-scan].htmx-request]:inline-flex items-center gap-2 text-sm text-amber-300" aria-live="polite">
 		<span class="size-3.5 rounded-full border-2 border-current border-t-transparent animate-spin"></span>
 		Reading the receipt with AI…
 	</span>

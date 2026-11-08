@@ -45,3 +45,15 @@ SELECT * FROM receipts
 WHERE hash = sqlc.arg(hash) AND ocr_json != ''
 ORDER BY transaction_id IS NULL DESC, created_at DESC
 LIMIT 1;
+
+-- The receipts stored before every image was a WebP (receiptimg), a few at
+-- a time.
+-- name: GetReceiptsToConvert :many
+SELECT id, data, content_type FROM receipts
+WHERE content_type != 'image/webp'
+ORDER BY created_at
+LIMIT sqlc.arg(lim);
+
+-- name: SetReceiptImage :exec
+UPDATE receipts SET data = sqlc.arg(data), content_type = sqlc.arg(content_type)
+WHERE id = sqlc.arg(id);
