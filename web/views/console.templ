@@ -9,6 +9,7 @@ import (
 	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
 	"github.com/omareloui/tyche/web/views/layouts"
 )
@@ -137,24 +138,25 @@ templ consoleTables(data ConsoleData) {
 	if data.Table != nil && !data.Query {
 		{{ current = data.Table.Name }}
 	}
-	// Phones pick the table from a select.
-	<select
-		name="t"
-		aria-label="Table"
-		hx-get="/console"
-		hx-trigger="change"
-		hx-target={ "#" + ConsoleTarget }
-		hx-swap="outerHTML"
-		hx-push-url="true"
-		class="input-field lg:hidden"
-	>
-		if current == "" {
-			<option value="" selected disabled>Pick a table…</option>
-		}
-		for _, t := range data.Tables {
-			<option value={ t.Name } selected?={ t.Name == current }>{ t.Name } ({ consoleRowsText(t.Rows) })</option>
-		}
-	</select>
+	// Phones pick the table from a combobox.
+	<div class="lg:hidden">
+		@form.Combobox(form.ComboboxProps{
+			Name:        "t",
+			ID:          "console",
+			Label:       "Table",
+			Placeholder: "Pick a table…",
+			Options:     consoleTableOptions(data.Tables),
+			Data:        form.FDInput{Value: current},
+			Searchable:  true,
+			InputAttrs: templ.Attributes{
+				"hx-get":      "/console",
+				"hx-trigger":  "change",
+				"hx-target":   "#" + ConsoleTarget,
+				"hx-swap":     "outerHTML",
+				"hx-push-url": "true",
+			},
+		})
+	</div>
 	<nav
 		x-data="{ q: '' }"
 		class="max-lg:hidden grid gap-2 lg:sticky lg:top-22 lg:max-h-[calc(100dvh-7rem)] lg:overflow-y-auto pr-1"
@@ -184,6 +186,14 @@ templ consoleTables(data ConsoleData) {
 			}
 		</ul>
 	</nav>
+}
+
+func consoleTableOptions(tables []models.ConsoleTable) []form.ComboOption {
+	opts := make([]form.ComboOption, len(tables))
+	for i, t := range tables {
+		opts[i] = form.ComboOption{Value: t.Name, Label: t.Name + " (" + consoleRowsText(t.Rows) + ")"}
+	}
+	return opts
 }
 
 func consoleTableClass(current bool) string {
