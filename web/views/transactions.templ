@@ -219,6 +219,7 @@ templ txFilterBar(f *models.TxFilter, start models.MonthStart, accs []models.Acc
 				})
 				@txFilterCombo(models.TxFilterSource, "Source", "Any source", string(f.Source), false, []form.ComboOption{
 					{Value: string(models.TxSourceSMS), Label: "From SMS", Leading: icons.Smartphone("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
+					{Value: string(models.TxSourceImport), Label: "Imported (CSV)", Leading: icons.Upload("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 					{Value: string(models.TxSourceManual), Label: "Added by hand", Leading: icons.Pencil("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 				})
 				@txFilterCombo(models.TxFilterReceipt, "Receipt", "Any receipt", string(f.Receipt), false, []form.ComboOption{

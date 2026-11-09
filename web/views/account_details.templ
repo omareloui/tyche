@@ -154,6 +154,12 @@ templ accountDetailsActions(a *models.Account) {
 			@icons.Search("14")
 			Transactions
 		</a>
+		if !a.IsArchive && CanImportCSVInto(a) {
+			<a href={ CSVImportURL(a.ID) } class="txd-action">
+				@icons.Upload("14")
+				Import CSV
+			</a>
+		}
 		if !a.IsArchive {
 			<button type="button" hx-get={ fmt.Sprintf("/accounts/%s/adjust", a.ID) } hx-target={ slot } hx-swap="innerHTML" class="txd-action">
 				@icons.Scale("14")

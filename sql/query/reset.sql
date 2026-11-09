@@ -1,6 +1,10 @@
 -- name: ResetDeleteTransactions :exec
 DELETE FROM transactions;
 
+-- The CSV imports go with their transactions (their mappings stay).
+-- name: ResetDeleteCSVImports :exec
+DELETE FROM csv_imports;
+
 -- name: ResetZeroAccountBalances :exec
 UPDATE accounts SET amount = 0;
 

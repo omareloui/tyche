@@ -34,7 +34,9 @@ type Transaction struct {
 	NeedsReview bool
 	FromSMS     bool
 	SMSBody     string
-	CreatedAt   time.Time
+	// FromImport tells it came from a CSV import.
+	FromImport bool
+	CreatedAt  time.Time
 	// ReimbursesID is the expense this income pays back (part of).
 	ReimbursesID string
 	// Reimbursed is the total of the incomes reimbursing this expense.

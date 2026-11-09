@@ -1,0 +1,592 @@
+package views
+
+import (
+	"fmt"
+	"net/url"
+	"strconv"
+
+	"github.com/omareloui/tyche/internal/csvimport"
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/tzctx"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+type CSVImportPageData struct {
+	// Accounts are the ones a file can be imported into.
+	Accounts []models.Account
+	// AccountID is the account picked first (?account=).
+	AccountID string
+	// Past are the latest imports done.
+	Past []csvimport.Import
+}
+
+// CSVPreviewRow is a row of an import's preview: its status and the
+// transaction it would be (nil when it can't be imported).
+type CSVPreviewRow struct {
+	Row   csvimport.Row
+	Match csvimport.Match
+	Tx    *models.Transaction
+}
+
+// CSVImportData is a pending import read with Mapping: its records and rows,
+// or why the mapping can't read it.
+type CSVImportData struct {
+	Import     *csvimport.Import
+	Account    *models.Account
+	Mapping    csvimport.Mapping
+	Records    [][]string
+	Rows       []CSVPreviewRow
+	MappingErr string
+}
+
+// CanImportCSVInto tells whether a CSV file can be imported into the
+// account: a live one, not a goal's nor a gam'yaa (transfers only).
+func CanImportCSVInto(a *models.Account) bool {
+	return a != nil && !a.IsGoal() && !a.IsDeleted() && a.Kind.Enum != models.AccKindGamyaa
+}
+
+// CSVImportAccounts are the accounts a CSV file can be imported into.
+func CSVImportAccounts(accs []models.Account) []models.Account {
+	var res []models.Account
+	for i := range accs {
+		if CanImportCSVInto(&accs[i]) && !accs[i].IsArchive {
+			res = append(res, accs[i])
+		}
+	}
+	return res
+}
+
+// CSVImportURL is the import page, with the account picked when not empty.
+func CSVImportURL(accountID string) templ.SafeURL {
+	if accountID == "" {
+		return "/import"
+	}
+	return templ.SafeURL("/import?account=" + accountID)
+}
+
+templ CSVImportPage(claims *jwt.AccessClaims, balances []models.Balance, data CSVImportPageData) {
+	@layouts.WithTitle(claims, "Import CSV", balances) {
+		<div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+			<div class="grid gap-6">
+				@csvUpload(data)
+				if len(data.Past) > 0 {
+					@csvPastImports(data.Past)
+				}
+			</div>
+			<div class="grid gap-10 lg:sticky lg:top-22">
+				@csvImportInfo()
+			</div>
+		</div>
+	}
+}
+
+templ csvUpload(data CSVImportPageData) {
+	@components.GlassCard("p-5 sm:p-6 grid gap-5", "bg-sky-400/10") {
+		<div class="flex gap-3">
+			@icons.Upload("22", &templ.Attributes{"class": "shrink-0 mt-0.5 text-sky-400"})
+			<div class="grid gap-1">
+				<h2 class="text-white font-semibold">Import a bank export</h2>
+				<p class="text-base text-zinc-400">A CSV file of an account's transactions. You'll check its columns and rows before anything is saved.</p>
+			</div>
+		</div>
+		if len(data.Accounts) == 0 {
+			<p class="text-sm text-zinc-400">Add an account first.</p>
+		} else {
+			<form
+				hx-post="/import"
+				hx-encoding="multipart/form-data"
+				hx-target="#csv-upload-error"
+				hx-swap="innerHTML"
+				hx-disabled-elt="find button[type=submit]"
+				x-data={ importFormData() }
+				class="grid gap-4"
+			>
+				<div>
+					<label for="csv-account" class="input-label">Account</label>
+					<select id="csv-account" name="account_id" class="input-field" required>
+						for _, a := range data.Accounts {
+							<option value={ a.ID } selected?={ a.ID == data.AccountID || (data.AccountID == "" && a.IsDefault) }>
+								{ a.Name } ({ a.Currency.String })
+							</option>
+						}
+					</select>
+				</div>
+				<label
+					for="csv-file"
+					class="grid justify-items-center gap-2 p-6 rounded-2xl border border-dashed text-center cursor-pointer transition-colors"
+					:class="dragging ? 'border-sky-400 bg-sky-400/10' : name ? 'border-zinc-600 bg-zinc-800/40' : 'border-zinc-700 hover:border-zinc-500 hover:bg-zinc-800/30'"
+					@dragover.prevent="dragging = true"
+					@dragleave.prevent="dragging = false"
+					@drop.prevent="dragging = false; $refs.file.files = $event.dataTransfer.files; pick($refs.file)"
+				>
+					<input
+						id="csv-file"
+						x-ref="file"
+						type="file"
+						name="file"
+						accept=".csv,.tsv,.txt,text/csv,text/plain,text/tab-separated-values"
+						class="sr-only"
+						@change="pick($el)"
+					/>
+					<template x-if="!name">
+						<div class="grid justify-items-center gap-2">
+							@icons.Upload("24", &templ.Attributes{"class": "text-zinc-500"})
+							<p class="text-zinc-300">Drop the file here or <span class="text-sky-400 underline underline-offset-2">browse</span></p>
+							<p class="text-sm text-zinc-500">
+								A <span class="text-zinc-400">.csv</span> file, up to <span class="whitespace-nowrap">{ strconv.Itoa(csvimport.MaxBytes>>20) } MB</span>
+								and { strconv.Itoa(csvimport.MaxRows) } rows
+							</p>
+						</div>
+					</template>
+					<template x-if="name">
+						<div class="flex items-center gap-3 max-w-full">
+							@icons.Check("18", &templ.Attributes{"class": "shrink-0 text-emerald-400"})
+							<span class="truncate text-zinc-200" x-text="name"></span>
+							<span class="shrink-0 text-sm text-zinc-500" x-text="size"></span>
+						</div>
+					</template>
+				</label>
+				<p id="csv-upload-error" class="text-sm text-red-400 empty:hidden"></p>
+				<div class="flex justify-end">
+					<button type="submit" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed max-sm:w-full" :disabled="!name">
+						Continue
+					</button>
+				</div>
+			</form>
+		}
+	}
+}
+
+templ csvPastImports(past []csvimport.Import) {
+	@components.GlassCard("p-5 sm:p-6 grid gap-4") {
+		<h2 class="text-white font-semibold">Past imports</h2>
+		<ul class="grid divide-y divide-zinc-800">
+			for _, p := range past {
+				<li class="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">
+					<div class="grid flex-1 min-w-48">
+						<span class="truncate text-zinc-200">{ p.FileName }</span>
+						<span class="text-sm text-zinc-500">
+							{ p.AccountName } · { tzctx.In(ctx, p.ImportedAt).Format("Jan 2, 2006") }
+						</span>
+					</div>
+					<span class="text-sm text-zinc-400">{ strconv.Itoa(p.ImportedCount) } of { strconv.Itoa(p.RowCount) } rows</span>
+				</li>
+			}
+		</ul>
+		<a href={ templ.SafeURL("/transactions?source=" + string(models.TxSourceImport)) } class="text-sm text-sky-400 hover:underline justify-self-start">
+			See the imported transactions
+		</a>
+	}
+}
+
+templ csvImportInfo() {
+	@securitySection("Duplicates", icons.CheckCheck("16")) {
+		<p class="text-sm text-zinc-600">
+			Rows imported before, and the ones a transaction already has (e.g. from an SMS: same day or the next, same amount), aren't picked.
+			You can still pick a duplicate.
+		</p>
+	}
+	@securitySection("Matching", icons.Link("16")) {
+		<p class="text-sm text-zinc-600">
+			A counterparty named in a row gets it, with its default category. Rows paying a scheduled recurring transaction fulfill it, and
+			the two sides of a transfer between your accounts are paired.
+		</p>
+	}
+	@securitySection("Review", icons.Check("16")) {
+		<p class="text-sm text-zinc-600">Imported transactions come to review, like the ones from SMS.</p>
+	}
+}
+
+templ CSVImport(claims *jwt.AccessClaims, balances []models.Balance, data CSVImportData) {
+	@layouts.WithTitle(claims, "Import CSV", balances) {
+		<div class="grid gap-6">
+			<p class="flex flex-wrap items-center gap-2 text-zinc-400">
+				<span class="truncate text-zinc-200">{ data.Import.FileName }</span>
+				@icons.ArrowRight("16", &templ.Attributes{"class": "shrink-0"})
+				<span class="text-zinc-200">{ data.Account.Name }</span>
+				<a href={ CSVImportURL(data.Account.ID) } class="ml-auto text-sm text-sky-400 hover:underline">Another file</a>
+			</p>
+			<form
+				id="csv-import"
+				hx-post={ fmt.Sprintf("/import/%s", data.Import.ID) }
+				hx-target="#csv-import-error"
+				hx-swap="innerHTML"
+				hx-disabled-elt="find button[type=submit]"
+				class="grid gap-6"
+			>
+				<div id="csv-import-body" class="grid gap-6">
+					@CSVImportBody(data)
+				</div>
+			</form>
+		</div>
+	}
+}
+
+// CSVImportBody is the mapping (any change previews again) and the preview
+// of an import.
+templ CSVImportBody(data CSVImportData) {
+	@csvMapping(data)
+	if data.MappingErr != "" {
+		<p class="flex gap-2 p-3 rounded-2xl bg-amber-400/10 text-sm text-amber-300">
+			@icons.Warning("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
+			{ data.MappingErr }
+		</p>
+	} else {
+		@csvPreview(data)
+	}
+}
+
+templ csvMapping(data CSVImportData) {
+	{{ m := data.Mapping }}
+	{{ cols := csvColumns(data) }}
+	@components.GlassCard("p-5 sm:p-6 grid gap-5") {
+		<div
+			class="grid gap-5"
+			hx-post={ fmt.Sprintf("/import/%s/preview", data.Import.ID) }
+			hx-trigger="change"
+			hx-target="#csv-import-body"
+			hx-swap="innerHTML"
+			hx-include="closest form"
+			hx-sync="closest form:replace"
+		>
+			<h2 class="text-white font-semibold">Columns</h2>
+			<div class="grid gap-4 sm:grid-cols-3">
+				<div>
+					<label for="csv-delimiter" class="input-label">Separator</label>
+					<select id="csv-delimiter" name="delimiter" class="input-field">
+						for _, d := range csvDelimiterOptions {
+							<option value={ d.name } selected?={ d.value == m.Delimiter }>{ d.label }</option>
+						}
+					</select>
+				</div>
+				<div>
+					<label for="csv-skip" class="input-label">Rows to skip</label>
+					<input id="csv-skip" type="number" min="0" name="skip_rows" value={ strconv.Itoa(m.SkipRows) } class="input-field"/>
+				</div>
+				<label class="flex items-center gap-2 self-end h-11 text-zinc-300">
+					<input type="checkbox" name="has_header" value="1" checked?={ m.HasHeader }/>
+					First row is the header
+				</label>
+			</div>
+			<div class="grid gap-4 sm:grid-cols-3">
+				@csvColumnSelect("Date", "date", m.Date, cols, false)
+				<div>
+					<label for="csv-date-format" class="input-label">Date format</label>
+					<select id="csv-date-format" name="date_format" class="input-field">
+						for _, f := range csvimport.DateFormats {
+							<option value={ f } selected?={ f == m.DateFormat }>{ f }</option>
+						}
+					</select>
+				</div>
+				@csvColumnSelect("Time", "time", m.Time, cols, true)
+			</div>
+			<fieldset class="grid gap-4">
+				<legend class="input-label">Amount</legend>
+				<div class="flex flex-wrap gap-x-5 gap-y-2 text-zinc-300">
+					<label class="flex items-center gap-2">
+						<input type="radio" name="amount_mode" value="signed" checked?={ !m.Split }/>
+						One column, signed
+					</label>
+					<label class="flex items-center gap-2">
+						<input type="radio" name="amount_mode" value="split" checked?={ m.Split }/>
+						Debit and credit columns
+					</label>
+				</div>
+				if m.Split {
+					<input type="hidden" name="amount" value={ strconv.Itoa(m.Amount) }/>
+					<div class="grid gap-4 sm:grid-cols-3">
+						@csvColumnSelect("Debit (out)", "debit", m.Debit, cols, true)
+						@csvColumnSelect("Credit (in)", "credit", m.Credit, cols, true)
+					</div>
+				} else {
+					<input type="hidden" name="debit" value={ strconv.Itoa(m.Debit) }/>
+					<input type="hidden" name="credit" value={ strconv.Itoa(m.Credit) }/>
+					<div class="grid gap-4 sm:grid-cols-3">
+						@csvColumnSelect("Amount", "amount", m.Amount, cols, false)
+						<div>
+							<label for="csv-negative" class="input-label">A negative amount is</label>
+							<select id="csv-negative" name="negative" class="input-field">
+								<option value={ string(csvimport.NegativeOut) } selected?={ m.Negative != csvimport.NegativeIn }>Money out</option>
+								<option value={ string(csvimport.NegativeIn) } selected?={ m.Negative == csvimport.NegativeIn }>Money in</option>
+							</select>
+						</div>
+					</div>
+				}
+				<label class="flex items-center gap-2 text-zinc-300">
+					<input type="checkbox" name="decimal_comma" value="1" checked?={ m.DecimalComma }/>
+					Decimal comma (1.234,56)
+				</label>
+			</fieldset>
+			<div class="grid gap-4 sm:grid-cols-3">
+				@csvColumnSelect("Description", "description", m.Description, cols, true)
+				@csvColumnSelect("Counterparty", "counterparty", m.Counterparty, cols, true)
+				@csvColumnSelect("Currency", "currency", m.Currency, cols, true)
+			</div>
+		</div>
+		if len(data.Records) > 0 {
+			@csvSample(data, cols)
+		}
+	}
+}
+
+templ csvColumnSelect(label, name string, selected int, cols []string, optional bool) {
+	<div>
+		<label for={ "csv-col-" + name } class="input-label">{ label }</label>
+		<select id={ "csv-col-" + name } name={ name } class="input-field">
+			<option value="" selected?={ selected == csvimport.None }>
+				if optional {
+					None
+				} else {
+					Pick a column
+				}
+			</option>
+			for i, c := range cols {
+				<option value={ strconv.Itoa(i) } selected?={ i == selected }>{ c }</option>
+			}
+		</select>
+	</div>
+}
+
+// csvSample shows the file's first rows as read, the skipped ones dimmed.
+templ csvSample(data CSVImportData, cols []string) {
+	<details class="group">
+		<summary class="cursor-pointer text-sm text-zinc-400 hover:text-zinc-200">The file's first rows</summary>
+		<div class="mt-3 overflow-x-auto rounded-xl ring-1 ring-zinc-800">
+			<table class="min-w-full text-sm">
+				<thead>
+					<tr class="text-left text-zinc-500">
+						<th class="px-3 py-2 font-medium">#</th>
+						for _, c := range cols {
+							<th class="px-3 py-2 font-medium whitespace-nowrap">{ c }</th>
+						}
+					</tr>
+				</thead>
+				<tbody>
+					for i, rec := range csvSampleRows(data.Records, data.Mapping) {
+						<tr class={ "border-t border-zinc-800", templ.KV("text-zinc-600", i < data.Mapping.SkipRows || (data.Mapping.HasHeader && i == data.Mapping.SkipRows)), templ.KV("text-zinc-300", !(i < data.Mapping.SkipRows || (data.Mapping.HasHeader && i == data.Mapping.SkipRows))) }>
+							<td class="px-3 py-1.5 text-zinc-600">{ strconv.Itoa(i + 1) }</td>
+							for _, v := range rec {
+								<td class="px-3 py-1.5 whitespace-nowrap max-w-64 truncate">{ v }</td>
+							}
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	</details>
+}
+
+templ csvPreview(data CSVImportData) {
+	{{ counts := csvStatusCounts(data.Rows) }}
+	@components.GlassCard("p-5 sm:p-6 grid gap-4") {
+		<div
+			class="grid gap-4"
+			x-data={ fmt.Sprintf("{count: %d}", counts[csvimport.RowNew]) }
+			@change="if ($event.target.name === 'line') count = $root.querySelectorAll('input[name=line]:checked').length"
+		>
+			<div class="flex flex-wrap items-center gap-2">
+				<h2 class="text-white font-semibold mr-auto">Rows</h2>
+				<span class="chip bg-emerald-400/10 text-emerald-300">{ strconv.Itoa(counts[csvimport.RowNew]) } new</span>
+				if n := counts[csvimport.RowDuplicate]; n > 0 {
+					<span class="chip bg-amber-400/10 text-amber-300">{ strconv.Itoa(n) } likely there</span>
+				}
+				if n := counts[csvimport.RowImported]; n > 0 {
+					<span class="chip">{ strconv.Itoa(n) } imported before</span>
+				}
+				if n := counts[csvimport.RowError]; n > 0 {
+					<span class="chip bg-red-400/10 text-red-300">{ strconv.Itoa(n) } can't be read</span>
+				}
+			</div>
+			<div class="flex flex-wrap gap-2 text-sm">
+				<button type="button" class="txd-action" @click="$root.querySelectorAll('input[name=line]').forEach(i => i.checked = i.dataset.status === 'new'); count = $root.querySelectorAll('input[name=line]:checked').length">Pick the new ones</button>
+				<button type="button" class="txd-action" @click="$root.querySelectorAll('input[name=line]').forEach(i => i.checked = true); count = $root.querySelectorAll('input[name=line]:checked').length">Pick all</button>
+				<button type="button" class="txd-action" @click="$root.querySelectorAll('input[name=line]').forEach(i => i.checked = false); count = 0">Pick none</button>
+			</div>
+			<div class="overflow-x-auto -mx-5 sm:mx-0">
+				<table class="min-w-full text-sm">
+					<thead>
+						<tr class="text-left text-zinc-500">
+							<th class="w-10 px-3 py-2"><span class="sr-only">Import</span></th>
+							<th class="px-3 py-2 font-medium">Date</th>
+							<th class="px-3 py-2 font-medium">Description</th>
+							<th class="px-3 py-2 font-medium text-right">Amount</th>
+							<th class="px-3 py-2 font-medium">Status</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, pr := range data.Rows {
+							@csvPreviewRow(data.Account, pr)
+						}
+					</tbody>
+				</table>
+			</div>
+			<div class="flex flex-wrap items-center justify-end gap-4 pt-2 border-t border-zinc-800">
+				<label class="flex items-center gap-2 mr-auto text-sm text-zinc-300">
+					<input type="checkbox" name="save_mapping" value="1" checked/>
+					Remember these columns for { data.Account.Name }
+				</label>
+				<p id="csv-import-error" class="basis-full text-sm text-red-400 text-right empty:hidden"></p>
+				<button type="submit" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed max-sm:w-full" :disabled="count === 0">
+					Import <span x-text="count"></span> <span x-text="count === 1 ? 'transaction' : 'transactions'"></span>
+				</button>
+			</div>
+		</div>
+	}
+}
+
+templ csvPreviewRow(acc *models.Account, pr CSVPreviewRow) {
+	{{ id := "csv-line-" + strconv.Itoa(pr.Row.Line) }}
+	{{ st := pr.Match.Status }}
+	<tr class={ "border-t border-zinc-800 align-top", templ.KV("opacity-60", st == csvimport.RowError || st == csvimport.RowImported) }>
+		<td class="px-3 py-2">
+			<input
+				id={ id }
+				type="checkbox"
+				name="line"
+				value={ strconv.Itoa(pr.Row.Line) }
+				data-status={ string(st) }
+				checked?={ st == csvimport.RowNew }
+				disabled?={ pr.Tx == nil || st == csvimport.RowImported }
+				aria-label={ "Import row " + strconv.Itoa(pr.Row.Line) }
+			/>
+		</td>
+		<td class="px-3 py-2 whitespace-nowrap text-zinc-400">
+			<label for={ id }>
+				if !pr.Row.Date.IsZero() {
+					{ pr.Row.Date.Format("Jan 2, 2006") }
+				} else {
+					Row { strconv.Itoa(pr.Row.Line) }
+				}
+			</label>
+		</td>
+		<td class="px-3 py-2 min-w-48 max-w-md">
+			<label for={ id } class="grid gap-1">
+				<span class="text-zinc-200 line-clamp-2 break-words">{ csvRowText(pr.Row) }</span>
+				if pr.Tx != nil && (pr.Tx.Counterparty != nil || pr.Tx.Category != nil) {
+					<span class="flex flex-wrap gap-1.5">
+						if pr.Tx.Counterparty != nil {
+							<span class="chip">
+								@icons.User("12")
+								{ pr.Tx.Counterparty.Name }
+							</span>
+						}
+						if pr.Tx.Category != nil {
+							<span class="chip">
+								@icons.Tag("12")
+								{ pr.Tx.Category.Name }
+							</span>
+						}
+					</span>
+				}
+			</label>
+		</td>
+		<td class={ "px-3 py-2 whitespace-nowrap text-right tabular-nums", templ.KV("text-emerald-300", pr.Row.Amount > 0), templ.KV("text-zinc-200", pr.Row.Amount <= 0) }>
+			if pr.Tx != nil {
+				if pr.Row.Amount > 0 {
+					+{ acc.Currency.Format(pr.Tx.Amount) }
+				} else {
+					−{ acc.Currency.Format(pr.Tx.Amount) }
+				}
+				if pr.Row.Currency != "" && pr.Row.Currency != acc.Currency.String {
+					<span class="block text-xs text-zinc-500">{ strconv.FormatFloat(pr.Row.Amount, 'f', -1, 64) } { pr.Row.Currency }</span>
+				}
+			} else if pr.Row.Amount != 0 {
+				{ strconv.FormatFloat(pr.Row.Amount, 'f', -1, 64) }
+			}
+		</td>
+		<td class="px-3 py-2 whitespace-nowrap">
+			switch st {
+				case csvimport.RowNew:
+					<span class="chip bg-emerald-400/10 text-emerald-300">New</span>
+				case csvimport.RowDuplicate:
+					<a href={ csvTxURL(pr.Match.TxID) } target="_blank" class="chip bg-amber-400/10 text-amber-300 hover:bg-amber-400/20" title="A transaction already has this day (or the next) and amount">
+						Likely there
+						@icons.ExternalLink("12")
+					</a>
+				case csvimport.RowImported:
+					<a href={ csvTxURL(pr.Match.TxID) } target="_blank" class="chip hover:bg-zinc-700">
+						Imported before
+						@icons.ExternalLink("12")
+					</a>
+				default:
+					<span class="chip bg-red-400/10 text-red-300">{ pr.Row.Err }</span>
+			}
+		</td>
+	</tr>
+}
+
+var csvDelimiterOptions = []struct{ name, value, label string }{
+	{"comma", ",", "Comma (,)"},
+	{"semicolon", ";", "Semicolon (;)"},
+	{"tab", "\t", "Tab"},
+	{"pipe", "|", "Pipe (|)"},
+}
+
+// csvColumns names the file's columns: by its header, else by their number
+// and first value.
+func csvColumns(data CSVImportData) []string {
+	n := data.Mapping.Columns(data.Records)
+	header := data.Mapping.Header(data.Records)
+	rows := data.Mapping.DataRows(data.Records)
+	cols := make([]string, n)
+	for i := range cols {
+		name := ""
+		if i < len(header) {
+			name = header[i]
+		}
+		if name == "" {
+			name = "Column " + strconv.Itoa(i+1)
+			if len(rows) > 0 && i < len(rows[0]) && rows[0][i] != "" {
+				v := []rune(rows[0][i])
+				if len(v) > 24 {
+					v = append(v[:24], '…')
+				}
+				name += " (" + string(v) + ")"
+			}
+		}
+		cols[i] = name
+	}
+	return cols
+}
+
+// csvSampleRows are the file's first records: the skipped ones, the header
+// and a few transactions.
+func csvSampleRows(recs [][]string, m csvimport.Mapping) [][]string {
+	n := m.SkipRows + 6
+	if m.HasHeader {
+		n++
+	}
+	if len(recs) > n {
+		return recs[:n]
+	}
+	return recs
+}
+
+// csvTxURL opens a transaction's details on the transactions page.
+func csvTxURL(id string) templ.SafeURL {
+	return templ.SafeURL("/transactions?" + TxDetailsParam + "=" + url.QueryEscape(id))
+}
+
+func csvStatusCounts(rows []CSVPreviewRow) map[csvimport.RowStatus]int {
+	counts := map[csvimport.RowStatus]int{}
+	for _, r := range rows {
+		counts[r.Match.Status]++
+	}
+	return counts
+}
+
+// csvRowText is what a row says: its counterparty and description.
+func csvRowText(r csvimport.Row) string {
+	switch {
+	case r.Counterparty != "" && r.Description != "":
+		return r.Counterparty + " · " + r.Description
+	case r.Counterparty != "":
+		return r.Counterparty
+	case r.Description != "":
+		return r.Description
+	}
+	return "—"
+}

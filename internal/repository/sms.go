@@ -92,7 +92,7 @@ func (r *Repository) CreateSMSMessage(ctx context.Context, msg *models.SMSMessag
 		l := logger.FromCtx(ctx)
 
 		if tx != nil {
-			if err := r.createSMSTransactionWithTxn(ctx, qtx, tx); err != nil {
+			if err := r.createIngestedTransactionWithTxn(ctx, qtx, tx); err != nil {
 				return err
 			}
 			msg.TransactionID = tx.ID
@@ -125,7 +125,7 @@ func (r *Repository) UpdateSMSMessageResult(ctx context.Context, msg *models.SMS
 		l := logger.FromCtx(ctx)
 
 		if tx != nil {
-			if err := r.createSMSTransactionWithTxn(ctx, qtx, tx); err != nil {
+			if err := r.createIngestedTransactionWithTxn(ctx, qtx, tx); err != nil {
 				return err
 			}
 			msg.TransactionID = tx.ID
@@ -166,10 +166,11 @@ func dbSMSMessageToSMSMessage(m *queries.SmsMessage) *models.SMSMessage {
 	}
 }
 
-// createSMSTransactionWithTxn saves an SMS's transaction: the occurrence of a
-// recurrent tx it likely pays becomes it (tx then being that one), else it's
-// created; then paired with the other leg of a transfer.
-func (r *Repository) createSMSTransactionWithTxn(ctx context.Context, qtx *queries.Queries, tx *models.Transaction) error {
+// createIngestedTransactionWithTxn saves an SMS's (or a CSV row's)
+// transaction: the occurrence of a recurrent tx it likely pays becomes it (tx
+// then being that one), else it's created; then paired with the other leg of
+// a transfer.
+func (r *Repository) createIngestedTransactionWithTxn(ctx context.Context, qtx *queries.Queries, tx *models.Transaction) error {
 	occ, err := r.mergeSMSIntoOccurrenceWithTxn(ctx, qtx, tx)
 	if err != nil {
 		return err

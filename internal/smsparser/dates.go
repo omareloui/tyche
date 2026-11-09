@@ -102,3 +102,15 @@ func dateFormat(format string) (layout, re string, err error) {
 	}
 	return l.String(), r.String(), nil
 }
+
+// DateLayout turns a format like DD/MM/YYYY into a time layout.
+func DateLayout(format string) (string, error) {
+	l, _, err := dateFormat(format)
+	return l, err
+}
+
+// ParseClock reads a time of day (15:04, 3:04 PM, …) as a duration from
+// midnight.
+func ParseClock(s string) (time.Duration, bool) {
+	return parseClock(s)
+}

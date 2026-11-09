@@ -154,6 +154,8 @@ func (h Handler) txFilterChips(ctx context.Context, f *models.TxFilter) []views.
 	switch f.Source {
 	case models.TxSourceSMS:
 		add("From SMS", models.TxFilterSource)
+	case models.TxSourceImport:
+		add("Imported (CSV)", models.TxFilterSource)
 	case models.TxSourceManual:
 		add("Added by hand", models.TxFilterSource)
 	}

@@ -35,6 +35,7 @@ func (r *Repository) RunDailyUpkeep(ctx context.Context, tenantID string) {
 	}
 	if _, q, err := r.dbFromCtx(ctx); err == nil {
 		purgeOrphanReceipts(ctx, q, time.Now())
+		purgePendingCSVImports(ctx, q, time.Now())
 	}
 }
 

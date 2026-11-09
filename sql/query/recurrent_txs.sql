@@ -183,7 +183,7 @@ WHERE id = sqlc.arg(id);
 -- name: GetRecurrentOccurrenceCandidates :many
 -- Occurrences of recurrent txs out of account_id scheduled between since and
 -- until that an SMS may be the payment of: scheduled ones, or fulfilled by
--- themselves (auto_fulfill) with no SMS yet.
+-- themselves (auto_fulfill) with no SMS (nor CSV row) yet.
 SELECT sqlc.embed(t), cp.is_merchant AS counterparty_is_merchant
 FROM transactions AS t
 INNER JOIN recurrent_txs AS rt ON t.recurrent_id = rt.id
@@ -196,7 +196,7 @@ WHERE t.account_id = sqlc.arg(account_id)
     AND t.reimburses_id IS NULL
     AND (
         t.fulfilled_at IS NULL
-        OR (rt.auto_fulfill AND NOT EXISTS (SELECT 1 FROM sms_messages AS s WHERE s.transaction_id = t.id))
+        OR (rt.auto_fulfill AND t.import_id IS NULL AND NOT EXISTS (SELECT 1 FROM sms_messages AS s WHERE s.transaction_id = t.id))
     )
 ORDER BY t.scheduled_to;
 

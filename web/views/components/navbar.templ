@@ -205,6 +205,13 @@ templ navUser(claims *jwt.AccessClaims) {
 					Security
 				</a>
 				<a
+					href="/import"
+					class="flex items-center gap-3 h-10 px-3 rounded-md text-[15px] text-zinc-300 transition-colors hover:bg-white/5 hover:text-white"
+				>
+					@icons.Upload("18", &templ.Attributes{"class": "shrink-0 text-zinc-400"})
+					Import CSV
+				</a>
+				<a
 					href="/backup"
 					class="flex items-center gap-3 h-10 px-3 rounded-md text-[15px] text-zinc-300 transition-colors hover:bg-white/5 hover:text-white"
 				>

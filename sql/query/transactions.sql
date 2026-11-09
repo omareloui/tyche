@@ -142,6 +142,7 @@ WHERE
     AND (sqlc.narg(from_sms) IS NULL OR EXISTS (
         SELECT 1 FROM sms_messages AS sm WHERE sm.transaction_id = t.id
     ) = sqlc.narg(from_sms))
+    AND (sqlc.narg(from_import) IS NULL OR (t.import_id IS NOT NULL) = sqlc.narg(from_import))
     AND (sqlc.narg(has_receipt) IS NULL OR EXISTS (
         SELECT 1 FROM receipts AS rc WHERE rc.transaction_id = t.id
     ) = sqlc.narg(has_receipt))
@@ -231,6 +232,7 @@ WHERE
     AND (sqlc.narg(from_sms) IS NULL OR EXISTS (
         SELECT 1 FROM sms_messages AS sm WHERE sm.transaction_id = t.id
     ) = sqlc.narg(from_sms))
+    AND (sqlc.narg(from_import) IS NULL OR (t.import_id IS NOT NULL) = sqlc.narg(from_import))
     AND (sqlc.narg(has_receipt) IS NULL OR EXISTS (
         SELECT 1 FROM receipts AS rc WHERE rc.transaction_id = t.id
     ) = sqlc.narg(has_receipt))
@@ -690,7 +692,8 @@ WHERE t.transfer_pair_id IN (SELECT value FROM json_each(sqlc.arg(ids)));
 -- Unpaired transactions of kind (1 expense, 2 income) out of account_id,
 -- fulfilled between since and until, that could be the other leg of a
 -- transfer: not a goal's nor a deleted account's, not reimbursing nor
--- reimbursed. With sms_only (auto pairing), only SMS ones and no merchant.
+-- reimbursed. With sms_only (auto pairing), only SMS (or CSV imported) ones and
+-- no merchant.
 SELECT
     sqlc.embed(t),
     sqlc.embed(a),
@@ -766,7 +769,7 @@ WHERE
     AND NOT EXISTS (SELECT 1 FROM transactions AS rt WHERE rt.reimburses_id = t.id)
     AND (CAST(sqlc.arg(sms_only) AS BOOLEAN) = FALSE OR (
         cp.is_merchant IS NOT TRUE
-        AND EXISTS (SELECT 1 FROM sms_messages AS sm WHERE sm.transaction_id = t.id)
+        AND (t.import_id IS NOT NULL OR EXISTS (SELECT 1 FROM sms_messages AS sm WHERE sm.transaction_id = t.id))
     ))
 ORDER BY t.fulfilled_at;
 

@@ -23,6 +23,7 @@ type TxSource string
 const (
 	TxSourceAny    TxSource = ""
 	TxSourceSMS    TxSource = "sms"
+	TxSourceImport TxSource = "import"
 	TxSourceManual TxSource = "manual"
 )
 
@@ -91,7 +92,7 @@ func ParseTxFilter(v url.Values) TxFilter {
 		f.Status = s
 	}
 	switch s := TxSource(v.Get(TxFilterSource)); s {
-	case TxSourceSMS, TxSourceManual:
+	case TxSourceSMS, TxSourceImport, TxSourceManual:
 		f.Source = s
 	}
 	switch s := TxReceipt(v.Get(TxFilterReceipt)); s {

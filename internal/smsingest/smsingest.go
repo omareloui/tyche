@@ -87,7 +87,7 @@ func BuildTransaction(
 		notes = append(notes, sms.Note)
 	}
 
-	amount, note, err := convert(sms.Amount, sms.Currency, acc, fxRate)
+	amount, note, err := Convert(sms.Amount, sms.Currency, acc, fxRate)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func BuildTransaction(
 		if toAmount == 0 {
 			toAmount = sms.Amount
 		}
-		toAmount, note, err := convert(toAmount, toCurrency(sms), to, fxRate)
+		toAmount, note, err := Convert(toAmount, toCurrency(sms), to, fxRate)
 		if err != nil {
 			return nil, err
 		}
@@ -110,7 +110,7 @@ func BuildTransaction(
 		if note != "" {
 			notes = append(notes, note)
 		}
-	} else if cp := matchCounterparty(sms.Counterparty, counterparties); cp != nil {
+	} else if cp := MatchCounterparty(sms.Counterparty, counterparties); cp != nil {
 		tx.Counterparty = cp
 		tx.Category = cp.DefaultCategoryFor(kind)
 	} else if name := strings.TrimSpace(sms.Counterparty); name != "" && sms.AutoCreateCounterparty {
@@ -182,7 +182,9 @@ func toCurrency(sms *smsparser.SMS) string {
 	return sms.Currency
 }
 
-func convert(amount float64, cur string, acc *models.Account, fxRate FxRateFunc) (float64, string, error) {
+// Convert puts amount of cur in acc's currency at today's rate, with a note
+// of the original amount when it converted it.
+func Convert(amount float64, cur string, acc *models.Account, fxRate FxRateFunc) (float64, string, error) {
 	if cur == "" || strings.EqualFold(cur, acc.Currency.String) {
 		return amount, "", nil
 	}
@@ -259,7 +261,8 @@ func pick(accounts []models.Account, cur string, match func(*models.Account) boo
 	return &acc
 }
 
-func matchCounterparty(name string, counterparties []models.Counterparty) *models.Counterparty {
+// MatchCounterparty is the counterparty named name (or with it as an alias).
+func MatchCounterparty(name string, counterparties []models.Counterparty) *models.Counterparty {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil

@@ -234,7 +234,7 @@ func (r *Repository) GetTransactionsSummary(ctx context.Context, f models.TxFilt
 	p := queries.GetTransactionsSummaryParams{
 		Q: lp.Q, Kind: lp.Kind, AccountID: lp.AccountID, CategoryID: lp.CategoryID,
 		CounterpartyID: lp.CounterpartyID, GoalID: lp.GoalID, NeedsReview: lp.NeedsReview,
-		FromSms: lp.FromSms, HasReceipt: lp.HasReceipt, FromDate: lp.FromDate, ToDate: lp.ToDate,
+		FromSms: lp.FromSms, FromImport: lp.FromImport, HasReceipt: lp.HasReceipt, FromDate: lp.FromDate, ToDate: lp.ToDate,
 		MinAmount: lp.MinAmount, MaxAmount: lp.MaxAmount,
 	}
 	switch f.Status {
@@ -297,8 +297,11 @@ func txFilterParams(f *models.TxFilter) queries.GetTransactionsParams {
 	switch f.Source {
 	case models.TxSourceSMS:
 		p.FromSms = true
+	case models.TxSourceImport:
+		p.FromImport = true
 	case models.TxSourceManual:
 		p.FromSms = false
+		p.FromImport = false
 	}
 	switch f.Receipt {
 	case models.TxReceiptWith:
@@ -672,6 +675,7 @@ func dbTransactionToTransaction(
 		TransferPairID: dbTx.TransferPairID.String,
 		RecurrentTxID:  dbTx.RecurrentID.String,
 		LoanGoalID:     dbTx.LoanGoalID.String,
+		FromImport:     dbTx.ImportID.Valid,
 	}
 
 	if acc != nil {

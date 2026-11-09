@@ -261,6 +261,12 @@ func New(h *handler.Handler) Router {
 	mux.Handle("GET /reset", handle(h.ResetPage))
 	mux.Handle("POST /reset", handle(h.Reset))
 
+	mux.Handle("GET /import", handle(h.CSVImportPage))
+	mux.Handle("POST /import", handle(h.UploadCSV, middleware.HTMXOnly))
+	mux.Handle("GET /import/{id}", handle(h.CSVImport))
+	mux.Handle("POST /import/{id}/preview", handle(h.PreviewCSVImport, middleware.HTMXOnly))
+	mux.Handle("POST /import/{id}", handle(h.ImportCSV, middleware.HTMXOnly))
+
 	mux.Handle("GET /backup", handle(h.BackupPage))
 	mux.Handle("GET /backup/export", handle(h.ExportBackup))
 	mux.Handle("POST /backup/import", handle(h.ImportBackup, middleware.HTMXOnly))
