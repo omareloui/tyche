@@ -203,10 +203,14 @@ func consoleTableNames(tables []models.ConsoleTable) string {
 	return string(b)
 }
 
+// consoleTableOptions are the phone's table picker's options: the internal
+// tables (sqlite_*, goose's) left out.
 func consoleTableOptions(tables []models.ConsoleTable) []form.ComboOption {
-	opts := make([]form.ComboOption, len(tables))
-	for i, t := range tables {
-		opts[i] = form.ComboOption{Value: t.Name, Label: t.Name + " (" + consoleRowsText(t.Rows) + ")"}
+	var opts []form.ComboOption
+	for _, t := range tables {
+		if !t.Internal {
+			opts = append(opts, form.ComboOption{Value: t.Name, Label: t.Name + " (" + consoleRowsText(t.Rows) + ")"})
+		}
 	}
 	return opts
 }
