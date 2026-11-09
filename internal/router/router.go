@@ -273,6 +273,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("POST /backup/restore", handle(h.RestorePrevBackup, middleware.HTMXOnly))
 
 	mux.Handle("GET /console", handle(h.Console))
+	mux.Handle("GET /console/diagram", handle(h.ConsoleDiagram))
 
 	// Public: signing out of a locked database has no access token.
 	mux.Handle("GET /signout", handlePub(h.Signout))

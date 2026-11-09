@@ -292,22 +292,8 @@ func consoleTableInfo(ctx context.Context, db *sql.DB, tables []models.ConsoleTa
 		}
 	}
 
-	rows, err := db.QueryContext(ctx, "SELECT cid, name, type, \"notnull\", COALESCE(dflt_value, ''), pk, hidden FROM pragma_table_xinfo(?)", name)
-	if err != nil {
-		return info, err
-	}
-	for rows.Next() {
-		var c models.ConsoleColumn
-		var hidden int
-		if err := rows.Scan(&c.Position, &c.Name, &c.Type, &c.NotNull, &c.Default, &c.PK, &hidden); err != nil {
-			rows.Close()
-			return info, err
-		}
-		c.Hidden = hidden != 0
-		info.Columns = append(info.Columns, c)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
+	var err error
+	if info.Columns, err = consoleColumns(ctx, db, name); err != nil {
 		return info, err
 	}
 
@@ -335,6 +321,57 @@ func consoleTableInfo(ctx context.Context, db *sql.DB, tables []models.ConsoleTa
 		}
 	}
 	return info, nil
+}
+
+func consoleColumns(ctx context.Context, db *sql.DB, table string) ([]models.ConsoleColumn, error) {
+	rows, err := db.QueryContext(ctx, "SELECT cid, name, type, \"notnull\", COALESCE(dflt_value, ''), pk, hidden FROM pragma_table_xinfo(?)", table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var cols []models.ConsoleColumn
+	for rows.Next() {
+		var c models.ConsoleColumn
+		var hidden int
+		if err := rows.Scan(&c.Position, &c.Name, &c.Type, &c.NotNull, &c.Default, &c.PK, &hidden); err != nil {
+			return nil, err
+		}
+		c.Hidden = hidden != 0
+		cols = append(cols, c)
+	}
+	return cols, rows.Err()
+}
+
+// ConsoleSchema is every table of the user's database but the internal ones,
+// with their columns and foreign keys, for the console's diagram.
+func (r *Repository) ConsoleSchema(ctx context.Context) ([]models.ConsoleTableInfo, error) {
+	db, _, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return consoleSchema(ctx, db)
+}
+
+func consoleSchema(ctx context.Context, db *sql.DB) ([]models.ConsoleTableInfo, error) {
+	tables, err := consoleTables(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+	var schema []models.ConsoleTableInfo
+	for _, t := range tables {
+		if t.Internal || t.Type != "table" {
+			continue
+		}
+		info := models.ConsoleTableInfo{ConsoleTable: t}
+		if info.Columns, err = consoleColumns(ctx, db, t.Name); err != nil {
+			return nil, err
+		}
+		if info.FKs, err = consoleFKs(ctx, db, t.Name); err != nil {
+			return nil, err
+		}
+		schema = append(schema, info)
+	}
+	return schema, nil
 }
 
 func consoleFKs(ctx context.Context, db *sql.DB, table string) ([]models.ConsoleFK, error) {

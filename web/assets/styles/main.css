@@ -84,6 +84,34 @@
 .sql-comment { @apply italic text-zinc-500; }
 .sql-punct { @apply text-zinc-400; }
 
+/* The console's schema diagram (schemaDiagram, console.js). */
+.diagram-canvas {
+  background-image: radial-gradient(circle, rgb(255 255 255 / 0.07) 1px, transparent 1.2px);
+}
+.diagram-canvas:fullscreen {
+  @apply rounded-none;
+}
+.diagram-btn {
+  @apply grid place-items-center size-8 rounded-lg text-zinc-300 cursor-pointer transition-colors hover:bg-white/10 hover:text-white;
+}
+.diagram-edge {
+  @apply fill-none stroke-zinc-500/70 transition-[stroke,opacity];
+  stroke-width: 1.5;
+}
+.diagram-edge-end {
+  @apply fill-zinc-500 transition-[fill,opacity];
+}
+.diagram-canvas [data-hot] {
+  @apply stroke-sky-400;
+  stroke-width: 2.25;
+}
+.diagram-canvas circle[data-hot] {
+  @apply fill-sky-400 stroke-none;
+}
+.diagram-canvas [data-cold] {
+  opacity: 0.12;
+}
+
 select.input-field {
   @apply appearance-none pr-10 cursor-pointer;
 }

@@ -95,3 +95,22 @@ func (h *Handler) Console(w http.ResponseWriter, r *http.Request) (templ.Compone
 	}
 	return views.Console(getClaims(ctx), b, data), nil
 }
+
+// ConsoleDiagram is the SQL console's diagram of the user's tables and their
+// foreign keys.
+func (h *Handler) ConsoleDiagram(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	ctx := r.Context()
+	tables, err := h.repo.ConsoleSchema(ctx)
+	if err != nil {
+		return nil, err
+	}
+	data := views.ConsoleDiagramData{Tables: tables, Ranks: models.ConsoleRanks(tables)}
+	if r.Header.Get("HX-Target") == views.ConsoleTarget {
+		return views.ConsoleDiagramBody(data), nil
+	}
+	b, err := h.repo.GetBalances(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return views.ConsoleDiagram(getClaims(ctx), b, data), nil
+}

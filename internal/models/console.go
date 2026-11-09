@@ -153,3 +153,39 @@ func (b ConsoleBrowse) Inline(table string) string {
 	}
 	return q + ";"
 }
+
+// ConsoleRanks places the tables of a schema diagram in columns, left to
+// right: a table one right of the furthest table it references (itself
+// aside), the ones referencing nothing first. Cycles stop growing after as
+// many rounds as there are tables.
+func ConsoleRanks(tables []ConsoleTableInfo) map[string]int {
+	rank := make(map[string]int, len(tables))
+	known := make(map[string]bool, len(tables))
+	for _, t := range tables {
+		known[t.Name] = true
+	}
+	for range tables {
+		changed := false
+		for _, t := range tables {
+			for _, fk := range t.FKs {
+				if fk.RefTable == t.Name || !known[fk.RefTable] {
+					continue
+				}
+				if r := rank[fk.RefTable] + 1; r > rank[t.Name] && r < len(tables) {
+					rank[t.Name] = r
+					changed = true
+				}
+			}
+		}
+		if !changed {
+			break
+		}
+	}
+	return rank
+}
+
+// IsKey reports whether the column is in the table's primary key or a
+// foreign key.
+func (t ConsoleTableInfo) IsKey(c ConsoleColumn) bool {
+	return c.PK > 0 || t.FK(c.Name) != nil
+}

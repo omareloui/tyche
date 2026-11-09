@@ -340,6 +340,42 @@ templ Database(size string, attrs ...*templ.Attributes) {
 	}
 }
 
+// Minus zooms out.
+templ Minus(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="M5 12h14"></path>
+	}
+}
+
+// Scan fits a view to its content, e.g. the schema diagram.
+templ Scan(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="M3 7V5a2 2 0 0 1 2-2h2"></path>
+		<path d="M17 3h2a2 2 0 0 1 2 2v2"></path>
+		<path d="M21 17v2a2 2 0 0 1-2 2h-2"></path>
+		<path d="M7 21H5a2 2 0 0 1-2-2v-2"></path>
+	}
+}
+
+// Expand goes full screen.
+templ Expand(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="M15 3h6v6"></path>
+		<path d="m21 3-7 7"></path>
+		<path d="m3 21 7-7"></path>
+		<path d="M9 21H3v-6"></path>
+	}
+}
+
+// Key marks a key, e.g. a table's primary key.
+templ Key(size string, attrs ...*templ.Attributes) {
+	@strokeIcon(size, attrs...) {
+		<path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"></path>
+		<path d="m21 2-9.6 9.6"></path>
+		<circle cx="7.5" cy="15.5" r="5.5"></circle>
+	}
+}
+
 // Upload marks importing a file, e.g. a backup.
 templ Upload(size string, attrs ...*templ.Attributes) {
 	@strokeIcon(size, attrs...) {

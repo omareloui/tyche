@@ -115,6 +115,9 @@ templ consoleLink(href string, class string) {
 
 templ ConsoleBody(data ConsoleData) {
 	<div id={ ConsoleTarget } class="grid gap-5 lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start pb-10">
+		<div class="lg:col-span-2">
+			@consoleTabs(false)
+		</div>
 		@consoleTables(data)
 		<div class="grid gap-4 min-w-0">
 			@consoleEditor(data)
@@ -497,5 +500,157 @@ templ consolePager(data ConsoleData) {
 				Next →
 			}
 		}
+	</div>
+}
+
+// consoleTabs switches between the data and the diagram.
+templ consoleTabs(diagram bool) {
+	<nav class="inline-flex p-1 rounded-full bg-zinc-800/60 ring-1 ring-zinc-700/60 text-sm" aria-label="Console views">
+		@consoleLink("/console", consoleTabClass(!diagram)) {
+			@icons.Database("16")
+			Data
+		}
+		@consoleLink("/console/diagram", consoleTabClass(diagram)) {
+			@icons.Grid("16")
+			Diagram
+		}
+	</nav>
+}
+
+func consoleTabClass(active bool) string {
+	c := "inline-flex items-center gap-2 h-8 px-3.5 rounded-full transition-colors "
+	if active {
+		return c + "bg-white/10 text-white"
+	}
+	return c + "text-zinc-400 hover:text-white"
+}
+
+type ConsoleDiagramData struct {
+	Tables []models.ConsoleTableInfo
+	// Ranks are the tables' columns in the diagram (models.ConsoleRanks).
+	Ranks map[string]int
+}
+
+type consoleDiagramFK struct {
+	From    string `json:"from"`
+	FromCol string `json:"fromCol"`
+	To      string `json:"to"`
+	ToCol   string `json:"toCol"`
+}
+
+// consoleDiagramFKs is the JSON list of the diagram's foreign keys, drawn by
+// schemaDiagram (console.js).
+func consoleDiagramFKs(tables []models.ConsoleTableInfo) string {
+	fks := []consoleDiagramFK{}
+	for _, t := range tables {
+		for _, fk := range t.FKs {
+			fks = append(fks, consoleDiagramFK{From: t.Name, FromCol: fk.From, To: fk.RefTable, ToCol: fk.To})
+		}
+	}
+	b, _ := json.Marshal(fks)
+	return string(b)
+}
+
+templ ConsoleDiagram(claims *jwt.AccessClaims, balances []models.Balance, data ConsoleDiagramData) {
+	@layouts.WithTitle(claims, "SQL console", balances) {
+		@ConsoleDiagramBody(data)
+	}
+}
+
+// ConsoleDiagramBody is the tables as cards on a canvas, foreign keys drawn
+// between their columns: dragged around (kept per browser), panned, zoomed,
+// a table picked to light up its links (schemaDiagram, console.js).
+templ ConsoleDiagramBody(data ConsoleDiagramData) {
+	<div id={ ConsoleTarget } class="grid gap-4 pb-10">
+		<div class="flex flex-wrap items-center gap-3">
+			@consoleTabs(true)
+			<span class="text-xs text-zinc-500 max-sm:hidden">Drag tables around, scroll to pan, Ctrl + scroll or pinch to zoom, click a table to light up its links</span>
+		</div>
+		<div
+			x-data="schemaDiagram"
+			data-fks={ consoleDiagramFKs(data.Tables) }
+			:class="keysOnly && 'keys-only'"
+			class="diagram-canvas group/diagram relative h-[75dvh] rounded-3xl ring-1 ring-zinc-800 bg-zinc-900 overflow-hidden touch-none select-none cursor-grab"
+			:style="`background-position: ${x}px ${y}px; background-size: ${24 * k}px ${24 * k}px`"
+		>
+			<div x-ref="world" class="absolute left-0 top-0 origin-top-left" :style="`transform: translate(${x}px, ${y}px) scale(${k})`">
+				<svg x-ref="edges" class="absolute left-0 top-0 overflow-visible pointer-events-none" width="1" height="1"></svg>
+				for _, t := range data.Tables {
+					@consoleDiagramTable(t, data.Ranks[t.Name])
+				}
+			</div>
+			<div class="absolute top-3 right-3 z-10 flex items-center gap-1 p-1 rounded-xl bg-zinc-800/90 ring-1 ring-zinc-700 shadow-lg" data-diagram-ui>
+				<button type="button" @click="zoomBy(1/1.25)" class="diagram-btn" aria-label="Zoom out" title="Zoom out">
+					@icons.Minus("16")
+				</button>
+				<span class="w-11 text-center text-xs tabular-nums text-zinc-400" x-text="Math.round(k * 100) + '%'"></span>
+				<button type="button" @click="zoomBy(1.25)" class="diagram-btn" aria-label="Zoom in" title="Zoom in">
+					@icons.Plus("16")
+				</button>
+				<button type="button" @click="fit()" class="diagram-btn" aria-label="Fit to screen" title="Fit to screen">
+					@icons.Scan("16")
+				</button>
+				<span class="w-px h-5 bg-zinc-700 mx-0.5"></span>
+				<button type="button" @click="toggleKeys()" class="diagram-btn" :class="keysOnly && 'text-(--accent)!'" :aria-pressed="keysOnly" aria-label="Keys only" title="Keys only">
+					@icons.Key("16")
+				</button>
+				<button type="button" @click="resetLayout()" class="diagram-btn" aria-label="Arrange again" title="Arrange again">
+					@icons.RotateCcw("16")
+				</button>
+				<button type="button" @click="fullscreen()" class="diagram-btn" aria-label="Full screen" title="Full screen">
+					@icons.Expand("16")
+				</button>
+			</div>
+		</div>
+	</div>
+}
+
+templ consoleDiagramTable(t models.ConsoleTableInfo, rank int) {
+	<div
+		data-table={ t.Name }
+		data-rank={ strconv.Itoa(rank) }
+		class="diagram-table absolute left-0 top-0 w-64 rounded-xl bg-zinc-800 ring-1 ring-zinc-700 shadow-xl shadow-black/30 transition-[opacity,box-shadow] data-dim:opacity-30 data-picked:ring-2 data-picked:ring-(--accent) data-linked:ring-sky-400/70"
+	>
+		<div data-drag class="flex items-center gap-2 h-9 px-3 rounded-t-xl border-b border-zinc-700 bg-white/5 cursor-grab active:cursor-grabbing">
+			<span class="truncate font-mono text-[13px] font-semibold text-white">{ t.Name }</span>
+			<span class="ml-auto shrink-0 tabular-nums text-[11px] text-zinc-500">{ consoleRowsText(t.Rows) }</span>
+			<a
+				href={ templ.SafeURL(ConsoleURL(t.Name, models.ConsoleBrowse{})) }
+				hx-get={ ConsoleURL(t.Name, models.ConsoleBrowse{}) }
+				hx-target={ "#" + ConsoleTarget }
+				hx-swap="outerHTML"
+				hx-push-url="true"
+				class="shrink-0 -mr-1 p-1 rounded-md text-zinc-400 hover:bg-white/10 hover:text-white"
+				aria-label={ "Browse " + t.Name }
+				title="Browse rows"
+			>
+				@icons.ArrowRight("14")
+			</a>
+		</div>
+		<div class="py-1">
+			for _, c := range t.Columns {
+				if !c.Hidden {
+					<div
+						data-col={ c.Name }
+						class={ "flex items-center gap-2 h-6 px-3 font-mono text-[12px]", templ.KV("group-[.keys-only]/diagram:hidden", !t.IsKey(c)) }
+					>
+						<span class="w-4 shrink-0">
+							if c.PK > 0 {
+								@icons.Key("12", &templ.Attributes{"class": "text-amber-300", "aria-label": "Primary key"})
+							} else if t.FK(c.Name) != nil {
+								@icons.Link("12", &templ.Attributes{"class": "text-sky-300", "aria-label": "Foreign key"})
+							}
+						</span>
+						<span class={ "truncate", templ.KV("text-zinc-100", t.IsKey(c)), templ.KV("text-zinc-300", !t.IsKey(c)) }>{ c.Name }</span>
+						<span class="ml-auto shrink-0 text-[11px] uppercase text-zinc-500">
+							{ c.Type }
+							if !c.NotNull && c.PK == 0 {
+								?
+							}
+						</span>
+					</div>
+				}
+			}
+		</div>
 	</div>
 }

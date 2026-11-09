@@ -200,3 +200,30 @@ func TestConsoleBrowse(t *testing.T) {
 		t.Errorf("unknown column: %v", err)
 	}
 }
+
+func TestConsoleSchema(t *testing.T) {
+	db := consoleTestDB(t)
+	if _, err := db.Exec(`CREATE TABLE items (id TEXT PRIMARY KEY, tx_id TEXT REFERENCES txs (id), parent_id TEXT REFERENCES items (id))`); err != nil {
+		t.Fatal(err)
+	}
+	schema, err := consoleSchema(context.Background(), db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(schema) != 3 {
+		t.Fatalf("got %d tables, want 3 (no views/internal ones)", len(schema))
+	}
+	ranks := models.ConsoleRanks(schema)
+	if ranks["accounts"] != 0 || ranks["txs"] != 1 || ranks["items"] != 2 {
+		t.Errorf("ranks %v", ranks)
+	}
+
+	// A cycle stays bounded.
+	cyc := []models.ConsoleTableInfo{
+		{ConsoleTable: models.ConsoleTable{Name: "a"}, FKs: []models.ConsoleFK{{Table: "a", RefTable: "b"}}},
+		{ConsoleTable: models.ConsoleTable{Name: "b"}, FKs: []models.ConsoleFK{{Table: "b", RefTable: "a"}}},
+	}
+	if r := models.ConsoleRanks(cyc); r["a"] >= 2 || r["b"] >= 2 {
+		t.Errorf("cycle ranks %v", r)
+	}
+}
