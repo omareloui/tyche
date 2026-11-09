@@ -1,0 +1,473 @@
+package views
+
+import (
+	"fmt"
+	"net/url"
+	"strconv"
+	"time"
+
+	"github.com/omareloui/tyche/internal/formatters"
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+// ConsoleTarget is the id of the console's body, which its own requests swap.
+const ConsoleTarget = "console"
+
+type ConsoleData struct {
+	Tables []models.ConsoleTable
+	// Query is whether it ran the user's SQL, else it browses Table.
+	Query  bool
+	Table  *models.ConsoleTableInfo
+	Browse models.ConsoleBrowse
+	// Total is how many rows the browsed table (filtered) has.
+	Total int64
+	// SQL is the editor's: the user's, or the browse's query.
+	SQL    string
+	Result *models.ConsoleResult
+	Err    string
+}
+
+// ConsoleURL browses a table, sorted by a column (desc) and filtered on col =
+// val when col is set.
+func ConsoleURL(table string, b models.ConsoleBrowse) string {
+	v := url.Values{"t": {table}}
+	if b.Sort != "" {
+		v.Set("sort", b.Sort)
+		if b.Desc {
+			v.Set("desc", "1")
+		}
+	}
+	if b.Col != "" {
+		v.Set("col", b.Col)
+		v.Set("val", b.Val)
+	}
+	if b.Page > 0 {
+		v.Set("p", strconv.Itoa(b.Page))
+	}
+	return "/console?" + v.Encode()
+}
+
+// consoleSortURL sorts the browse by col: ascending, descending, then not.
+func consoleSortURL(table string, b models.ConsoleBrowse, col string) string {
+	b.Page = 0
+	switch {
+	case b.Sort != col:
+		b.Sort, b.Desc = col, false
+	case !b.Desc:
+		b.Desc = true
+	default:
+		b.Sort, b.Desc = "", false
+	}
+	return ConsoleURL(table, b)
+}
+
+func consoleCell(cols []string, row []models.ConsoleValue, name string) (models.ConsoleValue, bool) {
+	for i, c := range cols {
+		if c == name {
+			return row[i], true
+		}
+	}
+	return models.ConsoleValue{}, false
+}
+
+func consoleRowsText(n int64) string {
+	if n < 0 {
+		return "?"
+	}
+	return formatters.FormatNum(n)
+}
+
+func consoleCellClass(v models.ConsoleValue) string {
+	switch {
+	case v.Null:
+		return "italic text-zinc-600"
+	case v.Blob >= 0:
+		return "text-zinc-500"
+	case v.Number:
+		return "text-right tabular-nums text-sky-300"
+	}
+	return "text-zinc-200"
+}
+
+templ Console(claims *jwt.AccessClaims, balances []models.Balance, data ConsoleData) {
+	@layouts.WithTitle(claims, "SQL console", balances) {
+		@ConsoleBody(data)
+	}
+}
+
+templ consoleLink(href string, class string) {
+	<a
+		href={ templ.SafeURL(href) }
+		hx-get={ href }
+		hx-target={ "#" + ConsoleTarget }
+		hx-swap="outerHTML"
+		hx-push-url="true"
+		class={ class }
+	>
+		{ children... }
+	</a>
+}
+
+templ ConsoleBody(data ConsoleData) {
+	<div id={ ConsoleTarget } class="grid gap-5 lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start pb-10">
+		@consoleTables(data)
+		<div class="grid gap-4 min-w-0">
+			@consoleEditor(data)
+			if data.Table != nil {
+				@consoleTableHeader(data)
+			}
+			if data.Err != "" {
+				<p class="flex gap-2 p-3 rounded-2xl bg-red-400/10 text-sm text-red-300 font-mono whitespace-pre-wrap break-words">
+					@icons.Error("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
+					{ data.Err }
+				</p>
+			}
+			if data.Result != nil {
+				@consoleResult(data)
+			}
+		</div>
+	</div>
+}
+
+templ consoleTables(data ConsoleData) {
+	{{ current := "" }}
+	if data.Table != nil && !data.Query {
+		{{ current = data.Table.Name }}
+	}
+	// Phones pick the table from a select.
+	<select
+		name="t"
+		aria-label="Table"
+		hx-get="/console"
+		hx-trigger="change"
+		hx-target={ "#" + ConsoleTarget }
+		hx-swap="outerHTML"
+		hx-push-url="true"
+		class="input-field lg:hidden"
+	>
+		if current == "" {
+			<option value="" selected disabled>Pick a table…</option>
+		}
+		for _, t := range data.Tables {
+			<option value={ t.Name } selected?={ t.Name == current }>{ t.Name } ({ consoleRowsText(t.Rows) })</option>
+		}
+	</select>
+	<nav
+		x-data="{ q: '' }"
+		class="max-lg:hidden grid gap-2 lg:sticky lg:top-22 lg:max-h-[calc(100dvh-7rem)] lg:overflow-y-auto pr-1"
+		aria-label="Tables"
+	>
+		<input
+			type="search"
+			x-model="q"
+			placeholder="Filter tables"
+			aria-label="Filter tables"
+			class="input-field h-9! text-sm!"
+		/>
+		<ul class="grid gap-0.5 text-sm">
+			for i, t := range data.Tables {
+				if t.Internal && (i == 0 || !data.Tables[i-1].Internal) {
+					<li class="mt-3 mb-1 px-2 text-xs uppercase tracking-wide text-zinc-500" x-show="!q">Internal</li>
+				}
+				<li x-show={ fmt.Sprintf("!q || %q.includes(q.toLowerCase())", t.Name) }>
+					@consoleLink(ConsoleURL(t.Name, models.ConsoleBrowse{}), "flex items-center gap-2 h-8 px-2 rounded-md transition-colors hover:bg-white/5 "+consoleTableClass(t.Name == current)) {
+						<span class="truncate font-mono text-[13px]">{ t.Name }</span>
+						if t.Type == "view" {
+							<span class="shrink-0 px-1.5 rounded bg-violet-400/15 text-[10px] uppercase text-violet-300">view</span>
+						}
+						<span class="ml-auto shrink-0 tabular-nums text-xs text-zinc-500">{ consoleRowsText(t.Rows) }</span>
+					}
+				</li>
+			}
+		</ul>
+	</nav>
+}
+
+func consoleTableClass(current bool) string {
+	if current {
+		return "bg-white/10 text-white"
+	}
+	return "text-zinc-300"
+}
+
+templ consoleEditor(data ConsoleData) {
+	<form
+		hx-get="/console"
+		hx-target={ "#" + ConsoleTarget }
+		hx-swap="outerHTML"
+		hx-push-url="true"
+		hx-trigger="submit, keydown[(ctrlKey||metaKey)&&key=='Enter'] from:find textarea"
+		hx-disabled-elt="find button[type=submit]"
+		class="grid gap-2"
+	>
+		<textarea
+			name="sql"
+			rows="4"
+			spellcheck="false"
+			autocapitalize="off"
+			autocomplete="off"
+			aria-label="SQL"
+			placeholder="SELECT * FROM transactions LIMIT 10;"
+			maxlength={ strconv.Itoa(models.ConsoleMaxSQL) }
+			class="input-field h-auto! min-h-24 py-2.5! font-mono text-[13px]! leading-relaxed resize-y"
+		>{ data.SQL }</textarea>
+		<div class="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
+			<button type="submit" class="btn-primary inline-flex items-center gap-2">
+				@icons.Play("16")
+				Run
+			</button>
+			<span><kbd class="font-sans">Ctrl</kbd> + <kbd class="font-sans">Enter</kbd> runs it</span>
+			<span class="ml-auto">Read only: SELECTs and the schema's pragmas</span>
+		</div>
+	</form>
+}
+
+templ consoleTableHeader(data ConsoleData) {
+	{{ t := data.Table }}
+	<div class="grid gap-3">
+		<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+			<h2 class="font-mono text-lg text-white">{ t.Name }</h2>
+			<span class="text-sm text-zinc-500">
+				{ t.Type } · { consoleRowsText(t.Rows) } rows
+			</span>
+			if data.Browse.Col != "" {
+				<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-sky-400/10 text-xs text-sky-300 font-mono">
+					{ data.Browse.Col } = { data.Browse.Val }
+					@consoleLink(ConsoleURL(t.Name, models.ConsoleBrowse{Sort: data.Browse.Sort, Desc: data.Browse.Desc}), "text-sky-200 hover:text-white") {
+						<span aria-label="Remove filter">✕</span>
+					}
+				</span>
+			}
+		</div>
+		<details class="group rounded-2xl bg-zinc-700/20 ring-1 ring-zinc-800">
+			<summary class="flex items-center gap-2 px-4 h-10 cursor-pointer select-none text-sm text-zinc-300">
+				@icons.ChevronDown("16", &templ.Attributes{"class": "transition-transform -rotate-90 group-open:rotate-0"})
+				Schema
+				<span class="text-zinc-500">
+					{ strconv.Itoa(len(t.Columns)) } columns
+					if len(t.FKs) > 0 {
+						· { strconv.Itoa(len(t.FKs)) } references
+					}
+					if len(t.RefBy) > 0 {
+						· referenced by { strconv.Itoa(len(t.RefBy)) }
+					}
+				</span>
+			</summary>
+			<div class="grid gap-4 px-4 pb-4 text-sm">
+				<div class="overflow-x-auto">
+					<table class="w-full text-left font-mono text-[13px]">
+						<thead class="text-xs text-zinc-500">
+							<tr>
+								<th class="py-1 pr-4 font-normal">column</th>
+								<th class="py-1 pr-4 font-normal">type</th>
+								<th class="py-1 pr-4 font-normal">null</th>
+								<th class="py-1 pr-4 font-normal">default</th>
+								<th class="py-1 pr-4 font-normal">references</th>
+							</tr>
+						</thead>
+						<tbody class="text-zinc-300">
+							for _, c := range t.Columns {
+								<tr class="border-t border-zinc-800">
+									<td class="py-1 pr-4 whitespace-nowrap">
+										{ c.Name }
+										if c.PK > 0 {
+											<span class="ml-1 text-[10px] text-amber-300">PK</span>
+										}
+									</td>
+									<td class="py-1 pr-4 text-zinc-400">{ c.Type }</td>
+									<td class="py-1 pr-4 text-zinc-400">
+										if c.NotNull {
+											no
+										} else {
+											yes
+										}
+									</td>
+									<td class="py-1 pr-4 text-zinc-400">{ c.Default }</td>
+									<td class="py-1 pr-4">
+										if fk := t.FK(c.Name); fk != nil {
+											@consoleLink(ConsoleURL(fk.RefTable, models.ConsoleBrowse{}), "text-sky-300 hover:underline") {
+												{ fk.RefTable }.{ fk.To }
+											}
+										}
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</div>
+				if len(t.RefBy) > 0 {
+					<div class="grid gap-1">
+						<h3 class="text-xs text-zinc-500">Referenced by</h3>
+						<div class="flex flex-wrap gap-2 font-mono text-[13px]">
+							for _, fk := range t.RefBy {
+								@consoleLink(ConsoleURL(fk.Table, models.ConsoleBrowse{}), "px-2 py-0.5 rounded-md bg-white/5 text-sky-300 hover:bg-white/10") {
+									{ fk.Table }.{ fk.From } → { fk.To }
+								}
+							}
+						</div>
+					</div>
+				}
+				if len(t.Indexes) > 0 {
+					<div class="grid gap-1">
+						<h3 class="text-xs text-zinc-500">Indexes</h3>
+						<ul class="grid gap-0.5 font-mono text-[13px] text-zinc-300">
+							for _, i := range t.Indexes {
+								<li>
+									{ i.Name }
+									<span class="text-zinc-500">
+										({ fmt.Sprint(i.Columns) })
+										if i.Unique {
+											unique
+										}
+									</span>
+								</li>
+							}
+						</ul>
+					</div>
+				}
+				if t.SQL != "" {
+					<pre class="p-3 rounded-xl bg-black/30 overflow-x-auto text-[12px] text-zinc-400">{ t.SQL }</pre>
+				}
+			</div>
+		</details>
+	</div>
+}
+
+templ consoleResult(data ConsoleData) {
+	{{ res := data.Result }}
+	{{ table := data.Table }}
+	<div class="grid gap-2">
+		<div class="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
+			if table != nil {
+				@consolePager(data)
+			} else {
+				<span>
+					{ formatters.FormatNum(int64(len(res.Rows))) } rows
+					if res.Truncated {
+						(first { strconv.Itoa(models.ConsoleMaxRows) } only, add a LIMIT)
+					}
+				</span>
+			}
+			<span class="ml-auto">{ res.Took.Round(10 * time.Microsecond).String() }</span>
+		</div>
+		if len(res.Columns) == 0 {
+			<p class="text-sm text-zinc-500">No columns.</p>
+		} else {
+			<div class="overflow-auto max-h-[70dvh] rounded-2xl ring-1 ring-zinc-800 bg-zinc-900/40">
+				<table class="min-w-full text-left font-mono text-[13px]">
+					<thead class="sticky top-0 z-10 bg-zinc-900">
+						<tr>
+							for _, c := range res.Columns {
+								<th class="px-3 py-2 font-medium text-zinc-400 whitespace-nowrap border-b border-zinc-800">
+									if table != nil && !data.Query && table.HasColumn(c) {
+										@consoleLink(consoleSortURL(table.Name, data.Browse, c), "inline-flex items-center gap-1 hover:text-white") {
+											{ c }
+											if data.Browse.Sort == c {
+												if data.Browse.Desc {
+													<span aria-label="descending">↓</span>
+												} else {
+													<span aria-label="ascending">↑</span>
+												}
+											}
+										}
+									} else {
+										{ c }
+									}
+								</th>
+							}
+						</tr>
+					</thead>
+					<tbody>
+						for _, row := range res.Rows {
+							<tr class="border-t border-zinc-800/70 hover:bg-white/3">
+								for i, v := range row {
+									<td
+										class={ "px-3 py-1.5 align-top max-w-[22rem] truncate " + consoleCellClass(v) }
+										if v.Cut || len(v.Text) > 40 {
+											title={ v.Text }
+										}
+									>
+										@consoleValue(data, res.Columns, row, i)
+									</td>
+								}
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+			if len(res.Rows) == 0 {
+				<p class="text-sm text-zinc-500">No rows.</p>
+			}
+		}
+	</div>
+}
+
+// consoleValue is a cell: a link to the row it references (foreign key), the
+// rows referencing it (a key other tables point at) or its value.
+templ consoleValue(data ConsoleData, cols []string, row []models.ConsoleValue, i int) {
+	{{ v := row[i] }}
+	{{ t := data.Table }}
+	if t == nil || data.Query || v.Null || v.Blob >= 0 {
+		{ v.Text }
+	} else if fk := t.FK(cols[i]); fk != nil {
+		@consoleLink(ConsoleURL(fk.RefTable, models.ConsoleBrowse{Col: fk.To, Val: v.Raw}), "text-sky-300 hover:underline") {
+			{ v.Text }
+		}
+	} else if refs := consoleRefsTo(t, cols[i]); len(refs) > 0 {
+		<span x-data="{ open: false }" class="relative">
+			<button type="button" @click="open = !open" @click.outside="open = false" class="text-amber-200 hover:underline cursor-pointer">{ v.Text }</button>
+			<span x-show="open" x-cloak class="absolute left-0 top-6 z-20 grid gap-0.5 min-w-56 p-1.5 rounded-xl bg-zinc-800 ring-1 ring-zinc-700 shadow-xl">
+				<span class="px-2 py-1 text-[11px] text-zinc-500 font-sans">Rows pointing here</span>
+				for _, fk := range refs {
+					@consoleLink(ConsoleURL(fk.Table, models.ConsoleBrowse{Col: fk.From, Val: v.Raw}), "px-2 py-1 rounded-md text-sky-300 hover:bg-white/5") {
+						{ fk.Table }.{ fk.From }
+					}
+				}
+			</span>
+		</span>
+	} else {
+		{ v.Text }
+	}
+}
+
+// consoleRefsTo are the foreign keys of other tables pointing at the column.
+func consoleRefsTo(t *models.ConsoleTableInfo, col string) []models.ConsoleFK {
+	var refs []models.ConsoleFK
+	for _, fk := range t.RefBy {
+		if fk.To == col {
+			refs = append(refs, fk)
+		}
+	}
+	return refs
+}
+
+templ consolePager(data ConsoleData) {
+	{{ b := data.Browse }}
+	{{ from := int64(b.Page*models.ConsolePageSize) + 1 }}
+	{{ to := from + int64(len(data.Result.Rows)) - 1 }}
+	{{ prev, next := b, b }}
+	{{ prev.Page-- }}
+	{{ next.Page++ }}
+	<div class="flex items-center gap-2">
+		if b.Page > 0 {
+			@consoleLink(ConsoleURL(data.Table.Name, prev), "btn-ghost h-8 px-2.5 text-xs") {
+				← Prev
+			}
+		}
+		<span>
+			if data.Total == 0 {
+				0 rows
+			} else {
+				{ formatters.FormatNum(from) }–{ formatters.FormatNum(to) } of { formatters.FormatNum(data.Total) }
+			}
+		</span>
+		if to < data.Total {
+			@consoleLink(ConsoleURL(data.Table.Name, next), "btn-ghost h-8 px-2.5 text-xs") {
+				Next →
+			}
+		}
+	</div>
+}
