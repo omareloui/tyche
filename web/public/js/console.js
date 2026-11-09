@@ -59,7 +59,7 @@ document.addEventListener("alpine:init", () => {
 
     init() {
       try {
-        this.tables = new Set(JSON.parse(this.$el.dataset.tables || "[]").map((t) => t.toLowerCase()));
+        this.tables = new Set(JSON.parse(this.$root.dataset.tables || "[]").map((t) => t.toLowerCase()));
       } catch {}
       this.render();
     },
@@ -117,16 +117,16 @@ document.addEventListener("alpine:init", () => {
       this.saved = state.pos || {};
       this.keysOnly = !!state.keysOnly;
       try {
-        this.fks = JSON.parse(this.$el.dataset.fks || "[]");
+        this.fks = JSON.parse(this.$root.dataset.fks || "[]");
       } catch {}
-      for (const el of this.$el.querySelectorAll("[data-table]")) this.cards[el.dataset.table] = el;
+      for (const el of this.$root.querySelectorAll("[data-table]")) this.cards[el.dataset.table] = el;
 
-      this.$el.addEventListener("wheel", (e) => this.onWheel(e), { passive: false });
-      this.$el.addEventListener("pointerdown", (e) => this.onDown(e));
-      this.$el.addEventListener("pointermove", (e) => this.onMove(e));
-      this.$el.addEventListener("pointerup", (e) => this.onUp(e));
-      this.$el.addEventListener("pointercancel", (e) => this.onUp(e));
-      this.$el.addEventListener("fullscreenchange", () => this.$nextTick(() => this.fit()));
+      this.$root.addEventListener("wheel", (e) => this.onWheel(e), { passive: false });
+      this.$root.addEventListener("pointerdown", (e) => this.onDown(e));
+      this.$root.addEventListener("pointermove", (e) => this.onMove(e));
+      this.$root.addEventListener("pointerup", (e) => this.onUp(e));
+      this.$root.addEventListener("pointercancel", (e) => this.onUp(e));
+      this.$root.addEventListener("fullscreenchange", () => this.$nextTick(() => this.fit()));
 
       this.$nextTick(() => {
         this.layout();
@@ -188,8 +188,8 @@ document.addEventListener("alpine:init", () => {
     fit() {
       if (!Object.keys(this.cards).length) return;
       const b = this.bounds();
-      const w = this.$el.clientWidth;
-      const h = this.$el.clientHeight;
+      const w = this.$root.clientWidth;
+      const h = this.$root.clientHeight;
       this.k = Math.min(1, Math.max(0.15, Math.min((w - 2 * DIAGRAM_PAD) / (b.maxX - b.minX), (h - 2 * DIAGRAM_PAD) / (b.maxY - b.minY))));
       this.x = (w - (b.maxX - b.minX) * this.k) / 2 - b.minX * this.k;
       this.y = Math.max(DIAGRAM_PAD, (h - (b.maxY - b.minY) * this.k) / 2) - b.minY * this.k;
@@ -204,7 +204,7 @@ document.addEventListener("alpine:init", () => {
     },
 
     zoomBy(factor) {
-      this.zoomAt(this.$el.clientWidth / 2, this.$el.clientHeight / 2, factor);
+      this.zoomAt(this.$root.clientWidth / 2, this.$root.clientHeight / 2, factor);
     },
 
     toggleKeys() {
@@ -222,12 +222,12 @@ document.addEventListener("alpine:init", () => {
 
     fullscreen() {
       if (document.fullscreenElement) document.exitFullscreen();
-      else this.$el.requestFullscreen?.();
+      else this.$root.requestFullscreen?.();
     },
 
     onWheel(e) {
       e.preventDefault();
-      const r = this.$el.getBoundingClientRect();
+      const r = this.$root.getBoundingClientRect();
       if (e.ctrlKey || e.metaKey) {
         this.zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.01));
       } else {
@@ -237,13 +237,13 @@ document.addEventListener("alpine:init", () => {
     },
 
     point(e) {
-      const r = this.$el.getBoundingClientRect();
+      const r = this.$root.getBoundingClientRect();
       return { x: e.clientX - r.left, y: e.clientY - r.top };
     },
 
     onDown(e) {
       if (e.button > 0 || e.target.closest("a, button, [data-diagram-ui]")) return;
-      this.$el.setPointerCapture(e.pointerId);
+      this.$root.setPointerCapture(e.pointerId);
       this.pointers.set(e.pointerId, this.point(e));
 
       if (this.pointers.size === 2) {
