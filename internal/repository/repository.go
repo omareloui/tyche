@@ -221,8 +221,10 @@ func (tm *TenantManager) export(tenantID string, from, to []byte, done func() er
 	if err := exportDB(tm.dbPath(tenantID), from, to); err != nil {
 		return err
 	}
-	// The previous database kept by an import has the old key.
+	// The previous databases kept by an import or a console write have the
+	// old key.
 	_ = os.Remove(tm.backupPath(tenantID))
+	_ = os.Remove(tm.consoleSnapshotPath(tenantID))
 	if done != nil {
 		return done()
 	}
@@ -271,7 +273,12 @@ func exportTo(ctx context.Context, db *sql.DB, dst string, to []byte) error {
 		return err
 	}
 	defer conn.Close()
+	return exportConn(ctx, conn, dst, to)
+}
 
+// exportConn is exportTo on a connection held by the caller, outside of a
+// transaction.
+func exportConn(ctx context.Context, conn *sql.Conn, dst string, to []byte) error {
 	toKey := "''"
 	if to != nil {
 		toKey = `"` + vault.SQLCipherKey(to) + `"`

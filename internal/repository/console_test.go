@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -225,5 +226,239 @@ func TestConsoleSchema(t *testing.T) {
 	}
 	if r := models.ConsoleRanks(cyc); r["a"] >= 2 || r["b"] >= 2 {
 		t.Errorf("cycle ranks %v", r)
+	}
+}
+
+func consoleWriteTestDB(t *testing.T) (*sql.DB, string) {
+	t.Helper()
+	db := consoleTestDB(t)
+	if _, err := db.Exec(`
+		CREATE TABLE user (id TEXT PRIMARY KEY, oauth_id TEXT NOT NULL, first_name TEXT, seeded_at TIMESTAMP);
+		CREATE TABLE devices (id TEXT PRIMARY KEY);
+		CREATE TABLE goose_db_version (id INTEGER PRIMARY KEY, version_id INTEGER);
+		INSERT INTO user VALUES ('u1', 'o1', 'Omar', CURRENT_TIMESTAMP);
+		INSERT INTO devices VALUES ('d1');
+		INSERT INTO goose_db_version VALUES (1, 1);
+	`); err != nil {
+		t.Fatal(err)
+	}
+	return db, filepath.Join(t.TempDir(), "console.sqlite.console")
+}
+
+func consoleCount(t *testing.T, db *sql.DB, q string) int {
+	t.Helper()
+	var n int
+	if err := db.QueryRow(q).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+// TestConsoleWrite checks the write mode writes rows, keeping a copy of the
+// database before it to undo.
+func TestConsoleWrite(t *testing.T) {
+	db, snapshot := consoleWriteTestDB(t)
+	ctx := context.Background()
+
+	res, err := consoleWrite(ctx, db, models.ConsoleMaxRows, snapshot, nil, "SELECT COUNT(*) FROM txs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Write || res.Changed != 0 || res.Rows[0][0].Raw != "700" {
+		t.Errorf("select = %+v", res)
+	}
+	if _, err := os.Stat(snapshot); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("snapshot kept without a change: %v", err)
+	}
+
+	res, err = consoleWrite(ctx, db, models.ConsoleMaxRows, snapshot, nil, `
+		UPDATE accounts SET name = 'Wallet' WHERE id = 'a1';
+		DELETE FROM txs WHERE amount >= 10;
+		INSERT INTO accounts VALUES ('a3', 'Card') RETURNING id, name`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Changed != 1+690+1 {
+		t.Errorf("changed = %d, want 692", res.Changed)
+	}
+	if len(res.Rows) != 1 || res.Rows[0][1].Raw != "Card" {
+		t.Errorf("returning rows = %+v", res.Rows)
+	}
+	if n := consoleCount(t, db, "SELECT COUNT(*) FROM txs"); n != 10 {
+		t.Errorf("txs = %d, want 10", n)
+	}
+	if _, err := db.Exec("UPDATE user SET first_name = 'O'"); err != nil {
+		t.Errorf("writing after the console: %v", err)
+	}
+
+	// The snapshot is the database before the write.
+	snap, err := openDB(snapshot, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer snap.Close()
+	if n := consoleCount(t, snap, "SELECT COUNT(*) FROM txs"); n != 700 {
+		t.Errorf("snapshot txs = %d, want 700", n)
+	}
+
+	// The user row: updated but its identity.
+	if _, err := consoleWrite(ctx, db, models.ConsoleMaxRows, snapshot, nil, "UPDATE user SET first_name = 'Om'"); err != nil {
+		t.Errorf("updating the user's name: %v", err)
+	}
+}
+
+func TestConsoleWriteDenies(t *testing.T) {
+	db, snapshot := consoleWriteTestDB(t)
+	ctx := context.Background()
+	other := filepath.Join(t.TempDir(), "other.sqlite")
+
+	for _, q := range []string{
+		"UPDATE sqlite_master SET sql = ''",
+		"DELETE FROM goose_db_version",
+		"INSERT INTO goose_db_version VALUES (2, 2)",
+		"DELETE FROM devices",
+		"INSERT INTO devices VALUES ('d2')",
+		"UPDATE user SET oauth_id = 'x'",
+		"UPDATE user SET seeded_at = NULL",
+		"DELETE FROM user",
+		"INSERT INTO user VALUES ('u2', 'o2', 'x', NULL)",
+		"CREATE TABLE x (a)",
+		"CREATE TEMP TABLE x (a)",
+		"CREATE TRIGGER x AFTER INSERT ON txs BEGIN DELETE FROM txs; END",
+		"CREATE VIEW x AS SELECT 1",
+		"CREATE INDEX x ON txs (amount)",
+		"DROP TABLE txs",
+		"DROP VIEW big_txs",
+		"ALTER TABLE txs ADD COLUMN y",
+		"ATTACH '" + other + "' AS o",
+		"DETACH main",
+		"PRAGMA user_version = 3",
+		"PRAGMA foreign_keys = OFF",
+		"PRAGMA key = 'x'",
+		"PRAGMA rekey = 'x'",
+		"PRAGMA writable_schema = ON",
+		"SELECT sqlcipher_export('main')",
+		"SELECT load_extension('x')",
+		"BEGIN",
+		"COMMIT",
+		"ROLLBACK",
+		"SAVEPOINT s",
+		"RELEASE s",
+		"VACUUM",
+		"VACUUM INTO '" + other + "'",
+		"ANALYZE",
+		"REINDEX",
+		// A foreign key broken: the whole run is rolled back.
+		"DELETE FROM txs WHERE id = 't0000'; INSERT INTO txs (id, account_id) VALUES ('x', 'nope')",
+		"DELETE FROM txs; DROP TABLE accounts",
+	} {
+		if _, err := consoleWrite(ctx, db, models.ConsoleMaxRows, snapshot, nil, q); err == nil {
+			t.Errorf("%q got through", q)
+		}
+	}
+
+	if n := consoleCount(t, db, "SELECT COUNT(*) FROM txs"); n != 700 {
+		t.Errorf("txs = %d, want 700", n)
+	}
+	if n := consoleCount(t, db, "SELECT COUNT(*) FROM devices"); n != 1 {
+		t.Errorf("devices = %d, want 1", n)
+	}
+	if n := consoleCount(t, db, "SELECT COUNT(*) FROM user WHERE oauth_id = 'o1' AND seeded_at IS NOT NULL"); n != 1 {
+		t.Errorf("the user's identity changed")
+	}
+	if _, err := os.Stat(other); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("wrote another database: %v", err)
+	}
+	if _, err := os.Stat(snapshot); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("snapshot kept without a change: %v", err)
+	}
+
+	// The connection is back as it was: no transaction, no authorizer.
+	if _, err := db.Exec("BEGIN; CREATE TABLE y (a); INSERT INTO devices VALUES ('d3'); COMMIT"); err != nil {
+		t.Errorf("writing after the console: %v", err)
+	}
+	if fk := consoleCount(t, db, "PRAGMA foreign_keys"); fk != 1 {
+		t.Errorf("foreign_keys = %d, want on", fk)
+	}
+}
+
+func TestConsoleWriteTimeout(t *testing.T) {
+	db, snapshot := consoleWriteTestDB(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		cancel()
+	}()
+	_, err := consoleWrite(ctx, db, models.ConsoleMaxRows, snapshot, nil, `
+		DELETE FROM txs;
+		WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n) SELECT COUNT(*) FROM n`)
+	if err == nil {
+		t.Fatal("an endless query wasn't stopped")
+	}
+	if n := consoleCount(t, db, "SELECT COUNT(*) FROM txs"); n != 700 {
+		t.Errorf("txs = %d, want 700 (rolled back)", n)
+	}
+	if _, err := db.Exec("INSERT INTO devices VALUES ('d2')"); err != nil {
+		t.Errorf("writing after the console: %v", err)
+	}
+}
+
+// TestConsoleSnapshotSwap checks undoing a console write puts the database
+// back, and undoing again redoes it.
+func TestConsoleSnapshotSwap(t *testing.T) {
+	tm := &TenantManager{baseDir: t.TempDir(), connections: map[string]*TenantDB{}}
+	const id = "GL_1"
+	db, err := openDB(tm.dbPath(id), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("CREATE TABLE accounts (id TEXT PRIMARY KEY); INSERT INTO accounts VALUES ('a1')"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := consoleWrite(context.Background(), db, models.ConsoleMaxRows, tm.consoleSnapshotPath(id), nil, "DELETE FROM accounts"); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+
+	count := func() int {
+		t.Helper()
+		db, err := openDB(tm.dbPath(id), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+		return consoleCount(t, db, "SELECT COUNT(*) FROM accounts")
+	}
+	for i, want := range []int{1, 0, 1} {
+		if err := tm.swapWith(id, nil, tm.consoleSnapshotPath(id)); err != nil {
+			t.Fatal(err)
+		}
+		if n := count(); n != want {
+			t.Errorf("swap %d: accounts = %d, want %d", i+1, n, want)
+		}
+	}
+}
+
+func TestConsoleStatements(t *testing.T) {
+	for q, want := range map[string][]string{
+		"":                                    nil,
+		" ; -- only a comment\n; /* ; */ ;":   nil,
+		"SELECT 1":                            {"SELECT 1"},
+		"SELECT 1;\nSELECT 2;":                {"SELECT 1", "SELECT 2"},
+		"SELECT 'a;b', \"c;\", `d;`, [e;];":   {"SELECT 'a;b', \"c;\", `d;`, [e;]"},
+		"SELECT 'it''s; ok'; SELECT 2":        {"SELECT 'it''s; ok'", "SELECT 2"},
+		"-- a; b\nSELECT 1 /* ; */; SELECT 2": {"-- a; b\nSELECT 1 /* ; */", "SELECT 2"},
+	} {
+		got := consoleStatements(q)
+		if len(got) != len(want) {
+			t.Errorf("%q = %q, want %q", q, got, want)
+			continue
+		}
+		for i := range got {
+			if got[i] != want[i] {
+				t.Errorf("%q = %q, want %q", q, got, want)
+				break
+			}
+		}
 	}
 }

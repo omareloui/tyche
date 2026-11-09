@@ -167,7 +167,7 @@ func (tm *TenantManager) remove(tenantID string) error {
 	tm.closeTenant(tenantID)
 
 	path := tm.dbPath(tenantID)
-	for _, f := range []string{path, path + "-journal", path + "-wal", path + "-shm", tm.backupPath(tenantID), path + ".export", path + ".swap"} {
+	for _, f := range []string{path, path + "-journal", path + "-wal", path + "-shm", tm.backupPath(tenantID), tm.consoleSnapshotPath(tenantID), tm.consoleSnapshotPath(tenantID) + ".tmp", path + ".export", path + ".swap"} {
 		if err := os.Remove(f); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("deleting %s: %w", f, err)
 		}

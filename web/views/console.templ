@@ -30,6 +30,32 @@ type ConsoleData struct {
 	SQL    string
 	Result *models.ConsoleResult
 	Err    string
+	// Write is whether the editor is in write mode (POST /console), CanUndo
+	// whether there's a console write to undo.
+	Write   bool
+	CanUndo bool
+	// Written is the outcome of a write run while browsing Table (reloaded
+	// after it), WriteErr its error.
+	Written  *models.ConsoleResult
+	WriteErr string
+}
+
+// consoleWriteRisks is what the write mode doesn't check, shown before turning
+// it on and while it's on.
+var consoleWriteRisks = []string{
+	"The app's own rules aren't checked: transfer pairs, reimbursements, goals' accounts, gam'yaas and recurrent schedules can end up broken.",
+	"A wrong value (bad JSON, an unknown kind or status) can break whole pages.",
+	"Balances are worked out from the transactions: changing an amount rewrites your history.",
+	"Deletes cascade: deleting a row can delete the rows pointing at it (locations, item shares…).",
+	"Undo puts the whole database back as it was before your last write: anything changed since (SMS, other tabs) is lost too.",
+	"The schema, internal tables, devices and your sign-in identity can't be changed.",
+}
+
+func consoleRowsWord(n int64) string {
+	if n == 1 {
+		return "row"
+	}
+	return "rows"
 }
 
 // ConsoleURL browses a table, sorted by a column (desc) and filtered on col =
@@ -121,20 +147,30 @@ templ ConsoleBody(data ConsoleData) {
 		@consoleTables(data)
 		<div class="grid gap-4 min-w-0">
 			@consoleEditor(data)
+			if data.WriteErr != "" {
+				@consoleError(data.WriteErr)
+			}
+			if data.Written != nil {
+				@consoleResult(ConsoleData{Query: true, Result: data.Written})
+			}
 			if data.Table != nil {
 				@consoleTableHeader(data)
 			}
 			if data.Err != "" {
-				<p class="flex gap-2 p-3 rounded-2xl bg-red-400/10 text-sm text-red-300 font-mono whitespace-pre-wrap break-words">
-					@icons.Error("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
-					{ data.Err }
-				</p>
+				@consoleError(data.Err)
 			}
 			if data.Result != nil {
 				@consoleResult(data)
 			}
 		</div>
 	</div>
+}
+
+templ consoleError(msg string) {
+	<p class="flex gap-2 p-3 rounded-2xl bg-red-400/10 text-sm text-red-300 font-mono whitespace-pre-wrap break-words">
+		@icons.Error("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
+		{ msg }
+	</p>
 }
 
 templ consoleTables(data ConsoleData) {
@@ -223,41 +259,125 @@ func consoleTableClass(current bool) string {
 }
 
 templ consoleEditor(data ConsoleData) {
-	<form
-		hx-get="/console"
-		hx-target={ "#" + ConsoleTarget }
-		hx-swap="outerHTML"
-		hx-push-url="true"
-		hx-trigger="submit, keydown[(ctrlKey||metaKey)&&key=='Enter'] from:find textarea"
-		hx-disabled-elt="find button[type=submit]"
+	<div
+		x-data={ "consoleWrite(" + strconv.FormatBool(data.Write) + ")" }
+		@keydown.enter="runKey($event)"
 		class="grid gap-2"
 	>
-		<div x-data="sqlEditor" data-tables={ consoleTableNames(data.Tables) } class="relative">
-			<textarea
-				x-ref="input"
-				@input="render()"
-				name="sql"
-				rows="4"
-				spellcheck="false"
-				autocapitalize="off"
-				autocomplete="off"
-				aria-label="SQL"
-				placeholder="SELECT * FROM transactions LIMIT 10;"
-				maxlength={ strconv.Itoa(models.ConsoleMaxSQL) }
-				class="input-field sql-editor h-auto! min-h-24 py-2.5! overflow-hidden resize-none text-transparent caret-zinc-100"
-			>{ data.SQL }</textarea>
-			// Over the textarea (its border aside), clicks going through.
-			<pre x-ref="code" aria-hidden="true" class="sql-editor absolute inset-px m-0 px-3.5 py-2.5 overflow-hidden pointer-events-none text-zinc-200"></pre>
+		<form
+			x-ref="form"
+			hx-get="/console"
+			hx-target={ "#" + ConsoleTarget }
+			hx-swap="outerHTML"
+			hx-push-url="true"
+			hx-disabled-elt="find button[type=submit]"
+			class="grid gap-2"
+		>
+			<div x-data="sqlEditor" data-tables={ consoleTableNames(data.Tables) } class="relative">
+				<textarea
+					id="console-sql"
+					x-ref="input"
+					@input="render()"
+					name="sql"
+					rows="4"
+					spellcheck="false"
+					autocapitalize="off"
+					autocomplete="off"
+					aria-label="SQL"
+					placeholder="SELECT * FROM transactions LIMIT 10;"
+					maxlength={ strconv.Itoa(models.ConsoleMaxSQL) }
+					class="input-field sql-editor h-auto! min-h-24 py-2.5! overflow-hidden resize-none text-transparent caret-zinc-100"
+					:class="write && 'ring-2! ring-red-500/40!'"
+				>{ data.SQL }</textarea>
+				// Over the textarea (its border aside), clicks going through.
+				<pre x-ref="code" aria-hidden="true" class="sql-editor absolute inset-px m-0 px-3.5 py-2.5 overflow-hidden pointer-events-none text-zinc-200"></pre>
+			</div>
+			<div class="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
+				<button type="submit" x-show="!write" class="btn-primary inline-flex items-center gap-2">
+					@icons.Play("16")
+					Run
+				</button>
+				<button
+					type="button"
+					x-ref="writeRun"
+					x-show="write"
+					x-cloak
+					hx-post="/console"
+					hx-vals={ `{"confirm":"` + models.ConsoleWriteConfirmation + `"}` }
+					hx-push-url="false"
+					hx-disabled-elt="this"
+					class="btn-primary inline-flex items-center gap-2 bg-red-500/25! hover:bg-red-500/35! text-red-100! ring-1 ring-inset ring-red-400/40"
+				>
+					@icons.Play("16")
+					Run and save
+				</button>
+				<span class="hidden sm:inline"><kbd class="font-sans">Ctrl</kbd> + <kbd class="font-sans">Enter</kbd> runs it</span>
+				if data.CanUndo {
+					<button
+						type="button"
+						hx-post="/console/undo"
+						hx-confirm="Undo your last write? The whole database goes back as it was before it: anything changed since is lost too. Undoing again redoes it."
+						hx-push-url="false"
+						hx-disabled-elt="this"
+						class="inline-flex items-center gap-1.5 text-zinc-400 hover:text-zinc-200"
+					>
+						@icons.RotateCcw("14")
+						Undo last write
+					</button>
+				}
+				<label class="ml-auto inline-flex items-center gap-2 cursor-pointer select-none">
+					<span x-text="write ? 'Write mode: changes are saved' : 'Read only'"></span>
+					<input type="checkbox" class="peer sr-only" :checked="write || asking" @change="toggle($event)" aria-label="Write mode"/>
+					<span
+						aria-hidden="true"
+						class="relative shrink-0 w-9 h-5 rounded-full bg-zinc-700 transition-colors peer-checked:bg-red-500/60 peer-focus-visible:ring-2 peer-focus-visible:ring-red-400/60 after:absolute after:top-0.5 after:left-0.5 after:size-4 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:after:translate-x-4"
+					></span>
+				</label>
+			</div>
+		</form>
+		<div x-show="asking" x-cloak class="grid gap-3 p-4 rounded-2xl ring-1 ring-red-500/40 bg-red-500/10 text-sm text-red-200">
+			<p class="flex items-center gap-2 font-medium text-red-100">
+				@icons.Warning("16")
+				Write mode saves what your SQL inserts, updates and deletes
+			</p>
+			@consoleRiskList()
+			<form @submit.prevent="confirm()" class="flex flex-wrap items-center gap-2">
+				<label for="console-write-confirm" class="text-red-200">
+					Type <span class="font-mono font-semibold">{ models.ConsoleWriteConfirmation }</span> to turn it on
+				</label>
+				<input
+					id="console-write-confirm"
+					x-ref="confirm"
+					x-model="typed"
+					type="text"
+					autocomplete="off"
+					autocapitalize="characters"
+					spellcheck="false"
+					class="input-field w-32! font-mono"
+				/>
+				<button type="submit" :disabled={ "typed !== '" + models.ConsoleWriteConfirmation + "'" } class="btn-primary bg-red-500/25! hover:bg-red-500/35! text-red-100! ring-1 ring-inset ring-red-400/40 disabled:opacity-50">Turn on</button>
+				<button type="button" @click="cancel()" class="btn-ghost">Cancel</button>
+			</form>
 		</div>
-		<div class="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
-			<button type="submit" class="btn-primary inline-flex items-center gap-2">
-				@icons.Play("16")
-				Run
-			</button>
-			<span><kbd class="font-sans">Ctrl</kbd> + <kbd class="font-sans">Enter</kbd> runs it</span>
-			<span class="ml-auto">Read only: SELECTs and the schema's pragmas</span>
-		</div>
-	</form>
+		<details x-show="write" x-cloak class="group rounded-2xl ring-1 ring-red-500/30 bg-red-500/5 text-xs text-red-200">
+			<summary class="flex items-center gap-2 px-3 py-2 cursor-pointer select-none list-none">
+				@icons.Warning("14")
+				Write mode is on: your SQL's changes are saved, one run at a time
+				@icons.ChevronDown("14", &templ.Attributes{"class": "ml-auto transition-transform -rotate-90 group-open:rotate-0"})
+			</summary>
+			<div class="px-3 pb-3">
+				@consoleRiskList()
+			</div>
+		</details>
+	</div>
+}
+
+templ consoleRiskList() {
+	<ul class="grid gap-1.5 pl-5 list-disc marker:text-red-400/70">
+		for _, r := range consoleWriteRisks {
+			<li>{ r }</li>
+		}
+	</ul>
 }
 
 templ consoleTableHeader(data ConsoleData) {
@@ -379,17 +499,24 @@ templ consoleResult(data ConsoleData) {
 			if table != nil {
 				@consolePager(data)
 			} else {
-				<span>
-					{ formatters.FormatNum(int64(len(res.Rows))) } rows
-					if res.Truncated {
-						(first { strconv.Itoa(models.ConsoleMaxRows) } only, add a LIMIT)
-					}
-				</span>
+				if res.Write {
+					<span class="text-red-300">{ formatters.FormatNum(res.Changed) } { consoleRowsWord(res.Changed) } changed</span>
+				}
+				if !res.Write || len(res.Columns) > 0 {
+					<span>
+						{ formatters.FormatNum(int64(len(res.Rows))) } rows
+						if res.Truncated {
+							(first { strconv.Itoa(models.ConsoleMaxRows) } only, add a LIMIT)
+						}
+					</span>
+				}
 			}
 			<span class="ml-auto">{ res.Took.Round(10 * time.Microsecond).String() }</span>
 		</div>
 		if len(res.Columns) == 0 {
-			<p class="text-sm text-zinc-500">No columns.</p>
+			if !res.Write {
+				<p class="text-sm text-zinc-500">No columns.</p>
+			}
 		} else {
 			<div class="overflow-auto max-h-[70dvh] rounded-2xl ring-1 ring-zinc-800 bg-zinc-900/40">
 				<table class="min-w-full text-left font-mono text-[13px]">
@@ -452,17 +579,42 @@ templ consoleValue(data ConsoleData, cols []string, row []models.ConsoleValue, i
 			{ v.Text }
 		}
 	} else if refs := consoleRefsTo(t, cols[i]); len(refs) > 0 {
-		<span x-data="{ open: false }" class="relative">
-			<button type="button" @click="open = !open" @click.outside="open = false" class="text-amber-200 hover:underline cursor-pointer">{ v.Text }</button>
-			<span x-show="open" x-cloak class="absolute left-0 top-6 z-20 grid gap-0.5 min-w-56 p-1.5 rounded-xl bg-zinc-800 ring-1 ring-zinc-700 shadow-xl">
-				<span class="px-2 py-1 text-[11px] text-zinc-500 font-sans">Rows pointing here</span>
+		// Fixed, as the cell clips what overflows it.
+		<span x-data="consoleRefs" data-copy={ v.Raw } @click.outside="open = false" @scroll.window.capture="open = false" @resize.window="open = false">
+			<button type="button" x-ref="btn" @click="toggle()" class="text-amber-200 hover:underline cursor-pointer">{ v.Text }</button>
+			<span x-show="open" x-cloak :style="`top: ${top}px; left: ${left}px`" class="fixed z-30 grid gap-0.5 w-56 p-1.5 rounded-xl bg-zinc-800 ring-1 ring-zinc-700 shadow-xl">
+				<button type="button" @click="copy()" class="flex items-center gap-2 px-2 py-1 rounded-md text-left text-zinc-300 hover:bg-white/5 font-sans">
+					<span x-show="!copied">
+						@icons.Copy("12")
+					</span>
+					<span x-cloak x-show="copied" class="text-emerald-400">
+						@icons.Check("12")
+					</span>
+					<span x-text="copied ? 'Copied' : 'Copy'">Copy</span>
+				</button>
+				<span class="px-2 pt-1.5 pb-1 text-[11px] text-zinc-500 font-sans border-t border-zinc-700/70">Rows pointing here</span>
 				for _, fk := range refs {
-					@consoleLink(ConsoleURL(fk.Table, models.ConsoleBrowse{Col: fk.From, Val: v.Raw}), "px-2 py-1 rounded-md text-sky-300 hover:bg-white/5") {
+					@consoleLink(ConsoleURL(fk.Table, models.ConsoleBrowse{Col: fk.From, Val: v.Raw}), "px-2 py-1 rounded-md text-sky-300 hover:bg-white/5 truncate") {
 						{ fk.Table }.{ fk.From }
 					}
 				}
 			</span>
 		</span>
+	} else if t.IsPK(cols[i]) {
+		// Nothing points at it: a click copies it.
+		<button
+			type="button"
+			x-data="{ copied: false }"
+			data-copy={ v.Raw }
+			@click="navigator.clipboard.writeText($el.dataset.copy); copied = true; setTimeout(() => copied = false, 1500)"
+			:title="copied ? 'Copied' : 'Copy'"
+			class="inline-flex items-center gap-1.5 cursor-copy hover:text-zinc-100"
+		>
+			{ v.Text }
+			<span x-cloak x-show="copied" class="text-emerald-400">
+				@icons.Check("12")
+			</span>
+		</button>
 	} else {
 		{ v.Text }
 	}

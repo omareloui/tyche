@@ -405,10 +405,16 @@ func (tm *TenantManager) replace(tenantID, src string, key []byte) error {
 // restoreBackup swaps the tenant's database with its backup. Both have the
 // same key, as changing it deletes the backup.
 func (tm *TenantManager) restoreBackup(tenantID string, key []byte) error {
+	return tm.swapWith(tenantID, key, tm.backupPath(tenantID))
+}
+
+// swapWith swaps the tenant's database with the one at bak, read with the
+// same key.
+func (tm *TenantManager) swapWith(tenantID string, key []byte, bak string) error {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 
-	path, bak := tm.dbPath(tenantID), tm.backupPath(tenantID)
+	path := tm.dbPath(tenantID)
 	if _, err := os.Stat(bak); err != nil {
 		return err
 	}

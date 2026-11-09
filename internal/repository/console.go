@@ -118,6 +118,12 @@ func consoleQuery(ctx context.Context, db *sql.DB, maxRows int, query string, ar
 		}
 	}()
 
+	return consoleRows(ctx, conn, maxRows, query, args...)
+}
+
+// consoleRows runs query on conn, reading at most maxRows rows (the last
+// statement's when there are many).
+func consoleRows(ctx context.Context, conn *sql.Conn, maxRows int, query string, args ...any) (models.ConsoleResult, error) {
 	start := time.Now()
 	rows, err := conn.QueryContext(ctx, query, args...)
 	if err != nil {

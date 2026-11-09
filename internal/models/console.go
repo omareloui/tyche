@@ -15,6 +15,8 @@ const (
 	ConsolePageSize = 100
 	// ConsoleMaxSQL is the longest SQL the console runs.
 	ConsoleMaxSQL = 10_000
+	// ConsoleWriteConfirmation is typed to turn the console's write mode on.
+	ConsoleWriteConfirmation = "WRITE"
 )
 
 // QuoteIdent quotes a name for SQL.
@@ -44,6 +46,10 @@ type ConsoleResult struct {
 	// Truncated is whether there were more rows than read.
 	Truncated bool
 	Took      time.Duration
+	// Write is whether it ran in write mode, Changed the rows it inserted,
+	// updated or deleted.
+	Write   bool
+	Changed int64
 }
 
 // ConsoleTable is a table or view of the user's database.
@@ -104,6 +110,16 @@ func (t ConsoleTableInfo) FK(column string) *ConsoleFK {
 		}
 	}
 	return nil
+}
+
+// IsPK reports whether the column is (part of) the table's primary key.
+func (t ConsoleTableInfo) IsPK(name string) bool {
+	for _, c := range t.Columns {
+		if c.Name == name {
+			return c.PK > 0
+		}
+	}
+	return false
 }
 
 // HasColumn reports whether the table has the column.
