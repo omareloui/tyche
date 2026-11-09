@@ -165,6 +165,8 @@ func (h *Handler) ConsoleExec(w http.ResponseWriter, r *http.Request) (templ.Com
 		}
 	}
 	data.Query, data.Result, data.Err = true, written, writeErr
+	// The url follows the SQL shown (reloading it runs it read only).
+	w.Header().Set("HX-Push-Url", "/console?"+url.Values{"sql": {data.SQL}}.Encode())
 	return views.ConsoleBody(data), nil
 }
 
