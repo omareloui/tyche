@@ -4,7 +4,7 @@
 // cached, never a page or partial (they hold the user's data); a shared image
 // is only kept until the transactions page picks it up.
 // Bump CACHE when changing PRECACHE.
-const CACHE = "tyche-static-v3";
+const CACHE = "tyche-static-v4";
 const OFFLINE = "/offline";
 
 const PRECACHE = [
@@ -29,6 +29,7 @@ const PRECACHE = [
   "/js/money-inputs.js",
   "/js/passkeys.js",
   "/js/badge.js",
+  "/js/console.js",
 ];
 
 const STATIC = ["/styles/", "/js/", "/fonts/", "/icons/", "/favicons/", "/brand-icons/"];

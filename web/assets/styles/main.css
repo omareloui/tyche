@@ -69,6 +69,21 @@
   @apply border-red-500/70;
 }
 
+/* The SQL console's editor (console.js): the textarea and its highlighted
+   copy over it must lay the text out alike. */
+.sql-editor {
+  @apply font-mono text-[13px]! leading-relaxed whitespace-pre-wrap break-words;
+  tab-size: 4;
+}
+.sql-keyword { @apply text-violet-300; }
+.sql-function { @apply text-sky-300; }
+.sql-table { @apply text-amber-200; }
+.sql-name { @apply text-zinc-100; }
+.sql-string { @apply text-emerald-300; }
+.sql-number { @apply text-orange-300; }
+.sql-comment { @apply italic text-zinc-500; }
+.sql-punct { @apply text-zinc-400; }
+
 select.input-field {
   @apply appearance-none pr-10 cursor-pointer;
 }

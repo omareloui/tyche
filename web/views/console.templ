@@ -1,6 +1,7 @@
 package views
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -188,6 +189,17 @@ templ consoleTables(data ConsoleData) {
 	</nav>
 }
 
+// consoleTableNames is the JSON list of the tables' names, highlighted by
+// the editor.
+func consoleTableNames(tables []models.ConsoleTable) string {
+	names := make([]string, len(tables))
+	for i, t := range tables {
+		names[i] = t.Name
+	}
+	b, _ := json.Marshal(names)
+	return string(b)
+}
+
 func consoleTableOptions(tables []models.ConsoleTable) []form.ComboOption {
 	opts := make([]form.ComboOption, len(tables))
 	for i, t := range tables {
@@ -213,17 +225,23 @@ templ consoleEditor(data ConsoleData) {
 		hx-disabled-elt="find button[type=submit]"
 		class="grid gap-2"
 	>
-		<textarea
-			name="sql"
-			rows="4"
-			spellcheck="false"
-			autocapitalize="off"
-			autocomplete="off"
-			aria-label="SQL"
-			placeholder="SELECT * FROM transactions LIMIT 10;"
-			maxlength={ strconv.Itoa(models.ConsoleMaxSQL) }
-			class="input-field h-auto! min-h-24 py-2.5! font-mono text-[13px]! leading-relaxed resize-y"
-		>{ data.SQL }</textarea>
+		<div x-data="sqlEditor" data-tables={ consoleTableNames(data.Tables) } class="relative">
+			<textarea
+				x-ref="input"
+				@input="render()"
+				name="sql"
+				rows="4"
+				spellcheck="false"
+				autocapitalize="off"
+				autocomplete="off"
+				aria-label="SQL"
+				placeholder="SELECT * FROM transactions LIMIT 10;"
+				maxlength={ strconv.Itoa(models.ConsoleMaxSQL) }
+				class="input-field sql-editor h-auto! min-h-24 py-2.5! overflow-hidden resize-none text-transparent caret-zinc-100"
+			>{ data.SQL }</textarea>
+			// Over the textarea (its border aside), clicks going through.
+			<pre x-ref="code" aria-hidden="true" class="sql-editor absolute inset-px m-0 px-3.5 py-2.5 overflow-hidden pointer-events-none text-zinc-200"></pre>
+		</div>
 		<div class="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
 			<button type="submit" class="btn-primary inline-flex items-center gap-2">
 				@icons.Play("16")
