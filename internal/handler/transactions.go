@@ -449,6 +449,24 @@ func (h Handler) MarkTransactionReviewed(w http.ResponseWriter, r *http.Request)
 	return h.transactionsList(r)
 }
 
+// MarkTransactionNeedsReview sends a transaction back to review.
+func (h Handler) MarkTransactionNeedsReview(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+
+	if err := h.repo.MarkTransactionNeedsReview(r.Context(), id); err != nil {
+		return nil, err
+	}
+	l.Info("marked transaction as needing review")
+
+	hxRetargetTxList(w)
+	return h.transactionsList(r)
+}
+
 func (h Handler) MarkAllTransactionsReviewed(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	l := logger.FromCtx(r.Context())
 

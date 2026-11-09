@@ -380,6 +380,12 @@ SET
     needs_review = FALSE
 WHERE id = sqlc.arg(id);
 
+-- name: MarkTransactionNeedsReview :exec
+UPDATE transactions
+SET
+    needs_review = TRUE
+WHERE id = sqlc.arg(id);
+
 -- name: MarkAllTransactionsReviewed :exec
 UPDATE transactions
 SET

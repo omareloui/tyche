@@ -15,7 +15,8 @@ type TxBulkEditFD struct {
 	// N is how many rows are selected, for the title.
 	N                            int
 	Category, Counterparty, Date string
-	Reviewed                     bool
+	// Review is a models.TxBulkReview.
+	Review string
 	Error                        string
 	// Locked tells the selected ones left out as they can't be edited,
 	// e.g. "2 balance corrections" (models.DescribeBulkLocks).
@@ -70,11 +71,14 @@ templ TxBulkEditForm(fd *TxBulkEditFD, cats []models.Category, cps []models.Coun
 				"data-datepicker": true,
 			})
 		}
-		{{ reviewed := "" }}
-		if fd.Reviewed {
-			{{ reviewed = "on" }}
-		}
-		@form.Toggle("Mark as reviewed", "reviewed", "bulk", icons.Check("15"), form.FDInput{Value: reviewed}, nil)
+		<div>
+			<span aria-hidden="true" class="input-label">Review</span>
+			@form.SegmentedRadio("Review", "review", "bulk", []form.RadioOption{
+				{Value: string(models.TxBulkReviewKeep), Label: "Keep"},
+				{Value: string(models.TxBulkReviewDone), Label: "Reviewed"},
+				{Value: string(models.TxBulkReviewNeeds), Label: "Needs review"},
+			}, form.FDInput{Value: fd.Review}, nil)
+		</div>
 		if fd.Error != "" {
 			<p role="alert" class="rounded-xl bg-red-400/10 px-4 py-3 text-sm text-red-300">{ fd.Error }</p>
 		}

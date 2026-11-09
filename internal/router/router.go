@@ -90,6 +90,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("PUT /transactions/{id}", handle(h.EditTransaction))
 	mux.Handle("PUT /transactions/{id}/fulfill", handle(h.FulfillTransaction))
 	mux.Handle("PUT /transactions/{id}/reviewed", handle(h.MarkTransactionReviewed))
+	mux.Handle("DELETE /transactions/{id}/reviewed", handle(h.MarkTransactionNeedsReview))
 	mux.Handle("PUT /transactions/reviewed", handle(h.MarkAllTransactionsReviewed))
 	mux.Handle("GET /transactions/{id}/category", handle(h.GetReviewCategoryPicker))
 	mux.Handle("PUT /transactions/{id}/category", handle(h.ReviewTransactionCategory))

@@ -495,16 +495,22 @@ func (r *Repository) UpdateTransaction(ctx context.Context, oldTx *models.Transa
 }
 
 // BulkUpdateTransactions saves every news[i] over olds[i] at once, all or
-// none, marking them reviewed too when asked.
-func (r *Repository) BulkUpdateTransactions(ctx context.Context, olds, news []*models.Transaction, reviewed bool) error {
+// none, marking them reviewed or sending them back to review when asked.
+func (r *Repository) BulkUpdateTransactions(ctx context.Context, olds, news []*models.Transaction, review models.TxBulkReview) error {
 	return r.transact(ctx, func(qtx *queries.Queries) error {
 		for i := range news {
 			if err := r.updateTransactionWithTxn(ctx, qtx, olds[i], news[i]); err != nil {
 				return err
 			}
-			if reviewed && olds[i].NeedsReview {
+			switch {
+			case review == models.TxBulkReviewDone && olds[i].NeedsReview:
 				if err := qtx.MarkTransactionReviewed(ctx, news[i].ID); err != nil {
 					logger.FromCtx(ctx).Error("marking transaction as reviewed", zap.Error(err), zap.String("id", news[i].ID))
+					return err
+				}
+			case review == models.TxBulkReviewNeeds:
+				if err := qtx.MarkTransactionNeedsReview(ctx, news[i].ID); err != nil {
+					logger.FromCtx(ctx).Error("marking transaction as needing review", zap.Error(err), zap.String("id", news[i].ID))
 					return err
 				}
 			}
@@ -624,6 +630,22 @@ func (r *Repository) MarkTransactionReviewed(ctx context.Context, id string) err
 
 	if err := q.MarkTransactionReviewed(ctx, id); err != nil {
 		l.Error("marking transaction as reviewed", zap.Error(err), zap.String("id", id))
+		return err
+	}
+	return nil
+}
+
+// MarkTransactionNeedsReview sends a transaction back to review.
+func (r *Repository) MarkTransactionNeedsReview(ctx context.Context, id string) error {
+	l := logger.FromCtx(ctx)
+
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+
+	if err := q.MarkTransactionNeedsReview(ctx, id); err != nil {
+		l.Error("marking transaction as needing review", zap.Error(err), zap.String("id", id))
 		return err
 	}
 	return nil

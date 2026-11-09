@@ -1208,6 +1208,19 @@ func txMenuReviewed(tx *models.Transaction) templ.Component {
 		components.WithEntryMenuItemShortcut("R"))
 }
 
+func txMenuNeedsReview(tx *models.Transaction) templ.Component {
+	return txMenuItem("Send to review", "delete", fmt.Sprintf("/transactions/%s/reviewed", tx.ID), icons.RotateCcw("16"),
+		components.WithEntryMenuItemShortcut("R"))
+}
+
+// txMenuReview marks tx reviewed or sends it back to review.
+func txMenuReview(tx *models.Transaction) templ.Component {
+	if tx.NeedsReview {
+		return txMenuReviewed(tx)
+	}
+	return txMenuNeedsReview(tx)
+}
+
 // txMenuEdit opens the drawer right in the edit form (txPage.openEdit in
 // transactions.js).
 func txMenuEdit(tx *models.Transaction) templ.Component {
@@ -1240,9 +1253,7 @@ func getTransactionMenuItems(tx *models.Transaction) []templ.Component {
 	if tx.FulfilledAt.IsZero() {
 		status = append(status, txMenuFulfill(tx))
 	}
-	if tx.NeedsReview {
-		status = append(status, txMenuReviewed(tx))
-	}
+	status = append(status, txMenuReview(tx))
 
 	links := []templ.Component{}
 	if tx.Kind == models.IncomeTxKind && !tx.IsTransferLeg() {
@@ -1279,10 +1290,7 @@ func canPairTransfer(tx *models.Transaction) bool {
 }
 
 func getTransferLegMenuItems(tx *models.Transaction) []templ.Component {
-	status := []templ.Component{}
-	if tx.NeedsReview {
-		status = append(status, txMenuReviewed(tx))
-	}
+	status := []templ.Component{txMenuReview(tx)}
 
 	return txMenuGroups(
 		[]templ.Component{txMenuDetails(tx.ID)},
@@ -1300,9 +1308,7 @@ func getReimbursementMenuItems(tx *models.Transaction) []templ.Component {
 	if tx.FulfilledAt.IsZero() {
 		status = append(status, txMenuFulfill(tx))
 	}
-	if tx.NeedsReview {
-		status = append(status, txMenuReviewed(tx))
-	}
+	status = append(status, txMenuReview(tx))
 
 	return txMenuGroups(
 		[]templ.Component{txMenuDetails(tx.ID)},

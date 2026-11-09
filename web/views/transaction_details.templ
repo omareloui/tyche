@@ -207,7 +207,7 @@ templ txDetailsHero(tx *models.Transaction, v *txView, def *models.Currency) {
 	</div>
 }
 
-// txDetailsActions are the row's actions. Fulfilling and reviewing answer the
+// txDetailsActions are the row's actions. Fulfilling and (un)reviewing answer the
 // list, then the details reload; editing swaps the form in; deleting
 // happens on the row, for its undo (txDetails in transactions.js).
 templ txDetailsActions(tx *models.Transaction) {
@@ -238,6 +238,19 @@ templ txDetailsActions(tx *models.Transaction) {
 			>
 				@icons.CheckCheck("14")
 				Mark reviewed
+			</button>
+		} else {
+			<button
+				type="button"
+				hx-delete={ fmt.Sprintf("/transactions/%s/reviewed", tx.ID) }
+				hx-target="#tx-list"
+				hx-swap="outerHTML"
+				@htmx:after-request="reload($event)"
+				hx-disabled-elt="this"
+				class="txd-action busy-swap"
+			>
+				@icons.RotateCcw("14")
+				Send to review
 			</button>
 		}
 		// Adjustments are signed, which the form can't edit; goals' and

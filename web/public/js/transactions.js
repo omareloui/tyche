@@ -514,8 +514,8 @@ document.addEventListener("alpine:init", () => {
           txRequest("PUT", txURL(d.id, "fulfill"), row);
           break;
         case "r":
-          if (!("review" in d)) return;
-          txRequest("PUT", txURL(d.id, "reviewed"), row);
+          if (!row) return;
+          txRequest("review" in d ? "PUT" : "DELETE", txURL(d.id, "reviewed"), row);
           break;
         case " ":
           // Space only selects while selecting, else it scrolls the page.

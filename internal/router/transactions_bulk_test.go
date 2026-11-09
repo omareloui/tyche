@@ -124,6 +124,28 @@ func TestTransactionsBulk(t *testing.T) {
 		t.Errorf("empty edit not refused: %s", body)
 	}
 
+	// Sending back to review and marking reviewed, one or in bulk.
+	needsReview := func(id string) bool { return mustTx(t, repo.GetTransaction, ctx, id).NeedsReview }
+	render(callHandler(ctx, h.MarkTransactionNeedsReview)(httptest.NewRecorder(), "DELETE", "/transactions/"+e1.ID+"/reviewed", e1.ID, nil))
+	if !needsReview(e1.ID) {
+		t.Error("e1 not sent back to review")
+	}
+	render(callHandler(ctx, h.MarkTransactionReviewed)(httptest.NewRecorder(), "PUT", "/transactions/"+e1.ID+"/reviewed", e1.ID, nil))
+	if needsReview(e1.ID) {
+		t.Error("e1 not marked reviewed")
+	}
+	render(bulk(httptest.NewRecorder(), "POST", "/transactions/bulk-edit", "", url.Values{"id": {e1.ID, e2.ID}, "review": {"needs"}}))
+	if !needsReview(e1.ID) || !needsReview(e2.ID) {
+		t.Error("bulk edit didn't send them back to review")
+	}
+	render(bulk(httptest.NewRecorder(), "POST", "/transactions/bulk-edit", "", url.Values{"id": {e1.ID}, "review": {"reviewed"}}))
+	if needsReview(e1.ID) || !needsReview(e2.ID) {
+		t.Error("bulk edit didn't mark e1 reviewed alone")
+	}
+	if body := render(bulk(httptest.NewRecorder(), "POST", "/transactions/bulk-edit", "", url.Values{"id": {e1.ID}, "review": {"maybe"}})); !strings.Contains(body, "Invalid review") {
+		t.Errorf("unknown review not refused: %s", body)
+	}
+
 	// Deleting the filter's: the food ones (e1, e2), the balance undone.
 	del := callHandler(ctx, h.DeleteTransactions)
 	render(del(httptest.NewRecorder(), "POST", "/transactions/delete", "", url.Values{

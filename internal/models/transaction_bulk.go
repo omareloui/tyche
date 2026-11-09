@@ -19,8 +19,27 @@ type TxBulkEdit struct {
 	ClearCounterparty bool
 	// Date is the day to move them to, their time of day kept.
 	Date *time.Time
-	// Reviewed marks the ones needing review as reviewed.
-	Reviewed bool
+	// Review marks them reviewed or sends them back to review.
+	Review TxBulkReview
+}
+
+// TxBulkReview is what a bulk edit does to the transactions' review.
+type TxBulkReview string
+
+const (
+	TxBulkReviewKeep  TxBulkReview = ""
+	TxBulkReviewDone  TxBulkReview = "reviewed"
+	TxBulkReviewNeeds TxBulkReview = "needs"
+)
+
+// ParseTxBulkReview is the review of a bulk edit form's value, false when
+// it's none of them.
+func ParseTxBulkReview(s string) (TxBulkReview, bool) {
+	switch r := TxBulkReview(s); r {
+	case TxBulkReviewKeep, TxBulkReviewDone, TxBulkReviewNeeds:
+		return r, true
+	}
+	return TxBulkReviewKeep, false
 }
 
 // TxBulkSkip is why (part of) a bulk edit was left out of a transaction.
@@ -84,7 +103,7 @@ func DescribeBulkLocks(counts map[TxBulkLock]int) string {
 
 func (e *TxBulkEdit) IsZero() bool {
 	return e.Category == nil && !e.ClearCategory && e.Counterparty == nil &&
-		!e.ClearCounterparty && e.Date == nil && !e.Reviewed
+		!e.ClearCounterparty && e.Date == nil && e.Review == TxBulkReviewKeep
 }
 
 // Apply is tx with the edit, and why parts of it were skipped (the whole of

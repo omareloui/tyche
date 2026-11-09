@@ -173,7 +173,7 @@ func (h Handler) BulkEditTransactions(w http.ResponseWriter, r *http.Request) (t
 		Category:     r.PostForm.Get("category_id"),
 		Counterparty: r.PostForm.Get("counterparty_id"),
 		Date:         strings.TrimSpace(r.PostForm.Get("scheduled_to")),
-		Reviewed:     r.PostForm.Get("reviewed") != "",
+		Review:       r.PostForm.Get("review"),
 	}
 	fd.N, _ = strconv.Atoi(r.PostForm.Get("n"))
 	fd.Locked = r.PostForm.Get("locked")
@@ -182,7 +182,11 @@ func (h Handler) BulkEditTransactions(w http.ResponseWriter, r *http.Request) (t
 		return views.TxBulkEditForm(fd, cats, cps), nil
 	}
 
-	edit := models.TxBulkEdit{Reviewed: fd.Reviewed}
+	review, ok := models.ParseTxBulkReview(fd.Review)
+	if !ok {
+		return answer("Invalid review.")
+	}
+	edit := models.TxBulkEdit{Review: review}
 	switch fd.Category {
 	case "":
 	case models.TxFilterNone:
@@ -245,7 +249,7 @@ func (h Handler) BulkEditTransactions(w http.ResponseWriter, r *http.Request) (t
 		changed = append(changed, old)
 		fulfilled = fulfilled || !old.FulfilledAt.IsZero()
 	}
-	if err := h.repo.BulkUpdateTransactions(r.Context(), changed, news, edit.Reviewed); err != nil {
+	if err := h.repo.BulkUpdateTransactions(r.Context(), changed, news, edit.Review); err != nil {
 		l.Error("bulk updating transactions", zap.Error(err))
 		return nil, err
 	}
