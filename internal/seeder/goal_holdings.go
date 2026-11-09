@@ -82,7 +82,7 @@ func splitGoal(ctx context.Context, q *queries.Queries, kindID string, gl *queri
 		}
 		id := idgen.New()
 		if err := q.CreateAccount(ctx, queries.CreateAccountParams{
-			ID: id, Name: models.GoalHoldingName(gl.Name, cur), KindID: kindID, CurrencyID: curID,
+			ID: id, Name: models.GoalAccountName(gl.Name, cur), KindID: kindID, CurrencyID: curID,
 			ExcludeFromBalance: true, SmsRefs: dbtypes.JSON("[]"),
 		}); err != nil {
 			return "", err

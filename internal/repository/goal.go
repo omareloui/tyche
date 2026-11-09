@@ -112,7 +112,11 @@ func createGoalWithTxn(ctx context.Context, qtx *queries.Queries, gl *models.Goa
 		l.Error("getting the goal account kind", zap.Error(err))
 		return err
 	}
-	accID, err := createGoalAccountWithTxn(ctx, qtx, kindID, models.GoalAccountName(gl.Name), gl.Currency.ID)
+	name, err := goalAccountNameWithTxn(ctx, qtx, gl.Name, gl.Currency.ID)
+	if err != nil {
+		return err
+	}
+	accID, err := createGoalAccountWithTxn(ctx, qtx, kindID, name, gl.Currency.ID)
 	if err != nil {
 		return err
 	}
@@ -128,6 +132,17 @@ func createGoalWithTxn(ctx context.Context, qtx *queries.Queries, gl *models.Goa
 		return err
 	}
 	return setAccountGoalWithTxn(ctx, qtx, accID, gl.ID)
+}
+
+// goalAccountNameWithTxn is the name of the goal's (named name) account of
+// the currency of id curID.
+func goalAccountNameWithTxn(ctx context.Context, qtx *queries.Queries, name, curID string) (string, error) {
+	cur, err := qtx.GetCurrency(ctx, curID)
+	if err != nil {
+		logger.FromCtx(ctx).Error("getting the goal's currency", zap.Error(err))
+		return "", err
+	}
+	return models.GoalAccountName(name, cur.Currency.String), nil
 }
 
 func setAccountGoalWithTxn(ctx context.Context, qtx *queries.Queries, accID, goalID string) error {
@@ -151,14 +166,15 @@ func goalAccountInWithTxn(ctx context.Context, qtx *queries.Queries, gl *models.
 	if err != nil {
 		return nil, err
 	}
-	id, err := createGoalAccountWithTxn(ctx, qtx, kindID, models.GoalHoldingName(gl.Name, cur.String), cur.ID)
+	name := models.GoalAccountName(gl.Name, cur.String)
+	id, err := createGoalAccountWithTxn(ctx, qtx, kindID, name, cur.ID)
 	if err != nil {
 		return nil, err
 	}
 	if err := setAccountGoalWithTxn(ctx, qtx, id, gl.ID); err != nil {
 		return nil, err
 	}
-	a := models.Account{ID: id, Name: models.GoalHoldingName(gl.Name, cur.String), Currency: *cur, Kind: models.AccountKind{Enum: models.AccKindGoal}, ExcludeFromBalance: true}
+	a := models.Account{ID: id, Name: name, Currency: *cur, Kind: models.AccountKind{Enum: models.AccKindGoal}, ExcludeFromBalance: true}
 	gl.Holdings = append(gl.Holdings, a)
 	return &gl.Holdings[len(gl.Holdings)-1], nil
 }
@@ -231,9 +247,13 @@ func (r *Repository) UpdateGoal(ctx context.Context, gl *models.Goal) error {
 			l.Error("updating goal", zap.Error(err))
 			return err
 		}
+		name, err := goalAccountNameWithTxn(ctx, qtx, gl.Name, gl.Currency.ID)
+		if err != nil {
+			return err
+		}
 		if err := qtx.UpdateGoalAccount(ctx, queries.UpdateGoalAccountParams{
 			ID:         prev.Account.ID,
-			Name:       models.GoalAccountName(gl.Name),
+			Name:       name,
 			CurrencyID: gl.Currency.ID,
 		}); err != nil {
 			l.Error("updating goal account", zap.Error(err))
@@ -242,7 +262,7 @@ func (r *Repository) UpdateGoal(ctx context.Context, gl *models.Goal) error {
 		for _, h := range prev.Holdings {
 			if err := qtx.UpdateGoalAccount(ctx, queries.UpdateGoalAccountParams{
 				ID:         h.ID,
-				Name:       models.GoalHoldingName(gl.Name, h.Currency.String),
+				Name:       models.GoalAccountName(gl.Name, h.Currency.String),
 				CurrencyID: h.Currency.ID,
 			}); err != nil {
 				l.Error("updating goal holding", zap.Error(err))

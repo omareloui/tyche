@@ -178,8 +178,10 @@ SET account_id = sqlc.arg(account_id)
 WHERE id = sqlc.arg(id);
 
 -- name: GetGoalsWithoutAccount :many
-SELECT * FROM goals
-WHERE account_id IS NULL;
+SELECT gl.id, gl.name, gl.currency_id, c.string AS currency
+FROM goals AS gl
+JOIN currencies AS c ON c.id = gl.currency_id
+WHERE gl.account_id IS NULL;
 
 -- name: CountAccountTransactions :one
 SELECT COUNT(*) FROM transactions

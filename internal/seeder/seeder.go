@@ -226,7 +226,7 @@ func (s *Seeder) goalAccounts(ctx context.Context, q *queries.Queries) {
 	for _, gl := range gls {
 		id := idgen.New()
 		// Goals' names aren't unique, their accounts' are.
-		name := models.GoalAccountName(gl.Name)
+		name := models.GoalAccountName(gl.Name, gl.Currency)
 		for n := 2; ; n++ {
 			err = q.CreateAccount(ctx, queries.CreateAccountParams{
 				ID: id, Name: name, KindID: kindID, CurrencyID: gl.CurrencyID,
@@ -235,7 +235,7 @@ func (s *Seeder) goalAccounts(ctx context.Context, q *queries.Queries) {
 			if err == nil || !strings.Contains(err.Error(), "UNIQUE constraint failed: accounts.name") || n > 50 {
 				break
 			}
-			name = fmt.Sprintf("%s (%d)", models.GoalAccountName(gl.Name), n)
+			name = fmt.Sprintf("%s (%d)", models.GoalAccountName(gl.Name, gl.Currency), n)
 		}
 		if err != nil {
 			l.Error("creating goal account", zap.String("goal", gl.ID), zap.Error(err))

@@ -76,15 +76,10 @@ func (gl *Goal) ShownPercentage() float64 {
 // GoalAccountPrefix starts the name of the goals' accounts.
 const GoalAccountPrefix = "Goal: "
 
-// GoalAccountName is the name of the account of the goal named name.
-func GoalAccountName(name string) string {
-	return GoalAccountPrefix + name
-}
-
-// GoalHoldingName is the name of the goal's (named name) account holding
-// currency cur.
-func GoalHoldingName(name, cur string) string {
-	return GoalAccountName(name) + " (" + strings.ToUpper(cur) + ")"
+// GoalAccountName is the name of the goal's (named name) account holding
+// currency cur, its own or a holding.
+func GoalAccountName(name, cur string) string {
+	return GoalAccountPrefix + name + " (" + strings.ToUpper(cur) + ")"
 }
 
 type createGoal struct {

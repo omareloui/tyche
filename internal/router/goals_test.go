@@ -96,7 +96,7 @@ func TestGoalLifecycle(t *testing.T) {
 	if gl.Account == nil || gl.Account.ID == "" {
 		t.Fatal("the goal has no account")
 	}
-	if a := amountOf(gl.Account.ID); !a.IsGoal() || !a.ExcludeFromBalance || a.Name != "Goal: Laptop" {
+	if a := amountOf(gl.Account.ID); !a.IsGoal() || !a.ExcludeFromBalance || a.Name != "Goal: Laptop ("+strings.ToUpper(gl.Currency.String)+")" {
 		t.Errorf("bad goal account %+v", a)
 	}
 	accs, err := repo.GetAccounts(ctx)
