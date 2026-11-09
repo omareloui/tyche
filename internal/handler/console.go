@@ -111,13 +111,13 @@ func (h *Handler) consoleBrowse(r *http.Request, q url.Values, data *views.Conso
 
 // ConsoleExec runs the user's SQL in the console's write mode (confirm =
 // models.ConsoleWriteConfirmation): its rows written in one transaction,
-// undone by ConsoleUndo. Answers the console's body, still in write mode.
+// undone by ConsoleUndo. Answers the console's body, back in read only.
 func (h *Handler) ConsoleExec(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	ctx := r.Context()
 	if r.PostFormValue("confirm") != models.ConsoleWriteConfirmation {
 		return nil, resperr.New(http.StatusUnprocessableEntity, "Type "+models.ConsoleWriteConfirmation+" to turn the write mode on.")
 	}
-	data := views.ConsoleData{Write: true, SQL: r.PostFormValue("sql")}
+	data := views.ConsoleData{SQL: r.PostFormValue("sql")}
 	if len(data.SQL) > models.ConsoleMaxSQL {
 		return nil, resperr.New(http.StatusRequestEntityTooLarge, "The query is too long.")
 	}
@@ -148,8 +148,9 @@ func (h *Handler) ConsoleExec(w http.ResponseWriter, r *http.Request) (templ.Com
 	}
 	data.Tables, data.CanUndo = tables, h.repo.HasConsoleSnapshot(ctx)
 
-	// A table browsed when it ran is loaded again, the write's outcome above it.
-	if q, ok := consoleBrowsed(r); ok {
+	// A table browsed when it ran is loaded again, the write's outcome above
+	// it, unless the SQL read rows (a SELECT, RETURNING): they're shown alone.
+	if q, ok := consoleBrowsed(r); ok && (written == nil || len(written.Columns) == 0) {
 		if err := h.consoleBrowse(r, q, &data); err != nil {
 			var re *resperr.RespError
 			if !errors.As(err, &re) {

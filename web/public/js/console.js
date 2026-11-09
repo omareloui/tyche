@@ -53,23 +53,6 @@ function highlightSQL(sql, tables) {
   return html + "\n";
 }
 
-const CONSOLE_WRITE_KEY = "consoleWrite";
-
-function storedConsoleWrite() {
-  try {
-    return localStorage.getItem(CONSOLE_WRITE_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function storeConsoleWrite(on) {
-  try {
-    if (on) localStorage.setItem(CONSOLE_WRITE_KEY, "1");
-    else localStorage.removeItem(CONSOLE_WRITE_KEY);
-  } catch {}
-}
-
 document.addEventListener("alpine:init", () => {
   // consoleRefs is a key cell other rows point at: its menu (fixed, as the
   // cell clips what overflows it) copies it or lists the rows pointing here.
@@ -105,21 +88,15 @@ document.addEventListener("alpine:init", () => {
   }));
 
   // consoleWrite is the editor's write mode: turned on once WRITE is typed,
-  // then kept on (localStorage, across browsing tables and reloads) until
-  // switched off.
-  Alpine.data("consoleWrite", (on) => ({
-    write: on || storedConsoleWrite(),
+  // for one run (the answer comes back read only).
+  Alpine.data("consoleWrite", () => ({
+    write: false,
     asking: false,
     typed: "",
-
-    init() {
-      if (on) storeConsoleWrite(true);
-    },
 
     toggle(e) {
       if (!e.target.checked) {
         this.write = this.asking = false;
-        storeConsoleWrite(false);
         return;
       }
       this.asking = true;
@@ -131,7 +108,6 @@ document.addEventListener("alpine:init", () => {
       this.write = true;
       this.asking = false;
       this.typed = "";
-      storeConsoleWrite(true);
     },
 
     cancel() {

@@ -30,9 +30,7 @@ type ConsoleData struct {
 	SQL    string
 	Result *models.ConsoleResult
 	Err    string
-	// Write is whether the editor is in write mode (POST /console), CanUndo
-	// whether there's a console write to undo.
-	Write   bool
+	// CanUndo is whether there's a console write to undo.
 	CanUndo bool
 	// Written is the outcome of a write run while browsing Table (reloaded
 	// after it), WriteErr its error.
@@ -260,7 +258,7 @@ func consoleTableClass(current bool) string {
 
 templ consoleEditor(data ConsoleData) {
 	<div
-		x-data={ "consoleWrite(" + strconv.FormatBool(data.Write) + ")" }
+		x-data="consoleWrite"
 		@keydown.enter="runKey($event)"
 		class="grid gap-2"
 	>
