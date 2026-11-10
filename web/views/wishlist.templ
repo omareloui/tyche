@@ -109,10 +109,10 @@ templ Wishlist(items []models.WishlistItem, ws *models.WorkSettings, defaultCur 
 			@wishlistSummary(s, defaultCur)
 		}
 		if len(ready) > 0 {
-			@wishlistGroup("Ready to decide", icons.Sparkles("16"), ready, ws)
+			@wishlistGroup("Ready to decide", icons.Sparkles("16"), ready, ws, defaultCur)
 		}
 		if len(cooling) > 0 {
-			@wishlistGroup("Cooling off", icons.Hourglass("16"), cooling, ws)
+			@wishlistGroup("Cooling off", icons.Hourglass("16"), cooling, ws, defaultCur)
 		}
 		if len(ready)+len(cooling) == 0 {
 			<div class="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl border border-dashed border-zinc-800">
@@ -134,7 +134,7 @@ templ Wishlist(items []models.WishlistItem, ws *models.WorkSettings, defaultCur 
 				</summary>
 				<div class="grid sm:grid-cols-2 gap-4">
 					for _, item := range decided {
-						@WishlistItem(&item, ws)
+						@WishlistItem(&item, ws, defaultCur)
 					}
 				</div>
 			</details>
@@ -184,7 +184,7 @@ templ wishlistSummary(s models.WishlistStats, defaultCur *models.Currency) {
 	</section>
 }
 
-templ wishlistGroup(title string, icon templ.Component, items []models.WishlistItem, ws *models.WorkSettings) {
+templ wishlistGroup(title string, icon templ.Component, items []models.WishlistItem, ws *models.WorkSettings, defaultCur *models.Currency) {
 	<div>
 		<h3 class="flex items-center gap-2 mb-3 text-sm font-semibold uppercase tracking-wider text-zinc-500">
 			@icon
@@ -192,13 +192,13 @@ templ wishlistGroup(title string, icon templ.Component, items []models.WishlistI
 		</h3>
 		<div class="grid sm:grid-cols-2 gap-4">
 			for _, item := range items {
-				@WishlistItem(&item, ws)
+				@WishlistItem(&item, ws, defaultCur)
 			}
 		</div>
 	</div>
 }
 
-templ WishlistItem(item *models.WishlistItem, ws *models.WorkSettings) {
+templ WishlistItem(item *models.WishlistItem, ws *models.WorkSettings, defaultCur *models.Currency) {
 	{{ now := time.Now() }}
 	{{ ready := item.IsReady(now) }}
 	<div
@@ -229,6 +229,9 @@ templ WishlistItem(item *models.WishlistItem, ws *models.WorkSettings) {
 							{ plan } · cash { item.ViewPrice() }
 						} else {
 							{ item.ViewPrice() }
+						}
+						if v := item.ViewPriceIn(defaultCur); v != "" {
+							<span title={ "In " + defaultCur.String }>· ≈ { v }</span>
 						}
 					</p>
 				</div>

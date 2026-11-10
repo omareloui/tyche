@@ -147,6 +147,19 @@ func (w *WishlistItem) ViewPrice() string {
 	return w.Currency.Format(w.Price)
 }
 
+// ViewPriceIn is its price in cur at today's rate, "" when it's already in
+// cur or there's no rate.
+func (w *WishlistItem) ViewPriceIn(cur *Currency) string {
+	if cur == nil || w.Currency.String == cur.String {
+		return ""
+	}
+	rate := w.Currency.FxRate(cur.String)
+	if rate == 0 {
+		return ""
+	}
+	return cur.Format(rate * w.Price)
+}
+
 // ViewPlan sums its plan up, e.g. "12 × E£ 1,100" or "12 mo, E£ 1,200 →
 // E£ 850", with the down payment if any. "" when paid cash.
 func (w *WishlistItem) ViewPlan() string {
