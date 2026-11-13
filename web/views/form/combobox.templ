@@ -13,6 +13,8 @@ type ComboOption struct {
 	Search string
 	// Leading is shown before the label, e.g. a color dot or an icon.
 	Leading templ.Component
+	// Attrs go on the option's <li>, e.g. a counterparty's default category.
+	Attrs templ.Attributes
 }
 
 type ComboboxProps struct {
@@ -149,6 +151,9 @@ templ ComboOptionItem(o ComboOption, selected bool) {
 		data-value={ o.Value }
 		data-label={ strings.ToLower(o.Label) }
 		data-search={ strings.ToLower(o.Label + " " + o.Search) }
+		if o.Attrs != nil {
+			{ o.Attrs... }
+		}
 		role="option"
 		if selected {
 			aria-selected="true"

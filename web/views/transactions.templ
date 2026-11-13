@@ -830,7 +830,8 @@ templ TransactionAmountsAndKindFormBody(
 							Name: "counterparty_id", ID: id, Label: "Counterparty", Placeholder: "Select Counterparty",
 							Options: counterpartyComboOptions(cps, fd.CounterpartyID.Value),
 							Data:    *fd.CounterpartyID, Nullable: true, Searchable: true,
-							CreateURL: "/counterparties/quick",
+							CreateURL:  "/counterparties/quick",
+							InputAttrs: templ.Attributes{"data-fills-category": true},
 						})
 					}
 				}
@@ -866,12 +867,16 @@ func categoryCreateURL(kind models.TxKind) string {
 }
 
 func counterpartyComboOption(cp *models.Counterparty) form.ComboOption {
-	return form.ComboOption{
+	o := form.ComboOption{
 		Value:   cp.ID,
 		Label:   cp.Name,
 		Search:  strings.Join(cp.Aliases, " "),
 		Leading: components.CounterpartyIcon(cp.Name, cp.Icon, cp.Color, "w-5 h-5 text-[11px]"),
 	}
+	if cp.DefaultCategory != nil && cp.DefaultCategory.ID != "" {
+		o.Attrs = templ.Attributes{"data-default-category": cp.DefaultCategory.ID}
+	}
+	return o
 }
 
 // counterpartyComboOptions leaves out the archived counterparties, but the

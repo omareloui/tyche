@@ -176,3 +176,24 @@ document.addEventListener("alpine:init", () => {
     };
   });
 });
+
+// Picking a counterparty with a default category (data-default-category on
+// its option) in a form whose category is still empty selects that category,
+// when the form's category combobox offers it (it allows the tx kind).
+document.addEventListener("change", (ev) => {
+  const input = ev.target;
+  if (!input.matches?.("input[data-fills-category]") || !input.value) return;
+  const form = input.form ?? input.closest("form");
+  const cat = form?.querySelector('input[name="category_id"]');
+  if (!cat || cat.value) return;
+  const cp = input
+    .closest('[x-data="combobox"]')
+    ?.querySelector(`[data-option][data-value="${CSS.escape(input.value)}"]`);
+  const catID = cp?.dataset.defaultCategory;
+  if (!catID) return;
+  const root = cat.closest('[x-data="combobox"]');
+  const opt = root?.querySelector(
+    `[data-option][data-value="${CSS.escape(catID)}"]`,
+  );
+  if (opt) Alpine.$data(root).pick(opt);
+});
