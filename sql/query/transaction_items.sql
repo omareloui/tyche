@@ -20,7 +20,7 @@ ORDER BY recurrent_id, position;
 
 -- name: CreateTransactionItem :exec
 INSERT INTO transaction_items (
-    id, transaction_id, recurrent_id, kind, name, quantity, unit_price, total, rate, included, shared_by_all, split_mode, position
+    id, transaction_id, recurrent_id, kind, name, quantity, unit_price, total, rate, included, shared_by_all, split_mode, position, currency_id
 ) VALUES (
     sqlc.arg(id),
     sqlc.narg(transaction_id),
@@ -34,7 +34,8 @@ INSERT INTO transaction_items (
     sqlc.arg(included),
     sqlc.arg(shared_by_all),
     sqlc.arg(split_mode),
-    sqlc.arg(position)
+    sqlc.arg(position),
+    sqlc.narg(currency_id)
 );
 
 -- name: DeleteTransactionItems :exec

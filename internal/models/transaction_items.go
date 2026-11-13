@@ -60,8 +60,8 @@ func TxItemKindOf(v int64) TxItemKind {
 }
 
 // TxItem is a line of a transaction (or of a recurrent transaction, copied to
-// its occurrences): an item bought, or a charge. Amounts are in its
-// transaction's account currency.
+// its occurrences): an item bought, or a charge. Amounts are in Currency,
+// its transaction's account currency when nil.
 type TxItem struct {
 	ID   string
 	Kind TxItemKind `validate:"lte=7"`
@@ -85,6 +85,10 @@ type TxItem struct {
 	SharedWith []ItemShare
 	// SplitMode is how the charge is shared in its transaction's split.
 	SplitMode ChargeSplitMode
+	// Currency is the lines' currency when not their account's, e.g. a
+	// receipt paid abroad; every line of a transaction has the same (see
+	// TxItemsCurrency, SetTxItemsCurrency).
+	Currency *Currency `validate:"-"`
 }
 
 // Label is its name, else its kind's with the rate (e.g. "VAT 14%").
@@ -178,16 +182,60 @@ func HasTxItemCharges(items []TxItem) bool {
 }
 
 // TxItemsMismatch tells the lines add up to something else than amount (by
-// more than a cent), the items then being incomplete or wrong.
-func TxItemsMismatch(items []TxItem, amount float64) bool {
-	if len(items) == 0 {
+// more than a cent), the items then being incomplete or wrong. Lines in
+// another currency than the account's (acc) never mismatch: the amount is
+// what they came to then (TxItemsRate).
+func TxItemsMismatch(items []TxItem, amount float64, acc *Currency) bool {
+	if len(items) == 0 || TxItemsForeign(items, acc) {
 		return false
 	}
 	return math.Abs(TxItemsTotal(items)-math.Abs(amount)) > 0.01
 }
 
+// TxItemsCurrency is the currency the lines are in: acc, their account's,
+// unless they have their own.
+func TxItemsCurrency(items []TxItem, acc *Currency) *Currency {
+	if len(items) > 0 && items[0].Currency != nil {
+		return items[0].Currency
+	}
+	return acc
+}
+
+// TxItemsForeign tells the lines are in another currency than acc, their
+// account's.
+func TxItemsForeign(items []TxItem, acc *Currency) bool {
+	cur := TxItemsCurrency(items, acc)
+	return cur != nil && acc != nil && cur.ID != acc.ID
+}
+
+// TxItemsRate is how much of the account's currency (acc) one of the lines'
+// is: the transaction's own rate, its amount over the lines' total (what the
+// bank charged for them), 1 when they're in the account's currency or add
+// up to nothing.
+func TxItemsRate(items []TxItem, amount float64, acc *Currency) float64 {
+	if !TxItemsForeign(items, acc) {
+		return 1
+	}
+	total := TxItemsTotal(items)
+	if math.Abs(total) < 0.000001 || amount == 0 {
+		return 1
+	}
+	return math.Abs(amount) / math.Abs(total)
+}
+
+// SetTxItemsCurrency puts every line in cur, none of their own (nil) when
+// it's acc, their account's.
+func SetTxItemsCurrency(items []TxItem, cur, acc *Currency) {
+	if cur != nil && acc != nil && cur.ID == acc.ID {
+		cur = nil
+	}
+	for i := range items {
+		items[i].Currency = cur
+	}
+}
+
 // CopyTxItems copies the items with new IDs (their shares of a split left
-// out), e.g. a recurrent transaction's onto an occurrence or a duplicated
+// out, their currency kept), e.g. a recurrent transaction's onto an occurrence or a duplicated
 // transaction's.
 func CopyTxItems(items []TxItem) []TxItem {
 	if len(items) == 0 {

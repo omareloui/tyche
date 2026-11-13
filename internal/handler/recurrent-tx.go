@@ -56,7 +56,7 @@ func (h Handler) RecurrentTxs(w http.ResponseWriter, r *http.Request) (templ.Com
 	openID := r.URL.Query().Get(views.RecurrentTxDetailsParam)
 
 	return views.RecurrentTxs(getClaims(r.Context()), balances, ftxs,
-		newRecurrentTxFD(h, accs), accs, knds, cats, cps, openID), nil
+		newRecurrentTxFD(r.Context(), h, accs), accs, knds, cats, cps, openID), nil
 }
 
 // RecurrentTxDetails is the recurrent transaction in full, in a drawer: what
@@ -99,10 +99,10 @@ func fromRecurrentTxDetails(r *http.Request) bool {
 }
 
 // newRecurrentTxFD is the create form's data: starting today, monthly.
-func newRecurrentTxFD(h Handler, accs []models.Account) *views.TransactionFD {
+func newRecurrentTxFD(ctx context.Context, h Handler, accs []models.Account) *views.TransactionFD {
 	tx := defaultTransaction(accs)
 	tx.RecurrentTx = &models.RecurrentTx{Unit: models.RecurrentUnitMonth, Every: 1}
-	return h.mapTransactionToFD(tx, new(errs.ValidationError))
+	return h.mapTransactionToFD(ctx, tx, new(errs.ValidationError))
 }
 
 // CreateRecurrentTx creates a recurrent transaction with its first
@@ -145,7 +145,7 @@ func (h Handler) CreateRecurrentTx(w http.ResponseWriter, r *http.Request) (temp
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("validating recurrent transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-			return views.CreateRecurrentTxForm(h.mapTransactionToFD(tx, &valerr),
+			return views.CreateRecurrentTxForm(h.mapTransactionToFD(r.Context(), tx, &valerr),
 				accs, knds, cats, cps, &claims.DefaultCurrency), nil
 		}
 		l.Error("sanitizing recurrent transaction", zap.Error(err))
@@ -173,7 +173,7 @@ func (h Handler) CreateRecurrentTx(w http.ResponseWriter, r *http.Request) (temp
 		}
 	}
 
-	return views.CreateRecurrentTxForm(newRecurrentTxFD(h, accs), accs, knds, cats, cps, &claims.DefaultCurrency), nil
+	return views.CreateRecurrentTxForm(newRecurrentTxFD(r.Context(), h, accs), accs, knds, cats, cps, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) RecurrentTx(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -215,7 +215,7 @@ func (h Handler) GetEditRecurrentTx(w http.ResponseWriter, r *http.Request) (tem
 	claims := getClaims(r.Context())
 
 	return views.EditRecurrentTx(rt,
-		h.mapRecurrentTxToFD(rt, &errs.ValidationError{}, knds),
+		h.mapRecurrentTxToFD(r.Context(), rt, &errs.ValidationError{}, knds),
 		accs, knds, cats, cps, &claims.DefaultCurrency), nil
 }
 
@@ -242,7 +242,12 @@ func (h Handler) EditRecurrentTx(w http.ResponseWriter, r *http.Request) (templ.
 	rt.ID = id
 	rt.StartsAt = old.StartsAt
 	rt.PausedAt = old.PausedAt
-	models.NormalizeTxItems(tx.Items, &old.Account.Currency)
+	acc := &old.Account.Currency
+	if a, err := h.repo.GetAccount(r.Context(), tx.Account.ID); err == nil {
+		acc = &a.Currency
+	}
+	models.SetTxItemsCurrency(tx.Items, models.TxItemsCurrency(tx.Items, acc), acc)
+	models.NormalizeTxItems(tx.Items, models.TxItemsCurrency(tx.Items, acc))
 	rt.Items = models.SortTxItems(tx.Items)
 
 	// The schedule is counted again from the next day picked, when it or the
@@ -268,7 +273,7 @@ func (h Handler) EditRecurrentTx(w http.ResponseWriter, r *http.Request) (templ.
 		if errors.As(err, &valerr) {
 			l.Error("validating recurrent transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
 			claims := getClaims(r.Context())
-			fd := h.mapRecurrentTxToFD(rt, &valerr, knds)
+			fd := h.mapRecurrentTxToFD(r.Context(), rt, &valerr, knds)
 			fd.NextOn = form.FDInput{Value: r.FormValue("next_on"), Error: valerr.Errors.MsgFor("Anchor")}
 			return views.EditRecurrentTxForm(rt, fd, accs, knds, cats, cps, &claims.DefaultCurrency), nil
 		}
@@ -436,7 +441,7 @@ func (h Handler) renderRecurrentTxsSummaryOOB(w http.ResponseWriter, r *http.Req
 	return renderToBody(w, r, views.RecurrentTxsSummaryOOB(rts, &claims.DefaultCurrency))
 }
 
-func (h Handler) mapRecurrentTxToFD(rt *models.RecurrentTx, valerr *errs.ValidationError, knds []models.TxKind) *views.RecurrentTxFD {
+func (h Handler) mapRecurrentTxToFD(ctx context.Context, rt *models.RecurrentTx, valerr *errs.ValidationError, knds []models.TxKind) *views.RecurrentTxFD {
 	fd := &views.RecurrentTxFD{
 		RecurrenceFD: views.RecurrenceFD{
 			IsRecurrent: form.FDInput{Value: "on"},
@@ -452,8 +457,9 @@ func (h Handler) mapRecurrentTxToFD(rt *models.RecurrentTx, valerr *errs.Validat
 				valerr.Errors.MsgFor("Amount")),
 			Kind: form.FDInput{Value: rt.Kind.String(), Error: valerr.Errors.MsgFor("Kind")},
 		},
-		Description: form.FDInput{Value: rt.Description, Error: valerr.Errors.MsgFor("Description")},
-		Items:       txItemsToFD(rt.Items, valerr),
+		Description:   form.FDInput{Value: rt.Description, Error: valerr.Errors.MsgFor("Description")},
+		Items:         txItemsToFD(rt.Items, valerr),
+		ItemsCurrency: h.itemsCurrencyFD(ctx, rt.Items),
 	}
 
 	hasToAccount := rt.Kind == models.DebtTxKind || rt.Kind == models.TransferTxKind

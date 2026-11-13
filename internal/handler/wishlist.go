@@ -221,7 +221,7 @@ func (h Handler) BuyWishlistItem(w http.ResponseWriter, r *http.Request) (templ.
 	tx.Amount = models.RoundCents(tx.Amount)
 	applyCounterpartyDefaultCategory(tx, cps)
 
-	fd := h.mapTransactionToFD(tx, new(errs.ValidationError))
+	fd := h.mapTransactionToFD(r.Context(), tx, new(errs.ValidationError))
 	fd.WishlistID = item.ID
 
 	claims := getClaims(r.Context())

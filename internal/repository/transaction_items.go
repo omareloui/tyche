@@ -45,7 +45,37 @@ func dbItemToTxItem(it queries.TransactionItem) models.TxItem {
 		r := it.Rate.Float64
 		item.Rate = &r
 	}
+	if it.CurrencyID.Valid {
+		// Its id only, filled by fillItemCurrencies.
+		item.Currency = &models.Currency{ID: it.CurrencyID.String}
+	}
 	return item
+}
+
+// fillItemCurrencies loads the currencies the lines have of their own (only
+// their id from dbItemToTxItem).
+func fillItemCurrencies(ctx context.Context, q *queries.Queries, lists ...[]models.TxItem) error {
+	loaded := map[string]*models.Currency{}
+	for _, items := range lists {
+		for i := range items {
+			c := items[i].Currency
+			if c == nil {
+				continue
+			}
+			cur, ok := loaded[c.ID]
+			if !ok {
+				row, err := q.GetCurrency(ctx, c.ID)
+				if err != nil {
+					logger.FromCtx(ctx).Error("querying the lines' currency", zap.Error(err), zap.String("currency_id", c.ID))
+					return err
+				}
+				cur = dbCurrencyToCurrency(&row.Currency, row.IsDefault.(int64) != 0)
+				loaded[c.ID] = cur
+			}
+			items[i].Currency = cur
+		}
+	}
+	return nil
 }
 
 // itemOwner is whose lines they are: a transaction's or a recurrent one's.
@@ -86,6 +116,10 @@ func createItemWithTxn(ctx context.Context, qtx *queries.Queries, owner itemOwne
 	if it.Rate != nil {
 		rate = sql.NullFloat64{Float64: *it.Rate, Valid: true}
 	}
+	var curID sql.NullString
+	if it.Currency != nil {
+		curID = sql.NullString{String: it.Currency.ID, Valid: true}
+	}
 	if err := qtx.CreateTransactionItem(ctx, queries.CreateTransactionItemParams{
 		ID:            it.ID,
 		TransactionID: sql.NullString{String: owner.txID, Valid: owner.txID != ""},
@@ -100,6 +134,7 @@ func createItemWithTxn(ctx context.Context, qtx *queries.Queries, owner itemOwne
 		SharedByAll:   it.SharedByAll && owner.txID != "",
 		SplitMode:     int64(it.SplitMode),
 		Position:      int64(position),
+		CurrencyID:    curID,
 	}); err != nil {
 		logger.FromCtx(ctx).Error("creating item", zap.Error(err), zap.Any("owner", owner))
 		return err
@@ -171,6 +206,13 @@ func loadTxItems(ctx context.Context, q *queries.Queries, txs []models.Transacti
 			txs[i].Items = append(txs[i].Items, dbItemToTxItem(row))
 			txs[i].ItemsCount++
 		}
+	}
+	lists := make([][]models.TxItem, len(txs))
+	for i := range txs {
+		lists[i] = txs[i].Items
+	}
+	if err := fillItemCurrencies(ctx, q, lists...); err != nil {
+		return err
 	}
 	return loadReceipts(ctx, q, txs, ids, at)
 }
@@ -246,7 +288,11 @@ func loadRecurrentTxItems(ctx context.Context, q *queries.Queries, rts []models.
 			rts[i].Items = append(rts[i].Items, dbItemToTxItem(row))
 		}
 	}
-	return nil
+	lists := make([][]models.TxItem, len(rts))
+	for i := range rts {
+		lists[i] = rts[i].Items
+	}
+	return fillItemCurrencies(ctx, q, lists...)
 }
 
 // recurrentTxItemsOf is the recurrent transaction's lines, an empty (not nil)
@@ -260,6 +306,9 @@ func recurrentTxItemsOf(ctx context.Context, q *queries.Queries, id string) ([]m
 	items := make([]models.TxItem, len(rows))
 	for i, row := range rows {
 		items[i] = dbItemToTxItem(row)
+	}
+	if err := fillItemCurrencies(ctx, q, items); err != nil {
+		return nil, err
 	}
 	return items, nil
 }
@@ -352,6 +401,9 @@ func (r *Repository) GetTxItems(ctx context.Context, txID string) ([]models.TxIt
 	items := make([]models.TxItem, len(rows))
 	for i, row := range rows {
 		items[i] = dbItemToTxItem(row)
+	}
+	if err := fillItemCurrencies(ctx, q, items); err != nil {
+		return nil, err
 	}
 	return items, nil
 }

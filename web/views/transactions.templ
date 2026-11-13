@@ -21,8 +21,9 @@ type TransactionFD struct {
 	// WishlistID is the wishlist item being bought, if any.
 	WishlistID string
 	// Items are its lines, Receipt its receipt scanning.
-	Items   []TxItemFD
-	Receipt ReceiptFD
+	Items         []TxItemFD
+	ItemsCurrency ItemsCurrencyFD
+	Receipt       ReceiptFD
 }
 
 type TransactionAmountsAndKindFD struct {
@@ -112,7 +113,7 @@ templ TxFormFields(
 	@form.Field("Description", "description", id, icons.Pencil("15"), fd.Description.Error) {
 		@form.Control("text", "description", "What was it for?", id, fd.Description, nil)
 	}
-	@txItemsField(id, fd.Items, &fd.Receipt)
+	@txItemsField(id, fd.Items, &fd.Receipt, fd.ItemsCurrency)
 	<div x-data>
 		@form.Field("Date", "scheduled_to", id, icons.Calendar("15"), fd.ScheduledTo.Error) {
 			<div class="flex gap-2">

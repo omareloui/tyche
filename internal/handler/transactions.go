@@ -50,7 +50,7 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 		return views.TxBody(*list, accs, knds, cats, cps, gls), nil
 	}
 
-	fd := h.mapTransactionToFD(defaultTransaction(accs), new(errs.ValidationError))
+	fd := h.mapTransactionToFD(r.Context(), defaultTransaction(accs), new(errs.ValidationError))
 
 	balances, err := h.repo.GetBalances(r.Context())
 	if err != nil {
@@ -239,7 +239,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 			var valerr errs.ValidationError
 			if errors.As(err, &valerr) {
 				l.Error("validating recurrent transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-				fd := h.mapTransactionToFD(tx, &valerr)
+				fd := h.mapTransactionToFD(r.Context(), tx, &valerr)
 				fd.WishlistID = wishlistID
 				return views.CreateTransactionForm(fd, accs, knds, cats, cps, &claims.DefaultCurrency), nil
 			}
@@ -282,7 +282,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		}
 	}
 
-	fd = h.mapTransactionToFD(defaultTransaction(accs), new(errs.ValidationError))
+	fd = h.mapTransactionToFD(r.Context(), defaultTransaction(accs), new(errs.ValidationError))
 	return views.CreateTransactionForm(fd, accs, knds, cats, cps, &claims.DefaultCurrency), nil
 }
 
@@ -312,7 +312,7 @@ func (h Handler) GetEditTransaction(w http.ResponseWriter, r *http.Request) (tem
 		return nil, err
 	}
 
-	fd := h.mapTransactionToFD(tx, new(errs.ValidationError))
+	fd := h.mapTransactionToFD(r.Context(), tx, new(errs.ValidationError))
 	fd.RecurrenceFD = nil
 
 	def := &getClaims(r.Context()).DefaultCurrency
@@ -376,7 +376,7 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 	if err := h.repo.UpdateTransaction(r.Context(), oldTx, tx); err != nil {
 		var valerr *errs.ValidationError
 		if errors.As(err, &valerr) {
-			fd := h.mapTransactionToFD(tx, valerr)
+			fd := h.mapTransactionToFD(r.Context(), tx, valerr)
 			fd.RecurrenceFD = nil
 			return views.TxEditPanel(tx, fd, accs, knds, cats, cps, def, txEditFrom(r)), nil
 		}
@@ -575,7 +575,7 @@ func (h Handler) DuplicateTransaction(w http.ResponseWriter, r *http.Request) (t
 	dup.Receipt, dup.ReceiptID = nil, ""
 
 	claims := getClaims(r.Context())
-	fd := h.mapTransactionToFD(&dup, new(errs.ValidationError))
+	fd := h.mapTransactionToFD(r.Context(), &dup, new(errs.ValidationError))
 	return views.CreateTransactionForm(fd, accs, knds, cats, cps, &claims.DefaultCurrency), nil
 }
 
@@ -724,18 +724,19 @@ func (h Handler) getTxDeps(ctx context.Context) ([]models.Account, []models.TxKi
 	return accs, models.GetTxKinds(), cats, cps, nil
 }
 
-func (h Handler) mapTransactionToFD(t *models.Transaction, err *errs.ValidationError) *views.TransactionFD {
+func (h Handler) mapTransactionToFD(ctx context.Context, t *models.Transaction, err *errs.ValidationError) *views.TransactionFD {
 	fd := &views.TransactionFD{
 		TransactionAmountsAndKindFD: views.TransactionAmountsAndKindFD{
 			AccountIFD: amountIFD(t.Amount, &t.Account, form.FDInput{Value: t.Account.ID, Error: err.Errors.MsgFor("AccountID")},
 				err.Errors.MsgFor("Amount")),
 			Kind: form.FDInput{Value: t.Kind.String(), Error: err.Errors.MsgFor("Kind")},
 		},
-		Description:  form.FDInput{Value: t.Description, Error: err.Errors.MsgFor("Description")},
-		ScheduledTo:  form.FDInput{Value: formatDateOnlyIfNonZero(t.ScheduledTo), Error: err.Errors.MsgFor("ScheduledTo")},
-		RecurrenceFD: &views.RecurrenceFD{},
-		Items:        txItemsToFD(t.Items, err),
-		Receipt:      views.ReceiptFD{Enabled: h.ocr != nil, ID: t.ReceiptID},
+		Description:   form.FDInput{Value: t.Description, Error: err.Errors.MsgFor("Description")},
+		ScheduledTo:   form.FDInput{Value: formatDateOnlyIfNonZero(t.ScheduledTo), Error: err.Errors.MsgFor("ScheduledTo")},
+		RecurrenceFD:  &views.RecurrenceFD{},
+		Items:         txItemsToFD(t.Items, err),
+		ItemsCurrency: h.itemsCurrencyFD(ctx, t.Items),
+		Receipt:       views.ReceiptFD{Enabled: h.ocr != nil, ID: t.ReceiptID},
 	}
 	if t.ReceiptID != "" {
 		fd.Receipt.URL = (&models.Receipt{ID: t.ReceiptID, Hash: "new"}).URL()
@@ -853,6 +854,9 @@ func (h Handler) mapFDToTransaction(r *http.Request, isRecurrent bool) (*models.
 		Items:        parseTxItems(r),
 		ReceiptID:    strings.TrimSpace(r.FormValue("receipt_id")),
 	}
+	// The account isn't resolved yet: the lines' currency is dropped when
+	// it's the account's by normalizeTxItems.
+	h.parseItemsCurrency(r, tx.Items, nil)
 
 	if isRecurrent {
 		tx.RecurrentTx, err = h.mapFDAndTxToRecurrentTx(r, tx)
@@ -950,7 +954,7 @@ func (h Handler) prepareTx(r *http.Request, tx *models.Transaction,
 		valerr := &errs.ValidationError{Errors: errs.ValidationErrors{}}
 		valerr.Errors["Kind"] = errs.ValidationField{Tag: "required"}
 		l.Error("invalid tx kind")
-		return h.mapTransactionToFD(tx, valerr), nil
+		return h.mapTransactionToFD(r.Context(), tx, valerr), nil
 	}
 
 	a := slicesutils.Find(accs, func(ac models.Account) bool { return ac.ID == tx.Account.ID })
@@ -958,7 +962,7 @@ func (h Handler) prepareTx(r *http.Request, tx *models.Transaction,
 		valerr := &errs.ValidationError{Errors: errs.ValidationErrors{}}
 		valerr.Errors["AccountID"] = errs.ValidationField{Tag: "required"}
 		l.Error("account doesn't exist")
-		return h.mapTransactionToFD(tx, valerr), nil
+		return h.mapTransactionToFD(r.Context(), tx, valerr), nil
 	}
 	tx.Account = *a
 	normalizeTxItems(tx)
@@ -976,7 +980,7 @@ func (h Handler) prepareTx(r *http.Request, tx *models.Transaction,
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("validating transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-			return h.mapTransactionToFD(tx, &valerr), nil
+			return h.mapTransactionToFD(r.Context(), tx, &valerr), nil
 		}
 		l.Error("sanitizing transaction", zap.Error(err))
 		return nil, err

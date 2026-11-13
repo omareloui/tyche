@@ -2,6 +2,7 @@ package views
 
 import (
 	"fmt"
+	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
@@ -59,8 +60,8 @@ templ TxSplitDrawer(s *models.TxSplit, cps []models.Counterparty, msg TxSplitMsg
 // schedules the incomes reimbursing the expense of what's left of the shares.
 templ TxSplitPanel(s *models.TxSplit, cps []models.Counterparty, msg TxSplitMsg) {
 	{{ tx := s.Tx }}
-	{{ cur := &tx.Account.Currency }}
 	{{ res := s.Compute() }}
+	{{ cur, acc := res.LinesCur, &tx.Account.Currency }}
 	{{ v := newTxView(ctx, tx) }}
 	<form
 		hx-put={ txSplitURL(tx.ID) }
@@ -138,9 +139,10 @@ templ TxSplitPanel(s *models.TxSplit, cps []models.Counterparty, msg TxSplitMsg)
 			@txDetailsSection("Who owes what") {
 				<ul class="grid grid-cols-1 gap-2">
 					for _, sh := range res.Shares {
-						@splitShare(sh, cur)
+						@splitShare(sh, cur, acc)
 					}
 				</ul>
+				@splitForeignNote(res, acc)
 				if res.Mismatch {
 					<p class="inline-flex items-start gap-1.5 text-sm text-amber-400">
 						@icons.Warning("14", &templ.Attributes{"class": "mt-1 shrink-0"})
@@ -290,7 +292,8 @@ templ splitChip(name, value, label string, checked bool) {
 }
 
 // splitShare is what someone owes, its lines unfolding.
-templ splitShare(sh models.SplitShare, cur *models.Currency) {
+// The lines are in cur, the totals in the account's (acc).
+templ splitShare(sh models.SplitShare, cur, acc *models.Currency) {
 	<li x-data="{open: false}" class="rounded-xl bg-zinc-800/40 ring-1 ring-zinc-800">
 		<button type="button" @click="open = !open" :aria-expanded="open" class="flex items-center gap-3 w-full px-3 py-2.5 text-left cursor-pointer">
 			@components.CounterpartyIcon(sh.Person.Name, sh.Person.Icon, sh.Person.Color, "w-8 h-8 text-xs")
@@ -302,11 +305,11 @@ templ splitShare(sh models.SplitShare, cur *models.Currency) {
 						{ sh.Person.Name }
 					}
 				</p>
-				if status := splitShareStatus(sh, cur); status != "" {
+				if status := splitShareStatus(sh, acc); status != "" {
 					<p class="text-xs text-zinc-500 truncate">{ status }</p>
 				}
 			</div>
-			<span class={ "sensitive tabular-nums font-semibold", templ.KV("text-emerald-400", !sh.Person.IsMe() && sh.Total > 0) }>{ cur.Format(sh.Total) }</span>
+			<span class={ "sensitive tabular-nums font-semibold", templ.KV("text-emerald-400", !sh.Person.IsMe() && sh.Total > 0) }>{ acc.Format(sh.Total) }</span>
 			@icons.ChevronDown("16", &templ.Attributes{"class": "shrink-0 text-zinc-500 transition-transform", ":class": "open && 'rotate-180'"})
 		</button>
 		<ul x-show="open" x-cloak class="grid gap-1 px-3 pb-3 text-sm text-zinc-400">
@@ -336,6 +339,17 @@ templ splitShare(sh models.SplitShare, cur *models.Currency) {
 	</li>
 }
 
+// splitForeignNote tells the shares of lines in another currency were
+// converted with the transaction's own rate.
+templ splitForeignNote(res models.SplitResult, acc *models.Currency) {
+	if res.Foreign && res.LinesTotal != 0 {
+		<p class="text-xs text-zinc-500 tabular-nums">
+			{ fmt.Sprintf("The lines are in %s: the shares are converted at what was charged (1 %s = %s %s).",
+				res.LinesCur.String, res.LinesCur.String, formatters.FormatRate(res.Total/abs(res.LinesTotal)), acc.String) }
+		</p>
+	}
+}
+
 // splitShareStatus tells where someone's share stands: paid, requested, or
 // what's left to request.
 func splitShareStatus(sh models.SplitShare, cur *models.Currency) string {
@@ -361,13 +375,14 @@ func splitShareStatus(sh models.SplitShare, cur *models.Currency) string {
 // one owes and where their payment stands, editable when it can be split.
 templ txDetailsSplit(s *models.TxSplit) {
 	{{ res := s.Compute() }}
-	{{ cur := &s.Tx.Account.Currency }}
+	{{ cur, acc := res.LinesCur, &s.Tx.Account.Currency }}
 	@txDetailsSection(fmt.Sprintf("Split with %s", splitPeopleCount(len(s.People)))) {
 		<ul class="grid grid-cols-1 gap-2">
 			for _, sh := range res.Shares {
-				@splitShare(sh, cur)
+				@splitShare(sh, cur, acc)
 			}
 		</ul>
+		@splitForeignNote(res, acc)
 		if s.Tx.CanSplit() {
 			<button
 				type="button"

@@ -1,6 +1,9 @@
 package models
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func ptr(v float64) *float64 { return &v }
 
@@ -39,13 +42,13 @@ func TestNormalizeTxItems(t *testing.T) {
 	if got, want := TxItemsTotal(items), 180+21.6-15+10.01; got-want > 1e-9 || want-got > 1e-9 {
 		t.Errorf("total = %v, want %v", got, want)
 	}
-	if TxItemsMismatch(items, -(180 + 21.6 - 15 + 10.01)) {
+	if TxItemsMismatch(items, -(180 + 21.6 - 15 + 10.01), nil) {
 		t.Error("expected no mismatch with the amount the lines add up to (sign ignored)")
 	}
-	if !TxItemsMismatch(items, 200) {
+	if !TxItemsMismatch(items, 200, nil) {
 		t.Error("expected a mismatch")
 	}
-	if TxItemsMismatch(nil, 200) {
+	if TxItemsMismatch(nil, 200, nil) {
 		t.Error("no lines, no mismatch")
 	}
 }
@@ -100,5 +103,46 @@ func TestFormatBytes(t *testing.T) {
 		if got := FormatBytes(n); got != want {
 			t.Errorf("FormatBytes(%d) = %q, want %q", n, got, want)
 		}
+	}
+}
+
+func TestTxItemsForeignCurrency(t *testing.T) {
+	egp := &Currency{ID: "egp", String: "EGP"}
+	eur := &Currency{ID: "eur", String: "EUR"}
+	items := []TxItem{{Name: "Pasta", Total: 10}, {Name: "Wine", Total: 5}}
+
+	if got := TxItemsCurrency(items, egp); got != egp {
+		t.Fatalf("lines without a currency are the account's, got %v", got)
+	}
+	if TxItemsForeign(items, egp) || TxItemsRate(items, -800, egp) != 1 {
+		t.Fatal("lines in the account's currency aren't foreign, rate 1")
+	}
+
+	SetTxItemsCurrency(items, eur, egp)
+	if items[0].Currency != eur || items[1].Currency != eur {
+		t.Fatal("every line takes the currency")
+	}
+	if !TxItemsForeign(items, egp) {
+		t.Fatal("EUR lines on an EGP account are foreign")
+	}
+	if got := TxItemsRate(items, -800, egp); math.Abs(got-800.0/15) > 1e-9 {
+		t.Fatalf("rate = %v, want the amount over the lines' total", got)
+	}
+	if TxItemsMismatch(items, -800, egp) {
+		t.Fatal("foreign lines never mismatch the amount")
+	}
+
+	SetTxItemsCurrency(items, egp, egp)
+	if items[0].Currency != nil {
+		t.Fatal("the account's currency is stored as none")
+	}
+	if !TxItemsMismatch(items, -800, egp) {
+		t.Fatal("lines in the account's currency still mismatch")
+	}
+
+	SetTxItemsCurrency(items, eur, egp)
+	cp := CopyTxItems(items)
+	if cp[0].Currency != eur {
+		t.Fatal("copies keep the lines' currency")
 	}
 }

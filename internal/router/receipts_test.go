@@ -406,6 +406,102 @@ func TestReceipts(t *testing.T) {
 		}
 	})
 
+	t.Run("lines in another currency convert at the transaction's rate", func(t *testing.T) {
+		eur, err := repo.GetCurrencyByString(ctx, "EUR")
+		if err != nil {
+			t.Fatal(err)
+		}
+		form := url.Values{
+			"kind": {models.ExpenseTxKind.String()}, "account_id": {bank.ID}, "amount": {"800"},
+			"scheduled_to": {time.Now().Format(time.DateOnly)}, "description": {"Trattoria"},
+			"items_currency_id": {eur.ID},
+			"item_id":           {"", ""},
+			"item_kind":         {"0", "0"},
+			"item_name":         {"Pasta", "Wine"},
+			"item_quantity":     {"", ""},
+			"item_unit_price":   {"", ""},
+			"item_total":        {"10", "5"},
+			"item_rate":         {"", ""},
+			"item_included":     {"", ""},
+		}
+		res, body := do("POST", "/transactions", form)
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("status %d: %s", res.StatusCode, body)
+		}
+		txs, _ := repo.GetTransactions(ctx)
+		var id string
+		for _, tx := range txs {
+			if tx.Description == "Trattoria" {
+				id = tx.ID
+			}
+		}
+		tx, err := repo.GetTransaction(ctx, id)
+		if err != nil {
+			t.Fatal(err, body)
+		}
+		if len(tx.Items) != 2 || tx.Items[0].Currency == nil || tx.Items[0].Currency.String != "EUR" {
+			t.Fatalf("items = %+v", tx.Items)
+		}
+		_, body = do("GET", "/transactions/"+id+"/details", nil)
+		for _, want := range []string{"Charged", "1 EUR = 53.33 EGP"} {
+			if !strings.Contains(body, want) {
+				t.Errorf("details miss %q", want)
+			}
+		}
+		if strings.Contains(body, "The lines add up to") {
+			t.Error("foreign lines show a mismatch")
+		}
+		_, edit := do("GET", "/transactions/"+id+"/edit", nil)
+		if !strings.Contains(edit, `name="items_currency_id" value="`+eur.ID+`"`) {
+			t.Error("the edit form doesn't keep the lines' currency")
+		}
+
+		// Added from the details, a line takes the lines' currency.
+		do("POST", "/transactions/"+id+"/items", url.Values{"kind": {"0"}, "name": {"Water"}, "total": {"2"}})
+		tx, _ = repo.GetTransaction(ctx, id)
+		if len(tx.Items) != 3 || tx.Items[2].Currency == nil || tx.Items[2].Currency.ID != eur.ID {
+			t.Errorf("added line = %+v", tx.Items[len(tx.Items)-1])
+		}
+
+		// Picking the account's currency stores none.
+		form.Set("items_currency_id", bank.Currency.ID)
+		form.Set("description", "Koshary")
+		do("POST", "/transactions", form)
+		txs, _ = repo.GetTransactions(ctx)
+		for _, tx := range txs {
+			if tx.Description == "Koshary" {
+				full, _ := repo.GetTransaction(ctx, tx.ID)
+				if full.Items[0].Currency != nil {
+					t.Errorf("the account's currency was stored: %+v", full.Items[0].Currency)
+				}
+			}
+		}
+	})
+
+	t.Run("a receipt in another currency puts the lines in it", func(t *testing.T) {
+		ocr.result.Currency = "EUR"
+		defer func() { ocr.result.Currency = "EGP" }()
+		res, body := upload("/transactions/"+txID+"/receipt", nil)
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("status %d: %s", res.StatusCode, body)
+		}
+		if strings.Contains(body, "taken as is") {
+			t.Error("a known currency still warns")
+		}
+		tx, _ := repo.GetTransaction(ctx, txID)
+		if tx.Items[0].Currency == nil || tx.Items[0].Currency.String != "EUR" {
+			t.Errorf("lines' currency = %+v", tx.Items[0].Currency)
+		}
+		ocr.result.Currency = "XYZ"
+		_, body = upload("/transactions/"+txID+"/receipt", nil)
+		if !strings.Contains(body, "taken as is") {
+			t.Error("an unknown currency doesn't warn")
+		}
+		if tx, _ := repo.GetTransaction(ctx, txID); tx.Items[0].Currency != nil {
+			t.Errorf("an unknown currency's lines = %+v", tx.Items[0].Currency)
+		}
+	})
+
 	t.Run("recurrent lines go to the occurrences, edited ones kept", func(t *testing.T) {
 		start := time.Now().AddDate(0, 0, 1)
 		rt := createTestRecurrentTx(t, ctx, repo, h, bank, "300", start, models.RecurrentUnitMonth, url.Values{

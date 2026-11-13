@@ -48,7 +48,7 @@ templ CreateRecurrentTxForm(
 		@form.Field("Description", "description", "0", icons.Pencil("15"), fd.Description.Error) {
 			@form.Control("text", "description", "What is it for?", "0", fd.Description, nil)
 		}
-		@txItemsField("0", fd.Items, &ReceiptFD{})
+		@txItemsField("0", fd.Items, &ReceiptFD{}, fd.ItemsCurrency)
 		<div>
 			@form.Field("Starts on", "scheduled_to", "0", icons.Calendar("15"), fd.ScheduledTo.Error) {
 				@form.Control("text", "scheduled_to", "yyyy-mm-dd", "0", fd.ScheduledTo, templ.Attributes{
@@ -85,7 +85,8 @@ type RecurrentTxFD struct {
 	TransactionAmountsAndKindFD
 	Description form.FDInput
 	// Items are its lines, copied to its occurrences.
-	Items []TxItemFD
+	Items         []TxItemFD
+	ItemsCurrency ItemsCurrencyFD
 }
 
 templ rtxFormBody(
@@ -97,7 +98,7 @@ templ rtxFormBody(
 	@form.Field("Description", "description", id, icons.Pencil("15"), fd.Description.Error) {
 		@form.Control("text", "description", "What is it for?", id, fd.Description, nil)
 	}
-	@txItemsField(id, fd.Items, &ReceiptFD{})
+	@txItemsField(id, fd.Items, &ReceiptFD{}, fd.ItemsCurrency)
 	@rtxRepeatsBox(id, &fd.RecurrenceFD)
 }
 

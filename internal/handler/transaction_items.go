@@ -1,11 +1,13 @@
 package handler
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -75,6 +77,40 @@ func parseTxItems(r *http.Request) []models.TxItem {
 	return items
 }
 
+// itemsCurrencyFD is the lines' currency picker: the shown currencies (and
+// the lines' own when hidden), the lines' picked (empty: the account's).
+func (h Handler) itemsCurrencyFD(ctx context.Context, items []models.TxItem) views.ItemsCurrencyFD {
+	fd := views.ItemsCurrencyFD{}
+	cur := models.TxItemsCurrency(items, nil)
+	if cur != nil {
+		fd.Value = cur.ID
+	}
+	curs, err := h.repo.GetCurrencies(ctx)
+	if err != nil {
+		logger.FromCtx(ctx).Error("querying the currencies for the lines", zap.Error(err))
+	}
+	fd.Currencies = curs
+	if cur != nil && !slices.ContainsFunc(curs, func(c models.Currency) bool { return c.ID == cur.ID }) {
+		fd.Currencies = append(fd.Currencies, *cur)
+	}
+	return fd
+}
+
+// parseItemsCurrency puts the lines in the form's items_currency_id (the
+// account's when empty or unknown), the account (acc) resolved.
+func (h Handler) parseItemsCurrency(r *http.Request, items []models.TxItem, acc *models.Currency) {
+	cur := acc
+	if id := strings.TrimSpace(r.FormValue("items_currency_id")); id != "" && (acc == nil || id != acc.ID) {
+		c, err := h.repo.GetCurrency(r.Context(), id)
+		if err != nil {
+			logger.FromCtx(r.Context()).Warn("unknown lines' currency", zap.Error(err), zap.String("currency_id", id))
+		} else {
+			cur = c
+		}
+	}
+	models.SetTxItemsCurrency(items, cur, acc)
+}
+
 // txItemsToFD maps lines to their inputs with their errors (keyed
 // Items[i].Field).
 func txItemsToFD(items []models.TxItem, err *errs.ValidationError) []views.TxItemFD {
@@ -93,10 +129,13 @@ func txItemsToFD(items []models.TxItem, err *errs.ValidationError) []views.TxIte
 	return fds
 }
 
-// normalizeTxItems fills what's missing of the transaction's lines in its
-// account's currency, copying them to the recurrent transaction it creates.
+// normalizeTxItems fills what's missing of the transaction's lines in their
+// currency (none of their own when it's the account's), copying them to the
+// recurrent transaction it creates.
 func normalizeTxItems(tx *models.Transaction) {
-	models.NormalizeTxItems(tx.Items, &tx.Account.Currency)
+	acc := &tx.Account.Currency
+	models.SetTxItemsCurrency(tx.Items, models.TxItemsCurrency(tx.Items, acc), acc)
+	models.NormalizeTxItems(tx.Items, models.TxItemsCurrency(tx.Items, acc))
 	tx.Items = models.SortTxItems(tx.Items)
 	if tx.RecurrentTx != nil {
 		tx.RecurrentTx.Items = models.CopyTxItems(tx.Items)
@@ -191,8 +230,9 @@ func (h Handler) AddTxItem(w http.ResponseWriter, r *http.Request) (templ.Compon
 	if !h.validateTxItem(it, fd) {
 		return h.txItemsAnswer(w, r, tx.ID, fd, nil)
 	}
+	it.Currency = models.TxItemsCurrency(tx.Items, nil)
 	items := append(tx.Items, *it)
-	models.NormalizeTxItems(items, &tx.Account.Currency)
+	models.NormalizeTxItems(items, models.TxItemsCurrency(items, &tx.Account.Currency))
 	*it = items[len(items)-1]
 	if err := h.repo.AddTxItem(r.Context(), tx.ID, it); err != nil {
 		logger.FromCtx(r.Context()).Error("adding a line", zap.Error(err))
@@ -228,8 +268,9 @@ func (h Handler) AddRecurrentTxItem(w http.ResponseWriter, r *http.Request) (tem
 	if !h.validateTxItem(it, fd) {
 		return views.RecurrentTxDetailsItems(rt, fd), nil
 	}
+	it.Currency = models.TxItemsCurrency(rt.Items, nil)
 	items := append(append([]models.TxItem{}, rt.Items...), *it)
-	models.NormalizeTxItems(items, &rt.Account.Currency)
+	models.NormalizeTxItems(items, models.TxItemsCurrency(items, &rt.Account.Currency))
 	*it = items[len(items)-1]
 	if err := h.repo.AddRecurrentTxItem(r.Context(), rt, it); err != nil {
 		logger.FromCtx(r.Context()).Error("adding a recurrent line", zap.Error(err))

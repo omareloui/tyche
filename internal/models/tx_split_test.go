@@ -28,7 +28,6 @@ func shareTotals(r SplitResult) map[string]float64 {
 	return out
 }
 
-
 func TestTxSplitCompute(t *testing.T) {
 	ali := SplitPerson{ID: "ali", Name: "Ali"}
 	sara := SplitPerson{ID: "sara", Name: "Sara"}
@@ -225,5 +224,44 @@ func TestParseChargeSplitMode(t *testing.T) {
 		if got := ParseChargeSplitMode(tt.it, tt.v); got != tt.want {
 			t.Errorf("%s %q = %v, want %v", tt.it.Label(), tt.v, got, tt.want)
 		}
+	}
+}
+
+func TestTxSplitComputeForeignLines(t *testing.T) {
+	egp := Currency{ID: "egp", String: "EGP"}
+	eur := &Currency{ID: "eur", String: "EUR"}
+	ali := SplitPerson{ID: "ali", Name: "Ali"}
+	sara := SplitPerson{ID: "sara", Name: "Sara"}
+
+	items := []TxItem{
+		{Name: "Pasta", Total: 10, SharedWith: with("ali")},
+		{Name: "Pizza", Total: 10, SharedWith: with("sara")},
+		{Name: "Wine", Total: 10.01},
+	}
+	SetTxItemsCurrency(items, eur, &egp)
+	tx := splitTx(items, -1601.33)
+	tx.Account = Account{Currency: egp}
+
+	res := (&TxSplit{Tx: tx, People: []SplitPerson{ali, sara}}).Compute()
+	if !res.Foreign || res.LinesCur != eur || res.LinesTotal != 30.01 {
+		t.Fatalf("lines: foreign %v in %v of %v", res.Foreign, res.LinesCur, res.LinesTotal)
+	}
+	if res.Total != 1601.33 || res.Mismatch {
+		t.Fatalf("total = %v (mismatch %v), want the amount", res.Total, res.Mismatch)
+	}
+	got := shareTotals(res)
+	rate := 1601.33 / 30.01
+	if want := math.Round(10*rate*100) / 100; got["ali"] != want || got["sara"] != want {
+		t.Fatalf("shares = %v, want %v each converted at the tx's rate", got, want)
+	}
+	sum := 0.0
+	for _, v := range got {
+		sum += v
+	}
+	if math.Abs(sum-1601.33) > 1e-9 {
+		t.Fatalf("shares add up to %v, want the amount (the user taking the rounding)", sum)
+	}
+	if res.Shares[1].Items[0].Part != 10 {
+		t.Fatalf("parts stay in the lines' currency, got %v", res.Shares[1].Items[0].Part)
 	}
 }

@@ -75,8 +75,10 @@ type SplitShare struct {
 	// Items are the items they share, Charges their part of each charge.
 	Items, Charges []SplitLine
 	Subtotal       float64
-	// Total is what they owe, rounded in the bill's currency; the user's
-	// takes the rounding, so the shares add up to the lines' total.
+	// Total is what they owe, in the account's currency (converted with the
+	// transaction's rate when the lines are in another); the user's takes the
+	// rounding, so the shares add up to the lines' total (the transaction's
+	// amount when converted).
 	Total float64
 	// Requested is what the expense's reimbursements from them add up to,
 	// Paid the fulfilled ones' (left out for the user).
@@ -95,10 +97,17 @@ func (s *SplitShare) Left() float64 {
 type SplitResult struct {
 	// Shares are the user's first, then the people's in order.
 	Shares []SplitShare
-	// Total is the lines' (TxItemsTotal), Mismatch telling it isn't the
-	// transaction's amount.
+	// Total is the lines' (TxItemsTotal) in the account's currency (the
+	// transaction's amount when they're in another, Foreign), Mismatch
+	// telling it isn't the transaction's amount.
 	Total    float64
 	Mismatch bool
+	// LinesCur is the currency the lines (and the shares' Items/Charges/
+	// Subtotal) are in, LinesTotal what they add up to in it; the shares'
+	// Total, Requested and Paid are in the account's.
+	LinesCur   *Currency
+	LinesTotal float64
+	Foreign    bool
 }
 
 // Others are the people's shares, the user's left out.
@@ -214,8 +223,16 @@ func (s *TxSplit) units(it *TxItem, at map[string]int, heads int) []float64 {
 // Compute works out everyone's share: each item split among who shares it,
 // the charges not included in the prices by share or per head
 // (ChargeByShare).
+//
+// The lines may be in another currency than the account's: the parts then
+// stay in theirs, each one's total converted with the transaction's own rate
+// (TxItemsRate), so the shares add up to its amount and the reimbursements
+// asked are in the account's currency.
 func (s *TxSplit) Compute() SplitResult {
-	cur := &s.Tx.Account.Currency
+	acc := &s.Tx.Account.Currency
+	cur := TxItemsCurrency(s.Tx.Items, acc)
+	foreign := TxItemsForeign(s.Tx.Items, acc)
+	rate := TxItemsRate(s.Tx.Items, s.Tx.Amount, acc)
 	heads := 1 + len(s.People)
 	shares := make([]SplitShare, heads)
 	shares[0].Person = SplitPerson{ID: SplitMe, Name: "You"}
@@ -274,15 +291,19 @@ func (s *TxSplit) Compute() SplitResult {
 		}
 	}
 
-	total := cur.Round(TxItemsTotal(s.Tx.Items))
+	linesTotal := cur.Round(TxItemsTotal(s.Tx.Items))
+	total := linesTotal
+	if foreign {
+		total = acc.Round(math.Abs(s.Tx.Amount))
+	}
 	others := 0.0
 	for o := 1; o < heads; o++ {
 		shares[o].Subtotal = cur.Round(shares[o].Subtotal)
-		shares[o].Total = cur.Round(raw[o])
+		shares[o].Total = acc.Round(raw[o] * rate)
 		others += shares[o].Total
 	}
 	shares[0].Subtotal = cur.Round(shares[0].Subtotal)
-	shares[0].Total = cur.Round(total - others)
+	shares[0].Total = acc.Round(total - others)
 
 	for _, re := range s.Tx.Reimbursements {
 		if re.Counterparty == nil {
@@ -296,7 +317,10 @@ func (s *TxSplit) Compute() SplitResult {
 		}
 	}
 
-	return SplitResult{Shares: shares, Total: total, Mismatch: TxItemsMismatch(s.Tx.Items, s.Tx.Amount)}
+	return SplitResult{
+		Shares: shares, Total: total, Mismatch: TxItemsMismatch(s.Tx.Items, s.Tx.Amount, acc),
+		LinesCur: cur, LinesTotal: linesTotal, Foreign: foreign,
+	}
 }
 
 // ItemShares is how the item is shared, for its toggles: SplitEveryone, or

@@ -8,12 +8,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/errs"
+	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
@@ -225,14 +228,40 @@ func scanError(w http.ResponseWriter, slot string, err error) error {
 	return resperr.New(http.StatusUnprocessableEntity, se.msg)
 }
 
-// receiptCurrencyWarning tells the receipt is in another currency than the
-// account, its amounts being taken as is.
-func receiptCurrencyWarning(res *receiptocr.Result, acc *models.Account) string {
+// receiptCurrency is the currency the receipt's lines are in: the one it's
+// printed in, the account's when it doesn't tell or it's unknown (warning
+// then that its amounts were taken as is).
+func (h Handler) receiptCurrency(ctx context.Context, res *receiptocr.Result, acc *models.Account) (*models.Currency, string) {
 	code := strings.ToUpper(strings.TrimSpace(res.Currency))
 	if code == "" || acc == nil || acc.Currency.String == "" || strings.EqualFold(code, acc.Currency.String) {
-		return ""
+		return &acc.Currency, ""
 	}
-	return fmt.Sprintf("The receipt is in %s, the account in %s: the amounts were taken as is.", code, acc.Currency.String)
+	cur, err := h.repo.GetCurrencyByString(ctx, code)
+	if err != nil {
+		logger.FromCtx(ctx).Warn("the receipt's currency is unknown", zap.Error(err))
+		return &acc.Currency, fmt.Sprintf("The receipt is in %s, the account in %s: the amounts were taken as is.", code, acc.Currency.String)
+	}
+	return cur, ""
+}
+
+// estimateTxAmount is what lines of total in cur come to in the account's
+// currency (acc) on day, at that day's rate (else today's), with a notice
+// telling it's an estimate; 0 without a rate.
+func (h Handler) estimateTxAmount(ctx context.Context, total float64, cur, acc *models.Currency, day time.Time) (float64, string) {
+	if h.fxJob == nil || total == 0 {
+		return 0, ""
+	}
+	rate, dated, err := h.fxJob.RateOn(ctx, day, cur.String, acc.String)
+	if err != nil || rate <= 0 {
+		logger.FromCtx(ctx).Warn("no fx rate to estimate the amount", zap.Error(err))
+		return 0, ""
+	}
+	when := "today's rate"
+	if dated {
+		when = "the rate of " + day.Format("Jan 2")
+	}
+	return acc.Round(total * rate), fmt.Sprintf("Amount estimated at %s (1 %s = %s %s): set what was charged.",
+		when, cur.String, formatters.FormatRate(rate), acc.String)
 }
 
 // ScanReceiptIntoForm reads a receipt into the transaction form being
@@ -264,23 +293,35 @@ func (h Handler) ScanReceiptIntoForm(w http.ResponseWriter, r *http.Request) (te
 		tx.Account = *a
 	}
 
+	lineCur, warning := h.receiptCurrency(ctx, res, &tx.Account)
+	foreign := lineCur.ID != tx.Account.Currency.ID
 	fresh := tx.Amount == 0
 	var filled []string
+	var estimate string
 	if fresh {
 		if tx.Kind != models.ExpenseTxKind && tx.Kind != models.RefundTxKind {
 			tx.Kind = models.ExpenseTxKind
 			tx.ToAccount, tx.ToAmount = nil, 0
 		}
-		if total := res.Total; total > 0 {
-			tx.Amount = tx.Account.Currency.Round(total)
-			filled = append(filled, "amount")
-		}
+		// The day first: a foreign receipt's amount is estimated at its rate.
+		dated := false
 		if when := res.When(getClaims(ctx).Location()); !when.IsZero() {
 			day := time.Date(when.Year(), when.Month(), when.Day(), 0, 0, 0, 0, time.UTC)
 			if !day.After(h.userToday(ctx)) {
-				tx.ScheduledTo = day
-				filled = append(filled, "date")
+				tx.ScheduledTo, dated = day, true
 			}
+		}
+		if total := res.Total; total > 0 {
+			if !foreign {
+				tx.Amount = tx.Account.Currency.Round(total)
+				filled = append(filled, "amount")
+			} else if amount, notice := h.estimateTxAmount(ctx, total, lineCur, &tx.Account.Currency, tx.ScheduledTo); amount > 0 {
+				tx.Amount, estimate = amount, notice
+				filled = append(filled, "amount")
+			}
+		}
+		if dated {
+			filled = append(filled, "date")
 		}
 	}
 	if merchant := strings.TrimSpace(res.Merchant); merchant != "" && tx.Kind.CategoryKind() == models.ExpenseTxKind {
@@ -305,15 +346,19 @@ func (h Handler) ScanReceiptIntoForm(w http.ResponseWriter, r *http.Request) (te
 		}
 	}
 	tx.Items = res.TxItems()
-	models.NormalizeTxItems(tx.Items, &tx.Account.Currency)
+	models.SetTxItemsCurrency(tx.Items, lineCur, &tx.Account.Currency)
+	models.NormalizeTxItems(tx.Items, lineCur)
 	tx.Items = models.SortTxItems(tx.Items)
 	filled = append(filled, txItemsCountNotice(len(tx.Items)))
+	if foreign {
+		filled = append(filled, "in "+lineCur.String)
+	}
 
 	accs, knds, cats, cps, err := h.getTxDeps(ctx)
 	if err != nil {
 		return nil, err
 	}
-	fd := h.mapTransactionToFD(tx, new(errs.ValidationError))
+	fd := h.mapTransactionToFD(r.Context(), tx, new(errs.ValidationError))
 	if isEdit {
 		fd.RecurrenceFD = nil
 	}
@@ -324,7 +369,7 @@ func (h Handler) ScanReceiptIntoForm(w http.ResponseWriter, r *http.Request) (te
 		URL:     (&models.Receipt{ID: scan.receiptID, Hash: "new"}).URL(),
 		Size:    models.FormatBytes(scan.size),
 		Notice:  "Read from the receipt: " + strings.Join(filled, ", ") + "." + cachedNotice(scan),
-		Warning: receiptCurrencyWarning(res, &tx.Account),
+		Warning: strings.TrimSpace(warning + " " + estimate),
 		Scanned: true,
 		Left:    scan.left,
 		Limit:   scan.limit,
@@ -359,14 +404,16 @@ func (h Handler) ScanReceiptIntoTx(w http.ResponseWriter, r *http.Request) (temp
 		return nil, scanError(w, "#txd-scan-error-"+tx.ID, err)
 	}
 	items := scan.result.TxItems()
-	models.NormalizeTxItems(items, &tx.Account.Currency)
+	lineCur, warning := h.receiptCurrency(r.Context(), scan.result, &tx.Account)
+	models.SetTxItemsCurrency(items, lineCur, &tx.Account.Currency)
+	models.NormalizeTxItems(items, lineCur)
 	items = models.SortTxItems(items)
 	if err := h.repo.SetTxItems(r.Context(), tx.ID, items, scan.receiptID); err != nil {
 		return nil, err
 	}
 	rec := &views.ReceiptFD{
 		Notice:  "Read " + txItemsCountNotice(len(items)) + " from the receipt." + cachedNotice(scan),
-		Warning: receiptCurrencyWarning(scan.result, &tx.Account),
+		Warning: warning,
 		Scanned: true,
 		Left:    scan.left,
 		Limit:   scan.limit,
@@ -376,3 +423,40 @@ func (h Handler) ScanReceiptIntoTx(w http.ResponseWriter, r *http.Request) (temp
 	}
 	return h.txItemsAnswer(w, r, tx.ID, nil, rec)
 }
+
+// EstimateItemsAmount answers the form's lines' "Use as the amount": their
+// total, converted to the account's currency at the form's day rate when
+// they're in another (an estimate, to set to what was charged).
+func (h Handler) EstimateItemsAmount(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	ctx := r.Context()
+	tx, err := h.mapFDToTransaction(r, false)
+	if err != nil {
+		return nil, err
+	}
+	accs, _, _, _, err := h.getTxDeps(ctx)
+	if err != nil {
+		return nil, err
+	}
+	a := slicesutils.Find(accs, func(a models.Account) bool { return a.ID == tx.Account.ID })
+	if a == nil {
+		return views.ItemsAmountEstimate("", "Pick the account first.", true), nil
+	}
+	tx.Account = *a
+	normalizeTxItems(tx)
+	acc := &tx.Account.Currency
+	cur := models.TxItemsCurrency(tx.Items, acc)
+	total := math.Abs(models.TxItemsTotal(tx.Items))
+	if total == 0 {
+		return views.ItemsAmountEstimate("", "The lines add up to nothing yet.", true), nil
+	}
+	if !models.TxItemsForeign(tx.Items, acc) {
+		return views.ItemsAmountEstimate(formatItemAmount(acc.Round(total)), "The amount is the lines' total.", false), nil
+	}
+	amount, notice := h.estimateTxAmount(ctx, total, cur, acc, tx.ScheduledTo)
+	if amount == 0 {
+		return views.ItemsAmountEstimate("", fmt.Sprintf("No %s → %s rate to estimate it: type what was charged.", cur.String, acc.String), true), nil
+	}
+	return views.ItemsAmountEstimate(formatItemAmount(amount), notice, true), nil
+}
+
+func formatItemAmount(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) }

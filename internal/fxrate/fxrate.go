@@ -106,7 +106,9 @@ type Job struct {
 	interval time.Duration
 	client   *http.Client
 	urls     []string
-	trigger  chan struct{}
+	// datedURLs are a past day's rates (RateOn).
+	datedURLs []string
+	trigger   chan struct{}
 
 	mu     sync.Mutex
 	status Status
@@ -121,13 +123,14 @@ func NewJob(db *sql.DB, q *sharedqueries.Queries, codes []string, interval time.
 	slices.Sort(lower)
 
 	return &Job{
-		db:       db,
-		q:        q,
-		codes:    slices.Compact(lower),
-		interval: interval,
-		client:   &http.Client{Timeout: fetchTimeout},
-		urls:     defaultURLs,
-		trigger:  make(chan struct{}, 1),
+		db:        db,
+		q:         q,
+		codes:     slices.Compact(lower),
+		interval:  interval,
+		client:    &http.Client{Timeout: fetchTimeout},
+		urls:      defaultURLs,
+		datedURLs: defaultDatedURLs,
+		trigger:   make(chan struct{}, 1),
 	}
 }
 

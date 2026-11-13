@@ -16,3 +16,12 @@ SELECT
     CAST(COALESCE(MAX(as_of), '') AS TEXT) AS as_of,
     CAST(COALESCE(MAX(fetched_at), '') AS TEXT) AS fetched_at
 FROM fx_rates;
+
+-- name: GetDailyFxRate :one
+SELECT rate FROM fx_rates_daily
+WHERE day = sqlc.arg(day) AND base = sqlc.arg(base) AND quote = sqlc.arg(quote);
+
+-- name: UpsertDailyFxRate :exec
+INSERT INTO fx_rates_daily (day, base, quote, rate)
+VALUES (sqlc.arg(day), sqlc.arg(base), sqlc.arg(quote), sqlc.arg(rate))
+ON CONFLICT (day, base, quote) DO UPDATE SET rate = excluded.rate;

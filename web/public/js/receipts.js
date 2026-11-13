@@ -132,4 +132,81 @@
     el.querySelectorAll?.("[data-receipt-input]").forEach((i) => (i.value = ""));
     if (el.matches?.("[data-receipt-input]")) el.value = "";
   });
+
+  // Live line totals in the transaction form's items ([data-tx-items]): an
+  // item's total follows quantity × unit price, a charge's amount its rate on
+  // the items' subtotal, until typed by hand (data-total-manual; cleared, it
+  // follows again), like NormalizeTxItems does on saving. The lines' total
+  // shows under the rows ([data-items-total]).
+  const num = (v) => {
+    const n = parseFloat(String(v ?? "").replace(/[^0-9.\-]/g, ""));
+    return Number.isFinite(n) ? n : 0;
+  };
+  const round2 = (v) => Math.round(v * 100) / 100;
+  const field = (row, name) => row.querySelector(`[name=${name}]:not([type=hidden])`);
+
+  function recomputeItems(box) {
+    let sub = 0;
+    const rows = [...box.querySelectorAll("[data-tx-item]")];
+    for (const row of rows) {
+      if (field(row, "item_rate")) continue;
+      const total = field(row, "item_total");
+      const price = field(row, "item_unit_price");
+      if (total && price && !total.hasAttribute("data-total-manual") && price.value.trim() !== "") {
+        const qty = field(row, "item_quantity")?.value.trim();
+        total.value = String(round2((qty ? num(qty) : 1) * num(price.value)));
+      }
+      sub += num(total?.value);
+    }
+    let sum = sub;
+    for (const row of rows) {
+      const rate = field(row, "item_rate");
+      if (!rate) continue;
+      const total = field(row, "item_total");
+      if (!total.hasAttribute("data-total-manual") && rate.value.trim() !== "") {
+        let v = round2((sub * num(rate.value)) / 100);
+        if (row.querySelector("select[name=item_kind]")?.value === "6") v = -Math.abs(v);
+        total.value = v ? String(v) : "";
+      }
+      const included = row.querySelector("input[type=hidden][name=item_included]")?.value === "on";
+      if (!included) sum += num(total.value);
+    }
+    const out = box.querySelector("[data-items-total]");
+    if (out) out.textContent = rows.length ? round2(sum).toLocaleString(undefined, { maximumFractionDigits: 2 }) : "–";
+  }
+
+  document.addEventListener("input", (e) => {
+    const el = e.target;
+    const box = el instanceof Element && el.closest("[data-tx-items]");
+    if (!box) return;
+    if (el.matches("[name=item_total]")) {
+      el.toggleAttribute("data-total-manual", el.value.trim() !== "");
+    }
+    recomputeItems(box);
+  });
+  // Rows added or removed, the included toggle, a charge's kind.
+  document.addEventListener("change", (e) => {
+    const box = e.target instanceof Element && e.target.closest("[data-tx-items]");
+    if (box) recomputeItems(box);
+  });
+  document.addEventListener("click", (e) => {
+    const box = e.target instanceof Element && e.target.closest("[data-tx-items]");
+    if (box) queueMicrotask(() => recomputeItems(box));
+  });
+  const initItems = (root) => root.querySelectorAll?.("[data-tx-items]").forEach(recomputeItems);
+  document.addEventListener("htmx:afterSettle", (e) => initItems(e.detail.elt));
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => initItems(document));
+  else initItems(document);
+
+  // "Use as the amount": the answer's data-items-amount goes in the form's
+  // amount (its mask formats it).
+  document.addEventListener("htmx:afterSwap", (e) => {
+    const p = e.detail.elt?.querySelector?.("[data-items-amount]");
+    const v = p?.dataset.itemsAmount;
+    if (!v) return;
+    const amount = p.closest("form")?.querySelector("input[name=amount]");
+    if (!amount) return;
+    amount.value = v;
+    amount.dispatchEvent(new Event("input", { bubbles: true }));
+  });
 })();

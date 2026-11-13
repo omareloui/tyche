@@ -2,6 +2,8 @@ package views
 
 import (
 	"fmt"
+	"math"
+	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
@@ -20,6 +22,24 @@ type TxItemFD struct {
 	Included  bool
 	Error     string
 }
+
+// ItemsCurrencyFD is the lines' currency picker: Value the picked one's id
+// (empty: the account's), Currencies the ones offered.
+type ItemsCurrencyFD struct {
+	Value      string
+	Currencies []models.Currency
+}
+
+func itemsCurrencyOptions(curs []models.Currency) []form.ComboOption {
+	opts := make([]form.ComboOption, len(curs))
+	for i, c := range curs {
+		opts[i] = form.ComboOption{Value: c.ID, Label: c.String, Search: c.Symbol}
+	}
+	return opts
+}
+
+// TxItemsEstimateID is where the lines' amount estimate is answered.
+func TxItemsEstimateID(id string) string { return "tx-items-estimate-" + id }
 
 // ReceiptFD is the form's receipt scanning: whether it's on, the receipt
 // scanned (to link on saving) and what the scan told.
@@ -87,7 +107,7 @@ func txItemsCountLabel(n int) string {
 
 // txItemsField edits the transaction's lines (items, then charges) as rows,
 // with the receipt scanning buttons when on. Blank rows are dropped.
-templ txItemsField(id string, items []TxItemFD, rec *ReceiptFD) {
+templ txItemsField(id string, items []TxItemFD, rec *ReceiptFD, cur ItemsCurrencyFD) {
 	{{ open := len(items) > 0 || rec.ID != "" }}
 	<div id={ txItemsID(id) } x-data={ fmt.Sprintf("{open: %t}", open) } data-tx-items class="grid gap-2">
 		<div class="flex items-center justify-between gap-2">
@@ -129,6 +149,16 @@ templ txItemsField(id string, items []TxItemFD, rec *ReceiptFD) {
 		}
 		<input type="hidden" name="receipt_id" value={ rec.ID }/>
 		<div x-show="open" x-cloak?={ !open } class="grid gap-2">
+			<div class="flex flex-wrap items-center gap-2 text-sm text-zinc-400">
+				<span>Prices in</span>
+				@form.Combobox(form.ComboboxProps{
+					Name: "items_currency_id", ID: id, Label: "Currency of the lines",
+					Options: itemsCurrencyOptions(cur.Currencies), Data: form.FDInput{Value: cur.Value},
+					Nullable: true, NullLabel: "Account's currency", Searchable: len(cur.Currencies) > 7, Chip: true,
+					InputAttrs: templ.Attributes{"data-items-currency": true},
+				})
+				<span class="text-xs text-zinc-500">Paid abroad? Pick the receipt's: the amount charged converts them.</span>
+			</div>
 			if rec.URL != "" {
 				<div class="flex items-center gap-3 p-2 rounded-xl border border-zinc-800 bg-zinc-900/40" x-data="{full: false}">
 					<button type="button" @click="full = true" class="shrink-0 cursor-zoom-in" aria-label="Open the receipt">
@@ -158,6 +188,20 @@ templ txItemsField(id string, items []TxItemFD, rec *ReceiptFD) {
 			<template x-ref="charge">
 				@txItemRow(TxItemFD{Kind: models.TxItemVAT})
 			</template>
+			<div class="flex flex-wrap items-center justify-between gap-2 px-1 text-sm" data-items-summary>
+				<span class="text-zinc-400">Lines total <span class="text-zinc-100 tabular-nums" data-items-total></span></span>
+				<button
+					type="button"
+					hx-post={ fmt.Sprintf("/receipts/estimate/%s", id) }
+					hx-include="closest form"
+					hx-target={ "#" + TxItemsEstimateID(id) }
+					hx-swap="innerHTML"
+					class="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-sm text-zinc-300 cursor-pointer transition-colors hover:bg-zinc-800"
+				>
+					Use as the amount
+				</button>
+			</div>
+			<div id={ TxItemsEstimateID(id) } class="text-sm empty:hidden" aria-live="polite"></div>
 			<div class="flex flex-wrap gap-1">
 				<button
 					type="button"
@@ -331,7 +375,7 @@ templ txItemRow(it TxItemFD) {
 				<input type="hidden" name="item_quantity" value=""/>
 				<input type="hidden" name="item_unit_price" value=""/>
 				<input type="text" inputmode="decimal" name="item_rate" value={ it.Rate } placeholder="Rate %" aria-label="Rate in %" class="input-field tabular-nums"/>
-				<input type="text" inputmode="decimal" name="item_total" value={ it.Total } placeholder="Amount (from the rate when empty)" aria-label="Amount" class="input-field tabular-nums"/>
+				<input type="text" inputmode="decimal" name="item_total" value={ it.Total } placeholder="Amount (from the rate when empty)" aria-label="Amount" class="input-field tabular-nums" data-total-manual?={ it.Total != "" && it.Rate == "" }/>
 			</div>
 			<label class="inline-flex items-center gap-2 text-sm text-zinc-400 cursor-pointer" x-data={ fmt.Sprintf("{inc: %t}", it.Included) }>
 				<input type="checkbox" x-model="inc" class="accent-emerald-500"/>
@@ -342,11 +386,35 @@ templ txItemRow(it TxItemFD) {
 			<div class="grid grid-cols-[4.5rem_1fr_1fr] gap-2">
 				<input type="text" inputmode="decimal" name="item_quantity" value={ it.Quantity } placeholder="Qty" aria-label="Quantity" class="input-field text-center tabular-nums"/>
 				<input type="text" inputmode="decimal" name="item_unit_price" value={ it.UnitPrice } placeholder="Unit price" aria-label="Unit price" class="input-field tabular-nums"/>
-				<input type="text" inputmode="decimal" name="item_total" value={ it.Total } placeholder="Total" aria-label="Total" class="input-field tabular-nums"/>
+				<input type="text" inputmode="decimal" name="item_total" value={ it.Total } placeholder="Total" aria-label="Total" class="input-field tabular-nums" data-total-manual?={ itemTotalManual(it) }/>
 			</div>
 		}
 		@form.ErrorMessage(it.Error)
 	</div>
+}
+
+// itemTotalManual tells an item's total isn't its quantity × unit price,
+// typed by hand: the form then stops working it out (receipts.js).
+func itemTotalManual(it TxItemFD) bool {
+	if it.Total == "" {
+		return false
+	}
+	total, err := strconv.ParseFloat(it.Total, 64)
+	if err != nil || it.UnitPrice == "" {
+		return true
+	}
+	price, _ := strconv.ParseFloat(it.UnitPrice, 64)
+	qty := 1.0
+	if it.Quantity != "" {
+		qty, _ = strconv.ParseFloat(it.Quantity, 64)
+	}
+	return math.Abs(qty*price-total) > 0.0051
+}
+
+// ItemsAmountEstimate answers the lines' "Use as the amount": the amount
+// (data-amount, put in the form's by receipts.js) and how it was worked out.
+templ ItemsAmountEstimate(amount string, notice string, warn bool) {
+	<p data-items-amount={ amount } class={ templ.KV("text-amber-400", warn), templ.KV("text-zinc-400", !warn) }>{ notice }</p>
 }
 
 func onIfTrue(b bool) string {
@@ -358,7 +426,8 @@ func onIfTrue(b bool) string {
 
 // TxItemsList shows the lines: the items, a subtotal when there are charges,
 // the charges, then what they add up to, against amount.
-templ TxItemsList(items []models.TxItem, cur *models.Currency, amount float64, onDelete func(models.TxItem) string) {
+templ TxItemsList(items []models.TxItem, acc *models.Currency, amount float64, onDelete func(models.TxItem) string) {
+	{{ cur := models.TxItemsCurrency(items, acc) }}
 	<ul class="grid grid-cols-1 gap-1">
 		for _, it := range items {
 			if !it.Kind.IsCharge() {
@@ -383,7 +452,13 @@ templ TxItemsList(items []models.TxItem, cur *models.Currency, amount float64, o
 		<span>Total</span>
 		<span class="sensitive tabular-nums">{ cur.Format(models.TxItemsTotal(items)) }</span>
 	</div>
-	if models.TxItemsMismatch(items, amount) {
+	if models.TxItemsForeign(items, acc) && amount != 0 {
+		<p class="px-3 text-sm text-zinc-400 tabular-nums">
+			Charged <span class="sensitive text-zinc-200">{ acc.Format(abs(amount)) }</span>
+			{ fmt.Sprintf(" · 1 %s = %s %s", cur.String, formatters.FormatRate(models.TxItemsRate(items, amount, acc)), acc.String) }
+		</p>
+	}
+	if models.TxItemsMismatch(items, amount, acc) {
 		<p class="inline-flex items-start gap-1.5 px-3 text-sm text-amber-400">
 			@icons.Warning("14", &templ.Attributes{"class": "mt-1 shrink-0"})
 			{ fmt.Sprintf("The lines add up to %s, the amount is %s.", cur.Format(models.TxItemsTotal(items)), cur.Format(abs(amount))) }
