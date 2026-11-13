@@ -649,7 +649,7 @@ templ txTile(tx *models.Transaction, v *txView) {
 
 templ txChips(tx *models.Transaction, v *txView) {
 	{{ isRefund := tx.Kind == models.RefundTxKind }}
-	{{ hasChips := isRefund || tx.Category != nil || v.isScheduled || tx.FromSMS || tx.FromImport || tx.RecurrentTxID != "" || tx.Goal != nil || len(tx.Reimbursements) > 0 || tx.ItemsCount > 0 || tx.Receipt != nil }}
+	{{ hasChips := isRefund || tx.Category != nil || v.isScheduled || tx.FromSMS || tx.FromImport || tx.RecurrentTxID != "" || tx.Goal != nil || len(tx.Reimbursements) > 0 || tx.ItemsCount > 0 || tx.Receipt != nil || len(tx.Wishes) > 0 }}
 	if hasChips {
 		<div class="flex flex-wrap items-center gap-1.5 mt-1.5">
 			if isRefund {
@@ -710,6 +710,15 @@ templ txChips(tx *models.Transaction, v *txView) {
 					@icons.Target("12")
 					<span class="truncate">{ tx.Goal.Name }</span>
 					@txGoalPopup(tx.Goal)
+				</span>
+			}
+			if len(tx.Wishes) > 0 {
+				<span class="chip max-w-48 text-pink-300" title={ txWishesTitle(tx.Wishes) }>
+					@icons.Gift("12")
+					<span class="truncate">{ tx.Wishes[0].Name }</span>
+					if len(tx.Wishes) > 1 {
+						<span class="text-zinc-400">{ fmt.Sprintf("+%d", len(tx.Wishes)-1) }</span>
+					}
 				</span>
 			}
 			if tx.ItemsCount > 0 {
@@ -1466,6 +1475,15 @@ func txConverted(tx *models.Transaction, def *models.Currency) string {
 func dateOf(t time.Time) time.Time {
 	y, m, d := t.Date()
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+}
+
+// txWishesTitle names the wishlist items bought in a transaction.
+func txWishesTitle(wishes []models.WishlistItem) string {
+	names := make([]string, len(wishes))
+	for i, w := range wishes {
+		names[i] = w.Name
+	}
+	return "From your wishlist: " + strings.Join(names, ", ")
 }
 
 func formatTxDay(day time.Time) string {

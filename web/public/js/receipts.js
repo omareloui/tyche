@@ -198,6 +198,43 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => initItems(document));
   else initItems(document);
 
+  // The details' "Add a line" form (form[data-item-add]): its total follows
+  // quantity × unit price (an item) or the rate on the items already there
+  // (data-subtotal, a charge) until typed by hand, like the form's rows.
+  function recomputeAddForm(f) {
+    const charge = f.querySelector("select[name=kind]")?.value !== "0";
+    // Alpine disables the other kind's total.
+    const total = f.querySelector("[name=total]:not([disabled])");
+    if (!total || total.hasAttribute("data-total-manual")) return;
+    if (charge) {
+      const rate = f.querySelector("[name=rate]")?.value.trim();
+      if (!rate) return;
+      let v = round2((num(f.dataset.subtotal) * num(rate)) / 100);
+      if (f.querySelector("select[name=kind]").value === "6") v = -Math.abs(v);
+      total.value = v ? String(v) : "";
+      return;
+    }
+    const price = f.querySelector("[name=unit_price]")?.value.trim();
+    if (!price) return;
+    const qty = f.querySelector("[name=quantity]")?.value.trim();
+    total.value = String(round2((qty ? num(qty) : 1) * num(price)));
+  }
+  document.addEventListener("input", (e) => {
+    const el = e.target;
+    const f = el instanceof Element && el.closest("form[data-item-add]");
+    if (!f) return;
+    if (el.matches("[name=total]")) {
+      el.toggleAttribute("data-total-manual", el.value.trim() !== "");
+      return;
+    }
+    recomputeAddForm(f);
+  });
+  document.addEventListener("change", (e) => {
+    const f = e.target instanceof Element && e.target.closest("form[data-item-add]");
+    // After Alpine swapped which total is enabled.
+    if (f && e.target.matches("select[name=kind]")) setTimeout(() => recomputeAddForm(f));
+  });
+
   // "Use as the amount": the answer's data-items-amount goes in the form's
   // amount (its mask formats it).
   document.addEventListener("htmx:afterSwap", (e) => {

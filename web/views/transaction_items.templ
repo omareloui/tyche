@@ -519,7 +519,9 @@ templ txItemLine(it models.TxItem, cur *models.Currency, onDelete func(models.Tx
 
 // TxItemAddForm adds a line from the details (an item or a charge, picked
 // by kind), posted to url; fd is its data, with its error.
-templ txItemAddForm(url string, fd *TxItemFD) {
+// subtotal is the items' already there, a charge's amount following its rate
+// on it (receipts.js works out the total as typed).
+templ txItemAddForm(url string, fd *TxItemFD, subtotal float64) {
 	{{ open := fd != nil }}
 	if fd == nil {
 		{{ fd = &TxItemFD{} }}
@@ -532,6 +534,8 @@ templ txItemAddForm(url string, fd *TxItemFD) {
 			hx-target="closest [data-tx-items-section]"
 			hx-swap="outerHTML"
 			@keydown.escape.stop="adding = false"
+			data-item-add
+			data-subtotal={ strconv.FormatFloat(subtotal, 'f', -1, 64) }
 			class="grid gap-2 p-3 rounded-xl border border-zinc-800 bg-zinc-900/40"
 		>
 			<div class="flex gap-2">
@@ -631,7 +635,9 @@ templ TxDetailsItems(tx *models.Transaction, add *TxItemFD, rec *ReceiptFD) {
 					@ReceiptViewer(tx.Receipt.URL())
 				</div>
 			}
-			if len(tx.Items) == 0 {
+			if len(tx.Items) == 0 && len(tx.Wishes) > 0 {
+				@txWishLines(tx)
+			} else if len(tx.Items) == 0 {
 				<p class="text-sm text-zinc-500">No items yet.</p>
 			} else {
 				{{ var onDelete func(models.TxItem) string }}
@@ -639,6 +645,9 @@ templ TxDetailsItems(tx *models.Transaction, add *TxItemFD, rec *ReceiptFD) {
 					{{ onDelete = func(it models.TxItem) string { return fmt.Sprintf("/transactions/%s/items/%s", tx.ID, it.ID) } }}
 				}
 				@TxItemsList(tx.Items, &tx.Account.Currency, tx.Amount, onDelete)
+				if len(tx.Wishes) > 0 {
+					@txWishChips(tx)
+				}
 			}
 			if rec != nil && (rec.Notice != "" || rec.Warning != "" || rec.Scanned) {
 				<div class="grid gap-1 text-sm">
@@ -668,14 +677,107 @@ templ TxDetailsItems(tx *models.Transaction, add *TxItemFD, rec *ReceiptFD) {
 			}
 			if !locked {
 				<div class="flex flex-wrap items-start gap-2">
-					@txItemAddForm(fmt.Sprintf("/transactions/%s/items", tx.ID), add)
+					@txItemAddForm(fmt.Sprintf("/transactions/%s/items", tx.ID), add, models.TxItemsSubtotal(tx.Items))
 					if rec != nil && rec.Enabled {
 						@detailsScanButtons(tx)
 					}
+					if tx.CanHoldWishes() {
+						<button
+							type="button"
+							hx-get={ txWishesURL(tx.ID) }
+							hx-target={ "#" + txWishPickerID(tx.ID) }
+							hx-swap="innerHTML"
+							class="txd-action"
+						>
+							@icons.Gift("14")
+							Add wishlist item
+						</button>
+					}
 				</div>
+				<div id={ txWishPickerID(tx.ID) } class="empty:hidden"></div>
 				<div id={ "txd-scan-error-" + tx.ID } class="text-sm text-red-400 empty:hidden" role="alert"></div>
 			}
 		}
+	</div>
+}
+
+func txWishesURL(txID string) string { return fmt.Sprintf("/transactions/%s/wishes", txID) }
+
+func txWishPickerID(txID string) string { return "txd-wish-picker-" + txID }
+
+// txWishUnlink is a wish's × putting it back to waiting on the wishlist.
+templ txWishUnlink(tx *models.Transaction, w *models.WishlistItem, size string) {
+	if tx.CanHoldWishes() {
+		<button
+			type="button"
+			hx-delete={ txWishesURL(tx.ID) + "/" + w.ID }
+			hx-target="closest [data-tx-items-section]"
+			hx-swap="outerHTML"
+			aria-label={ "Not bought in it: " + w.Name }
+			title="Not bought in it (back on the wishlist)"
+			class="grid place-items-center shrink-0 w-8 h-8 rounded-lg text-zinc-500 cursor-pointer transition-colors hover:bg-zinc-700 hover:text-white"
+		>
+			@icons.X(size)
+		</button>
+	}
+}
+
+// txWishLines are the wishes bought in a transaction without lines of its
+// own, standing in for its breakdown.
+templ txWishLines(tx *models.Transaction) {
+	<p class="text-xs font-medium uppercase tracking-wide text-zinc-500">From your wishlist</p>
+	<ul class="grid grid-cols-1 gap-1">
+		for i := range tx.Wishes {
+			{{ w := &tx.Wishes[i] }}
+			<li class="flex items-center gap-3 min-w-0 px-3 py-1.5 rounded-xl bg-tx-row" data-tx-wish>
+				<span class="grid place-items-center shrink-0 w-6 h-6 rounded-md bg-pink-400/12 text-pink-300">
+					@icons.Gift("13")
+				</span>
+				<p class="flex-1 min-w-0 text-sm [overflow-wrap:anywhere]">{ w.Name }</p>
+				<span class="text-sm tabular-nums text-zinc-300 sensitive">{ w.Currency.Format(w.Price) }</span>
+				@txWishUnlink(tx, w, "14")
+			</li>
+		}
+	</ul>
+}
+
+// txWishChips are the wishes bought in a transaction with lines of its own:
+// rows like the lines', under a divider.
+templ txWishChips(tx *models.Transaction) {
+	<div class="grid gap-2 pt-3 border-t border-zinc-800">
+		@txWishLines(tx)
+	</div>
+}
+
+// TxWishPicker lists the waiting wishes to mark bought in the transaction,
+// one per click.
+templ TxWishPicker(tx *models.Transaction, wishes []models.WishlistItem) {
+	<div class="grid gap-2 p-3 rounded-xl border border-zinc-800 bg-zinc-900/40">
+		<div class="flex items-center justify-between gap-2">
+			<p class="text-sm text-zinc-300">Which wish did you buy in it?</p>
+			<button type="button" @click="$el.closest('[id]').innerHTML = ''" class="text-sm text-zinc-400 cursor-pointer hover:text-zinc-200">Cancel</button>
+		</div>
+		if len(wishes) == 0 {
+			<p class="text-sm text-zinc-500">No wish is waiting on your wishlist.</p>
+		}
+		<ul class="grid gap-1 max-h-72 overflow-y-auto">
+			for _, w := range wishes {
+				<li>
+					<button
+						type="button"
+						hx-put={ txWishesURL(tx.ID) }
+						hx-vals={ fmt.Sprintf(`{"wish_id": %q}`, w.ID) }
+						hx-target="closest [data-tx-items-section]"
+						hx-swap="outerHTML"
+						class="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-zinc-800/50 text-left cursor-pointer transition-colors hover:bg-zinc-700/60"
+					>
+						@icons.Gift("14", &templ.Attributes{"class": "shrink-0 text-zinc-500"})
+						<span class="flex-1 min-w-0 truncate text-sm">{ w.Name }</span>
+						<span class="text-sm tabular-nums text-zinc-400 sensitive">{ w.Currency.Format(w.Price) }</span>
+					</button>
+				</li>
+			}
+		</ul>
 	</div>
 }
 
@@ -727,7 +829,7 @@ templ RecurrentTxDetailsItems(rt *models.RecurrentTx, add *TxItemFD) {
 				@TxItemsList(rt.Items, &rt.Account.Currency, rt.Amount, onDelete)
 			}
 			if !rt.IsGamyaa() {
-				@txItemAddForm(fmt.Sprintf("/recurrent-tx/%s/items", rt.ID), add)
+				@txItemAddForm(fmt.Sprintf("/recurrent-tx/%s/items", rt.ID), add, models.TxItemsSubtotal(rt.Items))
 			}
 		}
 	</div>

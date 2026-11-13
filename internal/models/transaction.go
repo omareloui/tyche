@@ -54,6 +54,8 @@ type Transaction struct {
 	ItemsCount int
 	// Receipt is its receipt's image, nil when none.
 	Receipt *Receipt
+	// Wishes are the wishlist items bought in it.
+	Wishes []WishlistItem
 	// ReceiptID is a scanned receipt to link on saving it.
 	ReceiptID string
 	// SplitPeople is how many people its bill is split with (see TxSplit),
@@ -174,6 +176,12 @@ func (t *Transaction) IsGoalPurchase() bool {
 
 // IsLocked reports whether it can't be edited nor duplicated: a goal's or a
 // deleted account's.
+// CanHoldWishes tells wishlist items can be marked bought in it: an expense
+// of the user's (not locked, a reimbursement or a transfer's leg).
+func (t *Transaction) CanHoldWishes() bool {
+	return t.Kind == ExpenseTxKind && !t.IsLocked() && !t.IsTransferLeg() && !t.IsReimbursement() && !t.IsLoanPayment()
+}
+
 func (t *Transaction) IsLocked() bool {
 	return t.IsGoalTx() || t.Account.IsDeleted() || (t.ToAccount != nil && t.ToAccount.IsDeleted())
 }

@@ -96,3 +96,32 @@ WHERE goal_id = sqlc.arg(goal_id);
 -- name: DeleteWishlistItem :exec
 DELETE FROM wishlist_items
 WHERE id = sqlc.arg(id);
+
+-- The wishes bought in the transactions.
+-- name: GetWishlistItemsOfTxs :many
+SELECT
+    sqlc.embed(w),
+    sqlc.embed(c)
+FROM wishlist_items AS w
+LEFT JOIN currencies AS c ON c.id = w.currency_id
+WHERE w.transaction_id IN (sqlc.slice(ids))
+ORDER BY w.decided_at, w.created_at;
+
+-- A waiting wish bought in an existing transaction.
+-- name: LinkWishlistItemToTx :execrows
+UPDATE wishlist_items
+SET
+    status = 1, -- models.WishlistBought
+    transaction_id = sqlc.arg(transaction_id),
+    goal_id = NULL,
+    decided_at = DATETIME('now')
+WHERE id = sqlc.arg(id) AND status = 0;
+
+-- A wish bought in the transaction back to waiting.
+-- name: UnlinkWishlistItemFromTx :execrows
+UPDATE wishlist_items
+SET
+    status = 0, -- models.WishlistWaiting
+    transaction_id = NULL,
+    decided_at = NULL
+WHERE id = sqlc.arg(id) AND transaction_id = sqlc.arg(transaction_id);

@@ -290,6 +290,16 @@ templ WishlistItem(item *models.WishlistItem, ws *models.WorkSettings, defaultCu
 							Buy
 						</button>
 						<button
+							hx-get={ wishBoughtURL(item.ID) }
+							hx-target={ "#" + components.DrawerSlot }
+							hx-swap="innerHTML"
+							data-opens-drawer
+							class="wl-action"
+						>
+							@icons.Receipt("14")
+							Already bought
+						</button>
+						<button
 							hx-get={ fmt.Sprintf("/wishlist/%s/goal", item.ID) }
 							hx-target={ "#" + components.DrawerSlot }
 							hx-swap="innerHTML"
@@ -323,9 +333,12 @@ templ WishlistItem(item *models.WishlistItem, ws *models.WorkSettings, defaultCu
 						}
 					</div>
 				case models.WishlistBought:
-					<p class="flex items-center gap-1.5 mt-auto text-sm text-(--accent)">
+					<p class="flex flex-wrap items-center gap-1.5 mt-auto text-sm text-(--accent)">
 						@icons.Check("14")
 						Bought { goalDay(item.DecidedAt) }
+						if item.TransactionID != "" {
+							<a href={ csvTxURL(item.TransactionID) } class="text-zinc-400 underline-offset-2 hover:underline hover:text-zinc-200">See the transaction</a>
+						}
 					</p>
 				case models.WishlistAbandoned:
 					<p class="flex items-center gap-1.5 mt-auto text-sm text-(--accent)">
@@ -417,3 +430,141 @@ const WishSheetID = "wish-sheet"
 
 // WishFormBind is the Alpine variable opening the wish create form.
 const WishFormBind = "openWishForm"
+
+// WishTxCandidate is an expense a wish may have been bought in, Likely when
+// its amount covers the wish's price and it's recent.
+type WishTxCandidate struct {
+	Tx     models.Transaction
+	Likely bool
+}
+
+func wishBoughtURL(id string) string { return fmt.Sprintf("/wishlist/%s/bought", id) }
+
+// WishBoughtListID is the candidates' list, re-fetched by the search.
+const WishBoughtListID = "wish-bought-list"
+
+// WishBoughtDrawer picks the transaction a wish was already bought in.
+templ WishBoughtDrawer(item *models.WishlistItem, cands []WishTxCandidate, q string) {
+	@components.Drawer(components.DrawerProps{Label: "Already bought " + item.Name}) {
+		<header class="flex items-start gap-3 px-5 sm:px-6 pt-5 pb-4">
+			<div class="flex-1 min-w-0">
+				<h2 class="text-lg font-bold leading-snug">Already bought</h2>
+				<p class="text-sm text-zinc-400 truncate">
+					Which transaction was { item.Name } (<span class="sensitive tabular-nums">{ item.Currency.Format(item.Price) }</span>) in?
+				</p>
+			</div>
+			@components.DrawerClose()
+		</header>
+		<div class="flex-1 grid grid-cols-1 auto-rows-max content-start gap-3 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
+			<input
+				type="search"
+				name="q"
+				value={ q }
+				placeholder="Search the expenses"
+				aria-label="Search the expenses"
+				autocomplete="off"
+				class="input-field"
+				hx-get={ wishBoughtURL(item.ID) }
+				hx-trigger="input changed delay:300ms, search"
+				hx-target={ "#" + WishBoughtListID }
+				hx-swap="outerHTML"
+			/>
+			@WishTxCandidates(item, cands)
+		</div>
+	}
+}
+
+// WishTxCandidates are the expenses to pick from, the likely ones first.
+templ WishTxCandidates(item *models.WishlistItem, cands []WishTxCandidate) {
+	<ul id={ WishBoughtListID } class="grid gap-2">
+		if len(cands) == 0 {
+			<li class="text-sm text-zinc-500">No expense matches.</li>
+		}
+		for i := range cands {
+			{{ c := &cands[i] }}
+			{{ v := newTxView(ctx, &c.Tx) }}
+			<li>
+				<button
+					type="button"
+					hx-put={ wishBoughtURL(item.ID) }
+					hx-vals={ fmt.Sprintf(`{"tx_id": %q}`, c.Tx.ID) }
+					hx-target="#wishlist"
+					hx-swap="outerHTML"
+					class="cursor-pointer w-full flex items-start gap-3 px-3 py-2.5 rounded-xl bg-zinc-700/30 text-left transition-colors hover:bg-zinc-600/40"
+				>
+					@wishTxTile(&c.Tx, &v)
+					<div class="flex-1 min-w-0 grid gap-0.5">
+						<p class="flex items-center gap-2 min-w-0">
+							<span class="truncate font-medium">{ v.title }</span>
+							if c.Likely {
+								<span class="chip shrink-0 text-emerald-300">Likely</span>
+							}
+						</p>
+						if v.subtitle != "" {
+							<p class={ "text-sm text-zinc-400 truncate", templ.KV("sensitive", v.subtitleSensitive) }>{ v.subtitle }</p>
+						}
+						<p class="text-xs text-zinc-500 truncate">
+							{ formatTxDay(c.Tx.ScheduledTo) }
+							if v.time != "" {
+								· { v.time }
+							}
+							· { v.account }
+							if c.Tx.FulfilledAt.IsZero() {
+								· Scheduled
+							}
+						</p>
+						if c.Tx.Category != nil || c.Tx.ItemsCount > 0 || c.Tx.Receipt != nil || len(c.Tx.Wishes) > 0 || c.Tx.FromSMS {
+							<div class="flex flex-wrap gap-1 mt-1">
+								if c.Tx.Category != nil {
+									<span class="chip max-w-40">
+										@categoryDot(c.Tx.Category.Color)
+										<span class="truncate">{ c.Tx.Category.Name }</span>
+									</span>
+								}
+								if c.Tx.ItemsCount > 0 {
+									<span class="chip">
+										@icons.Receipt("12")
+										{ txItemsCountLabel(c.Tx.ItemsCount) }
+									</span>
+								}
+								if c.Tx.Receipt != nil {
+									<span class="chip">
+										@icons.Image("12")
+										Receipt
+									</span>
+								}
+								if c.Tx.FromSMS {
+									<span class="chip">SMS</span>
+								}
+								if len(c.Tx.Wishes) > 0 {
+									<span class="chip max-w-40 text-pink-300" title={ txWishesTitle(c.Tx.Wishes) }>
+										@icons.Gift("12")
+										<span class="truncate">{ c.Tx.Wishes[0].Name }</span>
+										if len(c.Tx.Wishes) > 1 {
+											<span class="text-zinc-400">{ fmt.Sprintf("+%d", len(c.Tx.Wishes)-1) }</span>
+										}
+									</span>
+								}
+							</div>
+						}
+					</div>
+					<span class={ "shrink-0 self-start tabular-nums font-semibold", templ.KV("sensitive", v.sensitive) }>{ v.amount }</span>
+				</button>
+			</li>
+		}
+	</ul>
+}
+
+// wishTxTile is a candidate's avatar: its counterparty's icon, else its
+// category's color (txTile's buttons don't nest in the row's).
+templ wishTxTile(tx *models.Transaction, v *txView) {
+	<div class="grid place-items-center shrink-0 w-10 h-10 rounded-xl bg-zinc-800/70">
+		if v.counterparty != nil {
+			@components.CounterpartyIcon(v.counterparty.Name, v.counterparty.Icon, v.counterparty.Color, "w-7 h-7 text-sm")
+		} else if tx.Category != nil && tx.Category.Color != "" {
+			<span class="w-3 h-3 rounded-full" style={ fmt.Sprintf("background-color: %s", models.CategoryColorToHex(tx.Category.Color)) }></span>
+		} else {
+			@icons.Receipt("18", &templ.Attributes{"class": "text-zinc-500"})
+		}
+	</div>
+}

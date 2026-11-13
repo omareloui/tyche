@@ -210,3 +210,109 @@ func setWishlistItemStatusByGoalWithTxn(ctx context.Context, qtx *queries.Querie
 	}
 	return nil
 }
+
+var (
+	// ErrWishNotWaiting is a wish already decided, which can't be bought in a
+	// transaction.
+	ErrWishNotWaiting = errors.New("the wish is already decided")
+	// ErrWishTxNotFound is a wish not bought in the transaction.
+	ErrWishTxNotFound = errors.New("the wish isn't the transaction's")
+)
+
+// LinkWishesToTx marks the waiting wishes bought in the transaction, all or
+// none (ErrWishNotWaiting).
+func (r *Repository) LinkWishesToTx(ctx context.Context, txID string, wishIDs []string) error {
+	return r.transact(ctx, func(qtx *queries.Queries) error {
+		for _, id := range wishIDs {
+			n, err := qtx.LinkWishlistItemToTx(ctx, queries.LinkWishlistItemToTxParams{
+				ID:            id,
+				TransactionID: sql.NullString{String: txID, Valid: true},
+			})
+			if err != nil {
+				logger.FromCtx(ctx).Error("linking a wish to a transaction", zap.Error(err), zap.String("id", id))
+				return err
+			}
+			if n == 0 {
+				return ErrWishNotWaiting
+			}
+		}
+		return nil
+	})
+}
+
+// UnlinkWishFromTx puts a wish bought in the transaction back to waiting.
+func (r *Repository) UnlinkWishFromTx(ctx context.Context, txID, wishID string) error {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+	n, err := q.UnlinkWishlistItemFromTx(ctx, queries.UnlinkWishlistItemFromTxParams{
+		ID:            wishID,
+		TransactionID: sql.NullString{String: txID, Valid: true},
+	})
+	if err != nil {
+		logger.FromCtx(ctx).Error("unlinking a wish", zap.Error(err), zap.String("id", wishID))
+		return err
+	}
+	if n == 0 {
+		return ErrWishTxNotFound
+	}
+	return nil
+}
+
+// GetWishTxCandidates are the expenses a wish may have been bought in,
+// newest first, matching q when set.
+func (r *Repository) GetWishTxCandidates(ctx context.Context, q string, limit int) ([]models.Transaction, error) {
+	f := models.TxFilter{Q: q, Kind: models.ExpenseTxKind}
+	p := txFilterParams(&f)
+	p.Lim = int64(limit * 2)
+	txs, err := r.listTransactions(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]models.Transaction, 0, limit)
+	for _, t := range txs {
+		if t.CanHoldWishes() && len(out) < limit {
+			out = append(out, t)
+		}
+	}
+	_, dbq, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := loadTxItemCounts(ctx, dbq, out); err != nil {
+		return nil, err
+	}
+	if err := loadTxWishes(ctx, dbq, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// loadTxWishes sets the wishes bought in each transaction.
+func loadTxWishes(ctx context.Context, q *queries.Queries, lists ...[]models.Transaction) error {
+	var ids []string
+	type ref struct{ list, i int }
+	at := map[string]ref{}
+	for li, txs := range lists {
+		for i := range txs {
+			ids = append(ids, txs[i].ID)
+			at[txs[i].ID] = ref{li, i}
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	rows, err := q.GetWishlistItemsOfTxs(ctx, nullStrings(ids))
+	if err != nil {
+		logger.FromCtx(ctx).Error("querying the transactions' wishes", zap.Error(err))
+		return err
+	}
+	for _, row := range rows {
+		if r, ok := at[row.WishlistItem.TransactionID.String]; ok {
+			tx := &lists[r.list][r.i]
+			tx.Wishes = append(tx.Wishes, *dbWishlistItemToWishlistItem(&row.WishlistItem, &row.Currency))
+		}
+	}
+	return nil
+}

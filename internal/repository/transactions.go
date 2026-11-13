@@ -203,6 +203,9 @@ func (r *Repository) GetTransactionsPage(ctx context.Context, f models.TxFilter,
 	if err := loadTxItemCounts(ctx, q, page.Upcoming, page.History); err != nil {
 		return nil, err
 	}
+	if err := loadTxWishes(ctx, q, page.Upcoming, page.History); err != nil {
+		return nil, err
+	}
 	if err := r.loadGoalProgress(ctx, page.Upcoming); err != nil {
 		return nil, err
 	}
@@ -412,6 +415,9 @@ func (r *Repository) GetTransaction(ctx context.Context, id string) (*models.Tra
 		return nil, err
 	}
 	if err := loadTxItems(ctx, q, one); err != nil {
+		return nil, err
+	}
+	if err := loadTxWishes(ctx, q, one); err != nil {
 		return nil, err
 	}
 	tx := &one[0]
