@@ -404,7 +404,8 @@ WHERE id = sqlc.arg(id);
 -- name: GetMerchantSpending :many
 -- Sums fulfilled expenses (kind 1, net of their reimbursements) net of refunds
 -- (kind 5) and incomes (kind 2, treated as refunds from merchants) per merchant and
--- account currency fulfilled between from_date and to_date (exclusive);
+-- account currency fulfilled and dated (scheduled_to, like the transactions
+-- list) between from_date and to_date (exclusive);
 -- currencies are merged in Go using live fx rates.
 SELECT
     cp.id AS counterparty_id,
@@ -432,15 +433,15 @@ WHERE
     AND t.transfer_pair_id IS NULL
     AND t.fulfilled_at IS NOT NULL
     AND cp.is_merchant IS TRUE
-    AND t.fulfilled_at >= sqlc.arg(from_date)
-    AND t.fulfilled_at < sqlc.arg(to_date)
+    AND t.scheduled_to >= sqlc.arg(from_date)
+    AND t.scheduled_to < sqlc.arg(to_date)
 GROUP BY cp.id, cur.id
 ORDER BY total DESC;
 
 -- name: GetMerchantSpendingDays :many
 -- The days (YYYY-MM-DD) with merchant expenses, latest first, for the months
 -- to navigate to.
-SELECT DISTINCT CAST(SUBSTR(t.fulfilled_at, 1, 10) AS TEXT) AS day
+SELECT DISTINCT CAST(SUBSTR(t.scheduled_to, 1, 10) AS TEXT) AS day
 FROM transactions AS t
 JOIN counterparties AS cp ON t.counterparty_id = cp.id
 WHERE
@@ -451,10 +452,10 @@ WHERE
 ORDER BY day DESC;
 
 -- name: GetMerchantDailySpending :many
--- GetMerchantSpending per day (fulfilled_at's) too, with the merchants'
+-- GetMerchantSpending per day (scheduled_to's) too, with the merchants'
 -- labels, for the counterparties summary.
 SELECT
-    CAST(SUBSTR(t.fulfilled_at, 1, 10) AS TEXT) AS day,
+    CAST(SUBSTR(t.scheduled_to, 1, 10) AS TEXT) AS day,
     cp.id AS counterparty_id,
     cp.name AS counterparty_name,
     cp.icon AS counterparty_icon,
@@ -478,8 +479,8 @@ WHERE
     AND t.transfer_pair_id IS NULL
     AND t.fulfilled_at IS NOT NULL
     AND cp.is_merchant IS TRUE
-    AND t.fulfilled_at >= sqlc.arg(from_date)
-    AND t.fulfilled_at < sqlc.arg(to_date)
+    AND t.scheduled_to >= sqlc.arg(from_date)
+    AND t.scheduled_to < sqlc.arg(to_date)
 GROUP BY day, cp.id, cur.id
 ORDER BY day;
 

@@ -3,7 +3,6 @@ package repository
 import (
 	"cmp"
 	"context"
-	"database/sql"
 	"slices"
 	"time"
 
@@ -59,8 +58,8 @@ func (r *Repository) GetMerchantSpending(ctx context.Context, month string) (*mo
 	p := start.For(monthTime)
 
 	rows, err := q.GetMerchantSpending(ctx, queries.GetMerchantSpendingParams{
-		FromDate: sql.NullTime{Time: p.From, Valid: true},
-		ToDate:   sql.NullTime{Time: p.To, Valid: true},
+		FromDate: p.From,
+		ToDate:   p.To,
 	})
 	if err != nil {
 		l.Error("querying merchant spending", zap.Error(err))

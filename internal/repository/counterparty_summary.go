@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"database/sql"
 	"time"
 
 	"github.com/omareloui/tyche/internal/logger"
@@ -22,8 +21,8 @@ func (r *Repository) GetCounterpartySummary(ctx context.Context, month time.Time
 
 	p := userPeriod(ctx, month)
 	rows, err := q.GetMerchantDailySpending(ctx, queries.GetMerchantDailySpendingParams{
-		FromDate: sql.NullTime{Time: p.From, Valid: true},
-		ToDate:   sql.NullTime{Time: p.To, Valid: true},
+		FromDate: p.From,
+		ToDate:   p.To,
 	})
 	if err != nil {
 		logger.FromCtx(ctx).Error("querying merchant daily spending", zap.Error(err))
