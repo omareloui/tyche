@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/omareloui/tyche/internal/markdown"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
@@ -95,6 +96,7 @@ templ wishlistItemFormBody(id string, fd *WishlistItemFD, curs []models.Currency
 	}
 	@form.Field("Note", "note", id, icons.Pencil("15"), fd.Note.Error) {
 		@form.Textarea("note", "Why do you want it?", id, fd.Note, nil)
+		@form.MarkdownHint()
 	}
 }
 
@@ -258,7 +260,7 @@ templ WishlistItem(item *models.WishlistItem, ws *models.WorkSettings, defaultCu
 					</span>
 				}
 				if item.Note != "" {
-					<span title={ item.Note } class="text-sm text-zinc-500 truncate">{ firstLine(item.Note) }</span>
+					<span title={ markdown.Plain(item.Note) } class="text-sm text-zinc-500 truncate">{ markdown.FirstLine(item.Note) }</span>
 				}
 			</div>
 			if item.Status != models.WishlistWaiting {

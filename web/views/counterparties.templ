@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/markdown"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
@@ -135,6 +136,7 @@ templ counterpartyFormBody(id string, isNew bool, fd *CounterpartyFD, cats []mod
 	}
 	@form.Field("Note", "note", id, icons.StickyNote("15"), fd.Note.Error) {
 		@form.Textarea("note", "Anything to remember, e.g. ask for the student discount", id, fd.Note, templ.Attributes{"maxlength": "1000"})
+		@form.MarkdownHint()
 	}
 	<div
 		x-data={ fmt.Sprintf("{isMerchant: %t}", fd.IsMerchant.Value != "") }
@@ -648,9 +650,9 @@ templ Counterparty(cp *models.Counterparty) {
 					@counterpartyLabelChips(cp.Labels)
 				}
 				if cp.Note != "" {
-					<p title={ cp.Note } class="flex items-center gap-1.5 mt-1.5 min-w-0 text-sm text-zinc-400">
+					<p title={ markdown.Plain(cp.Note) } class="flex items-center gap-1.5 mt-1.5 min-w-0 text-sm text-zinc-400">
 						@icons.StickyNote("13", &templ.Attributes{"class": "shrink-0 text-zinc-500"})
-						<span class="truncate">{ firstLine(cp.Note) }</span>
+						<span class="truncate">{ markdown.FirstLine(cp.Note) }</span>
 					</p>
 				}
 				if len(cp.Aliases) > 0 {
@@ -779,11 +781,6 @@ func counterpartyLocationLabels(cp *models.Counterparty) string {
 		labels[i] = l.Label
 	}
 	return strings.Join(labels, ", ")
-}
-
-func firstLine(s string) string {
-	line, _, _ := strings.Cut(s, "\n")
-	return line
 }
 
 // counterpartyLabelChips are a counterparty's labels, each filtering the page

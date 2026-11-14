@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/omareloui/tyche/internal/markdown"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
@@ -80,7 +81,9 @@ templ CounterpartyDetails(d *CounterpartyDetailsData) {
 				@CounterpartyDetailsLabels(cp, d.LabelsInUse, "")
 				if cp.Note != "" {
 					@txDetailsSection("Note") {
-						<p class="whitespace-pre-line break-words text-sm text-zinc-300">{ cp.Note }</p>
+						<div class="md-note break-words text-sm text-zinc-300">
+							@markdown.HTML(cp.Note)
+						</div>
 					}
 				}
 				@counterpartyDetailsSpending(d)

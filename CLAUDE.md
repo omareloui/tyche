@@ -156,6 +156,7 @@ The app uses a **per-user database model** where each authenticated user gets th
   - `badge/` - The installed app's badge (see **PWA badge**): `Counts`/`Source`, `Notifier` (Web Push subscriptions in the shared DB, pushes on a change)
   - `logview/` - Reads the app's own JSON log files (`logger.Dir`: `tyche.log` + lumberjack's gzipped backups) for `/admin/logs`, paged back by byte offset
   - `sysinfo/` - The process' memory/runtime state for `/admin/logs`: Go's numbers, the RSS (SQLite's C memory included), the cgroup's and the host's
+  - `markdown/` - Renders notes (Markdown): `HTML` (goldmark, raw HTML left out, then a bluemonday allowlist: no images/styles/handlers, links http/https/mailto in a new tab), `Plain` / `FirstLine` for one line spots
   - `idgen/` - ULID generation
   - `formatters/`, `numsutils/`, `slicesutils/`, `structutils/` - Helpers
 - `mobile/android/` - Kotlin app forwarding bank SMS to `POST /api/sms` (see its README)
@@ -198,6 +199,8 @@ JSON endpoints use `HandlerJSONMethod` via `handlePubJSON()`.
 **Errors**: return a `resperr.New(code, msg)` (anything else is a 500 whose message is only logged). `route_handler` and the middlewares respond through `middleware.WriteError` → `errpage.Write`: the plain message for HTMX requests (swapped inline, e.g. a form's 422), else the full `views.ErrorPage` (401 sign in, 403, 404, 429, 5xx with the correlation ID as reference; also for boosted navigations, which `layouts.Main` swaps in). JSON routes answer `{"error": msg}`
 
 **Details drawers in the url**: a fetched drawer with `DrawerProps.URLParam` (counterparty `cp`, goal `goal`, account `acc`, recurrent tx `rtx`, wish `wish`; listed in drawer.js' `DRAWER_URL_PARAMS`) sets `?<param>=<id>` when it opens and drops it when a fetched drawer closes (an edit form opened from the details keeps it meanwhile); the page reads it and opens the details on load (`components.DrawerOnLoad`), like the transactions page's `?tx=`. Transaction amounts aren't `sensitive` (hidden with the balances) in lists, totals are, but for the ones of about the salary or more (any kind, either side of a transfer, ≥ `models.SalaryLikeShare` of the `/settings` salary at today's rates: `txView.sensitive` / `txSalaryLike`, the salary riding in the access claims, `salaryctx` for templates; their SMS body too)
+
+**Notes** (account, counterparty, wish): Markdown, stored as typed; shown only through `markdown.HTML` (sanitized: rendered HTML can only reach a page through `templ.Raw`, which escapes nothing, so never `templ.Raw` user text), in a `.md-note` block (main.css); cards show `markdown.FirstLine` with `markdown.Plain` as the title. Forms put `form.MarkdownHint()` under the textarea
 
 **Dropdowns**: never a native `<select>`: every dropdown is the custom `form.Combobox` (`web/views/form/combobox.templ`, `combobox.js`; `Searchable` for long lists, `Chip` for a pill), its value in a hidden input that fires `change` (so `hx-trigger="change"` goes in `InputAttrs`)
 

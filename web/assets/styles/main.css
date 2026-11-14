@@ -898,3 +898,25 @@ a.nav-pending {
     animation: none;
   }
 }
+
+/* A note rendered from Markdown (internal/markdown). */
+.md-note > * + * { @apply mt-2; }
+.md-note ul { @apply list-disc pl-5; }
+.md-note ol { @apply list-decimal pl-5; }
+.md-note li + li { @apply mt-0.5; }
+.md-note li > ul, .md-note li > ol { @apply mt-0.5; }
+.md-note li:has(> input[type="checkbox"]) { @apply list-none -ml-5; }
+.md-note input[type="checkbox"] { @apply mr-1.5 align-middle accent-(--accent); }
+.md-note a { @apply text-(--accent) underline underline-offset-2 hover:opacity-80; }
+.md-note strong { @apply font-semibold text-zinc-100; }
+.md-note h1, .md-note h2, .md-note h3, .md-note h4, .md-note h5, .md-note h6 { @apply font-semibold text-zinc-100; }
+.md-note h1 { @apply text-lg; }
+.md-note h2 { @apply text-base; }
+.md-note code { @apply px-1 py-0.5 rounded-md bg-zinc-800 font-mono text-[0.85em]; }
+.md-note pre { @apply p-3 rounded-xl bg-zinc-800 overflow-x-auto; }
+.md-note pre code { @apply p-0 bg-transparent; }
+.md-note blockquote { @apply pl-3 border-l-2 border-zinc-700 text-zinc-400; }
+.md-note hr { @apply border-zinc-800; }
+.md-note table { @apply block w-max max-w-full overflow-x-auto border-collapse text-xs; }
+.md-note th, .md-note td { @apply px-2 py-1 border border-zinc-800; }
+.md-note th { @apply bg-zinc-800/60 font-semibold; }

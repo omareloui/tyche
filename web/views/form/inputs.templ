@@ -195,6 +195,11 @@ templ Textarea(name, placeholder, id string, data FDInput, attrs templ.Attribute
 	>{ data.Value }</textarea>
 }
 
+// MarkdownHint goes under a textarea taking Markdown (a note).
+templ MarkdownHint() {
+	<p class="mt-1.5 text-xs text-zinc-500">Markdown works: <span class="font-semibold">**bold**</span>, <span class="italic">*italic*</span>, - lists, [links](https://…)</p>
+}
+
 templ Input(label, kind, name, placeholder, id string, data FDInput, inputAttrs templ.Attributes, wrapperAttrs templ.Attributes) {
 	<div
 		if wrapperAttrs != nil {

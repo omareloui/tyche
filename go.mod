@@ -23,11 +23,15 @@ require (
 	github.com/SherClockHolmes/webpush-go v1.4.0
 	github.com/gen2brain/heic v0.7.2
 	github.com/gen2brain/webp v0.6.4
+	github.com/microcosm-cc/bluemonday v1.0.27
+	github.com/yuin/goldmark v1.8.7
 	golang.org/x/image v0.45.0
 )
 
 require (
+	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/ebitengine/purego v0.10.1 // indirect
+	github.com/gorilla/css v1.0.1 // indirect
 	github.com/tetratelabs/wazero v1.12.0 // indirect
 )
 
