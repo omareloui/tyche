@@ -131,3 +131,8 @@ WHERE counterparty_id = sqlc.arg(counterparty_id);
 UPDATE counterparties
 SET labels = sqlc.arg(labels)
 WHERE id = sqlc.arg(id);
+
+-- name: SetCounterpartyNote :exec
+UPDATE counterparties
+SET note = sqlc.arg(note)
+WHERE id = sqlc.arg(id);

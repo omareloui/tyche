@@ -125,3 +125,8 @@ SET
     transaction_id = NULL,
     decided_at = NULL
 WHERE id = sqlc.arg(id) AND transaction_id = sqlc.arg(transaction_id);
+
+-- name: SetWishlistItemNote :exec
+UPDATE wishlist_items
+SET note = sqlc.arg(note)
+WHERE id = sqlc.arg(id);

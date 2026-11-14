@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/omareloui/tyche/internal/markdown"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/icons"
@@ -515,11 +514,10 @@ templ accountDetailsInfo(a *models.Account) {
 				@accountInfoRow("Status", accountStatusText(a), "", false)
 			}
 		</dl>
-		if a.Note != "" {
-			<div class="md-note break-words text-sm text-zinc-300">
-				@markdown.HTML(a.Note)
-			</div>
-		}
+		@NoteEditor(NoteEditorProps{
+			ID: NoteEditorID("acc", a.ID), URL: fmt.Sprintf("/accounts/%s/note", a.ID),
+			Note: a.Note, Editable: !a.IsGoal() && !a.IsDeleted(),
+		})
 	}
 }
 

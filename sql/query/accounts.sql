@@ -376,3 +376,8 @@ FROM transactions AS t
 WHERE
     (t.account_id = sqlc.arg(account_id) OR t.to_account_id = sqlc.arg(account_id))
     AND t.fulfilled_at IS NOT NULL;
+
+-- name: SetAccountNote :exec
+UPDATE accounts
+SET note = sqlc.narg(note)
+WHERE id = sqlc.arg(id);

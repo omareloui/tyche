@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/omareloui/tyche/internal/markdown"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/icons"
@@ -249,11 +248,10 @@ templ wishDetailsInfo(item *models.WishlistItem, now time.Time) {
 				@accountInfoRow("Decided", item.DecidedAt.Format("Jan 2, 2006"), "", false)
 			}
 		</dl>
-		if item.Note != "" {
-			<div class="md-note break-words text-sm text-zinc-300">
-				@markdown.HTML(item.Note)
-			</div>
-		}
+		@NoteEditor(NoteEditorProps{
+			ID: NoteEditorID("wish", item.ID), URL: fmt.Sprintf("/wishlist/%s/note", item.ID),
+			Note: item.Note, Editable: true,
+		})
 	}
 }
 

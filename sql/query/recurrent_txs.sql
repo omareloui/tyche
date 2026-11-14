@@ -266,3 +266,17 @@ ORDER BY tx.scheduled_to;
 -- The recurrent txs fulfilling their occurrences by themselves, to tell their
 -- transactions in the list.
 SELECT id FROM recurrent_txs WHERE auto_fulfill;
+
+-- name: SetRecurrentTxNote :exec
+UPDATE recurrent_txs
+SET note = sqlc.arg(note)
+WHERE id = sqlc.arg(id);
+
+-- name: SetUnfulfilledOccurrencesNote :exec
+-- Gives a recurrent tx's note to its scheduled occurrences, but the ones
+-- edited on their own.
+UPDATE transactions
+SET note = sqlc.arg(note)
+WHERE recurrent_id = sqlc.arg(recurrent_id)
+    AND fulfilled_at IS NULL
+    AND NOT recurrent_overridden;

@@ -970,3 +970,12 @@ WHERE
         )
     )
 GROUP BY cur.id;
+
+-- name: SetTransactionNote :exec
+-- Sets its note alone (its details' quick edit); an occurrence keeps it when
+-- its recurrent tx is edited, like any edit of its own.
+UPDATE transactions
+SET
+    note = sqlc.arg(note),
+    recurrent_overridden = recurrent_overridden OR recurrent_id IS NOT NULL
+WHERE id = sqlc.arg(id);

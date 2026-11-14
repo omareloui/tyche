@@ -1,0 +1,119 @@
+package views
+
+import (
+	"encoding/json"
+
+	"github.com/omareloui/tyche/internal/markdown"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+// NoteEditorProps is a note shown in details, edited in place.
+type NoteEditorProps struct {
+	// ID is the editor's element id, its answer replacing it.
+	ID string
+	// URL takes a PUT of the note alone (`note`).
+	URL  string
+	Note string
+	// Editable shows the edit button ("Add a note" when there's none).
+	Editable bool
+	// Draft and Error are a refused save's, reopening the editor with them.
+	Draft, Error string
+	// Vals are sent with the note (e.g. from=details).
+	Vals map[string]string
+}
+
+// NoteEditorID is the editor's id for an entity's note.
+func NoteEditorID(kind, id string) string {
+	return "note-" + kind + "-" + id
+}
+
+func noteVals(vals map[string]string) string {
+	if len(vals) == 0 {
+		return ""
+	}
+	b, _ := json.Marshal(vals)
+	return string(b)
+}
+
+// NoteEditor shows a note (Markdown, through markdown.HTML) with a quick
+// edit of it alone: a textarea in place, Ctrl/Cmd+Enter saving, Escape
+// cancelling. Nothing when there's no note and it can't be edited.
+templ NoteEditor(p NoteEditorProps) {
+	if p.Note != "" || p.Editable {
+		{{ editing := p.Error != "" }}
+		<div
+			id={ p.ID }
+			if editing {
+				x-data="{ editing: true }"
+			} else {
+				x-data="{ editing: false }"
+			}
+		>
+			<div x-show="!editing" class="flex items-start gap-2">
+				if p.Note != "" {
+					<div class="md-note flex-1 min-w-0 break-words text-sm text-zinc-300">
+						@markdown.HTML(p.Note)
+					</div>
+					if p.Editable {
+						<button
+							type="button"
+							@click="editing = true; $nextTick(() => $refs.note.focus())"
+							title="Edit the note"
+							aria-label="Edit the note"
+							class="shrink-0 -mt-1 p-1.5 rounded-lg text-zinc-500 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+						>
+							@icons.Pencil("14")
+						</button>
+					}
+				} else {
+					<button
+						type="button"
+						@click="editing = true; $nextTick(() => $refs.note.focus())"
+						class="inline-flex items-center gap-1.5 text-sm text-zinc-500 cursor-pointer transition-colors hover:text-zinc-200"
+					>
+						@icons.StickyNote("14")
+						Add a note
+					</button>
+				}
+			</div>
+			if p.Editable {
+				{{ draft := p.Note }}
+				if editing {
+					{{ draft = p.Draft }}
+				}
+				<form
+					x-show="editing"
+					if !editing {
+						x-cloak
+					}
+					hx-put={ p.URL }
+					hx-target={ "#" + p.ID }
+					hx-swap="outerHTML"
+					if v := noteVals(p.Vals); v != "" {
+						hx-vals={ v }
+					}
+					hx-disabled-elt="find button[type=submit]"
+					@keydown.escape.stop.prevent="editing = false; $refs.note.value = $refs.note.defaultValue"
+					@keydown.ctrl.enter.prevent="$el.requestSubmit()"
+					@keydown.meta.enter.prevent="$el.requestSubmit()"
+					class="grid gap-2"
+				>
+					@form.Textarea("note", "Anything to remember?", p.ID, form.FDInput{Value: draft, Error: p.Error}, templ.Attributes{"x-ref": "note"})
+					if p.Error != "" {
+						<p class="text-sm text-red-400">{ p.Error }</p>
+					}
+					@form.MarkdownHint()
+					<div class="flex justify-end gap-2">
+						<button
+							type="button"
+							@click="editing = false; $refs.note.value = $refs.note.defaultValue"
+							class="btn-ghost h-9!"
+						>Cancel</button>
+						<button type="submit" class="btn-primary h-9!">Save</button>
+					</div>
+				</form>
+			}
+		</div>
+	}
+}
