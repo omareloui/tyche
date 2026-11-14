@@ -9,6 +9,7 @@ INSERT INTO recurrent_txs (
     category_id,
     counterparty_id,
     description,
+    note,
     to_account_id,
     to_amount,
     starts_at,
@@ -28,6 +29,7 @@ VALUES (
     sqlc.arg(category_id),
     sqlc.arg(counterparty_id),
     sqlc.arg(description),
+    sqlc.arg(note),
     sqlc.arg(to_account_id),
     IIF(sqlc.narg(to_amount) > 0.0, ROUND(sqlc.narg(to_amount), 6), NULL),
     sqlc.arg(starts_at),
@@ -85,6 +87,7 @@ SET
     category_id = sqlc.arg(category_id),
     counterparty_id = sqlc.arg(counterparty_id),
     description = sqlc.arg(description),
+    note = sqlc.arg(note),
     to_account_id = sqlc.arg(to_account_id),
     to_amount = IIF(sqlc.narg(to_amount) > 0.0, ROUND(sqlc.narg(to_amount), 6), NULL),
     stops_at = sqlc.arg(stops_at),
@@ -145,6 +148,7 @@ SET
     category_id = sqlc.arg(category_id),
     counterparty_id = sqlc.arg(counterparty_id),
     description = sqlc.arg(description),
+    note = sqlc.arg(note),
     to_account_id = sqlc.narg(to_account_id),
     to_amount = IIF(sqlc.narg(to_amount) > 0.0, ROUND(sqlc.narg(to_amount), 6), NULL)
 WHERE recurrent_id = sqlc.arg(recurrent_id)

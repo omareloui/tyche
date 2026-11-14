@@ -36,6 +36,15 @@ const (
 	TxReceiptWithout TxReceipt = "without"
 )
 
+// TxNote narrows transactions by whether they have a note.
+type TxNote string
+
+const (
+	TxNoteAny     TxNote = ""
+	TxNoteWith    TxNote = "with"
+	TxNoteWithout TxNote = "without"
+)
+
 // Query keys of the transactions filters, also the form field names.
 const (
 	TxFilterQ            = "q"
@@ -47,6 +56,7 @@ const (
 	TxFilterStatus       = "status"
 	TxFilterSource       = "source"
 	TxFilterReceipt      = "receipt"
+	TxFilterNote         = "note"
 	TxFilterFrom         = "from"
 	TxFilterTo           = "to"
 	TxFilterMin          = "min"
@@ -71,6 +81,7 @@ type TxFilter struct {
 	Status         TxStatus
 	Source         TxSource
 	Receipt        TxReceipt
+	Note           TxNote
 	// From and To are inclusive days, zero for no bound.
 	From, To time.Time
 	// MinAmount and MaxAmount bound the amount, in the account's currency.
@@ -98,6 +109,10 @@ func ParseTxFilter(v url.Values) TxFilter {
 	switch s := TxReceipt(v.Get(TxFilterReceipt)); s {
 	case TxReceiptWith, TxReceiptWithout:
 		f.Receipt = s
+	}
+	switch s := TxNote(v.Get(TxFilterNote)); s {
+	case TxNoteWith, TxNoteWithout:
+		f.Note = s
 	}
 	f.From = parseFilterDate(v.Get(TxFilterFrom))
 	f.To = parseFilterDate(v.Get(TxFilterTo))
@@ -152,6 +167,7 @@ func (f *TxFilter) Values() url.Values {
 	set(TxFilterStatus, string(f.Status))
 	set(TxFilterSource, string(f.Source))
 	set(TxFilterReceipt, string(f.Receipt))
+	set(TxFilterNote, string(f.Note))
 	set(TxFilterFrom, f.FromString())
 	set(TxFilterTo, f.ToString())
 	set(TxFilterMin, FilterAmountString(f.MinAmount))
@@ -178,7 +194,7 @@ func (f *TxFilter) IsZero() bool {
 func (f *TxFilter) ActiveCount() int {
 	v := f.Values()
 	n := 0
-	for _, k := range []string{TxFilterKind, TxFilterAccount, TxFilterCategory, TxFilterCounterparty, TxFilterGoal, TxFilterStatus, TxFilterSource, TxFilterReceipt} {
+	for _, k := range []string{TxFilterKind, TxFilterAccount, TxFilterCategory, TxFilterCounterparty, TxFilterGoal, TxFilterStatus, TxFilterSource, TxFilterReceipt, TxFilterNote} {
 		if v.Has(k) {
 			n++
 		}

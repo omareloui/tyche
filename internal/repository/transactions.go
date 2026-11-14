@@ -75,6 +75,7 @@ func (r *Repository) createTransactionWithTxn(qtx *queries.Queries, ctx context.
 		CategoryID:     catID,
 		CounterpartyID: cpID,
 		Description:    sql.NullString{String: tx.Description, Valid: tx.Description != ""},
+		Note:           tx.Note,
 		ToAccountID:    toAccID,
 		ToAmount:       sql.NullFloat64{Float64: tx.ToAmount, Valid: tx.ToAmount != 0},
 		RecurrentID:    recurrentID,
@@ -237,7 +238,7 @@ func (r *Repository) GetTransactionsSummary(ctx context.Context, f models.TxFilt
 	p := queries.GetTransactionsSummaryParams{
 		Q: lp.Q, Kind: lp.Kind, AccountID: lp.AccountID, CategoryID: lp.CategoryID,
 		CounterpartyID: lp.CounterpartyID, GoalID: lp.GoalID, NeedsReview: lp.NeedsReview,
-		FromSms: lp.FromSms, FromImport: lp.FromImport, HasReceipt: lp.HasReceipt, FromDate: lp.FromDate, ToDate: lp.ToDate,
+		FromSms: lp.FromSms, FromImport: lp.FromImport, HasReceipt: lp.HasReceipt, HasNote: lp.HasNote, FromDate: lp.FromDate, ToDate: lp.ToDate,
 		MinAmount: lp.MinAmount, MaxAmount: lp.MaxAmount,
 	}
 	switch f.Status {
@@ -311,6 +312,12 @@ func txFilterParams(f *models.TxFilter) queries.GetTransactionsParams {
 		p.HasReceipt = true
 	case models.TxReceiptWithout:
 		p.HasReceipt = false
+	}
+	switch f.Note {
+	case models.TxNoteWith:
+		p.HasNote = true
+	case models.TxNoteWithout:
+		p.HasNote = false
 	}
 	if !f.From.IsZero() {
 		p.FromDate = f.From.UTC()
@@ -582,6 +589,7 @@ func (r *Repository) updateTransactionWithTxn(ctx context.Context, qtx *queries.
 		ToAccountID:    toAccID,
 		ToAmount:       sql.NullFloat64{Float64: tx.ToAmount, Valid: tx.ToAmount != 0},
 		Description:    sql.NullString{String: tx.Description, Valid: tx.Description != ""},
+		Note:           tx.Note,
 		ScheduledTo:    tx.ScheduledTo,
 	}); err != nil {
 		l.Error("updating transaction", zap.Error(err), zap.String("id", tx.ID))
@@ -671,6 +679,7 @@ func dbTransactionToTransaction(
 		Amount:      dbTx.Amount,
 		Kind:        models.TxKind(dbTx.Kind),
 		Description: dbTx.Description.String,
+		Note:        dbTx.Note,
 		ToAmount:    dbTx.ToAmount.Float64,
 		FulfilledAt: dbTx.FulfilledAt.Time,
 		ScheduledTo: dbTx.ScheduledTo,

@@ -152,6 +152,7 @@ func TestTransactionsPage(t *testing.T) {
 	}
 	create(&models.Transaction{
 		Kind: models.ExpenseTxKind, Amount: 500, Description: "rent",
+		Note:        "Paid to the **landlord**",
 		ScheduledTo: time.Now().AddDate(0, 1, 0), ReceiptID: receiptID,
 	})
 	// Pays back a January expense, from the June chunk.
@@ -263,6 +264,9 @@ func TestTransactionsPage(t *testing.T) {
 			{"on or before a day", models.TxFilter{To: day(time.January, 3)}, 3},
 			{"with a receipt", models.TxFilter{Receipt: models.TxReceiptWith}, 1},
 			{"without a receipt", models.TxFilter{Receipt: models.TxReceiptWithout}, 120},
+			{"with a note", models.TxFilter{Note: models.TxNoteWith}, 1},
+			{"without a note", models.TxFilter{Note: models.TxNoteWithout}, 120},
+			{"search a note", models.TxFilter{Q: "LANDLORD"}, 1},
 			{"amounts", models.TxFilter{MinAmount: &min, MaxAmount: &max}, 12},
 			{"account", models.TxFilter{AccountID: bank.ID}, 121},
 			{"other account", models.TxFilter{AccountID: idgen.New()}, 0},

@@ -18,6 +18,8 @@ type TransactionFD struct {
 	RecurrenceFD *RecurrenceFD
 	ScheduledTo  form.FDInput
 	Description  form.FDInput
+	// Note is Markdown.
+	Note form.FDInput
 	// WishlistID is the wishlist item being bought, if any.
 	WishlistID string
 	// Items are its lines, Receipt its receipt scanning.
@@ -113,6 +115,7 @@ templ TxFormFields(
 	@form.Field("Description", "description", id, icons.Pencil("15"), fd.Description.Error) {
 		@form.Control("text", "description", "What was it for?", id, fd.Description, nil)
 	}
+	@txNoteField(id, fd.Note)
 	@txItemsField(id, fd.Items, &fd.Receipt, fd.ItemsCurrency)
 	<div x-data>
 		@form.Field("Date", "scheduled_to", id, icons.Calendar("15"), fd.ScheduledTo.Error) {
@@ -226,6 +229,10 @@ templ txFilterBar(f *models.TxFilter, start models.MonthStart, accs []models.Acc
 				@txFilterCombo(models.TxFilterReceipt, "Receipt", "Any receipt", string(f.Receipt), false, []form.ComboOption{
 					{Value: string(models.TxReceiptWith), Label: "With a receipt", Leading: icons.Image("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 					{Value: string(models.TxReceiptWithout), Label: "Without a receipt", Leading: icons.X("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
+				})
+				@txFilterCombo(models.TxFilterNote, "Note", "Any note", string(f.Note), false, []form.ComboOption{
+					{Value: string(models.TxNoteWith), Label: "With a note", Leading: icons.StickyNote("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
+					{Value: string(models.TxNoteWithout), Label: "Without a note", Leading: icons.X("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 				})
 				@txDateRangeFilter(f)
 				@txDatePresets(f, start)
@@ -973,4 +980,12 @@ func getCategoriesOfKinds(cats []models.Category, txKind models.TxKind) []models
 		}
 	}
 	return kndsCats
+}
+
+// txNoteField is a transaction's (or recurrent one's) Markdown note.
+templ txNoteField(id string, data form.FDInput) {
+	@form.Field("Note", "note", id, icons.StickyNote("15"), data.Error) {
+		@form.Textarea("note", "Anything to remember about it?", id, data, nil)
+		@form.MarkdownHint()
+	}
 }

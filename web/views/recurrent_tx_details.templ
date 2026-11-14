@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/omareloui/tyche/internal/markdown"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/icons"
@@ -131,6 +132,11 @@ templ rtxDetailsHero(rt *models.RecurrentTx, v *txView, def *models.Currency, en
 		</div>
 		if rt.Description != "" && rt.Description != v.title {
 			<p class="text-sm text-zinc-400 break-words">{ rt.Description }</p>
+		}
+		if rt.Note != "" {
+			<div class="md-note break-words text-sm text-zinc-300">
+				@markdown.HTML(rt.Note)
+			</div>
 		}
 	</div>
 }

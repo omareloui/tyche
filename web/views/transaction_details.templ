@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/omareloui/tyche/internal/formatters"
+	"github.com/omareloui/tyche/internal/markdown"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/tzctx"
 	"github.com/omareloui/tyche/web/views/components"
@@ -75,6 +76,11 @@ templ TxDetailsPanel(d *models.TxDetails, def *models.Currency) {
 			@txDetailsHero(tx, &v, def)
 			@txDetailsActions(tx)
 			@txDetailsFields(d, &v)
+			if tx.Note != "" {
+				<div class="md-note break-words text-sm text-zinc-300">
+					@markdown.HTML(tx.Note)
+				</div>
+			}
 			if tx.Kind != models.AdjustmentTxKind && (len(tx.Items) > 0 || tx.Receipt != nil || len(tx.Wishes) > 0 || !tx.IsLocked()) {
 				@TxDetailsItems(tx, nil, &ReceiptFD{Enabled: d.ReceiptScan})
 			}

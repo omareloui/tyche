@@ -403,3 +403,62 @@ func TestRecurrentGamyaaLocked(t *testing.T) {
 		t.Errorf("installments after the refused actions = %d, want 3", len(sched))
 	}
 }
+
+func TestRecurrentNotes(t *testing.T) {
+	repo, ctx, _ := setupTenant(t)
+	bank := newTestAccount(t, repo, ctx, "Bank", "EGP", models.AccKindBankAcc, 1000)
+	hd := handler.New(repo, valid.New(), sanitizer.New(), nil, nil, nil)
+	today := utcToday()
+
+	rt := createTestRecurrentTx(t, ctx, repo, hd, bank, "100", today.AddDate(0, 0, 3), models.RecurrentUnitMonth,
+		url.Values{"note": {"  Every **month**\n- towel  "}})
+	if want := "Every **month**\n- towel"; rt.Note != want {
+		t.Fatalf("recurrent note = %q, want %q", rt.Note, want)
+	}
+	sched, _ := occurrences(t, ctx, repo, rt.ID)
+	if len(sched) < 2 {
+		t.Fatalf("scheduled = %d, want through next month", len(sched))
+	}
+	for _, tx := range sched {
+		if tx.Note != rt.Note {
+			t.Errorf("occurrence %s note = %q, want the recurrent one's", tx.ID, tx.Note)
+		}
+	}
+
+	// One given its own note keeps it when the recurrent tx's changes.
+	overridden := sched[0]
+	edited := overridden
+	edited.Note = "mine"
+	if err := repo.UpdateTransaction(ctx, &overridden, &edited); err != nil {
+		t.Fatal(err)
+	}
+	editForm := url.Values{
+		"kind":         {models.ExpenseTxKind.String()},
+		"account_id":   {bank.ID},
+		"amount":       {"100"},
+		"description":  {"Gym"},
+		"note":         {"changed"},
+		"is_recurrent": {"on"},
+		"every":        {"1"},
+		"unit":         {strconv.Itoa(int(models.RecurrentUnitMonth))},
+	}
+	if _, err := callHandler(ctx, hd.EditRecurrentTx)(httptest.NewRecorder(), "PUT", "/recurrent-tx/"+rt.ID, rt.ID, editForm); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := repo.GetRecurrentTx(ctx, rt.ID); got.Note != "changed" {
+		t.Errorf("recurrent note after edit = %q, want changed", got.Note)
+	}
+	after, _ := occurrences(t, ctx, repo, rt.ID)
+	for _, tx := range after {
+		want := "changed"
+		if tx.ID == overridden.ID {
+			want = "mine"
+		}
+		if tx.Note != want {
+			t.Errorf("occurrence %s note = %q, want %q", tx.ID, tx.Note, want)
+		}
+	}
+	if got, err := repo.GetTransaction(ctx, overridden.ID); err != nil || got.Note != "mine" {
+		t.Errorf("fetched note = %q (%v), want mine", got.Note, err)
+	}
+}

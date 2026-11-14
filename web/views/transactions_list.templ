@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/omareloui/tyche/internal/formatters"
+	"github.com/omareloui/tyche/internal/markdown"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/salaryctx"
 	"github.com/omareloui/tyche/internal/tzctx"
@@ -649,7 +650,7 @@ templ txTile(tx *models.Transaction, v *txView) {
 
 templ txChips(tx *models.Transaction, v *txView) {
 	{{ isRefund := tx.Kind == models.RefundTxKind }}
-	{{ hasChips := isRefund || tx.Category != nil || v.isScheduled || tx.FromSMS || tx.FromImport || tx.RecurrentTxID != "" || tx.Goal != nil || len(tx.Reimbursements) > 0 || tx.ItemsCount > 0 || tx.Receipt != nil || len(tx.Wishes) > 0 }}
+	{{ hasChips := isRefund || tx.Category != nil || v.isScheduled || tx.FromSMS || tx.FromImport || tx.RecurrentTxID != "" || tx.Goal != nil || len(tx.Reimbursements) > 0 || tx.ItemsCount > 0 || tx.Receipt != nil || len(tx.Wishes) > 0 || tx.Note != "" }}
 	if hasChips {
 		<div class="flex flex-wrap items-center gap-1.5 mt-1.5">
 			if isRefund {
@@ -725,6 +726,12 @@ templ txChips(tx *models.Transaction, v *txView) {
 				<span class="chip" title="Its items, in its details">
 					@icons.Receipt("12")
 					{ txItemsCountLabel(tx.ItemsCount) }
+				</span>
+			}
+			if tx.Note != "" {
+				<span class="chip max-w-48" title={ markdown.Plain(tx.Note) }>
+					@icons.StickyNote("12", &templ.Attributes{"class": "shrink-0"})
+					<span class="truncate">{ markdown.FirstLine(tx.Note) }</span>
 				</span>
 			}
 			if tx.Receipt != nil {

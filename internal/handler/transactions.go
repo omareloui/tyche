@@ -165,6 +165,12 @@ func (h Handler) txFilterChips(ctx context.Context, f *models.TxFilter) []views.
 	case models.TxReceiptWithout:
 		add("Without a receipt", models.TxFilterReceipt)
 	}
+	switch f.Note {
+	case models.TxNoteWith:
+		add("With a note", models.TxFilterNote)
+	case models.TxNoteWithout:
+		add("Without a note", models.TxFilterNote)
+	}
 	if !f.From.IsZero() || !f.To.IsZero() {
 		add(views.FormatTxRange(f.From, f.To), models.TxFilterFrom, models.TxFilterTo)
 	}
@@ -732,6 +738,7 @@ func (h Handler) mapTransactionToFD(ctx context.Context, t *models.Transaction, 
 			Kind: form.FDInput{Value: t.Kind.String(), Error: err.Errors.MsgFor("Kind")},
 		},
 		Description:   form.FDInput{Value: t.Description, Error: err.Errors.MsgFor("Description")},
+		Note:          form.FDInput{Value: t.Note, Error: err.Errors.MsgFor("Note")},
 		ScheduledTo:   form.FDInput{Value: formatDateOnlyIfNonZero(t.ScheduledTo), Error: err.Errors.MsgFor("ScheduledTo")},
 		RecurrenceFD:  &views.RecurrenceFD{},
 		Items:         txItemsToFD(t.Items, err),
@@ -850,6 +857,7 @@ func (h Handler) mapFDToTransaction(r *http.Request, isRecurrent bool) (*models.
 		ToAccount:    toAcc,
 		ToAmount:     toAmount,
 		Description:  r.FormValue("description"),
+		Note:         strings.TrimSpace(r.FormValue("note")),
 		ScheduledTo:  scheduledTo,
 		Items:        parseTxItems(r),
 		ReceiptID:    strings.TrimSpace(r.FormValue("receipt_id")),
@@ -918,6 +926,7 @@ func (h Handler) mapFDAndTxToRecurrentTx(r *http.Request, tx *models.Transaction
 		Category:     tx.Category,
 		Counterparty: tx.Counterparty,
 		Description:  tx.Description,
+		Note:         tx.Note,
 		ToAccount:    tx.ToAccount,
 		ToAmount:     tx.ToAmount,
 		Unit:         models.RecurrentUnit(unit),

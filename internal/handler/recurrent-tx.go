@@ -458,6 +458,7 @@ func (h Handler) mapRecurrentTxToFD(ctx context.Context, rt *models.RecurrentTx,
 			Kind: form.FDInput{Value: rt.Kind.String(), Error: valerr.Errors.MsgFor("Kind")},
 		},
 		Description:   form.FDInput{Value: rt.Description, Error: valerr.Errors.MsgFor("Description")},
+		Note:          form.FDInput{Value: rt.Note, Error: valerr.Errors.MsgFor("Note")},
 		Items:         txItemsToFD(rt.Items, valerr),
 		ItemsCurrency: h.itemsCurrencyFD(ctx, rt.Items),
 	}

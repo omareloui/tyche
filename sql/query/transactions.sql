@@ -7,6 +7,7 @@ INSERT INTO transactions (
     category_id,
     counterparty_id,
     description,
+    note,
     to_account_id,
     to_amount,
     recurrent_id,
@@ -22,6 +23,7 @@ VALUES (
     sqlc.arg(category_id),
     sqlc.arg(counterparty_id),
     sqlc.arg(description),
+    sqlc.arg(note),
     sqlc.arg(to_account_id),
     IIF(sqlc.narg(to_amount) > 0.0, ROUND(sqlc.narg(to_amount), 6), NULL),
     sqlc.arg(recurrent_id),
@@ -102,6 +104,7 @@ WHERE
     AND NOT (t.transfer_pair_id IS NOT NULL AND t.kind = 2)
     AND (sqlc.narg(q) IS NULL
         OR INSTR(LOWER(t.description), sqlc.narg(q)) > 0
+        OR INSTR(LOWER(t.note), sqlc.narg(q)) > 0
         OR INSTR(LOWER(cp.name), sqlc.narg(q)) > 0
         OR INSTR(LOWER(cp.aliases), sqlc.narg(q)) > 0
         OR INSTR(LOWER(cat.name), sqlc.narg(q)) > 0
@@ -111,13 +114,13 @@ WHERE
             SELECT 1 FROM transactions AS rt
             LEFT JOIN counterparties AS rcp ON rt.counterparty_id = rcp.id
             WHERE rt.reimburses_id = t.id
-                AND (INSTR(LOWER(rt.description), sqlc.narg(q)) > 0 OR INSTR(LOWER(rcp.name), sqlc.narg(q)) > 0)
+                AND (INSTR(LOWER(rt.description), sqlc.narg(q)) > 0 OR INSTR(LOWER(rt.note), sqlc.narg(q)) > 0 OR INSTR(LOWER(rcp.name), sqlc.narg(q)) > 0)
         )
         OR EXISTS (
             SELECT 1 FROM transactions AS pt
             JOIN accounts AS pa ON pt.account_id = pa.id
             WHERE pt.id = t.transfer_pair_id
-                AND (INSTR(LOWER(pt.description), sqlc.narg(q)) > 0 OR INSTR(LOWER(pa.name), sqlc.narg(q)) > 0)
+                AND (INSTR(LOWER(pt.description), sqlc.narg(q)) > 0 OR INSTR(LOWER(pt.note), sqlc.narg(q)) > 0 OR INSTR(LOWER(pa.name), sqlc.narg(q)) > 0)
         ))
     AND (sqlc.narg(kind) IS NULL
         OR (t.transfer_pair_id IS NULL AND t.kind = sqlc.narg(kind))
@@ -146,6 +149,7 @@ WHERE
     AND (sqlc.narg(has_receipt) IS NULL OR EXISTS (
         SELECT 1 FROM receipts AS rc WHERE rc.transaction_id = t.id
     ) = sqlc.narg(has_receipt))
+    AND (sqlc.narg(has_note) IS NULL OR (t.note != '') = sqlc.narg(has_note))
     AND (sqlc.narg(from_date) IS NULL OR t.scheduled_to >= sqlc.narg(from_date))
     AND (sqlc.narg(to_date) IS NULL OR t.scheduled_to < sqlc.narg(to_date))
     AND (sqlc.narg(min_amount) IS NULL OR t.amount >= sqlc.narg(min_amount))
@@ -192,6 +196,7 @@ WHERE
     AND NOT (t.transfer_pair_id IS NOT NULL AND t.kind = 2)
     AND (sqlc.narg(q) IS NULL
         OR INSTR(LOWER(t.description), sqlc.narg(q)) > 0
+        OR INSTR(LOWER(t.note), sqlc.narg(q)) > 0
         OR INSTR(LOWER(cp.name), sqlc.narg(q)) > 0
         OR INSTR(LOWER(cp.aliases), sqlc.narg(q)) > 0
         OR INSTR(LOWER(cat.name), sqlc.narg(q)) > 0
@@ -201,13 +206,13 @@ WHERE
             SELECT 1 FROM transactions AS rt
             LEFT JOIN counterparties AS rcp ON rt.counterparty_id = rcp.id
             WHERE rt.reimburses_id = t.id
-                AND (INSTR(LOWER(rt.description), sqlc.narg(q)) > 0 OR INSTR(LOWER(rcp.name), sqlc.narg(q)) > 0)
+                AND (INSTR(LOWER(rt.description), sqlc.narg(q)) > 0 OR INSTR(LOWER(rt.note), sqlc.narg(q)) > 0 OR INSTR(LOWER(rcp.name), sqlc.narg(q)) > 0)
         )
         OR EXISTS (
             SELECT 1 FROM transactions AS pt
             JOIN accounts AS pa ON pt.account_id = pa.id
             WHERE pt.id = t.transfer_pair_id
-                AND (INSTR(LOWER(pt.description), sqlc.narg(q)) > 0 OR INSTR(LOWER(pa.name), sqlc.narg(q)) > 0)
+                AND (INSTR(LOWER(pt.description), sqlc.narg(q)) > 0 OR INSTR(LOWER(pt.note), sqlc.narg(q)) > 0 OR INSTR(LOWER(pa.name), sqlc.narg(q)) > 0)
         ))
     AND (sqlc.narg(kind) IS NULL
         OR (t.transfer_pair_id IS NULL AND t.kind = sqlc.narg(kind))
@@ -236,6 +241,7 @@ WHERE
     AND (sqlc.narg(has_receipt) IS NULL OR EXISTS (
         SELECT 1 FROM receipts AS rc WHERE rc.transaction_id = t.id
     ) = sqlc.narg(has_receipt))
+    AND (sqlc.narg(has_note) IS NULL OR (t.note != '') = sqlc.narg(has_note))
     AND (sqlc.narg(from_date) IS NULL OR t.scheduled_to >= sqlc.narg(from_date))
     AND (sqlc.narg(to_date) IS NULL OR t.scheduled_to < sqlc.narg(to_date))
     AND (sqlc.narg(min_amount) IS NULL OR t.amount >= sqlc.narg(min_amount))
@@ -357,6 +363,7 @@ SET
     category_id = sqlc.arg(category_id),
     counterparty_id = sqlc.arg(counterparty_id),
     description = sqlc.arg(description),
+    note = sqlc.arg(note),
     to_account_id = sqlc.narg(to_account_id),
     to_amount = ROUND(sqlc.narg(to_amount), 6),
     scheduled_to = sqlc.arg(scheduled_to),

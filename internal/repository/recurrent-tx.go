@@ -40,6 +40,7 @@ func (r *Repository) createRecurrentTxWithTxn(qtx *queries.Queries, ctx context.
 		CategoryID:     catId,
 		CounterpartyID: cpId,
 		Description:    sql.NullString{String: rt.Description, Valid: rt.Description != ""},
+		Note:           rt.Note,
 		ToAccountID:    toAccId,
 		ToAmount:       rt.ToAmount,
 		StartsAt:       rt.StartsAt,
@@ -144,6 +145,7 @@ func (r *Repository) UpdateRecurrentTx(ctx context.Context, old, rt *models.Recu
 			CategoryID:     nullID(rt.Category),
 			CounterpartyID: nullCpID(rt.Counterparty),
 			Description:    sql.NullString{String: rt.Description, Valid: rt.Description != ""},
+			Note:           rt.Note,
 			ToAccountID:    nullAccID(rt.ToAccount),
 			ToAmount:       rt.ToAmount,
 		}); err != nil {
@@ -182,6 +184,7 @@ func (r *Repository) UpdateRecurrentTx(ctx context.Context, old, rt *models.Recu
 			Unit:           int64(rt.Unit),
 			Every:          int64(rt.Every),
 			Description:    sql.NullString{String: rt.Description, Valid: rt.Description != ""},
+			Note:           rt.Note,
 			ToAccountID:    nullAccID(rt.ToAccount),
 			ToAmount:       rt.ToAmount,
 			StopsAt:        sql.NullTime{Time: rt.StopsAt, Valid: !rt.StopsAt.IsZero()},
@@ -583,6 +586,7 @@ func dbRecurrentTxDetailsToRecurrentTx(dbRtx queries.RecurrentTxsDetail) *models
 		Account:     models.Account{ID: dbRtx.RecurrentTxAccountID},
 		Amount:      dbRtx.RecurrentTxAmount,
 		Description: dbRtx.RecurrentTxDescription.String,
+		Note:        dbRtx.RecurrentTxNote,
 		CreatedAt:   dbRtx.RecurrentTxCreatedAt,
 
 		Kind: models.TxKind(dbRtx.RecurrentTxKind),

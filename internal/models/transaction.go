@@ -18,6 +18,8 @@ type Transaction struct {
 	Counterparty *Counterparty
 	ToAmount     float64
 	Description  string
+	// Note is Markdown, stored as typed (see internal/markdown).
+	Note string
 	// Goal is set on its goal's transactions (in or out of its account).
 	Goal        *Goal
 	RecurrentTx *RecurrentTx
@@ -73,6 +75,7 @@ type commonFieldsForTxAndRtx struct {
 	ToAccountID    string   `validate:"required_if=Kind 3,required_if=Kind 4,omitempty,ulid"`
 	ToAmount       float64  `validate:"required_if=Kind 3,required_if=Kind 4"`
 	Description    string   `conform:"trim"`
+	Note           string   `conform:"trim" validate:"max=10000"`
 	Items          []TxItem `validate:"max=200,dive"`
 }
 
@@ -141,6 +144,7 @@ func (t *Transaction) toValidate() *createTransaction {
 			ToAccountID:    toAccID,
 			ToAmount:       t.ToAmount,
 			Description:    t.Description,
+			Note:           t.Note,
 			Items:          t.Items,
 		},
 		ScheduledTo: t.ScheduledTo,

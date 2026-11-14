@@ -32,10 +32,12 @@ type RecurrentTx struct {
 	Unit  RecurrentUnit
 	Every uint
 
-	Account      Account
-	Amount       float64
-	Kind         TxKind
-	Description  string
+	Account     Account
+	Amount      float64
+	Kind        TxKind
+	Description string
+	// Note is Markdown, copied to every occurrence.
+	Note         string
 	ToAmount     float64
 	ToAccount    *Account
 	Category     *Category
@@ -233,6 +235,7 @@ func (rt *RecurrentTx) Occurrence(id string, k int, now time.Time) Transaction {
 		ToAccount:    rt.ToAccount,
 		ToAmount:     rt.ToAmount,
 		Description:  rt.Description,
+		Note:         rt.Note,
 		Items:        CopyTxItems(rt.Items),
 		RecurrentTx:  &RecurrentTx{ID: rt.ID},
 		ScheduledTo:  rt.OccurrenceOn(k),
@@ -269,6 +272,7 @@ func (rt *RecurrentTx) AsTransaction() *Transaction {
 		ToAccount:    rt.ToAccount,
 		ToAmount:     rt.ToAmount,
 		Description:  rt.Description,
+		Note:         rt.Note,
 		RecurrentTx:  rt,
 	}
 }
@@ -331,6 +335,7 @@ func (rt *RecurrentTx) toValidate() *createRecurrentTx {
 			ToAccountID:    toAccId,
 			ToAmount:       rt.ToAmount,
 			Description:    rt.Description,
+			Note:           rt.Note,
 			Items:          rt.Items,
 		},
 		Unit:     rt.Unit,
