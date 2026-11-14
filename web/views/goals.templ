@@ -40,7 +40,7 @@ templ Goals(
 	plans map[string]*GoalPlanCard,
 	curs []models.Currency,
 	wishes GoalsWishes,
-	tab, openID string) {
+	tab, openID, wishOpenID string) {
 	@layouts.Main(claims, "Goals", balances) {
 		// ?new opens the goal's create form (layouts.WithCreateForm).
 		<div x-data={ fmt.Sprintf("goalsPage('%s')", tab) } x-init="createFormFromURL($data)">
@@ -94,6 +94,8 @@ templ Goals(
 		<div id={ WishSheetID }></div>
 		if openID != "" {
 			@components.DrawerOnLoad(goalDetailsURLOf(openID))
+		} else if wishOpenID != "" {
+			@components.DrawerOnLoad(wishDetailsURL(wishOpenID))
 		}
 	}
 }

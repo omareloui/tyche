@@ -1,0 +1,262 @@
+package views
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+// WishDetailsParam is the goals page's query param holding the wish whose
+// details are open.
+const WishDetailsParam = "wish"
+
+func wishDetailsURL(id string) string {
+	return fmt.Sprintf("/wishlist/%s/details", id)
+}
+
+// WishFromDetails is the `from` of a wish's action or form opened from its
+// details: it's answered with them again instead of closing.
+const WishFromDetails = "details"
+
+// wishFromDetails adds from=details to a wish action's url.
+func wishFromDetails(u string) string {
+	sep := "?"
+	if strings.Contains(u, "?") {
+		sep = "&"
+	}
+	return u + sep + "from=" + WishFromDetails
+}
+
+// wishBackCancel is the Cancel of a wish's form: back to its details when
+// opened from them (asking first if changed), else closing.
+func wishBackCancel(id, from string) string {
+	if from != WishFromDetails {
+		return ""
+	}
+	return fmt.Sprintf("confirmDiscard().then((ok) => ok && htmx.ajax('GET', '%s', {target: '#%s', swap: 'innerHTML'}))",
+		wishDetailsURL(id), components.DrawerSlot)
+}
+
+// wishStatusLabel is where the wish is: in its cooling-off or decided.
+func wishStatusLabel(item *models.WishlistItem, now time.Time) string {
+	switch item.Status {
+	case models.WishlistSaving:
+		return "Saving for it"
+	case models.WishlistBought:
+		return "Bought"
+	case models.WishlistAbandoned:
+		return "Let go"
+	}
+	if item.IsReady(now) {
+		return "Ready to decide"
+	}
+	return "Cooling off"
+}
+
+// WishDetails is a wish in full, in a drawer like a goal's details: its
+// price, cooling-off, actions, link and note. Its actions open their own
+// drawer in its place.
+templ WishDetails(item *models.WishlistItem, ws *models.WorkSettings, defaultCur *models.Currency) {
+	{{ now := time.Now() }}
+	{{ ready := item.IsReady(now) }}
+	@components.Drawer(components.DrawerProps{Label: item.Name + " details", URLParam: WishDetailsParam, URLValue: item.ID}) {
+		<div class={ "drawer-panel flex flex-col flex-1 min-h-0", wishlistAccentClass(item, ready) }>
+			<header class="flex items-start gap-3 px-5 sm:px-6 pt-5 pb-4">
+				<div class="grid place-items-center shrink-0 w-11 h-11 rounded-xl bg-(--accent)/15 text-(--accent)">
+					@icons.Gift("20")
+				</div>
+				<div class="flex-1 min-w-0">
+					<h2 class="text-lg font-bold leading-snug break-words">{ item.Name }</h2>
+					<p class="text-sm text-zinc-400 truncate">Wish · { wishStatusLabel(item, now) }</p>
+				</div>
+				@components.DrawerClose()
+			</header>
+			<div class="flex-1 grid grid-cols-1 auto-rows-max content-start gap-6 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
+				@wishDetailsHero(item, ws, defaultCur, now)
+				@wishDetailsActions(item, ready)
+				@wishDetailsInfo(item, now)
+			</div>
+		</div>
+	}
+}
+
+templ wishDetailsHero(item *models.WishlistItem, ws *models.WorkSettings, defaultCur *models.Currency, now time.Time) {
+	<div class="grid gap-3">
+		<div>
+			<p class="sensitive text-3xl font-semibold font-(family-name:--font-biorhyme-expanded) tabular-nums break-words">{ item.ViewPrice() }</p>
+			if plan, v := item.ViewPlan(), item.ViewPriceIn(defaultCur); plan != "" || v != "" {
+				<p class="sensitive text-sm text-zinc-500 tabular-nums">
+					if plan != "" {
+						{ plan }
+					}
+					if plan != "" && v != "" {
+						·
+					}
+					if v != "" {
+						<span title={ "In " + defaultCur.String }>≈ { v }</span>
+					}
+				</p>
+			}
+		</div>
+		if hours := ws.ViewHoursFor(item.TotalCost(), &item.Currency); hours != "" {
+			<div class="flex flex-wrap gap-1.5">
+				<span class="chip">
+					@icons.Clock("12")
+					{ hours } of work
+				</span>
+			</div>
+		}
+		@wishStatus(item, now)
+	</div>
+}
+
+// wishStatus is where the wish is, on its card and in its details: its
+// cooling-off while waiting, else what was decided.
+templ wishStatus(item *models.WishlistItem, now time.Time) {
+	switch item.Status {
+		case models.WishlistWaiting:
+			if !item.IsReady(now) {
+				<div>
+					<div class="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+						<div class="h-full rounded-full bg-(--accent)" style={ fmt.Sprintf("width: %.1f%%", item.CoolingProgress(now)*100) }></div>
+					</div>
+					<p class="mt-1.5 text-xs text-zinc-500">
+						Ready in { fmt.Sprint(item.DaysLeft(now)) } { plural(item.DaysLeft(now), "day", "days") } · { item.ReadyAt().Local().Format("Jan 2") }
+					</p>
+				</div>
+			} else {
+				<p class="flex items-center gap-1.5 text-sm text-(--accent)">
+					@icons.Sparkles("14")
+					Cooled off { goalDay(item.ReadyAt()) }. Still want it?
+				</p>
+			}
+		case models.WishlistSaving:
+			<p class="flex items-center gap-1.5 text-sm text-(--accent)">
+				@icons.Target("14")
+				Saving for it since { goalDay(item.DecidedAt) }
+			</p>
+		case models.WishlistBought:
+			<p class="flex flex-wrap items-center gap-1.5 text-sm text-(--accent)">
+				@icons.Check("14")
+				Bought { goalDay(item.DecidedAt) }
+				if item.TransactionID != "" {
+					<a href={ csvTxURL(item.TransactionID) } class="text-zinc-400 underline-offset-2 hover:underline hover:text-zinc-200">See the transaction</a>
+				}
+			</p>
+		case models.WishlistAbandoned:
+			<p class="flex items-center gap-1.5 text-sm text-(--accent)">
+				@icons.PiggyBank("14")
+				Let go { goalDay(item.DecidedAt) }, kept { item.Currency.Format(item.TotalCost()) }
+			</p>
+	}
+}
+
+// wishDetailsActions open the wish's drawers in place of the details; its
+// status changes answer them again.
+templ wishDetailsActions(item *models.WishlistItem, ready bool) {
+	{{ slot := "#" + components.DrawerSlot }}
+	<div class="flex flex-wrap gap-2">
+		switch item.Status {
+			case models.WishlistWaiting:
+				<button type="button" hx-get={ AffordURL(item.ID) } hx-target={ slot } hx-swap="innerHTML" class="txd-action">
+					@icons.Target("14")
+					Plan it
+				</button>
+				<button
+					type="button"
+					hx-get={ fmt.Sprintf("/wishlist/%s/buy", item.ID) }
+					hx-target={ "#" + WishSheetID }
+					hx-swap="innerHTML"
+					if !ready {
+						hx-confirm="Buy it anyway? It's still cooling off."
+						data-confirm-label="Buy anyway"
+					}
+					class="txd-action"
+				>
+					@icons.Check("14")
+					Buy
+				</button>
+				<button type="button" hx-get={ wishBoughtURL(item.ID) } hx-target={ slot } hx-swap="innerHTML" class="txd-action">
+					@icons.Receipt("14")
+					Already bought
+				</button>
+				<button type="button" hx-get={ fmt.Sprintf("/wishlist/%s/goal", item.ID) } hx-target={ slot } hx-swap="innerHTML" class="txd-action">
+					@icons.Target("14")
+					Save for it
+				</button>
+				<button type="button" hx-get={ wishFromDetails(fmt.Sprintf("/wishlist/%s/edit", item.ID)) } hx-target={ slot } hx-swap="innerHTML" class="txd-action">
+					@icons.Pencil("14")
+					Edit
+				</button>
+				<button type="button" hx-put={ wishFromDetails(fmt.Sprintf("/wishlist/%s/abandon", item.ID)) } hx-target={ slot } hx-swap="innerHTML" class="txd-action">
+					@icons.Ban("14")
+					Let it go
+				</button>
+			case models.WishlistSaving:
+				if item.GoalID != "" {
+					<button type="button" hx-get={ goalDetailsURLOf(item.GoalID) } hx-target={ slot } hx-swap="innerHTML" class="txd-action">
+						@icons.Target("14")
+						Open goal
+					</button>
+				}
+			default:
+				<button type="button" hx-put={ wishFromDetails(fmt.Sprintf("/wishlist/%s/restore", item.ID)) } hx-target={ slot } hx-swap="innerHTML" class="txd-action">
+					@icons.RotateCcw("14")
+					Back to waiting
+				</button>
+		}
+		// The answer re-renders the wishlist and closes the drawer.
+		<button
+			type="button"
+			hx-delete={ wishFromDetails(fmt.Sprintf("/wishlist/%s", item.ID)) }
+			hx-confirm="Delete this wish?"
+			hx-target="#wishlist"
+			hx-swap="outerHTML"
+			class="txd-action text-red-300!"
+		>
+			@icons.Trash("14")
+			Delete
+		</button>
+	</div>
+}
+
+templ wishDetailsInfo(item *models.WishlistItem, now time.Time) {
+	@txDetailsSection("Details") {
+		<dl class="grid grid-cols-1 divide-y divide-zinc-800 rounded-2xl ring-1 ring-zinc-800 overflow-hidden">
+			if item.URL != "" {
+				<div class="flex items-center gap-3 min-w-0 px-3 py-2 bg-zinc-900">
+					<div class="flex-1 min-w-0">
+						<dt class="text-xs text-zinc-500">Link</dt>
+						<dd class="mt-0.5 text-sm truncate">
+							<a href={ templ.SafeURL(item.URL) } target="_blank" rel="noopener noreferrer" hx-boost="false" class="text-(--accent) underline-offset-2 hover:underline">{ item.URL }</a>
+						</dd>
+					</div>
+					@copyButton(item.URL, "Copy link")
+				</div>
+			}
+			@accountInfoRow("Cooling-off period", fmt.Sprintf("%d days", item.CoolingDays), "", false)
+			if !item.CreatedAt.IsZero() {
+				@accountInfoRow("Added", item.CreatedAt.Format("Jan 2, 2006"), "", false)
+			}
+			if item.Status == models.WishlistWaiting {
+				@accountInfoRow(wishReadyLabel(item, now), item.ReadyAt().Local().Format("Jan 2, 2006"), "", false)
+			} else if !item.DecidedAt.IsZero() {
+				@accountInfoRow("Decided", item.DecidedAt.Format("Jan 2, 2006"), "", false)
+			}
+		</dl>
+		if item.Note != "" {
+			<p class="whitespace-pre-line break-words text-sm text-zinc-300">{ item.Note }</p>
+		}
+	}
+}
+
+func wishReadyLabel(item *models.WishlistItem, now time.Time) string {
+	if item.IsReady(now) {
+		return "Cooled off"
+	}
+	return "Ready on"
+}

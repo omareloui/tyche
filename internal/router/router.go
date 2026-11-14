@@ -165,6 +165,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("POST /decide/plan-preview", handle(h.PlanPreview))
 
 	mux.Handle("POST /wishlist", handle(h.CreateWishlistItem))
+	mux.Handle("GET /wishlist/{id}/details", handle(h.WishlistItemDetails))
 	mux.Handle("GET /wishlist/{id}/edit", handle(h.GetEditWishlistItem))
 	mux.Handle("PUT /wishlist/{id}", handle(h.EditWishlistItem))
 	mux.Handle("PUT /wishlist/{id}/abandon", handle(h.AbandonWishlistItem))

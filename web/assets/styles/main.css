@@ -117,7 +117,7 @@ select.input-field {
 }
 
 textarea.input-field {
-  @apply h-32 py-2.5;
+  @apply h-auto min-h-20 max-h-96 py-2.5 resize-y field-sizing-content;
 }
 
 input[type="number"]::-webkit-inner-spin-button,

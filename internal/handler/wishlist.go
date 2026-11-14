@@ -97,7 +97,9 @@ func (h Handler) GetEditWishlistItem(w http.ResponseWriter, r *http.Request) (te
 	}
 
 	claims := getClaims(r.Context())
-	return views.EditWishlistItem(id, mapWishlistItemToFD(item, &errs.ValidationError{}), curs, &claims.DefaultCurrency), nil
+	fd := mapWishlistItemToFD(item, &errs.ValidationError{})
+	fd.From = wishFrom(r)
+	return views.EditWishlistItem(id, fd, curs, &claims.DefaultCurrency), nil
 }
 
 func (h Handler) EditWishlistItem(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
@@ -123,7 +125,9 @@ func (h Handler) EditWishlistItem(w http.ResponseWriter, r *http.Request) (templ
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			claims := getClaims(r.Context())
-			return views.EditWishlistItemForm(id, mapWishlistItemToFD(item, &valerr), curs, &claims.DefaultCurrency), nil
+			fd := mapWishlistItemToFD(item, &valerr)
+			fd.From = wishFrom(r)
+			return views.EditWishlistItemForm(id, fd, curs, &claims.DefaultCurrency), nil
 		}
 		return nil, err
 	}
@@ -133,27 +137,81 @@ func (h Handler) EditWishlistItem(w http.ResponseWriter, r *http.Request) (templ
 		return nil, err
 	}
 	l.Info("updated wishlist item", zap.String("id", id))
+	if wishFrom(r) != "" {
+		return h.wishAnswer(w, r, id)
+	}
 	drawerSaved(w, "#wishlist", "outerHTML")
 
 	return h.wishlist(r, false)
 }
 
+// WishlistItemDetails is the wish in full, in a drawer: its price, cooling
+// off, actions, link and note.
+func (h Handler) WishlistItemDetails(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+	return h.wishDetails(r, id)
+}
+
+func (h Handler) wishDetails(r *http.Request, id string) (templ.Component, error) {
+	item, err := h.repo.GetWishlistItem(r.Context(), id)
+	if err != nil {
+		return nil, err
+	}
+	ws, err := h.repo.GetWorkSettings(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	claims := getClaims(r.Context())
+	return views.WishDetails(item, ws, &claims.DefaultCurrency), nil
+}
+
+// wishFrom is where the request's wish action or form was opened from:
+// views.WishFromDetails, or "" (the card).
+func wishFrom(r *http.Request) string {
+	if r.FormValue("from") == views.WishFromDetails {
+		return views.WishFromDetails
+	}
+	return ""
+}
+
+// wishAnswer answers a wish's action opened from its details: them again in
+// the drawer, the wishlist re-rendered out of band. Like every header,
+// before writing the body.
+func (h Handler) wishAnswer(w http.ResponseWriter, r *http.Request, id string) (templ.Component, error) {
+	w.Header().Set("HX-Retarget", "#"+components.DrawerSlot)
+	w.Header().Set("HX-Reswap", "innerHTML")
+	list, err := h.wishlist(r, true)
+	if err != nil {
+		return nil, err
+	}
+	if err := renderToBody(w, r, list); err != nil {
+		return nil, err
+	}
+	return h.wishDetails(r, id)
+}
+
 func (h Handler) AbandonWishlistItem(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	return h.setWishlistItemStatus(r, models.WishlistAbandoned)
+	return h.setWishlistItemStatus(w, r, models.WishlistAbandoned)
 }
 
 // RestoreWishlistItem puts a decided item back to waiting.
 func (h Handler) RestoreWishlistItem(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	return h.setWishlistItemStatus(r, models.WishlistWaiting)
+	return h.setWishlistItemStatus(w, r, models.WishlistWaiting)
 }
 
-func (h Handler) setWishlistItemStatus(r *http.Request, status models.WishlistStatus) (templ.Component, error) {
+func (h Handler) setWishlistItemStatus(w http.ResponseWriter, r *http.Request, status models.WishlistStatus) (templ.Component, error) {
 	id := r.PathValue("id")
 	if id == "" {
 		return nil, errs.ErrInvalidID
 	}
 	if err := h.repo.SetWishlistItemStatus(r.Context(), id, status, ""); err != nil {
 		return nil, err
+	}
+	if wishFrom(r) != "" {
+		return h.wishAnswer(w, r, id)
 	}
 	return h.wishlist(r, false)
 }
@@ -170,6 +228,10 @@ func (h Handler) DeleteWishlistItem(w http.ResponseWriter, r *http.Request) (tem
 		return nil, err
 	}
 	l.Info("deleted wishlist item", zap.String("id", id))
+	if wishFrom(r) != "" {
+		// From its details: closing them.
+		addHXTrigger(w, drawerSavedEvent)
+	}
 
 	return h.wishlist(r, false)
 }

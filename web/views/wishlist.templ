@@ -18,6 +18,9 @@ type WishlistItemFD struct {
 	CoolingDays form.FDInput
 	URL         form.FDInput
 	Note        form.FDInput
+	// From is where the edit form was opened from: WishFromDetails, or ""
+	// (the card).
+	From string
 }
 
 // CreateWishlistItemForm is the goals page's second create form, bound to
@@ -41,8 +44,11 @@ templ EditWishlistItem(id string, fd *WishlistItemFD, curs []models.Currency, de
 templ EditWishlistItemForm(id string, fd *WishlistItemFD, curs []models.Currency, defaultCur *models.Currency) {
 	@form.DrawerForm(form.DrawerFormProps{
 		Title: "Edit wish", Method: "put", URL: fmt.Sprintf("/wishlist/%s", id),
-		Submit: "Save changes",
+		Submit: "Save changes", CancelClick: wishBackCancel(id, fd.From),
 	}) {
+		if fd.From != "" {
+			<input type="hidden" name="from" value={ fd.From }/>
+		}
 		@wishlistItemFormBody(id, fd, curs, defaultCur)
 	}
 }
@@ -210,10 +216,17 @@ templ WishlistItem(item *models.WishlistItem, ws *models.WorkSettings, defaultCu
 			data-waiting
 		}
 		class="relative min-w-0"
-		x-data="{openMenu: false}"
+		x-data={ goalCardData }
 	>
 		@components.EntryMenuAt("openMenu", "top-13 right-3 origin-top-right", wishlistMenuItems(item))
-		<div class={ "relative flex flex-col gap-3 h-full p-4 rounded-2xl bg-zinc-700/20 overflow-hidden", wishlistAccentClass(item, ready) }>
+		<div
+			tabindex="0"
+			data-details={ wishDetailsURL(item.ID) }
+			@click="openDetails($event, $el)"
+			@keydown.enter.self="openDetails($event, $el)"
+			aria-label={ item.Name + " details" }
+			class={ "relative flex flex-col gap-3 h-full p-4 rounded-2xl bg-zinc-700/20 overflow-hidden cursor-pointer transition hover:bg-zinc-700/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)/60", wishlistAccentClass(item, ready) }
+		>
 			<div class="flex items-start gap-3 min-w-0">
 				<div class="flex-1 min-w-0">
 					<p class="flex items-center gap-1.5 text-lg leading-tight">
@@ -248,103 +261,72 @@ templ WishlistItem(item *models.WishlistItem, ws *models.WorkSettings, defaultCu
 					<span title={ item.Note } class="text-sm text-zinc-500 truncate">{ firstLine(item.Note) }</span>
 				}
 			</div>
-			switch item.Status {
-				case models.WishlistWaiting:
-					if !ready {
-						<div>
-							<div class="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-								<div class="h-full rounded-full bg-(--accent)" style={ fmt.Sprintf("width: %.1f%%", item.CoolingProgress(now)*100) }></div>
-							</div>
-							<p class="mt-1.5 text-xs text-zinc-500">
-								Ready in { fmt.Sprint(item.DaysLeft(now)) } { plural(item.DaysLeft(now), "day", "days") } · { item.ReadyAt().Local().Format("Jan 2") }
-							</p>
-						</div>
-					} else {
-						<p class="flex items-center gap-1.5 text-sm text-(--accent)">
-							@icons.Sparkles("14")
-							Cooled off { goalDay(item.ReadyAt()) }. Still want it?
-						</p>
+			if item.Status != models.WishlistWaiting {
+				<div class="flex flex-wrap items-center justify-between gap-2 mt-auto">
+					@wishStatus(item, now)
+					if item.Status == models.WishlistSaving && item.GoalID != "" {
+						<button
+							hx-get={ goalDetailsURLOf(item.GoalID) }
+							hx-target={ "#" + components.DrawerSlot }
+							hx-swap="innerHTML"
+							data-opens-drawer
+							class="wl-action"
+						>
+							Open goal
+						</button>
 					}
-					<div class="flex flex-wrap gap-2 mt-auto">
-						<button
-							hx-get={ AffordURL(item.ID) }
-							hx-target={ "#" + components.DrawerSlot }
-							hx-swap="innerHTML"
-							data-opens-drawer
-							class="wl-action"
-						>
-							@icons.Target("14")
-							Plan it
-						</button>
-						<button
-							hx-get={ fmt.Sprintf("/wishlist/%s/buy", item.ID) }
-							hx-target={ "#" + WishSheetID }
-							hx-swap="innerHTML"
-							if !ready {
-								hx-confirm="Buy it anyway? It's still cooling off."
-								data-confirm-label="Buy anyway"
-							}
-							class={ "wl-action", templ.KV("wl-action-primary", ready) }
-						>
-							@icons.Check("14")
-							Buy
-						</button>
-						<button
-							hx-get={ wishBoughtURL(item.ID) }
-							hx-target={ "#" + components.DrawerSlot }
-							hx-swap="innerHTML"
-							data-opens-drawer
-							class="wl-action"
-						>
-							@icons.Receipt("14")
-							Already bought
-						</button>
-						<button
-							hx-get={ fmt.Sprintf("/wishlist/%s/goal", item.ID) }
-							hx-target={ "#" + components.DrawerSlot }
-							hx-swap="innerHTML"
-							data-opens-drawer
-							class="wl-action"
-						>
-							@icons.Target("14")
-							Save for it
-						</button>
-						<button hx-put={ fmt.Sprintf("/wishlist/%s/abandon", item.ID) } class="wl-action">
-							@icons.Ban("14")
-							Let it go
-						</button>
-					</div>
-				case models.WishlistSaving:
-					<div class="flex flex-wrap items-center justify-between gap-2 mt-auto">
-						<p class="flex items-center gap-1.5 text-sm text-(--accent)">
-							@icons.Target("14")
-							Saving for it since { goalDay(item.DecidedAt) }
-						</p>
-						if item.GoalID != "" {
-							<button
-								hx-get={ goalDetailsURLOf(item.GoalID) }
-								hx-target={ "#" + components.DrawerSlot }
-								hx-swap="innerHTML"
-								data-opens-drawer
-								class="wl-action"
-							>
-								Open goal
-							</button>
+				</div>
+			} else {
+				@wishStatus(item, now)
+				<div class="flex flex-wrap gap-2 mt-auto">
+					<button
+						hx-get={ AffordURL(item.ID) }
+						hx-target={ "#" + components.DrawerSlot }
+						hx-swap="innerHTML"
+						data-opens-drawer
+						class="wl-action"
+					>
+						@icons.Target("14")
+						Plan it
+					</button>
+					<button
+						hx-get={ fmt.Sprintf("/wishlist/%s/buy", item.ID) }
+						hx-target={ "#" + WishSheetID }
+						hx-swap="innerHTML"
+						if !ready {
+							hx-confirm="Buy it anyway? It's still cooling off."
+							data-confirm-label="Buy anyway"
 						}
-					</div>
-				case models.WishlistBought:
-					<p class="flex flex-wrap items-center gap-1.5 mt-auto text-sm text-(--accent)">
+						class={ "wl-action", templ.KV("wl-action-primary", ready) }
+					>
 						@icons.Check("14")
-						Bought { goalDay(item.DecidedAt) }
-						if item.TransactionID != "" {
-							<a href={ csvTxURL(item.TransactionID) } class="text-zinc-400 underline-offset-2 hover:underline hover:text-zinc-200">See the transaction</a>
-						}
-					</p>
-				case models.WishlistAbandoned:
-					<p class="flex items-center gap-1.5 mt-auto text-sm text-(--accent)">
-						@icons.PiggyBank("14")
-						Let go { goalDay(item.DecidedAt) }, kept { item.Currency.Format(item.TotalCost()) }
-					</p>
+						Buy
+					</button>
+					<button
+						hx-get={ wishBoughtURL(item.ID) }
+						hx-target={ "#" + components.DrawerSlot }
+						hx-swap="innerHTML"
+						data-opens-drawer
+						class="wl-action"
+					>
+						@icons.Receipt("14")
+						Already bought
+					</button>
+					<button
+						hx-get={ fmt.Sprintf("/wishlist/%s/goal", item.ID) }
+						hx-target={ "#" + components.DrawerSlot }
+						hx-swap="innerHTML"
+						data-opens-drawer
+						class="wl-action"
+					>
+						@icons.Target("14")
+						Save for it
+					</button>
+					<button hx-put={ fmt.Sprintf("/wishlist/%s/abandon", item.ID) } class="wl-action">
+						@icons.Ban("14")
+						Let it go
+					</button>
+				</div>
 			}
 		</div>
 	</div>
@@ -398,7 +380,8 @@ func wishlistAccentClass(item *models.WishlistItem, ready bool) string {
 }
 
 func wishlistMenuItems(item *models.WishlistItem) []templ.Component {
-	items := []templ.Component{}
+	items := []templ.Component{components.EntryMenuDrawerItem("Details", wishDetailsURL(item.ID),
+		components.WithEntryMenuItemIcon(icons.Eye("16")))}
 	switch item.Status {
 	case models.WishlistWaiting:
 		items = append(items, wishlistEditMenuItem(item.ID))
