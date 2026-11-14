@@ -134,18 +134,7 @@ templ counterpartyFormBody(id string, isNew bool, fd *CounterpartyFD, cats []mod
 		@form.TagsInputSuggest("labels", "e.g. Restaurant, Online store", id, fd.Labels, counterpartyLabelSuggestions(fd.LabelsInUse))
 	}
 	@form.Field("Note", "note", id, icons.StickyNote("15"), fd.Note.Error) {
-		<textarea
-			id={ "note-" + id }
-			name="note"
-			rows="2"
-			maxlength="1000"
-			dir="auto"
-			placeholder="Anything to remember, e.g. ask for the student discount"
-			class="input-field h-auto! min-h-11 py-2.5"
-			if fd.Note.Error != "" {
-				aria-invalid="true"
-			}
-		>{ fd.Note.Value }</textarea>
+		@form.Textarea("note", "Anything to remember, e.g. ask for the student discount", id, fd.Note, templ.Attributes{"maxlength": "1000"})
 	}
 	<div
 		x-data={ fmt.Sprintf("{isMerchant: %t}", fd.IsMerchant.Value != "") }

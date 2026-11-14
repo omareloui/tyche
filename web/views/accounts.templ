@@ -121,7 +121,7 @@ templ accountFormBody(id string, fd *AccountFD, aknds []models.AccountKind, curs
 		<p class="-mt-2 text-sm text-zinc-500">Bank SMS mentioning any of them (e.g. the account and its debit card), or the card / IBAN's last digits, land in this account.</p>
 	</div>
 	@form.Field("Note", "note", id, icons.Pencil("15"), fd.Note.Error) {
-		@form.Control("text", "note", "Anything to remember about it", id, fd.Note, nil)
+		@form.Textarea("note", "Anything to remember about it", id, fd.Note, nil)
 	}
 	<div class="grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-800/20 p-4">
 		<div>
@@ -493,7 +493,7 @@ templ Account(a *models.Account, defaultCur *models.Currency) {
 						@expiryChip(a.ExpirationDate)
 					}
 					if a.Note != "" {
-						<span title={ a.Note } class="min-w-0 max-w-full truncate text-xs text-zinc-500">{ a.Note }</span>
+						<span title={ a.Note } class="min-w-0 max-w-full truncate text-xs text-zinc-500">{ firstLine(a.Note) }</span>
 					}
 				</div>
 			}

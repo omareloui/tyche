@@ -177,6 +177,24 @@ templ Control(kind, name, placeholder, id string, data FDInput, attrs templ.Attr
 	@input(name, id, kind, joinAttrs(attrs, templ.Attributes{"placeholder": placeholder}), data)
 }
 
+// Textarea is a bare multi-line input (e.g. a note), to put in a Field.
+templ Textarea(name, placeholder, id string, data FDInput, attrs templ.Attributes) {
+	<textarea
+		if attrs != nil {
+			{ attrs... }
+		}
+		id={ join(name, id) }
+		name={ name }
+		rows="2"
+		dir="auto"
+		placeholder={ placeholder }
+		class="input-field h-auto! min-h-11 py-2.5"
+		if data.Error != "" {
+			aria-invalid="true"
+		}
+	>{ data.Value }</textarea>
+}
+
 templ Input(label, kind, name, placeholder, id string, data FDInput, inputAttrs templ.Attributes, wrapperAttrs templ.Attributes) {
 	<div
 		if wrapperAttrs != nil {

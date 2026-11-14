@@ -88,7 +88,7 @@ templ wishlistItemFormBody(id string, fd *WishlistItemFD, curs []models.Currency
 		@form.Control("url", "url", "https://", id, fd.URL, nil)
 	}
 	@form.Field("Note", "note", id, icons.Pencil("15"), fd.Note.Error) {
-		@form.Control("text", "note", "Why do you want it?", id, fd.Note, nil)
+		@form.Textarea("note", "Why do you want it?", id, fd.Note, nil)
 	}
 }
 
@@ -245,7 +245,7 @@ templ WishlistItem(item *models.WishlistItem, ws *models.WorkSettings, defaultCu
 					</span>
 				}
 				if item.Note != "" {
-					<span class="text-sm text-zinc-500 truncate">{ item.Note }</span>
+					<span title={ item.Note } class="text-sm text-zinc-500 truncate">{ firstLine(item.Note) }</span>
 				}
 			</div>
 			switch item.Status {
