@@ -4,7 +4,9 @@
 # bundled Go code, never a system libheif / libwebp.
 comma := ,
 export GOFLAGS := -tags=sqlcipher,nodynamic
-export CGO_CFLAGS := $(shell pkg-config --cflags libcrypto 2>/dev/null)
+# -O2 -g: Go's default, replaced when CGO_CFLAGS is set. The SQLCipher
+# amalgamation warns about discarded const qualifiers: harmless.
+export CGO_CFLAGS := -O2 -g -Wno-discarded-qualifiers $(shell pkg-config --cflags libcrypto 2>/dev/null)
 libcrypto_dir := $(shell pkg-config --variable=libdir libcrypto 2>/dev/null)
 export CGO_LDFLAGS := $(if $(libcrypto_dir),-L$(libcrypto_dir) -Wl$(comma)-rpath$(comma)$(libcrypto_dir))
 

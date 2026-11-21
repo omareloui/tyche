@@ -1,4 +1,4 @@
-FROM golang:1.25-bookworm
+FROM golang:1.27-bookworm
 
 # To bash the bash commands work
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]

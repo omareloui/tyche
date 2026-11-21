@@ -1,4 +1,4 @@
-FROM golang:1.25-bookworm AS build
+FROM golang:1.27-bookworm AS build
 
 WORKDIR /usr/src/
 
@@ -7,9 +7,8 @@ RUN apt-get update && \
   apt-get install -y --no-install-recommends libssl-dev pkg-config && \
   rm -rf /var/lib/apt/lists/*
 
-# Pinned to the version generating internal/queries locally; it needs a newer
-# Go than the image's, GOTOOLCHAIN=auto fetches it for this install only.
-RUN GOTOOLCHAIN=auto go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
+# Pinned to the version generating internal/queries locally.
+RUN go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
 
 RUN useradd -u 1001 nonroot
 

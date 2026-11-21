@@ -8,7 +8,7 @@ Tyche is a personal finance management application built with Go and HTMX. It's 
 
 ## Tech Stack
 
-- **Backend**: Go (1.25) with standard library `net/http`
+- **Backend**: Go (1.27) with standard library `net/http`
 - **Frontend**: HTMX with Alpine.js, Tailwind CSS 4.0
 - **Templates**: Templ (type-safe Go templates compiled to Go code)
 - **Database**: SQLite (one database per user)
