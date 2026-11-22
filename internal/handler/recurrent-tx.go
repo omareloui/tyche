@@ -130,9 +130,19 @@ func (h Handler) CreateRecurrentTx(w http.ResponseWriter, r *http.Request) (temp
 
 	claims := getClaims(r.Context())
 
+	// A "Looks recurring" suggestion's form (a fetched drawer) is answered
+	// with its errors, or the suggestions once saved.
+	fromSuggestion := r.URL.Query().Get("from") == views.SubscriptionFormFrom
+	withErrors := func(fd *views.TransactionFD) templ.Component {
+		if fromSuggestion {
+			return views.SubscriptionFormBody(fd, accs, knds, cats, cps, &claims.DefaultCurrency)
+		}
+		return views.CreateRecurrentTxForm(fd, accs, knds, cats, cps, &claims.DefaultCurrency)
+	}
+
 	fd, err := h.prepareTx(r, tx, accs, knds, cats, cps)
 	if fd != nil {
-		return views.CreateRecurrentTxForm(fd, accs, knds, cats, cps, &claims.DefaultCurrency), nil
+		return withErrors(fd), nil
 	}
 	if err != nil {
 		return nil, err
@@ -145,8 +155,7 @@ func (h Handler) CreateRecurrentTx(w http.ResponseWriter, r *http.Request) (temp
 		var valerr errs.ValidationError
 		if errors.As(err, &valerr) {
 			l.Error("validating recurrent transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
-			return views.CreateRecurrentTxForm(h.mapTransactionToFD(r.Context(), tx, &valerr),
-				accs, knds, cats, cps, &claims.DefaultCurrency), nil
+			return withErrors(h.mapTransactionToFD(r.Context(), tx, &valerr)), nil
 		}
 		l.Error("sanitizing recurrent transaction", zap.Error(err))
 		return nil, err
@@ -157,7 +166,12 @@ func (h Handler) CreateRecurrentTx(w http.ResponseWriter, r *http.Request) (temp
 		return nil, err
 	}
 	l.Info("created recurrent transaction", zap.String("id", rt.ID))
-	drawerCreated(w)
+	if fromSuggestion {
+		drawerSaved(w, "#"+views.SubscriptionSuggestionsID, "outerHTML")
+	} else {
+		drawerCreated(w)
+		addHXTrigger(w, views.RecurrentChangedEvent)
+	}
 
 	rts, err := h.repo.GetRecurrentTxs(r.Context())
 	if err != nil {
@@ -173,6 +187,9 @@ func (h Handler) CreateRecurrentTx(w http.ResponseWriter, r *http.Request) (temp
 		}
 	}
 
+	if fromSuggestion {
+		return h.SubscriptionSuggestions(w, r)
+	}
 	return views.CreateRecurrentTxForm(newRecurrentTxFD(r.Context(), h, accs), accs, knds, cats, cps, &claims.DefaultCurrency), nil
 }
 
@@ -287,6 +304,7 @@ func (h Handler) EditRecurrentTx(w http.ResponseWriter, r *http.Request) (templ.
 	}
 	l.Info("updated recurrent tx", zap.String("id", rt.ID))
 	drawerSaved(w, "#"+views.RecurrentTxID(id), "outerHTML")
+	addHXTrigger(w, views.RecurrentChangedEvent)
 
 	rt, err = h.repo.GetRecurrentTx(r.Context(), id)
 	if err != nil {
@@ -420,6 +438,7 @@ func (h Handler) DeleteRecurrentTx(w http.ResponseWriter, r *http.Request) (temp
 		return nil, err
 	}
 	l.Info("deleted recurrent transaction")
+	addHXTrigger(w, views.RecurrentChangedEvent)
 	if fromRecurrentTxDetails(r) {
 		addHXTrigger(w, drawerSavedEvent)
 	}

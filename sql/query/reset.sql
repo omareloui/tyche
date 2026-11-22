@@ -85,3 +85,8 @@ DELETE FROM items;
 
 -- name: ResetDeleteItemCategories :exec
 DELETE FROM item_categories;
+
+-- The dismissed "Looks recurring" suggestions go with the recurrent
+-- transactions.
+-- name: ResetDeleteDismissedSubscriptions :exec
+DELETE FROM dismissed_subscriptions;

@@ -1,0 +1,202 @@
+package views
+
+import (
+	"fmt"
+	"math"
+	"net/url"
+	"time"
+
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+// SubscriptionSuggestionsID is the "Looks recurring" card's id, the target
+// of its actions and of a suggestion's saved form.
+const SubscriptionSuggestionsID = "rtx-suggestions"
+
+// SubscriptionFormFrom is CreateRecurrentTx's from= of a suggestion's form,
+// answered with the suggestions instead of the page's create form.
+const SubscriptionFormFrom = "suggestion"
+
+// SubscriptionFormID is the suggestion form's fields' id, apart from the
+// page's create form ("0") always in the page.
+const SubscriptionFormID = "sub"
+
+// RecurrentChangedEvent re-renders the suggestions after a recurrent
+// transaction is created or deleted (sent as HX-Trigger).
+const RecurrentChangedEvent = "recurrent-changed"
+
+// SubscriptionSuggestion is a charge that looks recurring with what it's
+// shown with.
+type SubscriptionSuggestion struct {
+	models.SubscriptionCandidate
+	Counterparty models.Counterparty
+	Currency     models.Currency
+}
+
+type SubscriptionSuggestionsData struct {
+	Items []SubscriptionSuggestion
+	// Monthly is what they come to in a month, in Def.
+	Monthly float64
+	Def     *models.Currency
+}
+
+// subscriptionSuggestionsLazy loads the suggestions after the page, as
+// detecting them reads two years of expenses.
+templ subscriptionSuggestionsLazy() {
+	<div
+		id={ SubscriptionSuggestionsID }
+		hx-get="/recurrent-tx/suggestions"
+		hx-trigger={ "load, " + RecurrentChangedEvent + " from:body" }
+		hx-swap="outerHTML"
+	></div>
+}
+
+// SubscriptionSuggestions is the "Looks recurring" card: repeated charges no
+// recurrent transaction makes, each made one or dismissed; nothing when
+// there are none, still re-rendering when a recurrent transaction changes.
+templ SubscriptionSuggestions(d *SubscriptionSuggestionsData) {
+	<div
+		id={ SubscriptionSuggestionsID }
+		hx-get="/recurrent-tx/suggestions"
+		hx-trigger={ RecurrentChangedEvent + " from:body" }
+		hx-swap="outerHTML"
+		if len(d.Items) > 0 {
+			class="mb-8"
+		}
+	>
+		if len(d.Items) > 0 {
+			@components.GlassCard("grid gap-4 p-5 sm:p-6", "bg-amber-400/10") {
+				<div class="relative flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+					<div class="min-w-0">
+						<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-amber-400">
+							@icons.Sparkles("14")
+							Looks recurring
+						</p>
+						<p class="mt-1 text-sm text-zinc-400">
+							{ fmt.Sprint(len(d.Items)) } { plural(len(d.Items), "charge repeats", "charges repeat") } without a recurring transaction.
+							Add them so the forecast and safe to spend count them.
+						</p>
+					</div>
+					<p class="sensitive text-sm text-zinc-400 tabular-nums">
+						≈ <span class="text-zinc-200 font-semibold">{ d.Def.Format(d.Monthly) }</span> a month
+					</p>
+				</div>
+				<ul class="relative grid gap-1 -mx-2">
+					for _, s := range d.Items {
+						@subscriptionSuggestionRow(&s)
+					}
+				</ul>
+			}
+		}
+	</div>
+}
+
+templ subscriptionSuggestionRow(s *SubscriptionSuggestion) {
+	{{ rt := models.RecurrentTx{Every: s.Every, Unit: s.Unit} }}
+	<li class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 px-2 py-2 rounded-xl hover:bg-zinc-800/40">
+		@components.CounterpartyIcon(s.Counterparty.Name, s.Counterparty.Icon, s.Counterparty.Color, "w-9 h-9 text-sm")
+		<div class="min-w-0">
+			<p class="flex items-center gap-2 min-w-0">
+				<span class="truncate">{ s.Counterparty.Name }</span>
+				if s.Change != 0 {
+					<span
+						class={
+							"shrink-0 inline-flex items-center h-5 px-1.5 rounded-full text-xs tabular-nums",
+							templ.KV("bg-red-400/12 text-red-400", s.Change > 0),
+							templ.KV("bg-emerald-400/12 text-emerald-400", s.Change < 0),
+						}
+						title={ fmt.Sprintf("Last charge %s, before %s", s.Currency.Format(s.LastAmount), s.Currency.Format(s.PrevAmount)) }
+					>{ subscriptionChange(s.Change) }</span>
+				}
+			</p>
+			<p class="text-sm text-zinc-500 truncate">
+				<span class="sensitive tabular-nums text-zinc-300">{ s.Currency.Format(s.Amount) }</span>
+				· { rt.ViewRecurrence() }
+				· { fmt.Sprint(s.Count) } since { formatSubscriptionDay(s.First) }
+				· next ~{ formatSubscriptionDay(s.Next) }
+			</p>
+		</div>
+		<div class="flex items-center gap-1">
+			<button
+				type="button"
+				class="inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-sm font-semibold text-amber-300 bg-amber-400/10 ring-1 ring-amber-400/30 cursor-pointer transition hover:bg-amber-400/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300"
+				hx-get={ SubscriptionFormURL(s.CounterpartyID, s.CurrencyID) }
+				hx-target={ "#" + components.DrawerSlot }
+				hx-swap="innerHTML"
+				data-opens-drawer
+			>
+				@icons.Repeat("14")
+				<span class="hidden sm:inline">Make recurring</span>
+				<span class="sm:hidden">Add</span>
+			</button>
+			<button
+				type="button"
+				aria-label={ "Dismiss " + s.Counterparty.Name }
+				title="Not a subscription"
+				class="p-2 rounded-lg text-zinc-500 cursor-pointer hover:text-zinc-200 hover:bg-zinc-800"
+				hx-post={ subscriptionDismissURL(s.CounterpartyID, s.CurrencyID) }
+				hx-target={ "#" + SubscriptionSuggestionsID }
+				hx-swap="outerHTML"
+			>
+				@icons.X("16")
+			</button>
+		</div>
+	</li>
+}
+
+// SubscriptionForm is a suggestion's recurrent transaction form, prefilled,
+// in a drawer.
+templ SubscriptionForm(
+	fd *TransactionFD, accs []models.Account,
+	knds []models.TxKind, cats []models.Category,
+	cps []models.Counterparty,
+	defaultCur *models.Currency) {
+	@components.Drawer(components.DrawerProps{Label: "New recurring transaction"}) {
+		@SubscriptionFormBody(fd, accs, knds, cats, cps, defaultCur)
+	}
+}
+
+// SubscriptionFormBody is SubscriptionForm's form alone, answered with its
+// errors.
+templ SubscriptionFormBody(
+	fd *TransactionFD, accs []models.Account,
+	knds []models.TxKind, cats []models.Category,
+	cps []models.Counterparty,
+	defaultCur *models.Currency) {
+	@form.DrawerForm(form.DrawerFormProps{
+		Title: "New recurring transaction", Method: "post",
+		URL:    "/recurrent-tx?from=" + SubscriptionFormFrom,
+		Submit: "Add", Class: "tx-form",
+	}) {
+		@createRecurrentTxFields(SubscriptionFormID, fd, accs, knds, cats, cps, defaultCur)
+	}
+}
+
+// SubscriptionFormURL is the form of the suggestion of a counterparty in a
+// currency.
+func SubscriptionFormURL(counterpartyID, currencyID string) string {
+	return fmt.Sprintf("/recurrent-tx/suggestions/%s/%s/form", url.PathEscape(counterpartyID), url.PathEscape(currencyID))
+}
+
+func subscriptionDismissURL(counterpartyID, currencyID string) string {
+	return fmt.Sprintf("/recurrent-tx/suggestions/%s/%s/dismiss", url.PathEscape(counterpartyID), url.PathEscape(currencyID))
+}
+
+// subscriptionChange is a price change, e.g. "+12%".
+func subscriptionChange(ch float64) string {
+	sign := "+"
+	if ch < 0 {
+		sign = "−"
+	}
+	return fmt.Sprintf("%s%.0f%%", sign, math.Abs(ch)*100)
+}
+
+func formatSubscriptionDay(d time.Time) string {
+	if d.Year() != time.Now().Year() {
+		return d.Format("Jan 2, 2006")
+	}
+	return d.Format("Jan 2")
+}

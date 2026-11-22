@@ -31,6 +31,7 @@ templ RecurrentTxs(
 	cats []models.Category, cps []models.Counterparty, openID string) {
 	@layouts.WithCreateForm(claims, "Recurring", "New recurring", balances,
 		CreateRecurrentTxForm(fd, accs, knds, cats, cps, &claims.DefaultCurrency)) {
+		@subscriptionSuggestionsLazy()
 		@rtxsList(rtxs, &claims.DefaultCurrency, false)
 		@components.DrawerOnLoad(recurrentTxDetailsURLIf(openID))
 	}
@@ -44,25 +45,35 @@ templ CreateRecurrentTxForm(
 	cps []models.Counterparty,
 	defaultCur *models.Currency) {
 	@form.SheetForm("New recurring transaction", "/recurrent-tx", "Add", "tx-form") {
-		@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, "0", knds, cats, accs, cps, defaultCur)
-		@form.Field("Description", "description", "0", icons.Pencil("15"), fd.Description.Error) {
-			@form.Control("text", "description", "What is it for?", "0", fd.Description, nil)
-		}
-		@txNoteField("0", fd.Note)
-		@txItemsField("0", fd.Items, &ReceiptFD{}, fd.ItemsCurrency)
-		<div>
-			@form.Field("Starts on", "scheduled_to", "0", icons.Calendar("15"), fd.ScheduledTo.Error) {
-				@form.Control("text", "scheduled_to", "yyyy-mm-dd", "0", fd.ScheduledTo, templ.Attributes{
-					"autocomplete":    "off",
-					"x-mask":          "9999-99-99",
-					"data-datepicker": true,
-				})
-			}
-			<p class="mt-1.5 text-sm text-zinc-500">The first one, then it repeats from it.</p>
-		</div>
-		<input type="hidden" name="is_recurrent" value="on"/>
-		@rtxRepeatsBox("0", fd.RecurrenceFD)
+		@createRecurrentTxFields("0", fd, accs, knds, cats, cps, defaultCur)
 	}
+}
+
+// createRecurrentTxFields are a new recurrent transaction's fields: a
+// transaction on its start date, and how it repeats.
+templ createRecurrentTxFields(
+	id string, fd *TransactionFD, accs []models.Account,
+	knds []models.TxKind, cats []models.Category,
+	cps []models.Counterparty,
+	defaultCur *models.Currency) {
+	@TransactionAmountsAndKindFormBody(&fd.TransactionAmountsAndKindFD, id, knds, cats, accs, cps, defaultCur)
+	@form.Field("Description", "description", id, icons.Pencil("15"), fd.Description.Error) {
+		@form.Control("text", "description", "What is it for?", id, fd.Description, nil)
+	}
+	@txNoteField(id, fd.Note)
+	@txItemsField(id, fd.Items, &ReceiptFD{}, fd.ItemsCurrency)
+	<div>
+		@form.Field("Starts on", "scheduled_to", id, icons.Calendar("15"), fd.ScheduledTo.Error) {
+			@form.Control("text", "scheduled_to", "yyyy-mm-dd", id, fd.ScheduledTo, templ.Attributes{
+				"autocomplete":    "off",
+				"x-mask":          "9999-99-99",
+				"data-datepicker": true,
+			})
+		}
+		<p class="mt-1.5 text-sm text-zinc-500">The first one, then it repeats from it.</p>
+	</div>
+	<input type="hidden" name="is_recurrent" value="on"/>
+	@rtxRepeatsBox(id, fd.RecurrenceFD)
 }
 
 templ RecurrenceFormBody(id string, fd *RecurrenceFD) {

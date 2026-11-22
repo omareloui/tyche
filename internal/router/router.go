@@ -137,6 +137,9 @@ func New(h *handler.Handler) Router {
 
 	mux.Handle("GET /recurrent-tx", handle(h.RecurrentTxs))
 	mux.Handle("POST /recurrent-tx", handle(h.CreateRecurrentTx))
+	mux.Handle("GET /recurrent-tx/suggestions", handle(h.SubscriptionSuggestions))
+	mux.Handle("GET /recurrent-tx/suggestions/{cp}/{cur}/form", handle(h.SubscriptionForm))
+	mux.Handle("POST /recurrent-tx/suggestions/{cp}/{cur}/dismiss", handle(h.DismissSubscription, middleware.HTMXOnly))
 	mux.Handle("GET /recurrent-tx/{id}", handle(h.RecurrentTx))
 	mux.Handle("GET /recurrent-tx/{id}/details", handle(h.RecurrentTxDetails))
 	mux.Handle("PUT /recurrent-tx/{id}/note", handle(h.SetRecurrentTxNote))
