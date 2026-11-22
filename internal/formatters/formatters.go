@@ -41,6 +41,11 @@ func FormatAmountDigits(amount float64, curSymbol string, frac int) string {
 		strBuilder.WriteString(curSymbol)
 		strBuilder.WriteString(" ")
 	}
+	// A negative amount rounding to 0 (e.g. a float's leftover after
+	// converting) is 0, not -0.
+	if pow := math.Pow10(frac); math.Round(amount*pow) == 0 {
+		amount = 0
+	}
 	strBuilder.WriteString(p.Sprintf("%v", number.Decimal(amount, number.MaxFractionDigits(frac))))
 	return strBuilder.String()
 }
