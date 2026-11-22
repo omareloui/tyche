@@ -333,6 +333,51 @@ function accSummaryWith() {
   }
 }
 
+// The currency the accounts summary's net worth over time is shown in (a
+// code, empty for the default currency), per browser.
+const accSummaryInKey = "tyche:acc-summary-in";
+
+function accSummaryIn() {
+  try {
+    return localStorage.getItem(accSummaryInKey) || "";
+  } catch {
+    return "";
+  }
+}
+
+// accSummaryParams are the accounts summary's options (hx-vals of its
+// requests and of the dashboard's net worth).
+// How far back its net worth over time goes: months, "all", or empty for
+// the default, per browser.
+const accSummaryMonthsKey = "tyche:acc-summary-months";
+
+function accSummaryMonths() {
+  try {
+    return localStorage.getItem(accSummaryMonthsKey) || "";
+  } catch {
+    return "";
+  }
+}
+
+function accSummaryParams() {
+  return { with: accSummaryWith().join(","), in: accSummaryIn(), months: accSummaryMonths() };
+}
+
+// reloadAccSummary asks for the summary again with its options, from its
+// element (hx-sync="this:replace"): a click while one is loading (rates of
+// past days may be fetched) cancels it, so no answer lands on a summary
+// already replaced.
+function reloadAccSummary() {
+  const el = document.getElementById("accounts-summary");
+  if (!el) return;
+  // Its options go as its hx-vals (accSummaryParams).
+  htmx.ajax("GET", "/accounts/summary", {
+    source: el,
+    target: el,
+    swap: "outerHTML",
+  });
+}
+
 document.addEventListener("click", (e) => {
   const toggle = e.target.closest("[data-acc-summary] [data-acc-summary-with]");
   if (!toggle) return;
@@ -342,10 +387,26 @@ document.addEventListener("click", (e) => {
   try {
     localStorage.setItem(accSummaryWithKey, JSON.stringify(keys));
   } catch {}
-  htmx.ajax("GET", `/accounts/summary?${new URLSearchParams({ with: keys.join(",") })}`, {
-    target: "#accounts-summary",
-    swap: "outerHTML",
-  });
+  reloadAccSummary();
+});
+
+document.addEventListener("click", (e) => {
+  const toggle = e.target.closest("[data-acc-summary] [data-acc-summary-months]");
+  if (!toggle || toggle.getAttribute("aria-pressed") === "true") return;
+  try {
+    localStorage.setItem(accSummaryMonthsKey, toggle.dataset.accSummaryMonths);
+  } catch {}
+  reloadAccSummary();
+});
+
+document.addEventListener("click", (e) => {
+  const toggle = e.target.closest("[data-acc-summary] [data-acc-summary-in]");
+  if (!toggle || toggle.getAttribute("aria-pressed") === "true") return;
+  try {
+    if (toggle.dataset.accSummaryIn) localStorage.setItem(accSummaryInKey, toggle.dataset.accSummaryIn);
+    else localStorage.removeItem(accSummaryInKey);
+  } catch {}
+  reloadAccSummary();
 });
 
 // Tooltips holding amounts (title) swap to their data-hidden-title while the

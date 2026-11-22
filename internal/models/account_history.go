@@ -9,7 +9,13 @@ const AccountHistoryMonths = 6
 // AccountHistoryFrom is the first day an account's details chart: the start
 // of the month (starting on s) AccountHistoryMonths-1 months before today's.
 func AccountHistoryFrom(s MonthStart, today time.Time) time.Time {
-	return s.For(s.Of(today).Month.AddDate(0, -(AccountHistoryMonths - 1), 0)).From
+	return AccountHistoryFromMonths(s, today, AccountHistoryMonths)
+}
+
+// AccountHistoryFromMonths is the start of the month (starting on s)
+// months-1 months before today's.
+func AccountHistoryFromMonths(s MonthStart, today time.Time, months int) time.Time {
+	return s.For(s.Of(today).Month.AddDate(0, -(max(months, 1) - 1), 0)).From
 }
 
 // GamyaaHistoryRange is the days a gam'yaa's details chart: from the first
@@ -42,6 +48,9 @@ type AccountHistory struct {
 	Scheduled []DayFlow
 	// Balance is the balance at the end of each day from From to To.
 	Balance []float64
+	// Months is how many of the user's months it goes back (From is the
+	// first day of the oldest), 0 when From is another day.
+	Months int
 }
 
 // NewAccountHistory works the balance back from balance (today's, after

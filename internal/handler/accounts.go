@@ -12,6 +12,7 @@ import (
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/errs"
+	"github.com/omareloui/tyche/internal/fxrate"
 	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/logger"
@@ -50,11 +51,72 @@ func (h *Handler) Accounts(w http.ResponseWriter, r *http.Request) (templ.Compon
 }
 
 func (h *Handler) AccountsSummary(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	s, err := h.repo.GetAccountsSummary(r.Context(), &getClaims(r.Context()).DefaultCurrency, accountsSummaryWith(r))
+	s, err := h.accountsSummary(r)
 	if err != nil {
 		return nil, err
 	}
 	return views.AccountsSummary(s), nil
+}
+
+// accountsSummaryIn are the currencies (codes) the net worth over time can
+// also be shown in, besides the default one.
+var accountsSummaryIn = []string{"USD", "XAU"}
+
+// accountsSummary is the accounts summary with the request's options: the
+// accounts `with`, and its history shown `in` another currency (one of
+// accountsSummaryIn), each past day at its own rates.
+func (h *Handler) accountsSummary(r *http.Request) (*models.AccountsSummary, error) {
+	ctx := r.Context()
+	def := &getClaims(ctx).DefaultCurrency
+	s, err := h.repo.GetAccountsSummary(ctx, def, accountsSummaryWith(r))
+	if err != nil {
+		return nil, err
+	}
+	in := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("in")))
+	curs, err := h.repo.GetCurrencies(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var target *models.Currency
+	for _, code := range accountsSummaryIn {
+		if strings.EqualFold(code, def.String) {
+			continue
+		}
+		for i := range curs {
+			if c := &curs[i]; strings.EqualFold(c.String, code) {
+				s.InChoices = append(s.InChoices, *c)
+				if code == in {
+					target = c
+				}
+			}
+		}
+	}
+	if target == nil || s.History == nil {
+		return s, nil
+	}
+
+	todayRate, err := fxrate.GetFxRate(def.String, target.String)
+	if err != nil {
+		logger.FromCtx(ctx).Warn("no rate to show the net worth in", zap.String("currency", target.String), zap.Error(err))
+		return s, nil
+	}
+	days := s.RateDays()
+	var (
+		rates  map[time.Time]map[string]float64
+		approx bool
+	)
+	if h.fxJob != nil {
+		// The default currency's too, to tell each day's rate on hover.
+		codes := s.Codes()
+		if d := strings.ToLower(def.String); !slices.Contains(codes, d) {
+			codes = append(codes, d)
+		}
+		rates, approx = h.fxJob.RatesOn(ctx, days, codes, target.String)
+	} else {
+		approx = true
+	}
+	s.ShowIn(*target, days, rates, todayRate, approx)
+	return s, nil
 }
 
 // accountsSummaryWith reads the accounts summary's options from `with`.
@@ -68,6 +130,14 @@ func accountsSummaryWith(r *http.Request) models.AccountsSummaryWith {
 			with.Goals = true
 		case "budget":
 			with.BudgetLeft = true
+		}
+	}
+	switch m := r.URL.Query().Get("months"); m {
+	case "all":
+		with.AllHistory = true
+	default:
+		if n, err := strconv.Atoi(m); err == nil && slices.Contains(models.AccountsSummaryMonths, n) {
+			with.Months = n
 		}
 	}
 	return with

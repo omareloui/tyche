@@ -193,11 +193,13 @@ templ accountDetailsActions(a *models.Account) {
 func accountChartSamples(h *models.AccountHistory) []int {
 	var res []int
 	t := min(h.TodayIdx(), len(h.Balance)-1)
-	for i := t; i >= 0; i -= 7 {
+	// A week apart, wider over long ranges (accountChartMaxSamples at most).
+	step := max(7, (len(h.Balance)+accountChartMaxSamples-1)/accountChartMaxSamples)
+	for i := t; i >= 0; i -= step {
 		res = append(res, i)
 	}
 	slices.Reverse(res)
-	for i := t + 7; i < len(h.Balance); i += 7 {
+	for i := t + step; i < len(h.Balance); i += step {
 		res = append(res, i)
 	}
 	if last := len(h.Balance) - 1; res[len(res)-1] != last {
@@ -242,10 +244,35 @@ func accountChartArea(h *models.AccountHistory, lo, hi float64) string {
 // accountChartSpan names the chart's days: the last months, or the months
 // it spans when projected (a gam'yaa's whole life).
 func accountChartSpan(h *models.AccountHistory) string {
-	if !h.HasProjection() && h.From.Equal(models.AccountHistoryFrom(h.Start, h.Today)) {
-		return fmt.Sprintf("Last %d months", models.AccountHistoryMonths)
+	if !h.HasProjection() {
+		if h.Months > 0 {
+			return fmt.Sprintf("Last %d months", h.Months)
+		}
+		if h.From.Equal(models.AccountHistoryFrom(h.Start, h.Today)) {
+			return fmt.Sprintf("Last %d months", models.AccountHistoryMonths)
+		}
 	}
 	return h.From.Format("Jan 2006") + " – " + h.To.Format("Jan 2006")
+}
+
+// accountChartMaxSamples is how many hover targets a chart has at most.
+const accountChartMaxSamples = 60
+
+// accountChartMaxMonths is how many month labels a chart shows at most.
+const accountChartMaxMonths = 8
+
+// accountChartLong tells whether a chart spans over a year, its days then
+// named with their year.
+func accountChartLong(h *models.AccountHistory) bool {
+	return len(h.Balance) > 400
+}
+
+// accountChartDay names a day in a chart's tooltip.
+func accountChartDay(h *models.AccountHistory, i int) string {
+	if accountChartLong(h) {
+		return h.DayOf(i).Format("Jan 2, 2006")
+	}
+	return h.DayOf(i).Format("Mon, Jan 2")
 }
 
 // accountChartMonths are the months starting in the chart, with where they
@@ -259,14 +286,28 @@ func accountChartMonths(h *models.AccountHistory) []struct {
 		Label string
 	}
 	n := len(h.Balance)
+	var firsts []int
 	for i := range n {
-		if d := h.DayOf(i); d.Day() == 1 {
-			res = append(res, struct {
-				X     float64
-				Label string
-			}{accountChartX(i, n), d.Format("Jan")})
+		if h.DayOf(i).Day() == 1 {
+			firsts = append(firsts, i)
 		}
 	}
+	// Every k-th month when there are too many, January's named with its
+	// year over long ranges.
+	k := max(1, (len(firsts)+accountChartMaxMonths-1)/accountChartMaxMonths)
+	long := accountChartLong(h)
+	for j := len(firsts) - 1; j >= 0; j -= k {
+		i := firsts[j]
+		label := h.DayOf(i).Format("Jan")
+		if long {
+			label = h.DayOf(i).Format("Jan ’06")
+		}
+		res = append(res, struct {
+			X     float64
+			Label string
+		}{accountChartX(i, n), label})
+	}
+	slices.Reverse(res)
 	return res
 }
 
@@ -280,6 +321,12 @@ templ accountDetailsChart(a *models.Account, h *models.AccountHistory) {
 // its days after today (dashed) named projected, note ending its footer. Its hover targets show their tooltips on hover,
 // and under a finger on touch screens (chartScrub, main.js).
 templ balanceChart(cur *models.Currency, h *models.AccountHistory, projected, note string) {
+	@balanceChartWith(cur, h, projected, note, nil)
+}
+
+// balanceChartWith is balanceChart with more told in the tooltip of its
+// i-th balance by extra (nil for nothing).
+templ balanceChartWith(cur *models.Currency, h *models.AccountHistory, projected, note string, extra func(i int) templ.Component) {
 	{{ lo, hi := h.Range() }}
 	{{ n := len(h.Balance) }}
 	{{ t := min(h.TodayIdx(), n-1) }}
@@ -316,12 +363,15 @@ templ balanceChart(cur *models.Currency, h *models.AccountHistory, projected, no
 						<div class={ "absolute bottom-full mb-1 hidden group-hover:block group-[.is-active]:block z-10 pointer-events-none", tooltipSide(k, len(samples)) }>
 							<div class="glass-tooltip whitespace-nowrap">
 								<p class="text-zinc-400">
-									{ h.DayOf(i).Format("Mon, Jan 2") }
+									{ accountChartDay(h, i) }
 									if h.IsProjected(i) {
 										· { projected }
 									}
 								</p>
 								<p class="sensitive tabular-nums">{ cur.Format(h.Balance[i]) }</p>
+								if extra != nil {
+									@extra(i)
+								}
 							</div>
 						</div>
 					</div>

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"math"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -63,6 +64,36 @@ type ForecastInfo struct {
 type AccountsSummaryWith struct {
 	Excluded, Goals bool
 	BudgetLeft      bool
+	// Months is how many of the user's months the history goes back
+	// (AccountHistoryMonths when 0), AllHistory from the first day money
+	// moved instead (HistoryFrom, set from the transactions).
+	Months      int
+	AllHistory  bool
+	HistoryFrom time.Time
+}
+
+// AccountsSummaryMonths are the ranges the history can be picked over, in
+// the user's months.
+var AccountsSummaryMonths = []int{3, 6, 12, 24}
+
+// HistoryMonths is how many months the history goes back, 0 for all of it.
+func (w AccountsSummaryWith) HistoryMonths() int {
+	if w.AllHistory {
+		return 0
+	}
+	if w.Months <= 0 {
+		return AccountHistoryMonths
+	}
+	return w.Months
+}
+
+// From is the history's first day: HistoryFrom for all of it (when known),
+// else the start of the month HistoryMonths back.
+func (w AccountsSummaryWith) From(s MonthStart, today time.Time) time.Time {
+	if w.AllHistory && !w.HistoryFrom.IsZero() {
+		return s.Of(w.HistoryFrom).From
+	}
+	return AccountHistoryFromMonths(s, today, w.HistoryMonths())
 }
 
 // AccountsSummary is the accounts counted in the balance (not archived nor
@@ -76,7 +107,7 @@ type AccountsSummary struct {
 	// the goals', counted or not.
 	Excluded, Goals int
 	Accounts        int
-	NetWorth float64
+	NetWorth        float64
 	// Assets are the positive balances, Owed the negative ones (positive).
 	Assets, Owed float64
 	// SetAside is what the accounts moved to goals in progress, out of the
@@ -104,8 +135,26 @@ type AccountsSummary struct {
 	// Info is what the forecast is made of.
 	Info ForecastInfo
 
-	// rates are the counted accounts' rates to Currency, by id.
-	rates map[string]float64
+	// In is the currency History is also shown in (ShowIn), each past day
+	// at its own rates, HistoryIn then; InApprox tells some of those rates
+	// were today's instead.
+	In        *Currency
+	HistoryIn *AccountHistory
+	InApprox  bool
+	// InRates are the rates from Currency to In each day of HistoryIn up to
+	// today was converted at (0 when Currency's own wasn't had), InToday
+	// today's.
+	InRates []float64
+	InToday float64
+	// InChoices are the currencies it can be shown in besides Currency.
+	InChoices []Currency
+
+	// rates are the counted accounts' rates to Currency, by id, codeRates
+	// by currency code (lower case).
+	rates     map[string]float64
+	codeRates map[string]float64
+	// native is History per currency code (lower case), in that currency.
+	native map[string][]float64
 }
 
 // Shown is the net worth shown: less the budgets' left when asked.
@@ -120,9 +169,9 @@ func (s *AccountsSummary) Shown() float64 {
 // statements attached) in def, their balances worked back from today through daily, the money each
 // moved per day (by account id) since AccountHistoryFrom.
 func NewAccountsSummary(accs []Account, def Currency, with AccountsSummaryWith, start MonthStart, today, to time.Time, daily, scheduled map[string][]DayFlow) *AccountsSummary {
-	s := &AccountsSummary{Currency: def, With: with, rates: map[string]float64{}}
+	s := &AccountsSummary{Currency: def, With: with, rates: map[string]float64{}, codeRates: map[string]float64{}, native: map[string][]float64{}}
 	s.Info.To = dateOnly(to)
-	from := AccountHistoryFrom(start, today)
+	from := with.From(start, today)
 
 	kinds := map[AccKind]int{}
 	curs := map[string]int{}
@@ -195,10 +244,18 @@ func NewAccountsSummary(accs []Account, def Currency, with AccountsSummaryWith, 
 
 		h := NewAccountHistory(start, a.Amount, daily[a.ID], scheduled[a.ID], from, today, to)
 		if s.History == nil {
-			s.History = &AccountHistory{From: h.From, Today: h.Today, To: h.To, Start: start, Balance: make([]float64, len(h.Balance))}
+			s.History = &AccountHistory{From: h.From, Today: h.Today, To: h.To, Start: start, Balance: make([]float64, len(h.Balance)), Months: with.HistoryMonths()}
+		}
+		code := strings.ToLower(a.Currency.String)
+		s.codeRates[code] = rate
+		nat := s.native[code]
+		if nat == nil {
+			nat = make([]float64, len(h.Balance))
+			s.native[code] = nat
 		}
 		for d, b := range h.Balance {
 			s.History.Balance[d] += b * rate
+			nat[d] += b
 		}
 	}
 
@@ -312,4 +369,111 @@ func (s *AccountsSummary) Share(amount float64) float64 {
 // HasCredit tells whether there are cards or debts to show.
 func (s *AccountsSummary) HasCredit() bool {
 	return s.Cards.Cards > 0 || s.OwedToYou > 0 || s.YouOwe > 0
+}
+
+// historyRateDays is the gap between the days ShowIn takes the rates of.
+const historyRateDays = 7
+
+// historyRateSamples is how many days' rates ShowIn takes at most.
+const historyRateSamples = 60
+
+// Codes are the counted accounts' currency codes (lower case), sorted.
+func (s *AccountsSummary) Codes() []string {
+	codes := make([]string, 0, len(s.native))
+	for c := range s.native {
+		codes = append(codes, c)
+	}
+	slices.Sort(codes)
+	return codes
+}
+
+// RateDays are the days whose rates ShowIn converts the history with: one a
+// week from its first day, and today.
+func (s *AccountsSummary) RateDays() []time.Time {
+	h := s.History
+	if h == nil {
+		return nil
+	}
+	// A week apart, or wider over long ranges (historyRateSamples at most).
+	step := max(historyRateDays, (h.TodayIdx()+historyRateSamples-1)/historyRateSamples)
+	var days []time.Time
+	for d := h.From; d.Before(h.Today); d = d.AddDate(0, 0, step) {
+		days = append(days, d)
+	}
+	return append(days, h.Today)
+}
+
+// ShowIn sets HistoryIn: History in cur, each day up to today at the rates
+// (rates[day][code], to cur) of the last of days (RateDays, oldest first) on
+// or before it, a currency without one there at today's rates (approx
+// then); the forecast's days at todayRate, from Currency to cur, as the
+// forecast is in today's money.
+func (s *AccountsSummary) ShowIn(cur Currency, days []time.Time, rates map[time.Time]map[string]float64, todayRate float64, approx bool) {
+	h := s.History
+	if h == nil || len(days) == 0 {
+		return
+	}
+	s.In = &cur
+	s.InApprox = approx
+	in := &AccountHistory{From: h.From, Today: h.Today, To: h.To, Start: h.Start, Balance: make([]float64, len(h.Balance)), Months: h.Months}
+	s.HistoryIn = in
+
+	t := h.TodayIdx()
+	s.InToday = todayRate
+	s.InRates = make([]float64, min(t+1, len(in.Balance)))
+	defCode := strings.ToLower(s.Currency.String)
+	k := 0
+	for i := range in.Balance {
+		if i > t {
+			in.Balance[i] = h.Balance[i] * todayRate
+			continue
+		}
+		day := h.DayOf(i)
+		for k+1 < len(days) && !dateOnly(days[k+1]).After(day) {
+			k++
+		}
+		s.InRates[i] = rates[days[k]][defCode]
+		for code, nat := range s.native {
+			if i >= len(nat) {
+				continue
+			}
+			rate, ok := rates[days[k]][code]
+			if !ok || rate <= 0 {
+				rate = s.codeRates[code] * todayRate
+				s.InApprox = true
+			}
+			in.Balance[i] += nat[i] * rate
+		}
+	}
+}
+
+// Change is how much a history's balance moved from its first day to
+// today's, relative to the first; ok is false when it started at 0.
+func (h *AccountHistory) Change() (float64, bool) {
+	if h == nil || len(h.Balance) == 0 {
+		return 0, false
+	}
+	first, now := h.Balance[0], h.Balance[min(h.TodayIdx(), len(h.Balance)-1)]
+	if first == 0 {
+		return 0, false
+	}
+	return (now - first) / math.Abs(first), true
+}
+
+// InDay is HistoryIn's i-th day (up to today) told in Currency: the net
+// worth that day at that day's rates (HistoryIn's balance back at the rate
+// of Currency then), what one unit of In (a gram or an ounce for a metal)
+// was worth in Currency then and today, and how much that moved since; ok is
+// false without that day's rate.
+func (s *AccountsSummary) InDay(i int) (worth, unitThen, unitNow, change float64, ok bool) {
+	if s.HistoryIn == nil || i < 0 || i >= len(s.InRates) || s.InRates[i] <= 0 || s.InToday <= 0 {
+		return 0, 0, 0, 0, false
+	}
+	rate := s.InRates[i]
+	worth = s.HistoryIn.Balance[i] / rate
+	// Rates are per troy ounce for a metal: per its unit shown.
+	perUnit := ToUnit(1, s.In.Unit())
+	unitThen = 1 / rate / perUnit
+	unitNow = 1 / s.InToday / perUnit
+	return worth, unitThen, unitNow, (unitNow - unitThen) / unitThen, true
 }

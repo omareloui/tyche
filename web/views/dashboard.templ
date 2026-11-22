@@ -61,7 +61,7 @@ templ Dashboard(d DashboardData) {
 					@dashPaceChart(d.Flow, def)
 				</div>
 				<div class="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-2">
-					@dashLazyWith("/dashboard/net-worth", "h-80", "revealed", "js:{with: accSummaryWith().join(',')}")
+					@dashLazyWith("/dashboard/net-worth", "h-80", "revealed", "js:{...accSummaryParams()}")
 					@dashLazyWith("/dashboard/budget-pace", "h-80", "revealed", "js:{hide: budgetHidden().join(',')}")
 				</div>
 				<div class="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-2">
@@ -546,10 +546,15 @@ templ DashNetWorth(s *models.AccountsSummary) {
 						}
 					</span>
 				</p>
-				@accSummaryForecastInfo(s)
+				<div class="flex items-center gap-2">
+					if s.In != nil {
+						@accSummaryInInfo(s)
+					}
+					@accSummaryForecastInfo(s)
+				</div>
 			</div>
 			<div class="[--accent:var(--color-sky-400)]">
-				@balanceChart(&s.Currency, s.History, "forecast", "at today’s rates")
+				@accSummaryChart(s)
 			</div>
 			if s.Partial {
 				<p class="text-xs text-amber-300">Some rates are unavailable, those accounts aren’t counted.</p>

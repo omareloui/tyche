@@ -117,7 +117,7 @@ func (h *Handler) DashboardCategories(w http.ResponseWriter, r *http.Request) (t
 // DashboardNetWorth is the accounts summary's net worth over time, with the
 // options picked on the accounts page in this browser.
 func (h *Handler) DashboardNetWorth(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	s, err := h.repo.GetAccountsSummary(r.Context(), &getClaims(r.Context()).DefaultCurrency, accountsSummaryWith(r))
+	s, err := h.accountsSummary(r)
 	if err != nil {
 		return nil, err
 	}

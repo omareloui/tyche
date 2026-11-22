@@ -51,7 +51,12 @@ func (r *Repository) GetAccountsSummary(ctx context.Context, def *models.Currenc
 	cur := start.Of(today)
 	next := cur.Next()
 
-	rows, err := q.GetAccountsDailyNet(ctx, models.AccountHistoryFrom(start, today))
+	// All the history: from the first day money moved.
+	from := with.From(start, today)
+	if with.AllHistory {
+		from = time.Time{}
+	}
+	rows, err := q.GetAccountsDailyNet(ctx, from)
 	if err != nil {
 		l.Error("querying accounts daily net", zap.Error(err))
 		return nil, err
@@ -60,6 +65,9 @@ func (r *Repository) GetAccountsSummary(ctx context.Context, def *models.Currenc
 	for _, row := range rows {
 		if d, ok := dayFlow(row.Day, row.MoneyIn, row.MoneyOut); ok {
 			daily[row.AccountID] = append(daily[row.AccountID], d)
+			if with.AllHistory && (with.HistoryFrom.IsZero() || d.Day.Before(with.HistoryFrom)) {
+				with.HistoryFrom = d.Day
+			}
 		}
 	}
 

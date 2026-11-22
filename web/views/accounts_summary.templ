@@ -2,7 +2,9 @@ package views
 
 import (
 	"fmt"
+	"math"
 	"strconv"
+	"strings"
 
 	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/models"
@@ -19,7 +21,7 @@ templ accountsSummaryLazy() {
 		id="accounts-summary"
 		hx-get="/accounts/summary"
 		hx-trigger="load"
-		hx-vals="js:{with: accSummaryWith().join(',')}"
+		hx-vals="js:{...accSummaryParams()}"
 		hx-swap="outerHTML"
 		hx-on::response-error="this.classList.remove('animate-pulse'); this.classList.add('grid', 'place-items-center', 'text-sm', 'text-zinc-500'); this.textContent = 'Couldn’t load the summary, refresh to try again'"
 		aria-busy="true"
@@ -33,11 +35,12 @@ templ accountsSummaryLazy() {
 templ AccountsSummary(s *models.AccountsSummary) {
 	<div
 		id="accounts-summary"
-		class="mb-6"
+		class="mb-6 transition-opacity [&.htmx-request]:opacity-60 [&.htmx-request]:pointer-events-none"
 		data-acc-summary
+		hx-sync="this:replace"
 		hx-get="/accounts/summary"
 		hx-trigger={ AccountsChangedEvent + " from:body" }
-		hx-vals="js:{with: accSummaryWith().join(',')}"
+		hx-vals="js:{...accSummaryParams()}"
 		hx-swap="outerHTML"
 	>
 		@components.GlassCard("grid content-start gap-5 p-5 sm:p-6", "bg-sky-400/10", "bg-teal-400/6") {
@@ -96,8 +99,14 @@ templ AccountsSummary(s *models.AccountsSummary) {
 				if s.History != nil && len(s.History.Balance) > 1 {
 					@budgetCollapse("acc-history", budgetSummaryTitle("Over time")) {
 						<div class="grid gap-2 [--accent:var(--color-sky-400)]">
-							@accSummaryForecastInfo(s)
-							@balanceChart(&s.Currency, s.History, "forecast", "at today’s rates")
+							<div class="flex flex-wrap items-center justify-between gap-2">
+								<div class="flex flex-wrap items-center gap-2">
+									@accSummaryRange(s)
+									@accSummaryInToggle(s)
+								</div>
+								@accSummaryForecastInfo(s)
+							</div>
+							@accSummaryChart(s)
 						</div>
 					}
 				}
@@ -347,4 +356,227 @@ templ accSummaryCredit(s *models.AccountsSummary) {
 			</div>
 		}
 	</div>
+}
+
+// accSummaryChart is the net worth over time in the currency it's shown in
+// (AccountsSummary.ShowIn: each past day at its own rates), with how much it
+// moved since its first day.
+templ accSummaryChart(s *models.AccountsSummary) {
+	if s.HistoryIn != nil {
+		@balanceChartWith(s.In, s.HistoryIn, "forecast", accSummaryInNote(s), func(i int) templ.Component { return accSummaryInDay(s, i) })
+	} else {
+		@balanceChart(&s.Currency, s.History, "forecast", "at today’s rates")
+	}
+	@accSummaryChange(s)
+}
+
+// accSummaryChange is how much the net worth moved since the chart's first
+// day, in the currency it's shown in and in the default one.
+templ accSummaryChange(s *models.AccountsSummary) {
+	{{ ch, ok := s.History.Change() }}
+	if s.HistoryIn != nil {
+		{{ chIn, okIn := s.HistoryIn.Change() }}
+		if okIn || ok {
+			<p class="text-xs text-zinc-500">
+				Since { accSummarySince(s.History) }:
+				if okIn {
+					@accChangePct(chIn)
+					in { accSummaryCurLabel(s.In) }
+				}
+				if okIn && ok {
+					·
+				}
+				if ok {
+					@accChangePct(ch)
+					in { s.Currency.String }
+				}
+			</p>
+		}
+	} else if ok {
+		<p class="text-xs text-zinc-500">
+			Since { accSummarySince(s.History) }:
+			@accChangePct(ch)
+		</p>
+	}
+}
+
+templ accChangePct(ch float64) {
+	<span
+		class={
+			"sensitive tabular-nums font-semibold",
+			templ.KV("text-emerald-400", ch > 0.0005),
+			templ.KV("text-red-400", ch < -0.0005),
+			templ.KV("text-zinc-300", ch >= -0.0005 && ch <= 0.0005),
+		}
+	>{ formatChangePct(ch) }</span>
+}
+
+// accSummaryRange picks how far back the net worth over time goes (main.js
+// keeps it per browser): models.AccountsSummaryMonths, or all of it.
+templ accSummaryRange(s *models.AccountsSummary) {
+	{{ cur := s.With.HistoryMonths() }}
+	@accSegmented("Range") {
+		for _, m := range models.AccountsSummaryMonths {
+			@accSegment(templ.Attributes{"data-acc-summary-months": strconv.Itoa(m)}, accSummaryRangeLabel(m), fmt.Sprintf("Last %d months", m), cur == m)
+		}
+		@accSegment(templ.Attributes{"data-acc-summary-months": "all"}, "All", "Since the first transaction", cur == 0)
+	}
+}
+
+// accSegmented is a segmented control: buttons (accSegment) side by side in
+// one pill, the pressed one lit.
+templ accSegmented(label string) {
+	<div role="group" aria-label={ label } class="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-zinc-800/60 ring-1 ring-zinc-800 text-xs">
+		{ children... }
+	</div>
+}
+
+templ accSegment(attrs templ.Attributes, label, title string, on bool) {
+	<button
+		type="button"
+		{ attrs... }
+		aria-pressed={ fmt.Sprint(on) }
+		title={ title }
+		class={
+			"min-w-8 h-6 px-2 rounded-full tabular-nums cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-sky-400",
+			templ.KV("bg-sky-400/20 text-sky-100 font-semibold", on),
+			templ.KV("text-zinc-400 hover:text-zinc-200", !on),
+		}
+	>{ label }</button>
+}
+
+// accSummaryRangeLabel names a range of months, e.g. 6M or 2Y.
+func accSummaryRangeLabel(m int) string {
+	if m%12 == 0 {
+		return fmt.Sprintf("%dY", m/12)
+	}
+	return fmt.Sprintf("%dM", m)
+}
+
+// accSummarySince is the history's first day, with its year when not this
+// one's.
+func accSummarySince(h *models.AccountHistory) string {
+	if h.From.Year() != h.Today.Year() {
+		return h.From.Format("Jan 2, 2006")
+	}
+	return h.From.Format("Jan 2")
+}
+
+// accSummaryInToggle picks the currency the net worth over time is shown
+// in (main.js keeps it per browser): the default one, or one of InChoices.
+templ accSummaryInToggle(s *models.AccountsSummary) {
+	if len(s.InChoices) > 0 {
+		<div class="inline-flex items-center gap-0.5">
+			@accSegmented("Show in") {
+				@accSegment(templ.Attributes{"data-acc-summary-in": ""}, s.Currency.String, "In "+s.Currency.String+", at today’s rates", s.In == nil)
+				for _, c := range s.InChoices {
+					@accSegment(templ.Attributes{"data-acc-summary-in": c.String}, accSummaryCurLabel(&c), "In "+accSummaryCurLabel(&c)+", each day at its own rates", s.In != nil && s.In.String == c.String)
+				}
+			}
+			@accSummaryInInfo(s)
+		</div>
+	}
+}
+
+// accSummaryInInfo tells how the chart's currency changes what it shows, in
+// a tooltip shown on hover or focus, and toggled by a tap.
+templ accSummaryInInfo(s *models.AccountsSummary) {
+	<div x-data="{ open: false }" class="group/curinfo relative" @click.outside="open = false" @keydown.escape="open = false">
+		<button
+			type="button"
+			@click="open = !open"
+			:aria-expanded="open"
+			aria-label="How the currencies work"
+			class="flex items-center p-1 text-zinc-500 cursor-pointer hover:text-zinc-300 focus-visible:text-zinc-300"
+		>
+			@icons.Info("13")
+		</button>
+		<div
+			class="absolute left-0 top-full mt-1.5 z-20 hidden w-80 max-w-[calc(100vw-2rem)] group-hover/curinfo:block group-focus-within/curinfo:block"
+			:class="open && '!block'"
+		>
+			<div class="glass-tooltip grid gap-2 text-left whitespace-normal">
+				if s.In == nil {
+					<p class="text-zinc-300">
+						In { s.Currency.String }, every day is at today’s rates: only the money coming in and going out moves the line, not the exchange rates.
+					</p>
+					<p class="text-zinc-400">
+						Pick another currency to see each day’s net worth at that day’s rate, e.g. whether what you saved kept its value in dollars or gold.
+					</p>
+				} else {
+					{{ in := accSummaryCurLabel(s.In) }}
+					<p class="text-zinc-300">
+						Each day is your net worth that day, in { in } at that day’s rate (one rate a week), not today’s.
+					</p>
+					<ul class="grid gap-1.5 text-zinc-400 list-disc pl-4">
+						<li>What you hold in { in } stays as is; the rest moves with the rate.</li>
+						<li>A flat line in { in } while { s.Currency.String } grows means the { s.Currency.String } lost about what you saved.</li>
+						<li>The dashed forecast is at today’s rates.</li>
+					</ul>
+					<p class="text-zinc-500">
+						Rates come from the history we keep of every day’s rates, older days from the rates’ public archive.
+						if s.InApprox {
+							<span class="text-amber-300">Some days’ rates couldn’t be had: today’s stand in for them.</span>
+						}
+					</p>
+				}
+			</div>
+		</div>
+	</div>
+}
+
+// accSummaryCurLabel names a currency in the toggle: gold rather than XAU.
+func accSummaryCurLabel(c *models.Currency) string {
+	if strings.EqualFold(c.String, "XAU") {
+		return "Gold"
+	}
+	return c.String
+}
+
+func accSummaryInNote(s *models.AccountsSummary) string {
+	if s.InApprox {
+		return "each day at its rates, some today’s"
+	}
+	return "each day at its rates"
+}
+
+// formatChangePct is a relative change, e.g. "+12.5%" or "−3%".
+func formatChangePct(ch float64) string {
+	v := math.Abs(ch) * 100
+	if v < 0.05 {
+		return "0%"
+	}
+	sign := "+"
+	if ch < 0 {
+		sign = "−"
+	}
+	if v < 10 {
+		return fmt.Sprintf("%s%.1f%%", sign, v)
+	}
+	return fmt.Sprintf("%s%.0f%%", sign, v)
+}
+
+// accSummaryInDay tells a day of the chart shown in another currency in the
+// default one: the net worth that day at its rates, and that day's rate
+// against today's.
+templ accSummaryInDay(s *models.AccountsSummary, i int) {
+	if worth, then, now, ch, ok := s.InDay(i); ok {
+		<p class="sensitive tabular-nums text-zinc-400">≈ { s.Currency.Format(worth) }</p>
+		<p class="tabular-nums text-zinc-500">
+			1 { accSummaryUnitLabel(s.In) } = { s.Currency.Format(then) }
+		</p>
+		<p class="tabular-nums text-zinc-500">
+			now { s.Currency.Format(now) }
+			<span class="text-zinc-300">({ formatChangePct(ch) })</span>
+		</p>
+	}
+}
+
+// accSummaryUnitLabel is one unit of a currency in the tooltip, e.g. USD or
+// g of gold.
+func accSummaryUnitLabel(c *models.Currency) string {
+	if u := c.Unit(); u != "" {
+		return string(u) + " " + strings.ToLower(accSummaryCurLabel(c))
+	}
+	return c.String
 }

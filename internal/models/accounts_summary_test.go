@@ -3,6 +3,8 @@ package models
 import (
 	"slices"
 	"testing"
+
+	"github.com/omareloui/tyche/internal/fxrate"
 	"time"
 )
 
@@ -221,5 +223,72 @@ func TestPlannedDeposits(t *testing.T) {
 	got = PlannedDeposits(goals, []Account{bank}, MonthStart(26), now, day("2026-12-26"))
 	if len(got) != 2 || !got[0].On.Equal(day("2026-11-26")) || !got[1].On.Equal(day("2026-11-26")) {
 		t.Errorf("deposits from the 26th = %+v", got)
+	}
+}
+
+func TestAccountsSummaryShowIn(t *testing.T) {
+	t.Cleanup(fxrate.SetRates(map[string]map[string]float64{"usd": {"egp": 50}}))
+	egp := Currency{String: "EGP"}
+	usd := Currency{String: "USD"}
+	today := day("2026-11-05")
+	kind := AccountKind{Enum: AccKindBankAcc}
+	accs := []Account{
+		// 1000 EGP all along, 10 USD all along.
+		{ID: "bank", Amount: 1000, Currency: egp, Kind: kind},
+		{ID: "dollars", Amount: 10, Currency: usd, Kind: kind},
+	}
+	s := NewAccountsSummary(accs, egp, AccountsSummaryWith{}, MonthStart(1), today, today.AddDate(0, 0, 3), nil, nil)
+	h := s.History
+	if got := s.Codes(); !slices.Equal(got, []string{"egp", "usd"}) {
+		t.Fatalf("codes = %v", got)
+	}
+	days := s.RateDays()
+	if !days[0].Equal(h.From) || !days[len(days)-1].Equal(today) || len(days) < 2 {
+		t.Fatalf("rate days = %v", days)
+	}
+
+	// EGP was 25 a dollar at first, 50 from the second sample on; no USD
+	// rate on the first day (today's then).
+	rates := map[time.Time]map[string]float64{}
+	for i, d := range days {
+		r := map[string]float64{"egp": 1.0 / 50, "usd": 1}
+		if i == 0 {
+			r = map[string]float64{"egp": 1.0 / 25}
+		}
+		rates[d] = r
+	}
+	s.ShowIn(usd, days, rates, 1.0/50, false)
+	in := s.HistoryIn
+	if s.In == nil || s.In.String != "USD" || in == nil || len(in.Balance) != len(h.Balance) {
+		t.Fatalf("history in = %+v", in)
+	}
+	if !s.InApprox {
+		t.Error("a missing rate should make it approximate")
+	}
+	// First day: 1000/25 + 10 (today's usd→egp→usd: 50 × 1/50).
+	if got := in.Balance[0]; got != 50 {
+		t.Errorf("first day = %v, want 50", got)
+	}
+	if got := in.Balance[h.TodayIdx()]; got != 30 {
+		t.Errorf("today = %v, want 30", got)
+	}
+	// The forecast at today's rate.
+	if got, want := in.Balance[len(in.Balance)-1], h.Balance[len(h.Balance)-1]/50; got != want {
+		t.Errorf("forecast = %v, want %v", got, want)
+	}
+	// Hovering the first day: what it was in EGP then, and the dollar's
+	// rate then and now.
+	worth, then, now, ch, ok := s.InDay(0)
+	if !ok || worth != 1250 || then != 25 || now != 50 || ch != 1 {
+		t.Errorf("first day = %v EGP, 1 USD %v → %v (%v), ok %v; want 1250, 25 → 50 (+100%%)", worth, then, now, ch, ok)
+	}
+	if _, _, _, _, ok := s.InDay(len(in.Balance) - 1); ok {
+		t.Error("a forecast day has no rate of its own")
+	}
+	if ch, ok := in.Change(); !ok || ch != -0.4 {
+		t.Errorf("change in usd = %v, want -40%%", ch)
+	}
+	if ch, ok := h.Change(); !ok || ch != 0 {
+		t.Errorf("change in egp = %v, want 0", ch)
 	}
 }
