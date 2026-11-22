@@ -114,7 +114,7 @@ templ consoleLink(href string, class string) {
 }
 
 templ ConsoleBody(data ConsoleData) {
-	<div id={ ConsoleTarget } class="grid gap-5 lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start pb-10">
+	<div id={ ConsoleTarget } class="grid gap-5 lg:grid-cols-[17rem_minmax(0,1fr)] lg:items-start pb-10">
 		<div class="lg:col-span-2">
 			@consoleTabs(false)
 		</div>
@@ -167,7 +167,7 @@ templ consoleTables(data ConsoleData) {
 	</div>
 	<nav
 		x-data="{ q: '' }"
-		class="max-lg:hidden grid gap-2 lg:sticky lg:top-22 lg:max-h-[calc(100dvh-7rem)] lg:overflow-y-auto pr-1"
+		class="max-lg:hidden grid gap-2 lg:sticky lg:top-22 lg:max-h-[calc(100dvh-7rem)] lg:overflow-y-auto overflow-x-hidden pr-1"
 		aria-label="Tables"
 	>
 		<input
@@ -184,7 +184,7 @@ templ consoleTables(data ConsoleData) {
 				}
 				<li x-show={ fmt.Sprintf("!q || %q.includes(q.toLowerCase())", t.Name) }>
 					@consoleLink(ConsoleURL(t.Name, models.ConsoleBrowse{}), "flex items-center gap-2 h-8 px-2 rounded-md transition-colors hover:bg-white/5 "+consoleTableClass(t.Name == current)) {
-						<span class="truncate font-mono text-[13px]">{ t.Name }</span>
+						<span class="min-w-0 truncate font-mono text-[13px]">{ t.Name }</span>
 						if t.Type == "view" {
 							<span class="shrink-0 px-1.5 rounded bg-violet-400/15 text-[10px] uppercase text-violet-300">view</span>
 						}
