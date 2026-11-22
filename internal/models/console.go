@@ -15,8 +15,6 @@ const (
 	ConsolePageSize = 100
 	// ConsoleMaxSQL is the longest SQL the console runs.
 	ConsoleMaxSQL = 10_000
-	// ConsoleWriteConfirmation is typed to turn the console's write mode on.
-	ConsoleWriteConfirmation = "WRITE"
 )
 
 // QuoteIdent quotes a name for SQL.
@@ -46,10 +44,6 @@ type ConsoleResult struct {
 	// Truncated is whether there were more rows than read.
 	Truncated bool
 	Took      time.Duration
-	// Write is whether it ran in write mode, Changed the rows it inserted,
-	// updated or deleted.
-	Write   bool
-	Changed int64
 }
 
 // ConsoleTable is a table or view of the user's database.

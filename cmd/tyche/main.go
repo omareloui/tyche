@@ -73,6 +73,7 @@ func main() {
 	}
 
 	repo := repository.New(vaults, sharedQ)
+	repo.RemoveConsoleSnapshots()
 	if err := repo.LoadDeleted(ctx); err != nil {
 		log.Fatalln(err)
 	}

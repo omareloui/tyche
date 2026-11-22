@@ -87,40 +87,12 @@ document.addEventListener("alpine:init", () => {
     },
   }));
 
-  // consoleWrite is the editor's write mode: turned on once WRITE is typed,
-  // for one run (the answer comes back read only).
-  Alpine.data("consoleWrite", () => ({
-    write: false,
-    asking: false,
-    typed: "",
-
-    toggle(e) {
-      if (!e.target.checked) {
-        this.write = this.asking = false;
-        return;
-      }
-      this.asking = true;
-      this.$nextTick(() => this.$refs.confirm.focus());
-    },
-
-    confirm() {
-      if (this.typed !== "WRITE") return;
-      this.write = true;
-      this.asking = false;
-      this.typed = "";
-    },
-
-    cancel() {
-      this.asking = false;
-      this.typed = "";
-    },
-
-    // runKey runs the editor's SQL on Ctrl/Cmd + Enter, in the mode it's in.
+  Alpine.data("consoleEditor", () => ({
+    // runKey runs the editor's SQL on Ctrl/Cmd + Enter.
     runKey(e) {
       if (!(e.ctrlKey || e.metaKey) || e.target.id !== "console-sql") return;
       e.preventDefault();
-      if (this.write) this.$refs.writeRun.click();
-      else this.$refs.form.requestSubmit();
+      this.$refs.form.requestSubmit();
     },
   }));
 

@@ -83,6 +83,29 @@ func newTenantManager() *TenantManager {
 	return tm
 }
 
+// RemoveConsoleSnapshots deletes the copies the SQL console's write mode
+// (removed 2026-11-22) kept to undo a write: <tenant>.sqlite.console (+ .tmp),
+// full copies of users' databases. Called once on startup by main.
+// TODO: delete after 2026-12-31, once every deployment ran it.
+func (r *Repository) RemoveConsoleSnapshots() {
+	l := logger.Get()
+	for _, pattern := range []string{"*.sqlite.console", "*.sqlite.console.tmp"} {
+		files, err := filepath.Glob(filepath.Join(r.tm.baseDir, pattern))
+		if err != nil {
+			l.Error("listing the console snapshots", zap.Error(err))
+			continue
+		}
+		for _, f := range files {
+			if err := os.Remove(f); err != nil && !os.IsNotExist(err) {
+				tenantID := strings.TrimSuffix(strings.TrimSuffix(filepath.Base(f), ".tmp"), ".sqlite.console")
+				l.Error("removing a console snapshot", zap.String("tenant_id", tenantID), zap.Error(err))
+				continue
+			}
+			l.Info("removed a console snapshot")
+		}
+	}
+}
+
 // GetTenant gets the tenant's database, opening it when it's not already.
 // key is its encryption key, nil when it's not encrypted.
 func (tm *TenantManager) GetTenant(provider models.OAuthProvider, oauthID string, key []byte) (*sql.DB, *queries.Queries, error) {
@@ -220,10 +243,8 @@ func (tm *TenantManager) export(tenantID string, from, to []byte, done func() er
 	if err := exportDB(tm.dbPath(tenantID), from, to); err != nil {
 		return err
 	}
-	// The previous databases kept by an import or a console write have the
-	// old key.
+	// The previous database kept by an import has the old key.
 	_ = os.Remove(tm.backupPath(tenantID))
-	_ = os.Remove(tm.consoleSnapshotPath(tenantID))
 	if done != nil {
 		return done()
 	}
