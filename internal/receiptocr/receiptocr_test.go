@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/omareloui/tyche/internal/gemini"
 	"github.com/omareloui/tyche/internal/models"
 )
 
@@ -76,7 +77,7 @@ func TestRead(t *testing.T) {
 		t.Errorf("usage = %+v", usage)
 	}
 	// 1800 × 0.75 + 500 × 3.75 micro dollars.
-	if got := usage.CostMicros(0.75, 3.75); got != 3225 {
+	if got := usage.CostMicros(gemini.Prices{InputPerM: 0.75, OutputPerM: 3.75}); got != 3225 {
 		t.Errorf("cost = %d", got)
 	}
 	if res.Merchant != "Cilantro" || res.Currency != "EGP" || res.Total != 195.2 {

@@ -134,8 +134,10 @@ func Prompt(in In) string {
 func (c *Client) Estimate(ctx context.Context, in In) (*models.ColCityEstimate, gemini.Usage, error) {
 	parts := []gemini.Part{{Text: Prompt(in)}}
 	ans, usage, err := c.GenerateWith(ctx, parts, responseSchema, gemini.Options{Search: true})
-	if err != nil && usage.InputTokens == 0 && usage.OutputTokens == 0 && ctx.Err() == nil {
-		ans, usage, err = c.Generate(ctx, parts, responseSchema)
+	if err != nil && !usage.Billed() && ctx.Err() == nil {
+		var again gemini.Usage
+		ans, again, err = c.Generate(ctx, parts, responseSchema)
+		usage = usage.Add(again)
 	}
 	if err != nil {
 		return nil, usage, err

@@ -172,8 +172,7 @@ func GuessVerified(ctx context.Context, g Guesser, in In) (*models.SMSTemplateGu
 	var total gemini.Usage
 	for range 2 {
 		guess, usage, err := g.Guess(ctx, in)
-		total.InputTokens += usage.InputTokens
-		total.OutputTokens += usage.OutputTokens
+		total = total.Add(usage)
 		if err != nil && !errors.Is(err, ErrNoGuess) {
 			return nil, total, err
 		}

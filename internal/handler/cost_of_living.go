@@ -123,8 +123,7 @@ func (h Handler) estimateCity(ctx context.Context, in colguess.In) (*models.ColC
 	if err != nil {
 		return nil, err
 	}
-	limit := h.ocrCfg.ColEstimatesPerMonth
-	left, err := h.repo.ColEstimatesLeft(ctx, tenantID, limit, time.Now())
+	left, limit, err := h.repo.AICallsLeft(ctx, tenantID, models.ScanColEstimate, h.ocrCfg.ColEstimatesPerMonth, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -136,13 +135,14 @@ func (h Handler) estimateCity(ctx context.Context, in colguess.In) (*models.ColC
 	defer cancel()
 	e, usage, callErr := h.colGuess.Estimate(callCtx, in)
 	scan := models.ReceiptScan{
-		TenantID:     tenantID,
-		Kind:         models.ScanColEstimate,
-		Model:        h.colGuess.Model(),
-		InputTokens:  usage.InputTokens,
-		OutputTokens: usage.OutputTokens,
-		CostMicros:   usage.CostMicros(h.ocrCfg.InputPerM, h.ocrCfg.OutputPerM),
-		OK:           callErr == nil,
+		TenantID:      tenantID,
+		Kind:          models.ScanColEstimate,
+		Model:         h.colGuess.Model(),
+		InputTokens:   usage.InputTokens,
+		OutputTokens:  usage.OutputTokens,
+		SearchQueries: usage.SearchQueries,
+		CostMicros:    usage.CostMicros(h.ocrCfg.Prices()),
+		OK:            callErr == nil,
 	}
 	if callErr != nil {
 		scan.Error = callErr.Error()
@@ -332,7 +332,7 @@ func (h Handler) colData(ctx context.Context, v url.Values, defaults bool) (*vie
 			d.Estimate = e
 			if e == nil {
 				if tenantID, err := repository.TenantIDFromCtx(ctx); err == nil {
-					d.EstimatesLeft, _ = h.repo.ColEstimatesLeft(ctx, tenantID, h.ocrCfg.ColEstimatesPerMonth, time.Now())
+					d.EstimatesLeft, _, _ = h.repo.AICallsLeft(ctx, tenantID, models.ScanColEstimate, h.ocrCfg.ColEstimatesPerMonth, time.Now())
 				}
 				d.NeedEstimate = true
 				return d, nil

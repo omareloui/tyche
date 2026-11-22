@@ -1,0 +1,551 @@
+package views
+
+import (
+	"fmt"
+	"github.com/omareloui/tyche/internal/gemini"
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+	"time"
+)
+
+// Chart colors, validated on the dark surface (dataviz): the categorical
+// blue / orange / aqua slots, one per kind of AI call, and the critical
+// status red for the failed calls.
+const (
+	vizBlue     = "#3987e5"
+	vizOrange   = "#d95926"
+	vizAqua     = "#199e70"
+	vizCritical = "#d03b3b"
+)
+
+// aiKindColor is the kind's series color, the same on every chart.
+func aiKindColor(k models.ScanKind) string {
+	switch k {
+	case models.ScanSMSGuess:
+		return vizOrange
+	case models.ScanColEstimate:
+		return vizAqua
+	default:
+		return vizBlue
+	}
+}
+
+// AdminAIRanges are the monthly charts' ranges.
+var AdminAIRanges = []struct{ Key, Label string }{{"12m", "Last 12 months"}, {"all", "All time"}}
+
+type AdminAIData struct {
+	Report models.AIUsageReport
+	// Range is the monthly charts' (AdminAIRanges).
+	Range string
+	// Enabled tells each kind's feature is on; Model, Prices and
+	// DefaultLimits its config.
+	Enabled       map[models.ScanKind]bool
+	Model         string
+	Prices        gemini.Prices
+	DefaultLimits map[models.ScanKind]int
+	Now           time.Time
+}
+
+templ AdminAI(claims *jwt.AccessClaims, balances []models.Balance, d AdminAIData) {
+	@layouts.WithTitle(claims, "AI usage", balances) {
+		<div class="grid gap-6">
+			@adminAITabs("usage")
+			@adminAITotals(d)
+			@adminAIKinds(d)
+			<div class="grid gap-6 lg:grid-cols-2">
+				@adminCallsDailyChart(d.Report.Daily)
+				@adminTopTenantsChart(d.Report.Tenants)
+			</div>
+			<div class="flex flex-wrap items-center gap-2" role="group" aria-label="Range">
+				for _, rg := range AdminAIRanges {
+					@adminPill("/admin/ai?range="+rg.Key, rg.Label, rg.Key == d.Range)
+				}
+			</div>
+			<div class="grid gap-6 lg:grid-cols-2">
+				@adminCostMonthlyChart(d.Report.Monthly)
+				@adminTokensMonthlyChart(d.Report.Monthly)
+			</div>
+		</div>
+	}
+}
+
+templ AdminAILimits(claims *jwt.AccessClaims, balances []models.Balance, d AdminAIData) {
+	@layouts.WithTitle(claims, "AI usage", balances) {
+		<div class="grid gap-6">
+			@adminAITabs("limits")
+			@adminAITenants(d)
+		</div>
+	}
+}
+
+templ adminPill(href, label string, current bool) {
+	<a
+		href={ templ.SafeURL(href) }
+		class={ "h-9 inline-flex items-center px-3 rounded-full text-sm transition-colors",
+			templ.KV("bg-zinc-200 text-zinc-900", current),
+			templ.KV("bg-zinc-800/60 text-zinc-300 hover:bg-zinc-800", !current) }
+		if current {
+			aria-current="page"
+		}
+	>{ label }</a>
+}
+
+templ adminAITabs(current string) {
+	<nav class="flex flex-wrap items-center gap-2" aria-label="AI usage pages">
+		@adminPill("/admin/ai", "Usage", current == "usage")
+		@adminPill("/admin/ai/limits", "Limits by account", current == "limits")
+	</nav>
+}
+
+func usd(v float64) string {
+	switch {
+	case v == 0:
+		return "$0"
+	case v < 0.01:
+		return fmt.Sprintf("$%.4f", v)
+	default:
+		return fmt.Sprintf("$%.2f", v)
+	}
+}
+
+func microsUSD(m int64) string { return usd(float64(m) / 1e6) }
+
+templ adminAITotals(d AdminAIData) {
+	<section class="grid gap-3">
+		<header class="flex flex-wrap items-end justify-between gap-2">
+			<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+				@icons.Bot("16")
+				Estimated cost
+			</h2>
+			<p class="text-sm text-zinc-500">
+				{ fmt.Sprintf("%s · %s in / %s out per million tokens · %s per 1,000 searches", d.Model, usd(d.Prices.InputPerM), usd(d.Prices.OutputPerM), usd(d.Prices.SearchPerK)) }
+			</p>
+		</header>
+		<div class="grid gap-3 sm:grid-cols-3">
+			@adminUsageTile("This month", d.Report.ThisMonth) {
+				<p class="text-sm text-zinc-300 tabular-nums">
+					{ "≈ " + usd(d.Report.MonthEndCost()) + " by the month's end" }
+				</p>
+				<p class="text-xs text-zinc-500 tabular-nums">
+					{ "Up to " + usd(d.Report.WorstCaseCost()) + " if every account used its limits" }
+				</p>
+			}
+			@adminUsageTile("Last month", d.Report.LastMonth)
+			@adminUsageTile("All time", d.Report.AllTime)
+		</div>
+		<p class="text-xs text-zinc-500">
+			Estimates: each call's cost at the prices set when it ran, Google Search's free tier left out. The month's end is this month's pace so far; the most assumes every listed account uses what's left of each limit at that kind's average cost. Google's billing is the source of truth.
+		</p>
+	</section>
+}
+
+templ adminUsageTile(label string, u models.AIUsage) {
+	@components.GlassCard("grid gap-1 p-5") {
+		<p class="text-xs font-semibold uppercase tracking-wider text-zinc-500">{ label }</p>
+		<p class="text-3xl font-bold tabular-nums">{ usd(u.Cost()) }</p>
+		<p class="text-sm text-zinc-400 tabular-nums">
+			{ fmt.Sprintf("%d calls", u.Calls) }
+			if u.Failed > 0 {
+				<span class="text-zinc-500">{ fmt.Sprintf(" · %d failed", u.Failed) }</span>
+			}
+			if u.Cached > 0 {
+				<span class="text-zinc-500">{ fmt.Sprintf(" · %d from cache", u.Cached) }</span>
+			}
+		</p>
+		<p class="text-xs text-zinc-500 tabular-nums">
+			{ fmt.Sprintf("%s in · %s out tokens", components.CompactNum(float64(u.InputTokens)), components.CompactNum(float64(u.OutputTokens))) }
+			if u.SearchQueries > 0 {
+				{ fmt.Sprintf(" · %d searches", u.SearchQueries) }
+			}
+		</p>
+		{ children... }
+	}
+}
+
+// adminAIKinds is each feature's usage: this month, all time, its default
+// limit.
+templ adminAIKinds(d AdminAIData) {
+	<section class="grid gap-3">
+		<h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-500">By feature</h2>
+		<div class="grid gap-3 sm:grid-cols-3">
+			for _, k := range models.ScanKinds {
+				{{ this, all := d.Report.ThisMonth.Kind(k), d.Report.AllTime.Kind(k) }}
+				@components.GlassCard("grid gap-1 p-5") {
+					<p class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+						<span class="size-2.5 rounded-full" style={ templ.SafeCSS("background:" + aiKindColor(k) + ";") }></span>
+						{ k.Label() }
+						if !d.Enabled[k] {
+							<span class="ml-auto normal-case tracking-normal font-normal text-zinc-500">Off</span>
+						}
+					</p>
+					<p class="text-2xl font-bold tabular-nums">
+						{ usd(this.Cost()) }
+						<span class="text-sm font-normal text-zinc-500">this month</span>
+					</p>
+					<p class="text-sm text-zinc-400 tabular-nums">
+						{ fmt.Sprintf("%d calls", this.Calls) }
+						if this.Failed > 0 {
+							<span class="text-zinc-500">{ fmt.Sprintf(" · %d failed", this.Failed) }</span>
+						}
+						if this.Cached > 0 {
+							<span class="text-zinc-500">{ fmt.Sprintf(" · %d from cache", this.Cached) }</span>
+						}
+					</p>
+					<p class="text-xs text-zinc-500 tabular-nums">
+						{ fmt.Sprintf("All time %d calls · %s", all.Calls, usd(all.Cost())) }
+						if all.Calls > 0 {
+							{ " · " + usd(all.AvgCost()) + " a call" }
+						}
+						if all.SearchQueries > 0 {
+							{ fmt.Sprintf(" · %d searches", all.SearchQueries) }
+						}
+					</p>
+					<p class="text-xs text-zinc-500 tabular-nums">{ fmt.Sprintf("%d a month by default", d.DefaultLimits[k]) }</p>
+				}
+			}
+		</div>
+		if !d.Enabled[models.ScanReceipt] {
+			<p class="text-xs text-zinc-500">Off: set GEMINI_API_KEY to turn the AI on.</p>
+		}
+	</section>
+}
+
+templ adminChartCard(title string) {
+	@components.GlassCard("grid gap-4 p-5 sm:p-6") {
+		<h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-400">{ title }</h3>
+		{ children... }
+	}
+}
+
+// adminBarPlot is a chart's plot: y axis, grid, the bars (children) and the
+// x labels (every labelEvery-th, nil for none).
+templ adminBarPlot(axisMax float64, labels []string, labelEvery int) {
+	<div class="flex">
+		@dashYAxis(axisMax)
+		<div class="grow min-w-0">
+			<div class="relative h-48">
+				@dashGridLines(axisMax)
+				<div x-data="chartScrub" x-bind="scrub" class="relative flex h-full items-end gap-px touch-pan-y">
+					{ children... }
+				</div>
+			</div>
+			<div class="flex gap-px mt-2 text-xs text-zinc-500">
+				for i, l := range labels {
+					<span class="flex-1 min-w-0 text-center whitespace-nowrap overflow-visible">
+						if labelEvery > 0 && i%labelEvery == 0 {
+							{ l }
+						}
+					</span>
+				}
+			</div>
+		</div>
+	</div>
+}
+
+// adminBar is a bar of stacked segments (bottom first), with its tooltip.
+templ adminBar(segments []adminSegment, axisMax float64, tooltip []string) {
+	<div tabindex="0" class="group relative flex-1 min-w-0 flex flex-col-reverse items-center justify-start h-full outline-none">
+		<div class="absolute inset-0 rounded-md transition-colors group-hover:bg-white/4 group-focus:bg-white/4 group-[.is-active]:bg-white/4"></div>
+		for i, s := range segments {
+			if s.value > 0 {
+				<div
+					class={ "relative w-full max-w-4", templ.KV("rounded-t-[4px]", i == lastNonZero(segments)), templ.KV("mt-[2px]", i > 0) }
+					style={ templ.SafeCSS(fmt.Sprintf("height:%.2f%%;background:%s;", axisPct(s.value, axisMax), s.color)) }
+				></div>
+			}
+		}
+		<div class="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 hidden group-hover:block group-focus:block group-[.is-active]:block z-10 pointer-events-none">
+			<div class="glass-tooltip whitespace-nowrap">
+				for i, t := range tooltip {
+					<p class={ templ.KV("text-zinc-400", i == 0), templ.KV("tabular-nums text-zinc-200", i > 0) }>{ t }</p>
+				}
+			</div>
+		</div>
+	</div>
+}
+
+type adminSegment struct {
+	value float64
+	color string
+}
+
+func lastNonZero(segs []adminSegment) int {
+	last := -1
+	for i, s := range segs {
+		if s.value > 0 {
+			last = i
+		}
+	}
+	return last
+}
+
+// axisOf is the y axis top for the values, at least one per tick so counts
+// keep whole labels.
+func axisOf(vs ...float64) float64 {
+	top := float64(dashAxisTicks)
+	for _, v := range vs {
+		top = max(top, v)
+	}
+	return models.AxisMax(top, dashAxisTicks)
+}
+
+// aiSegments are a bucket's bar, a segment per kind (value picks what).
+func aiSegments(u models.AIUsage, value func(models.AIUsageTotals) float64) []adminSegment {
+	var segs []adminSegment
+	for _, k := range models.ScanKinds {
+		segs = append(segs, adminSegment{value(u.Kind(k)), aiKindColor(k)})
+	}
+	return segs
+}
+
+// aiKindLines are a bucket's tooltip lines of the kinds used (line names
+// what), then its failed calls.
+func aiKindLines(u models.AIUsage, line func(models.AIUsageTotals) string) []string {
+	var out []string
+	for _, k := range models.ScanKinds {
+		if ku := u.Kind(k); ku.Calls > 0 {
+			out = append(out, k.Label()+": "+line(ku))
+		}
+	}
+	if u.Failed > 0 {
+		out = append(out, fmt.Sprintf("%d failed", u.Failed))
+	}
+	return out
+}
+
+templ vizLegend(label, color string) {
+	<span class="flex items-center gap-1.5 text-xs text-zinc-400">
+		<span class="size-2.5 rounded-full" style={ templ.SafeCSS("background:" + color + ";") }></span>
+		{ label }
+	</span>
+}
+
+templ aiKindsLegend() {
+	<div class="flex flex-wrap gap-3">
+		for _, k := range models.ScanKinds {
+			@vizLegend(k.Label(), aiKindColor(k))
+		}
+	</div>
+}
+
+func callsOf(u models.AIUsageTotals) float64  { return float64(u.Calls) }
+func centsOf(u models.AIUsageTotals) float64  { return u.Cost() * 100 }
+func callsLine(u models.AIUsageTotals) string { return fmt.Sprint(u.Calls) }
+func costLine(u models.AIUsageTotals) string {
+	return fmt.Sprintf("%s (%d calls)", usd(u.Cost()), u.Calls)
+}
+
+templ adminCallsDailyChart(days []models.AIUsageBucket) {
+	{{
+		var vals []float64
+		labels := make([]string, len(days))
+		for i, d := range days {
+			vals = append(vals, float64(d.Calls))
+			labels[i] = d.From.Format("Jan 2")
+		}
+		axis := axisOf(vals...)
+	}}
+	@adminChartCard(fmt.Sprintf("Calls a day · last %d days", len(days))) {
+		@aiKindsLegend()
+		@adminBarPlot(axis, labels, max(len(days)/6, 1)) {
+			for _, d := range days {
+				@adminBar(aiSegments(d.AIUsage, callsOf), axis,
+					append(append([]string{d.From.Format("Mon, Jan 2")}, aiKindLines(d.AIUsage, callsLine)...), usd(d.Cost())))
+			}
+		}
+	}
+}
+
+templ adminCostMonthlyChart(months []models.AIUsageBucket) {
+	{{
+		var vals []float64
+		labels := make([]string, len(months))
+		for i, m := range months {
+			vals = append(vals, m.Cost()*100)
+			labels[i] = m.From.Format("Jan")
+		}
+		axis := axisOf(vals...)
+	}}
+	@adminChartCard("Cost a month (US cents)") {
+		@aiKindsLegend()
+		@adminBarPlot(axis, labels, max(len(months)/12, 1)) {
+			for _, m := range months {
+				@adminBar(aiSegments(m.AIUsage, centsOf), axis,
+					append([]string{m.From.Format("January 2006"), usd(m.Cost())}, aiKindLines(m.AIUsage, costLine)...))
+			}
+		}
+	}
+}
+
+templ adminTokensMonthlyChart(months []models.AIUsageBucket) {
+	{{
+		var vals []float64
+		labels := make([]string, len(months))
+		for i, m := range months {
+			vals = append(vals, float64(m.InputTokens+m.OutputTokens))
+			labels[i] = m.From.Format("Jan")
+		}
+		axis := axisOf(vals...)
+	}}
+	@adminChartCard("Tokens a month") {
+		<div class="flex gap-3">
+			@vizLegend("Input", vizBlue)
+			@vizLegend("Output (thinking included)", vizOrange)
+		</div>
+		@adminBarPlot(axis, labels, max(len(months)/12, 1)) {
+			for _, m := range months {
+				@adminBar([]adminSegment{{float64(m.InputTokens), vizBlue}, {float64(m.OutputTokens), vizOrange}}, axis,
+					[]string{m.From.Format("January 2006"),
+						fmt.Sprintf("%s in", components.CompactNum(float64(m.InputTokens))),
+						fmt.Sprintf("%s out", components.CompactNum(float64(m.OutputTokens)))})
+			}
+		}
+	}
+}
+
+// adminTopTenantsChart is this month's cost per tenant, the most first,
+// each bar split by kind.
+templ adminTopTenantsChart(tenants []models.TenantAIUsage) {
+	{{
+		var top []models.TenantAIUsage
+		for _, t := range tenants {
+			if t.ThisMonth.Calls > 0 && len(top) < 8 {
+				top = append(top, t)
+			}
+		}
+		var most int64
+		for _, t := range top {
+			most = max(most, t.ThisMonth.CostMicros)
+		}
+	}}
+	@adminChartCard("Cost this month · by account") {
+		if len(top) == 0 {
+			<p class="text-sm text-zinc-500">No calls this month yet.</p>
+		} else {
+			@aiKindsLegend()
+			<ul class="grid gap-3">
+				for _, t := range top {
+					<li>
+						<a href={ templ.SafeURL("/admin/ai/limits#" + adminAIRowID(t.TenantID)) } class="group grid gap-1 outline-none rounded-md focus-visible:ring-2 focus-visible:ring-zinc-500">
+							<div class="flex justify-between gap-3 text-sm">
+								<span class="font-mono text-zinc-300 truncate group-hover:text-zinc-100">{ t.TenantID }</span>
+								<span class="tabular-nums text-zinc-400 whitespace-nowrap">{ fmt.Sprintf("%s · ≈ %s by the end", usd(t.ThisMonth.Cost()), usd(t.MonthEndCost())) }</span>
+							</div>
+							<div class="flex h-2 gap-[2px] rounded-full bg-zinc-800/80 overflow-hidden" title={ tenantKindsTitle(t) }>
+								for _, k := range models.ScanKinds {
+									if c := t.ThisMonth.Kind(k).CostMicros; c > 0 {
+										<div class="h-full" style={ templ.SafeCSS(fmt.Sprintf("width:%.2f%%;background:%s;", float64(c)/float64(max(most, 1))*100, aiKindColor(k))) }></div>
+									}
+								}
+							</div>
+						</a>
+					</li>
+				}
+			</ul>
+		}
+	}
+}
+
+func tenantKindsTitle(t models.TenantAIUsage) string {
+	s := ""
+	for _, k := range models.ScanKinds {
+		if s != "" {
+			s += " · "
+		}
+		s += fmt.Sprintf("%s %d / %d", k.Label(), t.Billed[k], t.Limits[k])
+	}
+	return s
+}
+
+func adminAIRowID(id string) string { return "admin-ai-" + id }
+
+templ adminAITenants(d AdminAIData) {
+	<section class="grid gap-3" x-data="{ q: '' }">
+		<header class="flex flex-wrap items-end justify-between gap-3">
+			<div class="min-w-0">
+				<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+					@icons.Users("16")
+					Accounts
+				</h2>
+				<p class="text-sm text-zinc-600">Limits are calls a calendar month (UTC) of each kind; cached receipts don't count. Empty a limit to go back to the default.</p>
+			</div>
+			<input type="search" x-model="q" placeholder="Search by account ID" aria-label="Search by account ID" class="input-field w-full sm:w-72 font-mono"/>
+		</header>
+		if len(d.Report.Tenants) == 0 {
+			<p class="text-zinc-500">No calls yet.</p>
+		}
+		<ul class="grid gap-2">
+			for _, t := range d.Report.Tenants {
+				@AdminAITenantRow(t, d, "")
+			}
+		</ul>
+	</section>
+}
+
+// AdminAITenantRow is a tenant's usage with its limits' inputs; saved tells
+// they were just changed.
+templ AdminAITenantRow(t models.TenantAIUsage, d AdminAIData, saved string) {
+	<li
+		id={ adminAIRowID(t.TenantID) }
+		data-tenant={ t.TenantID }
+		x-show="!q || $el.dataset.tenant.toLowerCase().includes(q.toLowerCase())"
+		class="grid gap-3 p-4 rounded-2xl bg-zinc-800/30 ring-1 ring-zinc-800 scroll-mt-24 target:ring-zinc-500"
+	>
+		<div class="grid gap-1 min-w-0">
+			<p class="font-mono text-sm [overflow-wrap:anywhere]">{ t.TenantID }</p>
+			<p class="text-sm text-zinc-400 tabular-nums">
+				{ fmt.Sprintf("This month %s · ≈ %s by the end", usd(t.ThisMonth.Cost()), usd(t.MonthEndCost())) }
+				<span class="text-zinc-500">{ fmt.Sprintf(" · up to %s · all time %d calls, %s", microsUSD(t.WorstCaseMicros), t.AllTime.Calls, usd(t.AllTime.Cost())) }</span>
+			</p>
+			if !t.AllTime.Last.IsZero() {
+				<p class="text-xs text-zinc-500 tabular-nums">{ "Last call " + t.AllTime.Last.Format("Jan 2, 2006 15:04") + " UTC" }</p>
+			}
+		</div>
+		<form
+			hx-put={ fmt.Sprintf("/admin/ai/limits/%s", t.TenantID) }
+			hx-target={ "#" + adminAIRowID(t.TenantID) }
+			hx-swap="outerHTML"
+			class="grid gap-3"
+		>
+			<div class="grid gap-3 sm:grid-cols-3">
+				for _, k := range models.ScanKinds {
+					{{
+						id := "limit-" + string(k) + "-" + t.TenantID
+						used := t.Billed[k]
+					}}
+					<div class="grid gap-1.5 p-3 rounded-xl bg-zinc-900/40">
+						<label for={ id } class="flex items-center gap-2 text-sm text-zinc-300">
+							<span class="size-2.5 rounded-full" style={ templ.SafeCSS("background:" + aiKindColor(k) + ";") }></span>
+							{ k.Label() }
+						</label>
+						<p class={ "text-xs tabular-nums", templ.KV("text-zinc-500", used < t.Limits[k]), templ.KV("text-amber-400", used >= t.Limits[k]) }>
+							{ fmt.Sprintf("%d / %d this month · %s", used, t.Limits[k], usd(t.ThisMonth.Kind(k).Cost())) }
+						</p>
+						<input
+							id={ id }
+							type="number"
+							name={ "limit_" + string(k) }
+							min="0"
+							max="100000"
+							inputmode="numeric"
+							if t.Custom[k] {
+								value={ fmt.Sprint(t.Limits[k]) }
+							}
+							placeholder={ fmt.Sprintf("%d (default)", d.DefaultLimits[k]) }
+							class="input-field w-full text-center tabular-nums"
+						/>
+					</div>
+				}
+			</div>
+			<div class="flex items-center justify-end gap-3">
+				if saved != "" {
+					<span class="text-sm text-emerald-400" role="status">{ saved }</span>
+				}
+				<button type="submit" class="btn-ghost h-11!">Save limits</button>
+			</div>
+		</form>
+	</li>
+}

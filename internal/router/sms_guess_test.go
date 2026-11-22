@@ -198,8 +198,17 @@ func TestGuessSMSTemplate(t *testing.T) {
 		}
 		// receipts count apart
 		usrID := models.TenantID(usr.OAuthProvider, usr.OAuthID)
-		if left, _, _ := repo.ReceiptScansLeft(ctx, usrID, 3, time.Now()); left != 3 {
+		if left, _, _ := repo.AICallsLeft(ctx, usrID, models.ScanReceipt, 3, time.Now()); left != 3 {
 			t.Errorf("receipt scans left = %d", left)
+		}
+		// an admin's limit for the tenant overrides the default
+		ten := 10
+		if err := repo.SetAILimit(ctx, usrID, models.ScanSMSGuess, &ten); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = repo.SetAILimit(ctx, usrID, models.ScanSMSGuess, nil) })
+		if res, b := do(newServer(g, 3), http.MethodPost, "/sms/"+other.ID+"/guess"); strings.Contains(b, "the most you can") || g.calls == 0 {
+			t.Errorf("past the default with a raised limit: status = %d, calls = %d, body = %s", res.StatusCode, g.calls, b)
 		}
 	})
 }

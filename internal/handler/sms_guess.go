@@ -65,8 +65,7 @@ func (h *Handler) guessSMSTemplate(ctx context.Context, msg *models.SMSMessage) 
 	if err != nil {
 		return nil, err
 	}
-	limit := h.ocrCfg.SMSGuessesPerMonth
-	left, err := h.repo.SMSGuessesLeft(ctx, tenantID, limit, time.Now())
+	left, limit, err := h.repo.AICallsLeft(ctx, tenantID, models.ScanSMSGuess, h.ocrCfg.SMSGuessesPerMonth, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -88,13 +87,14 @@ func (h *Handler) guessSMSTemplate(ctx context.Context, msg *models.SMSMessage) 
 	defer cancel()
 	guess, usage, guessErr := smsguess.GuessVerified(guessCtx, h.smsGuess, in)
 	scan := models.ReceiptScan{
-		TenantID:     tenantID,
-		Kind:         models.ScanSMSGuess,
-		Model:        h.smsGuess.Model(),
-		InputTokens:  usage.InputTokens,
-		OutputTokens: usage.OutputTokens,
-		CostMicros:   usage.CostMicros(h.ocrCfg.InputPerM, h.ocrCfg.OutputPerM),
-		OK:           guessErr == nil,
+		TenantID:      tenantID,
+		Kind:          models.ScanSMSGuess,
+		Model:         h.smsGuess.Model(),
+		InputTokens:   usage.InputTokens,
+		OutputTokens:  usage.OutputTokens,
+		SearchQueries: usage.SearchQueries,
+		CostMicros:    usage.CostMicros(h.ocrCfg.Prices()),
+		OK:            guessErr == nil,
 	}
 	if guessErr != nil {
 		scan.Error = guessErr.Error()

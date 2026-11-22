@@ -343,8 +343,11 @@ func New(h *handler.Handler) Router {
 	mux.Handle("POST /admin/cost-of-living/refresh", handle(h.RefreshCostOfLiving, middleware.Admin))
 	mux.Handle("GET /admin/tenants", handle(h.AdminTenants, middleware.Admin))
 	mux.Handle("POST /admin/tenants/{id}/delete", handle(h.DeleteTenant, middleware.Admin))
-	mux.Handle("GET /admin/receipts", handle(h.AdminReceipts, middleware.Admin))
-	mux.Handle("PUT /admin/receipts/limits/{tenant}", handle(h.SetReceiptLimit, middleware.Admin))
+	mux.Handle("GET /admin/ai", handle(h.AdminAI, middleware.Admin))
+	mux.Handle("GET /admin/ai/limits", handle(h.AdminAILimits, middleware.Admin))
+	mux.Handle("PUT /admin/ai/limits/{tenant}", handle(h.SetAILimits, middleware.Admin))
+	// The page's old url.
+	mux.Handle("GET /admin/receipts", handleHTTP(http.RedirectHandler("/admin/ai", http.StatusMovedPermanently), middleware.Admin))
 	mux.Handle("GET /admin/logs", handle(h.AdminLogs, middleware.Admin))
 	mux.Handle("GET /admin/logs/list", handle(h.AdminLogsList, middleware.Admin))
 	// Go's profiles (go tool pprof on a downloaded /admin/debug/pprof/heap).

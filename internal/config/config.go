@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/omareloui/tyche/internal/gemini"
 )
 
 func GetApplicationPort() int {
@@ -92,6 +94,9 @@ type ReceiptOCR struct {
 	ThinkingLevel string
 	InputPerM     float64
 	OutputPerM    float64
+	// SearchPerK is dollars per thousand Google Search queries of the
+	// grounded calls (the city estimates), the free tier left out.
+	SearchPerK    float64
 	ScansPerMonth int
 	// SMSGuessesPerMonth is how many sms templates a tenant may have
 	// guessed a calendar month.
@@ -99,6 +104,11 @@ type ReceiptOCR struct {
 	// ColEstimatesPerMonth is how many city estimates (cost of living) a
 	// tenant may ask for a calendar month.
 	ColEstimatesPerMonth int
+}
+
+// Prices are the calls' prices.
+func (c ReceiptOCR) Prices() gemini.Prices {
+	return gemini.Prices{InputPerM: c.InputPerM, OutputPerM: c.OutputPerM, SearchPerK: c.SearchPerK}
 }
 
 // GetReceiptOCR reads the GEMINI_*, RECEIPT_SCANS_PER_MONTH,
@@ -110,6 +120,7 @@ func GetReceiptOCR() ReceiptOCR {
 		ThinkingLevel:        getEnvironmentValueWithDefault("GEMINI_THINKING_LEVEL", "LOW"),
 		InputPerM:            getEnvironmentFloatWithDefault("GEMINI_PRICE_INPUT_PER_M", 0.75),
 		OutputPerM:           getEnvironmentFloatWithDefault("GEMINI_PRICE_OUTPUT_PER_M", 3.75),
+		SearchPerK:           getEnvironmentFloatWithDefault("GEMINI_PRICE_SEARCH_PER_K", 14),
 		ScansPerMonth:        max(getEnvironmentIntWithDefault("RECEIPT_SCANS_PER_MONTH", 50), 0),
 		SMSGuessesPerMonth:   max(getEnvironmentIntWithDefault("SMS_GUESSES_PER_MONTH", 30), 0),
 		ColEstimatesPerMonth: max(getEnvironmentIntWithDefault("COL_ESTIMATES_PER_MONTH", 20), 0),

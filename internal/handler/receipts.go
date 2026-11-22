@@ -130,7 +130,7 @@ func (h Handler) scanReceipt(w http.ResponseWriter, r *http.Request) (*receiptSc
 		return scan, err
 	}
 
-	left, limit, err := h.repo.ReceiptScansLeft(ctx, tenantID, h.ocrCfg.ScansPerMonth, time.Now())
+	left, limit, err := h.repo.AICallsLeft(ctx, tenantID, models.ScanReceipt, h.ocrCfg.ScansPerMonth, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -150,12 +150,13 @@ func (h Handler) scanReceipt(w http.ResponseWriter, r *http.Request) (*receiptSc
 	defer cancel()
 	result, usage, readErr := h.ocr.Read(readCtx, img, contentType)
 	scan := models.ReceiptScan{
-		TenantID:     tenantID,
-		Model:        h.ocr.Model(),
-		InputTokens:  usage.InputTokens,
-		OutputTokens: usage.OutputTokens,
-		CostMicros:   usage.CostMicros(h.ocrCfg.InputPerM, h.ocrCfg.OutputPerM),
-		OK:           readErr == nil,
+		TenantID:      tenantID,
+		Model:         h.ocr.Model(),
+		InputTokens:   usage.InputTokens,
+		OutputTokens:  usage.OutputTokens,
+		SearchQueries: usage.SearchQueries,
+		CostMicros:    usage.CostMicros(h.ocrCfg.Prices()),
+		OK:            readErr == nil,
 	}
 	if readErr != nil {
 		scan.Error = readErr.Error()
@@ -218,7 +219,7 @@ func (h Handler) cachedReceiptScan(r *http.Request, tenantID, hash string) (*rec
 	if err := h.repo.RecordReceiptScan(ctx, models.ReceiptScan{TenantID: tenantID, Model: h.ocr.Model(), OK: true, Cached: true}); err != nil {
 		l.Error("recording a cached receipt scan", zap.Error(err))
 	}
-	left, limit, err := h.repo.ReceiptScansLeft(ctx, tenantID, h.ocrCfg.ScansPerMonth, time.Now())
+	left, limit, err := h.repo.AICallsLeft(ctx, tenantID, models.ScanReceipt, h.ocrCfg.ScansPerMonth, time.Now())
 	if err != nil {
 		return nil, err
 	}

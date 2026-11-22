@@ -172,25 +172,48 @@ func (h Handler) adminTenantsData(r *http.Request) (views.AdminTenantsData, erro
 	}, nil
 }
 
-// adminReceiptsDays is how many days the admin receipts page's daily chart
-// shows.
-const adminReceiptsDays = 90
+// adminAIDays is how many days the AI usage page's daily chart shows.
+const adminAIDays = 90
 
-// AdminReceipts is the receipt scans' usage: totals, charts and every
-// tenant's with its monthly limit.
-func (h Handler) AdminReceipts(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+// aiLimits are a tenant's AI calls a calendar month of each kind, unless an
+// admin set its own.
+func (h Handler) aiLimits() map[models.ScanKind]int {
+	return map[models.ScanKind]int{
+		models.ScanReceipt:     h.ocrCfg.ScansPerMonth,
+		models.ScanSMSGuess:    h.ocrCfg.SMSGuessesPerMonth,
+		models.ScanColEstimate: h.ocrCfg.ColEstimatesPerMonth,
+	}
+}
+
+// AdminAI is every AI call's usage, estimated: totals, a projection,
+// charts, top accounts.
+func (h Handler) AdminAI(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	b, err := h.repo.GetBalances(r.Context())
 	if err != nil {
 		return nil, err
 	}
-	d, err := h.adminReceiptsData(r)
+	d, err := h.adminAIData(r)
 	if err != nil {
 		return nil, err
 	}
-	return views.AdminReceipts(getClaims(r.Context()), b, d), nil
+	return views.AdminAI(getClaims(r.Context()), b, d), nil
 }
 
-func (h Handler) adminReceiptsData(r *http.Request) (views.AdminReceiptsData, error) {
+// AdminAILimits is every tenant's usage with its monthly limits of each
+// kind.
+func (h Handler) AdminAILimits(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	b, err := h.repo.GetBalances(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	d, err := h.adminAIData(r)
+	if err != nil {
+		return nil, err
+	}
+	return views.AdminAILimits(getClaims(r.Context()), b, d), nil
+}
+
+func (h Handler) adminAIData(r *http.Request) (views.AdminAIData, error) {
 	ctx := r.Context()
 	now := time.Now().UTC()
 	rng := r.URL.Query().Get("range")
@@ -199,61 +222,85 @@ func (h Handler) adminReceiptsData(r *http.Request) (views.AdminReceiptsData, er
 	}
 	scans, err := h.repo.ReceiptScansSince(ctx, time.Time{})
 	if err != nil {
-		return views.AdminReceiptsData{}, err
+		return views.AdminAIData{}, err
 	}
-	limits, err := h.repo.ReceiptLimits(ctx)
+	limits, err := h.repo.AILimits(ctx)
 	if err != nil {
-		return views.AdminReceiptsData{}, err
+		return views.AdminAIData{}, err
 	}
 	var monthlyFrom time.Time
 	if rng == "12m" {
 		monthlyFrom, _ = models.CalendarMonth(now)
 		monthlyFrom = monthlyFrom.AddDate(0, -11, 0)
 	}
-	return views.AdminReceiptsData{
-		Report:       models.NewReceiptUsageReport(scans, now, now.AddDate(0, 0, -(adminReceiptsDays-1)), monthlyFrom, limits, h.ocrCfg.ScansPerMonth),
-		Range:        rng,
-		Enabled:      h.ocr != nil,
-		Model:        h.ocrCfg.Model,
-		InputPerM:    h.ocrCfg.InputPerM,
-		OutputPerM:   h.ocrCfg.OutputPerM,
-		DefaultLimit: h.ocrCfg.ScansPerMonth,
-		Now:          now,
+	defs := h.aiLimits()
+	return views.AdminAIData{
+		Report: models.NewAIUsageReport(scans, now, now.AddDate(0, 0, -(adminAIDays-1)), monthlyFrom, limits, defs),
+		Range:  rng,
+		Enabled: map[models.ScanKind]bool{
+			models.ScanReceipt:     h.ocr != nil,
+			models.ScanSMSGuess:    h.smsGuess != nil,
+			models.ScanColEstimate: h.colGuess != nil,
+		},
+		Model:         h.ocrCfg.Model,
+		Prices:        h.ocrCfg.Prices(),
+		DefaultLimits: defs,
+		Now:           now,
 	}, nil
 }
 
-// maxReceiptLimit is the most scans a month an admin can give a tenant.
-const maxReceiptLimit = 100000
+// maxAILimit is the most calls of a kind a month an admin can give a
+// tenant.
+const maxAILimit = 100000
 
-// SetReceiptLimit sets a tenant's scans a calendar month (empty: back to
-// the default), answering its row.
-func (h Handler) SetReceiptLimit(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+// SetAILimits sets a tenant's calls a calendar month of every kind sent
+// (limit_<kind>, empty: back to the default), answering its row.
+func (h Handler) SetAILimits(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	ctx := r.Context()
 	tenantID := r.PathValue("tenant")
 	if !repository.ValidTenantID(tenantID) {
 		return nil, resperr.New(http.StatusNotFound, "No such account")
 	}
-	var limit *int
-	if v := strings.TrimSpace(r.FormValue("limit")); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 0 || n > maxReceiptLimit {
-			return nil, resperr.New(http.StatusUnprocessableEntity, fmt.Sprintf("The limit is a whole number from 0 to %d.", maxReceiptLimit))
+	if err := r.ParseForm(); err != nil {
+		return nil, resperr.New(http.StatusBadRequest, "Bad form")
+	}
+	limits := map[models.ScanKind]*int{}
+	for _, k := range models.ScanKinds {
+		vs, ok := r.Form["limit_"+string(k)]
+		if !ok {
+			continue
 		}
-		limit = &n
+		var limit *int
+		if v := strings.TrimSpace(vs[0]); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil || n < 0 || n > maxAILimit {
+				return nil, resperr.New(http.StatusUnprocessableEntity, fmt.Sprintf("%s: the limit is a whole number from 0 to %d.", k.Label(), maxAILimit))
+			}
+			limit = &n
+		}
+		limits[k] = limit
 	}
-	if err := h.repo.SetReceiptLimit(r.Context(), tenantID, limit); err != nil {
-		return nil, err
+	for k, limit := range limits {
+		if err := h.repo.SetAILimit(ctx, tenantID, k, limit); err != nil {
+			return nil, err
+		}
+		l := logger.FromCtx(ctx).With(zap.String("tenant_id", tenantID), zap.String("kind", string(k)))
+		if limit == nil {
+			l.Info("reset an AI limit to the default")
+		} else {
+			l.Info("set an AI limit", zap.Int("limit", *limit))
+		}
 	}
-	logger.FromCtx(r.Context()).Info("set a receipt limit", zap.String("tenant_id", tenantID), zap.Any("limit", limit))
 
-	d, err := h.adminReceiptsData(r)
+	d, err := h.adminAIData(r)
 	if err != nil {
 		return nil, err
 	}
-	row := models.TenantReceiptUsage{TenantID: tenantID, Limit: h.ocrCfg.ScansPerMonth}
+	row := models.TenantAIUsage{TenantID: tenantID, Limits: d.DefaultLimits}
 	for _, t := range d.Report.Tenants {
 		if t.TenantID == tenantID {
 			row = t
 		}
 	}
-	return views.AdminReceiptTenantRow(row, d.DefaultLimit, "Saved"), nil
+	return views.AdminAITenantRow(row, d, "Saved"), nil
 }

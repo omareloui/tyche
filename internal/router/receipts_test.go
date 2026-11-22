@@ -317,14 +317,14 @@ func TestReceipts(t *testing.T) {
 		if ocr.reads != reads {
 			t.Error("a scan past the limit was read")
 		}
-		res, body = do("PUT", "/admin/receipts/limits/"+usrID, url.Values{"limit": {"5"}})
+		res, body = do("PUT", "/admin/ai/limits/"+usrID, url.Values{"limit_receipt": {"5"}})
 		if res.StatusCode != http.StatusOK || !strings.Contains(body, "Saved") || !strings.Contains(body, `value="5"`) {
 			t.Fatalf("status %d: %s", res.StatusCode, body)
 		}
 		if res, _ := upload("/receipts/scan/0", newForm); res.StatusCode != http.StatusOK {
 			t.Errorf("status %d after raising the limit", res.StatusCode)
 		}
-		if res, _ := do("PUT", "/admin/receipts/limits/"+usrID, url.Values{"limit": {"-1"}}); res.StatusCode != http.StatusUnprocessableEntity {
+		if res, _ := do("PUT", "/admin/ai/limits/"+usrID, url.Values{"limit_receipt": {"-1"}}); res.StatusCode != http.StatusUnprocessableEntity {
 			t.Errorf("a negative limit = %d", res.StatusCode)
 		}
 	})
@@ -343,35 +343,47 @@ func TestReceipts(t *testing.T) {
 		if ocr.reads != reads {
 			t.Error("a cached image was read again")
 		}
-		left, _, err := repo.ReceiptScansLeft(ctx, usrID, 3, time.Now())
+		left, _, err := repo.AICallsLeft(ctx, usrID, models.ScanReceipt, 3, time.Now())
 		if err != nil {
 			t.Fatal(err)
 		}
 		// Past the limit, the cache still answers.
 		repoLimit := 0
-		if err := repo.SetReceiptLimit(ctx, usrID, &repoLimit); err != nil {
+		if err := repo.SetAILimit(ctx, usrID, models.ScanReceipt, &repoLimit); err != nil {
 			t.Fatal(err)
 		}
 		if res, body := upload("/receipts/scan/0", newForm); res.StatusCode != http.StatusOK {
 			t.Errorf("cached scan past the limit = %d: %s", res.StatusCode, body)
 		}
 		ten := 10
-		_ = repo.SetReceiptLimit(ctx, usrID, &ten)
-		if after, _, _ := repo.ReceiptScansLeft(ctx, usrID, 3, time.Now()); after != left+5 {
+		_ = repo.SetAILimit(ctx, usrID, models.ScanReceipt, &ten)
+		if after, _, _ := repo.AICallsLeft(ctx, usrID, models.ScanReceipt, 3, time.Now()); after != left+5 {
 			t.Errorf("scans left %d → %d after cached scans", left, after)
 		}
 	})
 
-	t.Run("the admin page shows the usage", func(t *testing.T) {
-		_, body := do("GET", "/admin/receipts", nil)
-		for _, want := range []string{"Receipt scans", "fake-flash", "1 failed", "from cache", usrID, "Scans a day", "Tokens a month", "Cost a month"} {
+	t.Run("the admin pages show the usage", func(t *testing.T) {
+		_, body := do("GET", "/admin/ai", nil)
+		for _, want := range []string{"Receipt scans", "SMS guesses", "City estimates", "fake-flash", "1 failed", "from cache", usrID, "Calls a day", "Tokens a month", "Cost a month", "by the month&#39;s end"} {
 			if !strings.Contains(body, want) {
-				t.Errorf("admin page misses %q", want)
+				t.Errorf("usage page misses %q", want)
 			}
 		}
+		_, body = do("GET", "/admin/ai/limits", nil)
+		for _, want := range []string{usrID, `name="limit_receipt"`, `name="limit_sms"`, `name="limit_col"`, `value="10"`} {
+			if !strings.Contains(body, want) {
+				t.Errorf("limits page misses %q", want)
+			}
+		}
+		// The old url goes to the new page.
+		if res, body := do("GET", "/admin/receipts", nil); res.StatusCode != http.StatusOK || !strings.Contains(body, "Calls a day") {
+			t.Errorf("old url status %d", res.StatusCode)
+		}
 		t.Setenv("ADMIN_TENANT_IDS", "")
-		if res, _ := do("GET", "/admin/receipts", nil); res.StatusCode != http.StatusNotFound {
-			t.Errorf("non admin status %d", res.StatusCode)
+		for _, path := range []string{"/admin/ai", "/admin/ai/limits", "/admin/receipts"} {
+			if res, _ := do("GET", path, nil); res.StatusCode != http.StatusNotFound {
+				t.Errorf("non admin %s status %d", path, res.StatusCode)
+			}
 		}
 		t.Setenv("ADMIN_TENANT_IDS", usrID)
 	})

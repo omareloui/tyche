@@ -27,12 +27,33 @@ type Usage struct {
 	InputTokens int
 	// OutputTokens include the thinking ones.
 	OutputTokens int
+	// SearchQueries are the Google Search queries a grounded call
+	// (Options.Search) ran, billed apart from the tokens.
+	SearchQueries int
 }
 
-// CostMicros is the usage's cost in millionths of a dollar at the prices,
-// in dollars per million tokens.
-func (u Usage) CostMicros(inputPerM, outputPerM float64) int64 {
-	return int64(math.Round(float64(u.InputTokens)*inputPerM + float64(u.OutputTokens)*outputPerM))
+// Add is the usage of both calls.
+func (u Usage) Add(o Usage) Usage {
+	return Usage{
+		InputTokens:   u.InputTokens + o.InputTokens,
+		OutputTokens:  u.OutputTokens + o.OutputTokens,
+		SearchQueries: u.SearchQueries + o.SearchQueries,
+	}
+}
+
+// Billed tells the call used anything billed.
+func (u Usage) Billed() bool {
+	return u.InputTokens > 0 || u.OutputTokens > 0 || u.SearchQueries > 0
+}
+
+// Prices are dollars per million tokens and per thousand search queries.
+type Prices struct {
+	InputPerM, OutputPerM, SearchPerK float64
+}
+
+// CostMicros is the usage's cost in millionths of a dollar at the prices.
+func (u Usage) CostMicros(p Prices) int64 {
+	return int64(math.Round(float64(u.InputTokens)*p.InputPerM + float64(u.OutputTokens)*p.OutputPerM + float64(u.SearchQueries)*p.SearchPerK*1000))
 }
 
 // Part is a piece of the prompt: text or inline data (e.g. an image).
@@ -100,7 +121,8 @@ type generateResponse struct {
 		} `json:"content"`
 		FinishReason      string `json:"finishReason"`
 		GroundingMetadata struct {
-			GroundingChunks []struct {
+			WebSearchQueries []string `json:"webSearchQueries"`
+			GroundingChunks  []struct {
 				Web *struct {
 					URI   string `json:"uri"`
 					Title string `json:"title"`
@@ -180,6 +202,9 @@ func (c *Client) GenerateWith(ctx context.Context, parts []Part, schema map[stri
 	usage := Usage{
 		InputTokens:  gr.UsageMetadata.PromptTokenCount,
 		OutputTokens: gr.UsageMetadata.CandidatesTokenCount + gr.UsageMetadata.ThoughtsTokenCount,
+	}
+	for _, c := range gr.Candidates {
+		usage.SearchQueries += len(c.GroundingMetadata.WebSearchQueries)
 	}
 	if res.StatusCode != http.StatusOK {
 		msg := res.Status
