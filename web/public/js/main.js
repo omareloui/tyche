@@ -686,3 +686,24 @@ document.addEventListener("alpine:init", () => {
     },
   }));
 });
+
+// recapBanner is the dashboard's offer of the last month's recap, hidden
+// once dismissed for that month (YYYY-MM) in this browser.
+document.addEventListener("alpine:init", () => {
+  Alpine.data("recapBanner", (month) => ({
+    shown: true,
+
+    init() {
+      try {
+        this.shown = localStorage.getItem("recapDismissed") !== month;
+      } catch {}
+    },
+
+    dismiss() {
+      this.shown = false;
+      try {
+        localStorage.setItem("recapDismissed", month);
+      } catch {}
+    },
+  }));
+});

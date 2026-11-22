@@ -1,0 +1,483 @@
+package views
+
+import (
+	"fmt"
+	"math"
+	"strconv"
+	"time"
+
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+// MonthRecap sums up one of the user's months against the one before and
+// the last months' average.
+templ MonthRecap(claims *jwt.AccessClaims, balances []models.Balance, rc *models.MonthRecap) {
+	{{ def := &rc.Currency }}
+	@layouts.Main(claims, rc.Period.Month.Format("January 2006")+" recap", balances) {
+		@components.Container() {
+			<div class="grid grid-cols-1 gap-4 sm:gap-5">
+				@recapHeader(rc)
+				@recapFlow(rc, def)
+				<div class="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-2">
+					@recapNetWorth(rc, def)
+					@recapFacts(rc, def)
+				</div>
+				<div class="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-2 items-start">
+					@recapCategories(rc, def)
+					@recapBudgets(rc, def)
+				</div>
+				<div class="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-2 items-start">
+					@recapLargest(rc, def)
+					@recapNewMerchants(rc)
+				</div>
+				if len(rc.Goals) > 0 {
+					@recapGoals(rc)
+				}
+			</div>
+		}
+	}
+}
+
+templ recapHeader(rc *models.MonthRecap) {
+	<div class="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+		<div class="min-w-0">
+			<h1 class="text-2xl sm:text-3xl font-bold font-(family-name:--font-biorhyme-expanded)">
+				{ rc.Period.Month.Format("January") }
+				<span class="text-zinc-400">recap</span>
+			</h1>
+			<p class="text-sm text-zinc-500">
+				{ rc.Period.RangeLabel() }, { rc.Period.Month.Format("2006") }
+				if rc.IsOpen() {
+					<span class="ml-1 px-2 py-0.5 rounded-full bg-amber-400/15 text-amber-300 text-xs">so far · { strconv.Itoa(rc.Days()) } of { strconv.Itoa(rc.Period.Days()) } days</span>
+				}
+				if rc.Partial {
+					· some rates are missing
+				}
+			</p>
+		</div>
+		<nav class="flex items-center gap-1 rounded-full bg-zinc-900/60 ring-1 ring-zinc-800 px-2 py-1 shrink-0 text-sm" aria-label="Months">
+			@recapNavLink(rc.PrevMonth, "Previous month", "M3.828 7l4.95 4.95-1.414 1.414L1 7 7.364.636 8.778 2.05z")
+			<span class="min-w-16 text-center">{ rc.Period.Month.Format("Jan 2006") }</span>
+			@recapNavLink(rc.NextMonth, "Next month", "M6.172 7L1.222 2.05 2.636.636 9 7l-6.364 6.364-1.414-1.414z")
+		</nav>
+	</div>
+}
+
+templ recapNavLink(month, label, path string) {
+	if month == "" {
+		<span class="p-1.5 opacity-30" aria-hidden="true">
+			@recapArrow(path)
+		</span>
+	} else {
+		<a href={ templ.SafeURL("/recap?month=" + month) } aria-label={ label } title={ label } class="p-1.5 rounded-full hover:bg-zinc-700">
+			@recapArrow(path)
+		</a>
+	}
+}
+
+templ recapArrow(path string) {
+	<svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor" aria-hidden="true">
+		<path d={ path }></path>
+	</svg>
+}
+
+// recapFlow is the month's income, spending and savings against last month
+// and the average.
+templ recapFlow(rc *models.MonthRecap, def *models.Currency) {
+	@components.GlassCard("grid gap-4 p-5 sm:p-6", "bg-violet-400/14", "bg-emerald-400/10") {
+		<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-violet-400">
+			@icons.Calendar("14")
+			The month
+		</p>
+		<div class="grid gap-3 sm:grid-cols-3">
+			@recapFlowStat(rc, "Income", rc.Flow.In, rc.Prev.In, rc.Avg.In, true, "text-emerald-400", def)
+			@recapFlowStat(rc, "Spent", rc.Flow.Out, rc.Prev.Out, rc.Avg.Out, false, "text-zinc-100", def)
+			@recapFlowStat(rc, "Saved", rc.Flow.Saved(), rc.Prev.Saved(), rc.Avg.Saved(), true, savedClass(rc.Flow.Saved()), def)
+		</div>
+		<p class="text-sm text-zinc-500">
+			if rate, ok := rc.Flow.SavingsRate(); ok {
+				Savings rate <span class={ "font-semibold tabular-nums", savedClass(rate) }>{ fmt.Sprintf("%.0f%%", rate) }</span>
+				if prev, ok := rc.Prev.SavingsRate(); ok {
+					· last month { fmt.Sprintf("%.0f%%", prev) }
+				}
+				if avg, ok := rc.Avg.SavingsRate(); ok && rc.AvgMonths > 0 {
+					· average { fmt.Sprintf("%.0f%%", avg) }
+				}
+				·
+			}
+			{ recapAvgNote(rc) }
+		</p>
+	}
+}
+
+templ recapFlowStat(rc *models.MonthRecap, label string, cur, prev, avg float64, upIsGood bool, valueClass string, def *models.Currency) {
+	<div class="grid gap-2 px-4 py-3 rounded-2xl bg-zinc-900/60 ring-1 ring-zinc-800 min-w-0">
+		<p class="text-xs text-zinc-500">{ label }</p>
+		<p class={ "sensitive text-xl sm:text-2xl font-bold tabular-nums truncate font-(family-name:--font-biorhyme-expanded)", valueClass }>{ def.Format(cur) }</p>
+		<div class="grid gap-0.5 text-sm">
+			@recapDelta("vs last month", cur, prev, upIsGood, def)
+			if rc.AvgMonths > 0 {
+				@recapDelta("vs average", cur, avg, upIsGood, def)
+			}
+		</div>
+	</div>
+}
+
+// recapDelta is a change of cur from ref; up is good or bad.
+templ recapDelta(label string, cur, ref float64, upIsGood bool, def *models.Currency) {
+	{{ diff := cur - ref }}
+	<p class="flex flex-wrap items-baseline gap-x-1.5" title={ label + ": " + def.Format(ref) } data-hidden-title={ label }>
+		if math.Abs(diff) < 0.005 {
+			<span class="text-zinc-400">same</span>
+		} else {
+			<span class={ "font-semibold tabular-nums whitespace-nowrap", deltaClass(diff > 0 == upIsGood) }>
+				if diff > 0 {
+					▲
+				} else {
+					▼
+				}
+				if pct, ok := models.PctChange(cur, ref); ok && ref > 0 {
+					{ fmtPctChange(pct) }
+				} else {
+					<span class="sensitive">{ def.Format(math.Abs(diff)) }</span>
+				}
+			</span>
+		}
+		<span class="text-zinc-500">{ label }</span>
+	</p>
+}
+
+func recapAvgNote(rc *models.MonthRecap) string {
+	switch rc.AvgMonths {
+	case 0:
+		return "Not enough history for an average yet."
+	case models.RecapAvgMonths:
+		return fmt.Sprintf("Average of the %d months before.", rc.AvgMonths)
+	case 1:
+		return "Average of the only month before with data."
+	}
+	return fmt.Sprintf("Average of the only %d months before with data.", rc.AvgMonths)
+}
+
+templ recapNetWorth(rc *models.MonthRecap, def *models.Currency) {
+	{{ change := rc.NetChange() }}
+	@components.GlassCard("grid content-start gap-3 p-5 sm:p-6", "bg-sky-400/10") {
+		<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-sky-300">
+			@icons.Wallet("14")
+			Net worth
+		</p>
+		<p class={ "sensitive text-2xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)", deltaClass(change >= 0) }>
+			{ formatSignedAmount(change, def) }
+		</p>
+		<div class="grid grid-cols-2 gap-2 text-sm">
+			<div class="px-3 py-2 rounded-2xl bg-zinc-900/60 ring-1 ring-zinc-800">
+				<p class="text-xs text-zinc-500">{ rc.Period.From.Format("Jan 2") }</p>
+				<p class="sensitive font-semibold tabular-nums">{ def.Format(rc.NetStart) }</p>
+			</div>
+			<div class="px-3 py-2 rounded-2xl bg-zinc-900/60 ring-1 ring-zinc-800">
+				<p class="text-xs text-zinc-500">
+					if rc.IsOpen() {
+						Today
+					} else {
+						{ rc.Period.Last().Format("Jan 2") }
+					}
+				</p>
+				<p class="sensitive font-semibold tabular-nums">{ def.Format(rc.NetEnd) }</p>
+			</div>
+		</div>
+		<p class="text-xs text-zinc-500">The accounts in your balance, at today's rates.</p>
+	}
+}
+
+templ recapFacts(rc *models.MonthRecap, def *models.Currency) {
+	@components.GlassCard("grid content-start gap-3 p-5 sm:p-6", "bg-amber-400/10") {
+		<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-amber-300">
+			@icons.Sparkles("14")
+			Fun facts
+		</p>
+		<ul class="grid gap-2 text-sm">
+			<li class="flex items-baseline justify-between gap-3">
+				<span class="text-zinc-400">No-spend days</span>
+				<span class="font-semibold tabular-nums">{ strconv.Itoa(rc.NoSpendDays) } <span class="text-zinc-500 font-normal">of { strconv.Itoa(rc.Days()) }</span></span>
+			</li>
+			if rc.Busiest.Out > 0 {
+				<li class="flex items-baseline justify-between gap-3">
+					<span class="text-zinc-400">Busiest day</span>
+					<a href={ templ.SafeURL(recapDayURL(rc.Busiest.Day)) } class="font-semibold tabular-nums hover:text-sky-300">
+						{ rc.Busiest.Day.Format("Mon, Jan 2") } · <span class="sensitive">{ def.Format(rc.Busiest.Out) }</span>
+					</a>
+				</li>
+			}
+			if rc.Days() > 0 {
+				<li class="flex items-baseline justify-between gap-3">
+					<span class="text-zinc-400">Spent a day on average</span>
+					<span class="sensitive font-semibold tabular-nums">{ def.Format(rc.Flow.Out / float64(rc.Days())) }</span>
+				</li>
+			}
+		</ul>
+	}
+}
+
+templ recapCategories(rc *models.MonthRecap, def *models.Currency) {
+	@components.GlassCard("grid content-start gap-3 p-5 sm:p-6", "bg-fuchsia-400/8") {
+		<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-fuchsia-300">
+			@icons.Tag("14")
+			Biggest category changes
+		</p>
+		if rc.AvgMonths == 0 {
+			<p class="py-6 text-center text-sm text-zinc-500">Nothing to compare with yet</p>
+		} else if len(rc.CategoryChanges) == 0 {
+			<p class="py-6 text-center text-sm text-zinc-500">Spending moved the same as on average</p>
+		} else {
+			<p class="text-xs text-zinc-500">Against the { recapAvgLabel(rc) } average</p>
+			<ul class="grid gap-1">
+				for _, c := range rc.CategoryChanges {
+					<li>
+						@recapCategoryRow(rc, c, def)
+					</li>
+				}
+			</ul>
+		}
+	}
+}
+
+templ recapCategoryRow(rc *models.MonthRecap, c models.RecapCategoryChange, def *models.Currency) {
+	{{ hex := models.CategoryColorToHex(c.Color) }}
+	{{ top := math.Max(c.Amount, c.Avg) }}
+	<a href={ templ.SafeURL(recapCategoryURL(c, rc.Period)) } class="grid gap-1.5 -mx-2 px-2 py-2 rounded-xl transition-colors hover:bg-zinc-800/50">
+		<span class="flex items-baseline justify-between gap-3 text-sm">
+			<span class="flex items-center gap-2 min-w-0">
+				<span class="shrink-0 size-2.5 rounded-full" style={ "background-color:" + hex }></span>
+				<span class="truncate">{ c.Name }</span>
+			</span>
+			<span class={ "sensitive shrink-0 font-semibold tabular-nums", deltaClass(c.Change() < 0) }>{ formatSignedAmount(c.Change(), def) }</span>
+		</span>
+		<span class="grid gap-0.5">
+			<span class="h-1.5 rounded-full bg-zinc-800/70" title={ "This month: " + def.Format(c.Amount) } data-hidden-title="This month">
+				<span class="block h-full rounded-full" style={ recapBarStyle(c.Amount, top, hex) }></span>
+			</span>
+			<span class="h-1 rounded-full bg-zinc-800/40" title={ "Average: " + def.Format(c.Avg) } data-hidden-title="Average">
+				<span class="block h-full rounded-full bg-zinc-500" style={ recapBarStyle(c.Avg, top, "") }></span>
+			</span>
+		</span>
+		<span class="flex justify-between text-xs text-zinc-500 tabular-nums">
+			<span class="sensitive">{ def.Format(c.Amount) }</span>
+			<span>avg <span class="sensitive">{ def.Format(c.Avg) }</span></span>
+		</span>
+	</a>
+}
+
+templ recapBudgets(rc *models.MonthRecap, def *models.Currency) {
+	{{ items := rc.Budgets.Budgeted() }}
+	@components.GlassCard("grid content-start gap-3 p-5 sm:p-6", "bg-emerald-400/8") {
+		<div class="flex items-center justify-between gap-3">
+			<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-emerald-300">
+				@icons.PiggyBank("14")
+				Budgets
+			</p>
+			<a href={ templ.SafeURL("/categories") } class="text-sm text-zinc-400 hover:text-white">Adjust</a>
+		</div>
+		if len(items) == 0 {
+			<p class="py-6 text-center text-sm text-zinc-500">No budgets set</p>
+		} else {
+			{{ over := rc.Budgets.Over() }}
+			<p class="text-sm">
+				<span class="font-semibold text-emerald-400">{ strconv.Itoa(len(items) - over) } met</span>
+				if over > 0 {
+					· <span class="font-semibold text-rose-400">{ strconv.Itoa(over) } over</span>
+				}
+				<span class="text-zinc-500">
+					· <span class="sensitive">{ def.Format(rc.Budgets.BudgetedSpent()) }</span> of <span class="sensitive">{ def.Format(rc.Budgets.Budget()) }</span>
+				</span>
+			</p>
+			<ul class="grid gap-1">
+				for _, it := range items {
+					<li>
+						<a href={ templ.SafeURL(CategoryTxsURL(it.Key(), rc.Period)) } class="grid gap-1.5 -mx-2 px-2 py-2 rounded-xl transition-colors hover:bg-zinc-800/50">
+							<span class="flex items-baseline justify-between gap-3 text-sm">
+								<span class="truncate">{ it.Name }</span>
+								<span class="shrink-0 tabular-nums">
+									<span class={ "sensitive font-semibold", templ.KV("text-rose-400", it.Over()) }>{ def.Format(it.Spent) }</span>
+									<span class="sensitive text-zinc-500">/ { def.Format(it.Budget) }</span>
+								</span>
+							</span>
+							<span class="h-1.5 rounded-full bg-zinc-800/70">
+								<span class="block h-full rounded-full" style={ recapBarStyle(it.Spent, it.Budget, budgetFill(models.CategoryColorToHex(it.Color), it.Over())) }></span>
+							</span>
+						</a>
+					</li>
+				}
+			</ul>
+		}
+	}
+}
+
+templ recapLargest(rc *models.MonthRecap, def *models.Currency) {
+	@components.GlassCard("grid content-start gap-3 p-5 sm:p-6", "bg-rose-400/8") {
+		<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-rose-300">
+			@icons.Receipt("14")
+			Largest expenses
+		</p>
+		if len(rc.Largest) == 0 {
+			<p class="py-6 text-center text-sm text-zinc-500">No expenses this month</p>
+		} else {
+			<ul class="grid gap-1">
+				for _, it := range rc.Largest {
+					<li>
+						@recapTxRow(it, def)
+					</li>
+				}
+			</ul>
+		}
+	}
+}
+
+templ recapTxRow(it models.RecapTx, def *models.Currency) {
+	{{ t := it.Tx }}
+	<a href={ templ.SafeURL("/transactions?tx=" + t.ID) } class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 -mx-2 px-2 py-2 rounded-xl transition-colors hover:bg-zinc-800/50">
+		if t.Counterparty != nil {
+			@components.CounterpartyIcon(t.Counterparty.Name, t.Counterparty.Icon, t.Counterparty.Color, "w-9 h-9 text-sm")
+		} else {
+			<span class="grid place-items-center w-9 h-9 rounded-full bg-zinc-800 text-zinc-400">
+				@icons.Receipt("16")
+			</span>
+		}
+		<span class="grid min-w-0">
+			<span class="truncate text-sm">{ recapTxTitle(&t) }</span>
+			<span class="truncate text-xs text-zinc-500">
+				{ t.ScheduledTo.Format("Jan 2") }
+				if t.Category != nil {
+					· { t.Category.Name }
+				}
+				· { t.Account.Name }
+			</span>
+		</span>
+		<span class="grid text-right">
+			<span class="sensitive text-sm font-semibold tabular-nums">{ def.Format(it.Amount) }</span>
+			if t.Reimbursed > 0 {
+				<span class="text-xs text-zinc-500">net of paybacks</span>
+			}
+		</span>
+	</a>
+}
+
+func recapTxTitle(t *models.Transaction) string {
+	switch {
+	case t.Counterparty != nil && t.Counterparty.Name != "":
+		return t.Counterparty.Name
+	case t.Description != "":
+		return t.Description
+	case t.Category != nil:
+		return t.Category.Name
+	}
+	return "Expense"
+}
+
+templ recapNewMerchants(rc *models.MonthRecap) {
+	{{ ms := rc.NewMerchants }}
+	@components.GlassCard("grid content-start gap-3 p-5 sm:p-6", "bg-sky-400/8") {
+		<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-sky-300">
+			@icons.Star("14")
+			New merchants
+		</p>
+		if ms == nil || len(ms.Items) == 0 {
+			<p class="py-6 text-center text-sm text-zinc-500">No new merchants this month</p>
+		} else {
+			<p class="text-sm text-zinc-500">
+				{ strconv.Itoa(len(ms.Items)) } first { plural(len(ms.Items), "visit", "visits") } · <span class="sensitive">{ ms.Currency.Format(ms.Total()) }</span>
+			</p>
+			@components.MerchantSpendList(ms, false)
+		}
+	}
+}
+
+templ recapGoals(rc *models.MonthRecap) {
+	@components.GlassCard("grid content-start gap-3 p-5 sm:p-6", "bg-violet-400/8") {
+		<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-violet-300">
+			@icons.Target("14")
+			Goals
+		</p>
+		<ul class="grid gap-2 sm:grid-cols-2">
+			for _, g := range rc.Goals {
+				<li>
+					<a href={ templ.SafeURL("/goals?goal=" + g.Goal.ID) } class="flex items-center justify-between gap-3 px-3 py-2 rounded-2xl bg-zinc-900/60 ring-1 ring-zinc-800 transition-colors hover:ring-zinc-600">
+						<span class="flex items-center gap-2 min-w-0 text-sm">
+							if g.Achieved {
+								<span class="shrink-0 text-amber-300" title="Bought this month">
+									@icons.Trophy("16")
+								</span>
+							}
+							<span class="truncate">{ g.Goal.Name }</span>
+						</span>
+						<span class="shrink-0 text-sm tabular-nums">
+							if math.Abs(g.Deposited) >= 0.005 {
+								<span class={ "sensitive font-semibold", deltaClass(g.Deposited > 0) }>{ formatSignedAmount(g.Deposited, &g.Goal.Currency) }</span>
+							} else {
+								<span class="text-amber-300">Bought</span>
+							}
+						</span>
+					</a>
+				</li>
+			}
+		</ul>
+	}
+}
+
+func recapAvgLabel(rc *models.MonthRecap) string {
+	if rc.AvgMonths == 1 {
+		return "last month's"
+	}
+	return fmt.Sprintf("%d months'", rc.AvgMonths)
+}
+
+func recapCategoryURL(c models.RecapCategoryChange, p models.Period) string {
+	if c.Category == nil {
+		return CategoryTxsURL(models.TxFilterNone, p)
+	}
+	return CategoryTxsURL(c.Category.ID, p)
+}
+
+func recapDayURL(day time.Time) string {
+	d := day.Format(time.DateOnly)
+	return fmt.Sprintf("/transactions?%s=%s&%s=%s&%s=%s", models.TxFilterFrom, d, models.TxFilterTo, d, models.TxFilterKind, models.ExpenseTxKind.String())
+}
+
+// recapBarStyle is a bar v long of top's width, fill its color (gray when
+// empty, the class's then).
+func recapBarStyle(v, top float64, fill string) templ.SafeCSS {
+	pct := 0.0
+	if top > 0 {
+		pct = min(100, max(0, v/top*100))
+	}
+	css := fmt.Sprintf("width:%.2f%%;", pct)
+	if fill != "" {
+		css += "background-color:" + fill + ";"
+	}
+	return templ.SafeCSS(css)
+}
+
+// RecapBanner offers the last month's recap in the first days of a new one,
+// until dismissed (per month, in localStorage).
+templ RecapBanner(p models.Period) {
+	<div
+		x-data={ fmt.Sprintf("recapBanner('%s')", p.Key()) }
+		x-show="shown"
+		x-cloak
+		class="flex items-center gap-3 px-4 py-3 rounded-2xl bg-violet-400/10 ring-1 ring-violet-400/30"
+	>
+		<span class="shrink-0 text-violet-300">
+			@icons.Sparkles("18")
+		</span>
+		<a href={ templ.SafeURL("/recap?month=" + p.Key()) } class="flex-1 min-w-0 text-sm hover:text-violet-200">
+			Your <span class="font-semibold">{ p.Month.Format("January") }</span> recap is ready
+			<span class="text-zinc-400">· see how the month went</span>
+		</a>
+		<button type="button" @click="dismiss()" aria-label="Dismiss" title="Dismiss" class="shrink-0 p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 cursor-pointer">
+			@icons.X("16")
+		</button>
+	</div>
+}

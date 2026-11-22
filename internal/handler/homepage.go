@@ -56,6 +56,16 @@ func (h Handler) HomePage(w http.ResponseWriter, r *http.Request) (templ.Compone
 	if h.fxJob != nil {
 		ratesAt = h.fxJob.Status().LastSuccessAt
 	}
+	// The last month's recap, in the first days of a new month.
+	var recap *models.Period
+	today := h.userToday(ctx)
+	if cur := claims.MonthStart.Of(today); cur.Day(today) < models.RecapBannerDays {
+		if prev := flow.Prev(); prev.In > 0 || prev.Out > 0 {
+			p := cur.Prev()
+			recap = &p
+		}
+	}
+
 	return views.Dashboard(views.DashboardData{
 		Claims:       claims,
 		Balances:     balances,
@@ -65,6 +75,7 @@ func (h Handler) HomePage(w http.ResponseWriter, r *http.Request) (templ.Compone
 		Currencies:   curs,
 		RatesAt:      ratesAt,
 		Cards:        cards,
+		Recap:        recap,
 	}), nil
 }
 

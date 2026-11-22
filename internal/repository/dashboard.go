@@ -18,8 +18,6 @@ const dayLayout = "2006-01-02"
 // GetFlow is the fulfilled income and spending of the last
 // models.FlowMonths months, in def.
 func (r *Repository) GetFlow(ctx context.Context, def *models.Currency) (*models.Flow, error) {
-	l := logger.FromCtx(ctx)
-
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
 		return nil, err
@@ -27,10 +25,21 @@ func (r *Repository) GetFlow(ctx context.Context, def *models.Currency) (*models
 
 	today := time.Now()
 	start := monthStartFromCtx(ctx)
-	rows, err := q.GetDailyFlow(ctx, models.FlowFrom(start, today))
+	days, partial, err := dailyFlowSince(ctx, q, models.FlowFrom(start, today), def)
 	if err != nil {
-		l.Error("querying daily flow", zap.Error(err))
 		return nil, err
+	}
+
+	return models.NewFlow(start, today, days, partial), nil
+}
+
+// dailyFlowSince is the fulfilled income and spending per day since from,
+// in def, partial when a currency had no rate.
+func dailyFlowSince(ctx context.Context, q *queries.Queries, from time.Time, def *models.Currency) ([]models.DayFlow, bool, error) {
+	rows, err := q.GetDailyFlow(ctx, from)
+	if err != nil {
+		logger.FromCtx(ctx).Error("querying daily flow", zap.Error(err))
+		return nil, false, err
 	}
 
 	var days []models.DayFlow
@@ -55,8 +64,7 @@ func (r *Repository) GetFlow(ctx context.Context, def *models.Currency) (*models
 		}
 		days = append(days, models.DayFlow{Day: day, In: in, Out: out})
 	}
-
-	return models.NewFlow(start, today, days, partial), nil
+	return days, partial, nil
 }
 
 // getCategoryTotals is the spending per category and currency of p.

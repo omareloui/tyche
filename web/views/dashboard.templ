@@ -42,6 +42,9 @@ type DashboardData struct {
 	// Cards are the credit cards with a statement cycle, with their
 	// statements.
 	Cards []models.Account
+	// Recap is the last month, its recap offered in a banner in the first
+	// days of a new one (nil otherwise).
+	Recap *models.Period
 }
 
 // Dashboard is the signed in homepage. What's cheap (balances, the flow and
@@ -52,6 +55,9 @@ templ Dashboard(d DashboardData) {
 		@components.Container() {
 			<div class="grid grid-cols-1 gap-4 sm:gap-5">
 				@dashGreeting(d.Claims)
+				if d.Recap != nil {
+					@RecapBanner(*d.Recap)
+				}
 				@dashHero(d, def)
 				@dashLazy("/dashboard/safe-to-spend", "h-32", "load")
 				@dashFxRates(d.Currencies, def, d.RatesAt)
@@ -113,7 +119,13 @@ templ dashGreeting(claims *jwt.AccessClaims) {
 				<span class="text-zinc-400">{ claims.FirstName }</span>
 			}
 		</h1>
-		<p class="text-sm text-zinc-500">{ now.Format("Monday, January 2") }</p>
+		<p class="flex items-center gap-3 text-sm text-zinc-500">
+			<a href="/recap" class="flex items-center gap-1 text-zinc-400 transition-colors hover:text-white">
+				@icons.Calendar("14")
+				Last month's recap
+			</a>
+			<span>{ now.Format("Monday, January 2") }</span>
+		</p>
 	</div>
 }
 
