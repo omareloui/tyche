@@ -1,0 +1,51 @@
+package views
+
+import (
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+// toolCard is a calculator on the tools page.
+type toolCard struct {
+	Href, Title, Text string
+	Icon              templ.Component
+	// Tint colors the icon's tile.
+	Tint string
+}
+
+var toolCards = []toolCard{
+	{
+		Href:  "/tools/cost-of-living",
+		Title: "Cost of living",
+		Text:  "What living like you do now would cost in another country or city, weighed by your own spending.",
+		Icon:  icons.Globe("22"),
+		Tint:  "bg-sky-400/15 text-sky-300",
+	},
+}
+
+// Tools lists the helper calculators.
+templ Tools(claims *jwt.AccessClaims, balances []models.Balance) {
+	@layouts.WithTitle(claims, "Tools", balances) {
+		<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+			for _, t := range toolCards {
+				<a
+					href={ templ.SafeURL(t.Href) }
+					class="group flex gap-4 p-5 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800 transition-colors hover:ring-zinc-600 focus-visible:outline-2 focus-visible:outline-sky-400"
+				>
+					<span class={ "grid place-items-center shrink-0 w-12 h-12 rounded-2xl", t.Tint }>
+						@t.Icon
+					</span>
+					<span class="grid gap-1 min-w-0">
+						<span class="flex items-center gap-1.5 font-semibold text-zinc-100">
+							{ t.Title }
+							@icons.ArrowRight("14", &templ.Attributes{"class": "text-zinc-500 transition-transform group-hover:translate-x-0.5"})
+						</span>
+						<span class="text-sm text-zinc-400">{ t.Text }</span>
+					</span>
+				</a>
+			}
+		</div>
+	}
+}

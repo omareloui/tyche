@@ -214,6 +214,12 @@ func New(h *handler.Handler) Router {
 	mux.Handle("POST /counterparties/{id}/merge", handle(h.MergeCounterparty))
 	mux.Handle("DELETE /counterparties/{id}", handle(h.DeleteCounterparty))
 
+	mux.Handle("GET /tools", handle(h.Tools))
+	mux.Handle("GET /tools/cost-of-living", handle(h.CostOfLiving))
+	mux.Handle("GET /tools/cost-of-living/result", handle(h.CostOfLivingResult, middleware.HTMXOnly))
+	mux.Handle("POST /tools/cost-of-living/city", handle(h.EstimateCostOfLivingCity, middleware.HTMXOnly))
+	mux.Handle("PUT /tools/cost-of-living/categories/{id}", handle(h.SetColCategoryGroup, middleware.HTMXOnly))
+
 	mux.Handle("GET /items", handle(h.Items))
 	mux.Handle("GET /items/list", handle(h.ItemsList))
 	mux.Handle("GET /items/suggest", handlePubJSON(h.ItemSuggestions, middleware.Protected))
@@ -333,6 +339,8 @@ func New(h *handler.Handler) Router {
 	mux.Handle("GET /admin/fx-rates", handle(h.AdminFxRates, middleware.Admin))
 	mux.Handle("GET /admin/fx-rates/status", handle(h.AdminFxRatesStatus, middleware.Admin))
 	mux.Handle("POST /admin/fx-rates/refresh", handle(h.RefreshFxRates, middleware.Admin))
+	mux.Handle("GET /admin/cost-of-living/status", handle(h.AdminColStatus, middleware.Admin))
+	mux.Handle("POST /admin/cost-of-living/refresh", handle(h.RefreshCostOfLiving, middleware.Admin))
 	mux.Handle("GET /admin/tenants", handle(h.AdminTenants, middleware.Admin))
 	mux.Handle("POST /admin/tenants/{id}/delete", handle(h.DeleteTenant, middleware.Admin))
 	mux.Handle("GET /admin/receipts", handle(h.AdminReceipts, middleware.Admin))

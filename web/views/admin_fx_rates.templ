@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/omareloui/tyche/internal/costofliving"
 	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/fxrate"
 	"github.com/omareloui/tyche/internal/jwt"
@@ -24,13 +25,80 @@ func (d FxRatesStatusData) busy() bool {
 	return d.Pending || d.Status.Running
 }
 
-templ AdminFxRates(claims *jwt.AccessClaims, balances []models.Balance, status FxRatesStatusData, currencies []models.Currency) {
+// ColStatusData is the cost of living data's job.
+type ColStatusData struct {
+	Status    costofliving.Status
+	FetchedAt time.Time
+	Interval  time.Duration
+	Pending   bool
+}
+
+func (d ColStatusData) busy() bool {
+	return d.Pending || d.Status.Running
+}
+
+templ AdminFxRates(claims *jwt.AccessClaims, balances []models.Balance, status FxRatesStatusData, currencies []models.Currency, col ColStatusData) {
 	@layouts.WithTitle(claims, "FX Rates", balances) {
 		<div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
-			@FxRatesStatus(status)
+			<div class="grid gap-10 min-w-0">
+				@FxRatesStatus(status)
+				@ColStatus(col)
+			</div>
 			@fxRatesTable(&claims.DefaultCurrency, currencies)
 		</div>
 	}
+}
+
+// ColStatus is the cost of living data's job, polling itself while it runs.
+templ ColStatus(d ColStatusData) {
+	<section
+		id="col-status"
+		hx-target="this"
+		hx-swap="outerHTML"
+		if d.busy() {
+			hx-get="/admin/cost-of-living/status"
+			hx-trigger="every 2s"
+		}
+		class="grid gap-4 min-w-0"
+	>
+		<header class="flex flex-wrap items-end justify-between gap-3">
+			<div class="min-w-0">
+				<h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+					@icons.Globe("16")
+					Cost of living data
+					@fxJobBadge(FxRatesStatusData{Pending: d.Pending, Status: fxrate.Status{Running: d.Status.Running, LastErr: d.Status.LastErr}})
+				</h2>
+				<p class="text-sm text-zinc-600">World Bank PPPs, ICP 2021 and IMF inflation, refetched every { fmtDuration(d.Interval) }.</p>
+			</div>
+			<button
+				hx-post="/admin/cost-of-living/refresh"
+				disabled?={ d.busy() }
+				class="btn-primary h-9! inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+			>
+				@icons.Retry("16")
+				if d.busy() {
+					Fetching…
+				} else {
+					Fetch now
+				}
+			</button>
+		</header>
+		<dl class="grid gap-3 sm:grid-cols-2">
+			@fxStat("Last fetched", fmtWhen(d.FetchedAt), fmtAbs(d.FetchedAt))
+			@fxStat("Countries", formatters.FormatNum(d.Status.Countries), fmt.Sprintf("%d with inflation", d.Status.Inflation))
+			@fxStat("Next run", fmtWhen(d.Status.NextRunAt), fmtAbs(d.Status.NextRunAt))
+			@fxStat("Last run", fmtWhen(d.Status.LastRunAt), fmtAbs(d.Status.LastRunAt))
+		</dl>
+		if d.Status.LastErr != "" {
+			<div class="grid gap-1 p-4 rounded-2xl bg-red-400/8 text-sm">
+				<p class="flex items-center gap-2 text-red-400">
+					@icons.Error("16")
+					Last run failed
+				</p>
+				<p class="text-zinc-400 break-words">{ d.Status.LastErr }</p>
+			</div>
+		}
+	</section>
 }
 
 // FxRatesStatus polls itself while a run is pending or running.

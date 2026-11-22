@@ -77,6 +77,20 @@ func (c *Client) Model() string { return c.ModelID }
 type Answer struct {
 	Text         string
 	FinishReason string
+	// Sources are the web pages a grounded answer (Options.Search) used.
+	Sources []Source
+}
+
+// Source is a web page an answer was grounded on.
+type Source struct {
+	Title string
+	URL   string
+}
+
+// Options change a call.
+type Options struct {
+	// Search grounds the answer on Google Search.
+	Search bool
 }
 
 type generateResponse struct {
@@ -84,7 +98,15 @@ type generateResponse struct {
 		Content struct {
 			Parts []Part `json:"parts"`
 		} `json:"content"`
-		FinishReason string `json:"finishReason"`
+		FinishReason      string `json:"finishReason"`
+		GroundingMetadata struct {
+			GroundingChunks []struct {
+				Web *struct {
+					URI   string `json:"uri"`
+					Title string `json:"title"`
+				} `json:"web"`
+			} `json:"groundingChunks"`
+		} `json:"groundingMetadata"`
 	} `json:"candidates"`
 	PromptFeedback struct {
 		BlockReason string `json:"blockReason"`
@@ -102,6 +124,11 @@ type generateResponse struct {
 // Generate asks the model for JSON following schema. The usage is returned
 // even on errors when the call was billed.
 func (c *Client) Generate(ctx context.Context, parts []Part, schema map[string]any) (*Answer, Usage, error) {
+	return c.GenerateWith(ctx, parts, schema, Options{})
+}
+
+// GenerateWith is Generate with options.
+func (c *Client) GenerateWith(ctx context.Context, parts []Part, schema map[string]any, opts Options) (*Answer, Usage, error) {
 	gen := map[string]any{
 		"responseMimeType":   "application/json",
 		"responseJsonSchema": schema,
@@ -109,10 +136,14 @@ func (c *Client) Generate(ctx context.Context, parts []Part, schema map[string]a
 	if c.ThinkingLevel != "" {
 		gen["thinkingConfig"] = map[string]any{"thinkingLevel": c.ThinkingLevel}
 	}
-	body, err := json.Marshal(map[string]any{
+	payload := map[string]any{
 		"contents":         []map[string]any{{"role": "user", "parts": parts}},
 		"generationConfig": gen,
-	})
+	}
+	if opts.Search {
+		payload["tools"] = []map[string]any{{"google_search": map[string]any{}}}
+	}
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, Usage{}, err
 	}
@@ -167,7 +198,13 @@ func (c *Client) Generate(ctx context.Context, parts []Part, schema map[string]a
 	for _, p := range gr.Candidates[0].Content.Parts {
 		text.WriteString(p.Text)
 	}
-	return &Answer{Text: text.String(), FinishReason: gr.Candidates[0].FinishReason}, usage, nil
+	ans := &Answer{Text: text.String(), FinishReason: gr.Candidates[0].FinishReason}
+	for _, ch := range gr.Candidates[0].GroundingMetadata.GroundingChunks {
+		if ch.Web != nil && ch.Web.URI != "" {
+			ans.Sources = append(ans.Sources, Source{Title: ch.Web.Title, URL: ch.Web.URI})
+		}
+	}
+	return ans, usage, nil
 }
 
 func truncate(s string, n int) string {

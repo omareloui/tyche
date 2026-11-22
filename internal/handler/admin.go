@@ -37,7 +37,33 @@ func (h Handler) AdminFxRates(w http.ResponseWriter, r *http.Request) (templ.Com
 		return nil, err
 	}
 
-	return views.AdminFxRates(getClaims(r.Context()), b, status, currs), nil
+	return views.AdminFxRates(getClaims(r.Context()), b, status, currs, h.colStatus(r)), nil
+}
+
+func (h Handler) colStatus(r *http.Request) views.ColStatusData {
+	if h.colJob == nil {
+		return views.ColStatusData{}
+	}
+	return views.ColStatusData{
+		Status:    h.colJob.Status(),
+		FetchedAt: h.colJob.FetchedAt(r.Context()),
+		Interval:  h.colJob.Interval(),
+	}
+}
+
+func (h Handler) AdminColStatus(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	return views.ColStatus(h.colStatus(r)), nil
+}
+
+func (h Handler) RefreshCostOfLiving(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	if h.colJob == nil {
+		return nil, resperr.New(http.StatusNotFound, "The cost of living job is off")
+	}
+	queued := h.colJob.Trigger()
+	logger.FromCtx(r.Context()).Info("triggered the cost of living job", zap.Bool("queued", queued))
+	s := h.colStatus(r)
+	s.Pending = queued
+	return views.ColStatus(s), nil
 }
 
 func (h Handler) AdminFxRatesStatus(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

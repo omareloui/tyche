@@ -16,17 +16,19 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/omareloui/tyche/internal/badge"
+	"github.com/omareloui/tyche/internal/colguess"
 	"github.com/omareloui/tyche/internal/config"
+	"github.com/omareloui/tyche/internal/costofliving"
 	"github.com/omareloui/tyche/internal/fxrate"
 	"github.com/omareloui/tyche/internal/handler"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/receiptocr"
-	"github.com/omareloui/tyche/internal/smsguess"
 	"github.com/omareloui/tyche/internal/repository"
 	"github.com/omareloui/tyche/internal/router"
 	"github.com/omareloui/tyche/internal/sanitizer"
 	"github.com/omareloui/tyche/internal/seeder"
 	"github.com/omareloui/tyche/internal/shareddb"
+	"github.com/omareloui/tyche/internal/smsguess"
 	"github.com/omareloui/tyche/internal/smstemplates"
 	"github.com/omareloui/tyche/internal/valid"
 	"github.com/omareloui/tyche/internal/vault"
@@ -86,10 +88,12 @@ func main() {
 	}
 	go badges.RunReposts(ctx)
 	h := handler.New(repo, valid, sani, fxJob, smsTemplates, badges)
+	h.SetCostOfLiving(startCostOfLiving(ctx, l, costofliving.NewJob(sharedDB, sharedQ, config.GetColFetchInterval())))
 	// A nil *Client in the interface would read as on.
 	if ocrCfg := config.GetReceiptOCR(); ocrCfg.APIKey != "" {
 		h.SetReceiptOCR(receiptocr.New(ocrCfg.APIKey, ocrCfg.Model, ocrCfg.ThinkingLevel), ocrCfg)
 		h.SetSMSGuess(smsguess.New(ocrCfg.APIKey, ocrCfg.Model, ocrCfg.ThinkingLevel))
+		h.SetColGuess(colguess.New(ocrCfg.APIKey, ocrCfg.Model, ocrCfg.ThinkingLevel))
 	} else {
 		h.SetReceiptOCR(nil, ocrCfg)
 	}
@@ -130,6 +134,17 @@ func startFxRates(ctx context.Context, l *zap.Logger, job *fxrate.Job) *fxrate.J
 		cancel()
 	}
 
+	go job.Run(ctx)
+	return job
+}
+
+// startCostOfLiving loads the stored price data and runs the job in the
+// background, which fetches them right away when there are none (the
+// calculator says so meanwhile).
+func startCostOfLiving(ctx context.Context, l *zap.Logger, job *costofliving.Job) *costofliving.Job {
+	if err := job.Load(ctx); err != nil {
+		l.Error("failed to load the cost of living data", zap.Error(err))
+	}
 	go job.Run(ctx)
 	return job
 }

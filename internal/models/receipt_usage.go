@@ -1,6 +1,7 @@
 package models
 
 import (
+	"cmp"
 	"slices"
 	"time"
 )
@@ -31,6 +32,8 @@ const (
 	ScanReceipt ScanKind = "receipt"
 	// ScanSMSGuess guessed an sms' template.
 	ScanSMSGuess ScanKind = "sms"
+	// ScanColEstimate estimated a city's prices (cost of living).
+	ScanColEstimate ScanKind = "col"
 )
 
 // Billed tells the scan used tokens, counting toward the monthly limit.
@@ -51,6 +54,8 @@ type ReceiptUsage struct {
 	Failed int
 	// SMSGuesses are the scans that guessed an sms' template, in Scans.
 	SMSGuesses int
+	// ColEstimates are the scans that estimated a city's prices, in Scans.
+	ColEstimates int
 	// Cached are the scans answered from the cache, apart: they aren't
 	// scans (no call, not counted toward the limit).
 	Cached       int
@@ -66,8 +71,11 @@ func (u *ReceiptUsage) add(s *ReceiptScan) {
 		return
 	}
 	u.Scans++
-	if s.Kind == ScanSMSGuess {
+	switch s.Kind {
+	case ScanSMSGuess:
 		u.SMSGuesses++
+	case ScanColEstimate:
+		u.ColEstimates++
 	}
 	if !s.OK {
 		u.Failed++
@@ -175,7 +183,7 @@ func NewReceiptUsageReport(scans []ReceiptScan, now, dailyFrom, monthlyFrom time
 		if !at.Before(thisFrom) && at.Before(thisTo) {
 			rep.ThisMonth.add(s)
 			t.ThisMonth.add(s)
-			if s.Billed() && s.Kind != ScanSMSGuess {
+			if s.Billed() && cmp.Or(s.Kind, ScanReceipt) == ScanReceipt {
 				t.Billed++
 			}
 		} else if !at.Before(lastFrom) && at.Before(thisFrom) {

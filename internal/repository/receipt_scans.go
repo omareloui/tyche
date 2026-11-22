@@ -57,6 +57,16 @@ func (r *Repository) SMSGuessesLeft(ctx context.Context, tenantID string, limit 
 	return max(limit-n, 0), nil
 }
 
+// ColEstimatesLeft is how many city estimates the tenant may still ask for
+// this calendar month (UTC) out of limit.
+func (r *Repository) ColEstimatesLeft(ctx context.Context, tenantID string, limit int, now time.Time) (int, error) {
+	n, err := r.billedScans(ctx, tenantID, models.ScanColEstimate, now)
+	if err != nil {
+		return 0, err
+	}
+	return max(limit-n, 0), nil
+}
+
 // billedScans counts the tenant's billed calls of the kind this calendar
 // month (UTC).
 func (r *Repository) billedScans(ctx context.Context, tenantID string, kind models.ScanKind, now time.Time) (int, error) {

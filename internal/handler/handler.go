@@ -2,7 +2,9 @@ package handler
 
 import (
 	"github.com/omareloui/tyche/internal/badge"
+	"github.com/omareloui/tyche/internal/colguess"
 	"github.com/omareloui/tyche/internal/config"
+	"github.com/omareloui/tyche/internal/costofliving"
 	"github.com/omareloui/tyche/internal/fxrate"
 	"github.com/omareloui/tyche/internal/receiptocr"
 	"github.com/omareloui/tyche/internal/repository"
@@ -30,6 +32,10 @@ type Handler struct {
 	// smsGuess guesses unparsed sms' templates, nil when off (its prices and
 	// limit in ocrCfg).
 	smsGuess smsguess.Guesser
+	// colJob fetches the cost of living data; colGuess estimates cities'
+	// prices, nil when off (its prices and limit in ocrCfg).
+	colJob   *costofliving.Job
+	colGuess colguess.Estimator
 }
 
 // SetReceiptOCR turns reading receipts on (a nil reader keeps it off).

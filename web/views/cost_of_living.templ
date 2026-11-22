@@ -1,0 +1,597 @@
+package views
+
+import (
+	"cmp"
+	"fmt"
+	"math"
+	"net/url"
+	"strings"
+
+	"github.com/omareloui/tyche/internal/colguess"
+	"github.com/omareloui/tyche/internal/countries"
+	"github.com/omareloui/tyche/internal/formatters"
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+const (
+	ColModeCountry = "country"
+	// ColModeCity compares cities with the AI's estimate.
+	ColModeCity = "city"
+)
+
+// ColAmountFrom tells where the amount's default came from.
+type ColAmountFrom int
+
+const (
+	ColAmountTyped ColAmountFrom = iota
+	ColAmountSalary
+	ColAmountSpending
+)
+
+// ColForm is the calculator's form, as in the query string.
+type ColForm struct {
+	// Home and To are ISO 3166 alpha-2 codes.
+	Home, To         string
+	Amount           string
+	Mode             string
+	HomeCity, ToCity string
+}
+
+// CostOfLivingURL is the calculator's page with the form.
+func CostOfLivingURL(f ColForm) string {
+	v := url.Values{}
+	for k, s := range map[string]string{"home": f.Home, "to": f.To, "amount": f.Amount, "home_city": f.HomeCity, "to_city": f.ToCity} {
+		if s != "" {
+			v.Set(k, s)
+		}
+	}
+	if f.Mode == ColModeCity {
+		v.Set("mode", f.Mode)
+	}
+	if len(v) == 0 {
+		return "/tools/cost-of-living"
+	}
+	return "/tools/cost-of-living?" + v.Encode()
+}
+
+// ColData is the calculator: its form and what it comes to.
+type ColData struct {
+	Form ColForm
+	// Countries are the ones with price data, CityOn tells the AI's city
+	// estimates are on.
+	Countries []countries.Country
+	CityOn    bool
+
+	Home, Target countries.Country
+	// HomeFromTZ tells home is the time zone's country.
+	HomeFromTZ bool
+	HomeCity   string
+	TargetCity string
+	Amount     float64
+	AmountFrom ColAmountFrom
+	// Market is the exchange rate, target's currency per home's (0 unknown).
+	Market float64
+
+	// Categories are the user's basket (home's currency a month), over
+	// BasketMonths months (of BasketFrom at most); BasketMissing tells some
+	// spending had no rate.
+	Categories    []models.ColCategory
+	BasketMonths  int
+	BasketFrom    int
+	BasketMissing bool
+	MonthlySpend  float64
+
+	Result *models.ColResult
+	// DataYear is the year of the countries' price level (DataFrom the
+	// year it's rolled to); NoGroups tells there were no ICP groups.
+	DataYear, DataFrom int
+	NoGroups           bool
+	// Estimate is the AI's, in city mode; NeedEstimate tells there's none
+	// yet (EstimatesLeft this month).
+	Estimate      *models.ColCityEstimate
+	NeedEstimate  bool
+	EstimatesLeft int
+	Error         string
+}
+
+// CostOfLiving is the cost of living calculator.
+templ CostOfLiving(claims *jwt.AccessClaims, balances []models.Balance, d *ColData) {
+	@layouts.Main(claims, "Cost of living", balances) {
+		@components.Container() {
+			<a href="/tools" class="inline-flex items-center gap-1 mb-2 text-sm text-zinc-400 hover:text-zinc-200">
+				@icons.ArrowLeft("14")
+				Tools
+			</a>
+			@components.MainHeader("Cost of living")
+			<div class="grid gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:items-start">
+				@colForm(d)
+				<div id="col-result" aria-live="polite">
+					@ColResultBody(d)
+				</div>
+			</div>
+		}
+	}
+}
+
+func colCountryOptions(cs []countries.Country) []form.ComboOption {
+	opts := make([]form.ComboOption, len(cs))
+	for i, c := range cs {
+		opts[i] = form.ComboOption{Value: c.ISO2, Label: c.Name, Search: c.ISO2 + " " + c.ISO3 + " " + c.Currency}
+	}
+	return opts
+}
+
+templ colForm(d *ColData) {
+	<form
+		id="col-form"
+		x-data={ fmt.Sprintf("{mode: %q}", d.Form.Mode) }
+		hx-get="/tools/cost-of-living/result"
+		hx-trigger="input delay:500ms, change"
+		hx-target="#col-result"
+		hx-swap="innerHTML"
+		hx-sync="this:replace"
+		@submit.prevent
+		class="grid gap-4 p-5 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800"
+	>
+		if d.CityOn {
+			<div @change="mode = $event.target.value">
+				@form.SegmentedRadio("Compare", "mode", "col", []form.RadioOption{
+					{Value: ColModeCountry, Label: "Countries"},
+					{Value: ColModeCity, Label: "Cities (AI)"},
+				}, form.FDInput{Value: d.Form.Mode}, nil)
+			</div>
+			<p x-show="mode === 'city'" x-cloak class="flex gap-2 -mt-2 text-xs text-amber-300/90">
+				@icons.Warning("14", &templ.Attributes{"class": "shrink-0 mt-px"})
+				Estimated by Gemini from what it finds on the web: it may be unreliable.
+			</p>
+		} else {
+			<input type="hidden" name="mode" value={ ColModeCountry }/>
+		}
+		@form.Field("You live in", "home", "col", icons.Home("15"), "") {
+			@form.Combobox(form.ComboboxProps{
+				Name: "home", ID: "col", Label: "You live in", Placeholder: "Pick a country",
+				Options: colCountryOptions(d.Countries), Data: form.FDInput{Value: d.Form.Home}, Searchable: true,
+			})
+			if d.HomeFromTZ {
+				<p class="mt-1 text-xs text-zinc-500">
+					From your time zone on <a href={ SettingsURL(SettingsRegion) } class="underline hover:text-zinc-300">settings</a>
+				</p>
+			}
+		}
+		if d.CityOn {
+			<div x-show="mode === 'city'" x-cloak>
+				@form.Field("Your city", "home_city", "col", icons.MapPin("15"), "") {
+					@form.Control("text", "home_city", "e.g. Cairo", "col", form.FDInput{Value: d.Form.HomeCity}, templ.Attributes{"autocomplete": "off", "maxlength": "80"})
+				}
+			</div>
+		}
+		@form.Field("Moving to", "to", "col", icons.Globe("15"), "") {
+			@form.Combobox(form.ComboboxProps{
+				Name: "to", ID: "col", Label: "Moving to", Placeholder: "Pick a country",
+				Options: colCountryOptions(d.Countries), Data: form.FDInput{Value: d.Form.To}, Searchable: true,
+			})
+		}
+		if d.CityOn {
+			<div x-show="mode === 'city'" x-cloak>
+				@form.Field("City there", "to_city", "col", icons.MapPin("15"), "") {
+					@form.Control("text", "to_city", "e.g. Berlin", "col", form.FDInput{Value: d.Form.ToCity}, templ.Attributes{"autocomplete": "off", "maxlength": "80"})
+				}
+			</div>
+		}
+		@form.Field("A month at home", "amount", "col", icons.Coins("15"), "") {
+			<div class="flex items-center gap-2">
+				@form.Control("text", "amount", "e.g. 30,000", "col", form.FDInput{Value: d.Form.Amount}, templ.Attributes{
+					"inputmode": "decimal", "autocomplete": "off", "x-mask:dynamic": "$money($input, '.', ',')",
+				})
+				<span class="shrink-0 text-sm text-zinc-400">{ d.Home.Currency }</span>
+			</div>
+			<p class="mt-1 text-xs text-zinc-500">
+				switch d.AmountFrom {
+					case ColAmountSalary:
+						Your salary from <a href={ SettingsURL(SettingsWork) } class="underline hover:text-zinc-300">settings</a>, in { d.Home.Currency } at today's rate
+					case ColAmountSpending:
+						What you spend a month on average
+					default:
+						What you earn or spend a month where you live
+				}
+			</p>
+		}
+	</form>
+}
+
+// colFmt formats an amount with its currency code, whole units past 100.
+func colFmt(v float64, code string) string {
+	digits := 2
+	if math.Abs(v) >= 100 {
+		digits = 0
+	}
+	return formatters.FormatAmountDigits(v, code, digits)
+}
+
+func colPct(v float64) string {
+	return fmt.Sprintf("%.0f%%", math.Abs(v)*100)
+}
+
+// colLevelText says how expensive the target is against home.
+func colLevelText(level float64, target, home string) string {
+	switch {
+	case level <= 0:
+		return ""
+	case level >= 1.995:
+		return fmt.Sprintf("%s is about %.1f× as expensive as %s", target, level, home)
+	case level > 1.005:
+		return fmt.Sprintf("%s is about %s pricier than %s", target, colPct(level-1), home)
+	case level < 0.995:
+		return fmt.Sprintf("%s is about %s cheaper than %s", target, colPct(1-level), home)
+	}
+	return fmt.Sprintf("%s costs about as much as %s", target, home)
+}
+
+func colPlace(d *ColData, target bool) string {
+	if target {
+		if d.Form.Mode == ColModeCity && d.TargetCity != "" {
+			return d.TargetCity
+		}
+		return d.Target.Name
+	}
+	if d.Form.Mode == ColModeCity && d.HomeCity != "" {
+		return d.HomeCity
+	}
+	return d.Home.Name
+}
+
+// ColResultBody is the calculator's result, swapped on every change.
+templ ColResultBody(d *ColData) {
+	switch  {
+		case d.Target.ISO2 == "":
+			@colEmpty("Pick where you'd move to, to see what living like you do would cost there.")
+		case d.Error != "":
+			<p class="flex gap-2 p-4 rounded-2xl bg-red-500/10 ring-1 ring-red-500/30 text-sm text-red-200">
+				@icons.Warning("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
+				{ d.Error }
+			</p>
+		case d.Form.Mode == ColModeCity && (d.HomeCity == "" || d.TargetCity == ""):
+			@colEmpty("Type both cities to compare them.")
+		case d.NeedEstimate:
+			@colAskEstimate(d)
+		case d.Result != nil:
+			@colResult(d)
+	}
+}
+
+templ colEmpty(text string) {
+	<div class="grid place-items-center gap-3 p-10 rounded-3xl ring-1 ring-dashed ring-zinc-800 text-center text-zinc-500">
+		@icons.Globe("32")
+		<p class="max-w-xs text-sm">{ text }</p>
+	</div>
+}
+
+templ colAskEstimate(d *ColData) {
+	@components.GlassCard("grid gap-4 p-5 sm:p-6", "bg-amber-400/10") {
+		<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-amber-300">
+			@icons.Sparkles("14")
+			AI estimate
+		</p>
+		<p class="text-zinc-200">
+			Gemini can look up how prices in <span class="font-semibold">{ d.TargetCity }</span> compare with <span class="font-semibold">{ d.HomeCity }</span>, rent included.
+		</p>
+		<p class="flex gap-2 text-sm text-amber-200/90">
+			@icons.Warning("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
+			It's an estimate from what it finds on the web, not official statistics: it may be unreliable, so check before deciding anything on it.
+		</p>
+		if d.EstimatesLeft > 0 {
+			<div class="flex flex-wrap items-center gap-3">
+				<button
+					type="button"
+					hx-post="/tools/cost-of-living/city"
+					hx-include="#col-form"
+					hx-target="#col-result"
+					hx-swap="innerHTML"
+					hx-disabled-elt="this"
+					class="group inline-flex items-center gap-2 h-10 px-4 rounded-full bg-amber-300 text-sm font-semibold text-zinc-950 cursor-pointer transition-colors hover:bg-amber-200 disabled:opacity-60"
+				>
+					@icons.Sparkles("16", &templ.Attributes{"class": "group-disabled:animate-pulse"})
+					<span class="group-disabled:hidden">Estimate with Gemini</span>
+					<span class="hidden group-disabled:inline">Estimating, this takes a bit…</span>
+				</button>
+				<span class="text-xs text-zinc-500">{ fmt.Sprintf("%d left this month", d.EstimatesLeft) }</span>
+			</div>
+		} else {
+			<p class="text-sm text-zinc-400">You've used this month's city estimates. They start again on the 1st; compare the countries meanwhile.</p>
+		}
+	}
+}
+
+templ colResult(d *ColData) {
+	{{ res := d.Result }}
+	<div class="grid gap-4">
+		if d.Estimate != nil {
+			@colEstimateBanner(d)
+		}
+		@components.GlassCard("grid gap-5 p-5 sm:p-6", "bg-sky-400/10", "bg-violet-400/10") {
+			<div class="grid gap-1">
+				<p class="text-sm text-zinc-400">
+					To live in { colPlace(d, true) } like you do on { colFmt(d.Amount, d.Home.Currency) } in { colPlace(d, false) }, you'd need about
+				</p>
+				if d.Amount > 0 {
+					<p class="text-3xl sm:text-4xl font-bold tabular-nums text-zinc-50">{ colFmt(res.Mine, d.Target.Currency) }</p>
+					if res.Market > 0 && d.Target.Currency != d.Home.Currency {
+						<p class="text-sm text-zinc-400 tabular-nums">
+							{ "≈ " + colFmt(res.Mine/res.Market, d.Home.Currency) } at today's rate
+						</p>
+					}
+				} else {
+					<p class="text-sm text-zinc-500">Type how much you earn or spend a month.</p>
+				}
+				<p class="text-xs text-zinc-500">
+					if res.HasBasket {
+						{ "a month, for your own spending" }
+					} else {
+						{ "a month, for an average household's spending" }
+					}
+				</p>
+			</div>
+			if res.HasBasket && d.Amount > 0 {
+				<div class="grid gap-1 pt-4 border-t border-zinc-800">
+					<p class="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
+						<span class="text-zinc-400">An average household would need</span>
+						<span class="font-semibold tabular-nums text-zinc-200">{ colFmt(res.Average, d.Target.Currency) }</span>
+					</p>
+					@colDiffHint(d)
+				</div>
+			}
+			if res.PriceLevel > 0 {
+				<p class="flex gap-2 text-sm text-zinc-300">
+					@icons.Scale("16", &templ.Attributes{"class": "shrink-0 mt-0.5 text-zinc-500"})
+					<span>
+						{ colLevelText(res.MinePriceLevel, colPlace(d, true), colPlace(d, false)) + " for what you buy, at today's rate (1 " + d.Home.Currency + " = " + formatters.FormatRate(res.Market) + " " + d.Target.Currency + ")." }
+					</span>
+				</p>
+			}
+		}
+		if res.HasBasket {
+			@colGroups(d)
+		} else {
+			<p class="p-4 rounded-2xl ring-1 ring-zinc-800 text-sm text-zinc-400">
+				{ fmt.Sprintf("You have no spending in the last %d months to weigh the prices by, so this is the average household's basket. Add your expenses, with categories, for a result closer to how you live.", d.BasketFrom) }
+			</p>
+		}
+		@colBasket(d)
+		@colFootnote(d)
+	</div>
+}
+
+// colDiffHint tells how the user's basket differs from the average's, and
+// the group that drives it.
+templ colDiffHint(d *ColData) {
+	{{ res := d.Result }}
+	<p class="text-xs text-zinc-400">
+		if math.Abs(res.Diff) < 0.005 {
+			Your spending is spread like the average household's: it costs the same either way.
+		} else {
+			{ "Your spending costs " }
+			<span class={ "font-semibold", templ.KV("text-amber-300", res.Diff > 0), templ.KV("text-emerald-300", res.Diff < 0) }>
+				if res.Diff > 0 {
+					{ colPct(res.Diff) + " more" }
+				} else {
+					{ colPct(res.Diff) + " less" }
+				}
+			</span>
+			{ " there than the average household's" + colDriverText(d) }
+		}
+	</p>
+}
+
+// colDriverText names the group pulling the user's basket away from the
+// average's, ending the hint's sentence.
+func colDriverText(d *ColData) string {
+	g, ok := d.Result.DriverResult()
+	if !ok {
+		return "."
+	}
+	dir := "pricier"
+	if g.VsAverage < 0 {
+		dir = "cheaper"
+	}
+	return fmt.Sprintf(", mostly because of %s (%s of your spending): compared with %s, it's %s %s there than prices overall.",
+		strings.ToLower(models.ColGroupLabel(g.Group)), colPct(g.Share), colPlace(d, false), colPct(g.VsAverage), dir)
+}
+
+templ colGroups(d *ColData) {
+	{{ res := d.Result }}
+	<section class="grid gap-3 p-5 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800">
+		<h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Your month, by what you spend on</h2>
+		<ul class="grid gap-3">
+			for _, g := range res.Groups {
+				<li class="grid gap-1.5">
+					<div class="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
+						<span class="font-medium text-zinc-200">
+							{ models.ColGroupLabel(g.Group) }
+							<span class="ml-1 text-xs text-zinc-500 tabular-nums">{ colPct(g.Share) }</span>
+						</span>
+						<span class="tabular-nums text-zinc-300">
+							{ colFmt(g.Home, d.Home.Currency) }
+							<span class="text-zinc-500">→</span>
+							{ colFmt(g.There, d.Target.Currency) }
+						</span>
+					</div>
+					<div class="flex items-center gap-2">
+						<div class="flex-1 h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+							<div class="h-full rounded-full bg-sky-400/70" style={ fmt.Sprintf("width: %.1f%%", g.Share*100) }></div>
+						</div>
+						if g.Group != models.ColAverage && math.Abs(g.VsAverage) >= 0.05 {
+							<span
+								class={ "shrink-0 text-xs tabular-nums", templ.KV("text-amber-300", g.VsAverage > 0), templ.KV("text-emerald-300", g.VsAverage < 0) }
+								title="How this group's prices there compare with the rest, against home"
+							>
+								if g.VsAverage > 0 {
+									{ "+" + colPct(g.VsAverage) + " vs average" }
+								} else {
+									{ "−" + colPct(g.VsAverage) + " vs average" }
+								}
+							</span>
+						}
+					</div>
+				</li>
+			}
+		</ul>
+		<p class="text-xs text-zinc-500">
+			{ fmt.Sprintf("What you spent a month on average (last %d months, in %s), and what the same would cost there.", d.BasketMonths, d.Home.Currency) }
+		</p>
+	</section>
+}
+
+func colGroupOptions() []form.ComboOption {
+	opts := make([]form.ComboOption, 0, len(models.ColGroups)+1)
+	for _, g := range models.ColGroups {
+		opts = append(opts, form.ComboOption{Value: string(g.Group), Label: g.Label})
+	}
+	return append(opts, form.ComboOption{Value: string(models.ColAverage), Label: models.ColGroupLabel(models.ColAverage)})
+}
+
+// colBasket lists the expense categories with the price group each is
+// weighed by, a chip picking another.
+templ colBasket(d *ColData) {
+	if len(d.Categories) > 0 {
+		<details class="group rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800">
+			<summary class="flex items-center justify-between gap-3 p-5 cursor-pointer list-none">
+				<span class="grid gap-0.5">
+					<span class="text-sm font-semibold text-zinc-200">Your categories' price groups</span>
+					<span class="text-xs text-zinc-500">Which prices each category is weighed by, guessed from its name</span>
+				</span>
+				@icons.ChevronDown("16", &templ.Attributes{"class": "shrink-0 text-zinc-500 transition-transform group-open:rotate-180"})
+			</summary>
+			<ul class="grid gap-2 px-5 pb-5">
+				for _, c := range d.Categories {
+					<li class="flex items-center justify-between gap-3">
+						<span class="flex items-center gap-2 min-w-0">
+							<span class="shrink-0 w-2.5 h-2.5 rounded-full" style={ "background-color: " + cmpColor(c.Color) }></span>
+							<span class="truncate text-sm text-zinc-200">{ c.Name }</span>
+							if c.Monthly > 0 {
+								<span class="shrink-0 text-xs text-zinc-500 tabular-nums">{ colFmt(c.Monthly, d.Home.Currency) }</span>
+							}
+						</span>
+						if c.ID == models.UncategorizedKey {
+							<span class="shrink-0 text-xs text-zinc-500">{ models.ColGroupLabel(models.ColAverage) }</span>
+						} else {
+							<div class="shrink-0">
+								@form.Combobox(colGroupPicker(c))
+							</div>
+						}
+					</li>
+				}
+			</ul>
+		</details>
+	}
+}
+
+func cmpColor(c string) string {
+	if c == "" {
+		return "var(--color-zinc-500)"
+	}
+	return c
+}
+
+func colGroupPicker(c models.ColCategory) form.ComboboxProps {
+	value := string(c.Group)
+	nullLabel := "Auto"
+	if c.Guessed {
+		value = ""
+		nullLabel = "Auto: " + models.ColGroupLabel(c.Group)
+	}
+	return form.ComboboxProps{
+		Name: "col_group", ID: "col-" + c.ID, Label: "Price group of " + c.Name,
+		Options: colGroupOptions(), Data: form.FDInput{Value: value},
+		Nullable: true, NullLabel: nullLabel, Chip: true,
+		InputAttrs: templ.Attributes{
+			"hx-put":     "/tools/cost-of-living/categories/" + c.ID,
+			"hx-trigger": "change",
+			"hx-include": "#col-form",
+			"hx-target":  "#col-result",
+			"hx-swap":    "innerHTML",
+		},
+	}
+}
+
+templ colEstimateBanner(d *ColData) {
+	{{ e := d.Estimate }}
+	<section class="grid gap-3 p-4 rounded-2xl bg-amber-400/10 ring-1 ring-amber-400/30 text-sm">
+		<p class="flex gap-2 font-medium text-amber-200">
+			@icons.Sparkles("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
+			Estimated by Gemini from the web: it may be unreliable. Check it before deciding anything on it.
+		</p>
+		if t := ColReadAs(d); t != "" {
+			<p class="text-zinc-400">{ t }</p>
+		}
+		if e.Notes != "" {
+			<p class="text-zinc-300">{ e.Notes }</p>
+		}
+		if e.RentHome > 0 && e.RentTarget > 0 {
+			<p class="text-zinc-300">
+				One bedroom flat in the center:
+				<span class="font-semibold tabular-nums">{ colFmt(e.RentTarget, d.Target.Currency) }</span> in { d.TargetCity },
+				<span class="font-semibold tabular-nums">{ colFmt(e.RentHome, d.Home.Currency) }</span> in { d.HomeCity }, a month
+			</p>
+		}
+		if len(e.Sources) > 0 {
+			<details>
+				<summary class="cursor-pointer text-xs text-zinc-400 hover:text-zinc-200">{ fmt.Sprintf("Sources (%d)", len(e.Sources)) }</summary>
+				<ul class="grid gap-1 mt-2">
+					for _, s := range e.Sources {
+						<li>
+							<a href={ templ.SafeURL(s.URL) } target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-xs text-sky-300 hover:underline">
+								{ colSourceTitle(s) }
+								@icons.ExternalLink("12")
+							</a>
+						</li>
+					}
+				</ul>
+			</details>
+		}
+	</section>
+}
+
+// ColReadAs tells which cities the estimate is for when the model read
+// what was typed as other names (NYC as New York City), "" when the same.
+func ColReadAs(d *ColData) string {
+	e := d.Estimate
+	homeSame := e.HomeCity == "" || colguess.NormalizeCity(e.HomeCity) == colguess.NormalizeCity(d.HomeCity)
+	targetSame := e.TargetCity == "" || colguess.NormalizeCity(e.TargetCity) == colguess.NormalizeCity(d.TargetCity)
+	if homeSame && targetSame {
+		return ""
+	}
+	return fmt.Sprintf("Estimated for %s against %s.", cmp.Or(e.TargetCity, d.TargetCity), cmp.Or(e.HomeCity, d.HomeCity))
+}
+
+func colSourceTitle(s models.ColSource) string {
+	if s.Title != "" {
+		return s.Title
+	}
+	if u, err := url.Parse(s.URL); err == nil && u.Host != "" {
+		return u.Host
+	}
+	return "Source"
+}
+
+templ colFootnote(d *ColData) {
+	<div class="grid gap-1 px-1 text-xs text-zinc-500">
+		if d.Estimate != nil {
+			<p>Price levels per group from Gemini's estimate, weighed by your spending; converted at today's exchange rate.</p>
+		} else {
+			<p>
+				{ fmt.Sprintf("Country averages, not a city's: big cities, rent above all, cost more. Price levels: the World Bank's household consumption PPPs (%d), brought to %d with the IMF's inflation figures and estimates; each group's prices from the ICP 2021.", d.DataYear, d.DataFrom) }
+			</p>
+			if d.NoGroups {
+				<p>There are no per group prices for these countries: everything is weighed by the average prices.</p>
+			}
+		}
+		if d.BasketMissing {
+			<p>Some of your spending is in a currency without an exchange rate and was left out.</p>
+		}
+	</div>
+}
