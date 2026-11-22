@@ -3,9 +3,13 @@ SELECT
     sqlc.embed(items),
     cat.name AS category_name,
     cat.color AS category_color,
-    (SELECT COUNT(*) FROM counterparty_items AS ci WHERE ci.item_id = items.id) AS merchants
+    (SELECT COUNT(*) FROM counterparty_items AS ci WHERE ci.item_id = items.id) AS merchants,
+    img.hash AS image_hash,
+    img.width AS image_width,
+    img.height AS image_height
 FROM items
 LEFT JOIN item_categories AS cat ON items.category_id = cat.id
+LEFT JOIN item_images AS img ON img.item_id = items.id
 ORDER BY items.name COLLATE NOCASE;
 
 -- name: GetItem :one
@@ -13,9 +17,13 @@ SELECT
     sqlc.embed(items),
     cat.name AS category_name,
     cat.color AS category_color,
-    (SELECT COUNT(*) FROM counterparty_items AS ci WHERE ci.item_id = items.id) AS merchants
+    (SELECT COUNT(*) FROM counterparty_items AS ci WHERE ci.item_id = items.id) AS merchants,
+    img.hash AS image_hash,
+    img.width AS image_width,
+    img.height AS image_height
 FROM items
 LEFT JOIN item_categories AS cat ON items.category_id = cat.id
+LEFT JOIN item_images AS img ON img.item_id = items.id
 WHERE items.id = sqlc.arg(id);
 
 -- name: GetItemIDs :many
@@ -49,6 +57,27 @@ WHERE id = sqlc.arg(id);
 
 -- name: DeleteItem :exec
 DELETE FROM items WHERE id = sqlc.arg(id);
+
+-- name: GetItemImage :one
+SELECT data, content_type, hash FROM item_images WHERE item_id = sqlc.arg(item_id);
+
+-- name: SetItemImage :exec
+INSERT INTO item_images (item_id, data, content_type, hash, width, height)
+VALUES (sqlc.arg(item_id), sqlc.arg(data), sqlc.arg(content_type), sqlc.arg(hash), sqlc.arg(width), sqlc.arg(height))
+ON CONFLICT (item_id) DO UPDATE SET
+    data = excluded.data,
+    content_type = excluded.content_type,
+    hash = excluded.hash,
+    width = excluded.width,
+    height = excluded.height,
+    updated_at = CURRENT_TIMESTAMP;
+
+-- name: DeleteItemImage :exec
+DELETE FROM item_images WHERE item_id = sqlc.arg(item_id);
+
+-- name: MoveItemImage :exec
+-- Merging items: from_id's picture becomes into_id's when it has none.
+UPDATE OR IGNORE item_images SET item_id = sqlc.arg(into_id) WHERE item_id = sqlc.arg(from_id);
 
 -- name: CountItemLines :one
 SELECT COUNT(*) FROM transaction_items WHERE item_id = sqlc.arg(item_id);

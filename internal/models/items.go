@@ -48,8 +48,25 @@ type Item struct {
 	Aliases []string `validate:"max=50,dive,not_blank,max=200"`
 	// Category groups it on the items page (an item category, apart from
 	// the budget ones); never used by an analysis.
-	Category  *ItemCategory `validate:"-"`
+	Category *ItemCategory `validate:"-"`
+	// Image is its picture's, nil when it has none.
+	Image     *ItemImage `validate:"-"`
 	CreatedAt time.Time
+}
+
+// ItemImage is what's shown of an item's picture without reading it.
+type ItemImage struct {
+	Hash          string
+	Width, Height int
+}
+
+// ImageURL is its picture's url, versioned by its hash (cached for good),
+// "" when it has none.
+func (it *Item) ImageURL() string {
+	if it.Image == nil {
+		return ""
+	}
+	return "/item-pictures/" + it.ID + "?v=" + it.Image.Hash
 }
 
 // ItemKey is what a name is matched by: lowercased, its whitespace runs

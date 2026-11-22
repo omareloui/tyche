@@ -30,9 +30,7 @@ templ ItemDetails(s *models.ItemSummary) {
 	@components.Drawer(components.DrawerProps{Label: it.Name + " details", URLParam: ItemDetailsParam, URLValue: it.ID}) {
 		<div class="drawer-panel flex flex-col flex-1 min-h-0">
 			<header class="flex items-start gap-3 px-5 sm:px-6 pt-5 pb-4">
-				<div class="grid place-items-center shrink-0 w-11 h-11 rounded-xl bg-zinc-700/40 text-zinc-300" style={ itemTileStyle(it) }>
-					@icons.Basket("20")
-				</div>
+				@itemTile(it, "w-11 h-11 bg-zinc-700/40 text-zinc-300", "20")
 				<div class="flex-1 min-w-0">
 					<h2 class="text-lg font-bold leading-snug break-words">{ it.Name }</h2>
 					<p class="text-sm text-zinc-400 truncate">
@@ -49,7 +47,11 @@ templ ItemDetails(s *models.ItemSummary) {
 				@components.DrawerClose()
 			</header>
 			<div class="flex-1 grid grid-cols-1 auto-rows-max content-start gap-6 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
+				if it.Image != nil {
+					@itemDetailsImage(it)
+				}
 				@itemDetailsActions(s)
+				<p id={ ItemImageErrorID } class="empty:hidden -mt-3 text-sm text-rose-400" role="alert"></p>
 				<dl class="grid gap-px overflow-hidden rounded-2xl bg-zinc-800/60 ring-1 ring-zinc-800">
 					@txDetailsRow("Category", icons.Tag("15")) {
 						@ItemCategoryPick(it)
@@ -79,6 +81,44 @@ templ ItemDetails(s *models.ItemSummary) {
 	}
 }
 
+// ItemImageErrorID is the details' slot a picture's upload error goes in.
+const ItemImageErrorID = "item-image-error"
+
+// itemDetailsImage is the item's picture (a ThumbSide square).
+templ itemDetailsImage(it *models.Item) {
+	<div class="flex justify-center">
+		<img
+			src={ it.ImageURL() }
+			alt={ it.Name }
+			width={ strconv.Itoa(it.Image.Width) }
+			height={ strconv.Itoa(it.Image.Height) }
+			decoding="async"
+			class="block size-40 rounded-2xl object-cover bg-zinc-900 ring-1 ring-zinc-800"
+		/>
+	</div>
+}
+
+// itemImageInput is a picture button's file input (capture: the camera),
+// resized (receipts.js) then put on "item-image-ready".
+templ itemImageInput(id string, capture bool) {
+	<input
+		type="file"
+		name="image"
+		accept="image/*"
+		if capture {
+			capture="environment"
+		}
+		class="sr-only"
+		hx-put={ fmt.Sprintf("/item-pictures/%s", id) }
+		hx-trigger="item-image-ready"
+		hx-encoding="multipart/form-data"
+		hx-target={ "#" + components.DrawerSlot }
+		hx-swap="innerHTML"
+		hx-indicator="closest [data-item-image]"
+		data-item-image-input
+	/>
+}
+
 templ itemDetailsActions(s *models.ItemSummary) {
 	{{ slot := "#" + components.DrawerSlot }}
 	{{ id := s.Item.ID }}
@@ -91,6 +131,41 @@ templ itemDetailsActions(s *models.ItemSummary) {
 			@icons.Merge("14")
 			Merge into…
 		</button>
+		<div class="contents" data-item-image>
+			<label class="txd-action cursor-pointer has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-zinc-500">
+				@icons.Camera("14")
+				Take photo
+				@itemImageInput(id, true)
+			</label>
+			<label class="txd-action cursor-pointer has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-zinc-500">
+				@icons.Image("14")
+				if s.Item.Image != nil {
+					Change picture
+				} else {
+					Add picture
+				}
+				@itemImageInput(id, false)
+			</label>
+			<span class="htmx-indicator hidden in-[[data-item-image].htmx-request]:inline-flex items-center gap-2 text-sm text-zinc-400" aria-live="polite">
+				<span class="size-3.5 rounded-full border-2 border-current border-t-transparent animate-spin"></span>
+				Saving…
+			</span>
+		</div>
+		if s.Item.Image != nil {
+			<button
+				type="button"
+				hx-delete={ fmt.Sprintf("/item-pictures/%s", id) }
+				hx-target={ slot }
+				hx-swap="innerHTML"
+				hx-confirm="Remove the picture?"
+				data-confirm-label="Remove"
+				data-confirm-danger
+				class="txd-action"
+			>
+				@icons.Trash("14")
+				Remove picture
+			</button>
+		}
 		if s.Stats.Times > 0 {
 			<a href={ itemTxsURL(id) } class="txd-action">
 				@icons.Search("14")

@@ -435,6 +435,26 @@ func itemSearch(it *models.Item) string {
 	return strings.ToLower(strings.Join(append([]string{it.Name}, it.Aliases...), " "))
 }
 
+// itemTile is an item's picture as a square tile (class sizing it), its
+// category's tinted basket when it has none.
+templ itemTile(it *models.Item, class, iconSize string) {
+	if it.Image != nil {
+		<img
+			src={ it.ImageURL() }
+			alt=""
+			width={ strconv.Itoa(it.Image.Width) }
+			height={ strconv.Itoa(it.Image.Height) }
+			loading="lazy"
+			decoding="async"
+			class={ "shrink-0 object-cover rounded-xl", class }
+		/>
+	} else {
+		<div class={ "grid place-items-center shrink-0 rounded-xl", class } style={ itemTileStyle(it) }>
+			@icons.Basket(iconSize)
+		</div>
+	}
+}
+
 // itemTileStyle tints an item's tile with its category's color, as a
 // transaction's tile is with its kind's.
 func itemTileStyle(it *models.Item) string {
@@ -470,9 +490,7 @@ templ itemRow(s *models.ItemSummary, def *models.Currency) {
 		@click="open($event, $el)"
 		class="relative flex items-center gap-3 min-w-0 px-4 py-3 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 cursor-pointer transition-colors hover:ring-zinc-600"
 	>
-		<div class="grid place-items-center shrink-0 w-10 h-10 rounded-xl bg-zinc-800 text-zinc-400" style={ itemTileStyle(it) }>
-			@icons.Basket("18")
-		</div>
+		@itemTile(it, "w-10 h-10 bg-zinc-800 text-zinc-400", "18")
 		<div class="flex-1 min-w-0">
 			<p class="font-medium truncate">{ it.Name }</p>
 			if it.Category != nil {

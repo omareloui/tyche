@@ -14,7 +14,7 @@
   const encode = (canvas, type, quality) =>
     new Promise((done) => canvas.toBlob(done, type, quality));
 
-  async function resize(file) {
+  async function resize(file, maxSide = RECEIPT_MAX, quality = QUALITY) {
     let bitmap;
     try {
       bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
@@ -22,7 +22,7 @@
       // Not decodable here (e.g. HEIC outside Safari): sent as is.
       return file;
     }
-    const scale = Math.min(1, RECEIPT_MAX / Math.max(bitmap.width, bitmap.height));
+    const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
     if (scale === 1 && file.type === "image/webp") {
       bitmap.close();
       return file;
@@ -32,7 +32,7 @@
     canvas.height = Math.round(bitmap.height * scale);
     canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     bitmap.close();
-    let blob = await encode(canvas, "image/webp", QUALITY);
+    let blob = await encode(canvas, "image/webp", quality);
     // Browsers without a WebP encoder hand a PNG instead.
     if (blob?.type !== "image/webp") blob = await encode(canvas, "image/jpeg", 0.8);
     if (!blob) return file;
@@ -71,6 +71,26 @@
     });
     // The details' form posts itself, the transaction form's input itself.
     htmx.trigger(input.closest("form[hx-trigger='receipt-ready']") ?? input, "receipt-ready");
+  });
+
+  // An item's picture (input[data-item-image-input], its details): resized
+  // before the upload (its short side still over receiptimg.ThumbSide for
+  // most photos), the server cropping the small square WebP stored
+  // (receiptimg.Thumbnail), then put by htmx on "item-image-ready".
+  const ITEM_IMAGE_MAX = 768;
+
+  document.addEventListener("change", async (e) => {
+    const input = e.target;
+    if (!(input instanceof HTMLInputElement) || !input.matches("[data-item-image-input]")) return;
+    const file = input.files?.[0];
+    if (!file) return;
+    const resized = await resize(file, ITEM_IMAGE_MAX, 0.85);
+    if (resized !== file) {
+      const dt = new DataTransfer();
+      dt.items.add(resized);
+      input.files = dt.files;
+    }
+    htmx.trigger(input, "item-image-ready");
   });
 
   // scanInCreateForm hands a file to the transactions page's create form's

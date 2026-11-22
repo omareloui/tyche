@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"image/jpeg"
 	"image/png"
 
@@ -43,13 +44,87 @@ func Normalize(data []byte, contentType string) ([]byte, error) {
 	sem <- struct{}{}
 	defer func() { <-sem }()
 
+	img, err := upright(data, contentType)
+	if err != nil {
+		return nil, err
+	}
+	return encode(img, webp.Options{Quality: Quality})
+}
+
+// Thumb is an item's picture as stored: a WebP and its size.
+type Thumb struct {
+	Data          []byte
+	Width, Height int
+}
+
+const (
+	// ThumbSide is an item picture's side: a square, tiles being ~44px and
+	// the details' preview 160px.
+	ThumbSide = 256
+	// ThumbMaxBytes is the size a thumbnail's quality is lowered to fit in.
+	ThumbMaxBytes = 16 << 10
+)
+
+// thumbQualities are tried in turn (with the slowest, smallest method: a
+// thumbnail is cheap to encode), the first fitting ThumbMaxBytes kept (else
+// the last).
+var thumbQualities = []int{55, 45, 35}
+
+// thumbBackground is what transparent pixels are flattened onto (the app's
+// zinc-900), so the WebP has no alpha.
+var thumbBackground = color.RGBA{0x18, 0x18, 0x1b, 0xff}
+
+// Thumbnail is an item's picture: its center square, ThumbSide wide (its
+// short side when smaller), upright, flattened, as small a WebP as fits
+// ThumbMaxBytes. Always encoded again, so no metadata (EXIF, ICC) is kept.
+func Thumbnail(data []byte, contentType string) (*Thumb, error) {
+	sem <- struct{}{}
+	defer func() { <-sem }()
+
 	img, err := decode(data, contentType)
 	if err != nil {
 		return nil, err
 	}
-	img = orient(shrink(img), orientation(data, contentType))
+	// Scaled first (its short side to ThumbSide), so turning it is cheap.
+	b := img.Bounds()
+	if short := min(b.Dx(), b.Dy()); short > ThumbSide {
+		dst := image.NewRGBA(image.Rect(0, 0, max(b.Dx()*ThumbSide/short, ThumbSide), max(b.Dy()*ThumbSide/short, ThumbSide)))
+		draw.CatmullRom.Scale(dst, dst.Bounds(), img, b, draw.Src, nil)
+		img = dst
+	}
+	img = orient(img, orientation(data, contentType))
+	b = img.Bounds()
+	side := min(b.Dx(), b.Dy(), ThumbSide)
+	src := image.Pt(b.Min.X+(b.Dx()-side)/2, b.Min.Y+(b.Dy()-side)/2)
+
+	sq := image.NewRGBA(image.Rect(0, 0, side, side))
+	draw.Draw(sq, sq.Bounds(), image.NewUniform(thumbBackground), image.Point{}, draw.Src)
+	draw.Draw(sq, sq.Bounds(), img, src, draw.Over)
+
+	var out []byte
+	for _, q := range thumbQualities {
+		if out, err = encode(sq, webp.Options{Quality: q, Method: 6}); err != nil {
+			return nil, err
+		}
+		if len(out) <= ThumbMaxBytes {
+			break
+		}
+	}
+	return &Thumb{Data: out, Width: side, Height: side}, nil
+}
+
+// upright is the decoded image within MaxSide, its orientation applied.
+func upright(data []byte, contentType string) (image.Image, error) {
+	img, err := decode(data, contentType)
+	if err != nil {
+		return nil, err
+	}
+	return orient(shrink(img), orientation(data, contentType)), nil
+}
+
+func encode(img image.Image, opts webp.Options) ([]byte, error) {
 	var buf bytes.Buffer
-	if err := webp.Encode(&buf, img, webp.Options{Quality: Quality}); err != nil {
+	if err := webp.Encode(&buf, img, opts); err != nil {
 		return nil, fmt.Errorf("receiptimg: encoding webp: %w", err)
 	}
 	return buf.Bytes(), nil

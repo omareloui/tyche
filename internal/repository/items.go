@@ -2,7 +2,9 @@ package repository
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"strings"
 
@@ -101,6 +103,14 @@ func (r *Repository) DeleteItemCategory(ctx context.Context, id string) error {
 	return q.DeleteItemCategory(ctx, id)
 }
 
+// withItemImage sets item's picture from its row's image columns.
+func withItemImage(item models.Item, hash sql.NullString, w, h sql.NullInt64) models.Item {
+	if hash.Valid {
+		item.Image = &models.ItemImage{Hash: hash.String, Width: int(w.Int64), Height: int(h.Int64)}
+	}
+	return item
+}
+
 func dbItemToItem(it queries.Item, catName, catColor sql.NullString) models.Item {
 	aliases, _ := unmarshalStrings(it.Aliases)
 	item := models.Item{ID: it.ID, Name: it.Name, Aliases: aliases, CreatedAt: it.CreatedAt}
@@ -125,7 +135,8 @@ func (r *Repository) GetItems(ctx context.Context, def models.Currency, rng mode
 	items := make([]models.ItemSummary, len(rows))
 	for i, row := range rows {
 		items[i] = models.ItemSummary{
-			Item:      dbItemToItem(row.Item, row.CategoryName, row.CategoryColor),
+			Item: withItemImage(dbItemToItem(row.Item, row.CategoryName, row.CategoryColor),
+				row.ImageHash, row.ImageWidth, row.ImageHeight),
 			Merchants: int(row.Merchants),
 		}
 	}
@@ -147,7 +158,8 @@ func (r *Repository) GetItem(ctx context.Context, id string) (*models.ItemSummar
 		return nil, err
 	}
 	return &models.ItemSummary{
-		Item:      dbItemToItem(row.Item, row.CategoryName, row.CategoryColor),
+		Item: withItemImage(dbItemToItem(row.Item, row.CategoryName, row.CategoryColor),
+			row.ImageHash, row.ImageWidth, row.ImageHeight),
 		Merchants: int(row.Merchants),
 	}, nil
 }
@@ -295,7 +307,8 @@ func (r *Repository) DeleteItem(ctx context.Context, id string) error {
 	})
 }
 
-// MergeItems makes fromID's lines and merchants intoID's, adds its name and
+// MergeItems makes fromID's lines, merchants and picture (when intoID has
+// none) intoID's, adds its name and
 // aliases to intoID's aliases and deletes it.
 func (r *Repository) MergeItems(ctx context.Context, fromID, intoID string) (*models.Item, error) {
 	if fromID == intoID {
@@ -321,6 +334,9 @@ func (r *Repository) MergeItems(ctx context.Context, fromID, intoID string) (*mo
 			return err
 		}
 		if err := qtx.MoveItemMerchants(ctx, queries.MoveItemMerchantsParams{IntoID: intoID, FromID: fromID}); err != nil {
+			return err
+		}
+		if err := qtx.MoveItemImage(ctx, queries.MoveItemImageParams{IntoID: intoID, FromID: fromID}); err != nil {
 			return err
 		}
 		if err := qtx.DeleteItem(ctx, fromID); err != nil {
@@ -390,4 +406,54 @@ func (r *Repository) MatchItems(ctx context.Context, cpID string, names []string
 		}
 	}
 	return ids, nil
+}
+
+// ItemImageData is an item's stored picture.
+type ItemImageData struct {
+	Data        []byte
+	ContentType string
+	Hash        string
+}
+
+// GetItemImage is the item's picture, sql.ErrNoRows when it has none.
+func (r *Repository) GetItemImage(ctx context.Context, id string) (*ItemImageData, error) {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	row, err := q.GetItemImage(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return &ItemImageData{Data: row.Data, ContentType: row.ContentType, Hash: row.Hash}, nil
+}
+
+// SetItemImage sets (or replaces) the item's picture, a WebP of w×h.
+func (r *Repository) SetItemImage(ctx context.Context, id string, data []byte, w, h int) error {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+	sum := sha256.Sum256(data)
+	err = q.SetItemImage(ctx, queries.SetItemImageParams{
+		ItemID:      id,
+		Data:        data,
+		ContentType: "image/webp",
+		Hash:        hex.EncodeToString(sum[:16]),
+		Width:       int64(w),
+		Height:      int64(h),
+	})
+	if err != nil {
+		logger.FromCtx(ctx).Error("setting an item's picture", zap.Error(err), zap.String("item_id", id))
+	}
+	return err
+}
+
+// DeleteItemImage deletes the item's picture.
+func (r *Repository) DeleteItemImage(ctx context.Context, id string) error {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+	return q.DeleteItemImage(ctx, id)
 }

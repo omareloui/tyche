@@ -59,11 +59,21 @@ func (e errScan) Error() string { return e.msg }
 // readReceiptUpload is the posted image (the first non-empty "receipt"
 // file) and its type.
 func readReceiptUpload(w http.ResponseWriter, r *http.Request) ([]byte, string, error) {
+	data, ct, err := readImageUpload(w, r, "receipt")
+	if err == nil && data == nil {
+		return nil, "", errScan{"Pick a photo of the receipt."}
+	}
+	return data, ct, err
+}
+
+// readImageUpload is the posted image (the first non-empty field file) and
+// its type, nil when none was sent.
+func readImageUpload(w http.ResponseWriter, r *http.Request, field string) ([]byte, string, error) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxReceiptBytes+1<<20)
 	if err := r.ParseMultipartForm(maxReceiptBytes); err != nil {
 		return nil, "", errScan{"The image is too big or didn't upload, try again."}
 	}
-	for _, fh := range r.MultipartForm.File["receipt"] {
+	for _, fh := range r.MultipartForm.File[field] {
 		if fh.Size == 0 {
 			continue
 		}
@@ -92,7 +102,7 @@ func readReceiptUpload(w http.ResponseWriter, r *http.Request) ([]byte, string, 
 		}
 		return nil, "", errScan{"Pick a photo (JPEG, PNG, WebP or HEIC)."}
 	}
-	return nil, "", errScan{"Pick a photo of the receipt."}
+	return nil, "", nil
 }
 
 // scanReceipt reads the posted receipt within the tenant's monthly limit,
