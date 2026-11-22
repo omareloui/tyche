@@ -19,12 +19,14 @@ import (
 
 type fakeColGuess struct {
 	calls int
+	in    colguess.In
 	e     *models.ColCityEstimate
 	err   error
 }
 
 func (f *fakeColGuess) Estimate(ctx context.Context, in colguess.In) (*models.ColCityEstimate, gemini.Usage, error) {
 	f.calls++
+	f.in = in
 	return f.e, gemini.Usage{InputTokens: 10, OutputTokens: 5}, f.err
 }
 
@@ -164,6 +166,10 @@ func TestCostOfLivingCityCanonical(t *testing.T) {
 	if fake.calls != 1 {
 		t.Fatalf("calls = %d", fake.calls)
 	}
+	// The countries' levels went along: USD 0.1 per EGP at 0.02 = 5.
+	if ref := fake.in.Ref; ref == nil || math.Abs(ref.Overall-5) > 1e-9 {
+		t.Errorf("reference = %+v", fake.in.Ref)
+	}
 
 	// The usual name hits the estimate kept for NYC.
 	form.Set("to_city", "new york city")
@@ -208,7 +214,22 @@ func TestCostOfLivingCity(t *testing.T) {
 		}
 		return w
 	}
-	estimate()
+	// The first answer is the result, not the ask again.
+	{
+		w, r := e.put("/tools/cost-of-living/city", form, nil)
+		r.Method = "POST"
+		c, err := e.h.EstimateCostOfLivingCity(w, r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var b strings.Builder
+		if err := c.Render(e.ctx, &b); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(b.String(), "Estimate with Gemini") || !strings.Contains(b.String(), "Estimated by Gemini") {
+			t.Errorf("first answer isn't the result:\n%s", b.String())
+		}
+	}
 	if fake.calls != 1 {
 		t.Fatalf("calls = %d", fake.calls)
 	}

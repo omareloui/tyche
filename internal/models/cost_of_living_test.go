@@ -95,3 +95,32 @@ func TestColCityEstimateRatios(t *testing.T) {
 		t.Errorf("no market, no ratios")
 	}
 }
+
+func TestColCityEstimateHousing(t *testing.T) {
+	// Cairo → Madrid at 1 EGP = 0.0169 EUR: rents 12,500 EGP / 1,150 EUR
+	// come to 5.44, housing 4.6 is within ColRentMismatch: kept.
+	e := &ColCityEstimate{Overall: 3, Groups: map[ColGroup]float64{ColHousing: 4.6}, RentHome: 12500, RentTarget: 1150}
+	if v, adj := e.HousingLevel(0.0169); adj || v != 4.6 {
+		t.Errorf("housing = %v, %v", v, adj)
+	}
+
+	// Housing 2 against rents of 8: the geometric mean, 4.
+	e = &ColCityEstimate{Overall: 3, Groups: map[ColGroup]float64{ColHousing: 2}, RentHome: 100, RentTarget: 400}
+	v, adj := e.HousingLevel(0.5)
+	if !adj || math.Abs(v-4) > 1e-9 {
+		t.Errorf("housing = %v, %v", v, adj)
+	}
+	if r := e.Ratios(0.5); math.Abs(r.Groups[ColHousing]-2) > 1e-9 {
+		t.Errorf("housing ratio = %v", r.Groups[ColHousing])
+	}
+
+	// Without rents or a housing level: as given.
+	e = &ColCityEstimate{Overall: 3, Groups: map[ColGroup]float64{ColHousing: 2}}
+	if v, adj := e.HousingLevel(0.5); adj || v != 2 {
+		t.Errorf("no rents: %v, %v", v, adj)
+	}
+	e = &ColCityEstimate{Overall: 3, Groups: map[ColGroup]float64{}, RentHome: 100, RentTarget: 400}
+	if r := e.Ratios(0.5); r.Groups[ColHousing] != 0 {
+		t.Errorf("housing made up: %v", r.Groups[ColHousing])
+	}
+}

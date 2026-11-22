@@ -37,7 +37,7 @@ func TestKeyAndPrompt(t *testing.T) {
 		Target: City{Name: "Berlin", Country: "Germany", Code: "DE", Currency: "EUR"},
 	}
 	now := time.Date(2026, 11, 23, 0, 0, 0, 0, time.UTC)
-	if k := in.Key(now); k != "cairo,EG|berlin,DE|2026-11" {
+	if k := in.Key(now); k != "v3|cairo,EG|berlin,DE|2026-11" {
 		t.Errorf("key = %q", k)
 	}
 	if Key("CAIRO", "EG", "berlin.", "de", now) != in.Key(now) {
@@ -75,5 +75,45 @@ func TestParseCities(t *testing.T) {
 	}
 	if e.HomeCity != "Cairo" || e.TargetCity != "New York City" {
 		t.Errorf("cities = %q %q", e.HomeCity, e.TargetCity)
+	}
+}
+
+func TestSwapped(t *testing.T) {
+	in := In{Home: City{Name: "Cairo"}, Target: City{Name: "madrid"}}
+	cases := []struct {
+		home, target string
+		want         bool
+	}{
+		{"Cairo", "Madrid", false},
+		{"Madrid", "Cairo", true},
+		{"", "Cairo", false},
+		{"Giza", "Madrid", false},
+	}
+	for _, c := range cases {
+		if got := Swapped(in, &models.ColCityEstimate{HomeCity: c.home, TargetCity: c.target}); got != c.want {
+			t.Errorf("Swapped(%q, %q) = %v", c.home, c.target, got)
+		}
+	}
+}
+
+func TestPromptReference(t *testing.T) {
+	in := In{
+		Home:   City{Name: "Cairo", Country: "Egypt", Code: "EG", Currency: "EGP"},
+		Target: City{Name: "Madrid", Country: "Spain", Code: "ES", Currency: "EUR"},
+	}
+	if strings.Contains(Prompt(in), "World Bank") {
+		t.Errorf("reference without one")
+	}
+	// Ratios in EUR per EGP at a market rate of 0.02: levels 4 and 2.5.
+	r := &models.ColRatios{Avg: 0.08, Groups: map[models.ColGroup]float64{models.ColFood: 0.05}}
+	in.Ref = NewReference(r, 0.02, 2021)
+	p := Prompt(in)
+	for _, want := range []string{"World Bank", "2021", "overall: 4.00", "food: 2.50"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("prompt lacks %q:\n%s", want, p)
+		}
+	}
+	if NewReference(nil, 0.02, 2021) != nil || NewReference(r, 0, 2021) != nil {
+		t.Errorf("reference without ratios or rate")
 	}
 }

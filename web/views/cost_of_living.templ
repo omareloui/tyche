@@ -538,6 +538,9 @@ templ colEstimateBanner(d *ColData) {
 				<span class="font-semibold tabular-nums">{ colFmt(e.RentHome, d.Home.Currency) }</span> in { d.HomeCity }, a month
 			</p>
 		}
+		if v, adjusted := e.HousingLevel(d.Market); adjusted {
+			<p class="text-zinc-400">{ colHousingNote(e, v, d.Market) }</p>
+		}
 		if len(e.Sources) > 0 {
 			<details>
 				<summary class="cursor-pointer text-xs text-zinc-400 hover:text-zinc-200">{ fmt.Sprintf("Sources (%d)", len(e.Sources)) }</summary>
@@ -554,6 +557,12 @@ templ colEstimateBanner(d *ColData) {
 			</details>
 		}
 	</section>
+}
+
+// colHousingNote tells the housing level was moved toward the rents'.
+func colHousingNote(e *models.ColCityEstimate, level, market float64) string {
+	return fmt.Sprintf("Housing taken as %.1f× as expensive: Gemini said %.1f×, but its rents above come to %.1f×.",
+		level, e.Groups[models.ColHousing], e.RentLevel(market))
 }
 
 // ColReadAs tells which cities the estimate is for when the model read

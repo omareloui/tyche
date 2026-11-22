@@ -347,5 +347,38 @@ func (e *ColCityEstimate) Ratios(market float64) *ColRatios {
 			r.Groups[g.Group] = v * market
 		}
 	}
+	if v, _ := e.HousingLevel(market); v > 0 {
+		r.Groups[ColHousing] = v * market
+	}
 	return r
+}
+
+// ColRentMismatch is how many times apart the estimate's housing level and
+// its own rents' level may be before the housing level is moved toward the
+// rents.
+const ColRentMismatch = 1.3
+
+// RentLevel is the target's rent over home's at the market rate (target's
+// currency per home's), 0 without both rents.
+func (e *ColCityEstimate) RentLevel(market float64) float64 {
+	if e == nil || market <= 0 || e.RentHome <= 0 || e.RentTarget <= 0 {
+		return 0
+	}
+	return e.RentTarget / (e.RentHome * market)
+}
+
+// HousingLevel is the housing level to use: the model's, or, when it's more
+// than ColRentMismatch times apart from the level of the rents it gave, the
+// geometric mean of both (adjusted): only partway, as housing also holds the
+// utilities. 0 when the estimate has no housing level.
+func (e *ColCityEstimate) HousingLevel(market float64) (level float64, adjusted bool) {
+	if e == nil {
+		return 0, false
+	}
+	h := e.Groups[ColHousing]
+	rent := e.RentLevel(market)
+	if h <= 0 || rent <= 0 || max(h, rent)/min(h, rent) <= ColRentMismatch {
+		return h, false
+	}
+	return math.Sqrt(h * rent), true
 }

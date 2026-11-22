@@ -100,6 +100,10 @@ func (h Handler) EstimateCostOfLivingCity(w http.ResponseWriter, r *http.Request
 	}
 
 	in := colCityIn(d)
+	// The countries' levels as the model's starting point, when there.
+	if r, year, _ := countryRatios(d); r != nil {
+		in.Ref = colguess.NewReference(r, d.Market, year)
+	}
 	e, err := h.estimateCity(ctx, in)
 	var msg errScan
 	if errors.As(err, &msg) {
@@ -110,7 +114,7 @@ func (h Handler) EstimateCostOfLivingCity(w http.ResponseWriter, r *http.Request
 		return nil, err
 	}
 
-	d.Estimate = e
+	d.Estimate, d.NeedEstimate = e, false
 	h.fillColResult(d)
 	return views.ColResultBody(d), nil
 }
@@ -367,25 +371,33 @@ func (h Handler) fillColResult(d *views.ColData) {
 		return
 	}
 
+	r, year, msg := countryRatios(d)
+	if r == nil {
+		d.Error = msg
+		return
+	}
+	d.DataYear = year
+	d.NoGroups = len(r.Groups) == 0
+	res := models.ComputeCol(d.Amount, *r, spend, d.Market)
+	d.Result = &res
+}
+
+// countryRatios are the countries' price ratios (target's currency per
+// home's) with the year of their data, else nil and why.
+func countryRatios(d *views.ColData) (*models.ColRatios, int, string) {
 	data := costofliving.Current()
 	now := time.Now().Year()
 	home, homeYear, err := data.Prices(d.Home.ISO3, now)
 	if err != nil {
-		d.Error = "There's no price data for " + d.Home.Name + " yet."
-		return
+		return nil, 0, "There's no price data for " + d.Home.Name + " yet."
 	}
 	target, targetYear, err := data.Prices(d.Target.ISO3, now)
 	if err != nil {
-		d.Error = "There's no price data for " + d.Target.Name + " yet."
-		return
+		return nil, 0, "There's no price data for " + d.Target.Name + " yet."
 	}
-	d.DataYear = min(homeYear, targetYear)
 	r := home.Ratios(target)
 	if r == nil {
-		d.Error = "There's no price data for these countries yet."
-		return
+		return nil, 0, "There's no price data for these countries yet."
 	}
-	d.NoGroups = len(r.Groups) == 0
-	res := models.ComputeCol(d.Amount, *r, spend, d.Market)
-	d.Result = &res
+	return r, min(homeYear, targetYear), ""
 }
