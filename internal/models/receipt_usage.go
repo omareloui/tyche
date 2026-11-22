@@ -19,7 +19,19 @@ type ReceiptScan struct {
 	// Cached tells it was answered from what was read off the same image
 	// before (the tenant's receipts), without a call.
 	Cached bool
+	// Kind is what was read, ScanReceipt when empty.
+	Kind ScanKind
 }
+
+// ScanKind is what a Gemini call read, each counted toward its own monthly
+// limit.
+type ScanKind string
+
+const (
+	ScanReceipt ScanKind = "receipt"
+	// ScanSMSGuess guessed an sms' template.
+	ScanSMSGuess ScanKind = "sms"
+)
 
 // Billed tells the scan used tokens, counting toward the monthly limit.
 func (s *ReceiptScan) Billed() bool {
@@ -37,6 +49,8 @@ func CalendarMonth(t time.Time) (from, to time.Time) {
 type ReceiptUsage struct {
 	Scans  int
 	Failed int
+	// SMSGuesses are the scans that guessed an sms' template, in Scans.
+	SMSGuesses int
 	// Cached are the scans answered from the cache, apart: they aren't
 	// scans (no call, not counted toward the limit).
 	Cached       int
@@ -52,6 +66,9 @@ func (u *ReceiptUsage) add(s *ReceiptScan) {
 		return
 	}
 	u.Scans++
+	if s.Kind == ScanSMSGuess {
+		u.SMSGuesses++
+	}
 	if !s.OK {
 		u.Failed++
 	}
@@ -88,7 +105,7 @@ type TenantReceiptUsage struct {
 	// Limit is its scans a calendar month, Custom when set by an admin.
 	Limit  int
 	Custom bool
-	// Billed is its scans counting toward the limit this month.
+	// Billed is its receipt scans counting toward the limit this month.
 	Billed int
 }
 
@@ -158,7 +175,7 @@ func NewReceiptUsageReport(scans []ReceiptScan, now, dailyFrom, monthlyFrom time
 		if !at.Before(thisFrom) && at.Before(thisTo) {
 			rep.ThisMonth.add(s)
 			t.ThisMonth.add(s)
-			if s.Billed() {
+			if s.Billed() && s.Kind != ScanSMSGuess {
 				t.Billed++
 			}
 		} else if !at.Before(lastFrom) && at.Before(thisFrom) {

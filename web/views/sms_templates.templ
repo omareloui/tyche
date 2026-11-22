@@ -484,6 +484,17 @@ func NewTemplateURL(sender, sms string) templ.SafeURL {
 	return templ.SafeURL(SMSTemplatesFormURL(newTemplateURL(models.SMSTemplateMine, sender, sms)))
 }
 
+// SMSGuessFormURL opens the templates page with the form of a new template,
+// prefilled with the AI's guess for the sms.
+func SMSGuessFormURL(smsID string) string {
+	return SMSTemplatesFormURL("/sms/templates/new?" + url.Values{"guess": {smsID}}.Encode())
+}
+
+// SMSGuessErrorSlot is where an sms card shows why guessing failed.
+func SMSGuessErrorSlot(smsID string) string {
+	return "#sms-guess-err-" + smsID
+}
+
 // SMSTemplatesFormURL is the templates page opening the form drawer at path
 // (drawer.js' ?form=).
 func SMSTemplatesFormURL(path string) string {

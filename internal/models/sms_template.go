@@ -1,6 +1,7 @@
 package models
 
 import (
+	"maps"
 	"strings"
 	"time"
 
@@ -133,4 +134,37 @@ func (t *SMSTemplate) AppliesTo(sender string) bool {
 		}
 	}
 	return false
+}
+
+// SMSTemplateGuess is a template the AI guessed for an sms, verified to read
+// it; it only prefills the template form.
+type SMSTemplateGuess struct {
+	Name   string            `json:"name"`
+	Bank   string            `json:"bank"`
+	Action SMSTemplateAction `json:"action"`
+	TxKind TxKind            `json:"tx_kind"`
+	Body   string            `json:"body"`
+	Fixed  map[string]string `json:"fixed,omitempty"`
+}
+
+// Template is the guess as a new template of the user's for the sms.
+func (g *SMSTemplateGuess) Template(sender, body string) *SMSTemplate {
+	t := &SMSTemplate{
+		Scope:     SMSTemplateMine,
+		Name:      g.Name,
+		Bank:      g.Bank,
+		Action:    g.Action,
+		TxKind:    g.TxKind,
+		Body:      g.Body,
+		Fixed:     maps.Clone(g.Fixed),
+		Sample:    body,
+		IsEnabled: true,
+	}
+	if sender = strings.TrimSpace(sender); sender != "" {
+		t.Senders = []string{sender}
+	}
+	if t.Action == SMSTemplateIgnore {
+		t.TxKind, t.Fixed = NilTxKind, nil
+	}
+	return t
 }

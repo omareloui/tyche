@@ -78,3 +78,19 @@ func TestNewReceiptUsageReportEmpty(t *testing.T) {
 		t.Errorf("report = %d days, %d months, %d tenants", len(rep.Daily), len(rep.Monthly), len(rep.Tenants))
 	}
 }
+
+func TestNewReceiptUsageReportSMSGuesses(t *testing.T) {
+	now := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
+	scans := []ReceiptScan{
+		{TenantID: "GL_1", ScannedAt: now, InputTokens: 1000, CostMicros: 1500, OK: true},
+		{TenantID: "GL_1", ScannedAt: now, InputTokens: 900, CostMicros: 1000, OK: true, Kind: ScanSMSGuess},
+	}
+	rep := NewReceiptUsageReport(scans, now, now, time.Time{}, nil, 10)
+	// The guess costs and shows, but doesn't count toward the receipts' limit.
+	if rep.ThisMonth.Scans != 2 || rep.ThisMonth.SMSGuesses != 1 || rep.ThisMonth.CostMicros != 2500 {
+		t.Errorf("this month = %+v", rep.ThisMonth)
+	}
+	if rep.Tenants[0].Billed != 1 {
+		t.Errorf("billed = %d", rep.Tenants[0].Billed)
+	}
+}

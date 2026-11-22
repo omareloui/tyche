@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
@@ -162,8 +163,35 @@ func dbSMSMessageToSMSMessage(m *queries.SmsMessage) *models.SMSMessage {
 		TransactionID: m.TransactionID.String,
 		DeviceID:      m.DeviceID.String,
 		TemplateID:    m.TemplateID.String,
+		TemplateGuess: smsTemplateGuess(m),
 		CreatedAt:     m.CreatedAt,
 	}
+}
+
+// smsTemplateGuess reads the sms' stored guess, nil without one (or when it
+// doesn't read, so it's asked for again).
+func smsTemplateGuess(m *queries.SmsMessage) *models.SMSTemplateGuess {
+	if !m.TemplateGuess.Valid || m.TemplateGuess.String == "" {
+		return nil
+	}
+	var g models.SMSTemplateGuess
+	if err := json.Unmarshal([]byte(m.TemplateGuess.String), &g); err != nil {
+		return nil
+	}
+	return &g
+}
+
+// SetSMSTemplateGuess keeps the template the AI guessed for the sms.
+func (r *Repository) SetSMSTemplateGuess(ctx context.Context, id string, g *models.SMSTemplateGuess) error {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+	raw, err := json.Marshal(g)
+	if err != nil {
+		return err
+	}
+	return q.SetSMSTemplateGuess(ctx, queries.SetSMSTemplateGuessParams{ID: id, TemplateGuess: nullString(string(raw))})
 }
 
 // createIngestedTransactionWithTxn saves an SMS's (or a CSV row's)

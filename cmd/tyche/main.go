@@ -21,6 +21,7 @@ import (
 	"github.com/omareloui/tyche/internal/handler"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/receiptocr"
+	"github.com/omareloui/tyche/internal/smsguess"
 	"github.com/omareloui/tyche/internal/repository"
 	"github.com/omareloui/tyche/internal/router"
 	"github.com/omareloui/tyche/internal/sanitizer"
@@ -87,6 +88,7 @@ func main() {
 	// A nil *Client in the interface would read as on.
 	if ocrCfg := config.GetReceiptOCR(); ocrCfg.APIKey != "" {
 		h.SetReceiptOCR(receiptocr.New(ocrCfg.APIKey, ocrCfg.Model, ocrCfg.ThinkingLevel), ocrCfg)
+		h.SetSMSGuess(smsguess.New(ocrCfg.APIKey, ocrCfg.Model, ocrCfg.ThinkingLevel))
 	} else {
 		h.SetReceiptOCR(nil, ocrCfg)
 	}

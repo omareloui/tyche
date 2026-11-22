@@ -2,6 +2,7 @@ package views
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/omareloui/tyche/internal/jwt"
@@ -10,10 +11,11 @@ import (
 	"github.com/omareloui/tyche/web/views/layouts"
 )
 
-templ SMS(claims *jwt.AccessClaims, balances []models.Balance, msgs []models.SMSMessage, devices []models.Device, loc *time.Location, templatesCount int) {
+// canGuess tells the AI can guess unparsed sms' templates.
+templ SMS(claims *jwt.AccessClaims, balances []models.Balance, msgs []models.SMSMessage, devices []models.Device, loc *time.Location, templatesCount int, canGuess bool) {
 	@layouts.WithTitle(claims, "SMS", balances) {
 		<div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
-			@smsInbox(msgs)
+			@smsInbox(msgs, canGuess)
 			<div class="grid gap-10 lg:sticky lg:top-22">
 				@templatesCard(templatesCount)
 				@TransferPairsCard(nil)
@@ -123,7 +125,7 @@ const smsFilterData = `{
 	},
 }`
 
-templ smsInbox(msgs []models.SMSMessage) {
+templ smsInbox(msgs []models.SMSMessage, canGuess bool) {
 	<section
 		x-data={ smsFilterData }
 		x-effect="if (status && !count(status)) status = ''"
@@ -177,7 +179,7 @@ templ smsInbox(msgs []models.SMSMessage) {
 				@smsStatusPill(smsStatusMetaOf(st).Label, string(st))
 			}
 		</div>
-		@SMSList(msgs)
+		@SMSList(msgs, canGuess)
 	</section>
 }
 
@@ -196,10 +198,10 @@ templ smsStatusPill(label, status string) {
 	</button>
 }
 
-templ SMSList(msgs []models.SMSMessage) {
+templ SMSList(msgs []models.SMSMessage, canGuess bool) {
 	<div id="sms-list" class="grid gap-3">
 		for _, m := range msgs {
-			@SMSMessage(&m)
+			@SMSMessage(&m, canGuess)
 		}
 		<div class="hidden only:grid place-items-center gap-2 py-14 px-6 rounded-3xl border border-dashed border-zinc-800 text-center">
 			<div class="relative grid place-items-center w-14 h-14 rounded-2xl bg-emerald-400/15 text-emerald-400">
@@ -212,7 +214,7 @@ templ SMSList(msgs []models.SMSMessage) {
 	</div>
 }
 
-templ SMSMessage(m *models.SMSMessage) {
+templ SMSMessage(m *models.SMSMessage, canGuess bool) {
 	{{ meta := smsStatusMetaOf(m.Status) }}
 	<article
 		data-sms
@@ -300,18 +302,48 @@ templ SMSMessage(m *models.SMSMessage) {
 					if m.Error != "" {
 						<p class="mt-0.5 font-mono text-xs text-zinc-500 break-words">{ m.Error }</p>
 					}
+					if canGuess && m.Status == models.SMSStatusUnparsed {
+						<p id={ strings.TrimPrefix(SMSGuessErrorSlot(m.ID), "#") } role="alert" class="mt-1 text-sm text-red-400 empty:hidden"></p>
+					}
 				</div>
 			</div>
 			<footer class="relative flex flex-wrap justify-end gap-2">
 				if m.Status == models.SMSStatusUnparsed {
-					<a
-						href={ NewTemplateURL(m.Sender, m.Body) }
-						title="Teach Tyche to read this SMS"
-						class="inline-flex items-center gap-1.5 h-9 px-3 mr-auto rounded-full text-sm text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
-					>
-						@icons.Plus("15")
-						Make template
-					</a>
+					<div class="flex flex-wrap gap-2 mr-auto">
+						<a
+							href={ NewTemplateURL(m.Sender, m.Body) }
+							title="Teach Tyche to read this SMS"
+							class="inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-sm text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+						>
+							@icons.Plus("15")
+							Make template
+						</a>
+						if canGuess {
+							if m.TemplateGuess != nil {
+								<a
+									href={ templ.SafeURL(SMSGuessFormURL(m.ID)) }
+									title="Open the template the AI guessed, to check and save it"
+									class="inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-sm text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+								>
+									@icons.Sparkles("15")
+									Open AI guess
+								</a>
+							} else {
+								<button
+									hx-post={ fmt.Sprintf("/sms/%s/guess", m.ID) }
+									hx-target={ SMSGuessErrorSlot(m.ID) }
+									hx-swap="innerHTML"
+									hx-disabled-elt="this"
+									title="Have the AI guess a template reading this SMS, to check and save it"
+									class="inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-sm text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white"
+								>
+									@icons.Sparkles("15", &templ.Attributes{"class": "in-[.htmx-request]:animate-pulse"})
+									<span class="in-[.htmx-request]:hidden">Guess with AI</span>
+									<span class="hidden in-[.htmx-request]:inline">Guessing…</span>
+								</button>
+							}
+						}
+					</div>
 				}
 				<button
 					hx-put={ fmt.Sprintf("/sms/%s/ignore", m.ID) }

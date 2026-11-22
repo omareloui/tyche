@@ -262,6 +262,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("POST /sms/pair-transfers", handle(h.PairTransfers))
 	mux.Handle("POST /sms/{id}/retry", handle(h.RetrySMS))
 	mux.Handle("PUT /sms/{id}/ignore", handle(h.IgnoreSMS))
+	mux.Handle("POST /sms/{id}/guess", handle(h.GuessSMSTemplate, middleware.HTMXOnly))
 
 	mux.Handle("GET /sms/templates", handle(h.SMSTemplates))
 	mux.Handle("POST /sms/templates", handle(h.CreateSMSTemplate))

@@ -96,6 +96,7 @@ func (h *Handler) NewSMSTemplate(w http.ResponseWriter, r *http.Request) (templ.
 	}
 
 	var t *models.SMSTemplate
+	var err error
 	if id := q.Get("copy"); id != "" {
 		// overriding a shared template: the user's ones are tried first, and
 		// a higher priority tries it before the original among its scope
@@ -106,7 +107,9 @@ func (h *Handler) NewSMSTemplate(w http.ResponseWriter, r *http.Request) (templ.
 		t = shared
 		t.ID, t.SeedKey, t.Name = "", "", t.Name+" (mine)"
 		t.Priority++
-	} else {
+	} else if t, err = h.guessedTemplate(r, q.Get("guess")); err != nil {
+		return nil, err
+	} else if t == nil {
 		sample := strings.TrimSpace(q.Get("sms"))
 		sender := strings.TrimSpace(q.Get("sender"))
 		t = &models.SMSTemplate{
@@ -141,6 +144,36 @@ func (h *Handler) EditSMSTemplate(w http.ResponseWriter, r *http.Request) (templ
 	fd.IsAdmin = getClaims(r.Context()).IsAdmin()
 
 	return views.SMSTemplateDrawer(fd, h.previewSMSTemplate(fd)), nil
+}
+
+// guessedTemplate is the template the AI guessed for the sms (by id), nil
+// when there's no id. An sms without a guess prefills it with the sms alone.
+func (h *Handler) guessedTemplate(r *http.Request, smsID string) (*models.SMSTemplate, error) {
+	if smsID = strings.TrimSpace(smsID); smsID == "" {
+		return nil, nil
+	}
+	msg, err := h.repo.GetSMSMessage(r.Context(), smsID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, resperr.New(http.StatusNotFound, "sms not found")
+	}
+	if err != nil {
+		return nil, err
+	}
+	var t *models.SMSTemplate
+	if msg.TemplateGuess != nil {
+		t = msg.TemplateGuess.Template(msg.Sender, msg.Body)
+	} else {
+		t = &models.SMSTemplate{
+			Action:    models.SMSTemplateTransaction,
+			TxKind:    models.ExpenseTxKind,
+			Senders:   views.SplitSenders(msg.Sender),
+			Body:      msg.Body,
+			Sample:    msg.Body,
+			IsEnabled: true,
+		}
+	}
+	t.Bank = cmp.Or(t.Bank, h.bankOfSender(msg.Sender))
+	return t, nil
 }
 
 // smsTemplateFormPage sends a navigation to a form drawer (a link opened in

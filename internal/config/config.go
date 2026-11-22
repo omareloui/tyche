@@ -87,16 +87,21 @@ type ReceiptOCR struct {
 	InputPerM     float64
 	OutputPerM    float64
 	ScansPerMonth int
+	// SMSGuessesPerMonth is how many sms templates a tenant may have
+	// guessed a calendar month.
+	SMSGuessesPerMonth int
 }
 
-// GetReceiptOCR reads the GEMINI_* and RECEIPT_SCANS_PER_MONTH variables.
+// GetReceiptOCR reads the GEMINI_*, RECEIPT_SCANS_PER_MONTH and
+// SMS_GUESSES_PER_MONTH variables.
 func GetReceiptOCR() ReceiptOCR {
 	return ReceiptOCR{
-		APIKey:        getEnvironmentValueWithDefault("GEMINI_API_KEY", ""),
-		Model:         getEnvironmentValueWithDefault("GEMINI_MODEL", "gemini-3.8-flash"),
-		ThinkingLevel: getEnvironmentValueWithDefault("GEMINI_THINKING_LEVEL", "LOW"),
-		InputPerM:     getEnvironmentFloatWithDefault("GEMINI_PRICE_INPUT_PER_M", 0.75),
-		OutputPerM:    getEnvironmentFloatWithDefault("GEMINI_PRICE_OUTPUT_PER_M", 3.75),
-		ScansPerMonth: max(getEnvironmentIntWithDefault("RECEIPT_SCANS_PER_MONTH", 50), 0),
+		APIKey:             getEnvironmentValueWithDefault("GEMINI_API_KEY", ""),
+		Model:              getEnvironmentValueWithDefault("GEMINI_MODEL", "gemini-3.8-flash"),
+		ThinkingLevel:      getEnvironmentValueWithDefault("GEMINI_THINKING_LEVEL", "LOW"),
+		InputPerM:          getEnvironmentFloatWithDefault("GEMINI_PRICE_INPUT_PER_M", 0.75),
+		OutputPerM:         getEnvironmentFloatWithDefault("GEMINI_PRICE_OUTPUT_PER_M", 3.75),
+		ScansPerMonth:      max(getEnvironmentIntWithDefault("RECEIPT_SCANS_PER_MONTH", 50), 0),
+		SMSGuessesPerMonth: max(getEnvironmentIntWithDefault("SMS_GUESSES_PER_MONTH", 30), 0),
 	}
 }

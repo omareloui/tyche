@@ -3,23 +3,16 @@
 package receiptocr
 
 import (
-	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"math"
-	"net/http"
 	"strings"
 	"time"
 
+	"github.com/omareloui/tyche/internal/gemini"
 	"github.com/omareloui/tyche/internal/models"
 )
-
-// DefaultEndpoint is Gemini's API base.
-const DefaultEndpoint = "https://generativelanguage.googleapis.com/v1beta"
 
 // ErrUnreadable is an image that isn't a receipt or couldn't be read.
 var ErrUnreadable = errors.New("couldn't read a receipt in the image")
@@ -61,17 +54,7 @@ type Result struct {
 }
 
 // Usage is what a call used, as billed.
-type Usage struct {
-	InputTokens int
-	// OutputTokens include the thinking ones.
-	OutputTokens int
-}
-
-// CostMicros is the usage's cost in millionths of a dollar at the prices,
-// in dollars per million tokens.
-func (u Usage) CostMicros(inputPerM, outputPerM float64) int64 {
-	return int64(math.Round(float64(u.InputTokens)*inputPerM + float64(u.OutputTokens)*outputPerM))
-}
+type Usage = gemini.Usage
 
 var chargeKinds = map[string]models.TxItemKind{
 	"vat":      models.TxItemVAT,
@@ -124,25 +107,17 @@ func (r *Result) When(loc *time.Location) time.Time {
 
 // Client reads receipts with Gemini's generateContent.
 type Client struct {
-	APIKey string
-	// ModelID is e.g. gemini-3.8-flash.
-	ModelID string
-	// ThinkingLevel (MINIMAL, LOW, ...), empty for the model's default.
-	ThinkingLevel string
-	// Endpoint is the API base, DefaultEndpoint when empty.
-	Endpoint string
-	HTTP     *http.Client
+	*gemini.Client
 }
 
 // New is a client of the model, nil without an API key.
 func New(apiKey, model, thinkingLevel string) *Client {
-	if apiKey == "" {
+	c := gemini.New(apiKey, model, thinkingLevel)
+	if c == nil {
 		return nil
 	}
-	return &Client{APIKey: apiKey, ModelID: model, ThinkingLevel: thinkingLevel, HTTP: &http.Client{Timeout: 60 * time.Second}}
+	return &Client{Client: c}
 }
-
-func (c *Client) Model() string { return c.ModelID }
 
 const prompt = `You read photos of shop and restaurant receipts (Arabic, English or both) for a personal finance app.
 Extract, as printed:
@@ -195,123 +170,22 @@ var responseSchema = map[string]any{
 	"required": []string{"is_receipt", "merchant", "date", "time", "currency", "subtotal", "total", "items", "charges"},
 }
 
-type part struct {
-	Text       string      `json:"text,omitempty"`
-	InlineData *inlineData `json:"inlineData,omitempty"`
-}
-
-type inlineData struct {
-	MimeType string `json:"mimeType"`
-	Data     string `json:"data"`
-}
-
-type generateResponse struct {
-	Candidates []struct {
-		Content struct {
-			Parts []part `json:"parts"`
-		} `json:"content"`
-		FinishReason string `json:"finishReason"`
-	} `json:"candidates"`
-	PromptFeedback struct {
-		BlockReason string `json:"blockReason"`
-	} `json:"promptFeedback"`
-	UsageMetadata struct {
-		PromptTokenCount     int `json:"promptTokenCount"`
-		CandidatesTokenCount int `json:"candidatesTokenCount"`
-		ThoughtsTokenCount   int `json:"thoughtsTokenCount"`
-	} `json:"usageMetadata"`
-	Error *struct {
-		Message string `json:"message"`
-	} `json:"error"`
-}
-
 // Read reads the receipt in img. The usage is returned even on errors when
 // the call was billed.
 func (c *Client) Read(ctx context.Context, img []byte, contentType string) (*Result, Usage, error) {
-	gen := map[string]any{
-		"responseMimeType":   "application/json",
-		"responseJsonSchema": responseSchema,
+	ans, usage, err := c.Generate(ctx, []gemini.Part{gemini.Inline(contentType, img), {Text: prompt}}, responseSchema)
+	if errors.Is(err, gemini.ErrNoAnswer) {
+		return nil, usage, fmt.Errorf("%w (%v)", ErrUnreadable, err)
 	}
-	if c.ThinkingLevel != "" {
-		gen["thinkingConfig"] = map[string]any{"thinkingLevel": c.ThinkingLevel}
-	}
-	body, err := json.Marshal(map[string]any{
-		"contents": []map[string]any{{
-			"role": "user",
-			"parts": []part{
-				{InlineData: &inlineData{MimeType: contentType, Data: base64.StdEncoding.EncodeToString(img)}},
-				{Text: prompt},
-			},
-		}},
-		"generationConfig": gen,
-	})
 	if err != nil {
-		return nil, Usage{}, err
-	}
-
-	endpoint := c.Endpoint
-	if endpoint == "" {
-		endpoint = DefaultEndpoint
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/models/%s:generateContent", endpoint, c.ModelID), bytes.NewReader(body))
-	if err != nil {
-		return nil, Usage{}, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-goog-api-key", c.APIKey)
-
-	httpc := c.HTTP
-	if httpc == nil {
-		httpc = http.DefaultClient
-	}
-	res, err := httpc.Do(req)
-	if err != nil {
-		return nil, Usage{}, fmt.Errorf("calling gemini: %w", err)
-	}
-	defer res.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(res.Body, 4<<20))
-	if err != nil {
-		return nil, Usage{}, fmt.Errorf("reading gemini's answer: %w", err)
-	}
-
-	var gr generateResponse
-	if err := json.Unmarshal(raw, &gr); err != nil {
-		return nil, Usage{}, fmt.Errorf("gemini answered %d: %s", res.StatusCode, truncate(string(raw), 300))
-	}
-	usage := Usage{
-		InputTokens:  gr.UsageMetadata.PromptTokenCount,
-		OutputTokens: gr.UsageMetadata.CandidatesTokenCount + gr.UsageMetadata.ThoughtsTokenCount,
-	}
-	if res.StatusCode != http.StatusOK {
-		msg := res.Status
-		if gr.Error != nil && gr.Error.Message != "" {
-			msg = gr.Error.Message
-		}
-		return nil, usage, fmt.Errorf("gemini answered %d: %s", res.StatusCode, msg)
-	}
-	if gr.PromptFeedback.BlockReason != "" {
-		return nil, usage, fmt.Errorf("%w (blocked: %s)", ErrUnreadable, gr.PromptFeedback.BlockReason)
-	}
-	if len(gr.Candidates) == 0 {
-		return nil, usage, ErrUnreadable
-	}
-	var text strings.Builder
-	for _, p := range gr.Candidates[0].Content.Parts {
-		text.WriteString(p.Text)
+		return nil, usage, err
 	}
 	var result Result
-	if err := json.Unmarshal([]byte(text.String()), &result); err != nil {
-		return nil, usage, fmt.Errorf("%w (finish reason %s)", ErrUnreadable, gr.Candidates[0].FinishReason)
+	if err := json.Unmarshal([]byte(ans.Text), &result); err != nil {
+		return nil, usage, fmt.Errorf("%w (finish reason %s)", ErrUnreadable, ans.FinishReason)
 	}
 	if !result.IsReceipt || (len(result.Items) == 0 && result.Total == 0) {
 		return &result, usage, ErrUnreadable
 	}
 	return &result, usage, nil
-}
-
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "…"
 }

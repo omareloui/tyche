@@ -79,3 +79,8 @@ LIMIT ?;
 UPDATE sms_messages
 SET status = 'ignored'
 WHERE status IN (sqlc.slice(statuses));
+
+-- name: SetSMSTemplateGuess :exec
+UPDATE sms_messages
+SET template_guess = sqlc.arg(template_guess)
+WHERE id = sqlc.arg(id);

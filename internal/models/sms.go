@@ -32,5 +32,8 @@ type SMSMessage struct {
 	DeviceID      string
 	// TemplateID is the template that read it (or made it ignored).
 	TemplateID string
-	CreatedAt  time.Time
+	// TemplateGuess is the template the AI guessed for it, nil when none was
+	// asked for.
+	TemplateGuess *SMSTemplateGuess
+	CreatedAt     time.Time
 }

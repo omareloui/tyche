@@ -235,7 +235,7 @@ func (h *Handler) SMSPage(w http.ResponseWriter, r *http.Request) (templ.Compone
 		return nil, err
 	}
 
-	return views.SMS(getClaims(ctx), b, msgs, devices, loc, len(templates)), nil
+	return views.SMS(getClaims(ctx), b, msgs, devices, loc, len(templates), h.smsGuess != nil), nil
 }
 
 // SetTimezone sets the time zone of the dates in the user's sms.
@@ -265,7 +265,7 @@ func (h *Handler) RetrySMS(w http.ResponseWriter, r *http.Request) (templ.Compon
 		}
 	}
 
-	return views.SMSMessage(msg), nil
+	return views.SMSMessage(msg, h.smsGuess != nil), nil
 }
 
 // RetryAllSMS re-processes the pending sms of the status in the form (every
@@ -323,7 +323,7 @@ func (h *Handler) RetryAllSMS(w http.ResponseWriter, r *http.Request) (templ.Com
 	slices.SortStableFunc(stillPending, func(a, b models.SMSMessage) int {
 		return b.ReceivedAt.Compare(a.ReceivedAt)
 	})
-	return views.SMSList(stillPending), nil
+	return views.SMSList(stillPending, h.smsGuess != nil), nil
 }
 
 // formPendingStatuses is the pending sms status in the form, every pending one
@@ -359,7 +359,7 @@ func (h *Handler) IgnoreAllSMS(w http.ResponseWriter, r *http.Request) (templ.Co
 	if err != nil {
 		return nil, err
 	}
-	return views.SMSList(msgs), nil
+	return views.SMSList(msgs, h.smsGuess != nil), nil
 }
 
 func (h *Handler) IgnoreSMS(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

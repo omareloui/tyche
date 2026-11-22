@@ -7,6 +7,7 @@ import (
 	"github.com/omareloui/tyche/internal/receiptocr"
 	"github.com/omareloui/tyche/internal/repository"
 	"github.com/omareloui/tyche/internal/sanitizer"
+	"github.com/omareloui/tyche/internal/smsguess"
 	"github.com/omareloui/tyche/internal/smstemplates"
 	"github.com/omareloui/tyche/internal/valid"
 	"github.com/omareloui/tyche/internal/vault"
@@ -26,6 +27,9 @@ type Handler struct {
 	// ocr reads receipts, nil when off; ocrCfg its prices and limit.
 	ocr    receiptocr.Reader
 	ocrCfg config.ReceiptOCR
+	// smsGuess guesses unparsed sms' templates, nil when off (its prices and
+	// limit in ocrCfg).
+	smsGuess smsguess.Guesser
 }
 
 // SetReceiptOCR turns reading receipts on (a nil reader keeps it off).

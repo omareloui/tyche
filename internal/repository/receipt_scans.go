@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"errors"
@@ -28,6 +29,7 @@ func (r *Repository) RecordReceiptScan(ctx context.Context, s models.ReceiptScan
 		Ok:           s.OK,
 		Error:        s.Error,
 		Cached:       s.Cached,
+		Kind:         string(cmp.Or(s.Kind, models.ScanReceipt)),
 	})
 }
 
@@ -38,14 +40,31 @@ func (r *Repository) ReceiptScansLeft(ctx context.Context, tenantID string, def 
 	if err != nil {
 		return 0, 0, err
 	}
-	from, to := models.CalendarMonth(now)
-	n, err := r.shared.CountReceiptScans(ctx, sharedqueries.CountReceiptScansParams{
-		TenantID: tenantID, FromAt: from, ToAt: to,
-	})
+	n, err := r.billedScans(ctx, tenantID, models.ScanReceipt, now)
 	if err != nil {
 		return 0, 0, err
 	}
-	return max(limit-int(n), 0), limit, nil
+	return max(limit-n, 0), limit, nil
+}
+
+// SMSGuessesLeft is how many sms templates the tenant may still have guessed
+// this calendar month (UTC) out of limit.
+func (r *Repository) SMSGuessesLeft(ctx context.Context, tenantID string, limit int, now time.Time) (int, error) {
+	n, err := r.billedScans(ctx, tenantID, models.ScanSMSGuess, now)
+	if err != nil {
+		return 0, err
+	}
+	return max(limit-n, 0), nil
+}
+
+// billedScans counts the tenant's billed calls of the kind this calendar
+// month (UTC).
+func (r *Repository) billedScans(ctx context.Context, tenantID string, kind models.ScanKind, now time.Time) (int, error) {
+	from, to := models.CalendarMonth(now)
+	n, err := r.shared.CountReceiptScans(ctx, sharedqueries.CountReceiptScansParams{
+		TenantID: tenantID, Kind: string(kind), FromAt: from, ToAt: to,
+	})
+	return int(n), err
 }
 
 // ReceiptLimit is the tenant's scans a calendar month, def unless an admin
@@ -103,6 +122,7 @@ func (r *Repository) ReceiptScansSince(ctx context.Context, from time.Time) ([]m
 			OK:           row.Ok,
 			Error:        row.Error,
 			Cached:       row.Cached,
+			Kind:         models.ScanKind(row.Kind),
 		}
 	}
 	return out, nil
