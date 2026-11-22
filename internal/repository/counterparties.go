@@ -183,6 +183,9 @@ func (r *Repository) MergeCounterparties(ctx context.Context, fromID, intoID str
 		if err := qtx.ReassignTxItemShares(ctx, queries.ReassignTxItemSharesParams{ToID: to, FromID: from}); err != nil {
 			return err
 		}
+		if err := qtx.MoveCounterpartyItems(ctx, queries.MoveCounterpartyItemsParams{IntoID: intoID, FromID: fromID}); err != nil {
+			return err
+		}
 		intoLocs, err := qtx.GetCounterpartyLocationsOf(ctx, intoID)
 		if err != nil {
 			return err

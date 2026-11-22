@@ -295,6 +295,9 @@ func txFilterParams(f *models.TxFilter) queries.GetTransactionsParams {
 	if f.GoalID != "" {
 		p.GoalID = f.GoalID
 	}
+	if f.ItemID != "" {
+		p.ItemID = f.ItemID
+	}
 	if f.Status == models.TxStatusReview {
 		p.NeedsReview = true
 	}

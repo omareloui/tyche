@@ -201,6 +201,10 @@ func (r *Repository) UpdateRecurrentTx(ctx context.Context, old, rt *models.Recu
 		if err := writeRecurrentItemsWithTxn(ctx, qtx, rt, true); err != nil {
 			return err
 		}
+		// Its counterparty may have changed: it sells the lines' items too.
+		if err := linkOwnerItemsWithTxn(ctx, qtx, itemOwner{recurrentID: rt.ID}); err != nil {
+			return err
+		}
 		if !rt.IsPaused() {
 			return r.scheduleRecurrentTxWithTxn(ctx, qtx, rt, today)
 		}

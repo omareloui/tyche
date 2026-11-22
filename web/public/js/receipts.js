@@ -177,6 +177,10 @@
 
   document.addEventListener("input", (e) => {
     const el = e.target;
+    // A price typed by hand stays when an item is picked (itemSuggest).
+    if (e.isTrusted && el instanceof Element && el.matches("[name=item_unit_price], [name=unit_price]")) {
+      el.removeAttribute("data-price-picked");
+    }
     const box = el instanceof Element && el.closest("[data-tx-items]");
     if (!box) return;
     if (el.matches("[name=item_total]")) {
@@ -247,3 +251,109 @@
     amount.dispatchEvent(new Event("input", { bubbles: true }));
   });
 })();
+
+// itemSuggest offers the catalog's items while an item line's name is typed
+// (views.itemNameInput): the ones bought at the form's counterparty (its
+// counterparty_id field, or the details' add form's data-counterparty)
+// first. Picking one puts its id in the hidden input (x-ref id) and the
+// unit price it shows (its last, at that counterparty when bought there)
+// when none is typed;
+// typing clears the id, the server then matching the name (or creating an
+// item) when saved.
+document.addEventListener("alpine:init", () => {
+  Alpine.data("itemSuggest", () => ({
+    open: false,
+    list: [],
+    active: -1,
+    timer: null,
+    ctrl: null,
+
+    input: {
+      ["@input"]() {
+        this.$refs.id.value = "";
+        this.search();
+      },
+      ["@keydown.down.prevent"]() {
+        if (!this.open) return this.search();
+        this.active = (this.active + 1) % this.list.length;
+      },
+      ["@keydown.up.prevent"]() {
+        if (!this.open) return;
+        this.active = (this.active - 1 + this.list.length) % this.list.length;
+      },
+      ["@keydown.enter"](e) {
+        if (!this.open || this.active < 0) return;
+        e.preventDefault();
+        this.pick(this.list[this.active]);
+      },
+      ["@keydown.escape"](e) {
+        if (!this.open) return;
+        e.preventDefault();
+        e.stopPropagation();
+        this.close();
+      },
+      ["@keydown.tab"]() {
+        this.close();
+      },
+      ["@blur"]() {
+        setTimeout(() => this.close(), 150);
+      },
+    },
+
+    counterparty() {
+      const f = this.$el.closest("form");
+      return f?.dataset.counterparty || f?.querySelector("[name=counterparty_id]")?.value || "";
+    },
+
+    search() {
+      clearTimeout(this.timer);
+      const q = this.$refs.name.value.trim();
+      if (!q) return this.close();
+      this.timer = setTimeout(async () => {
+        this.ctrl?.abort();
+        this.ctrl = new AbortController();
+        try {
+          const params = new URLSearchParams({ q, cp: this.counterparty() });
+          const res = await fetch(`/items/suggest?${params}`, {
+            signal: this.ctrl.signal,
+            headers: { Accept: "application/json" },
+          });
+          if (!res.ok) return;
+          const list = await res.json();
+          if (this.$refs.name.value.trim() !== q) return;
+          this.list = Array.isArray(list) ? list : [];
+          this.active = -1;
+          // Nothing to offer but what's typed already.
+          const same = this.list.length === 1 && this.list[0].name.toLowerCase() === q.toLowerCase();
+          this.open = this.list.length > 0 && !same;
+        } catch {}
+      }, 180);
+    },
+
+    pick(s) {
+      this.$refs.name.value = s.name;
+      this.$refs.id.value = s.id;
+      const row = this.$el.closest("[data-tx-item], form[data-item-add]");
+      const price = row?.querySelector("[name=item_unit_price]:not([type=hidden]), [name=unit_price]");
+      // The shown price goes in, unless one was typed by hand (a price an
+      // earlier pick put there is replaced).
+      if (price && s.last_price && (!price.value.trim() || price.hasAttribute("data-price-picked"))) {
+        price.value = String(Math.round(s.last_price * 100) / 100);
+        price.setAttribute("data-price-picked", "");
+        price.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      this.close();
+      this.$refs.name.focus();
+    },
+
+    close() {
+      this.open = false;
+      this.active = -1;
+    },
+
+    priceLabel(s) {
+      const n = s.last_price.toLocaleString(undefined, { maximumFractionDigits: 2 });
+      return `${n} ${s.currency}`;
+    },
+  }));
+});

@@ -143,6 +143,13 @@ func (h Handler) txFilterChips(ctx context.Context, f *models.TxFilter) []views.
 		}
 		add(label, models.TxFilterGoal)
 	}
+	if f.ItemID != "" {
+		label := "Unknown item"
+		if it, err := h.repo.GetItem(ctx, f.ItemID); err == nil {
+			label = it.Item.Name
+		}
+		add(label, models.TxFilterItem)
+	}
 	switch f.Status {
 	case models.TxStatusFulfilled:
 		add("Fulfilled", models.TxFilterStatus)

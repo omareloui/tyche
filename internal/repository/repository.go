@@ -17,7 +17,6 @@ import (
 	"github.com/omareloui/tyche/internal/seeder"
 	"github.com/omareloui/tyche/internal/sharedqueries"
 	"github.com/omareloui/tyche/internal/vault"
-	"github.com/pressly/goose/v3"
 	"go.uber.org/zap"
 )
 
@@ -330,15 +329,7 @@ func (tm *TenantManager) Reseed(ctx context.Context, provider models.OAuthProvid
 }
 
 func (tm *TenantManager) runMigrations(db *sql.DB) error {
-	if err := goose.SetDialect("sqlite3"); err != nil {
-		return fmt.Errorf("failed to set dialect: %w", err)
-	}
-
-	if err := goose.Up(db, migrationsDir); err != nil {
-		return fmt.Errorf("failed to run migrations: %w", err)
-	}
-
-	return nil
+	return migrateTenantDB(context.Background(), db, migrationsDir)
 }
 
 func (tm *TenantManager) cleanupIdleConnections() {

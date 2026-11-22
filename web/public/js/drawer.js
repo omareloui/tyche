@@ -40,6 +40,7 @@ const DRAWER_URL_PARAMS = {
   acc: (id) => `/accounts/${encodeURIComponent(id)}/details`,
   rtx: (id) => `/recurrent-tx/${encodeURIComponent(id)}/details`,
   wish: (id) => `/wishlist/${encodeURIComponent(id)}/details`,
+  item: (id) => `/items/${encodeURIComponent(id)}/details`,
 };
 
 // DETAILS_URL_PARAMS also has the transaction details' ?tx= (transactions.js).

@@ -1,0 +1,527 @@
+package views
+
+import (
+	"fmt"
+	"math"
+	"strconv"
+
+	"github.com/omareloui/tyche/internal/formatters"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+// itemDetailsCancel brings an item's form back to its details.
+func itemDetailsCancel(id string) string {
+	return fmt.Sprintf("confirmDiscard().then((ok) => ok && htmx.ajax('GET', '%s', {target: '#%s', swap: 'innerHTML'}))",
+		itemDetailsURL(id), components.DrawerSlot)
+}
+
+// itemTxsURL is the transactions with a line of the item.
+func itemTxsURL(id string) templ.SafeURL {
+	return templ.SafeURL("/transactions?" + models.TxFilterItem + "=" + id)
+}
+
+// ItemDetails is an item in full, in a drawer like a counterparty's: what
+// it cost over time and where, and its purchases.
+templ ItemDetails(s *models.ItemSummary) {
+	{{ it, st := &s.Item, s.Stats }}
+	@components.Drawer(components.DrawerProps{Label: it.Name + " details", URLParam: ItemDetailsParam, URLValue: it.ID}) {
+		<div class="drawer-panel flex flex-col flex-1 min-h-0">
+			<header class="flex items-start gap-3 px-5 sm:px-6 pt-5 pb-4">
+				<div class="grid place-items-center shrink-0 w-11 h-11 rounded-xl bg-zinc-700/40 text-zinc-300">
+					@icons.Basket("20")
+				</div>
+				<div class="flex-1 min-w-0">
+					<h2 class="text-lg font-bold leading-snug break-words">{ it.Name }</h2>
+					<p class="text-sm text-zinc-400 truncate">
+						if it.Category != nil {
+							{ it.Category.Name }
+						} else {
+							Item
+						}
+						if s.Merchants > 0 {
+							· { itemMerchants(s.Merchants) }
+						}
+					</p>
+				</div>
+				@components.DrawerClose()
+			</header>
+			<div class="flex-1 grid grid-cols-1 auto-rows-max content-start gap-6 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
+				@itemDetailsActions(s)
+				if st.Times > 0 {
+					@itemDetailsPrices(st)
+					if len(st.Purchases) > 1 {
+						@txDetailsSection("Price over time") {
+							@itemPriceChart(st)
+						}
+					}
+					@itemDetailsMerchants(st)
+				}
+				if len(it.Aliases) > 0 {
+					@txDetailsSection("Also named") {
+						<ul class="flex flex-wrap gap-1.5">
+							for _, a := range it.Aliases {
+								<li class="px-2.5 py-1 rounded-full bg-zinc-800 text-sm text-zinc-300 [overflow-wrap:anywhere]">{ a }</li>
+							}
+						</ul>
+					}
+				}
+				@itemDetailsPurchases(st)
+			</div>
+		</div>
+	}
+}
+
+templ itemDetailsActions(s *models.ItemSummary) {
+	{{ slot := "#" + components.DrawerSlot }}
+	{{ id := s.Item.ID }}
+	<div class="flex flex-wrap gap-2">
+		<button type="button" hx-get={ fmt.Sprintf("/items/%s/edit", id) } hx-target={ slot } hx-swap="innerHTML" class="txd-action">
+			@icons.Pencil("14")
+			Edit
+		</button>
+		<button type="button" hx-get={ fmt.Sprintf("/items/%s/merge", id) } hx-target={ slot } hx-swap="innerHTML" class="txd-action">
+			@icons.Merge("14")
+			Merge into…
+		</button>
+		if s.Stats.Times > 0 {
+			<a href={ itemTxsURL(id) } class="txd-action">
+				@icons.Search("14")
+				Transactions
+			</a>
+		} else {
+			<button
+				type="button"
+				hx-delete={ fmt.Sprintf("/items/%s", id) }
+				hx-confirm={ fmt.Sprintf("Delete %q?", s.Item.Name) }
+				data-confirm-label="Delete"
+				data-confirm-danger
+				class="txd-action text-rose-400!"
+			>
+				@icons.Trash("14")
+				Delete
+			</button>
+		}
+	</div>
+}
+
+templ itemDetailsPrices(st *models.ItemStats) {
+	{{ def := &st.Currency }}
+	@txDetailsSection("Prices") {
+		<dl class="grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-zinc-800/60 ring-1 ring-zinc-800">
+			@counterpartyDetailsStat("Last paid", def.Format(st.Last))
+			if st.Multiple() {
+				@counterpartyDetailsStat("Since the first", itemChangeLabel(st))
+				@counterpartyDetailsStat("Lowest", def.Format(st.Min))
+				@counterpartyDetailsStat("Highest", def.Format(st.Max))
+			}
+			@counterpartyDetailsStat("Average", def.Format(st.Avg))
+			@counterpartyDetailsStat("Bought", itemQtyLabel(st))
+			@counterpartyDetailsStat("Spent on it", def.Format(st.Spent))
+			@counterpartyDetailsStat("Last bought", formatTxDay(st.LastOn))
+		</dl>
+		<p class="text-xs text-zinc-500">
+			Unit prices from its receipt lines, at today's rates.
+			if st.Partial {
+				Some lines are in a currency without an exchange rate yet and are left out.
+			}
+		</p>
+	}
+}
+
+func itemChangeLabel(st *models.ItemStats) string {
+	pct := st.ChangePct()
+	switch {
+	case math.Abs(pct) < 0.5:
+		return "Same"
+	case pct > 0:
+		return "+" + formatters.FormatNum(roundPct(pct)) + "%"
+	}
+	return "−" + formatters.FormatNum(roundPct(-pct)) + "%"
+}
+
+func itemQtyLabel(st *models.ItemStats) string {
+	q := strconv.FormatFloat(math.Round(st.Qty*100)/100, 'f', -1, 64)
+	return fmt.Sprintf("%s in %s", q, map[bool]string{true: "1 purchase", false: strconv.Itoa(st.Times) + " purchases"}[st.Times == 1])
+}
+
+// itemMerchantColor is a merchant's dot color in the chart.
+func itemMerchantColor(m *models.Counterparty) string {
+	if m == nil || m.Color == "" {
+		return "#a1a1aa"
+	}
+	return m.Color
+}
+
+func itemMerchantName(m *models.Counterparty) string {
+	if m == nil {
+		return "No merchant"
+	}
+	return m.Name
+}
+
+// itemChartY is the % from the top of price between lo and hi, with room
+// above and below.
+func itemChartY(v, lo, hi float64) float64 {
+	if hi-lo < 0.000001 {
+		return 50
+	}
+	return 90 - (v-lo)/(hi-lo)*80
+}
+
+func itemChartX(i, n int) float64 {
+	if n < 2 {
+		return 50
+	}
+	return float64(i) / float64(n-1) * 100
+}
+
+// itemChartPoints is the polyline of the unit prices, oldest first.
+func itemChartPoints(ps []models.ItemPurchase, lo, hi float64) string {
+	var b []byte
+	for i, p := range ps {
+		b = fmt.Appendf(b, "%.2f,%.2f ", itemChartX(i, len(ps)), itemChartY(p.UnitPrice, lo, hi))
+	}
+	return string(b)
+}
+
+// oldestFirst are the purchases in buying order.
+func oldestFirst(ps []models.ItemPurchase) []models.ItemPurchase {
+	out := make([]models.ItemPurchase, len(ps))
+	for i, p := range ps {
+		out[len(ps)-1-i] = p
+	}
+	return out
+}
+
+// itemChartMerchants are the merchants of the purchases, in first bought
+// order, for the legend.
+func itemChartMerchants(ps []models.ItemPurchase) []*models.Counterparty {
+	var out []*models.Counterparty
+	seen := map[string]bool{}
+	for _, p := range ps {
+		key := ""
+		if p.Merchant != nil {
+			key = p.Merchant.ID
+		}
+		if !seen[key] {
+			seen[key] = true
+			out = append(out, p.Merchant)
+		}
+	}
+	return out
+}
+
+// itemPriceChart draws the unit price of every purchase, evenly spaced,
+// each dot in its merchant's color, a tooltip per purchase.
+templ itemPriceChart(st *models.ItemStats) {
+	{{ ps := oldestFirst(st.Purchases) }}
+	{{ def := &st.Currency }}
+	{{ n := len(ps) }}
+	<div class="grid gap-2 p-4 rounded-2xl bg-zinc-800/30 ring-1 ring-zinc-800">
+		<div class="flex justify-between gap-3 text-xs text-zinc-500 tabular-nums">
+			<span>{ def.Format(st.Max) }</span>
+			<span>{ itemChangeLabel(st) } since the first</span>
+		</div>
+		<div class="relative h-36">
+			<svg viewBox="0 0 100 100" preserveAspectRatio="none" class="absolute inset-0 size-full overflow-visible" aria-hidden="true">
+				<polyline points={ itemChartPoints(ps, st.Min, st.Max) } fill="none" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke" class="stroke-zinc-500"></polyline>
+			</svg>
+			for i, p := range ps {
+				<span
+					aria-hidden="true"
+					class="absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-zinc-900"
+					style={ templ.SafeCSS(fmt.Sprintf("left:%.2f%%;top:%.2f%%;background-color:%s;", itemChartX(i, n), itemChartY(p.UnitPrice, st.Min, st.Max), itemMerchantColor(p.Merchant))) }
+				></span>
+			}
+			<div x-data="chartScrub" x-bind="scrub" class="absolute inset-0 flex touch-pan-y">
+				for i, p := range ps {
+					<div class="group relative flex-1 h-full">
+						<div class="absolute inset-y-0 left-1/2 border-l border-zinc-500/60 hidden group-hover:block group-[.is-active]:block"></div>
+						<div class={ "absolute bottom-full mb-1 hidden group-hover:block group-[.is-active]:block z-10 pointer-events-none", tooltipSide(i, n) }>
+							<div class="glass-tooltip whitespace-nowrap">
+								<p class="text-zinc-400">{ p.Day.Format("Mon, Jan 2, 2006") } · { itemMerchantName(p.Merchant) }</p>
+								<p class="tabular-nums">{ def.Format(p.UnitPrice) }</p>
+							</div>
+						</div>
+					</div>
+				}
+			</div>
+		</div>
+		<div class="flex justify-between gap-3 text-xs text-zinc-500 tabular-nums">
+			<span>{ ps[0].Day.Format("Jan 2, 2006") }</span>
+			<span>{ ps[n-1].Day.Format("Jan 2, 2006") }</span>
+		</div>
+		if ms := itemChartMerchants(ps); len(ms) > 1 {
+			<ul class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-400">
+				for _, m := range ms {
+					<li class="inline-flex items-center gap-1.5">
+						<span class="size-2 rounded-full" style={ "background-color:" + itemMerchantColor(m) }></span>
+						{ itemMerchantName(m) }
+					</li>
+				}
+			</ul>
+		}
+	</div>
+}
+
+templ itemDetailsMerchants(st *models.ItemStats) {
+	{{ def := &st.Currency }}
+	@txDetailsSection("By merchant") {
+		<ul class="grid gap-1.5">
+			for _, m := range st.PerMerchant {
+				<li class="flex items-center gap-3 min-w-0 px-3 py-2 rounded-xl bg-tx-row">
+					if m.Merchant != nil {
+						@components.CounterpartyIcon(m.Merchant.Name, m.Merchant.Icon, m.Merchant.Color, "w-7 h-7 text-xs")
+					} else {
+						<span class="grid place-items-center shrink-0 w-7 h-7 rounded-full bg-zinc-800 text-zinc-500">
+							@icons.Basket("14")
+						</span>
+					}
+					<div class="flex-1 min-w-0">
+						if m.Merchant != nil {
+							<a href={ templ.SafeURL("/counterparties?" + CounterpartyDetailsParam + "=" + m.Merchant.ID) } class="block text-sm truncate hover:underline">{ m.Merchant.Name }</a>
+						} else {
+							<p class="text-sm truncate text-zinc-400">No merchant</p>
+						}
+						<p class="text-xs text-zinc-500 truncate tabular-nums">
+							{ itemTimes(m.Times) } · last { formatTxDay(m.LastOn) }
+						</p>
+					</div>
+					<div class="shrink-0 text-right tabular-nums">
+						<p class="text-sm">{ def.Format(m.Last) }</p>
+						<p class="text-xs text-zinc-500">
+							if m.Times > 1 {
+								low { def.Format(m.Min) } · avg { def.Format(m.Avg) }
+							} else {
+								last paid
+							}
+						</p>
+					</div>
+				</li>
+			}
+		</ul>
+	}
+}
+
+// itemDetailsMaxPurchases are the purchases the details list.
+const itemDetailsMaxPurchases = 20
+
+templ itemDetailsPurchases(st *models.ItemStats) {
+	{{ def := &st.Currency }}
+	@txDetailsSection("Purchases") {
+		if len(st.Purchases) == 0 {
+			<p class="text-sm text-zinc-500">Not on any fulfilled expense yet.</p>
+		} else {
+			<ul class="grid gap-1.5">
+				for i, p := range st.Purchases {
+					if i < itemDetailsMaxPurchases {
+						<li>
+							<a href={ templ.SafeURL("/transactions?" + TxDetailsParam + "=" + p.TxID) } class="flex items-center gap-3 min-w-0 px-3 py-2 rounded-xl bg-tx-row hover:bg-zinc-800 transition-colors">
+								<div class="flex-1 min-w-0">
+									<p class="text-sm truncate">{ formatTxDay(p.Day) } · { itemMerchantName(p.Merchant) }</p>
+									<p class="text-xs text-zinc-500 tabular-nums">{ fmt.Sprintf("%s × %s", strconv.FormatFloat(p.Quantity, 'f', -1, 64), def.Format(p.UnitPrice)) }</p>
+								</div>
+								<span class="shrink-0 text-sm tabular-nums">{ def.Format(p.Total) }</span>
+							</a>
+						</li>
+					}
+				}
+			</ul>
+			if len(st.Purchases) > itemDetailsMaxPurchases {
+				<p class="text-xs text-zinc-500">{ fmt.Sprintf("The last %d of %d.", itemDetailsMaxPurchases, len(st.Purchases)) }</p>
+			}
+		}
+	}
+}
+
+// ItemFD is the item's edit form data.
+type ItemFD struct {
+	Name, Aliases, CategoryID form.FDInput
+}
+
+// EditItem is the item's edit form, in a drawer opened from its details.
+templ EditItem(id string, fd *ItemFD, cats []models.ItemCategory) {
+	@components.Drawer(components.DrawerProps{Label: "Edit item"}) {
+		@EditItemForm(id, fd, cats)
+	}
+}
+
+// EditItemForm is EditItem's form alone, answered with its errors.
+templ EditItemForm(id string, fd *ItemFD, cats []models.ItemCategory) {
+	@form.DrawerForm(form.DrawerFormProps{
+		Title: "Edit item", Method: "put", URL: fmt.Sprintf("/items/%s", id),
+		Submit: "Save changes", CancelClick: itemDetailsCancel(id),
+	}) {
+		@form.Field("Name", "name", id, icons.Pencil("15"), fd.Name.Error) {
+			@form.Control("text", "name", "e.g. Milk 1L", id, fd.Name, nil)
+		}
+		@form.Field("Aliases", "aliases", id, icons.Receipt("15"), fd.Aliases.Error) {
+			@form.TagsInput("aliases", "Other names on receipts, e.g. FRESH MILK 1LT", id, fd.Aliases)
+		}
+		<p class="-mt-2 text-xs text-zinc-500">Receipt lines named like it or one of its aliases are linked to it when saved. Its own lines keep the name they were written with.</p>
+		@form.Field("Category", "category_id", id, icons.Tag("15"), fd.CategoryID.Error) {
+			@form.Combobox(form.ComboboxProps{
+				Name: "category_id", ID: id, Label: "Category", Placeholder: "No category",
+				Options: itemCategoryComboOptions(cats), Data: fd.CategoryID, Nullable: true, Searchable: true,
+				CreateURL: "/items/categories/quick",
+			})
+		}
+	}
+}
+
+// MergeItem is the form merging from into another item, in a drawer.
+templ MergeItem(from *models.Item, fd form.FDInput, items []models.Item) {
+	@components.Drawer(components.DrawerProps{Label: "Merge " + from.Name}) {
+		@MergeItemForm(from, fd, items)
+	}
+}
+
+func itemComboOptions(items []models.Item) []form.ComboOption {
+	opts := make([]form.ComboOption, len(items))
+	for i, it := range items {
+		opts[i] = form.ComboOption{Value: it.ID, Label: it.Name}
+	}
+	return opts
+}
+
+// MergeItemForm is MergeItem's form alone, answered with its errors.
+templ MergeItemForm(from *models.Item, fd form.FDInput, items []models.Item) {
+	@form.DrawerForm(form.DrawerFormProps{
+		Title: "Merge " + from.Name, Method: "post", URL: fmt.Sprintf("/items/%s/merge", from.ID),
+		Submit: "Merge", CancelClick: itemDetailsCancel(from.ID),
+		Attrs: templ.Attributes{
+			"hx-disinherit":       "hx-confirm",
+			"hx-confirm":          fmt.Sprintf("Merge %q into the selected item? %q will be deleted.", from.Name, from.Name),
+			"data-confirm-label":  "Merge",
+			"data-confirm-danger": true,
+		},
+	}) {
+		<p class="text-sm text-zinc-400">
+			Its receipt lines and merchants move to the item you pick, and its name and aliases become that item's aliases. { from.Name } is then deleted.
+		</p>
+		@form.Field("Merge into", "into_id", from.ID, icons.Basket("15"), fd.Error) {
+			@form.Combobox(form.ComboboxProps{
+				Name: "into_id", ID: from.ID, Label: "Merge into", Placeholder: "Select item",
+				Options: itemComboOptions(items), Data: fd, Searchable: true,
+			})
+		}
+	}
+}
+
+func itemCategoryComboOption(c *models.ItemCategory) form.ComboOption {
+	return form.ComboOption{Value: c.ID, Label: c.Name, Leading: categoryDot(c.Color)}
+}
+
+func itemCategoryComboOptions(cats []models.ItemCategory) []form.ComboOption {
+	opts := make([]form.ComboOption, len(cats))
+	for i := range cats {
+		opts[i] = itemCategoryComboOption(&cats[i])
+	}
+	return form.SortComboOptions(opts)
+}
+
+// ItemCategoryComboOption answers an item category combobox's CreateURL.
+func ItemCategoryComboOption(c *models.ItemCategory) templ.Component {
+	return form.ComboOptionItem(itemCategoryComboOption(c), true)
+}
+
+// ItemCategories lists the item categories (the items' own, apart from the
+// budget ones) in a drawer, each opening its form in its place.
+templ ItemCategories(cats []models.ItemCategory) {
+	{{ slot := "#" + components.DrawerSlot }}
+	@components.Drawer(components.DrawerProps{Label: "Item categories"}) {
+		<div class="drawer-panel flex flex-col flex-1 min-h-0">
+			<header class="flex items-start gap-3 px-5 sm:px-6 pt-5 pb-4">
+				<div class="flex-1 min-w-0">
+					<h2 class="text-lg font-bold">Item categories</h2>
+					<p class="text-sm text-zinc-400">Group items, e.g. Dairy or Snacks. Apart from the budget categories, they only sort the items page.</p>
+				</div>
+				@components.DrawerClose()
+			</header>
+			<div class="flex-1 grid grid-cols-1 auto-rows-max content-start gap-3 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
+				<button type="button" hx-get="/items/categories/new" hx-target={ slot } hx-swap="innerHTML" class="txd-action justify-self-start">
+					@icons.Plus("14")
+					New category
+				</button>
+				if len(cats) == 0 {
+					<p class="py-6 text-center text-sm text-zinc-500">No item categories yet. Add one here, or from an item's Edit.</p>
+				}
+				<ul class="grid gap-1.5">
+					for _, c := range cats {
+						<li>
+							<button
+								type="button"
+								hx-get={ fmt.Sprintf("/items/categories/%s/edit", c.ID) }
+								hx-target={ slot }
+								hx-swap="innerHTML"
+								class="flex items-center gap-3 w-full min-w-0 px-3 py-2.5 rounded-xl bg-tx-row text-left cursor-pointer transition-colors hover:bg-zinc-800"
+							>
+								<span class="size-3 shrink-0 rounded-full" style={ "background-color:" + c.Hex() }></span>
+								<span class="flex-1 min-w-0 truncate">{ c.Name }</span>
+								<span class="shrink-0 text-xs text-zinc-500 tabular-nums">{ itemsCount(c.Items) }</span>
+								@icons.Pencil("14", &templ.Attributes{"class": "shrink-0 text-zinc-500"})
+							</button>
+						</li>
+					}
+				</ul>
+			</div>
+		</div>
+	}
+}
+
+func itemsCount(n int) string {
+	if n == 1 {
+		return "1 item"
+	}
+	return fmt.Sprintf("%d items", n)
+}
+
+// ItemCategoryFD is an item category's form data.
+type ItemCategoryFD struct {
+	Name, Color form.FDInput
+}
+
+// itemCategoriesBack brings an item category's form back to the list.
+const itemCategoriesBack = "confirmDiscard().then((ok) => ok && htmx.ajax('GET', '/items/categories', {target: '#drawer', swap: 'innerHTML'}))"
+
+// ItemCategoryDrawer is an item category's form (id empty: a new one), in
+// the drawer.
+templ ItemCategoryDrawer(id string, fd *ItemCategoryFD) {
+	@components.Drawer(components.DrawerProps{Label: "Item category"}) {
+		@ItemCategoryForm(id, fd)
+	}
+}
+
+// ItemCategoryForm is ItemCategoryDrawer's form alone, answered with its
+// errors.
+templ ItemCategoryForm(id string, fd *ItemCategoryFD) {
+	{{ method, url, title, submit, fid := "post", "/items/categories", "New item category", "Add category", "new-item-category" }}
+	if id != "" {
+		{{ method, url, title, submit, fid = "put", "/items/categories/" + id, "Edit item category", "Save changes", id }}
+	}
+	@form.DrawerForm(form.DrawerFormProps{
+		Title: title, Method: method, URL: url, Submit: submit, CancelClick: itemCategoriesBack,
+		Attrs: templ.Attributes{"x-data": fmt.Sprintf("{accent: '%s'}", models.CategoryColorToHex(fd.Color.Value))},
+	}) {
+		@form.Field("Name", "name", fid, icons.Pencil("15"), fd.Name.Error) {
+			@form.Control("text", "name", "e.g. Dairy", fid, fd.Name, nil)
+		}
+		@form.SelectCategoryColor("color", fid, fd.Color)
+		if id != "" {
+			<button
+				type="button"
+				hx-delete={ "/items/categories/" + id }
+				hx-confirm="Delete this category? Its items stay, without a category."
+				data-confirm-label="Delete"
+				data-confirm-danger
+				class="txd-action justify-self-start text-rose-400!"
+			>
+				@icons.Trash("14")
+				Delete category
+			</button>
+		}
+	}
+}

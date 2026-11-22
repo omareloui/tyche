@@ -89,6 +89,9 @@ type TxItem struct {
 	// receipt paid abroad; every line of a transaction has the same (see
 	// TxItemsCurrency, SetTxItemsCurrency).
 	Currency *Currency `validate:"-"`
+	// ItemID is the catalog item (Item) an item line is, set when saved
+	// (picked, matched by its name or created); never a charge's.
+	ItemID string `validate:"-"`
 }
 
 // Label is its name, else its kind's with the rate (e.g. "VAT 14%").
@@ -136,6 +139,7 @@ func NormalizeTxItems(items []TxItem, cur *Currency) {
 		if !it.Kind.IsCharge() {
 			continue
 		}
+		it.ItemID = ""
 		it.Quantity, it.UnitPrice = 1, 0
 		if it.Total == 0 && it.Rate != nil {
 			it.Total = sub * *it.Rate / 100
@@ -213,14 +217,16 @@ func TxItemsForeign(items []TxItem, acc *Currency) bool {
 // bank charged for them), 1 when they're in the account's currency or add
 // up to nothing.
 func TxItemsRate(items []TxItem, amount float64, acc *Currency) float64 {
-	if !TxItemsForeign(items, acc) {
+	return ItemsRate(TxItemsTotal(items), amount, TxItemsForeign(items, acc))
+}
+
+// ItemsRate is TxItemsRate from the lines' total (TxItemsTotal) and whether
+// they're foreign, for lines read apart from their transaction's.
+func ItemsRate(linesTotal, amount float64, foreign bool) float64 {
+	if !foreign || math.Abs(linesTotal) < 0.000001 || amount == 0 {
 		return 1
 	}
-	total := TxItemsTotal(items)
-	if math.Abs(total) < 0.000001 || amount == 0 {
-		return 1
-	}
-	return math.Abs(amount) / math.Abs(total)
+	return math.Abs(amount) / math.Abs(linesTotal)
 }
 
 // SetTxItemsCurrency puts every line in cur, none of their own (nil) when

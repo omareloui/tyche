@@ -78,3 +78,10 @@ SET is_shown = (string IN (sqlc.slice(shown)));
 
 -- name: ResetSeededAt :exec
 UPDATE user SET seeded_at = NULL;
+
+-- name: ResetDeleteItems :exec
+-- The items catalog; lines keep their names, unlinked (item_id SET NULL).
+DELETE FROM items;
+
+-- name: ResetDeleteItemCategories :exec
+DELETE FROM item_categories;

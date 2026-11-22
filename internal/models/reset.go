@@ -12,6 +12,7 @@ const (
 	ResetSMSTemplates   ResetEntity = "sms_templates"
 	ResetCategories     ResetEntity = "categories"
 	ResetCounterparties ResetEntity = "counterparties"
+	ResetItems          ResetEntity = "items"
 	ResetGoals          ResetEntity = "goals"
 	ResetAccounts       ResetEntity = "accounts"
 	ResetWishlist       ResetEntity = "wishlist"
@@ -37,6 +38,7 @@ var ResetEntities = []ResetEntityInfo{
 	{ResetSMSTemplates, "SMS templates", "Your own templates reading bank SMS, the shared ones stay.", nil},
 	{ResetCategories, "Categories", "Categories and their budgets. Kept transactions lose their category.", nil},
 	{ResetCounterparties, "Counterparties", "People and merchants, with their aliases and icons.", nil},
+	{ResetItems, "Items", "The catalog of items bought, with their aliases and categories. Receipt lines stay, unlinked until their transaction is saved again.", nil},
 	{ResetGoals, "Goals", "Savings goals and the money put towards them, with every transaction (moving money to a goal is one).", []ResetEntity{ResetTransactions}},
 	{ResetAccounts, "Accounts", "Every account, gam'yaa and goal, with all their transactions and recurring transactions.", []ResetEntity{ResetTransactions, ResetRecurrent, ResetGoals}},
 	{ResetWishlist, "Wishlist", "The items on the decide page's wishlist.", nil},

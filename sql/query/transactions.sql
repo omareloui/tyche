@@ -133,6 +133,9 @@ WHERE
         OR (sqlc.narg(category_id) = 'none' AND t.category_id IS NULL))
     AND (sqlc.narg(counterparty_id) IS NULL OR t.counterparty_id = sqlc.narg(counterparty_id)
         OR (sqlc.narg(counterparty_id) = 'none' AND t.counterparty_id IS NULL))
+    AND (sqlc.narg(item_id) IS NULL OR EXISTS (
+        SELECT 1 FROM transaction_items AS fti WHERE fti.transaction_id = t.id AND fti.item_id = sqlc.narg(item_id)
+    ))
     AND (sqlc.narg(goal_id) IS NULL OR t.loan_goal_id = sqlc.narg(goal_id) OR EXISTS (
         SELECT 1 FROM accounts AS fa WHERE fa.goal_id = sqlc.narg(goal_id) AND fa.id IN (t.account_id, t.to_account_id)
     ))
@@ -225,6 +228,9 @@ WHERE
         OR (sqlc.narg(category_id) = 'none' AND t.category_id IS NULL))
     AND (sqlc.narg(counterparty_id) IS NULL OR t.counterparty_id = sqlc.narg(counterparty_id)
         OR (sqlc.narg(counterparty_id) = 'none' AND t.counterparty_id IS NULL))
+    AND (sqlc.narg(item_id) IS NULL OR EXISTS (
+        SELECT 1 FROM transaction_items AS fti WHERE fti.transaction_id = t.id AND fti.item_id = sqlc.narg(item_id)
+    ))
     AND (sqlc.narg(goal_id) IS NULL OR t.loan_goal_id = sqlc.narg(goal_id) OR EXISTS (
         SELECT 1 FROM accounts AS fa WHERE fa.goal_id = sqlc.narg(goal_id) AND fa.id IN (t.account_id, t.to_account_id)
     ))

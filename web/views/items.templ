@@ -1,0 +1,575 @@
+package views
+
+import (
+	"fmt"
+	"slices"
+	"strconv"
+	"strings"
+
+	"github.com/omareloui/tyche/internal/formatters"
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+// ItemsData is the items page's list: every item with its stats, in Def.
+type ItemsData struct {
+	// Items are the ones bought in Range (every one for every day).
+	Items []models.ItemSummary
+	Def   *models.Currency
+	Range models.ItemsRange
+	// Any tells there's an item at all, bought in Range or not.
+	Any bool
+}
+
+// itemsListURL re-renders the page's body with its range.
+func itemsListURL(r models.ItemsRange) string {
+	if q := r.Values().Encode(); q != "" {
+		return "/items/list?" + q
+	}
+	return "/items/list"
+}
+
+// ItemsChangedEvent re-renders the items page's list (HX-Trigger).
+const ItemsChangedEvent = "items-changed"
+
+// ItemDetailsParam is the items page's query param holding the item whose
+// details are open.
+const ItemDetailsParam = "item"
+
+func itemDetailsURL(id string) string { return fmt.Sprintf("/items/%s/details", id) }
+
+func itemDetailsURLIf(id string) string {
+	if id == "" {
+		return ""
+	}
+	return itemDetailsURL(id)
+}
+
+// ItemURL is the items page with the item's details open.
+func ItemURL(id string) templ.SafeURL {
+	return templ.SafeURL("/items?" + ItemDetailsParam + "=" + id)
+}
+
+// ItemRowID is the id of the item's row in the list.
+func ItemRowID(id string) string { return "item-" + id }
+
+// Items is the catalog of what was bought: every item linked to receipt
+// lines, with how often, how much and what it costs.
+templ Items(claims *jwt.AccessClaims, balances []models.Balance, d *ItemsData, openID string) {
+	@layouts.WithTitle(claims, "Items", balances) {
+		@ItemsList(d)
+		@components.DrawerOnLoad(itemDetailsURLIf(openID))
+	}
+}
+
+// itemsFilterData filters (data-search: name and aliases, data-category)
+// and sorts (CSS order from data-spent, data-times, data-last) the rows.
+const itemsFilterData = `{
+	q: '',
+	sort: 'spent',
+	category: '',
+	init() {
+		try {
+			const saved = JSON.parse(localStorage.getItem('itemsView') || '{}')
+			if (['spent', 'times', 'recent', 'name'].includes(saved.sort)) this.sort = saved.sort
+		} catch {}
+		this.$watch('sort', () => {
+			try { localStorage.setItem('itemsView', JSON.stringify({sort: this.sort})) } catch {}
+		})
+	},
+	matches(el) {
+		const q = this.q.trim().toLowerCase()
+		return (!q || el.dataset.search.includes(q)) && (!this.category || el.dataset.category === this.category)
+	},
+	order(el) {
+		switch (this.sort) {
+		case 'spent': return -Math.round(Number(el.dataset.spent) * 100)
+		case 'times': return -Number(el.dataset.times)
+		case 'recent': return -Number(el.dataset.last)
+		}
+		return 0
+	},
+	any() {
+		this.q
+		this.category
+		return [...this.$root.querySelectorAll('[data-item]')].some(c => this.matches(c))
+	},
+	// open opens the row's details on a click on it, unless on its menu or
+	// while selecting its text.
+	open(e, row) {
+		if (e.target.closest('button, a, [role=menu]')) return
+		if (getSelection()?.toString()) return
+		htmx.ajax('GET', row.dataset.details, {target: '#drawer', swap: 'innerHTML'})
+	},
+}`
+
+var itemsSorts = [][2]string{{"spent", "Most spent"}, {"times", "Most bought"}, {"recent", "Recent"}, {"name", "Name"}}
+
+// itemsCategories are the categories the items are in, by name.
+func itemsCategories(items []models.ItemSummary) []models.ItemCategory {
+	var cats []models.ItemCategory
+	for _, it := range items {
+		if c := it.Item.Category; c != nil && !slices.ContainsFunc(cats, func(o models.ItemCategory) bool { return o.ID == c.ID }) {
+			cats = append(cats, *c)
+		}
+	}
+	slices.SortFunc(cats, func(a, b models.ItemCategory) int { return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)) })
+	return cats
+}
+
+// ItemsList is the items page's body, re-rendered when an item changes.
+templ ItemsList(d *ItemsData) {
+	<div
+		id="items"
+		hx-get={ itemsListURL(d.Range) }
+		hx-trigger={ ItemsChangedEvent + " from:body" }
+		hx-swap="outerHTML"
+		x-data={ itemsFilterData }
+		@keydown.slash.window="if (!$event.target.closest('input, textarea, select, [contenteditable]')) { $event.preventDefault(); $refs.q.focus(); $refs.q.select() }"
+		class="grid gap-4"
+	>
+		if !d.Any {
+			@itemsEmpty()
+		} else {
+			@itemsHero(d)
+		}
+		if d.Any && len(d.Items) == 0 {
+			<p class="py-10 text-center text-zinc-500">Nothing bought { strings.ToLower(itemsRangeIn(d.Range)) }.</p>
+		}
+		if len(d.Items) > 0 {
+			<div class="grid gap-3">
+				<label class="flex items-center gap-3 h-12 px-4 rounded-2xl border-2 border-zinc-700 bg-zinc-800/40 focus-within:border-zinc-400 transition-colors">
+					@icons.Search("20", &templ.Attributes{"class": "text-zinc-500 shrink-0"})
+					<input
+						type="search"
+						x-ref="q"
+						x-model="q"
+						@keydown.escape.prevent="q ? q = '' : $el.blur()"
+						autocomplete="off"
+						enterkeyhint="search"
+						placeholder="Search by name or alias"
+						aria-label="Search items"
+						class="flex-1 min-w-0 bg-transparent outline-none placeholder:text-zinc-500 [&::-webkit-search-cancel-button]:hidden"
+					/>
+					<kbd class="hidden sm:grid place-items-center shrink-0 w-6 h-6 rounded border border-zinc-600 text-xs text-zinc-500">/</kbd>
+				</label>
+				<div class="flex flex-wrap items-center gap-2" role="group" aria-label="Sort">
+					<button
+						type="button"
+						hx-get="/items/categories"
+						hx-target={ "#" + components.DrawerSlot }
+						hx-swap="innerHTML"
+						class="order-last ml-auto inline-flex items-center gap-1.5 h-8 px-3 rounded-full ring-1 ring-zinc-700 text-sm text-zinc-300 transition-colors cursor-pointer hover:text-white hover:ring-zinc-500"
+					>
+						@icons.Tag("14")
+						Categories
+					</button>
+					for _, s := range itemsSorts {
+						<button
+							type="button"
+							@click={ fmt.Sprintf("sort = '%s'", s[0]) }
+							:class={ fmt.Sprintf("sort === '%s' ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-800/60 text-zinc-400 hover:text-white'", s[0]) }
+							:aria-pressed={ fmt.Sprintf("sort === '%s'", s[0]) }
+							class="h-8 px-3 rounded-full text-sm font-medium transition-colors cursor-pointer"
+						>{ s[1] }</button>
+					}
+				</div>
+				if cats := itemsCategories(d.Items); len(cats) > 0 {
+					<div role="group" aria-label="Filter by category" class="flex flex-wrap items-center gap-1.5">
+						@icons.Tag("14", &templ.Attributes{"class": "text-zinc-500 mr-0.5"})
+						for _, c := range cats {
+							<button
+								type="button"
+								@click={ fmt.Sprintf("category = category === '%s' ? '' : '%s'", c.ID, c.ID) }
+								:aria-pressed={ fmt.Sprintf("category === '%s'", c.ID) }
+								:class={ fmt.Sprintf("category === '%s' ? 'bg-violet-400/20 text-violet-200 ring-1 ring-violet-400/50' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'", c.ID) }
+								class="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-xs cursor-pointer transition-colors"
+							>
+								<span class="size-1.5 rounded-full" style={ "background-color:" + c.Hex() }></span>
+								{ c.Name }
+							</button>
+						}
+						<button
+							type="button"
+							x-show="category"
+							x-cloak
+							@click="category = ''"
+							class="h-7 px-2 rounded-full text-xs text-zinc-500 cursor-pointer hover:text-zinc-300"
+						>Clear</button>
+					</div>
+				}
+			</div>
+			<ul class="grid gap-2">
+				for _, it := range d.Items {
+					@itemRow(&it, d.Def)
+				}
+			</ul>
+			<p x-cloak x-show="(q.trim() || category) && !any()" class="py-12 text-center text-zinc-500">No items match</p>
+		}
+	</div>
+}
+
+// itemsRangeIn is the range as the end of a sentence, e.g. "this month".
+func itemsRangeIn(r models.ItemsRange) string {
+	switch r.Key {
+	case models.ItemsRangeAll:
+		return "yet"
+	case models.ItemsRangeCustom:
+		return "in " + r.Label()
+	}
+	return strings.ToLower(r.Label())
+}
+
+// itemsTopN are the items the hero ranks.
+const itemsTopN = 5
+
+// itemsTop are the most spent on items, at most n.
+func itemsTop(items []models.ItemSummary, n int) []models.ItemSummary {
+	top := slices.Clone(items)
+	slices.SortStableFunc(top, func(a, b models.ItemSummary) int {
+		switch {
+		case a.Stats.Spent > b.Stats.Spent:
+			return -1
+		case a.Stats.Spent < b.Stats.Spent:
+			return 1
+		}
+		return 0
+	})
+	top = slices.DeleteFunc(top, func(s models.ItemSummary) bool { return s.Stats.Spent <= 0 })
+	return top[:min(n, len(top))]
+}
+
+// itemsCategorySpend is what was spent on a category's items.
+type itemsCategorySpend struct {
+	Name, Hex string
+	Items     int
+	Spent     float64
+}
+
+// itemsByCategory are the categories' spending, most first, the items
+// without one last.
+func itemsByCategory(items []models.ItemSummary) []itemsCategorySpend {
+	var out []itemsCategorySpend
+	idx := map[string]int{}
+	var none itemsCategorySpend
+	for _, it := range items {
+		c := it.Item.Category
+		if c == nil {
+			none.Items++
+			none.Spent += it.Stats.Spent
+			continue
+		}
+		i, ok := idx[c.ID]
+		if !ok {
+			i = len(out)
+			idx[c.ID] = i
+			out = append(out, itemsCategorySpend{Name: c.Name, Hex: c.Hex()})
+		}
+		out[i].Items++
+		out[i].Spent += it.Stats.Spent
+	}
+	slices.SortStableFunc(out, func(a, b itemsCategorySpend) int {
+		switch {
+		case a.Spent > b.Spent:
+			return -1
+		case a.Spent < b.Spent:
+			return 1
+		}
+		return 0
+	})
+	if len(out) > 0 && none.Items > 0 {
+		none.Name, none.Hex = "No category", "#52525b"
+		out = append(out, none)
+	}
+	return out
+}
+
+func barPct(v, max float64) string {
+	if max <= 0 || v <= 0 {
+		return "0%"
+	}
+	return fmt.Sprintf("%.1f%%", max2(v/max*100, 2))
+}
+
+func max2(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// itemsHero sums what was bought in the range, its picker on top, then the
+// most spent on items and the categories, like the other pages' summaries.
+templ itemsHero(d *ItemsData) {
+	{{ spent, times := 0.0, 0 }}
+	for _, it := range d.Items {
+		{{ spent += it.Stats.Spent }}
+		{{ times += it.Stats.Times }}
+	}
+	@components.GlassCard("grid content-start gap-5 p-5 sm:p-6", "bg-amber-400/10", "bg-emerald-400/10") {
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<h2 class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-amber-300">
+				@icons.Basket("14")
+				Items bought
+				if days := d.Range.Days(); days != "" {
+					<span class="font-normal normal-case tracking-normal text-zinc-500">· { days }</span>
+				}
+			</h2>
+			@itemsRangePicker(d.Range)
+		</div>
+		<p>
+			<span class="sensitive text-2xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">{ d.Def.Format(spent) }</span>
+			<span class="text-sm text-zinc-500">
+				on { strconv.Itoa(len(d.Items)) } { plural(len(d.Items), "item", "items") }
+				if times > 0 {
+					· { itemTimes(times) }
+				}
+			</span>
+		</p>
+		if top := itemsTop(d.Items, itemsTopN); len(top) > 0 {
+			@budgetCollapse("items-top", budgetSummaryTitle("Most spent on")) {
+				<ul class="grid gap-1 mt-2">
+					for _, it := range top {
+						<li>
+							<button
+								type="button"
+								hx-get={ itemDetailsURL(it.Item.ID) }
+								hx-target={ "#" + components.DrawerSlot }
+								hx-swap="innerHTML"
+								class="grid gap-1.5 w-full px-2 py-1.5 rounded-lg text-left cursor-pointer transition-colors hover:bg-zinc-800/60"
+							>
+								<span class="flex items-center gap-3 min-w-0 text-sm">
+									<span class="flex-1 min-w-0 truncate">{ it.Item.Name }</span>
+									<span class="shrink-0 text-xs text-zinc-500 tabular-nums">{ fmt.Sprintf("×%d", it.Stats.Times) }</span>
+									<span class="sensitive shrink-0 tabular-nums">{ d.Def.Format(it.Stats.Spent) }</span>
+								</span>
+								<span class="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+									<span class="block h-full rounded-full bg-amber-400/70" style={ "width:" + barPct(it.Stats.Spent, top[0].Stats.Spent) }></span>
+								</span>
+							</button>
+						</li>
+					}
+				</ul>
+			}
+		}
+		if cats := itemsByCategory(d.Items); len(cats) > 0 {
+			@budgetCollapse("items-categories", budgetSummaryTitle("By category")) {
+				<ul class="grid gap-2 mt-2">
+					for _, c := range cats {
+						<li class="grid gap-1.5 px-2">
+							<span class="flex items-center gap-2 min-w-0 text-sm">
+								<span class="size-2 shrink-0 rounded-full" style={ "background-color:" + c.Hex }></span>
+								<span class="flex-1 min-w-0 truncate">{ c.Name }</span>
+								<span class="shrink-0 text-xs text-zinc-500">{ itemsCount(c.Items) }</span>
+								<span class="sensitive shrink-0 tabular-nums">{ d.Def.Format(c.Spent) }</span>
+							</span>
+							<span class="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+								<span class="block h-full rounded-full" style={ fmt.Sprintf("width:%s;background-color:%s", barPct(c.Spent, cats[0].Spent), c.Hex) }></span>
+							</span>
+						</li>
+					}
+				</ul>
+			}
+		}
+		<p class="text-xs text-zinc-500">
+			From the receipt lines of your expenses, at today's rates. Charges (VAT, service, tips, …) and transactions without lines aren't in it.
+		</p>
+	}
+}
+
+func itemsRangeOptions() []form.ComboOption {
+	opts := make([]form.ComboOption, len(models.ItemsRangePresets))
+	for i, p := range models.ItemsRangePresets {
+		opts[i] = form.ComboOption{Value: p[0], Label: p[1]}
+	}
+	return opts
+}
+
+// itemsRangePicker picks the range: a preset, or custom days (datepickers.js'
+// range picker, its days in the hidden from and to inputs); any change
+// re-renders the page's body.
+templ itemsRangePicker(r models.ItemsRange) {
+	<form
+		hx-get="/items/list"
+		hx-target="#items"
+		hx-swap="outerHTML"
+		hx-trigger="change"
+		x-data={ fmt.Sprintf("{range: '%s'}", r.Key) }
+		class="flex flex-wrap items-center justify-end gap-2"
+	>
+		@form.Combobox(form.ComboboxProps{
+			Name: "range", ID: "items-range", Label: "Period", Options: itemsRangeOptions(),
+			Data: form.FDInput{Value: r.Key}, Chip: true,
+			InputAttrs: templ.Attributes{"@change": "range = $event.target.value"},
+		})
+		<div x-show="range === 'custom'" x-cloak?={ r.Key != models.ItemsRangeCustom } class="relative">
+			<input type="hidden" name="from" value={ r.FromString() }/>
+			<input type="hidden" name="to" value={ r.ToString() }/>
+			@icons.Calendar("16", &templ.Attributes{"class": "pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500"})
+			<input
+				type="text"
+				readonly
+				data-datepicker
+				data-datepicker-range
+				placeholder="Pick the days"
+				aria-label="Days"
+				value={ itemsRangePickerValue(r) }
+				class="combo-chip w-52 pl-9! placeholder:text-zinc-500"
+			/>
+		</div>
+	</form>
+}
+
+func itemsRangePickerValue(r models.ItemsRange) string {
+	if r.Key != models.ItemsRangeCustom || (r.From.IsZero() && r.To.IsZero()) {
+		return ""
+	}
+	return r.FromString() + " → " + r.ToString()
+}
+
+func itemSearch(it *models.Item) string {
+	return strings.ToLower(strings.Join(append([]string{it.Name}, it.Aliases...), " "))
+}
+
+func itemCategoryID(it *models.Item) string {
+	if it.Category == nil {
+		return ""
+	}
+	return it.Category.ID
+}
+
+templ itemRow(s *models.ItemSummary, def *models.Currency) {
+	{{ it, st := &s.Item, s.Stats }}
+	<li
+		id={ ItemRowID(it.ID) }
+		data-item
+		data-search={ itemSearch(it) }
+		data-category={ itemCategoryID(it) }
+		data-spent={ strconv.FormatFloat(st.Spent, 'f', 2, 64) }
+		data-times={ strconv.Itoa(st.Times) }
+		data-last={ strconv.FormatInt(st.LastOn.Unix(), 10) }
+		data-details={ itemDetailsURL(it.ID) }
+		x-data="{openMenu: false}"
+		x-show="matches($el)"
+		:style="{order: order($el)}"
+		:class="openMenu && 'z-30'"
+		@click="open($event, $el)"
+		class="relative flex items-center gap-3 min-w-0 px-4 py-3 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 cursor-pointer transition-colors hover:ring-zinc-600"
+	>
+		<div class="grid place-items-center shrink-0 w-10 h-10 rounded-xl bg-zinc-800 text-zinc-400">
+			@icons.Basket("18")
+		</div>
+		<div class="flex-1 min-w-0">
+			<p class="flex items-center gap-2 min-w-0">
+				<span class="font-medium truncate">{ it.Name }</span>
+				if it.Category != nil {
+					<span class="inline-flex items-center gap-1 shrink-0 text-xs text-zinc-400">
+						<span class="size-1.5 rounded-full" style={ "background-color:" + it.Category.Hex() }></span>
+						{ it.Category.Name }
+					</span>
+				}
+			</p>
+			<p class="text-xs text-zinc-500 truncate tabular-nums">
+				if st.Times == 0 {
+					Not bought yet
+				} else {
+					{ itemTimes(st.Times) }
+					if s.Merchants > 0 {
+						· { itemMerchants(s.Merchants) }
+					}
+					· last { formatTxDay(st.LastOn) }
+				}
+			</p>
+		</div>
+		if st.Times > 0 {
+			<div class="shrink-0 text-right tabular-nums">
+				<p class="text-sm font-medium">{ def.Format(st.Spent) }</p>
+				<p class="text-xs text-zinc-500">
+					{ def.Format(st.Last) }
+					@itemChange(st)
+				</p>
+			</div>
+		}
+		@components.EntryMenuAnchored("openMenu", "Item actions", itemMenuItems(s))
+	</li>
+}
+
+// itemMenuItems are a row's actions, like the details' ones.
+func itemMenuItems(s *models.ItemSummary) []templ.Component {
+	id := s.Item.ID
+	items := []templ.Component{
+		components.EntryMenuDrawerItem("Details", itemDetailsURL(id),
+			components.WithEntryMenuItemIcon(icons.Eye("16"))),
+		components.EntryMenuEditItem(fmt.Sprintf("/items/%s/edit", id)),
+		components.EntryMenuDrawerItem("Merge into…", fmt.Sprintf("/items/%s/merge", id),
+			components.WithEntryMenuItemIcon(icons.Merge("16"))),
+	}
+	if s.Stats.Times > 0 {
+		items = append(items, components.EntryMenuItem("Transactions",
+			templ.Attributes{"@click": fmt.Sprintf("openMenu = false; location.href = '%s'", string(itemTxsURL(id)))},
+			components.WithEntryMenuItemIcon(icons.Search("16"))))
+	} else {
+		items = append(items, components.EntryMenuSeparator(),
+			components.EntryMenuItem("Delete", templ.Attributes{
+				"hx-delete": fmt.Sprintf("/items/%s", id),
+			},
+				components.WithEntryMenuItemConfirmMessage(fmt.Sprintf("Delete %q?", s.Item.Name)),
+				components.WithEntryMenuItemIcon(icons.Trash("16")),
+				components.WithEntryMenuItemDanger()))
+	}
+	return items
+}
+
+func itemTimes(n int) string {
+	if n == 1 {
+		return "Bought once"
+	}
+	return fmt.Sprintf("Bought %d times", n)
+}
+
+func itemMerchants(n int) string {
+	if n == 1 {
+		return "1 merchant"
+	}
+	return fmt.Sprintf("%d merchants", n)
+}
+
+// itemChange is how the unit price moved since the first purchase, red when
+// up, green when down.
+templ itemChange(st *models.ItemStats) {
+	if pct := st.ChangePct(); st.Multiple() && (pct >= 0.5 || pct <= -0.5) {
+		<span class={ templ.KV("text-rose-400", pct > 0), templ.KV("text-emerald-400", pct < 0) }>
+			if pct > 0 {
+				{ " ▲" + formatters.FormatNum(roundPct(pct)) + "%" }
+			} else {
+				{ " ▼" + formatters.FormatNum(roundPct(-pct)) + "%" }
+			}
+		</span>
+	}
+}
+
+func roundPct(v float64) float64 {
+	if v >= 10 {
+		return float64(int(v + 0.5))
+	}
+	return float64(int(v*10+0.5)) / 10
+}
+
+templ itemsEmpty() {
+	<div class="grid place-items-center gap-3 py-16 text-center">
+		<div class="relative grid place-items-center w-16 h-16 rounded-2xl bg-amber-400/15 text-amber-400">
+			<div aria-hidden="true" class="absolute inset-0 rounded-2xl bg-amber-400/20 blur-xl"></div>
+			@icons.Basket("30", &templ.Attributes{"class": "relative"})
+		</div>
+		<p class="mt-2 text-xl font-semibold">No items yet</p>
+		<p class="max-w-sm text-zinc-500">Add a transaction's items (or scan its receipt) and they show up here, with what they cost over time and where.</p>
+		<a href="/transactions?new" class="btn-primary mt-2">
+			@icons.Plus("18")
+			Add a transaction
+		</a>
+	</div>
+}

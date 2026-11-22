@@ -40,6 +40,7 @@ func dbItemToTxItem(it queries.TransactionItem) models.TxItem {
 		// SharedWith is only loaded for a split (loadTxItemShares).
 		SharedByAll: it.SharedByAll,
 		SplitMode:   models.ChargeSplitModeOf(it.SplitMode),
+		ItemID:      it.ItemID.String,
 	}
 	if it.Rate.Valid {
 		r := it.Rate.Float64
@@ -100,17 +101,22 @@ func replaceItemsWithTxn(ctx context.Context, qtx *queries.Queries, owner itemOw
 		logger.FromCtx(ctx).Error("deleting items", zap.Error(err), zap.Any("owner", owner))
 		return err
 	}
+	res := &itemResolver{qtx: qtx, owner: owner}
 	for i := range items {
-		if err := createItemWithTxn(ctx, qtx, owner, &items[i], i); err != nil {
+		if err := createItemWithTxn(ctx, qtx, res, &items[i], i); err != nil {
 			return err
 		}
 	}
-	return nil
+	return linkOwnerItemsWithTxn(ctx, qtx, owner)
 }
 
-func createItemWithTxn(ctx context.Context, qtx *queries.Queries, owner itemOwner, it *models.TxItem, position int) error {
+func createItemWithTxn(ctx context.Context, qtx *queries.Queries, res *itemResolver, it *models.TxItem, position int) error {
+	owner := res.owner
 	if it.ID == "" {
 		it.ID = idgen.New()
+	}
+	if err := res.resolve(ctx, it); err != nil {
+		return err
 	}
 	var rate sql.NullFloat64
 	if it.Rate != nil {
@@ -135,6 +141,7 @@ func createItemWithTxn(ctx context.Context, qtx *queries.Queries, owner itemOwne
 		SplitMode:     int64(it.SplitMode),
 		Position:      int64(position),
 		CurrencyID:    curID,
+		ItemID:        sql.NullString{String: it.ItemID, Valid: it.ItemID != ""},
 	}); err != nil {
 		logger.FromCtx(ctx).Error("creating item", zap.Error(err), zap.Any("owner", owner))
 		return err
@@ -150,6 +157,11 @@ func createItemWithTxn(ctx context.Context, qtx *queries.Queries, owner itemOwne
 func writeTxExtrasWithTxn(ctx context.Context, qtx *queries.Queries, tx *models.Transaction, created bool) error {
 	if tx.Items != nil && (!created || len(tx.Items) > 0) {
 		if err := replaceItemsWithTxn(ctx, qtx, itemOwner{txID: tx.ID}, tx.Items); err != nil {
+			return err
+		}
+	} else if !created {
+		// Its counterparty may have changed: it sells the lines' items too.
+		if err := linkOwnerItemsWithTxn(ctx, qtx, itemOwner{txID: tx.ID}); err != nil {
 			return err
 		}
 	}
@@ -346,7 +358,11 @@ func (r *Repository) AddTxItem(ctx context.Context, txID string, it *models.TxIt
 		if err != nil {
 			return err
 		}
-		if err := createItemWithTxn(ctx, qtx, itemOwner{txID: txID}, it, len(items)); err != nil {
+		owner := itemOwner{txID: txID}
+		if err := createItemWithTxn(ctx, qtx, &itemResolver{qtx: qtx, owner: owner}, it, len(items)); err != nil {
+			return err
+		}
+		if err := linkOwnerItemsWithTxn(ctx, qtx, owner); err != nil {
 			return err
 		}
 		return qtx.MarkTransactionOverridden(ctx, txID)

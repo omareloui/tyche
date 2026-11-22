@@ -13,6 +13,9 @@ import (
 // TxItemFD is a line's inputs, sent as parallel item_* fields.
 type TxItemFD struct {
 	ID        string
+	// ItemID is the catalog item picked for an item line (models.Item),
+	// empty to match or create one by its name when saved.
+	ItemID    string
 	Kind      models.TxItemKind
 	Name      string
 	Quantity  string
@@ -83,7 +86,7 @@ func TxItemsToFD(items []models.TxItem) []TxItemFD {
 	fds := make([]TxItemFD, len(items))
 	for i, it := range items {
 		fd := TxItemFD{
-			ID: it.ID, Kind: it.Kind, Name: it.Name, Included: it.Included,
+			ID: it.ID, ItemID: it.ItemID, Kind: it.Kind, Name: it.Name, Included: it.Included,
 			Quantity: formatItemNum(it.Quantity), UnitPrice: formatItemNum(it.UnitPrice), Total: formatItemNum(it.Total),
 		}
 		if it.Rate != nil {
@@ -183,7 +186,7 @@ templ txItemsField(id string, items []TxItemFD, rec *ReceiptFD, cur ItemsCurrenc
 				}
 			</div>
 			<template x-ref="item">
-				@txItemRow(TxItemFD{})
+				@txItemRow(TxItemFD{Quantity: "1"})
 			</template>
 			<template x-ref="charge">
 				@txItemRow(TxItemFD{Kind: models.TxItemVAT})
@@ -332,6 +335,9 @@ templ txItemRow(it TxItemFD) {
 	{{ charge := it.Kind.IsCharge() }}
 	<div data-tx-item class="grid gap-2 p-3 rounded-xl border border-zinc-800 bg-zinc-900/40">
 		<input type="hidden" name="item_id" value={ it.ID }/>
+		if charge {
+			<input type="hidden" name="item_item_id" value=""/>
+		}
 		if !charge {
 			<input type="hidden" name="item_kind" value="0"/>
 			<input type="hidden" name="item_rate" value=""/>
@@ -345,22 +351,22 @@ templ txItemRow(it TxItemFD) {
 					}
 				</select>
 			}
-			<input
-				type="text"
-				name="item_name"
-				value={ it.Name }
-				if charge {
+			if charge {
+				<input
+					type="text"
+					name="item_name"
+					value={ it.Name }
 					placeholder="Name as printed (optional)"
-				} else {
-					placeholder="Item, e.g. Milk 1L"
-				}
-				aria-label="Name"
-				autocomplete="off"
-				class="input-field flex-1 min-w-0"
-				if it.Error != "" {
-					aria-invalid="true"
-				}
-			/>
+					aria-label="Name"
+					autocomplete="off"
+					class="input-field flex-1 min-w-0"
+					if it.Error != "" {
+						aria-invalid="true"
+					}
+				/>
+			} else {
+				@itemNameInput("item_name", "item_item_id", it.Name, it.ItemID, it.Error != "")
+			}
 			<button
 				type="button"
 				@click="$el.closest('[data-tx-item]').remove()"
@@ -383,9 +389,9 @@ templ txItemRow(it TxItemFD) {
 				Already included in the prices
 			</label>
 		} else {
-			<div class="grid grid-cols-[4.5rem_1fr_1fr] gap-2">
-				<input type="text" inputmode="decimal" name="item_quantity" value={ it.Quantity } placeholder="Qty" aria-label="Quantity" class="input-field text-center tabular-nums"/>
+			<div class="grid grid-cols-[1fr_4.5rem_1fr] gap-2">
 				<input type="text" inputmode="decimal" name="item_unit_price" value={ it.UnitPrice } placeholder="Unit price" aria-label="Unit price" class="input-field tabular-nums"/>
+				<input type="text" inputmode="decimal" name="item_quantity" value={ it.Quantity } placeholder="Qty" aria-label="Quantity" class="input-field text-center tabular-nums"/>
 				<input type="text" inputmode="decimal" name="item_total" value={ it.Total } placeholder="Total" aria-label="Total" class="input-field tabular-nums" data-total-manual?={ itemTotalManual(it) }/>
 			</div>
 		}
@@ -487,7 +493,11 @@ templ txItemLine(it models.TxItem, cur *models.Currency, onDelete func(models.Tx
 	<li class="flex items-center gap-3 min-w-0 px-3 py-1.5 rounded-xl bg-tx-row" data-tx-item-line>
 		<div class="flex-1 min-w-0">
 			<p class="text-sm [overflow-wrap:anywhere]">
-				{ it.Label() }
+				if it.ItemID != "" && !it.Kind.IsCharge() {
+					<a href={ ItemURL(it.ItemID) } class="hover:underline" title="The item's prices over time">{ it.Label() }</a>
+				} else {
+					{ it.Label() }
+				}
 				if it.Kind.IsCharge() && it.Name != "" && it.Rate != nil {
 					<span class="text-zinc-500">{ fmt.Sprintf(" · %s%%", strconv.FormatFloat(*it.Rate, 'f', -1, 64)) }</span>
 				}
@@ -520,11 +530,12 @@ templ txItemLine(it models.TxItem, cur *models.Currency, onDelete func(models.Tx
 // TxItemAddForm adds a line from the details (an item or a charge, picked
 // by kind), posted to url; fd is its data, with its error.
 // subtotal is the items' already there, a charge's amount following its rate
-// on it (receipts.js works out the total as typed).
-templ txItemAddForm(url string, fd *TxItemFD, subtotal float64) {
+// on it (receipts.js works out the total as typed); cpID is the owner's
+// counterparty, whose items are suggested first.
+templ txItemAddForm(url string, fd *TxItemFD, subtotal float64, cpID string) {
 	{{ open := fd != nil }}
 	if fd == nil {
-		{{ fd = &TxItemFD{} }}
+		{{ fd = &TxItemFD{Quantity: "1"} }}
 	}
 	<div x-data={ fmt.Sprintf("{adding: %t, kind: '%d'}", open, fd.Kind) }>
 		<form
@@ -536,6 +547,7 @@ templ txItemAddForm(url string, fd *TxItemFD, subtotal float64) {
 			@keydown.escape.stop="adding = false"
 			data-item-add
 			data-subtotal={ strconv.FormatFloat(subtotal, 'f', -1, 64) }
+			data-counterparty={ cpID }
 			class="grid gap-2 p-3 rounded-xl border border-zinc-800 bg-zinc-900/40"
 		>
 			<div class="flex gap-2">
@@ -545,20 +557,25 @@ templ txItemAddForm(url string, fd *TxItemFD, subtotal float64) {
 						<option value={ strconv.Itoa(int(k)) }>{ k.String() }</option>
 					}
 				</select>
-				<input
-					type="text"
-					name="name"
-					value={ fd.Name }
-					:placeholder="kind === '0' ? 'Item, e.g. Milk 1L' : 'Name as printed (optional)'"
-					aria-label="Name"
-					autocomplete="off"
-					x-effect="if (adding) $nextTick(() => $el.focus())"
-					class="input-field flex-1 min-w-0"
-				/>
+				<div class="contents" x-effect="if (adding) $nextTick(() => $el.parentElement.querySelector('input[type=text]')?.focus())"></div>
+				<template x-if="kind === '0'">
+					@itemNameInput("name", "item_ref", fd.Name, fd.ItemID, false)
+				</template>
+				<template x-if="kind !== '0'">
+					<input
+						type="text"
+						name="name"
+						value={ fd.Name }
+						placeholder="Name as printed (optional)"
+						aria-label="Name"
+						autocomplete="off"
+						class="input-field flex-1 min-w-0"
+					/>
+				</template>
 			</div>
-			<div x-show="kind === '0'" class="grid grid-cols-[4.5rem_1fr_1fr] gap-2">
-				<input type="text" inputmode="decimal" name="quantity" value={ fd.Quantity } placeholder="Qty" aria-label="Quantity" class="input-field text-center tabular-nums"/>
+			<div x-show="kind === '0'" class="grid grid-cols-[1fr_4.5rem_1fr] gap-2">
 				<input type="text" inputmode="decimal" name="unit_price" value={ fd.UnitPrice } placeholder="Unit price" aria-label="Unit price" class="input-field tabular-nums"/>
+				<input type="text" inputmode="decimal" name="quantity" value={ fd.Quantity } placeholder="Qty" aria-label="Quantity" class="input-field text-center tabular-nums"/>
 				<input type="text" inputmode="decimal" name="total" value={ fd.Total } placeholder="Total" aria-label="Total" class="input-field tabular-nums" :disabled="kind !== '0'"/>
 			</div>
 			<div x-show="kind !== '0'" x-cloak class="grid gap-2">
@@ -585,6 +602,54 @@ templ txItemAddForm(url string, fd *TxItemFD, subtotal float64) {
 }
 
 func txItemsSectionID(prefix, id string) string { return prefix + "-items-" + id }
+
+// itemNameInput is an item line's name, suggesting the catalog's items as
+// typed (itemSuggest, receipts.js: the ones bought at the form's
+// counterparty first); picking one puts its id in idName, typing another
+// name clears it (matched or created by the name when saved).
+templ itemNameInput(name, idName, value, itemID string, invalid bool) {
+	<div x-data="itemSuggest" class="relative flex-1 min-w-0" @click.outside="close()">
+		<input type="hidden" name={ idName } value={ itemID } x-ref="id"/>
+		<input
+			type="text"
+			name={ name }
+			value={ value }
+			placeholder="Item, e.g. Milk 1L"
+			aria-label="Name"
+			autocomplete="off"
+			role="combobox"
+			aria-autocomplete="list"
+			:aria-expanded="open"
+			x-ref="name"
+			x-bind="input"
+			class="input-field w-full"
+			if invalid {
+				aria-invalid="true"
+			}
+		/>
+		<ul
+			x-cloak
+			x-show="open"
+			role="listbox"
+			aria-label="Items"
+			class="absolute z-30 inset-x-0 top-full mt-1 max-h-64 overflow-y-auto overscroll-contain p-1 rounded-xl border border-zinc-700 bg-zinc-900 shadow-xl"
+		>
+			<template x-for="(s, i) in list" :key="s.id">
+				<li
+					role="option"
+					:aria-selected="i === active"
+					@mousedown.prevent="pick(s)"
+					@mouseenter="active = i"
+					:class="i === active && 'bg-zinc-800'"
+					class="flex items-center gap-2 px-3 py-2 rounded-lg text-sm cursor-pointer"
+				>
+					<span class="flex-1 min-w-0 truncate" x-text="s.name"></span>
+					<span x-show="s.last_price" class="shrink-0 text-xs text-zinc-500 tabular-nums" x-text="priceLabel(s)"></span>
+				</li>
+			</template>
+		</ul>
+	</div>
+}
 
 // ReceiptViewer shows a receipt's image full screen while its Alpine scope's
 // full is true, the image only fetched then (the list has one per row); the
@@ -677,7 +742,7 @@ templ TxDetailsItems(tx *models.Transaction, add *TxItemFD, rec *ReceiptFD) {
 			}
 			if !locked {
 				<div class="flex flex-wrap items-start gap-2">
-					@txItemAddForm(fmt.Sprintf("/transactions/%s/items", tx.ID), add, models.TxItemsSubtotal(tx.Items))
+					@txItemAddForm(fmt.Sprintf("/transactions/%s/items", tx.ID), add, models.TxItemsSubtotal(tx.Items), txCounterpartyID(tx.Counterparty))
 					if rec != nil && rec.Enabled {
 						@detailsScanButtons(tx)
 					}
@@ -829,8 +894,16 @@ templ RecurrentTxDetailsItems(rt *models.RecurrentTx, add *TxItemFD) {
 				@TxItemsList(rt.Items, &rt.Account.Currency, rt.Amount, onDelete)
 			}
 			if !rt.IsGamyaa() {
-				@txItemAddForm(fmt.Sprintf("/recurrent-tx/%s/items", rt.ID), add, models.TxItemsSubtotal(rt.Items))
+				@txItemAddForm(fmt.Sprintf("/recurrent-tx/%s/items", rt.ID), add, models.TxItemsSubtotal(rt.Items), txCounterpartyID(rt.Counterparty))
 			}
 		}
 	</div>
+}
+
+// txCounterpartyID is the counterparty's id, empty for none.
+func txCounterpartyID(cp *models.Counterparty) string {
+	if cp == nil {
+		return ""
+	}
+	return cp.ID
 }

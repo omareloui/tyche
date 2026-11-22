@@ -53,6 +53,7 @@ const (
 	TxFilterCategory     = "category"
 	TxFilterCounterparty = "counterparty"
 	TxFilterGoal         = "goal"
+	TxFilterItem         = "item"
 	TxFilterStatus       = "status"
 	TxFilterSource       = "source"
 	TxFilterReceipt      = "receipt"
@@ -78,10 +79,12 @@ type TxFilter struct {
 	CategoryID     string
 	CounterpartyID string
 	GoalID         string
-	Status         TxStatus
-	Source         TxSource
-	Receipt        TxReceipt
-	Note           TxNote
+	// ItemID matches the transactions with a line of the item (Item).
+	ItemID  string
+	Status  TxStatus
+	Source  TxSource
+	Receipt TxReceipt
+	Note    TxNote
 	// From and To are inclusive days, zero for no bound.
 	From, To time.Time
 	// MinAmount and MaxAmount bound the amount, in the account's currency.
@@ -97,6 +100,7 @@ func ParseTxFilter(v url.Values) TxFilter {
 		CategoryID:     strings.TrimSpace(v.Get(TxFilterCategory)),
 		CounterpartyID: strings.TrimSpace(v.Get(TxFilterCounterparty)),
 		GoalID:         strings.TrimSpace(v.Get(TxFilterGoal)),
+		ItemID:         strings.TrimSpace(v.Get(TxFilterItem)),
 	}
 	switch s := TxStatus(v.Get(TxFilterStatus)); s {
 	case TxStatusScheduled, TxStatusFulfilled, TxStatusReview:
@@ -164,6 +168,7 @@ func (f *TxFilter) Values() url.Values {
 	set(TxFilterCategory, f.CategoryID)
 	set(TxFilterCounterparty, f.CounterpartyID)
 	set(TxFilterGoal, f.GoalID)
+	set(TxFilterItem, f.ItemID)
 	set(TxFilterStatus, string(f.Status))
 	set(TxFilterSource, string(f.Source))
 	set(TxFilterReceipt, string(f.Receipt))
@@ -194,7 +199,7 @@ func (f *TxFilter) IsZero() bool {
 func (f *TxFilter) ActiveCount() int {
 	v := f.Values()
 	n := 0
-	for _, k := range []string{TxFilterKind, TxFilterAccount, TxFilterCategory, TxFilterCounterparty, TxFilterGoal, TxFilterStatus, TxFilterSource, TxFilterReceipt, TxFilterNote} {
+	for _, k := range []string{TxFilterKind, TxFilterAccount, TxFilterCategory, TxFilterCounterparty, TxFilterGoal, TxFilterItem, TxFilterStatus, TxFilterSource, TxFilterReceipt, TxFilterNote} {
 		if v.Has(k) {
 			n++
 		}

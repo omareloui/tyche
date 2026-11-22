@@ -216,6 +216,11 @@ templ txFilterBar(f *models.TxFilter, start models.MonthStart, accs []models.Acc
 				if len(gls) > 0 {
 					@txFilterCombo(models.TxFilterGoal, "Goal", "Any goal", f.GoalID, true, goalComboOptions(gls))
 				}
+				if f.ItemID != "" {
+					// Set from an item's details (/items): kept while the other
+					// filters change, removed by its chip.
+					<input type="hidden" name={ models.TxFilterItem } value={ f.ItemID }/>
+				}
 				@txFilterCombo(models.TxFilterStatus, "Status", "Any status", string(f.Status), false, []form.ComboOption{
 					{Value: string(models.TxStatusFulfilled), Label: "Fulfilled", Leading: icons.Check("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 					{Value: string(models.TxStatusScheduled), Label: "Scheduled", Leading: icons.Calendar("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},

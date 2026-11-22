@@ -12,7 +12,6 @@ import (
 
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
-	"github.com/pressly/goose/v3"
 	"go.uber.org/zap"
 )
 
@@ -225,18 +224,6 @@ func (tm *TenantManager) checkBackup(path string) error {
 		return invalidBackup("This backup can't be upgraded to the current version.")
 	}
 	return nil
-}
-
-func latestMigration() (int64, error) {
-	ms, err := goose.CollectMigrations(migrationsDir, 0, goose.MaxVersion)
-	if err != nil {
-		return 0, err
-	}
-	last, err := ms.Last()
-	if err != nil {
-		return 0, err
-	}
-	return last.Version, nil
 }
 
 // buildImport creates a fresh database at dst with the current schema and

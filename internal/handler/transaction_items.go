@@ -46,7 +46,8 @@ func parseRate(s string) *float64 {
 }
 
 // parseTxItems reads the line rows (parallel item_* fields, one value per
-// row), dropping blank rows; never nil, so saving replaces the lines.
+// row: every row sends all nine), dropping blank rows; never nil, so saving
+// replaces the lines.
 func parseTxItems(r *http.Request) []models.TxItem {
 	_ = r.ParseForm()
 	f := r.Form
@@ -61,6 +62,7 @@ func parseTxItems(r *http.Request) []models.TxItem {
 		kind, _ := strconv.Atoi(at("item_kind", i))
 		it := models.TxItem{
 			ID:        at("item_id", i),
+			ItemID:    at("item_item_id", i),
 			Kind:      models.TxItemKindOf(int64(kind)),
 			Name:      at("item_name", i),
 			Quantity:  parseSignedFloat(at("item_quantity", i)),
@@ -150,6 +152,7 @@ func parseTxItemFD(r *http.Request) (*models.TxItem, *views.TxItemFD) {
 	kind, _ := strconv.Atoi(r.FormValue("kind"))
 	it := &models.TxItem{
 		Kind:      models.TxItemKindOf(int64(kind)),
+		ItemID:    strings.TrimSpace(r.FormValue("item_ref")),
 		Name:      strings.TrimSpace(r.FormValue("name")),
 		Quantity:  parseSignedFloat(r.FormValue("quantity")),
 		UnitPrice: parseSignedFloat(r.FormValue("unit_price")),
@@ -158,7 +161,7 @@ func parseTxItemFD(r *http.Request) (*models.TxItem, *views.TxItemFD) {
 		Included:  r.FormValue("included") != "",
 	}
 	fd := &views.TxItemFD{
-		Kind: it.Kind, Name: it.Name, Included: it.Included,
+		Kind: it.Kind, ItemID: it.ItemID, Name: it.Name, Included: it.Included,
 		Quantity: r.FormValue("quantity"), UnitPrice: r.FormValue("unit_price"),
 		Total: r.FormValue("total"), Rate: r.FormValue("rate"),
 	}
