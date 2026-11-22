@@ -102,6 +102,11 @@ LEFT JOIN currencies AS gc ON g.currency_id = gc.id
 WHERE
     t.reimburses_id IS NULL
     AND NOT (t.transfer_pair_id IS NOT NULL AND t.kind = 2)
+    -- A debt for something bought for the user comes nested under its expense
+    -- (GetBoughtByOfMany), unless filtering by an account its expense isn't in.
+    AND (t.bought_for_id IS NULL OR (sqlc.narg(account_id) IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM transactions AS bt WHERE bt.id = t.bought_for_id AND bt.account_id = sqlc.narg(account_id)
+    )))
     AND (sqlc.narg(q) IS NULL
         OR INSTR(LOWER(t.description), sqlc.narg(q)) > 0
         OR INSTR(LOWER(t.note), sqlc.narg(q)) > 0
@@ -121,6 +126,12 @@ WHERE
             JOIN accounts AS pa ON pt.account_id = pa.id
             WHERE pt.id = t.transfer_pair_id
                 AND (INSTR(LOWER(pt.description), sqlc.narg(q)) > 0 OR INSTR(LOWER(pt.note), sqlc.narg(q)) > 0 OR INSTR(LOWER(pa.name), sqlc.narg(q)) > 0)
+        )
+        OR EXISTS (
+            SELECT 1 FROM transactions AS bt
+            JOIN accounts AS ba ON bt.account_id = ba.id
+            WHERE bt.bought_for_id = t.id
+                AND (INSTR(LOWER(bt.description), sqlc.narg(q)) > 0 OR INSTR(LOWER(bt.note), sqlc.narg(q)) > 0 OR INSTR(LOWER(ba.name), sqlc.narg(q)) > 0)
         ))
     AND (sqlc.narg(kind) IS NULL
         OR (t.transfer_pair_id IS NULL AND t.kind = sqlc.narg(kind))
@@ -144,6 +155,8 @@ WHERE
         SELECT 1 FROM transactions AS rt WHERE rt.reimburses_id = t.id AND rt.needs_review
     ) OR EXISTS (
         SELECT 1 FROM transactions AS pt WHERE pt.id = t.transfer_pair_id AND pt.needs_review
+    ) OR EXISTS (
+        SELECT 1 FROM transactions AS bt WHERE bt.bought_for_id = t.id AND bt.needs_review
     )) = sqlc.narg(needs_review))
     AND (sqlc.narg(from_sms) IS NULL OR EXISTS (
         SELECT 1 FROM sms_messages AS sm WHERE sm.transaction_id = t.id
@@ -197,6 +210,11 @@ LEFT JOIN categories AS cat ON t.category_id = cat.id
 WHERE
     t.reimburses_id IS NULL
     AND NOT (t.transfer_pair_id IS NOT NULL AND t.kind = 2)
+    -- A debt for something bought for the user comes nested under its expense
+    -- (GetBoughtByOfMany), unless filtering by an account its expense isn't in.
+    AND (t.bought_for_id IS NULL OR (sqlc.narg(account_id) IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM transactions AS bt WHERE bt.id = t.bought_for_id AND bt.account_id = sqlc.narg(account_id)
+    )))
     AND (sqlc.narg(q) IS NULL
         OR INSTR(LOWER(t.description), sqlc.narg(q)) > 0
         OR INSTR(LOWER(t.note), sqlc.narg(q)) > 0
@@ -216,6 +234,12 @@ WHERE
             JOIN accounts AS pa ON pt.account_id = pa.id
             WHERE pt.id = t.transfer_pair_id
                 AND (INSTR(LOWER(pt.description), sqlc.narg(q)) > 0 OR INSTR(LOWER(pt.note), sqlc.narg(q)) > 0 OR INSTR(LOWER(pa.name), sqlc.narg(q)) > 0)
+        )
+        OR EXISTS (
+            SELECT 1 FROM transactions AS bt
+            JOIN accounts AS ba ON bt.account_id = ba.id
+            WHERE bt.bought_for_id = t.id
+                AND (INSTR(LOWER(bt.description), sqlc.narg(q)) > 0 OR INSTR(LOWER(bt.note), sqlc.narg(q)) > 0 OR INSTR(LOWER(ba.name), sqlc.narg(q)) > 0)
         ))
     AND (sqlc.narg(kind) IS NULL
         OR (t.transfer_pair_id IS NULL AND t.kind = sqlc.narg(kind))
@@ -239,6 +263,8 @@ WHERE
         SELECT 1 FROM transactions AS rt WHERE rt.reimburses_id = t.id AND rt.needs_review
     ) OR EXISTS (
         SELECT 1 FROM transactions AS pt WHERE pt.id = t.transfer_pair_id AND pt.needs_review
+    ) OR EXISTS (
+        SELECT 1 FROM transactions AS bt WHERE bt.bought_for_id = t.id AND bt.needs_review
     )) = sqlc.narg(needs_review))
     AND (sqlc.narg(from_sms) IS NULL OR EXISTS (
         SELECT 1 FROM sms_messages AS sm WHERE sm.transaction_id = t.id
@@ -701,6 +727,208 @@ LEFT JOIN categories AS cat ON t.category_id = cat.id
 LEFT JOIN goals AS g ON g.id IN (a.goal_id, ta.goal_id) OR g.id = t.loan_goal_id
 LEFT JOIN currencies AS gc ON g.currency_id = gc.id
 WHERE t.transfer_pair_id IN (SELECT value FROM json_each(sqlc.arg(ids)));
+
+-- name: SetTransactionBoughtFor :exec
+UPDATE transactions
+SET
+    bought_for_id = sqlc.narg(bought_for_id)
+WHERE id = sqlc.arg(id);
+
+-- name: ClearBoughtForOf :exec
+UPDATE transactions
+SET
+    bought_for_id = NULL
+WHERE bought_for_id = sqlc.arg(id);
+
+-- name: GetBoughtForTotal :one
+-- What the debts of the expense id (but exclude_id) brought into its account.
+SELECT CAST(TOTAL(to_amount) AS FLOAT) AS total
+FROM transactions
+WHERE bought_for_id = sqlc.arg(id) AND id != sqlc.arg(exclude_id);
+
+-- name: GetBoughtByOfMany :many
+-- The debts of the expenses ids (a JSON array), oldest first.
+SELECT
+    sqlc.embed(t),
+    sqlc.embed(a),
+    sqlc.embed(c),
+    ak.enum AS account_kind_enum,
+    cp.name AS counterparty_name,
+    cp.icon AS counterparty_icon,
+    cp.color AS counterparty_color,
+    CAST(COALESCE(cp.is_merchant, FALSE) AS BOOLEAN) AS counterparty_is_merchant,
+    ta.id AS to_account_id,
+    ta.name AS to_account_name,
+    ta.kind_id AS to_account_kind_id,
+    tak.enum AS to_account_kind_enum,
+    ta.amount AS to_account_amount,
+    ta.currency_id AS to_account_currency_id,
+    ta.counterparty_id AS to_account_counterparty_id,
+    ta.card_number AS to_account_card_number,
+    ta.card_limit AS to_account_card_limit,
+    ta.name_on_card AS to_account_name_on_card,
+    ta.iban AS to_account_iban,
+    ta.note AS to_account_note,
+    ta.is_archived AS to_account_is_archived,
+    ta.exclude_from_balance AS to_account_exclude_from_balance,
+    ta.expiration_date AS to_account_expiration_date,
+    ta.created_at AS to_account_created_at,
+    ta.deleted_at AS to_account_deleted_at,
+    tc.string AS to_account_currency_string,
+    tc.symbol AS to_account_currency_symbol,
+    tc.in_grams AS to_account_currency_in_grams,
+    cat.id AS category_id,
+    cat.name AS category_name,
+    cat.color AS category_color,
+    cat.budget_amount AS category_budget_amount,
+    cat.budget_currency_id AS category_budget_currency_id,
+    cat.created_at AS category_created_at,
+    g.id AS goal_id,
+    g.name AS goal_name,
+    g.price AS goal_price,
+    g.currency_id AS goal_currency_id,
+    g.fulfilled_at AS goal_fulfilled_at,
+    gc.string AS goal_currency_string,
+    gc.symbol AS goal_currency_symbol,
+    gc.in_grams AS goal_currency_in_grams,
+    CAST(COALESCE((
+        SELECT sm.body FROM sms_messages AS sm WHERE sm.transaction_id = t.id LIMIT 1
+    ), '') AS TEXT) AS sms_body,
+    CAST((
+        SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id
+    ) AS FLOAT) AS reimbursed
+FROM transactions AS t
+LEFT JOIN accounts AS a ON t.account_id = a.id
+LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
+LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN account_kinds AS ak ON a.kind_id = ak.id
+LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
+LEFT JOIN account_kinds AS tak ON ta.kind_id = tak.id
+LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
+LEFT JOIN categories AS cat ON t.category_id = cat.id
+-- A goal's transactions are the ones in or out of its accounts, and the
+-- payments of the loan it was bought with.
+LEFT JOIN goals AS g ON g.id IN (a.goal_id, ta.goal_id) OR g.id = t.loan_goal_id
+LEFT JOIN currencies AS gc ON g.currency_id = gc.id
+WHERE t.bought_for_id IN (SELECT value FROM json_each(sqlc.arg(ids)))
+ORDER BY t.scheduled_to, t.created_at;
+
+-- name: GetBoughtByCandidates :many
+-- Debts borrowed (out of a Debt account, kind 4) into an account in
+-- currency_id, scheduled in [since, until), not for something yet, that an
+-- expense can be bought with, newest first.
+SELECT
+    sqlc.embed(t),
+    sqlc.embed(a),
+    sqlc.embed(c),
+    ak.enum AS account_kind_enum,
+    cp.name AS counterparty_name,
+    cp.icon AS counterparty_icon,
+    cp.color AS counterparty_color,
+    CAST(COALESCE(cp.is_merchant, FALSE) AS BOOLEAN) AS counterparty_is_merchant,
+    ta.id AS to_account_id,
+    ta.name AS to_account_name,
+    ta.kind_id AS to_account_kind_id,
+    tak.enum AS to_account_kind_enum,
+    ta.amount AS to_account_amount,
+    ta.currency_id AS to_account_currency_id,
+    ta.counterparty_id AS to_account_counterparty_id,
+    ta.card_number AS to_account_card_number,
+    ta.card_limit AS to_account_card_limit,
+    ta.name_on_card AS to_account_name_on_card,
+    ta.iban AS to_account_iban,
+    ta.note AS to_account_note,
+    ta.is_archived AS to_account_is_archived,
+    ta.exclude_from_balance AS to_account_exclude_from_balance,
+    ta.expiration_date AS to_account_expiration_date,
+    ta.created_at AS to_account_created_at,
+    ta.deleted_at AS to_account_deleted_at,
+    tc.string AS to_account_currency_string,
+    tc.symbol AS to_account_currency_symbol,
+    tc.in_grams AS to_account_currency_in_grams,
+    cat.id AS category_id,
+    cat.name AS category_name,
+    cat.color AS category_color,
+    cat.budget_amount AS category_budget_amount,
+    cat.budget_currency_id AS category_budget_currency_id,
+    cat.created_at AS category_created_at,
+    g.id AS goal_id,
+    g.name AS goal_name,
+    g.price AS goal_price,
+    g.currency_id AS goal_currency_id,
+    g.fulfilled_at AS goal_fulfilled_at,
+    gc.string AS goal_currency_string,
+    gc.symbol AS goal_currency_symbol,
+    gc.in_grams AS goal_currency_in_grams,
+    CAST(COALESCE((
+        SELECT sm.body FROM sms_messages AS sm WHERE sm.transaction_id = t.id LIMIT 1
+    ), '') AS TEXT) AS sms_body,
+    CAST((
+        SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id
+    ) AS FLOAT) AS reimbursed
+FROM transactions AS t
+LEFT JOIN accounts AS a ON t.account_id = a.id
+LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
+LEFT JOIN currencies AS c ON a.currency_id = c.id
+LEFT JOIN account_kinds AS ak ON a.kind_id = ak.id
+LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
+LEFT JOIN account_kinds AS tak ON ta.kind_id = tak.id
+LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
+LEFT JOIN categories AS cat ON t.category_id = cat.id
+-- A goal's transactions are the ones in or out of its accounts, and the
+-- payments of the loan it was bought with.
+LEFT JOIN goals AS g ON g.id IN (a.goal_id, ta.goal_id) OR g.id = t.loan_goal_id
+LEFT JOIN currencies AS gc ON g.currency_id = gc.id
+WHERE
+    t.kind = 4
+    AND t.bought_for_id IS NULL
+    AND ak.enum = 4 -- models.AccKindDebt
+    AND tak.enum != 4
+    AND a.deleted_at IS NULL
+    AND ta.deleted_at IS NULL
+    AND ta.currency_id = sqlc.arg(currency_id)
+    AND t.scheduled_to >= sqlc.arg(since)
+    AND t.scheduled_to < sqlc.arg(until)
+ORDER BY t.scheduled_to DESC, t.created_at DESC
+LIMIT 50;
+
+-- name: GetBoughtForCandidates :many
+-- Expenses in currency_id scheduled in [since, until) with at least min_left
+-- of them not bought by someone yet, not a goal's, a deleted account's, a
+-- transfer's leg nor a loan's payment, newest first.
+SELECT
+    t.id,
+    t.amount,
+    t.description,
+    t.scheduled_to,
+    a.name AS account_name,
+    cur.symbol AS currency_symbol,
+    cur.in_grams AS currency_in_grams,
+    cp.name AS counterparty_name,
+    cat.name AS category_name,
+    cat.color AS category_color,
+    CAST((
+        SELECT TOTAL(bt.to_amount) FROM transactions AS bt WHERE bt.bought_for_id = t.id
+    ) AS FLOAT) AS bought_by
+FROM transactions AS t
+JOIN accounts AS a ON t.account_id = a.id
+JOIN currencies AS cur ON a.currency_id = cur.id
+LEFT JOIN counterparties AS cp ON t.counterparty_id = cp.id
+LEFT JOIN categories AS cat ON t.category_id = cat.id
+WHERE
+    t.kind = 1
+    AND a.kind_id NOT IN (SELECT id FROM account_kinds WHERE enum = 6) -- models.AccKindGoal
+    AND a.deleted_at IS NULL
+    AND t.transfer_pair_id IS NULL
+    AND t.loan_goal_id IS NULL
+    AND a.currency_id = sqlc.arg(currency_id)
+    AND t.scheduled_to >= sqlc.arg(since)
+    AND t.scheduled_to < sqlc.arg(until)
+    AND t.amount - (
+        SELECT TOTAL(bt.to_amount) FROM transactions AS bt WHERE bt.bought_for_id = t.id
+    ) >= CAST(sqlc.arg(min_left) AS FLOAT)
+ORDER BY t.scheduled_to DESC, t.created_at DESC
+LIMIT 50;
 
 -- name: GetTransferPairCandidates :many
 -- Unpaired transactions of kind (1 expense, 2 income) out of account_id,

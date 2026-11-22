@@ -198,6 +198,9 @@ func (r *Repository) GetTransactionsPage(ctx context.Context, f models.TxFilter,
 	if err := r.loadReimbursements(ctx, q, page.Upcoming, page.History); err != nil {
 		return nil, err
 	}
+	if err := r.loadBoughtBy(ctx, q, page.Upcoming, page.History); err != nil {
+		return nil, err
+	}
 	if err := r.loadTransferPairs(ctx, q, page.Upcoming, page.History); err != nil {
 		return nil, err
 	}
@@ -461,6 +464,13 @@ func (r *Repository) GetTransaction(ctx context.Context, id string) (*models.Tra
 		}
 	}
 
+	if tx.Kind == models.ExpenseTxKind {
+		if err := r.loadBoughtBy(ctx, q, one); err != nil {
+			return nil, err
+		}
+		tx.BoughtBy = one[0].BoughtBy
+	}
+
 	if tx.IsTransferLeg() && tx.Kind == models.ExpenseTxKind {
 		txs := []models.Transaction{*tx}
 		if err := r.loadTransferPairs(ctx, q, txs); err != nil {
@@ -610,6 +620,9 @@ func (r *Repository) updateTransactionWithTxn(ctx context.Context, qtx *queries.
 	if err := r.syncTransferPairOnUpdateWithTxn(qtx, ctx, oldTx, tx); err != nil {
 		return err
 	}
+	if err := r.syncBoughtForOnUpdateWithTxn(qtx, ctx, oldTx, tx); err != nil {
+		return err
+	}
 
 	if !oldTx.FulfilledAt.IsZero() {
 		if err := r.undoTxToAccountWithTxn(qtx, ctx, oldTx); err != nil {
@@ -691,6 +704,7 @@ func dbTransactionToTransaction(
 
 		ReimbursesID:   dbTx.ReimbursesID.String,
 		TransferPairID: dbTx.TransferPairID.String,
+		BoughtForID:    dbTx.BoughtForID.String,
 		RecurrentTxID:  dbTx.RecurrentID.String,
 		LoanGoalID:     dbTx.LoanGoalID.String,
 		FromImport:     dbTx.ImportID.Valid,
@@ -725,7 +739,7 @@ func dbTransactionToTransaction(
 	return &tx
 }
 
-func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTransactionsRow | queries.GetReimbursementsOfManyRow | queries.GetTransferPairsOfManyRow | queries.GetTransferPairCandidatesRow](dbTx *T) *models.Transaction {
+func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTransactionsRow | queries.GetReimbursementsOfManyRow | queries.GetTransferPairsOfManyRow | queries.GetTransferPairCandidatesRow | queries.GetBoughtByOfManyRow | queries.GetBoughtByCandidatesRow](dbTx *T) *models.Transaction {
 	_dbTx := queries.GetTransactionsRow(*dbTx)
 
 	var cp *queries.Counterparty

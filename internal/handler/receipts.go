@@ -373,6 +373,7 @@ func (h Handler) ScanReceiptIntoForm(w http.ResponseWriter, r *http.Request) (te
 		fd.RecurrenceFD = nil
 	}
 	fd.WishlistID = r.FormValue("wishlist_id")
+	fd.BoughtBy = boughtByFD(r)
 	fd.Receipt = views.ReceiptFD{
 		Enabled: true,
 		ID:      scan.receiptID,

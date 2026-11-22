@@ -537,6 +537,24 @@ templ txDetailsLinked(d *models.TxDetails, def *models.Currency) {
 			</div>
 		}
 	}
+	if len(tx.BoughtBy) > 0 {
+		@txDetailsSection("Bought for you by") {
+			for _, bt := range tx.BoughtBy {
+				@txDetailsBoughtFor(&bt, bt.ID, tx.ID)
+			}
+			if left := tx.Amount - tx.BoughtByTotal(); left >= 0.01 {
+				<div class="flex justify-between px-3 text-sm text-zinc-400">
+					<span>You paid</span>
+					<span class={ "tabular-nums", templ.KV("sensitive", txSalaryLike(ctx, tx)) }>{ "-" + tx.Account.Currency.Format(left) }</span>
+				</div>
+			}
+		}
+	}
+	if d.BoughtFor != nil {
+		@txDetailsSection("Bought for you") {
+			@txDetailsBoughtFor(d.BoughtFor, tx.ID, tx.ID)
+		}
+	}
 	if d.Reimburses != nil {
 		@txDetailsSection("Pays back") {
 			@txDetailsMini(d.Reimburses)
@@ -590,6 +608,29 @@ templ txDetailsSMS(d *models.TxDetails) {
 }
 
 // txDetailsMini is a related transaction, opening its own details on click.
+// txDetailsBoughtFor is a transaction linked by a "bought for" link (the
+// debt debtID, of the expense or the other way), with a button unlinking it,
+// the details of detailsID answered back.
+templ txDetailsBoughtFor(tx *models.Transaction, debtID, detailsID string) {
+	<div class="flex items-center gap-2">
+		<div class="flex-1 min-w-0">
+			@txDetailsMini(tx)
+		</div>
+		<button
+			type="button"
+			hx-delete={ fmt.Sprintf("/transactions/%s/bought-for", debtID) }
+			hx-vals={ fmt.Sprintf(`{"details_id": %q}`, detailsID) }
+			hx-target="#txd-panel"
+			hx-swap="innerHTML"
+			title="Unlink"
+			aria-label="Unlink"
+			class="grid place-items-center shrink-0 w-9 h-9 rounded-full border border-zinc-700 text-zinc-400 cursor-pointer transition-colors hover:border-red-400 hover:text-red-400"
+		>
+			@icons.Unlink("16")
+		</button>
+	</div>
+}
+
 templ txDetailsMini(tx *models.Transaction) {
 	{{ v := txMiniView(ctx, tx) }}
 	<button

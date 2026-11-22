@@ -19,6 +19,8 @@ type TxDetails struct {
 	Split *TxSplit
 	// Reimburses is the expense this income pays back.
 	Reimburses *Transaction
+	// BoughtFor is the expense of what this debt's person bought for the user.
+	BoughtFor *Transaction
 	// Pair is the other side of the transfer pair it's a side of.
 	Pair *Transaction
 	// CounterpartyTxs are the latest other transactions with its

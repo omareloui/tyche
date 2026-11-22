@@ -768,6 +768,7 @@ document.addEventListener("alpine:init", () => {
   Alpine.data("txRow", () => ({
     openMenu: false,
     openReimbursements: false,
+    openBoughtBy: false,
     openTransferPair: false,
     dx: 0,
     x0: null,

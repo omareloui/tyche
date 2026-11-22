@@ -81,6 +81,14 @@ func (v ValidationField) String() string {
 		return fmt.Sprintf("Can't be less than what got reimbursed of it (%s)", v.Param)
 	case "gt_reimbursable":
 		return fmt.Sprintf("Exceeds what's left to reimburse of its expense (%s)", v.Param)
+	case "lt_bought_by":
+		return fmt.Sprintf("Can't be less than what the people who bought it paid (%s)", v.Param)
+	case "gt_bought_for":
+		return fmt.Sprintf("Exceeds what's left of the expense it paid for (%s)", v.Param)
+	case "bought_by_person":
+		return "Pick who bought it, or type a new name"
+	case "bought_by_once":
+		return "Can't be bought by someone and repeat"
 	case "months_or_amount":
 		return "Fill in the months or the amount per month"
 	case "down_payment_too_high":

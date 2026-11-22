@@ -237,6 +237,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 	fd, err := h.prepareTx(r, tx, accs, knds, cats, cps)
 	if fd != nil {
 		fd.WishlistID = wishlistID
+		fd.BoughtBy = boughtByFD(r)
 		return views.CreateTransactionForm(fd, accs, knds, cats, cps, &claims.DefaultCurrency), nil
 	}
 	if err != nil {
@@ -261,6 +262,17 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		}
 	}
 
+	// Someone bought it for the user: the debt borrowed from them, saved
+	// with it.
+	debt, valerr := boughtByDebt(r, tx, accs)
+	if valerr != nil {
+		fd := h.mapTransactionToFD(r.Context(), tx, valerr)
+		fd.WishlistID = wishlistID
+		fd.BoughtBy = boughtByFD(r)
+		fd.BoughtBy.AccountID.Error = valerr.Errors.MsgFor("BoughtBy")
+		return views.CreateTransactionForm(fd, accs, knds, cats, cps, &claims.DefaultCurrency), nil
+	}
+
 	if wishlistID != "" && tx.RecurrentTx == nil {
 		item, err := h.repo.GetWishlistItem(r.Context(), wishlistID)
 		if err != nil {
@@ -269,7 +281,12 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		scheduledTxs = append(scheduledTxs, wishlistPlanTxs(item, tx)...)
 	}
 
-	if err := h.repo.CreateTransaction(r.Context(), tx, tx.RecurrentTx, scheduledTxs); err != nil {
+	if debt != nil && len(scheduledTxs) == 0 {
+		if err := h.repo.CreateBoughtForMe(r.Context(), tx, debt); err != nil {
+			l.Error("creating bought for me", zap.Error(err))
+			return nil, err
+		}
+	} else if err := h.repo.CreateTransaction(r.Context(), tx, tx.RecurrentTx, scheduledTxs); err != nil {
 		l.Error("creating transaction", zap.Error(err))
 		return nil, err
 	}

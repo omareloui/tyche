@@ -55,6 +55,12 @@ func (r *Repository) GetTransactionDetails(ctx context.Context, id string, def *
 		}
 	}
 
+	if tx.IsBoughtFor() {
+		if d.BoughtFor, err = r.GetTransaction(ctx, tx.BoughtForID); err != nil {
+			return nil, err
+		}
+	}
+
 	if tx.IsTransferLeg() {
 		if tx.TransferPair != nil {
 			d.Pair = tx.TransferPair

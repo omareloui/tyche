@@ -600,6 +600,9 @@ templ transaction(tx *models.Transaction, def *models.Currency) {
 		if len(tx.Reimbursements) > 0 {
 			@reimbursementsBreakdown(tx, def)
 		}
+		if len(tx.BoughtBy) > 0 {
+			@boughtByBreakdown(tx, def)
+		}
 	</div>
 }
 
@@ -650,7 +653,7 @@ templ txTile(tx *models.Transaction, v *txView) {
 
 templ txChips(tx *models.Transaction, v *txView) {
 	{{ isRefund := tx.Kind == models.RefundTxKind }}
-	{{ hasChips := isRefund || tx.Category != nil || v.isScheduled || tx.FromSMS || tx.FromImport || tx.RecurrentTxID != "" || tx.Goal != nil || len(tx.Reimbursements) > 0 || tx.ItemsCount > 0 || tx.Receipt != nil || len(tx.Wishes) > 0 || tx.Note != "" }}
+	{{ hasChips := isRefund || tx.Category != nil || v.isScheduled || tx.FromSMS || tx.FromImport || tx.RecurrentTxID != "" || tx.Goal != nil || len(tx.Reimbursements) > 0 || len(tx.BoughtBy) > 0 || tx.ItemsCount > 0 || tx.Receipt != nil || len(tx.Wishes) > 0 || tx.Note != "" }}
 	if hasChips {
 		<div class="flex flex-wrap items-center gap-1.5 mt-1.5">
 			if isRefund {
@@ -747,6 +750,19 @@ templ txChips(tx *models.Transaction, v *txView) {
 					</button>
 					@ReceiptViewer(tx.Receipt.URL())
 				</span>
+			}
+			if len(tx.BoughtBy) > 0 {
+				<button
+					type="button"
+					@click="openBoughtBy = !openBoughtBy"
+					:aria-expanded="openBoughtBy"
+					title="Show the debts of who bought it for you"
+					class="chip max-w-56 cursor-pointer bg-pink-400/10 text-pink-300 transition-colors hover:bg-pink-400/20"
+				>
+					@icons.Gift("12")
+					<span class="truncate">{ models.BoughtByLabel(tx.BoughtBy) }</span>
+					@icons.ChevronDown("12", &templ.Attributes{":class": "openBoughtBy && 'rotate-180'", "class": "transition-transform shrink-0"})
+				</button>
 			}
 			if len(tx.Reimbursements) > 0 {
 				<button
@@ -1128,6 +1144,66 @@ templ reimbursement(tx *models.Transaction, def *models.Currency) {
 	</div>
 }
 
+// boughtByBreakdown lists the debts of the people who bought an expense for
+// the user, under it.
+templ boughtByBreakdown(tx *models.Transaction, def *models.Currency) {
+	<div x-cloak x-show="openBoughtBy" x-transition class="ml-6 md:ml-16 mt-2 grid grid-cols-1 gap-2 border-l-2 border-pink-400/20 pl-4">
+		for _, d := range tx.BoughtBy {
+			@boughtByDebt(&d, def)
+		}
+		if left := tx.Amount - tx.BoughtByTotal(); left >= 0.01 {
+			<div class="flex justify-between px-4 text-sm text-zinc-400">
+				<span>You paid</span>
+				<span class={ "tabular-nums", templ.KV("sensitive", txSalaryLike(ctx, tx)) }>{ "-" + tx.Account.Currency.Format(left) }</span>
+			</div>
+		}
+	</div>
+}
+
+// boughtByDebt is the debt borrowed from someone who bought the expense it's
+// under for the user.
+templ boughtByDebt(tx *models.Transaction, def *models.Currency) {
+	{{ v := newTxView(ctx, tx) }}
+	<div
+		{ txRowAttrs(tx, &v)... }
+		hx-target="this"
+		hx-swap="outerHTML"
+		class="relative"
+		x-data="txRow"
+	>
+		@components.EntryMenuAt("openMenu", txMenuSmall, getBoughtByMenuItems(tx))
+		<div
+			data-tx-row
+			data-details={ tx.ID }
+			tabindex="0"
+			class={ "relative flex items-center gap-3 px-4 py-2 rounded-xl bg-tx-row cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60", templ.KV("opacity-70", v.isScheduled) }
+		>
+			@txSelTile(true) {
+				<div class="grid place-items-center shrink-0 w-9 h-9 rounded-lg bg-pink-400/10 text-pink-300">
+					@icons.Debt("18")
+				</div>
+			}
+			<div class="flex-1 min-w-0">
+				<p class="truncate">{ "Owed to " + models.DebtPartyName(&tx.Account) }</p>
+				<p class="text-xs text-zinc-500 truncate">
+					{ formatTxDay(tx.ScheduledTo) } · { tx.Account.Name } → { v.account }
+				</p>
+			</div>
+			<div class={ "shrink-0 text-right tabular-nums", templ.KV("sensitive", v.sensitive) }>
+				<p class="font-semibold text-pink-300">{ tx.ViewAmount() }</p>
+				{{ conv := txConverted(tx, def) }}
+				if conv != "" {
+					<p class="text-xs text-zinc-500">{ conv }</p>
+				}
+			</div>
+			@components.EntryMenuTrigger("openMenu", "Debt actions")
+		</div>
+		if tx.NeedsReview {
+			@txReviewStrip(tx)
+		}
+	</div>
+}
+
 // txUndoToast offers to undo the deletes waiting to be sent, all of them;
 // its ring drains, with the seconds left in it, until they are (restarted by
 // each delete).
@@ -1288,6 +1364,17 @@ func getTransactionMenuItems(tx *models.Transaction) []templ.Component {
 		links = append(links,
 			txMenuItem("Pair transfer…", "get", fmt.Sprintf("/transactions/%s/transfer-pair", tx.ID), icons.Transfer("16")))
 	}
+	if tx.CanBeBoughtBy() && !tx.IsReimbursement() {
+		links = append(links,
+			txMenuItem("Bought by someone…", "get", fmt.Sprintf("/transactions/%s/bought-by", tx.ID), icons.Gift("16")))
+	}
+	if tx.IsBoughtFor() {
+		links = append(links,
+			txMenuItem("Unlink bought for", "delete", fmt.Sprintf("/transactions/%s/bought-for", tx.ID), icons.Unlink("16")))
+	} else if tx.CanPayFor() {
+		links = append(links,
+			txMenuItem("Bought for…", "get", fmt.Sprintf("/transactions/%s/bought-for", tx.ID), icons.Gift("16")))
+	}
 	if CanMatchRecurrent(tx) {
 		links = append(links,
 			txMenuItem("Match to scheduled…", "get", fmt.Sprintf("/transactions/%s/recurrent-match", tx.ID), icons.Repeat("16")))
@@ -1320,6 +1407,28 @@ func getTransferLegMenuItems(tx *models.Transaction) []templ.Component {
 			txMenuItem("Unlink transfer", "delete", fmt.Sprintf("/transactions/%s/transfer-pair", tx.ID), icons.Unlink("16")),
 		},
 		[]templ.Component{txMenuEdit(tx)},
+		[]templ.Component{txMenuSelect(), txMenuDelete()},
+	)
+}
+
+func getBoughtByMenuItems(tx *models.Transaction) []templ.Component {
+	status := []templ.Component{}
+	if tx.FulfilledAt.IsZero() {
+		status = append(status, txMenuFulfill(tx))
+	}
+	status = append(status, txMenuReview(tx))
+
+	edit := []templ.Component{}
+	if !tx.IsLocked() {
+		edit = append(edit, txMenuEdit(tx))
+	}
+	return txMenuGroups(
+		[]templ.Component{txMenuDetails(tx.ID)},
+		status,
+		[]templ.Component{
+			txMenuItem("Unlink bought for", "delete", fmt.Sprintf("/transactions/%s/bought-for", tx.ID), icons.Unlink("16")),
+		},
+		edit,
 		[]templ.Component{txMenuSelect(), txMenuDelete()},
 	)
 }
@@ -1737,8 +1846,5 @@ func txMeta(v *txView) string {
 }
 
 func debtPartyName(acc *models.Account) string {
-	if acc.Counterparty != nil && acc.Counterparty.Name != "" {
-		return acc.Counterparty.Name
-	}
-	return acc.Name
+	return models.DebtPartyName(acc)
 }

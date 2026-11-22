@@ -2,6 +2,7 @@ package views
 
 import (
 	"fmt"
+	"math"
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/slicesutils"
@@ -26,6 +27,15 @@ type TransactionFD struct {
 	Items         []TxItemFD
 	ItemsCurrency ItemsCurrencyFD
 	Receipt       ReceiptFD
+	// BoughtBy is the create form's "someone bought it for me".
+	BoughtBy BoughtByFD
+}
+
+// BoughtByFD is whether someone bought the expense for the user, and the
+// Debt account of who.
+type BoughtByFD struct {
+	On        form.FDInput
+	AccountID form.FDInput
 }
 
 type TransactionAmountsAndKindFD struct {
@@ -134,8 +144,58 @@ templ TxFormFields(
 		}
 	</div>
 	if fd.RecurrenceFD != nil {
+		@boughtByField(id, fd.BoughtBy, accs)
 		@RecurrenceFormBody(id, fd.RecurrenceFD)
 	}
+}
+
+// boughtByField saves an expense someone bought for the user with the debt
+// borrowed from them, linked (only for expenses, on creating them).
+templ boughtByField(id string, fd BoughtByFD, accs []models.Account) {
+	<div
+		x-data={ fmt.Sprintf("{ on: %t }", fd.On.Value != "") }
+		class="hidden [form:has(input[name=kind][value=Expense]:checked)_&]:grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-800/20 p-4"
+	>
+		@form.Toggle("Someone bought it for me", "bought_by_on", id, icons.Gift("18"), fd.On,
+			templ.Attributes{"@change": "on = $event.target.checked"})
+		<div x-cloak x-show="on" x-collapse class="grid gap-2">
+			@form.Field("Who bought it", "bought_by", id, icons.User("15"), fd.AccountID.Error) {
+				@form.Combobox(form.ComboboxProps{
+					Name: "bought_by", ID: id, Label: "Who bought it", Placeholder: "Pick or type a name",
+					Options: boughtByComboOptions(accs), Data: fd.AccountID, Searchable: true,
+					CreateURL: "/transactions/bought-by/person",
+				})
+			}
+			<p class="text-xs text-zinc-500">You'll owe them its amount: a debt from them is saved with it, into the same account.</p>
+		</div>
+	</div>
+}
+
+// boughtByComboOptions are the Debt accounts (people) who can buy something
+// for the user.
+func boughtByComboOptions(accs []models.Account) []form.ComboOption {
+	opts := []form.ComboOption{}
+	for i := range accs {
+		if accs[i].Kind.Enum != models.AccKindDebt || accs[i].IsArchive {
+			continue
+		}
+		opts = append(opts, boughtByComboOption(&accs[i]))
+	}
+	return form.SortComboOptions(opts)
+}
+
+func boughtByComboOption(a *models.Account) form.ComboOption {
+	return form.ComboOption{
+		Value:   a.ID,
+		Label:   a.Name,
+		Search:  a.Currency.String,
+		Leading: accKindIcon(models.AccKindDebt, "16"),
+	}
+}
+
+// BoughtByComboOption answers the "who bought it" combobox's CreateURL.
+func BoughtByComboOption(a *models.Account) templ.Component {
+	return form.ComboOptionItem(boughtByComboOption(a), true)
 }
 
 // txDateChip sets the date input (x-ref "date") to daysAgo days before today.
@@ -596,6 +656,116 @@ templ ReimbursePicker(tx *models.Transaction, exps []models.ReimbursableExpense,
 							<p class="font-semibold">{ "-" + e.ViewAmount() }</p>
 							if e.Reimbursed > 0 {
 								<p class="text-xs text-zinc-400">{ "Net -" + e.ViewNetAmount() }</p>
+							}
+						</div>
+					</button>
+				</li>
+			}
+		</ul>
+	</div>
+}
+
+// BoughtByPicker links an expense to the debt borrowed from who bought it
+// for the user.
+templ BoughtByPicker(tx *models.Transaction, debts []models.Transaction, errMsg string) {
+	{{ v := newTxView(ctx, tx) }}
+	<div data-tx hx-target="this" hx-swap="outerHTML" class="grid gap-3 px-4 py-3 rounded-2xl bg-zinc-700/20">
+		<div class="flex items-center justify-between gap-4">
+			<p>
+				Who bought <span class="font-semibold">{ v.title }</span>
+				<span class={ "tabular-nums", templ.KV("sensitive", v.sensitive) }>{ v.amount }</span> { "for you?" }
+			</p>
+			<button hx-get={ fmt.Sprintf("/transactions/%s", tx.ID) } class="cursor-pointer text-sm text-zinc-400 hover:text-zinc-200">Cancel</button>
+		</div>
+		if errMsg != "" {
+			<p class="text-sm text-red-500">{ errMsg }</p>
+		}
+		if len(debts) == 0 {
+			<p class="text-sm text-zinc-400">No debt borrowed into { tx.Account.Currency.String } within two weeks of it is free to link. Add one, or a new expense with "Someone bought it for me".</p>
+		}
+		<ul class="grid gap-2 max-h-96 overflow-y-auto">
+			for _, d := range debts {
+				<li>
+					<button
+						hx-put={ fmt.Sprintf("/transactions/%s/bought-by", tx.ID) }
+						hx-vals={ fmt.Sprintf(`{"debt_id": %q}`, d.ID) }
+						class="cursor-pointer w-full flex items-center gap-4 px-4 py-2 rounded-xl bg-zinc-700/30 text-left transition-colors hover:bg-zinc-600/40"
+					>
+						<div class="flex-1 min-w-0">
+							<p class="flex items-center gap-2 min-w-0">
+								<span class="truncate">{ models.DebtPartyName(&d.Account) }</span>
+								if boughtForLikely(tx, &d) {
+									<span class="chip shrink-0 bg-sky-400/10 text-sky-300">Likely</span>
+								}
+							</p>
+							<p class="text-xs text-zinc-400 truncate">
+								{ formatTxDay(d.ScheduledTo) } · into { d.ToAccount.Name }
+								if d.Description != "" {
+									· { d.Description }
+								}
+							</p>
+						</div>
+						<p class="shrink-0 font-semibold tabular-nums">{ d.ViewToAmount() }</p>
+					</button>
+				</li>
+			}
+		</ul>
+	</div>
+}
+
+// boughtForLikely flags a debt that brought in an expense's amount into its
+// account.
+func boughtForLikely(expense, debt *models.Transaction) bool {
+	return debt.ToAccount != nil && debt.ToAccount.ID == expense.Account.ID &&
+		math.Abs(debt.ToAmount-expense.Amount) < 0.005
+}
+
+// BoughtForPicker links a debt to the expense of what its person bought for
+// the user.
+templ BoughtForPicker(tx *models.Transaction, exps []models.BoughtForCandidate, errMsg string) {
+	<div data-tx hx-target="this" hx-swap="outerHTML" class="grid gap-3 px-4 py-3 rounded-2xl bg-zinc-700/20">
+		<div class="flex items-center justify-between gap-4">
+			<p>
+				What did <span class="font-semibold">{ models.DebtPartyName(&tx.Account) }</span> buy { "for you with" }
+				<span class="tabular-nums">{ tx.ViewToAmount() }</span>?
+			</p>
+			<button hx-get={ fmt.Sprintf("/transactions/%s", tx.ID) } class="cursor-pointer text-sm text-zinc-400 hover:text-zinc-200">Cancel</button>
+		</div>
+		if errMsg != "" {
+			<p class="text-sm text-red-500">{ errMsg }</p>
+		}
+		if len(exps) == 0 {
+			<p class="text-sm text-zinc-400">No expense in the same currency within two weeks of it has enough left not bought by someone.</p>
+		}
+		<ul class="grid gap-2 max-h-96 overflow-y-auto">
+			for _, e := range exps {
+				<li>
+					<button
+						hx-put={ fmt.Sprintf("/transactions/%s/bought-for", tx.ID) }
+						hx-vals={ fmt.Sprintf(`{"expense_id": %q}`, e.ID) }
+						class="cursor-pointer w-full flex items-center gap-4 px-4 py-2 rounded-xl bg-zinc-700/30 text-left transition-colors hover:bg-zinc-600/40"
+					>
+						<div class="flex-1 min-w-0">
+							<p class="truncate">{ e.Title }</p>
+							<p class="text-xs text-zinc-400 truncate">
+								if e.Subtitle != "" {
+									{ e.Subtitle } ·
+								}
+								{ formatTxDay(e.ScheduledTo) } · { e.Account }
+							</p>
+							if e.Category != "" {
+								<div class="flex mt-1">
+									<span class="chip max-w-48">
+										@categoryDot(e.CategoryColor)
+										<span class="truncate">{ e.Category }</span>
+									</span>
+								</div>
+							}
+						</div>
+						<div class="shrink-0 text-right tabular-nums">
+							<p class="font-semibold">{ "-" + e.ViewAmount() }</p>
+							if e.BoughtBy > 0 {
+								<p class="text-xs text-zinc-400">{ e.ViewLeft() + " left" }</p>
 							}
 						</div>
 					</button>

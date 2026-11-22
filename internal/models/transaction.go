@@ -49,6 +49,12 @@ type Transaction struct {
 	TransferPairID string
 	// TransferPair is the incoming leg, nested under the outgoing one.
 	TransferPair *Transaction
+	// BoughtForID is the expense of what someone bought for the user, on the
+	// debt borrowed from them for it (see bought_for.go).
+	BoughtForID string
+	// BoughtBy are the debts of the people who bought this expense for the
+	// user, nested under it.
+	BoughtBy []Transaction
 	// Items are its lines (items bought, then charges), in order.
 	Items []TxItem
 	// ItemsCount is how many lines it has, set in lists where the lines
