@@ -4,8 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -32,13 +30,6 @@ func TestRateOn(t *testing.T) {
 	defer srv.Close()
 
 	j := newTestJob(t, srv, []string{"eur", "egp"})
-	schema, err := os.ReadFile("../../sql/shared/schema/20261118000000_fx_rates_daily.sql")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := j.db.Exec(strings.Split(strings.Split(string(schema), "-- +goose Down")[0], "-- +goose Up")[1]); err != nil {
-		t.Fatal(err)
-	}
 	j.datedURLs = []string{srv.URL + "/%s/%s.json"}
 	defer SetRates(map[string]map[string]float64{"eur": {"egp": 50}, "usd": {"egp": 47, "gbp": 0.75, "eur": 0.9}})()
 
@@ -65,5 +56,62 @@ func TestRateOn(t *testing.T) {
 	fail.Store(true)
 	if got, dated, _ := j.RateOn(ctx, day.AddDate(0, 0, -3), "eur", "egp"); dated || got != 50 {
 		t.Errorf("failed fetch = %v (dated %v), want today's 50", got, dated)
+	}
+}
+
+func TestRatesOn(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		switch r.URL.Path {
+		case "/2026-10-01/usd.json":
+			_, _ = w.Write([]byte(`{"date":"2026-10-01","usd":{"egp":40,"eur":0.8,"xau":0.0005}}`))
+		case "/2026-10-08/usd.json":
+			_, _ = w.Write([]byte(`{"date":"2026-10-08","usd":{"egp":50,"eur":1}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	j := newTestJob(t, srv, []string{"usd", "egp", "eur"})
+	j.datedURLs = []string{srv.URL + "/%s/%s.json"}
+	defer SetRates(map[string]map[string]float64{
+		"usd": {"egp": 47, "eur": 0.9, "xau": 0.0004},
+		"egp": {"usd": 1.0 / 47}, "xau": {"usd": 2500},
+	})()
+
+	ctx := context.Background()
+	d1 := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	d2 := time.Date(2026, 10, 8, 0, 0, 0, 0, time.UTC)
+	today := time.Now().UTC()
+	days := []time.Time{d1, d2, today}
+
+	rates, approx := j.RatesOn(ctx, days, []string{"EGP", "XAU", "USD"}, "USD")
+	if got := rates[d1]["egp"]; got != 1.0/40 {
+		t.Errorf("egp on d1 = %v, want 1/40", got)
+	}
+	if got := rates[d1]["xau"]; got != 1/0.0005 {
+		t.Errorf("xau on d1 = %v, want 2000", got)
+	}
+	if got := rates[d1]["usd"]; got != 1 {
+		t.Errorf("usd = %v, want 1", got)
+	}
+	if got := rates[d2]["egp"]; got != 1.0/50 {
+		t.Errorf("egp on d2 = %v, want 1/50", got)
+	}
+	// d2 lacks xau: today's, approximate.
+	if !approx || rates[d2]["xau"] != 1/0.0004 {
+		t.Errorf("xau on d2 = %v (approx %v), want today's 2500 approximate", rates[d2]["xau"], approx)
+	}
+	if got := rates[today]["egp"]; got != 1.0/47 {
+		t.Errorf("egp today = %v, want today's 1/47", got)
+	}
+
+	// Asked again: from fx_rates_daily but d2's xau (not stored, refetched).
+	n := hits.Load()
+	rates, _ = j.RatesOn(ctx, []time.Time{d1}, []string{"egp", "xau"}, "usd")
+	if hits.Load() != n || rates[d1]["egp"] != 1.0/40 {
+		t.Errorf("second call: %d fetches, egp %v; want none, from the cache", hits.Load()-n, rates[d1]["egp"])
 	}
 }

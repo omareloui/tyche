@@ -413,6 +413,16 @@ func (j *Job) persist(ctx context.Context, fetched []baseRates, fetchedAt time.T
 			}); err != nil {
 				return err
 			}
+			// Kept as the day's too, so the rates of past days (RateOn,
+			// RatesOn) come from our own history.
+			if !br.asOf.IsZero() {
+				day := time.Date(br.asOf.Year(), br.asOf.Month(), br.asOf.Day(), 0, 0, 0, 0, time.UTC)
+				if err := q.UpsertDailyFxRate(ctx, sharedqueries.UpsertDailyFxRateParams{
+					Day: day, Base: br.base, Quote: quote, Rate: v,
+				}); err != nil {
+					return err
+				}
+			}
 		}
 	}
 

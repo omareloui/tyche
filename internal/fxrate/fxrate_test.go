@@ -61,6 +61,13 @@ func newTestJob(t *testing.T, srv *httptest.Server, codes []string) *Job {
 	if _, err := db.Exec(up); err != nil {
 		t.Fatal(err)
 	}
+	daily, err := os.ReadFile("../../sql/shared/schema/20261118000000_fx_rates_daily.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(strings.Split(string(daily), "-- +goose Down")[0]); err != nil {
+		t.Fatal(err)
+	}
 
 	j := NewJob(db, sharedqueries.New(db), codes, time.Hour)
 	j.urls = []string{srv.URL + "/primary/%s.json", srv.URL + "/fallback/%s.json"}
@@ -113,6 +120,12 @@ func TestRunOnce(t *testing.T) {
 	// usd: eur, egp; eur: usd, egp.
 	if info.Pairs != 4 || info.Bases != 2 || info.AsOf != "2026-10-30" || info.FetchedAt.IsZero() {
 		t.Errorf("unexpected info %+v", info)
+	}
+
+	// Each fetch is the day's rates too.
+	day := time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC)
+	if v, err := j.q.GetDailyFxRate(ctx, sharedqueries.GetDailyFxRateParams{Day: day, Base: "eur", Quote: "egp"}); err != nil || v != 100 {
+		t.Errorf("eur → egp on 2026-10-30 = %v, %v; want 100 kept as the day's", v, err)
 	}
 
 	// A failing base keeps its stored rates.
