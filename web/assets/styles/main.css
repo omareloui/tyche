@@ -138,10 +138,35 @@ input[type="number"] {
   @apply flex items-center gap-2 max-w-full h-10 pl-3.5 pr-3 rounded-full border border-zinc-700 bg-zinc-800 text-base text-zinc-100 cursor-pointer outline-none transition-[border-color,box-shadow] hover:border-zinc-500;
 }
 
-/* A details row's quick pick (views.QuickPick, QuickPicker with "txd-pick"). */
+/* A details row's quick pick (views.QuickPick, QuickPicker with "txd-pick"):
+   a ghost chip, reading as the row's plain value (its text lined up with the
+   other rows', the row's height kept) until hovered, focused or opened. */
 .txd-pick.combo-chip,
 .txd-pick .combo-chip {
-  @apply h-8 gap-1.5 pl-2.5 pr-2 text-sm;
+  @apply relative -left-2.5 h-8 -my-1.5 gap-1.5 pl-2.5 pr-2 text-sm border-transparent bg-transparent transition-[border-color,box-shadow,background-color];
+}
+
+.txd-pick.combo-chip:hover,
+.txd-pick .combo-chip:hover {
+  @apply border-zinc-700 bg-zinc-800/60;
+}
+
+.txd-pick.combo-chip:focus-visible,
+.txd-pick .combo-chip:focus-visible,
+.txd-pick .combo-chip[aria-expanded="true"] {
+  @apply bg-zinc-800;
+  border-color: var(--accent);
+}
+
+.txd-pick.combo-chip > svg:last-child,
+.txd-pick .combo-chip > svg:last-child {
+  @apply text-zinc-600 transition-colors;
+}
+
+.txd-pick.combo-chip:hover > svg:last-child,
+.txd-pick .combo-chip:hover > svg:last-child,
+.txd-pick .combo-chip[aria-expanded="true"] > svg:last-child {
+  @apply text-zinc-300;
 }
 
 .combo-field[data-empty="true"] [x-ref="display"],
