@@ -320,30 +320,45 @@ templ txDetailsFields(d *models.TxDetails, v *txView) {
 				<span class={ "tabular-nums", templ.KV("sensitive", hide) }>{ tx.ViewToAmount() }</span>
 			}
 		}
-		if tx.Category != nil {
+		{{ pickable := TxRefsEditable(tx) }}
+		if tx.Category != nil || pickable {
 			@txDetailsRow("Category", icons.Tag("15")) {
-				<button
-					type="button"
-					{ txFilterBy(models.TxFilterCategory, tx.Category.ID)... }
-					title={ "Show only " + tx.Category.Name }
-					class="txd-link inline-flex items-center gap-1.5"
-				>
-					@categoryDot(tx.Category.Color)
-					{ tx.Category.Name }
-				</button>
+				if pickable {
+					@QuickPick(txCategoryPick(tx))
+					if tx.Category != nil {
+						@txDetailsFilterBy(models.TxFilterCategory, tx.Category.ID, tx.Category.Name)
+					}
+				} else {
+					<button
+						type="button"
+						{ txFilterBy(models.TxFilterCategory, tx.Category.ID)... }
+						title={ "Show only " + tx.Category.Name }
+						class="txd-link inline-flex items-center gap-1.5"
+					>
+						@categoryDot(tx.Category.Color)
+						{ tx.Category.Name }
+					</button>
+				}
 			}
 		}
-		if tx.Counterparty != nil {
+		if tx.Counterparty != nil || pickable {
 			@txDetailsRow("Counterparty", icons.User("15")) {
-				<button
-					type="button"
-					{ txFilterBy(models.TxFilterCounterparty, tx.Counterparty.ID)... }
-					title={ "Show only " + tx.Counterparty.Name }
-					class="txd-link inline-flex items-center gap-1.5"
-				>
-					@components.CounterpartyIcon(tx.Counterparty.Name, tx.Counterparty.Icon, tx.Counterparty.Color, "w-5 h-5 text-[10px]")
-					{ tx.Counterparty.Name }
-				</button>
+				if pickable {
+					@QuickPick(txCounterpartyPick(tx))
+					if tx.Counterparty != nil {
+						@txDetailsFilterBy(models.TxFilterCounterparty, tx.Counterparty.ID, tx.Counterparty.Name)
+					}
+				} else {
+					<button
+						type="button"
+						{ txFilterBy(models.TxFilterCounterparty, tx.Counterparty.ID)... }
+						title={ "Show only " + tx.Counterparty.Name }
+						class="txd-link inline-flex items-center gap-1.5"
+					>
+						@components.CounterpartyIcon(tx.Counterparty.Name, tx.Counterparty.Icon, tx.Counterparty.Color, "w-5 h-5 text-[10px]")
+						{ tx.Counterparty.Name }
+					</button>
+				}
 			}
 		}
 		if tx.Goal != nil {
@@ -375,6 +390,20 @@ templ txDetailsFields(d *models.TxDetails, v *txView) {
 			<span class="text-zinc-400">{ tzctx.In(ctx, tx.CreatedAt).Format("Jan 2 2006, 3:04pm") }</span>
 		}
 	</dl>
+}
+
+// txDetailsFilterBy narrows the list to a picked row's value, next to its
+// quick pick.
+templ txDetailsFilterBy(key, id, name string) {
+	<button
+		type="button"
+		{ txFilterBy(key, id)... }
+		title={ "Show only " + name }
+		aria-label={ "Show only " + name }
+		class="shrink-0 p-1.5 rounded-lg text-zinc-500 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+	>
+		@icons.Filter("14")
+	</button>
 }
 
 templ txDetailsRow(label string, icon templ.Component) {

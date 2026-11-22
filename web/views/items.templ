@@ -435,6 +435,16 @@ func itemSearch(it *models.Item) string {
 	return strings.ToLower(strings.Join(append([]string{it.Name}, it.Aliases...), " "))
 }
 
+// itemTileStyle tints an item's tile with its category's color, as a
+// transaction's tile is with its kind's.
+func itemTileStyle(it *models.Item) string {
+	if it.Category == nil || it.Category.ID == "" {
+		return ""
+	}
+	hex := it.Category.Hex()
+	return "color: " + hex + "; background-color: color-mix(in oklab, " + hex + " 12%, transparent)"
+}
+
 func itemCategoryID(it *models.Item) string {
 	if it.Category == nil {
 		return ""
@@ -460,19 +470,25 @@ templ itemRow(s *models.ItemSummary, def *models.Currency) {
 		@click="open($event, $el)"
 		class="relative flex items-center gap-3 min-w-0 px-4 py-3 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 cursor-pointer transition-colors hover:ring-zinc-600"
 	>
-		<div class="grid place-items-center shrink-0 w-10 h-10 rounded-xl bg-zinc-800 text-zinc-400">
+		<div class="grid place-items-center shrink-0 w-10 h-10 rounded-xl bg-zinc-800 text-zinc-400" style={ itemTileStyle(it) }>
 			@icons.Basket("18")
 		</div>
 		<div class="flex-1 min-w-0">
-			<p class="flex items-center gap-2 min-w-0">
-				<span class="font-medium truncate">{ it.Name }</span>
-				if it.Category != nil {
-					<span class="inline-flex items-center gap-1 shrink-0 text-xs text-zinc-400">
-						<span class="size-1.5 rounded-full" style={ "background-color:" + it.Category.Hex() }></span>
-						{ it.Category.Name }
-					</span>
-				}
-			</p>
+			<p class="font-medium truncate">{ it.Name }</p>
+			if it.Category != nil {
+				<div class="flex mt-1 mb-0.5">
+					// Like a transaction row's: narrows the list to it.
+					<button
+						type="button"
+						@click={ fmt.Sprintf("category = category === '%s' ? '' : '%s'", it.Category.ID, it.Category.ID) }
+						title={ "Show only " + it.Category.Name }
+						class="chip shrink-0 max-w-48 cursor-pointer transition-colors hover:bg-zinc-700 hover:text-zinc-200"
+					>
+						<span class="shrink-0 w-2.5 h-2.5 rounded-full" style={ "background-color:" + it.Category.Hex() }></span>
+						<span class="truncate">{ it.Category.Name }</span>
+					</button>
+				</div>
+			}
 			<p class="text-xs text-zinc-500 truncate tabular-nums">
 				if st.Times == 0 {
 					Not bought yet

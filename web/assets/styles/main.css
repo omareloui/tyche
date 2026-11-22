@@ -138,6 +138,12 @@ input[type="number"] {
   @apply flex items-center gap-2 max-w-full h-10 pl-3.5 pr-3 rounded-full border border-zinc-700 bg-zinc-800 text-base text-zinc-100 cursor-pointer outline-none transition-[border-color,box-shadow] hover:border-zinc-500;
 }
 
+/* A details row's quick pick (views.QuickPick, QuickPicker with "txd-pick"). */
+.txd-pick.combo-chip,
+.txd-pick .combo-chip {
+  @apply h-8 gap-1.5 pl-2.5 pr-2 text-sm;
+}
+
 .combo-field[data-empty="true"] [x-ref="display"],
 .combo-chip[data-empty="true"] [x-ref="display"] {
   @apply text-zinc-500;

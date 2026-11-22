@@ -75,6 +75,7 @@ templ RecurrentTxDetails(d *RecurrentTxDetailsData) {
 			<div class="flex-1 grid grid-cols-1 auto-rows-max content-start gap-6 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
 				@rtxDetailsHero(rt, &v, d.Def, ended)
 				@rtxDetailsActions(rt, ended)
+				@rtxDetailsRefs(rt)
 				@rtxDetailsMoney(d)
 				if !rt.IsGamyaa() || len(rt.Items) > 0 {
 					@RecurrentTxDetailsItems(rt, nil)
@@ -120,12 +121,6 @@ templ rtxDetailsHero(rt *models.RecurrentTx, v *txView, def *models.Currency, en
 				<span class="chip">
 					@icons.Archive("12")
 					Ended
-				</span>
-			}
-			if rt.Category != nil && rt.Category.Name != "" && rt.Category.Name != v.title {
-				<span class="chip">
-					@icons.Tag("12")
-					{ rt.Category.Name }
 				</span>
 			}
 		</div>
@@ -278,5 +273,27 @@ func skipURLs(rt *models.RecurrentTx) func(*models.Transaction) string {
 	}
 	return func(tx *models.Transaction) string {
 		return fmt.Sprintf("/recurrent-tx/%s/occurrences/%s?from=%s", rt.ID, tx.ID, RecurrentTxDetailsFrom)
+	}
+}
+
+// rtxDetailsRefs are its category and counterparty, picked again in place
+// (applied to its scheduled occurrences, as an edit).
+templ rtxDetailsRefs(rt *models.RecurrentTx) {
+	{{ pickable := RecurrentRefsEditable(rt) }}
+	{{ hasCat := rt.Category != nil && rt.Category.ID != "" }}
+	{{ hasCp := rt.Counterparty != nil && rt.Counterparty.ID != "" }}
+	if pickable || hasCat || hasCp {
+		<dl class="grid gap-px overflow-hidden rounded-2xl bg-zinc-800/60 ring-1 ring-zinc-800">
+			if pickable || hasCat {
+				@txDetailsRow("Category", icons.Tag("15")) {
+					@QuickPick(rtxCategoryPick(rt))
+				}
+			}
+			if pickable || hasCp {
+				@txDetailsRow("Counterparty", icons.User("15")) {
+					@QuickPick(rtxCounterpartyPick(rt))
+				}
+			}
+		</dl>
 	}
 }

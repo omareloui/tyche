@@ -840,18 +840,17 @@ templ TxReviewCategoryPicker(tx *models.Transaction, cats []models.Category) {
 	if tx.Category != nil {
 		{{ catID = tx.Category.ID }}
 	}
-	<div class="min-w-0 max-w-56" x-init="$nextTick(() => $el.querySelector('[x-ref=button]')?.click())">
-		@form.Combobox(form.ComboboxProps{
+	// The answer is the list (hxRetargetTxList).
+	@QuickPicker(QuickPickerProps{
+		Combo: form.ComboboxProps{
 			Name: "category_id", ID: "review-" + tx.ID, Label: "Category", Placeholder: "Pick a category",
 			Options: categoryComboOptions(getCategoriesOfKinds(cats, tx.Kind)),
-			Data:    form.FDInput{Value: catID}, Nullable: true, Searchable: true, Chip: true,
+			Data:    form.FDInput{Value: catID}, Nullable: true,
 			CreateURL: categoryCreateURL(tx.Kind),
-			InputAttrs: templ.Attributes{
-				"hx-put":     fmt.Sprintf("/transactions/%s/category", tx.ID),
-				"hx-trigger": "change",
-			},
-		})
-	</div>
+		},
+		SaveURL: fmt.Sprintf("/transactions/%s/category", tx.ID),
+		Target:  "#tx-list", Class: "max-w-56",
+	})
 }
 
 // txSMSPopup shows the SMS a transaction was created from on hovering its

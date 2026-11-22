@@ -200,3 +200,8 @@ UPDATE item_categories SET name = sqlc.arg(name), color = sqlc.arg(color) WHERE 
 -- name: DeleteItemCategory :exec
 -- Its items keep going, without a category (ON DELETE SET NULL).
 DELETE FROM item_categories WHERE id = sqlc.arg(id);
+
+-- name: SetItemCategory :exec
+UPDATE items
+SET category_id = sqlc.narg(category_id), updated_at = CURRENT_TIMESTAMP
+WHERE id = sqlc.arg(id);

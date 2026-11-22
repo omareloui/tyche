@@ -1,0 +1,339 @@
+package views
+
+import (
+	"fmt"
+
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+// QuickPickProps is a reference (category, counterparty…) shown in details,
+// picked again in place without opening the edit form.
+type QuickPickProps struct {
+	// ID is the element's id, the picker and the save's answer replacing it.
+	ID    string
+	Label string
+	// PickerURL answers the QuickPicker (its options load on demand).
+	PickerURL string
+	// Display is the current value, nil showing Placeholder.
+	Display     templ.Component
+	Placeholder string
+	// Editable shows a chip opening the picker, else the value alone.
+	Editable bool
+}
+
+// QuickPickID is a quick pick's id for an entity's field.
+func QuickPickID(kind, id, field string) string {
+	return "pick-" + kind + "-" + field + "-" + id
+}
+
+// QuickPick is the value as a chip loading its QuickPicker on click.
+templ QuickPick(p QuickPickProps) {
+	if !p.Editable {
+		<span id={ p.ID } class="inline-flex items-center gap-1.5 min-w-0">
+			if p.Display != nil {
+				@p.Display
+			} else {
+				<span class="text-zinc-500">None</span>
+			}
+		</span>
+	} else {
+		<button
+			type="button"
+			id={ p.ID }
+			hx-get={ p.PickerURL }
+			hx-target="this"
+			hx-swap="outerHTML"
+			title={ "Change the " + p.Label }
+			aria-label={ "Change the " + p.Label }
+			class="combo-chip txd-pick"
+		>
+			<span class="flex min-w-0 items-center gap-1.5">
+				if p.Display != nil {
+					@p.Display
+				} else {
+					<span class="truncate text-zinc-500">{ p.Placeholder }</span>
+				}
+			</span>
+			@icons.ChevronDown("14", &templ.Attributes{"class": "shrink-0 ml-auto text-zinc-400"})
+		</button>
+	}
+}
+
+// QuickPickerProps is a QuickPick opened: its combobox, saving on pick.
+type QuickPickerProps struct {
+	ID    string
+	Combo form.ComboboxProps
+	// SaveURL takes a PUT of the picked value (Combo.Name), its answer
+	// swapped into Target (the picker itself when empty) with Swap
+	// (outerHTML when empty).
+	SaveURL      string
+	Target, Swap string
+	// Class goes on the wrapper, e.g. "max-w-56", "txd-pick" (a details row's size).
+	Class string
+}
+
+// QuickPicker is a chip combobox opened right away, saving what's picked.
+templ QuickPicker(p QuickPickerProps) {
+	{{ cb := p.Combo }}
+	{{ cb.Chip, cb.Searchable = true, true }}
+	{{ attrs := templ.Attributes{"hx-put": p.SaveURL, "hx-trigger": "change"} }}
+	if p.Target != "" {
+		{{ attrs["hx-target"] = p.Target }}
+	} else {
+		{{ attrs["hx-target"] = "#" + p.ID }}
+	}
+	if p.Swap != "" {
+		{{ attrs["hx-swap"] = p.Swap }}
+	} else {
+		{{ attrs["hx-swap"] = "outerHTML" }}
+	}
+	{{ cb.InputAttrs = attrs }}
+	<div
+		if p.ID != "" {
+			id={ p.ID }
+		}
+		class={ "min-w-0", p.Class }
+		x-init="$nextTick(() => $el.querySelector('[x-ref=button]')?.click())"
+	>
+		@form.Combobox(cb)
+	</div>
+}
+
+// The fields a details drawer picks again in place
+// (/<entity>/{id}/pick/{field}).
+const (
+	QuickPickCategory     = "category"
+	QuickPickCounterparty = "counterparty"
+)
+
+templ categoryDisplay(color, name string) {
+	@categoryDot(color)
+	<span class="truncate">{ name }</span>
+}
+
+templ counterpartyDisplay(cp *models.Counterparty) {
+	@components.CounterpartyIcon(cp.Name, cp.Icon, cp.Color, "w-5 h-5 text-[10px]")
+	<span class="truncate">{ cp.Name }</span>
+}
+
+func categoryPickDisplay(c *models.Category) templ.Component {
+	if c == nil || c.ID == "" {
+		return nil
+	}
+	return categoryDisplay(c.Color, c.Name)
+}
+
+func counterpartyPickDisplay(cp *models.Counterparty) templ.Component {
+	if cp == nil || cp.ID == "" {
+		return nil
+	}
+	return counterpartyDisplay(cp)
+}
+
+func categoryRefID(c *models.Category) string {
+	if c == nil {
+		return ""
+	}
+	return c.ID
+}
+
+func counterpartyRefID(cp *models.Counterparty) string {
+	if cp == nil {
+		return ""
+	}
+	return cp.ID
+}
+
+// KindTakesRefs tells a transaction kind takes a category and a
+// counterparty (transfers and debts take none).
+func KindTakesRefs(k models.TxKind) bool {
+	return k != models.TransferTxKind && k != models.DebtTxKind && k != models.AdjustmentTxKind
+}
+
+// TxRefsEditable tells the details can pick the transaction's category and
+// counterparty again: as a bulk edit can, but a transfer pair's legs (shown
+// as one transfer).
+func TxRefsEditable(tx *models.Transaction) bool {
+	return tx.BulkLock() == models.TxBulkLockNone && KindTakesRefs(tx.Kind) && !tx.IsTransferLeg()
+}
+
+func txPickURL(id, field string) string {
+	return fmt.Sprintf("/transactions/%s/pick/%s", id, field)
+}
+
+func txCategoryPick(tx *models.Transaction) QuickPickProps {
+	return QuickPickProps{
+		ID: QuickPickID("tx", tx.ID, QuickPickCategory), Label: "category",
+		PickerURL: txPickURL(tx.ID, QuickPickCategory), Display: categoryPickDisplay(tx.Category),
+		Placeholder: "Add a category", Editable: TxRefsEditable(tx),
+	}
+}
+
+func txCounterpartyPick(tx *models.Transaction) QuickPickProps {
+	return QuickPickProps{
+		ID: QuickPickID("tx", tx.ID, QuickPickCounterparty), Label: "counterparty",
+		PickerURL: txPickURL(tx.ID, QuickPickCounterparty), Display: counterpartyPickDisplay(tx.Counterparty),
+		Placeholder: "Add a counterparty", Editable: TxRefsEditable(tx),
+	}
+}
+
+// TxCategoryPicker picks a transaction's category again, the details
+// answered into the drawer.
+func TxCategoryPicker(tx *models.Transaction, cats []models.Category) templ.Component {
+	return QuickPicker(QuickPickerProps{
+		ID: QuickPickID("tx", tx.ID, QuickPickCategory),
+		Combo: form.ComboboxProps{
+			Name: "category_id", ID: "pick-" + tx.ID, Label: "Category", Placeholder: "Add a category",
+			Options: categoryComboOptions(getCategoriesOfKinds(cats, tx.Kind)),
+			Data:    form.FDInput{Value: categoryRefID(tx.Category)}, Nullable: true,
+			CreateURL: categoryCreateURL(tx.Kind),
+		},
+		SaveURL: txPickURL(tx.ID, QuickPickCategory),
+		Target:  "#txd-panel", Swap: "innerHTML", Class: "txd-pick max-w-full",
+	})
+}
+
+// TxCounterpartyPicker picks a transaction's counterparty again.
+func TxCounterpartyPicker(tx *models.Transaction, cps []models.Counterparty) templ.Component {
+	cur := counterpartyRefID(tx.Counterparty)
+	return QuickPicker(QuickPickerProps{
+		ID: QuickPickID("tx", tx.ID, QuickPickCounterparty),
+		Combo: form.ComboboxProps{
+			Name: "counterparty_id", ID: "pick-" + tx.ID, Label: "Counterparty", Placeholder: "Add a counterparty",
+			Options: counterpartyComboOptions(cps, cur),
+			Data:    form.FDInput{Value: cur}, Nullable: true,
+			CreateURL: "/counterparties/quick",
+		},
+		SaveURL: txPickURL(tx.ID, QuickPickCounterparty),
+		Target:  "#txd-panel", Swap: "innerHTML", Class: "txd-pick max-w-full",
+	})
+}
+
+// RecurrentRefsEditable tells the details can pick the recurrent
+// transaction's category and counterparty again.
+func RecurrentRefsEditable(rt *models.RecurrentTx) bool {
+	return !rt.IsGamyaa() && KindTakesRefs(rt.Kind)
+}
+
+func rtxPickURL(id, field string) string {
+	return fmt.Sprintf("/recurrent-tx/%s/pick/%s", id, field)
+}
+
+func rtxCategoryPick(rt *models.RecurrentTx) QuickPickProps {
+	return QuickPickProps{
+		ID: QuickPickID("rtx", rt.ID, QuickPickCategory), Label: "category",
+		PickerURL: rtxPickURL(rt.ID, QuickPickCategory), Display: categoryPickDisplay(rt.Category),
+		Placeholder: "Add a category", Editable: RecurrentRefsEditable(rt),
+	}
+}
+
+func rtxCounterpartyPick(rt *models.RecurrentTx) QuickPickProps {
+	return QuickPickProps{
+		ID: QuickPickID("rtx", rt.ID, QuickPickCounterparty), Label: "counterparty",
+		PickerURL: rtxPickURL(rt.ID, QuickPickCounterparty), Display: counterpartyPickDisplay(rt.Counterparty),
+		Placeholder: "Add a counterparty", Editable: RecurrentRefsEditable(rt),
+	}
+}
+
+// RecurrentCategoryPicker picks a recurrent transaction's category again,
+// its details answered into the drawer.
+func RecurrentCategoryPicker(rt *models.RecurrentTx, cats []models.Category) templ.Component {
+	return QuickPicker(QuickPickerProps{
+		ID: QuickPickID("rtx", rt.ID, QuickPickCategory),
+		Combo: form.ComboboxProps{
+			Name: "category_id", ID: "pick-" + rt.ID, Label: "Category", Placeholder: "Add a category",
+			Options: categoryComboOptions(getCategoriesOfKinds(cats, rt.Kind)),
+			Data:    form.FDInput{Value: categoryRefID(rt.Category)}, Nullable: true,
+			CreateURL: categoryCreateURL(rt.Kind),
+		},
+		SaveURL: rtxPickURL(rt.ID, QuickPickCategory),
+		Target:  "#" + components.DrawerSlot, Swap: "innerHTML", Class: "txd-pick max-w-full",
+	})
+}
+
+// RecurrentCounterpartyPicker picks a recurrent transaction's counterparty
+// again.
+func RecurrentCounterpartyPicker(rt *models.RecurrentTx, cps []models.Counterparty) templ.Component {
+	cur := counterpartyRefID(rt.Counterparty)
+	return QuickPicker(QuickPickerProps{
+		ID: QuickPickID("rtx", rt.ID, QuickPickCounterparty),
+		Combo: form.ComboboxProps{
+			Name: "counterparty_id", ID: "pick-" + rt.ID, Label: "Counterparty", Placeholder: "Add a counterparty",
+			Options: counterpartyComboOptions(cps, cur),
+			Data:    form.FDInput{Value: cur}, Nullable: true,
+			CreateURL: "/counterparties/quick",
+		},
+		SaveURL: rtxPickURL(rt.ID, QuickPickCounterparty),
+		Target:  "#" + components.DrawerSlot, Swap: "innerHTML", Class: "txd-pick max-w-full",
+	})
+}
+
+func counterpartyCategoryPickURL(id string) string {
+	return fmt.Sprintf("/counterparties/%s/pick/%s", id, QuickPickCategory)
+}
+
+// CounterpartyCategoryPick is a merchant's default category in its details.
+func CounterpartyCategoryPick(cp *models.Counterparty) templ.Component {
+	return QuickPick(QuickPickProps{
+		ID: QuickPickID("cp", cp.ID, QuickPickCategory), Label: "default category",
+		PickerURL: counterpartyCategoryPickURL(cp.ID), Display: categoryPickDisplay(cp.DefaultCategory),
+		Placeholder: "Add a default category", Editable: cp.IsMerchant,
+	})
+}
+
+// CounterpartyCategoryPicker picks a merchant's default category again (an
+// expense one, as its form), answered with CounterpartyCategoryPick.
+func CounterpartyCategoryPicker(cp *models.Counterparty, cats []models.Category) templ.Component {
+	return QuickPicker(QuickPickerProps{
+		ID: QuickPickID("cp", cp.ID, QuickPickCategory),
+		Combo: form.ComboboxProps{
+			Name: "default_category_id", ID: "pick-" + cp.ID, Label: "Default category", Placeholder: "Add a default category",
+			Options: categoryComboOptions(getCategoriesOfKinds(cats, models.ExpenseTxKind)),
+			Data:    form.FDInput{Value: categoryRefID(cp.DefaultCategory)}, Nullable: true,
+			CreateURL: categoryCreateURL(models.ExpenseTxKind),
+		},
+		SaveURL: counterpartyCategoryPickURL(cp.ID), Class: "txd-pick max-w-full",
+	})
+}
+
+func itemCategoryPickURL(id string) string {
+	return fmt.Sprintf("/items/%s/pick/%s", id, QuickPickCategory)
+}
+
+func itemCategoryRefID(c *models.ItemCategory) string {
+	if c == nil {
+		return ""
+	}
+	return c.ID
+}
+
+// ItemCategoryPick is an item's category in its details.
+func ItemCategoryPick(it *models.Item) templ.Component {
+	var display templ.Component
+	if it.Category != nil && it.Category.ID != "" {
+		display = categoryDisplay(it.Category.Color, it.Category.Name)
+	}
+	return QuickPick(QuickPickProps{
+		ID: QuickPickID("item", it.ID, QuickPickCategory), Label: "category",
+		PickerURL: itemCategoryPickURL(it.ID), Display: display,
+		Placeholder: "Add a category", Editable: true,
+	})
+}
+
+// ItemCategoryPicker picks an item's category again, answered with
+// ItemCategoryPick.
+func ItemCategoryPicker(it *models.Item, cats []models.ItemCategory) templ.Component {
+	return QuickPicker(QuickPickerProps{
+		ID: QuickPickID("item", it.ID, QuickPickCategory),
+		Combo: form.ComboboxProps{
+			Name: "category_id", ID: "pick-" + it.ID, Label: "Category", Placeholder: "Add a category",
+			Options: itemCategoryComboOptions(cats),
+			Data:    form.FDInput{Value: itemCategoryRefID(it.Category)}, Nullable: true,
+			CreateURL: "/items/categories/quick",
+		},
+		SaveURL: itemCategoryPickURL(it.ID), Class: "txd-pick max-w-full",
+	})
+}

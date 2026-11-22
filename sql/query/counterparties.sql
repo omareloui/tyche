@@ -136,3 +136,8 @@ WHERE id = sqlc.arg(id);
 UPDATE counterparties
 SET note = sqlc.arg(note)
 WHERE id = sqlc.arg(id);
+
+-- name: SetCounterpartyDefaultCategory :exec
+UPDATE counterparties
+SET default_category_id = sqlc.narg(default_category_id)
+WHERE id = sqlc.arg(id) AND is_merchant;
