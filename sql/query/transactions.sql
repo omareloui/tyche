@@ -1077,11 +1077,12 @@ ORDER BY day;
 -- name: GetSpendingTimes :many
 -- Fulfilled spending (expenses net of their reimbursements, refunds
 -- negative) one row per transaction between from_date and to_date
--- (exclusive), with its time as stored (in the zone it was written in), for
--- the spending heatmap. Follows the analysis rule; goals' purchases and loan
+-- (exclusive), with its time as stored (in the zone it was written in) and
+-- its category (empty for none), for the spending heatmap. Follows the analysis rule; goals' purchases and loan
 -- payments are left out.
 SELECT
     t.scheduled_to,
+    CAST(IFNULL(t.category_id, '') AS TEXT) AS category_id,
     sqlc.embed(cur),
     CAST(IIF(
         t.kind = 1,

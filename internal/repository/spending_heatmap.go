@@ -26,7 +26,13 @@ func (r *Repository) GetSpendingHeatmap(ctx context.Context, months int, metric 
 		return nil, err
 	}
 	txs, partial := spendingTimes(rows, def)
-	return models.NewSpendingHeatmap(*def, metric, months, from, to, weekStart, loc, txs, partial), nil
+	cats, err := r.GetCategories(ctx)
+	if err != nil {
+		return nil, err
+	}
+	hm := models.NewSpendingHeatmap(*def, metric, months, from, to, weekStart, loc, txs, partial)
+	hm.SetCategories(cats)
+	return hm, nil
 }
 
 // spendingTimes are rows in def, partial when a currency had no rate.
@@ -39,7 +45,7 @@ func spendingTimes(rows []queries.GetSpendingTimesRow, def *models.Currency) ([]
 			partial = true
 			continue
 		}
-		txs = append(txs, models.SpendingTime{At: row.ScheduledTo, Amount: amount})
+		txs = append(txs, models.SpendingTime{At: row.ScheduledTo, CategoryID: row.CategoryID, Amount: amount})
 	}
 	return txs, partial
 }

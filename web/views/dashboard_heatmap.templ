@@ -136,7 +136,8 @@ templ heatmapGrid(hm *models.SpendingHeatmap, step int) {
 		>
 			for r, wd := range hm.Days() {
 				for c, col := range cols {
-					@heatmapCell(hm, wd, col, hm.Level(hm.Cell(wd, col), maxValue), r, c, len(cols))
+					{{ cell := hm.Cell(wd, col) }}
+					@heatmapCell(hm, wd, col, cell, hm.Level(cell, maxValue), r, c, len(cols))
 				}
 			}
 		</div>
@@ -153,8 +154,7 @@ templ heatmapGrid(hm *models.SpendingHeatmap, step int) {
 	</div>
 }
 
-templ heatmapCell(hm *models.SpendingHeatmap, wd time.Weekday, col models.HeatColumn, level, row, c, cols int) {
-	{{ cell := hm.Cell(wd, col) }}
+templ heatmapCell(hm *models.SpendingHeatmap, wd time.Weekday, col models.HeatColumn, cell models.HeatCell, level, row, c, cols int) {
 	<div tabindex="0" class="group relative h-6 outline-none">
 		<div
 			class={
@@ -174,8 +174,12 @@ templ heatmapCell(hm *models.SpendingHeatmap, wd time.Weekday, col models.HeatCo
 		>
 			<div class="glass-tooltip">
 				<p class="text-zinc-400">{ shortWeekday(wd) } { col.RangeLabel() } · { heatTxCount(cell.Count) }</p>
-				if cell.Count > 0 {
+				if cell.Count > 0 || cell.Refunded > 0 {
 					<p class="sensitive text-rose-300 tabular-nums">{ hm.Currency.Format(cell.Amount) }</p>
+					if cell.Refunded > 0 {
+						<p class="text-xs text-emerald-400 tabular-nums"><span class="sensitive">{ hm.Currency.Format(cell.Refunded) }</span> refunded</p>
+					}
+					@heatmapCategories(hm, cell)
 				}
 			</div>
 		</div>
@@ -204,6 +208,31 @@ templ heatmapWeekdays(hm *models.SpendingHeatmap) {
 			</li>
 		}
 	</ul>
+}
+
+// heatmapCategories lists a cell's categories spending the most.
+templ heatmapCategories(hm *models.SpendingHeatmap, cell models.HeatCell) {
+	{{ top, more := hm.TopCategories(cell, models.HeatmapTopCategories) }}
+	if len(top) > 0 {
+		<ul class="grid gap-0.5 pt-1 mt-1 border-t border-white/10 text-xs">
+			for _, c := range top {
+				<li class="flex items-center gap-1.5">
+					<span class="size-2 shrink-0 rounded-full" style={ "background-color:" + models.CategoryColorToHex(c.Color) }></span>
+					<span class="max-w-36 truncate text-zinc-300">{ c.Name }</span>
+					<span class="ml-auto pl-2 tabular-nums text-zinc-400">
+						if hm.Metric == models.HeatmapByCount {
+							{ heatTxCount(c.Count) }
+						} else {
+							<span class="sensitive">{ hm.Currency.Format(c.Amount) }</span>
+						}
+					</span>
+				</li>
+			}
+			if more > 0 {
+				<li class="text-zinc-500">+{ strconv.Itoa(more) } more</li>
+			}
+		</ul>
+	}
 }
 
 templ heatmapLegend() {

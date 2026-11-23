@@ -1,7 +1,9 @@
 package models
 
 import (
+	"cmp"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"time"
@@ -17,6 +19,9 @@ const HeatmapDefaultMonths = 3
 // HeatmapMinTimed is how many transactions with a time of day the heatmap
 // needs to show the hours, else only the weekdays.
 const HeatmapMinTimed = 10
+
+// HeatmapTopCategories is how many categories a cell's tooltip lists.
+const HeatmapTopCategories = 3
 
 // HeatmapLevels is how many colors the heatmap's cells take, empty included.
 const HeatmapLevels = 5
@@ -61,23 +66,80 @@ func HeatmapPeriod(s MonthStart, now time.Time, n int) (from, to time.Time) {
 // SpendingTime is one transaction's spending, in the heatmap's currency, at
 // its time as stored.
 type SpendingTime struct {
-	At     time.Time
+	At time.Time
+	// CategoryID is empty for none.
+	CategoryID string
+	// Amount is negative for a refund.
 	Amount float64
 }
 
-// HeatCell is the spending of a weekday, an hour or both.
+// HeatSpend is what a number of charges (expenses) spent, net of the
+// refunds (which aren't counted as transactions).
+type HeatSpend struct {
+	// Amount is net of the refunds.
+	Amount float64
+	// Count counts the charges.
+	Count int
+	// Refunded is what the refunds gave back, positive.
+	Refunded float64
+}
+
+// add counts a charge, or a refund when amount is negative.
+func (s *HeatSpend) add(amount float64) {
+	s.Amount += amount
+	if amount < 0 {
+		s.Refunded -= amount
+		return
+	}
+	s.Count++
+}
+
+func (s HeatSpend) plus(o HeatSpend) HeatSpend {
+	return HeatSpend{Amount: s.Amount + o.Amount, Count: s.Count + o.Count, Refunded: s.Refunded + o.Refunded}
+}
+
+// HeatCell is the spending of a weekday, an hour or both, and of each
+// category (by ID, empty for none) in it.
 type HeatCell struct {
-	Amount float64
-	Count  int
+	HeatSpend
+	Categories map[string]HeatSpend
 }
 
-func (c *HeatCell) add(amount float64) {
-	c.Amount += amount
-	c.Count++
+func (c *HeatCell) add(categoryID string, amount float64) {
+	c.HeatSpend.add(amount)
+	if c.Categories == nil {
+		c.Categories = map[string]HeatSpend{}
+	}
+	cat := c.Categories[categoryID]
+	cat.add(amount)
+	c.Categories[categoryID] = cat
 }
 
 func (c HeatCell) plus(o HeatCell) HeatCell {
-	return HeatCell{Amount: c.Amount + o.Amount, Count: c.Count + o.Count}
+	out := HeatCell{HeatSpend: c.HeatSpend.plus(o.HeatSpend)}
+	if len(c.Categories)+len(o.Categories) == 0 {
+		return out
+	}
+	out.Categories = maps.Clone(c.Categories)
+	if out.Categories == nil {
+		out.Categories = map[string]HeatSpend{}
+	}
+	for id, s := range o.Categories {
+		out.Categories[id] = out.Categories[id].plus(s)
+	}
+	return out
+}
+
+// HeatCategory is a category's name and color (a CategoryColors name) for
+// the tooltips.
+type HeatCategory struct {
+	Name, Color string
+}
+
+// HeatCategoryShare is a category's spending in a cell.
+type HeatCategoryShare struct {
+	HeatCategory
+	HeatSpend
 }
 
 // SpendingHeatmap is when money went out: per weekday × hour of the user's
@@ -96,10 +158,52 @@ type SpendingHeatmap struct {
 	Weekdays [7]HeatCell
 	// Hours are the timed transactions per hour.
 	Hours [24]HeatCell
-	// Timed of Total transactions have a time of day.
+	// Timed of Total charges have a time of day (refunds aren't counted).
 	Timed, Total int
 	// Partial is when a currency had no rate, its spending left out.
 	Partial bool
+	// Categories name the cells' categories by ID.
+	Categories map[string]HeatCategory
+}
+
+// SetCategories names the cells' categories from cats.
+func (hm *SpendingHeatmap) SetCategories(cats []Category) {
+	hm.Categories = make(map[string]HeatCategory, len(cats))
+	for _, c := range cats {
+		hm.Categories[c.ID] = HeatCategory{Name: c.Name, Color: c.Color}
+	}
+}
+
+// TopCategories are c's categories spending the most (by the metric),
+// at most n, and how many more there are. Categories netting to nothing or
+// less (refunds) are left out.
+func (hm *SpendingHeatmap) TopCategories(c HeatCell, n int) ([]HeatCategoryShare, int) {
+	shares := make([]HeatCategoryShare, 0, len(c.Categories))
+	for id, s := range c.Categories {
+		if s.Amount <= 0 {
+			continue
+		}
+		cat, ok := hm.Categories[id]
+		if !ok {
+			cat = HeatCategory{Name: "Uncategorized", Color: "gray"}
+		}
+		shares = append(shares, HeatCategoryShare{HeatCategory: cat, HeatSpend: s})
+	}
+	slices.SortFunc(shares, func(a, b HeatCategoryShare) int {
+		if hm.Metric == HeatmapByCount {
+			if c := cmp.Compare(b.Count, a.Count); c != 0 {
+				return c
+			}
+		}
+		if c := cmp.Compare(b.Amount, a.Amount); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.Name, b.Name)
+	})
+	if len(shares) <= n {
+		return shares, 0
+	}
+	return shares[:n], len(shares) - n
 }
 
 // SpendingLocalTime is t in loc for the heatmap, and whether it has a time
@@ -132,14 +236,19 @@ func NewSpendingHeatmap(cur Currency, metric HeatmapMetric, months int, from, to
 	for _, tx := range txs {
 		at, timed := SpendingLocalTime(tx.At, loc)
 		wd := at.Weekday()
-		hm.Total++
-		hm.Weekdays[wd].add(tx.Amount)
+		charge := tx.Amount >= 0
+		if charge {
+			hm.Total++
+		}
+		hm.Weekdays[wd].add(tx.CategoryID, tx.Amount)
 		if !timed {
 			continue
 		}
-		hm.Timed++
-		hm.Cells[wd][at.Hour()].add(tx.Amount)
-		hm.Hours[at.Hour()].add(tx.Amount)
+		if charge {
+			hm.Timed++
+		}
+		hm.Cells[wd][at.Hour()].add(tx.CategoryID, tx.Amount)
+		hm.Hours[at.Hour()].add(tx.CategoryID, tx.Amount)
 	}
 	return hm
 }

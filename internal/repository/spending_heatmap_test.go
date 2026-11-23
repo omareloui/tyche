@@ -59,9 +59,13 @@ func TestGetSpendingTimes(t *testing.T) {
 		if x.fulfilled {
 			fulfilled = at
 		}
-		_, err := db.Exec(`INSERT INTO transactions (id, account_id, amount, kind, scheduled_to, fulfilled_at, reimburses_id, transfer_pair_id)
-			VALUES (?, ?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''))`,
-			x.id, x.acc, x.amount, x.kind, at, fulfilled, x.reimburses, x.pair)
+		var category any
+		if x.id == "exp" {
+			category = "food"
+		}
+		_, err := db.Exec(`INSERT INTO transactions (id, account_id, amount, kind, scheduled_to, fulfilled_at, reimburses_id, transfer_pair_id, category_id)
+			VALUES (?, ?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?)`,
+			x.id, x.acc, x.amount, x.kind, at, fulfilled, x.reimburses, x.pair, category)
 		if err != nil {
 			t.Fatalf("%s: %v", x.id, err)
 		}
@@ -77,6 +81,9 @@ func TestGetSpendingTimes(t *testing.T) {
 	var amounts []float64
 	for _, row := range rows {
 		amounts = append(amounts, row.Amount)
+		if want := map[float64]string{180: "food", -20: ""}[row.Amount]; row.CategoryID != want {
+			t.Errorf("category of %v = %q, want %q", row.Amount, row.CategoryID, want)
+		}
 		if h := row.ScheduledTo.Hour(); h != 21 {
 			t.Errorf("hour = %d, want the stored 21:30 kept", h)
 		}
