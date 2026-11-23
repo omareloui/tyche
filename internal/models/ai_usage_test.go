@@ -144,3 +144,10 @@ func TestParseScanKind(t *testing.T) {
 		t.Error("nope parsed")
 	}
 }
+
+func TestAIUsageKindsFit(t *testing.T) {
+	var u AIUsage
+	if len(u.kinds) != len(ScanKinds) {
+		t.Fatalf("AIUsage.kinds holds %d kinds, ScanKinds has %d", len(u.kinds), len(ScanKinds))
+	}
+}

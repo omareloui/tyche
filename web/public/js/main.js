@@ -714,6 +714,20 @@ document.addEventListener("alpine:init", () => {
   }));
 });
 
+// visaReload re-renders the visa readiness tool after the user's visa
+// requirements changed (visa-rules-changed): picking the saved ones, or
+// dropping the deleted ones.
+function visaReload(detail = {}) {
+  const f = document.getElementById("visa-form");
+  if (!f) return;
+  const params = new URLSearchParams(new FormData(f));
+  if (detail.id) {
+    params.set("visa", detail.id);
+    if (detail.country) params.set("country", detail.country);
+  }
+  htmx.ajax("GET", "/tools/visa/body?" + params.toString(), { target: "#visa-body", swap: "innerHTML" });
+}
+
 // salaryReload re-renders the salary calculator after the user's tax rules
 // changed (salary-rules-changed): picking the saved ones, or dropping the
 // deleted ones.

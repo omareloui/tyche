@@ -1,0 +1,230 @@
+package views
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/omareloui/tyche/internal/countries"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/visa"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+// VisaReqRow is a requirement's row of the form.
+type VisaReqRow struct {
+	Kind         string `json:"kind"`
+	Period       string `json:"period"`
+	Amount       string `json:"amount"`
+	PerDependent string `json:"per_dep"`
+	Group        string `json:"group"`
+	Months       string `json:"months"`
+	Text         string `json:"text"`
+}
+
+// VisaRuleFD is the form of the user's visa requirements.
+type VisaRuleFD struct {
+	Countries                         []countries.Country
+	Name, Country, Currency, Category string
+	Notes                             string
+	Reqs                              []VisaReqRow
+	// Year and SourceURLs are kept from the requirements copied.
+	Year       int
+	SourceURLs []string
+	Error      string
+}
+
+func (fd *VisaRuleFD) xData() string {
+	rows := fd.Reqs
+	if rows == nil {
+		rows = []VisaReqRow{}
+	}
+	b, _ := json.Marshal(map[string]any{"reqs": rows})
+	return string(b)
+}
+
+func visaCategoryOptions() []form.ComboOption {
+	out := make([]form.ComboOption, len(visa.Categories))
+	for i, c := range visa.Categories {
+		out[i] = form.ComboOption{Value: string(c), Label: c.Label()}
+	}
+	return out
+}
+
+// VisaRulesDrawer lists the user's own visa requirements, each opening its
+// form.
+templ VisaRulesDrawer(rules []models.VisaRule) {
+	@components.Drawer(components.DrawerProps{Label: "My visa rules"}) {
+		<div class="drawer-panel flex flex-col flex-1 min-h-0">
+			<header class="flex items-start gap-3 px-5 sm:px-6 pt-5 pb-4">
+				<div class="flex-1 min-w-0">
+					<h2 class="text-lg font-bold">My visa rules</h2>
+					<p class="text-sm text-zinc-400">Your own requirements, for a visa there's nothing on or to fix the ones there are.</p>
+				</div>
+				@components.DrawerClose()
+			</header>
+			<div class="flex-1 grid grid-cols-1 auto-rows-max content-start gap-3 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
+				<button type="button" hx-get="/tools/visa/rules/new" hx-target={ salaryRulesSlot } hx-swap="innerHTML" class="txd-action justify-self-start">
+					@icons.Plus("14")
+					New requirements
+				</button>
+				if len(rules) == 0 {
+					<p class="py-6 text-center text-sm text-zinc-500">Nothing of your own yet. Add some here, or copy the ones a result uses.</p>
+				}
+				<ul class="grid gap-1.5">
+					for _, v := range rules {
+						<li>
+							<button
+								type="button"
+								hx-get={ "/tools/visa/rules/" + v.ID + "/edit" }
+								hx-target={ salaryRulesSlot }
+								hx-swap="innerHTML"
+								class="flex items-center gap-3 w-full min-w-0 px-3 py-2.5 rounded-xl bg-tx-row text-left cursor-pointer transition-colors hover:bg-zinc-800"
+							>
+								<span class="flex-1 min-w-0 truncate">{ v.Name }</span>
+								<span class="shrink-0 text-xs text-zinc-500">{ v.Country + " · " + v.Rule.Currency }</span>
+								@icons.Pencil("14", &templ.Attributes{"class": "shrink-0 text-zinc-500"})
+							</button>
+						</li>
+					}
+				</ul>
+			</div>
+		</div>
+	}
+}
+
+// VisaRuleDrawer is the form of the user's requirements (id empty: new).
+templ VisaRuleDrawer(id string, fd *VisaRuleFD) {
+	@components.Drawer(components.DrawerProps{Label: "Visa requirements"}) {
+		@VisaRuleForm(id, fd)
+	}
+}
+
+const visaRulesBack = "confirmDiscard().then((ok) => ok && htmx.ajax('GET', '/tools/visa/rules', {target: '#drawer', swap: 'innerHTML'}))"
+
+// visaKindSelect is a requirement's kind, a plain list of buttons as rows
+// are client side (comboboxes are server rendered).
+templ visaKindSelect() {
+	<div class="flex flex-wrap gap-1">
+		for _, k := range visa.Kinds {
+			<button
+				type="button"
+				@click={ fmt.Sprintf("r.kind = %q; if (%t) r.period = (r.period === 'year' ? 'year' : 'month'); else r.period = 'once'", string(k), k == visa.KindIncome || k == visa.KindSalary) }
+				:class={ fmt.Sprintf("r.kind === %q ? 'bg-(--accent) text-zinc-950' : 'bg-zinc-800 text-zinc-300 hover:text-white'", string(k)) }
+				class="px-2.5 py-1 rounded-full text-xs font-medium cursor-pointer transition-colors"
+			>{ k.Label() }</button>
+		}
+	</div>
+}
+
+// VisaRuleForm is VisaRuleDrawer's form alone, answered with its error.
+templ VisaRuleForm(id string, fd *VisaRuleFD) {
+	{{ method, url, title, submit, fid := "post", "/tools/visa/rules", "New visa requirements", "Add requirements", "new-visa-rule" }}
+	if id != "" {
+		{{ method, url, title, submit, fid = "put", "/tools/visa/rules/" + id, "Edit visa requirements", "Save changes", id }}
+	}
+	@form.DrawerForm(form.DrawerFormProps{
+		Title: title, Method: method, URL: url, Submit: submit, CancelClick: visaRulesBack,
+		Attrs: templ.Attributes{"x-data": fd.xData()},
+	}) {
+		if fd.Error != "" {
+			<p class="flex gap-2 p-3 rounded-2xl bg-red-500/10 ring-1 ring-red-500/30 text-sm text-red-200">
+				@icons.Warning("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
+				{ fd.Error }
+			</p>
+		}
+		<input type="hidden" name="year" value={ fmt.Sprint(fd.Year) }/>
+		for _, u := range fd.SourceURLs {
+			<input type="hidden" name="source_url" value={ u }/>
+		}
+		@form.Field("Visa", "name", fid, icons.Passport("15"), "") {
+			@form.Control("text", "name", "e.g. Digital Nomad Visa", fid, form.FDInput{Value: fd.Name}, templ.Attributes{"maxlength": "80"})
+		}
+		<div class="grid grid-cols-[1fr_6rem] gap-3">
+			@form.Field("Country", "country", fid, icons.Globe("15"), "") {
+				@form.Combobox(form.ComboboxProps{
+					Name: "country", ID: fid, Label: "Country", Placeholder: "Pick a country",
+					Options: colCountryOptions(fd.Countries), Data: form.FDInput{Value: fd.Country}, Searchable: true,
+				})
+			}
+			@form.Field("Currency", "currency", fid, nil, "") {
+				@form.Control("text", "currency", "EUR", fid, form.FDInput{Value: fd.Currency}, templ.Attributes{"maxlength": "3", "class": "input-field uppercase"})
+			}
+		</div>
+		@form.Field("Kind of visa", "category", fid, nil, "") {
+			@form.Combobox(form.ComboboxProps{
+				Name: "category", ID: fid, Label: "Kind of visa",
+				Options: visaCategoryOptions(), Data: form.FDInput{Value: fd.Category},
+			})
+		}
+		<fieldset class="grid gap-2">
+			<legend class="input-label">Requirements</legend>
+			<p class="text-xs text-zinc-500">Amounts for the applicant alone, in the visa's currency. Requirements sharing a group are alternatives (an income or savings).</p>
+			<template x-for="(r, i) in reqs" :key="i">
+				<div class="grid gap-2 p-3 rounded-2xl ring-1 ring-zinc-800">
+					<div class="flex items-start gap-2">
+						<div class="flex-1 min-w-0">
+							@visaKindSelect()
+						</div>
+						@salaryRowRemove("reqs.splice(i, 1)")
+					</div>
+					<input type="hidden" name="req_kind" :value="r.kind"/>
+					<input type="hidden" name="req_period" :value="r.period"/>
+					<template x-if="r.kind !== 'check'">
+						<div class="grid gap-2">
+							<div class="grid grid-cols-[1fr_auto] items-center gap-2">
+								<input name="req_amount" x-model="r.amount" inputmode="decimal" autocomplete="off" placeholder="Amount" class="input-field"/>
+								<div x-show="r.kind === 'income' || r.kind === 'salary'" class="flex gap-1 p-1 rounded-xl bg-zinc-800/60">
+									<button type="button" @click="r.period = 'month'" :class="r.period !== 'year' ? 'bg-(--accent) text-zinc-950' : 'text-zinc-400'" class="px-2 py-1 rounded-lg text-xs font-medium cursor-pointer">A month</button>
+									<button type="button" @click="r.period = 'year'" :class="r.period === 'year' ? 'bg-(--accent) text-zinc-950' : 'text-zinc-400'" class="px-2 py-1 rounded-lg text-xs font-medium cursor-pointer">A year</button>
+								</div>
+							</div>
+							<input name="req_per_dep" x-model="r.per_dep" autocomplete="off" placeholder="Added per dependent, e.g. 1068, 356" class="input-field text-xs"/>
+							<div class="grid grid-cols-2 gap-2">
+								<input name="req_group" x-model="r.group" autocomplete="off" placeholder="Group (optional)" class="input-field text-xs"/>
+								<input name="req_months" x-model="r.months" x-show="r.kind === 'income'" inputmode="numeric" autocomplete="off" placeholder="Months of proof" class="input-field text-xs"/>
+							</div>
+						</div>
+					</template>
+					<template x-if="r.kind === 'check'">
+						<div>
+							<input type="hidden" name="req_amount" value=""/>
+							<input type="hidden" name="req_per_dep" value=""/>
+							<input type="hidden" name="req_group" value=""/>
+							<input type="hidden" name="req_months" value=""/>
+						</div>
+					</template>
+					<input name="req_text" x-model="r.text" autocomplete="off" :placeholder="r.kind === 'check' ? 'The condition, e.g. Health insurance' : 'Note (optional)'" maxlength="300" class="input-field"/>
+				</div>
+			</template>
+			<div class="flex flex-wrap gap-2">
+				<button type="button" @click="reqs.push({kind: 'income', period: 'month', amount: '', per_dep: '', group: '', months: '', text: ''})" class="txd-action">
+					@icons.Plus("14")
+					Money requirement
+				</button>
+				<button type="button" @click="reqs.push({kind: 'check', period: '', amount: '', per_dep: '', group: '', months: '', text: ''})" class="txd-action">
+					@icons.Plus("14")
+					Condition
+				</button>
+			</div>
+		</fieldset>
+		@form.Field("Notes", "notes", fid, icons.StickyNote("15"), "") {
+			@form.Textarea("notes", "Optional", fid, form.FDInput{Value: fd.Notes}, templ.Attributes{"rows": "2", "maxlength": "2000"})
+		}
+		if id != "" {
+			<button
+				type="button"
+				hx-delete={ "/tools/visa/rules/" + id }
+				hx-swap="none"
+				hx-confirm="Delete these requirements?"
+				data-confirm-label="Delete"
+				data-confirm-danger
+				class="txd-action justify-self-start text-rose-400!"
+			>
+				@icons.Trash("14")
+				Delete requirements
+			</button>
+		}
+	}
+}

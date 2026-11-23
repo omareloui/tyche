@@ -93,3 +93,6 @@ DELETE FROM dismissed_subscriptions;
 
 -- name: ResetDeleteSalaryRules :exec
 DELETE FROM salary_rules;
+
+-- name: ResetDeleteVisaRules :exec
+DELETE FROM visa_rules;

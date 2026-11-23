@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -112,6 +113,20 @@ func (h Handler) AffordDrawer(w http.ResponseWriter, r *http.Request) (templ.Com
 			loan := *item.Plan
 			plan.Mode, plan.Loan = models.GoalPlanInstallments, &loan
 		}
+	} else if q := r.URL.Query(); q.Get("amount") != "" {
+		// Prefilled from elsewhere, e.g. the visa readiness tool's funds
+		// missing.
+		name := strings.TrimSpace(q.Get("name"))
+		if len(name) > 100 {
+			name = name[:100]
+		}
+		fd.Name.Value = name
+		if v, err := strconv.ParseFloat(q.Get("amount"), 64); err == nil && v > 0 {
+			fd.AmountFD.Amount.Value = formatFloatIfNonZero(v)
+		}
+		if id := q.Get("currency_id"); slicesutils.Find(curs, func(c models.Currency) bool { return c.ID == id }) != nil {
+			fd.AmountFD.CurrencyID.Value = id
+		}
 	}
 
 	r.Form = url.Values{"amount": {fd.AmountFD.Amount.Value}, "currency_id": {fd.AmountFD.CurrencyID.Value}, "name": {fd.Name.Value}}
@@ -186,7 +201,6 @@ func (h Handler) affordContext(ctx context.Context) (models.AffordContext, error
 		Start: claims.MonthStart, Today: h.userToday(ctx), Currency: &claims.DefaultCurrency,
 	}, nil
 }
-
 
 func (h Handler) planIt(r *http.Request) (*planIt, error) {
 	ctx := r.Context()

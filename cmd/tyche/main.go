@@ -33,6 +33,7 @@ import (
 	"github.com/omareloui/tyche/internal/taxguess"
 	"github.com/omareloui/tyche/internal/valid"
 	"github.com/omareloui/tyche/internal/vault"
+	"github.com/omareloui/tyche/internal/visaguess"
 )
 
 // initialFxFetchTimeout bounds the blocking fetch on a fresh shared database.
@@ -96,6 +97,7 @@ func main() {
 		h.SetSMSGuess(smsguess.New(ocrCfg.APIKey, ocrCfg.Model, ocrCfg.ThinkingLevel))
 		h.SetColGuess(colguess.New(ocrCfg.APIKey, ocrCfg.Model, ocrCfg.ThinkingLevel))
 		h.SetTaxGuess(taxguess.New(ocrCfg.APIKey, ocrCfg.Model, ocrCfg.ThinkingLevel))
+		h.SetVisaGuess(visaguess.New(ocrCfg.APIKey, ocrCfg.Model, ocrCfg.ThinkingLevel))
 	} else {
 		h.SetReceiptOCR(nil, ocrCfg)
 	}

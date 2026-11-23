@@ -1,0 +1,857 @@
+package views
+
+import (
+	"fmt"
+	"math"
+	"net/url"
+	"strconv"
+
+	"github.com/omareloui/tyche/internal/countries"
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/visa"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+// VisaPickAI picks a visa looked up by the AI (by its typed name); any other
+// value of the visa field is a built in visa's key or the id of the user's
+// own requirements.
+const VisaPickAI = "ai"
+
+// Where the income checked comes from.
+const (
+	VisaFromTxs    = "txs"
+	VisaFromSalary = "salary"
+	VisaFromTyped  = "typed"
+)
+
+// VisaPickForm picks a visa: its country (ISO2), the visa, the AI's typed
+// name, the built in options (opt_<key>) and a job offer's gross a year in
+// its currency.
+type VisaPickForm struct {
+	Country, Visa, Name, Offer string
+	Opts                       map[string]string
+}
+
+// VisaMoneyForm is the user's numbers, typed over their transactions', in
+// the default currency.
+type VisaMoneyForm struct {
+	Dependents, Income, Savings string
+}
+
+// VisaForm is the visa readiness tool's form, as in the query string.
+type VisaForm struct {
+	VisaPickForm
+	Money VisaMoneyForm
+	// Checked are the conditions ticked (check_<i>).
+	Checked map[int]bool
+}
+
+func (p VisaPickForm) values(v url.Values, prefix string) {
+	for k, s := range map[string]string{"country": p.Country, "visa": p.Visa, "name": p.Name, "offer": p.Offer} {
+		if s != "" {
+			v.Set(prefix+k, s)
+		}
+	}
+	for k, s := range p.Opts {
+		v.Set(prefix+"opt_"+k, s)
+	}
+}
+
+func (m VisaMoneyForm) values(v url.Values) {
+	for k, s := range map[string]string{"dependents": m.Dependents, "income": m.Income, "savings": m.Savings} {
+		if s != "" {
+			v.Set(k, s)
+		}
+	}
+}
+
+// VisaURL is the tool's page with the form.
+func VisaURL(f VisaForm) string {
+	v := url.Values{}
+	f.VisaPickForm.values(v, "")
+	f.Money.values(v)
+	for i, ok := range f.Checked {
+		if ok {
+			v.Set("check_"+strconv.Itoa(i), "1")
+		}
+	}
+	if len(v) == 0 {
+		return "/tools/visa"
+	}
+	return "/tools/visa?" + v.Encode()
+}
+
+// VisaPick is a picked visa: its country's choices and its rule checked.
+type VisaPick struct {
+	Country countries.Country
+	// Visas are the country's built in ones, MyRules the user's own of it.
+	Visas   []visa.Visa
+	MyRules []models.VisaRule
+	Options []visa.Option
+	AIOn    bool
+	// Rule is the picked one (RuleName the user's name of their own); nil
+	// when NeedName (the AI's picked, no name typed) or NeedAI (none looked
+	// up yet; AILeft of AILimit lookups this month).
+	Rule     *visa.Rule
+	RuleName string
+	NeedName bool
+	NeedAI   bool
+	AILeft   int
+	AILimit  int
+	// Rate is one of the default currency in the rule's, Input the user's
+	// money in it, IncomeFrom where the income comes from (VisaFrom*).
+	Rate       float64
+	Input      visa.Input
+	IncomeFrom string
+	Result     *visa.Result
+	// CurrencyID is the rule's currency among the user's, empty when not
+	// one of them.
+	CurrencyID string
+	Error      string
+}
+
+// VisaData is the tool: its form and the picked visa checked.
+type VisaData struct {
+	Form      VisaForm
+	Countries []countries.Country
+	Pick      *VisaPick
+	Default   models.Currency
+	Money     *models.VisaMoney
+}
+
+// VisaCalc is the visa readiness tool.
+templ VisaCalc(claims *jwt.AccessClaims, balances []models.Balance, d *VisaData) {
+	@layouts.Main(claims, "Visa readiness", balances) {
+		@components.Container() {
+			<a href="/tools" class="inline-flex items-center gap-1 mb-2 text-sm text-zinc-400 hover:text-zinc-200">
+				@icons.ArrowLeft("14")
+				Tools
+			</a>
+			<div class="flex flex-wrap items-start justify-between gap-3">
+				@components.MainHeader("Visa readiness")
+				<div class="flex flex-wrap gap-2 mb-6">
+					<a href="/tools/visa/compare" class="txd-action">
+						@icons.Scale("14")
+						Compare visas
+					</a>
+					<button type="button" hx-get="/tools/visa/rules" hx-target={ "#" + components.DrawerSlot } hx-swap="innerHTML" class="txd-action">
+						@icons.Pencil("14")
+						My visa rules
+					</button>
+				</div>
+			</div>
+			<div
+				id="visa-body"
+				x-data
+				@visa-rules-changed.window="visaReload($event.detail)"
+				class="grid gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:items-start"
+			>
+				@VisaBody(d)
+			</div>
+		}
+	}
+}
+
+// VisaBody is the tool's form and result.
+templ VisaBody(d *VisaData) {
+	@visaForm(d)
+	<div id="visa-result" aria-live="polite">
+		@VisaResult(d)
+	</div>
+}
+
+func visaCountryOptions(cs []countries.Country) []form.ComboOption {
+	opts := make([]form.ComboOption, len(cs))
+	for i, c := range cs {
+		opts[i] = form.ComboOption{Value: c.ISO2, Label: c.Name, Search: c.ISO2 + " " + c.ISO3 + " " + c.Currency}
+		opts[i].Leading = noRulesIcon()
+		if visa.HasBuiltin(c.ISO2) {
+			opts[i].Leading = builtinVisasIcon()
+			opts[i].Search += " built-in"
+			opts[i].Flagged = true
+		}
+	}
+	return opts
+}
+
+// builtinVisasIcon marks the countries and visas written here.
+templ builtinVisasIcon() {
+	<span title="Built-in requirements" class="inline-flex shrink-0 text-emerald-400">
+		@icons.ShieldCheck("14")
+	</span>
+}
+
+templ visaOwnIcon() {
+	<span title="Yours" class="inline-flex shrink-0 text-sky-300">
+		@icons.Pencil("14")
+	</span>
+}
+
+templ visaAIIcon() {
+	<span title="Looked up by AI" class="inline-flex shrink-0 text-violet-300">
+		@icons.Sparkles("14")
+	</span>
+}
+
+// visaOptions are the visas the country can be checked against.
+func visaOptions(p *VisaPick) []form.ComboOption {
+	var opts []form.ComboOption
+	for _, v := range p.Visas {
+		opts = append(opts, form.ComboOption{Value: v.Key, Label: v.Name, Search: v.Category.Label(), Leading: builtinVisasIcon()})
+	}
+	for _, m := range p.MyRules {
+		opts = append(opts, form.ComboOption{Value: m.ID, Label: m.Name, Search: "mine", Leading: visaOwnIcon()})
+	}
+	label := "Another visa (AI lookup)"
+	if !p.AIOn {
+		label = "Another visa (AI lookups are off)"
+	}
+	opts = append(opts, form.ComboOption{Value: VisaPickAI, Label: label, Search: "other ai", Leading: visaAIIcon()})
+	return opts
+}
+
+// visaReloadAttrs re-render the whole form of formID (what it asks depends
+// on the value) into target.
+func visaReloadAttrs(url, formID, target string) templ.Attributes {
+	return salaryReloadAttrs(url, formID, target)
+}
+
+// visaMoneyFields are the user's numbers, shared by the tool and the
+// comparison.
+templ visaMoneyFields(id string, mf VisaMoneyForm, money *models.VisaMoney, def models.Currency) {
+	<fieldset class="grid gap-3 pt-4 border-t border-zinc-800">
+		<legend class="sr-only">Your numbers</legend>
+		<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+			@icons.Wallet("14")
+			Your numbers
+		</p>
+		@form.Field("Dependents", "dependents", id, icons.Users("15"), "") {
+			@form.Control("number", "dependents", "0", id, form.FDInput{Value: mf.Dependents}, templ.Attributes{"min": "0", "max": "10", "inputmode": "numeric"})
+			<p class="mt-1 text-xs text-zinc-500">A spouse and children coming along.</p>
+		}
+		@form.Field("Income a month", "income", id, icons.Coins("15"), "") {
+			<div class="flex items-center gap-2">
+				@form.Control("text", "income", colFmt(money.Average(), ""), id, form.FDInput{Value: mf.Income}, templ.Attributes{
+					"inputmode": "decimal", "autocomplete": "off", "x-mask:dynamic": "$money($input, '.', ',')", "class": "input-field sensitive",
+				})
+				<span class="shrink-0 text-sm text-zinc-400">{ def.String }</span>
+			</div>
+			<p class="mt-1 text-xs text-zinc-500">
+				if money.HasIncome() {
+					{ fmt.Sprintf("Your income's average over the last %d months, unless you type one.", len(money.Months)) }
+				} else {
+					No income in the last months: your salary from <a href={ SettingsURL(SettingsWork) } class="underline hover:text-zinc-300">settings</a>, unless you type one.
+				}
+			</p>
+		}
+		@form.Field("Savings", "savings", id, icons.PiggyBank("15"), "") {
+			<div class="flex items-center gap-2">
+				@form.Control("text", "savings", colFmt(money.Savings, ""), id, form.FDInput{Value: mf.Savings}, templ.Attributes{
+					"inputmode": "decimal", "autocomplete": "off", "x-mask:dynamic": "$money($input, '.', ',')", "class": "input-field sensitive",
+				})
+				<span class="shrink-0 text-sm text-zinc-400">{ def.String }</span>
+			</div>
+			<p class="mt-1 text-xs text-zinc-500">Your accounts' balance and what your goals hold, unless you type it.</p>
+		}
+	</fieldset>
+}
+
+// visaPickFields pick a visa: the country, the visa, its options, a name to
+// look up and a job offer. prefix names the fields (the comparison's
+// v<i>_), reload re-renders on a country or visa change.
+templ visaPickFields(id, prefix string, f VisaPickForm, p *VisaPick, countriesList []countries.Country, reload templ.Attributes) {
+	@form.Field("Country", prefix+"country", id, icons.Globe("15"), "") {
+		@form.Combobox(form.ComboboxProps{
+			Name: prefix + "country", ID: id, Label: "Country", Placeholder: "Pick a country",
+			Options: visaCountryOptions(countriesList), Data: form.FDInput{Value: f.Country}, Searchable: true,
+			InputAttrs: reload,
+			FlagFilter: &form.ComboFlagFilter{Label: "Built-in visas only", Key: "visa-builtin", Icon: icons.ShieldCheck("13")},
+		})
+		if prefix == "" {
+			<p class="mt-1 flex items-center gap-1 text-xs text-zinc-500">
+				@builtinVisasIcon()
+				<span>has built-in visas; others are looked up by AI or typed by you.</span>
+			</p>
+		}
+	}
+	@form.Field("Visa", prefix+"visa", id, icons.Passport("15"), "") {
+		@form.Combobox(form.ComboboxProps{
+			Name: prefix + "visa", ID: id, Label: "Visa", Placeholder: "Pick a visa",
+			Options: visaOptions(p), Data: form.FDInput{Value: f.Visa}, Searchable: len(p.Visas)+len(p.MyRules) > 5,
+			InputAttrs: reload,
+		})
+	}
+	if f.Visa == VisaPickAI {
+		@form.Field("Visa's name", prefix+"name", id, icons.Search("15"), "") {
+			@form.Control("text", prefix+"name", "e.g. Digital nomad, Golden visa", id, form.FDInput{Value: f.Name}, templ.Attributes{"autocomplete": "off", "maxlength": "80"})
+			<p class="mt-1 text-xs text-zinc-500">Looked up once, then kept for everyone.</p>
+		}
+	}
+	for _, o := range p.Options {
+		@form.Field(o.Label, prefix+"opt_"+o.Key, id, nil, "") {
+			@form.Combobox(form.ComboboxProps{
+				Name: prefix + "opt_" + o.Key, ID: id, Label: o.Label,
+				Options: optionComboOptions(o), Data: form.FDInput{Value: f.Opts[o.Key]},
+			})
+		}
+	}
+	if p.Rule == nil || visaHasKind(p.Rule, visa.KindSalary) {
+		@form.Field("Job offer (gross a year)", prefix+"offer", id, icons.Banknote("15"), "") {
+			<div class="flex items-center gap-2">
+				@form.Control("text", prefix+"offer", "Optional", id, form.FDInput{Value: f.Offer}, templ.Attributes{
+					"inputmode": "decimal", "autocomplete": "off", "x-mask:dynamic": "$money($input, '.', ',')", "class": "input-field sensitive",
+				})
+				<span class="shrink-0 text-sm text-zinc-400">{ visaCurrency(p) }</span>
+			</div>
+		}
+	}
+}
+
+func visaHasKind(r *visa.Rule, k visa.Kind) bool {
+	for _, q := range r.Requirements {
+		if q.Kind == k {
+			return true
+		}
+	}
+	return false
+}
+
+// visaCurrency is the picked visa's currency, else its country's.
+func visaCurrency(p *VisaPick) string {
+	if p.Rule != nil {
+		return p.Rule.Currency
+	}
+	return p.Country.Currency
+}
+
+templ visaForm(d *VisaData) {
+	<form
+		id="visa-form"
+		hx-get="/tools/visa/result"
+		hx-trigger="input delay:500ms, change[!target.closest('[data-reload]')]"
+		hx-target="#visa-result"
+		hx-swap="innerHTML"
+		hx-sync="this:replace"
+		@submit.prevent
+		class="grid gap-4 p-5 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800"
+	>
+		@visaPickFields("visa", "", d.Form.VisaPickForm, d.Pick, d.Countries, visaReloadAttrs("/tools/visa/body", "#visa-form", "#visa-body"))
+		@visaMoneyFields("visa", d.Form.Money, d.Money, d.Default)
+	</form>
+}
+
+// visaFmt formats an amount with its currency code.
+func visaFmt(v float64, code string) string { return colFmt(v, code) }
+
+// VisaResult is the tool's result, swapped on every change.
+templ VisaResult(d *VisaData) {
+	{{ p := d.Pick }}
+	<div class="grid gap-4">
+		if p.Error != "" {
+			@visaError(p.Error)
+		}
+		switch {
+			case p.NeedName:
+				@visaEmpty("Type the visa's name to look its requirements up.")
+			case p.NeedAI:
+				@visaAskAI(p, d.Form.Name, "#visa-form", "#visa-result", nil)
+			case p.Result != nil:
+				@visaHero(p, d.Default, d.Form.Money.Dependents)
+				@visaRequirements(p, d.Money, d.Default)
+				@visaRuleInfo(p, "#visa-form", "#visa-result", d.Form.Visa, nil)
+		}
+	</div>
+}
+
+templ visaError(msg string) {
+	<p class="flex gap-2 p-4 rounded-2xl bg-red-500/10 ring-1 ring-red-500/30 text-sm text-red-200">
+		@icons.Warning("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
+		{ msg }
+	</p>
+}
+
+templ visaEmpty(text string) {
+	<div class="grid place-items-center gap-3 p-10 rounded-3xl ring-1 ring-dashed ring-zinc-800 text-center text-zinc-500">
+		@icons.Passport("32")
+		<p class="max-w-xs text-sm">{ text }</p>
+	</div>
+}
+
+// visaFetchButton asks the AI for the visa (again when confirm is set),
+// sending the form of include and vals.
+templ visaFetchButton(label, include, target, confirm string, vals map[string]string) {
+	<button
+		type="button"
+		hx-post="/tools/visa/rules/fetch"
+		hx-include={ include }
+		hx-target={ target }
+		hx-swap="innerHTML"
+		hx-disabled-elt="this"
+		hx-vals={ salaryFetchVals(confirm != "", vals) }
+		if confirm != "" {
+			hx-confirm={ confirm }
+			data-confirm-label="Look up again"
+			class="group txd-action"
+		} else {
+			class="group inline-flex items-center gap-2 h-10 px-4 rounded-full bg-violet-300 text-sm font-semibold text-zinc-950 cursor-pointer transition-colors hover:bg-violet-200 disabled:opacity-60"
+		}
+	>
+		@icons.Sparkles("16", &templ.Attributes{"class": "group-disabled:animate-pulse"})
+		<span class="group-disabled:hidden">{ label }</span>
+		<span class="hidden group-disabled:inline">Looking up, this takes a bit…</span>
+	</button>
+}
+
+// visaNewRuleURL opens the form of new requirements for the country.
+func visaNewRuleURL(country string) string {
+	return "/tools/visa/rules/new?country=" + url.QueryEscape(country)
+}
+
+templ visaAskAI(p *VisaPick, name, include, target string, vals map[string]string) {
+	@components.GlassCard("grid gap-4 p-5 sm:p-6", "bg-violet-400/10") {
+		<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-violet-300">
+			@icons.Sparkles("14")
+			Visa requirements
+		</p>
+		if p.AIOn {
+			<p class="text-zinc-200">
+				Gemini can look <span class="font-semibold">{ p.Country.Name }</span>'s <span class="font-semibold">{ name }</span> up on the web; its requirements are then kept for everyone.
+			</p>
+			<p class="flex gap-2 text-sm text-amber-200/90">
+				@icons.Warning("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
+				It's what it finds on the web, not official figures: check with the consulate before deciding anything on it.
+			</p>
+			if p.AILeft > 0 {
+				<div class="flex flex-wrap items-center gap-3">
+					@visaFetchButton("Look up the visa", include, target, "", vals)
+					<span class="text-xs text-zinc-500">{ fmt.Sprintf("%d left this month", p.AILeft) }</span>
+				</div>
+			} else {
+				<p class="text-sm text-zinc-400">You've used this month's visa lookups. They start again on the 1st.</p>
+			}
+		} else {
+			<p class="text-zinc-200">AI lookups are off here.</p>
+		}
+		<p class="text-sm text-zinc-400">
+			Or
+			<button type="button" hx-get={ visaNewRuleURL(p.Country.ISO2) } hx-target={ "#" + components.DrawerSlot } hx-swap="innerHTML" class="underline cursor-pointer hover:text-zinc-200">type the requirements yourself</button>.
+		</p>
+	}
+}
+
+// visaShortBy is the gap shown on the hero: the funds missing, else the
+// largest gap of an unmet requirement, as a share of its need.
+func visaShortBy(res *visa.Result) (visa.Item, bool) {
+	var best visa.Item
+	found := false
+	for _, it := range res.Items {
+		if it.Met() || it.Status != visa.StatusShort {
+			continue
+		}
+		if !found || it.Gap/it.Need > best.Gap/best.Need {
+			best, found = it, true
+		}
+	}
+	return best, found
+}
+
+func visaGapLabel(it visa.Item) string {
+	switch it.Kind {
+	case visa.KindIncome:
+		if it.Gap == 0 && it.MonthsMet >= 0 {
+			return fmt.Sprintf("%d of the last %d months reached it", it.MonthsMet, it.MonthsProof)
+		}
+		return "more income " + visaPeriodLabel(it.Period)
+	case visa.KindSalary:
+		return "more salary " + visaPeriodLabel(it.Period)
+	default:
+		return "more " + visaKindNoun(it.Kind)
+	}
+}
+
+func visaKindNoun(k visa.Kind) string {
+	switch k {
+	case visa.KindBlocked:
+		return "in a blocked account"
+	case visa.KindInvestment:
+		return "to invest"
+	default:
+		return "savings"
+	}
+}
+
+func visaPeriodLabel(p visa.Period) string {
+	switch p {
+	case visa.PeriodMonth:
+		return "a month"
+	case visa.PeriodYear:
+		return "a year"
+	default:
+		return ""
+	}
+}
+
+// visaGoalURL opens Plan it for the funds missing, in the visa's currency
+// when it's one of the user's, else the default.
+func visaGoalURL(p *VisaPick, def models.Currency) string {
+	amount, cur := p.Result.FundsGap, p.CurrencyID
+	if cur == "" {
+		amount, cur = p.Result.FundsGap/p.Rate, def.ID
+	}
+	v := url.Values{}
+	v.Set("name", p.Rule.Name+" funds")
+	v.Set("amount", strconv.FormatFloat(math.Ceil(amount), 'f', -1, 64))
+	v.Set("currency_id", cur)
+	return "/decide/afford?" + v.Encode()
+}
+
+templ visaHero(p *VisaPick, def models.Currency, deps string) {
+	{{ res, cur := p.Result, p.Rule.Currency }}
+	@components.GlassCard("grid gap-4 p-5 sm:p-6", visaHue(res.Verdict), "bg-sky-400/10") {
+		<div class="flex flex-wrap items-center gap-2">
+			@visaVerdictPill(res.Verdict)
+			<span class="text-sm text-zinc-400">{ p.Rule.Name + " · " + p.Country.Name }</span>
+		</div>
+		switch res.Verdict {
+			case visa.VerdictReady:
+				<p class="text-2xl font-bold text-zinc-50">{ ternary(len(res.MoneyItems()) == 0, "You meet every condition.", "Your money meets every requirement.") }</p>
+			case visa.VerdictTick:
+				<p class="text-2xl font-bold text-zinc-50">{ ternary(len(res.MoneyItems()) == 0, "No money asked.", "Your money's there.") }</p>
+				<p class="text-sm text-zinc-400">Tick the conditions below that you meet.</p>
+			case visa.VerdictUnknown:
+				<p class="text-2xl font-bold text-zinc-50">Type a job offer's salary to check it.</p>
+			default:
+				if it, ok := visaShortBy(res); ok {
+					<p class="text-sm text-zinc-400">You're short by</p>
+					if it.Gap > 0 {
+						<p class="sensitive flex flex-wrap items-baseline gap-x-2 text-3xl sm:text-4xl font-bold tabular-nums text-zinc-50">
+							{ visaFmt(it.Gap, cur) }
+							<span class="text-base font-medium text-zinc-400">{ visaGapLabel(it) }</span>
+						</p>
+						if cur != def.String && p.Rate > 0 {
+							<p class="sensitive text-sm text-zinc-400 tabular-nums">{ "≈ " + visaFmt(it.Gap/p.Rate, def.String) }</p>
+						}
+					} else {
+						<p class="text-2xl font-bold text-zinc-50">{ visaGapLabel(it) }</p>
+					}
+				}
+		}
+		if deps != "" {
+			<p class="text-xs text-zinc-500">{ "With " + deps + " dependents." }</p>
+		}
+		if res.FundsGap > 0 {
+			<div class="flex flex-wrap items-center gap-3 pt-4 border-t border-zinc-800">
+				<button type="button" hx-get={ visaGoalURL(p, def) } hx-target={ "#" + components.DrawerSlot } hx-swap="innerHTML" class="txd-action">
+					@icons.PiggyBank("14")
+					Save for it
+				</button>
+				<span class="sensitive text-xs text-zinc-500">{ "A goal for the " + visaFmt(res.FundsGap, cur) + " missing" }</span>
+			</div>
+		}
+	}
+}
+
+func visaHue(v visa.Verdict) string {
+	switch v {
+	case visa.VerdictReady:
+		return "bg-emerald-400/15"
+	case visa.VerdictShort:
+		return "bg-rose-400/10"
+	default:
+		return "bg-amber-400/10"
+	}
+}
+
+templ visaVerdictPill(v visa.Verdict) {
+	switch v {
+		case visa.VerdictReady:
+			<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-400/15 text-xs font-semibold text-emerald-300">
+				@icons.CheckCheck("12")
+				Ready
+			</span>
+		case visa.VerdictTick:
+			<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-400/15 text-xs font-semibold text-amber-300">
+				@icons.Check("12")
+				Tick the conditions
+			</span>
+		case visa.VerdictUnknown:
+			<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-zinc-700/60 text-xs font-semibold text-zinc-300">
+				@icons.Info("12")
+				Needs a job offer
+			</span>
+		default:
+			<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-400/15 text-xs font-semibold text-rose-300">
+				@icons.X("12")
+				Not yet
+			</span>
+	}
+}
+
+func visaItemTitle(it visa.Item) string {
+	t := it.Kind.Label()
+	if pl := visaPeriodLabel(it.Period); pl != "" && it.Kind.Money() {
+		t += " " + pl
+	}
+	return t
+}
+
+// visaShare is how much of the need is had, 0–100.
+func visaShare(it visa.Item) float64 {
+	if it.Need <= 0 {
+		return 100
+	}
+	return math.Min(it.Have/it.Need*100, 100)
+}
+
+func visaGroups(items []visa.Item) map[string]int {
+	n := map[string]int{}
+	for _, it := range items {
+		if it.Group != "" {
+			n[it.Group]++
+		}
+	}
+	return n
+}
+
+templ visaStatusIcon(it visa.Item) {
+	switch {
+		case it.Met():
+			<span class="grid place-items-center shrink-0 w-6 h-6 rounded-full bg-emerald-400/15 text-emerald-300">
+				@icons.Check("13")
+			</span>
+		case it.Status == visa.StatusUnknown:
+			<span class="grid place-items-center shrink-0 w-6 h-6 rounded-full bg-zinc-700/60 text-zinc-300">
+				@icons.Info("13")
+			</span>
+		default:
+			<span class="grid place-items-center shrink-0 w-6 h-6 rounded-full bg-rose-400/15 text-rose-300">
+				@icons.X("13")
+			</span>
+	}
+}
+
+// visaMonthLabels are the months' labels of the last n.
+func visaMonthLabels(money *models.VisaMoney, n int) []string {
+	out := make([]string, 0, n)
+	if money == nil || len(money.Periods) < n {
+		return out
+	}
+	for _, p := range money.Periods[len(money.Periods)-n:] {
+		out = append(out, p.Month.Format("Jan"))
+	}
+	return out
+}
+
+templ visaRequirements(p *VisaPick, money *models.VisaMoney, def models.Currency) {
+	{{ res, cur := p.Result, p.Rule.Currency }}
+	{{ groups := visaGroups(res.Items) }}
+	<section class="grid gap-3 p-5 rounded-3xl ring-1 ring-zinc-800">
+		if len(res.MoneyItems()) == 0 {
+			<p class="text-sm text-zinc-400">No amount of money is asked: only the conditions below.</p>
+		} else {
+			<h2 class="text-sm font-semibold text-zinc-300">Money</h2>
+		}
+		<ul class="grid gap-3">
+			for _, it := range res.MoneyItems() {
+				<li class="grid gap-2 p-3 rounded-2xl bg-zinc-800/40">
+					<div class="flex items-start gap-3">
+						@visaStatusIcon(it)
+						<div class="flex-1 min-w-0 grid gap-0.5">
+							<p class="flex flex-wrap items-center gap-2 font-medium text-zinc-100">
+								{ visaItemTitle(it) }
+								if groups[it.Group] > 1 {
+									<span class="px-2 py-0.5 rounded-full bg-zinc-700/60 text-[11px] font-medium text-zinc-300">One of these</span>
+								}
+							</p>
+							if it.Text != "" {
+								<p class="text-xs text-zinc-400">{ it.Text }</p>
+							}
+						</div>
+						<div class="shrink-0 text-right">
+							<p class="font-semibold tabular-nums">{ visaFmt(it.Need, cur) }</p>
+							if cur != def.String && p.Rate > 0 {
+								<p class="text-xs text-zinc-500 tabular-nums">{ "≈ " + visaFmt(it.Need/p.Rate, def.String) }</p>
+							}
+						</div>
+					</div>
+					if it.Status != visa.StatusUnknown {
+						<div class="grid gap-1">
+							<div class="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+								<div
+									class={ "h-full rounded-full", templ.KV("bg-emerald-400", it.Met()), templ.KV("bg-rose-400", !it.Met()) }
+									style={ fmt.Sprintf("width: %.1f%%", visaShare(it)) }
+								></div>
+							</div>
+							<p class="sensitive flex flex-wrap justify-between gap-x-3 text-xs text-zinc-400 tabular-nums">
+								<span>{ "You have " + visaFmt(it.Have, cur) + visaHaveFrom(it, p.IncomeFrom) }</span>
+								if it.Gap > 0 && !it.GroupMet {
+									<span class="text-rose-300">{ visaFmt(it.Gap, cur) + " short" }</span>
+								}
+							</p>
+						</div>
+					}
+					if len(it.Months) > 0 {
+						{{ labels := visaMonthLabels(money, len(it.Months)) }}
+						<div class="grid gap-1">
+							<p class="text-xs text-zinc-500">{ fmt.Sprintf("Last %d months: %d reached %s", len(it.Months), it.MonthsMet, visaFmt(it.MonthlyNeed(), cur)) }</p>
+							<ul class="flex flex-wrap gap-1">
+								for i, m := range it.Months {
+									<li
+										title={ visaFmt(m, cur) }
+										class={ "sensitive px-2 py-0.5 rounded-full text-[11px] tabular-nums",
+											templ.KV("bg-emerald-400/15 text-emerald-300", m+0.005 >= it.MonthlyNeed()),
+											templ.KV("bg-rose-400/10 text-rose-300", m+0.005 < it.MonthlyNeed()) }
+									>
+										if i < len(labels) {
+											{ labels[i] + " · " }
+										}
+										{ visaFmt(m, cur) }
+									</li>
+								}
+							</ul>
+						</div>
+					}
+					if it.Kind == visa.KindSalary {
+						<a href={ templ.SafeURL(visaSalaryURL(p.Country.ISO2, it)) } class="justify-self-start inline-flex items-center gap-1 text-xs text-zinc-400 underline hover:text-zinc-200">
+							@icons.Calculator("12")
+							What this salary takes home
+						</a>
+					}
+				</li>
+			}
+		</ul>
+		if checks := res.Checks(); len(checks) > 0 {
+			<h2 class="mt-2 text-sm font-semibold text-zinc-300">Conditions</h2>
+			<ul class="grid gap-1.5">
+				for _, it := range checks {
+					<li>
+						<label class="flex items-start gap-3 p-3 rounded-2xl bg-zinc-800/40 cursor-pointer has-checked:bg-emerald-400/10">
+							<input
+								type="checkbox"
+								form="visa-form"
+								name={ "check_" + strconv.Itoa(it.Index) }
+								value="1"
+								checked?={ it.Status == visa.StatusMet }
+								hx-get="/tools/visa/result"
+								hx-include="#visa-form"
+								hx-target="#visa-result"
+								hx-swap="innerHTML"
+								hx-trigger="change"
+								class="mt-0.5 shrink-0 accent-emerald-400"
+							/>
+							<span class="text-sm text-zinc-200">{ it.Text }</span>
+						</label>
+					</li>
+				}
+			</ul>
+		}
+	</section>
+}
+
+// visaHaveFrom tells where an income's number comes from.
+func visaHaveFrom(it visa.Item, from string) string {
+	if it.Kind != visa.KindIncome {
+		return ""
+	}
+	switch from {
+	case VisaFromTxs:
+		return " on average"
+	case VisaFromSalary:
+		return " (your salary)"
+	default:
+		return ""
+	}
+}
+
+// visaSalaryURL works the salary out in the salary calculator.
+func visaSalaryURL(country string, it visa.Item) string {
+	v := url.Values{}
+	v.Set("country", country)
+	v.Set("amount", strconv.FormatFloat(math.Round(it.Need), 'f', -1, 64))
+	if it.Period == visa.PeriodYear {
+		v.Set("per", "year")
+	}
+	return "/tools/salary?" + v.Encode()
+}
+
+templ visaRuleInfo(p *VisaPick, include, target, pick string, vals map[string]string) {
+	{{ r := p.Rule }}
+	<section class="grid gap-3 p-5 rounded-3xl ring-1 ring-zinc-800 text-sm">
+		<p class="flex flex-wrap items-center gap-2">
+			switch r.Source {
+				case visa.SourceAI:
+					<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-400/15 text-xs font-medium text-violet-300">
+						@icons.Sparkles("12")
+						AI lookup
+					</span>
+				case visa.SourceManual:
+					<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-400/15 text-xs font-medium text-sky-300">
+						@icons.Pencil("12")
+						Yours
+					</span>
+				default:
+					<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-400/15 text-xs font-medium text-emerald-300">
+						@icons.ShieldCheck("12")
+						Built-in
+					</span>
+			}
+			<span class="text-zinc-300">{ fmt.Sprintf("%s · %s · %d", r.Name, p.Country.Name, r.Year) }</span>
+			<span class="text-zinc-500">{ r.Category.Label() }</span>
+		</p>
+		<p class="flex gap-2 text-xs text-amber-200/90">
+			@icons.Warning("14", &templ.Attributes{"class": "shrink-0 mt-px"})
+			<span>
+				if r.Source == visa.SourceAI {
+					Looked up by Gemini on the web
+					if !r.FetchedAt.IsZero() {
+						{ " on " + r.FetchedAt.Format("2 Jan 2006") }
+					}
+					: it may be wrong or out of date.
+				}
+				Amounts change every year and consulates differ: check with the official sources before applying.
+			</span>
+		</p>
+		if r.Notes != "" {
+			<p class="text-zinc-400">{ r.Notes }</p>
+		}
+		if len(r.Sources) > 0 {
+			<ul class="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+				for i, s := range r.Sources {
+					if i < 6 {
+						<li>
+							<a href={ templ.SafeURL(s) } target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-zinc-400 underline hover:text-zinc-200">
+								{ sourceHost(s) }
+								@icons.ExternalLink("11")
+							</a>
+						</li>
+					}
+				}
+			</ul>
+		}
+		<div class="flex flex-wrap gap-2">
+			if r.Source == visa.SourceManual {
+				<button type="button" hx-get={ "/tools/visa/rules/" + pick + "/edit" } hx-target={ "#" + components.DrawerSlot } hx-swap="innerHTML" class="txd-action">
+					@icons.Pencil("14")
+					Edit these requirements
+				</button>
+			} else if include == "#visa-form" {
+				<button type="button" hx-get="/tools/visa/rules/new?from=1" hx-include={ include } hx-target={ "#" + components.DrawerSlot } hx-swap="innerHTML" class="txd-action">
+					@icons.Copy("14")
+					Copy to my rules
+				</button>
+			}
+			<a href={ templ.SafeURL("/tools/cost-of-living?to=" + url.QueryEscape(p.Country.ISO2)) } class="txd-action">
+				@icons.Globe("14")
+				Cost of living there
+			</a>
+			if r.Source == visa.SourceAI && p.AIOn && p.AILeft > 0 {
+				@visaFetchButton("Look up again", include, target,
+					fmt.Sprintf("Look this visa up again? It uses 1 of your %d lookups left this month, and replaces it for everyone.", p.AILeft), vals)
+			}
+		</div>
+	</section>
+}

@@ -1,0 +1,223 @@
+package views
+
+import (
+	"fmt"
+	"net/url"
+	"strconv"
+
+	"github.com/omareloui/tyche/internal/countries"
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/visa"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+// VisaMaxCompare is how many visas can be compared.
+const VisaMaxCompare = 4
+
+// VisaCompareItem is a visa of the comparison.
+type VisaCompareItem struct {
+	Form VisaPickForm
+	Pick *VisaPick
+}
+
+// VisaCompareData is the comparison: the user's numbers and each visa
+// checked against them, Best the closest one (-1 when none).
+type VisaCompareData struct {
+	Countries []countries.Country
+	Money     VisaMoneyForm
+	Data      *models.VisaMoney
+	Default   models.Currency
+	Visas     []VisaCompareItem
+	Best      int
+	Error     string
+}
+
+// VisaCompareURL is the comparison's page with its form.
+func VisaCompareURL(d *VisaCompareData) string {
+	v := url.Values{}
+	v.Set("n", strconv.Itoa(len(d.Visas)))
+	for i, it := range d.Visas {
+		it.Form.values(v, "v"+strconv.Itoa(i)+"_")
+	}
+	d.Money.values(v)
+	return "/tools/visa/compare?" + v.Encode()
+}
+
+// visaToolURL opens a compared visa in the tool.
+func visaToolURL(d *VisaCompareData, it VisaCompareItem) string {
+	return VisaURL(VisaForm{VisaPickForm: it.Form, Money: d.Money})
+}
+
+templ VisaCompare(claims *jwt.AccessClaims, balances []models.Balance, d *VisaCompareData) {
+	@layouts.Main(claims, "Compare visas", balances) {
+		@components.Container() {
+			<a href="/tools/visa" class="inline-flex items-center gap-1 mb-2 text-sm text-zinc-400 hover:text-zinc-200">
+				@icons.ArrowLeft("14")
+				Visa readiness
+			</a>
+			@components.MainHeader("Compare visas")
+			<div id="visa-compare-body">
+				@VisaCompareBody(d)
+			</div>
+		}
+	}
+}
+
+// VisaCompareBody is the comparison's form, each visa with how the user's
+// money stands.
+templ VisaCompareBody(d *VisaCompareData) {
+	<form
+		id="visa-compare-form"
+		x-data
+		hx-get="/tools/visa/compare/result"
+		hx-trigger="change, input delay:700ms[target.inputMode === 'decimal' || target.inputMode === 'numeric']"
+		hx-target="#visa-compare-body"
+		hx-swap="innerHTML"
+		hx-sync="this:replace"
+		@submit.prevent
+		class="grid gap-4"
+	>
+		<input type="hidden" name="n" value={ strconv.Itoa(len(d.Visas)) }/>
+		<div class="grid gap-4 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] lg:items-start">
+			<div class="p-5 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800">
+				@visaMoneyFields("vc", d.Money, d.Data, d.Default)
+			</div>
+			<div class="grid gap-4">
+				<div class="flex flex-wrap items-center justify-between gap-3">
+					<p class="text-sm text-zinc-400">Your money against each visa's requirements.</p>
+					if len(d.Visas) < VisaMaxCompare {
+						<button
+							type="button"
+							hx-get="/tools/visa/compare/result"
+							hx-include="#visa-compare-form"
+							hx-vals={ fmt.Sprintf(`{"n": "%d"}`, len(d.Visas)+1) }
+							hx-target="#visa-compare-body"
+							hx-swap="innerHTML"
+							class="txd-action"
+						>
+							@icons.Plus("14")
+							Add a visa
+						</button>
+					}
+				</div>
+				if d.Error != "" {
+					@visaError(d.Error)
+				}
+				<div class="grid gap-4 sm:grid-cols-2">
+					for i := range d.Visas {
+						@visaCompareCard(d, i)
+					}
+				</div>
+				<p class="text-xs text-zinc-500">Conditions that aren't money (insurance, degree, employer abroad…) are left out here: open a visa to tick them.</p>
+			</div>
+		</div>
+	</form>
+}
+
+templ visaCompareCard(d *VisaCompareData, i int) {
+	{{ it := d.Visas[i] }}
+	{{ p := it.Pick }}
+	{{ prefix := "v" + strconv.Itoa(i) + "_" }}
+	{{ best := d.Best == i }}
+	<section class={ "grid gap-4 content-start p-5 rounded-3xl bg-zinc-700/20 ring-1", templ.KV("ring-emerald-400/60", best), templ.KV("ring-zinc-800", !best) }>
+		<header class="flex items-center justify-between gap-2">
+			<h2 class="flex flex-wrap items-center gap-2 font-semibold">
+				{ fmt.Sprintf("Visa %d", i+1) }
+				if best {
+					<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-400/15 text-xs font-medium text-emerald-300">
+						@icons.Trophy("12")
+						Closest
+					</span>
+				}
+			</h2>
+			if len(d.Visas) > 2 {
+				<button
+					type="button"
+					hx-get="/tools/visa/compare/result"
+					hx-include="#visa-compare-form"
+					hx-vals={ fmt.Sprintf(`{"remove": "%d"}`, i) }
+					hx-target="#visa-compare-body"
+					hx-swap="innerHTML"
+					aria-label="Remove this visa"
+					class="p-1.5 rounded-full text-zinc-500 cursor-pointer hover:bg-zinc-800 hover:text-zinc-200"
+				>
+					@icons.X("14")
+				</button>
+			}
+		</header>
+		@visaPickFields("vc"+strconv.Itoa(i), prefix, it.Form, p, d.Countries, nil)
+		<div class="pt-4 border-t border-zinc-800">
+			if p.Error != "" {
+				<p class="text-sm text-red-300">{ p.Error }</p>
+			}
+			switch {
+				case p.NeedName:
+					<p class="text-sm text-zinc-500">Type the visa's name.</p>
+				case p.NeedAI:
+					<div class="grid gap-2 text-sm">
+						if p.AIOn && p.AILeft > 0 {
+							@visaFetchButton("Look up the visa", "#visa-compare-form", "#visa-compare-body", "", map[string]string{"view": "compare", "fetch": strconv.Itoa(i)})
+						} else if p.AIOn {
+							<p class="text-zinc-500">You've used this month's lookups.</p>
+						} else {
+							<p class="text-zinc-500">AI lookups are off here.</p>
+						}
+						<button type="button" hx-get={ visaNewRuleURL(p.Country.ISO2) } hx-target={ "#" + components.DrawerSlot } hx-swap="innerHTML" class="justify-self-start text-zinc-400 underline cursor-pointer hover:text-zinc-200">Type the requirements yourself</button>
+					</div>
+				case p.Result != nil:
+					@visaCompareResult(d, it)
+			}
+		</div>
+	</section>
+}
+
+templ visaCompareResult(d *VisaCompareData, it VisaCompareItem) {
+	{{ p := it.Pick }}
+	{{ res, cur := p.Result, p.Rule.Currency }}
+	<div class="grid gap-3">
+		<div class="flex flex-wrap items-center gap-2">
+			@visaVerdictPill(res.Verdict)
+			<span class="text-xs text-zinc-500">{ fmt.Sprintf("%s · %d", p.Rule.Category.Label(), p.Rule.Year) }</span>
+		</div>
+		<ul class="grid gap-2 text-sm">
+			for _, item := range res.MoneyItems() {
+				<li class="flex items-start gap-2">
+					@visaStatusIcon(item)
+					<div class="flex-1 min-w-0">
+						<p class="text-zinc-200">{ visaItemTitle(item) }</p>
+						if item.Status != visa.StatusUnknown {
+							<p class="sensitive text-xs text-zinc-500 tabular-nums">
+								{ "You have " + visaFmt(item.Have, cur) }
+								if item.MonthsMet >= 0 {
+									{ fmt.Sprintf(" · %d/%d months", item.MonthsMet, item.MonthsProof) }
+								}
+							</p>
+						}
+					</div>
+					<div class="shrink-0 text-right tabular-nums">
+						<p class="font-semibold">{ visaFmt(item.Need, cur) }</p>
+						if cur != d.Default.String && p.Rate > 0 {
+							<p class="text-xs text-zinc-500">{ "≈ " + visaFmt(item.Need/p.Rate, d.Default.String) }</p>
+						}
+					</div>
+				</li>
+			}
+		</ul>
+		if n := len(res.Checks()); n > 0 {
+			<p class="text-xs text-zinc-500">{ fmt.Sprintf("+ %d conditions", n) }</p>
+		}
+		if res.FundsGap > 0 {
+			<p class="sensitive text-sm text-rose-300">{ visaFmt(res.FundsGap, cur) + " more funds to save" }</p>
+		}
+		<a href={ templ.SafeURL(visaToolURL(d, it)) } class="justify-self-start txd-action">
+			@icons.ArrowRight("14")
+			Open
+		</a>
+		if p.Rule.Source == visa.SourceAI {
+			<p class="text-xs text-amber-200/80">Looked up by AI: check it with the consulate.</p>
+		}
+	</div>
+}

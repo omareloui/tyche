@@ -14,6 +14,7 @@ import (
 	"github.com/omareloui/tyche/internal/taxguess"
 	"github.com/omareloui/tyche/internal/valid"
 	"github.com/omareloui/tyche/internal/vault"
+	"github.com/omareloui/tyche/internal/visaguess"
 )
 
 type Handler struct {
@@ -40,6 +41,10 @@ type Handler struct {
 	// taxGuess looks up the salary calculator's tax rules of the countries
 	// without built in ones, nil when off (its prices and limit in ocrCfg).
 	taxGuess taxguess.Guesser
+	// visaGuess looks up the visa readiness tool's requirements of the
+	// visas without built in ones, nil when off (its prices and limit in
+	// ocrCfg).
+	visaGuess visaguess.Guesser
 }
 
 // SetReceiptOCR turns reading receipts on (a nil reader keeps it off).

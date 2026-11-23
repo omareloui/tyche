@@ -39,10 +39,12 @@ const (
 	ScanColEstimate ScanKind = "col"
 	// ScanTaxRules looked up a country's tax rules (salary calculator).
 	ScanTaxRules ScanKind = "tax"
+	// ScanVisaRules looked up a visa's requirements (visa readiness).
+	ScanVisaRules ScanKind = "visa"
 )
 
 // ScanKinds are every kind of AI call, in the order shown.
-var ScanKinds = []ScanKind{ScanReceipt, ScanSMSGuess, ScanColEstimate, ScanTaxRules}
+var ScanKinds = []ScanKind{ScanReceipt, ScanSMSGuess, ScanColEstimate, ScanTaxRules, ScanVisaRules}
 
 // ParseScanKind is the kind named s, false when there is none.
 func ParseScanKind(s string) (ScanKind, bool) {
@@ -59,6 +61,8 @@ func (k ScanKind) Label() string {
 		return "City estimates"
 	case ScanTaxRules:
 		return "Tax rules"
+	case ScanVisaRules:
+		return "Visa rules"
 	default:
 		return "Receipt scans"
 	}
@@ -124,9 +128,9 @@ func (u AIUsageTotals) AvgCost() float64 {
 // AIUsage sums calls, in all and of each kind.
 type AIUsage struct {
 	AIUsageTotals
-	Last  time.Time
+	Last time.Time
 	// kinds is per ScanKinds (its length: grow it with them).
-	kinds [4]AIUsageTotals
+	kinds [5]AIUsageTotals
 }
 
 func (u *AIUsage) add(s *ReceiptScan) {
