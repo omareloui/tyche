@@ -1132,11 +1132,13 @@ func (h Handler) parseTransactionAmountsAndKindFD(r *http.Request, accs []models
 		}
 
 		// Set to amount
-		if triggered("amount", "amount_unit", "kind", "account_id", "to_account_id", "to_amount_unit") {
-			// The rate is how much of the to currency one of the from is.
+		// "to_amount" is the received amount asking again as the date changed.
+		if triggered("amount", "amount_unit", "kind", "account_id", "to_account_id", "to_amount_unit", "to_amount") {
+			// The rate is how much of the to currency one of the from is, on
+			// the form's day (today's when none, ahead or not found).
 			fxRate := 1.0
 			if acc != nil && toAcc != nil {
-				if v, err := fxrate.GetFxRate(acc.Currency.String, toAcc.Currency.String); err == nil && v > 0 {
+				if v := h.transferRate(r, acc.Currency.String, toAcc.Currency.String); v > 0 {
 					fxRate = v
 				}
 			}
@@ -1157,6 +1159,23 @@ func (h Handler) parseTransactionAmountsAndKindFD(r *http.Request, accs []models
 	}
 
 	return fd, nil
+}
+
+// transferRate is from → to on the form's day: a transaction's date, a
+// recurrent tx's next one; today's without a day or the rates' job.
+func (h Handler) transferRate(r *http.Request, from, to string) float64 {
+	day, _ := parseDateOnlyIfExists(r.FormValue("scheduled_to"))
+	if day.IsZero() {
+		day, _ = parseDateOnlyIfExists(r.FormValue("next_on"))
+	}
+	if h.fxJob != nil {
+		if v, _, err := h.fxJob.RateOn(r.Context(), day, from, to); err == nil {
+			return v
+		}
+		return 0
+	}
+	v, _ := fxrate.GetFxRate(from, to)
+	return v
 }
 
 // openHeader is whether the page has a folding section open, from its

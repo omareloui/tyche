@@ -208,7 +208,7 @@ func BoughtByComboOption(a *models.Account) templ.Component {
 templ txDateChip(label string, daysAgo int) {
 	<button
 		type="button"
-		@click={ fmt.Sprintf("$refs.date.value = new Date(Date.now() - %d * 864e5).toLocaleDateString('en-CA')", daysAgo) }
+		@click={ fmt.Sprintf("$refs.date.value = new Date(Date.now() - %d * 864e5).toLocaleDateString('en-CA'); $refs.date.dispatchEvent(new Event('change', { bubbles: true }))", daysAgo) }
 		class="shrink-0 h-11 px-3 rounded-xl border border-zinc-700 text-sm text-zinc-300 cursor-pointer transition-colors hover:border-zinc-500 hover:text-white"
 	>{ label }</button>
 }
@@ -1006,6 +1006,11 @@ templ TransactionAmountsAndKindFormBody(
 							autocomplete="off"
 							inputmode="decimal"
 							x-mask:dynamic={ form.MoneyMask(toSym, models.AmountDigits(toUnit)) }
+							hx-post={ fmt.Sprintf("/tx-inputs/%s", id) }
+							hx-trigger="change[target.name=='scheduled_to'||target.name=='next_on'] from:closest form"
+							hx-target="this"
+							hx-select={ "#to_amount-" + id }
+							hx-swap="outerHTML"
 							class="input-field w-48! h-9! text-center tabular-nums font-(family-name:--font-biorhyme-expanded)"
 							if fd.ToAccountIFD.Amount.Error != "" {
 								aria-invalid="true"

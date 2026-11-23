@@ -1,13 +1,18 @@
 package handler
 
 import (
+	"context"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/omareloui/tyche/internal/fxrate"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/shareddb"
+	"github.com/omareloui/tyche/internal/sharedqueries"
 )
 
 func TestTransferInputs(t *testing.T) {
@@ -74,11 +79,69 @@ func TestTransferInputs(t *testing.T) {
 		t.Errorf("accounts = %s → %s, want another → usd1", from, to)
 	}
 
-	// Editing the received amount by hand keeps it.
-	_, _, toAmt = parse("to_amount-f1", url.Values{
+	// Another field changing keeps a received amount typed by hand.
+	_, _, toAmt = parse("description-f1", url.Values{
 		"account_id": {"usd1"}, "to_account_id": {"egp1"}, "amount": {"10"}, "to_amount": {"499"},
 	})
 	if toAmt != "499" {
 		t.Errorf("to amount = %s, want 499", toAmt)
+	}
+
+	// A new date (asked by the received amount) works it out again.
+	_, _, toAmt = parse("to_amount-f1", url.Values{
+		"account_id": {"usd1"}, "to_account_id": {"egp1"}, "amount": {"10"}, "to_amount": {"499"},
+		"scheduled_to": {"2026-11-01"},
+	})
+	if toAmt != "500.00" {
+		t.Errorf("to amount = %s, want 500.00", toAmt)
+	}
+}
+
+func TestTransferInputsDayRate(t *testing.T) {
+	restore := fxrate.SetRates(map[string]map[string]float64{"usd": {"egp": 50}})
+	t.Cleanup(restore)
+
+	dir := t.TempDir()
+	t.Chdir("../..") // the shared DB's migrations are read from ./sql/shared
+	db, q, err := shareddb.Open(filepath.Join(dir, "shared.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	day := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	if err := q.UpsertDailyFxRate(context.Background(), sharedqueries.UpsertDailyFxRateParams{
+		Day: day, Base: "usd", Quote: "egp", Rate: 48,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h := Handler{fxJob: fxrate.NewJob(db, q, []string{"usd", "egp"}, time.Hour)}
+
+	bank := models.AccountKind{Enum: models.AccKindBankAcc}
+	accs := []models.Account{
+		{ID: "usd1", Currency: models.Currency{String: "USD"}, Kind: bank},
+		{ID: "egp1", Currency: models.Currency{String: "EGP"}, Kind: bank},
+	}
+	toAmount := func(date string) string {
+		t.Helper()
+		vals := url.Values{
+			"kind": {models.TransferTxKind.String()}, "account_id": {"usd1"}, "to_account_id": {"egp1"},
+			"amount": {"10"}, "scheduled_to": {date},
+		}
+		r := httptest.NewRequest("POST", "/tx-inputs/f1", strings.NewReader(vals.Encode()))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.Header.Set("Hx-Trigger", "to_amount-f1")
+		r.SetPathValue("id", "f1")
+		fd, err := h.parseTransactionAmountsAndKindFD(r, accs, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return fd.ToAccountIFD.Amount.Value
+	}
+
+	if got := toAmount("2026-11-01"); got != "480.00" {
+		t.Errorf("on Nov 1 = %s, want 480.00 (that day's rate)", got)
+	}
+	if got := toAmount(time.Now().UTC().Format(time.DateOnly)); got != "500.00" {
+		t.Errorf("today = %s, want 500.00 (today's rate)", got)
 	}
 }
