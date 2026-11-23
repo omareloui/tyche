@@ -24,8 +24,6 @@ type TxListData struct {
 	Def    *models.Currency
 	// Summary is what the filter matches as a whole, nil when unfiltered.
 	Summary *models.TxSummary
-	// Chips are the filters set, removable one by one.
-	Chips []TxFilterChip
 	// UpcomingOpen is whether the page has this month's upcoming group open
 	// (the X-Tx-Upcoming header), nil on loading the page: open if any is
 	// overdue. LaterOpen is the later group's (X-Tx-Upcoming-Later), folded
@@ -34,12 +32,9 @@ type TxListData struct {
 	// Tags are every tag, for the filters' tag picker (only on the page
 	// and the body's renders).
 	Tags []models.Tag
-}
-
-// TxFilterChip is a filter that's set: its label and the query string
-// without it.
-type TxFilterChip struct {
-	Label, Without string
+	// ItemName names the item filtered by (only on the page and the body's
+	// renders).
+	ItemName string
 }
 
 // TxList is the whole list loaded so far: the review banner, upcoming
@@ -71,11 +66,11 @@ templ txList(d TxListData, oob bool) {
 			if d.Filter.IsZero() {
 				@txEmptyState()
 			} else {
-				@txNoMatches(d.Chips)
+				@txNoMatches()
 			}
 		} else {
 			if d.Summary != nil {
-				@txSummary(d.Summary, d.Chips, d.Def)
+				@txSummary(d.Summary, d.Def)
 			}
 			if len(l.ThisMonth.Txs) > 0 || len(l.Later.Txs) > 0 {
 				@txUpcoming(&l, &d)
@@ -132,18 +127,13 @@ templ txUntil(p *models.TxPage, oob bool) {
 	></span>
 }
 
-templ txNoMatches(chips []TxFilterChip) {
+templ txNoMatches() {
 	<div class="grid justify-items-center gap-3 py-16 text-center">
 		<div class="grid place-items-center w-16 h-16 rounded-2xl bg-zinc-800/70 text-zinc-400">
 			@icons.Search("30")
 		</div>
 		<p class="text-xl font-semibold">No transactions match</p>
 		<p class="max-w-sm text-zinc-500">Try another search or fewer filters.</p>
-		if len(chips) > 0 {
-			<div class="flex flex-wrap justify-center gap-1.5 max-w-lg">
-				@txFilterChips(chips)
-			</div>
-		}
 		@txFilterLink("/transactions", "btn-primary mt-2") {
 			@icons.X("18")
 			Clear filters
@@ -232,7 +222,7 @@ templ txReviewBanner(count int, f *models.TxFilter) {
 
 // txSummary answers what the filters ask: how many transactions match and
 // what they earn and spend, all of them, not just the months loaded.
-templ txSummary(s *models.TxSummary, chips []TxFilterChip, def *models.Currency) {
+templ txSummary(s *models.TxSummary, def *models.Currency) {
 	<div id="tx-summary" data-total={ fmt.Sprint(s.Count) } class="flex flex-wrap items-center gap-x-6 gap-y-3 p-4 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800">
 		<div class="flex-1 min-w-40">
 			<p class="font-semibold">
@@ -268,22 +258,7 @@ templ txSummary(s *models.TxSummary, chips []TxFilterChip, def *models.Currency)
 				</div>
 			}
 		</dl>
-		if len(chips) > 0 {
-			<div class="basis-full flex flex-wrap gap-1.5">
-				@txFilterChips(chips)
-			</div>
-		}
 	</div>
-}
-
-// txFilterChips removes a filter each, keeping the others.
-templ txFilterChips(chips []TxFilterChip) {
-	for _, c := range chips {
-		@txFilterLink(txFilterURL(c.Without), "chip max-w-56 cursor-pointer transition-colors hover:bg-zinc-700 hover:text-zinc-200") {
-			<span class="truncate">{ c.Label }</span>
-			@icons.X("12", &templ.Attributes{"class": "shrink-0", "aria-label": "Remove filter"})
-		}
-	}
 }
 
 // txUpcoming is the scheduled transactions in two groups, the furthest on
@@ -1641,17 +1616,6 @@ func FormatTxRange(from, to time.Time) string {
 		return day(from)
 	}
 	return day(from) + " → " + day(to)
-}
-
-// FormatAmountRange is a filter's amounts, either bound maybe open.
-func FormatAmountRange(min, max *float64) string {
-	switch {
-	case max == nil:
-		return "≥ " + formatters.FormatNum(*min)
-	case min == nil:
-		return "≤ " + formatters.FormatNum(*max)
-	}
-	return formatters.FormatNum(*min) + " – " + formatters.FormatNum(*max)
 }
 
 func formatTxMonth(month time.Time) string {

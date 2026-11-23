@@ -74,21 +74,67 @@ function loadRangePicker(el) {
   el.dataset.datepickerReady = "";
 }
 
-// txDateFilter switches the transactions' date filter between a range and
-// one open-ended bound, carrying the day picked over.
+// txDateFilter is the transactions' dates pill (views.txDateFilter): a
+// preset, or custom days, a range or one open-ended bound (switching carries
+// the day picked over), named on the pill.
 document.addEventListener("alpine:init", () => {
   Alpine.data("txDateFilter", (mode = "range") => ({
     mode,
+    open: false,
+    label: "",
+    set: false,
+
+    init() {
+      this.syncLabel();
+    },
+
+    inputs() {
+      const box = this.$refs.picker.parentElement;
+      return [box.querySelector("input[name=from]"), box.querySelector("input[name=to]")];
+    },
+
+    isPreset(from, to) {
+      const [f, t] = this.inputs();
+      return f.value === from && t.value === to;
+    },
+
+    // syncLabel names the days: a preset's name, else the days themselves.
+    syncLabel() {
+      const [f, t] = this.inputs();
+      this.set = !!(f.value || t.value);
+      const preset = [...this.$root.querySelectorAll("[data-preset]")].find(
+        (b) => b.dataset.from === f.value && b.dataset.to === t.value,
+      );
+      this.label = preset ? preset.dataset.preset : txRangeLabel(f.value, t.value);
+    },
+
+    pickPreset(btn) {
+      const [f, t] = this.inputs();
+      this.open = false;
+      if (f.value === btn.dataset.from && t.value === btn.dataset.to) return;
+      f.value = btn.dataset.from;
+      t.value = btn.dataset.to;
+      this.mode = "range";
+      this.rebuild();
+      f.dispatchEvent(new Event("change", { bubbles: true }));
+    },
 
     switchMode() {
-      const el = this.$refs.picker;
-      const box = el.parentElement;
-      const from = box.querySelector("input[name=from]");
-      const to = box.querySelector("input[name=to]");
+      const [from, to] = this.inputs();
       const was = [from.value, to.value];
       const one = from.value || to.value;
       if (this.mode === "from") [from.value, to.value] = [one, ""];
       else if (this.mode === "to") [from.value, to.value] = ["", one];
+      this.rebuild();
+      if (from.value !== was[0] || to.value !== was[1]) {
+        from.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    },
+
+    // rebuild makes the picker again for the mode and the days.
+    rebuild() {
+      const el = this.$refs.picker;
+      const [from, to] = this.inputs();
       el._picker?.destroy();
       delete el.dataset.datepickerReady;
       el.dataset.datepickerMode = this.mode;
@@ -97,13 +143,25 @@ document.addEventListener("alpine:init", () => {
         : this.mode === "to" ? to.value
         : from.value || to.value ? `${from.value} → ${to.value}`
         : "";
-      loadDatePickers(box);
-      if (from.value !== was[0] || to.value !== was[1]) {
-        from.dispatchEvent(new Event("change", { bubbles: true }));
-      }
+      loadDatePickers(el.parentElement);
     },
   }));
 });
+
+// txRangeLabel names a dates filter's days like views.FormatTxRange.
+function txRangeLabel(from, to) {
+  const day = (s) => {
+    const d = new Date(s + "T00:00:00");
+    const opts = { month: "short", day: "numeric" };
+    if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
+    return d.toLocaleDateString("en-US", opts);
+  };
+  if (!from && !to) return "Any time";
+  if (!to) return "From " + day(from);
+  if (!from) return "Until " + day(to);
+  if (from === to) return day(from);
+  return day(from) + " → " + day(to);
+}
 
 // keepInViewport moves the shown picker back inside the viewport:
 // Litepicker keeps it aligned with the input's left edge when it fits neither

@@ -1,6 +1,7 @@
 package views
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"github.com/omareloui/tyche/internal/jwt"
@@ -92,7 +93,7 @@ templ Transactions(
 templ TxBody(list TxListData, accs []models.Account,
 	knds []models.TxKind, cats []models.Category,
 	cps []models.Counterparty, gls []models.Goal) {
-	@txFilterBar(&list.Filter, list.Page.MonthStart, accs, knds, cats, cps, gls, list.Tags)
+	@txFilterBar(&list.Filter, list.Page.MonthStart, accs, knds, cats, cps, gls, list.Tags, list.ItemName)
 	@TxList(list)
 }
 
@@ -228,9 +229,12 @@ templ txDateChip(label string, daysAgo int) {
 
 // txFilterBar narrows the list: changing it swaps the list and keeps the
 // query string in the URL. The search is focused with "/" (transactions.js).
+// Under the search, the dates pill then only the filters set (or just added)
+// as pills, each editable in place and removable; "Filter" adds another one
+// from a grouped menu (txFilterBuilder).
 templ txFilterBar(f *models.TxFilter, start models.MonthStart, accs []models.Account,
 	knds []models.TxKind, cats []models.Category,
-	cps []models.Counterparty, gls []models.Goal, tags []models.Tag) {
+	cps []models.Counterparty, gls []models.Goal, tags []models.Tag, itemName string) {
 	<form
 		id="tx-filters"
 		hx-get="/transactions"
@@ -238,117 +242,316 @@ templ txFilterBar(f *models.TxFilter, start models.MonthStart, accs []models.Acc
 		hx-swap="outerHTML"
 		hx-replace-url="true"
 		hx-sync="this:replace"
-		hx-trigger="input changed delay:300ms from:find [data-filter-input], change, submit"
-		x-init="syncFilters($el); if (activeFilters) filtersOpen = true"
+		hx-trigger="input changed delay:300ms from:[data-filter-input], change, submit"
+		x-init="syncFilters($el)"
 		@change="syncFilters($el)"
 		class="grid gap-3 mb-8"
 	>
-		<div class="flex items-center gap-2">
-			<label
-				class="flex flex-1 min-w-0 items-center gap-3 h-12 px-4 rounded-2xl border-2 border-zinc-700 bg-zinc-800/40 focus-within:border-zinc-400 transition-colors"
-			>
-				@icons.Search("20", &templ.Attributes{"class": "text-zinc-500 shrink-0"})
-				<input
-					type="search"
-					name={ models.TxFilterQ }
-					value={ f.Q }
-					x-ref="q"
-					data-filter-input
-					autocomplete="off"
-					enterkeyhint="search"
-					placeholder="Search transactions"
-					aria-label="Search transactions"
-					@keydown.escape.prevent="if ($el.value) { $el.value = ''; $el.dispatchEvent(new Event('input', { bubbles: true })) } else { $el.blur() }"
-					class="flex-1 min-w-0 bg-transparent outline-none placeholder:text-zinc-500 [&::-webkit-search-cancel-button]:hidden"
-				/>
-				<kbd class="hidden sm:grid place-items-center shrink-0 w-6 h-6 rounded border border-zinc-600 text-xs text-zinc-500">/</kbd>
-			</label>
-			<button
-				type="button"
-				@click="filtersOpen = !filtersOpen"
-				:aria-expanded="filtersOpen"
-				aria-controls="tx-filters-panel"
-				title="Filters"
-				:class="(filtersOpen || activeFilters) ? 'border-zinc-400 text-white' : 'border-zinc-700 text-zinc-400'"
-				class="relative flex items-center gap-2 shrink-0 h-12 px-4 rounded-2xl border-2 bg-zinc-800/40 cursor-pointer transition-colors hover:border-zinc-500 hover:text-white"
-			>
-				@icons.Filter("18")
-				<span class="hidden sm:inline">Filters</span>
-				<span
-					x-cloak
-					x-show="activeFilters"
-					x-text="activeFilters"
-					class="grid place-items-center min-w-5 h-5 px-1 rounded-full bg-(--accent) text-xs font-semibold text-zinc-950"
-				></span>
-			</button>
-		</div>
-		// The shortcuts' button sits up here: the list scrolls on forever.
-		@txShortcuts()
-		<div id="tx-filters-panel" x-cloak x-show="filtersOpen" x-collapse>
-			<div class="flex flex-wrap items-center gap-2 pt-1">
-				@txFilterCombo(models.TxFilterKind, "Kind", "Any kind", f.KindValue(), false, txKindFilterOptions(knds))
-				@txFilterCombo(models.TxFilterAccount, "Account", "Any account", f.AccountID, true, txAccountFilterOptions(accs))
-				@txFilterCombo(models.TxFilterCategory, "Category", "Any category", f.CategoryID, true,
+		<div x-data="txFilterBuilder" @combo-closed="onComboClosed($event)" class="flex flex-wrap items-center gap-2">
+			@txSearch(f.Q)
+			@txDateFilter(f, start)
+			@txFilterSlot(models.TxFilterKind, "Kind", icons.ArrowUpDown("15")) {
+				@txFilterCombo(models.TxFilterKind, "Kind", f.KindValue(), false, txKindFilterOptions(knds))
+			}
+			@txFilterSlot(models.TxFilterAccount, "Account", icons.Wallet("15")) {
+				@txFilterCombo(models.TxFilterAccount, "Account", f.AccountID, true, txAccountFilterOptions(accs))
+			}
+			@txFilterSlot(models.TxFilterCategory, "Category", icons.Grid("15")) {
+				@txFilterCombo(models.TxFilterCategory, "Category", f.CategoryID, true,
 					append([]form.ComboOption{{Value: models.TxFilterNone, Label: "Uncategorized"}}, categoryComboOptions(cats)...))
-				@txFilterCombo(models.TxFilterCounterparty, "Counterparty", "Any counterparty", f.CounterpartyID, true,
+			}
+			@txFilterSlot(models.TxFilterCounterparty, "Counterparty", icons.Users("15")) {
+				@txFilterCombo(models.TxFilterCounterparty, "Counterparty", f.CounterpartyID, true,
 					append([]form.ComboOption{{Value: models.TxFilterNone, Label: "No counterparty"}}, counterpartyComboOptions(cps, f.CounterpartyID)...))
-				if len(gls) > 0 {
-					@txFilterCombo(models.TxFilterGoal, "Goal", "Any goal", f.GoalID, true, goalComboOptions(gls))
+			}
+			if len(gls) > 0 {
+				@txFilterSlot(models.TxFilterGoal, "Goal", icons.Target("15")) {
+					@txFilterCombo(models.TxFilterGoal, "Goal", f.GoalID, true, goalComboOptions(gls))
 				}
-				if len(tags) > 0 {
-					@txFilterCombo(models.TxFilterTag, "Tag", "Any tag", f.TagID, true, tagComboOptions(tags, f.TagID))
+			}
+			if len(tags) > 0 {
+				@txFilterSlot(models.TxFilterTag, "Tag", icons.Tag("15")) {
+					@txFilterCombo(models.TxFilterTag, "Tag", f.TagID, true, tagComboOptions(tags, f.TagID))
 				}
-				if f.ItemID != "" {
-					// Set from an item's details (/items): kept while the other
-					// filters change, removed by its chip.
+			}
+			if f.ItemID != "" {
+				// Set from an item's details (/items): kept while the other
+				// filters change, only removed.
+				@txFilterSlot(models.TxFilterItem, "Item", icons.Basket("15")) {
 					<input type="hidden" name={ models.TxFilterItem } value={ f.ItemID }/>
+					<span class="max-w-48 truncate pl-1.5 pr-1 font-medium text-zinc-100">{ itemName }</span>
 				}
-				@txFilterCombo(models.TxFilterStatus, "Status", "Any status", string(f.Status), false, []form.ComboOption{
+			}
+			@txFilterSlot(models.TxFilterStatus, "Status", icons.CheckCheck("15")) {
+				@txFilterCombo(models.TxFilterStatus, "Status", string(f.Status), false, []form.ComboOption{
 					{Value: string(models.TxStatusFulfilled), Label: "Fulfilled", Leading: icons.Check("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 					{Value: string(models.TxStatusScheduled), Label: "Scheduled", Leading: icons.Calendar("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 					{Value: string(models.TxStatusReview), Label: "Needs review", Leading: icons.Message("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 				})
-				@txFilterCombo(models.TxFilterSource, "Source", "Any source", string(f.Source), false, []form.ComboOption{
+			}
+			@txFilterSlot(models.TxFilterSource, "Source", icons.Download("15")) {
+				@txFilterCombo(models.TxFilterSource, "Source", string(f.Source), false, []form.ComboOption{
 					{Value: string(models.TxSourceSMS), Label: "From SMS", Leading: icons.Smartphone("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 					{Value: string(models.TxSourceImport), Label: "Imported (CSV)", Leading: icons.Upload("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 					{Value: string(models.TxSourceManual), Label: "Added by hand", Leading: icons.Pencil("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 				})
-				@txFilterCombo(models.TxFilterReceipt, "Receipt", "Any receipt", string(f.Receipt), false, []form.ComboOption{
+			}
+			@txFilterSlot(models.TxFilterReceipt, "Receipt", icons.Receipt("15")) {
+				@txFilterCombo(models.TxFilterReceipt, "Receipt", string(f.Receipt), false, []form.ComboOption{
 					{Value: string(models.TxReceiptWith), Label: "With a receipt", Leading: icons.Image("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 					{Value: string(models.TxReceiptWithout), Label: "Without a receipt", Leading: icons.X("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 				})
-				@txFilterCombo(models.TxFilterNote, "Note", "Any note", string(f.Note), false, []form.ComboOption{
+			}
+			@txFilterSlot(models.TxFilterNote, "Note", icons.StickyNote("15")) {
+				@txFilterCombo(models.TxFilterNote, "Note", string(f.Note), false, []form.ComboOption{
 					{Value: string(models.TxNoteWith), Label: "With a note", Leading: icons.StickyNote("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 					{Value: string(models.TxNoteWithout), Label: "Without a note", Leading: icons.X("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 				})
-				@txFilterCombo(models.TxFilterWindow, "Return / warranty", "Any return / warranty", string(f.Window), false, []form.ComboOption{
+			}
+			@txFilterSlot(models.TxFilterWindow, "Return / warranty", icons.ShieldCheck("15")) {
+				@txFilterCombo(models.TxFilterWindow, "Return / warranty", string(f.Window), false, []form.ComboOption{
 					{Value: string(models.TxWindowReturnOpen), Label: "Can still be returned", Leading: icons.RotateCcw("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 					{Value: string(models.TxWindowWarrantyActive), Label: "Under warranty", Leading: icons.ShieldCheck("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 				})
-				@txDateRangeFilter(f)
-				@txDatePresets(f, start)
-				@txAmountFilter(models.TxFilterMin, "Min amount", f.MinAmount)
+			}
+			@txFilterSlot(txFilterAmountSlot, "Amount", icons.Coins("15")) {
+				@txAmountFilter(models.TxFilterMin, "Min", f.MinAmount)
 				<span class="text-zinc-600">–</span>
-				@txAmountFilter(models.TxFilterMax, "Max amount", f.MaxAmount)
-				<button
-					type="button"
-					x-show="activeFilters"
-					hx-get={ txFilterURL(f.Without(txFilterKeysButQ()...)) }
-					hx-target="#tx-body"
-					hx-swap="innerHTML"
-					hx-replace-url="true"
-					class="flex items-center gap-1 h-10 px-3 rounded-full text-sm text-zinc-400 cursor-pointer transition-colors hover:bg-white/5 hover:text-white"
-				>
-					@icons.X("16")
-					Clear
-				</button>
-			</div>
+				@txAmountFilter(models.TxFilterMax, "Max", f.MaxAmount)
+			}
+			@txFilterMenu(len(gls) > 0, len(tags) > 0)
+			<button
+				type="button"
+				x-cloak
+				x-show="activeFilters"
+				hx-get={ txFilterURL(f.Without(txFilterKeysButQ()...)) }
+				hx-target="#tx-body"
+				hx-swap="innerHTML"
+				hx-replace-url="true"
+				class="h-9 px-3 rounded-full text-sm text-zinc-400 cursor-pointer transition-colors hover:bg-white/5 hover:text-white"
+			>Clear all</button>
+			// The shortcuts' button sits up here: the list scrolls on forever.
+			<button
+				type="button"
+				@click="toggleShortcuts()"
+				class="hidden sm:inline-flex items-center gap-1.5 ml-auto text-xs text-zinc-600 cursor-pointer transition-colors hover:text-zinc-300"
+			>
+				@icons.Keyboard("14")
+				Shortcuts <kbd class="kbd">?</kbd>
+			</button>
 		</div>
+		@txSwipeHint()
 	</form>
 }
 
-templ txShortcuts() {
-	// Swiping has no visible cue on touch screens, told once.
+// txSearch is the search: an icon, opened into a box (animated) by a click
+// or "/" (tx-search-open, transactions.js), staying open while it has text.
+// Escape empties it, then closes it. Its icon turns into a spinner while the
+// list loads for the filters (data-tx-loading, transactions.js).
+templ txSearch(q string) {
+	<div
+		x-data="{ q: '', open: false }"
+		x-init="q = $refs.q.value; open = q !== ''; requestAnimationFrame(() => $el.dataset.ready = '')"
+		@tx-search-open.window="open = true; $nextTick(() => { $refs.q.focus(); $refs.q.select() })"
+		@focusout="if (!q && !$el.contains($event.relatedTarget)) open = false"
+		:data-open="open"
+		class="tx-search"
+		if q != "" {
+			data-open
+		}
+	>
+		<button
+			type="button"
+			@click="open = true; $nextTick(() => $refs.q.focus())"
+			:aria-expanded="open"
+			aria-label="Search transactions"
+			title="Search (/)"
+			class="grid place-items-center shrink-0 size-9 -m-px rounded-full text-zinc-400 cursor-pointer transition-colors hover:text-white"
+		>
+			@icons.Search("16", &templ.Attributes{"class": "in-[[data-tx-loading]]:hidden"})
+			<span class="hidden in-[[data-tx-loading]]:block size-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" aria-hidden="true"></span>
+		</button>
+		<input
+			type="search"
+			name={ models.TxFilterQ }
+			value={ q }
+			x-ref="q"
+			x-model="q"
+			:tabindex="open ? 0 : -1"
+			data-filter-input
+			autocomplete="off"
+			enterkeyhint="search"
+			placeholder="Search"
+			aria-label="Search transactions"
+			@keydown.escape.prevent="if ($el.value) { q = ''; $nextTick(() => $el.dispatchEvent(new Event('input', { bubbles: true }))) } else { $el.blur() }"
+			class="flex-1 min-w-0 pr-2 bg-transparent text-sm outline-none placeholder:text-zinc-500 [&::-webkit-search-cancel-button]:hidden"
+		/>
+		<button
+			type="button"
+			x-cloak
+			x-show="q"
+			@click="q = ''; $nextTick(() => { $refs.q.dispatchEvent(new Event('input', { bubbles: true })); $refs.q.focus() })"
+			aria-label="Clear the search"
+			class="grid place-items-center shrink-0 size-6 mr-1.5 rounded-full text-zinc-500 cursor-pointer transition-colors hover:bg-white/10 hover:text-white"
+		>
+			@icons.X("13")
+		</button>
+	</div>
+}
+
+// txFilterAmountSlot is the amount range's pill (min and max).
+const txFilterAmountSlot = "amount"
+
+// txFilterSlot is a filter's pill: its icon and name, the value picked in
+// place, a button removing it. Shown while set or just added from the menu.
+templ txFilterSlot(key, label string, icon templ.Component) {
+	<div
+		data-slot={ key }
+		x-show={ fmt.Sprintf("isShown(%q)", key) }
+		x-cloak
+		@focusout="onSlotFocusOut($event)"
+		class="tx-filter-pill"
+	>
+		<span class="flex items-center gap-1.5 text-zinc-400">
+			@icon
+			<span class="hidden sm:inline">{ label }</span>
+		</span>
+		{ children... }
+		<button
+			type="button"
+			@click={ fmt.Sprintf("remove(%q)", key) }
+			aria-label={ "Remove the " + strings.ToLower(label) + " filter" }
+			title="Remove"
+			class="grid place-items-center shrink-0 w-7 h-7 -mr-1 rounded-full text-zinc-500 cursor-pointer transition-colors hover:bg-white/10 hover:text-white"
+		>
+			@icons.X("14")
+		</button>
+	</div>
+}
+
+type txFilterMenuItem struct {
+	key, label string
+	icon       templ.Component
+}
+
+type txFilterMenuGroup struct {
+	title string
+	items []txFilterMenuItem
+}
+
+// txFilterMenuGroups are the filters the menu adds, grouped; goals and tags
+// only when there are some.
+func txFilterMenuGroups(goals, tags bool) []txFilterMenuGroup {
+	what := []txFilterMenuItem{
+		{models.TxFilterKind, "Kind", icons.ArrowUpDown("16")},
+		{models.TxFilterCategory, "Category", icons.Grid("16")},
+	}
+	if tags {
+		what = append(what, txFilterMenuItem{models.TxFilterTag, "Tag", icons.Tag("16")})
+	}
+	who := []txFilterMenuItem{
+		{models.TxFilterAccount, "Account", icons.Wallet("16")},
+		{models.TxFilterCounterparty, "Counterparty", icons.Users("16")},
+	}
+	if goals {
+		who = append(who, txFilterMenuItem{models.TxFilterGoal, "Goal", icons.Target("16")})
+	}
+	return []txFilterMenuGroup{
+		{"What", what},
+		{"Where & who", who},
+		{"How much", []txFilterMenuItem{{txFilterAmountSlot, "Amount", icons.Coins("16")}}},
+		{"State", []txFilterMenuItem{
+			{models.TxFilterStatus, "Status", icons.CheckCheck("16")},
+			{models.TxFilterSource, "Source", icons.Download("16")},
+		}},
+		{"Has", []txFilterMenuItem{
+			{models.TxFilterReceipt, "Receipt", icons.Receipt("16")},
+			{models.TxFilterNote, "Note", icons.StickyNote("16")},
+			{models.TxFilterWindow, "Return / warranty", icons.ShieldCheck("16")},
+		}},
+	}
+}
+
+// txFilterMenu adds a filter: the ones not shown yet, searchable.
+templ txFilterMenu(goals, tags bool) {
+	<div class="relative" @keydown.escape.stop="closeMenu(true)" @click.outside="closeMenu()">
+		<button
+			type="button"
+			x-ref="addFilter"
+			@click="toggleMenu()"
+			:aria-expanded="menuOpen"
+			aria-haspopup="menu"
+			class="flex items-center gap-1.5 h-9 pl-2.5 pr-3.5 rounded-full border border-dashed border-zinc-700 text-sm text-zinc-400 cursor-pointer transition-colors hover:border-zinc-500 hover:text-white aria-expanded:border-(--accent) aria-expanded:text-white"
+		>
+			@icons.Plus("16")
+			Filter
+		</button>
+		<div
+			x-ref="menu"
+			x-cloak
+			x-show="menuOpen"
+			x-transition.opacity.duration.100ms
+			:style="menuStyle"
+			role="menu"
+			@keydown.down.prevent="moveFocus(1)"
+			@keydown.up.prevent="moveFocus(-1)"
+			class={ "z-70 flex flex-col w-64 p-1.5 rounded-xl", components.PopupSurface }
+		>
+			<div class="relative shrink-0 mb-1">
+				@icons.Search("15", &templ.Attributes{"class": "pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"})
+				<input
+					x-ref="menuSearch"
+					x-model="menuQ"
+					@keydown.enter.prevent="pickFirst()"
+					type="text"
+					placeholder="Filter by…"
+					autocomplete="off"
+					aria-label="Search filters"
+					class="w-full h-9 pl-9 pr-3 rounded-lg border border-white/10 bg-white/5 text-sm outline-none placeholder:text-zinc-400 focus:border-(--accent)"
+				/>
+			</div>
+			<div class="min-h-0 max-h-96 overflow-y-auto overscroll-contain">
+				for _, g := range txFilterMenuGroups(goals, tags) {
+					<div x-show={ "groupShown(" + txFilterMenuKeys(g) + ")" } class="py-1">
+						<p class="px-3 pt-1 pb-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">{ g.title }</p>
+						for _, it := range g.items {
+							<button
+								type="button"
+								role="menuitem"
+								data-menu-item
+								data-key={ it.key }
+								data-label={ strings.ToLower(it.label) }
+								x-show={ fmt.Sprintf("itemShown(%q, %q)", it.key, strings.ToLower(it.label)) }
+								@click={ fmt.Sprintf("add(%q)", it.key) }
+								class="flex w-full items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm text-zinc-200 cursor-pointer outline-none hover:bg-white/10 focus:bg-white/10"
+							>
+								<span class="text-zinc-400">
+									@it.icon
+								</span>
+								{ it.label }
+							</button>
+						}
+					</div>
+				}
+				<p x-show="noMenuMatches" class="px-3 py-2 text-sm text-zinc-500">No filters left</p>
+			</div>
+		</div>
+	</div>
+}
+
+// txFilterMenuKeys are a menu group's filters, with their labels for the
+// search, as JSON.
+func txFilterMenuKeys(g txFilterMenuGroup) string {
+	keys := make([][2]string, len(g.items))
+	for i, it := range g.items {
+		keys[i] = [2]string{it.key, strings.ToLower(it.label)}
+	}
+	b, _ := json.Marshal(keys)
+	return string(b)
+}
+
+// txSwipeHint tells phones about swiping once: it has no visible cue.
+templ txSwipeHint() {
 	<p
 		x-data="{ hint: false }"
 		x-init="hint = (() => { try { return !localStorage.getItem('tx-swipe-hint') } catch { return false } })()"
@@ -366,17 +569,8 @@ templ txShortcuts() {
 			@icons.X("14")
 		</button>
 	</p>
-	<div class="hidden sm:flex justify-end">
-		<button
-			type="button"
-			@click="toggleShortcuts()"
-			class="inline-flex items-center gap-1.5 text-xs text-zinc-600 cursor-pointer transition-colors hover:text-zinc-300"
-		>
-			@icons.Keyboard("14")
-			Shortcuts <kbd class="kbd">?</kbd>
-		</button>
-	</div>
 }
+
 
 type txShortcut struct {
 	Keys []string
@@ -473,50 +667,123 @@ templ txShortcutsDialog(scan bool) {
 	</dialog>
 }
 
-templ txFilterCombo(name, label, anyLabel, value string, searchable bool, opts []form.ComboOption) {
+templ txFilterCombo(name, label, value string, searchable bool, opts []form.ComboOption) {
 	@form.Combobox(form.ComboboxProps{
-		Name: name, ID: "filter", Label: label, Placeholder: anyLabel,
+		Name: name, ID: "filter", Label: label, Placeholder: "Any",
 		Options: opts, Data: form.FDInput{Value: value},
-		Nullable: true, NullLabel: anyLabel, Searchable: searchable, Chip: true,
+		Nullable: true, NullLabel: "Any", Searchable: searchable, Chip: true,
 		InputAttrs: templ.Attributes{"data-filter": true},
 	})
 }
 
-// txDateRangeFilter picks the from and to days (datepickers.js), the days
-// kept in hidden inputs: a range, or one open-ended bound (on or after a day,
-// on or before one), the mode picked by its select (txDateFilter).
-templ txDateRangeFilter(f *models.TxFilter) {
+// txDateFilter is the dates' pill, always shown: a popover with the presets,
+// then a custom range or one open-ended bound (on or after a day, on or
+// before one) picked on a calendar (datepickers.js), the days kept in hidden
+// inputs.
+templ txDateFilter(f *models.TxFilter, start models.MonthStart) {
 	{{ from, to := f.FromString(), f.ToString() }}
 	{{ mode := txDateMode(f) }}
-	<div class="flex items-center gap-1" x-data={ fmt.Sprintf("txDateFilter(%q)", mode) }>
-		// Not a filter itself (no name, its change kept from the form): only how
-		// the days are picked.
-		@form.Combobox(form.ComboboxProps{
-			ID: "tx-date-mode", Label: "Dates mode", Options: txDateModeOptions(),
-			Data: form.FDInput{Value: mode}, Chip: true,
-			InputAttrs: templ.Attributes{"@change.stop": "mode = $event.target.value; switchMode()"},
-		})
-		<div class="relative">
-			<input type="hidden" name={ models.TxFilterFrom } value={ from } data-filter/>
-			<input type="hidden" name={ models.TxFilterTo } value={ to } data-filter/>
-			@icons.Calendar("16", &templ.Attributes{"class": "pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500"})
-			<input
-				type="text"
-				readonly
-				x-ref="picker"
-				data-datepicker
-				data-datepicker-range
-				data-datepicker-mode={ mode }
-				:placeholder="mode === 'range' ? 'Any date' : 'Pick a day'"
-				aria-label="Dates"
-				value={ txDateValue(mode, from, to) }
-				class="combo-chip w-52 pl-9! placeholder:text-zinc-500"
-			/>
+	{{ presets := txDatePresetRanges(time.Now(), start) }}
+	<div
+		class="relative"
+		x-data={ fmt.Sprintf("txDateFilter(%q)", mode) }
+		@click.outside="if (!$event.target.closest?.('.litepicker')) open = false"
+		@keydown.escape.stop="open = false; $refs.dateButton.focus()"
+		@change="syncLabel()"
+	>
+		<button
+			type="button"
+			x-ref="dateButton"
+			@click="open = !open"
+			:aria-expanded="open"
+			aria-haspopup="dialog"
+			:data-set="set"
+			if from != "" || to != "" {
+				data-set="true"
+			}
+			class="tx-filter-pill tx-date-pill"
+		>
+			@icons.Calendar("15", &templ.Attributes{"class": "shrink-0"})
+			<span x-text="label" class="truncate font-medium">{ txDateLabel(f, presets) }</span>
+			@icons.ChevronDown("15", &templ.Attributes{"class": "shrink-0 text-zinc-500 transition-transform", ":class": "open && 'rotate-180'"})
+		</button>
+		<div
+			x-cloak
+			x-show="open"
+			x-transition.opacity.duration.100ms
+			role="dialog"
+			aria-label="Dates"
+			class={ "absolute left-0 top-full z-60 mt-2 w-[min(20rem,calc(100vw-2rem))] p-1.5 rounded-xl", components.PopupSurface }
+		>
+			<div class="grid">
+				@txDatePresetButton("Any time", "", "")
+				for _, p := range presets {
+					@txDatePresetButton(p.label, p.from.Format(time.DateOnly), p.to.Format(time.DateOnly))
+				}
+			</div>
+			<div class="grid gap-2 mt-1.5 p-2 pt-3 border-t border-white/10">
+				<p class="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Custom</p>
+				<div class="grid grid-cols-3 p-0.5 rounded-lg bg-white/5 text-xs">
+					for _, m := range txDateModeOptions() {
+						<button
+							type="button"
+							@click={ fmt.Sprintf("mode = %q; switchMode()", m.Value) }
+							:aria-pressed={ fmt.Sprintf("mode === %q", m.Value) }
+							class="h-7 rounded-md text-zinc-400 cursor-pointer transition-colors hover:text-white aria-pressed:bg-zinc-700 aria-pressed:text-white"
+						>{ m.Label }</button>
+					}
+				</div>
+				<div class="relative">
+					<input type="hidden" name={ models.TxFilterFrom } value={ from } data-filter/>
+					<input type="hidden" name={ models.TxFilterTo } value={ to } data-filter/>
+					@icons.Calendar("15", &templ.Attributes{"class": "pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"})
+					<input
+						type="text"
+						readonly
+						x-ref="picker"
+						data-datepicker
+						data-datepicker-range
+						data-datepicker-mode={ mode }
+						:placeholder="mode === 'range' ? 'Pick the days' : 'Pick a day'"
+						aria-label="Dates"
+						value={ txDateValue(mode, from, to) }
+						class="w-full h-9 pl-9 pr-3 rounded-lg border border-white/10 bg-white/5 text-sm cursor-pointer outline-none placeholder:text-zinc-400 focus:border-(--accent)"
+					/>
+				</div>
+			</div>
 		</div>
 	</div>
 }
 
-// txDateModeOptions are how txDateRangeFilter picks the days.
+templ txDatePresetButton(label, from, to string) {
+	<button
+		type="button"
+		data-preset={ label }
+		data-from={ from }
+		data-to={ to }
+		@click="pickPreset($el)"
+		:aria-pressed={ fmt.Sprintf("isPreset(%q, %q)", from, to) }
+		class="group flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left text-zinc-200 cursor-pointer outline-none hover:bg-white/10 focus-visible:bg-white/10"
+	>
+		<span class="flex-1">{ label }</span>
+		@icons.Check("15", &templ.Attributes{"class": "shrink-0 invisible text-(--accent) group-aria-pressed:visible"})
+	</button>
+}
+
+// txDateLabel names the dates filtered by: a preset's name, else the days.
+func txDateLabel(f *models.TxFilter, presets []txDatePreset) string {
+	if f.From.IsZero() && f.To.IsZero() {
+		return "Any time"
+	}
+	for _, p := range presets {
+		if f.From.Equal(p.from) && f.To.Equal(p.to) {
+			return p.label
+		}
+	}
+	return FormatTxRange(f.From, f.To)
+}
+
+// txDateModeOptions are how txDateFilter picks custom days.
 func txDateModeOptions() []form.ComboOption {
 	return []form.ComboOption{
 		{Value: "range", Label: "Between"},
@@ -549,29 +816,6 @@ func txDateValue(mode, from, to string) string {
 	return ""
 }
 
-// txDatePresets set the date range to common periods in one click.
-templ txDatePresets(f *models.TxFilter, start models.MonthStart) {
-	<div class="flex flex-wrap gap-1">
-		for _, p := range txDatePresetRanges(time.Now(), start) {
-			{{ active := f.From.Equal(p.from) && f.To.Equal(p.to) }}
-			{{ v := f.Values() }}
-			{{ v.Set(models.TxFilterFrom, p.from.Format(time.DateOnly)) }}
-			{{ v.Set(models.TxFilterTo, p.to.Format(time.DateOnly)) }}
-			@txFilterLink(txFilterURL(v.Encode()), txDatePresetClass(active)) {
-				{ p.label }
-			}
-		}
-	</div>
-}
-
-func txDatePresetClass(active bool) string {
-	c := "h-8 px-3 rounded-full text-sm cursor-pointer transition-colors "
-	if active {
-		return c + "bg-zinc-700 text-white"
-	}
-	return c + "text-zinc-400 hover:bg-white/5 hover:text-white"
-}
-
 type txDatePreset struct {
 	label    string
 	from, to time.Time
@@ -599,8 +843,8 @@ templ txAmountFilter(name, label string, value *float64) {
 		inputmode="decimal"
 		autocomplete="off"
 		placeholder={ label }
-		aria-label={ label }
-		class="combo-chip w-32 tabular-nums placeholder:text-zinc-500"
+		aria-label={ label + " amount" }
+		class="w-16 h-7 px-2 rounded-md bg-white/5 text-sm tabular-nums outline-none placeholder:text-zinc-500 focus:bg-white/10 focus:ring-1 focus:ring-(--accent)"
 	/>
 }
 

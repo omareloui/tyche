@@ -49,6 +49,12 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 	if list.Tags, err = h.repo.GetTags(r.Context()); err != nil {
 		return nil, err
 	}
+	if id := list.Filter.ItemID; id != "" {
+		list.ItemName = "Unknown item"
+		if it, err := h.repo.GetItem(r.Context(), id); err == nil {
+			list.ItemName = it.Item.Name
+		}
+	}
 	if target == "tx-body" {
 		return views.TxBody(*list, accs, knds, cats, cps, gls), nil
 	}
@@ -96,111 +102,8 @@ func (h Handler) txListData(r *http.Request, f models.TxFilter, before time.Time
 		if d.Summary, err = h.repo.GetTransactionsSummary(r.Context(), f, d.Def); err != nil {
 			return nil, err
 		}
-		d.Chips = h.txFilterChips(r.Context(), &f)
 	}
 	return d, nil
-}
-
-// txFilterChips are the filters set, each removable on its own.
-func (h Handler) txFilterChips(ctx context.Context, f *models.TxFilter) []views.TxFilterChip {
-	chips := []views.TxFilterChip{}
-	add := func(label string, keys ...string) {
-		chips = append(chips, views.TxFilterChip{Label: label, Without: f.Without(keys...)})
-	}
-	if f.Q != "" {
-		add("“"+f.Q+"”", models.TxFilterQ)
-	}
-	if f.Kind != models.NilTxKind {
-		add(f.Kind.String(), models.TxFilterKind)
-	}
-	// The ids' names, "Unknown" when gone.
-	if f.AccountID != "" {
-		label := "Unknown"
-		if acc, err := h.repo.GetAccount(ctx, f.AccountID); err == nil {
-			label = acc.Name
-		}
-		add(label, models.TxFilterAccount)
-	}
-	if f.CategoryID == models.TxFilterNone {
-		add("Uncategorized", models.TxFilterCategory)
-	} else if f.CategoryID != "" {
-		label := "Unknown"
-		if cat, err := h.repo.GetCategory(ctx, f.CategoryID); err == nil {
-			label = cat.Name
-		}
-		add(label, models.TxFilterCategory)
-	}
-	if f.CounterpartyID == models.TxFilterNone {
-		add("No counterparty", models.TxFilterCounterparty)
-	} else if f.CounterpartyID != "" {
-		label := "Unknown"
-		if cp, err := h.repo.GetCounterparty(ctx, f.CounterpartyID); err == nil {
-			label = cp.Name
-		}
-		add(label, models.TxFilterCounterparty)
-	}
-	if f.GoalID != "" {
-		label := "Unknown"
-		if gl, err := h.repo.GetGoal(ctx, f.GoalID); err == nil {
-			label = gl.Name
-		}
-		add(label, models.TxFilterGoal)
-	}
-	if f.ItemID != "" {
-		label := "Unknown item"
-		if it, err := h.repo.GetItem(ctx, f.ItemID); err == nil {
-			label = it.Item.Name
-		}
-		add(label, models.TxFilterItem)
-	}
-	if f.TagID != "" {
-		label := "Unknown tag"
-		if t, err := h.repo.GetTag(ctx, f.TagID); err == nil {
-			label = t.Name
-		}
-		add(label, models.TxFilterTag)
-	}
-	switch f.Status {
-	case models.TxStatusFulfilled:
-		add("Fulfilled", models.TxFilterStatus)
-	case models.TxStatusScheduled:
-		add("Scheduled", models.TxFilterStatus)
-	case models.TxStatusReview:
-		add("Needs review", models.TxFilterStatus)
-	}
-	switch f.Source {
-	case models.TxSourceSMS:
-		add("From SMS", models.TxFilterSource)
-	case models.TxSourceImport:
-		add("Imported (CSV)", models.TxFilterSource)
-	case models.TxSourceManual:
-		add("Added by hand", models.TxFilterSource)
-	}
-	switch f.Receipt {
-	case models.TxReceiptWith:
-		add("With a receipt", models.TxFilterReceipt)
-	case models.TxReceiptWithout:
-		add("Without a receipt", models.TxFilterReceipt)
-	}
-	switch f.Note {
-	case models.TxNoteWith:
-		add("With a note", models.TxFilterNote)
-	case models.TxNoteWithout:
-		add("Without a note", models.TxFilterNote)
-	}
-	switch f.Window {
-	case models.TxWindowReturnOpen:
-		add("Can still be returned", models.TxFilterWindow)
-	case models.TxWindowWarrantyActive:
-		add("Under warranty", models.TxFilterWindow)
-	}
-	if !f.From.IsZero() || !f.To.IsZero() {
-		add(views.FormatTxRange(f.From, f.To), models.TxFilterFrom, models.TxFilterTo)
-	}
-	if f.MinAmount != nil || f.MaxAmount != nil {
-		add(views.FormatAmountRange(f.MinAmount, f.MaxAmount), models.TxFilterMin, models.TxFilterMax)
-	}
-	return chips
 }
 
 // loadedTxListData is the list as the page shows it, to re-render it after

@@ -99,6 +99,8 @@ document.addEventListener("alpine:init", () => {
         if (!this.open) return;
         this.open = false;
         if (refocus) this.$refs.button.focus();
+        // E.g. the transactions' filter pills hide one closed empty.
+        this.$root.dispatchEvent(new CustomEvent("combo-closed", { bubbles: true }));
       },
 
       // place anchors the panel under the button, or above it when there's

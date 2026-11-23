@@ -138,6 +138,79 @@ input[type="number"] {
   @apply flex items-center gap-2 max-w-full h-10 pl-3.5 pr-3 rounded-full border border-zinc-700 bg-zinc-800 text-base text-zinc-100 cursor-pointer outline-none transition-[border-color,box-shadow] hover:border-zinc-500;
 }
 
+/* The transactions' filter pills (views.txFilterSlot, txDateFilter): an
+   icon and name, the value picked in place (a ghost combo chip), a remove
+   button. */
+.tx-filter-pill {
+  @apply flex items-center gap-1 max-w-full h-9 pl-3 pr-1.5 rounded-full border border-zinc-700/80 bg-zinc-800/50 text-sm transition-[border-color,box-shadow,background-color];
+}
+
+.tx-filter-pill:hover {
+  @apply border-zinc-600;
+}
+
+.tx-filter-pill:has([aria-expanded="true"]),
+.tx-filter-pill:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 15%, transparent);
+}
+
+.tx-filter-pill .combo-chip {
+  @apply h-7 gap-1 pl-1.5 pr-1 border-0 bg-transparent text-sm font-medium shadow-none;
+}
+
+.tx-filter-pill .combo-chip:focus,
+.tx-filter-pill .combo-chip[aria-expanded="true"] {
+  box-shadow: none;
+}
+
+.tx-filter-pill .combo-chip > svg:last-child {
+  @apply size-4 text-zinc-500;
+}
+
+/* The transactions' search (views.txSearch): an icon pill, opened into a
+   box (data-open, rendered set when it has text). Animated only once ready,
+   so a page loaded with a search doesn't grow it. */
+.tx-search {
+  @apply flex items-center w-9 h-9 overflow-hidden rounded-full border border-zinc-700/80 bg-zinc-800/50;
+}
+
+.tx-search[data-ready] {
+  @apply transition-[width,border-color,background-color] duration-200 ease-out;
+}
+
+.tx-search:hover {
+  @apply border-zinc-600;
+}
+
+.tx-search[data-open] {
+  @apply w-72 max-w-full bg-zinc-800/80;
+}
+
+.tx-search[data-open]:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 15%, transparent);
+}
+
+/* The list dims while it loads for the search / filters (transactions.js). */
+#tx-list {
+  transition: opacity 150ms;
+}
+
+[data-tx-loading] #tx-list {
+  opacity: 0.5;
+  transition-delay: 120ms;
+}
+
+/* The dates' pill is a button: set, it reads as a filter. */
+.tx-date-pill {
+  @apply gap-2 pr-2.5 text-zinc-300 cursor-pointer;
+}
+
+.tx-date-pill[data-set="true"] {
+  @apply border-(--accent)/50 bg-(--accent)/10 text-zinc-100;
+}
+
 /* A details row's quick pick (views.QuickPick, QuickPicker with "txd-pick"):
    a ghost chip, reading as the row's plain value (its text lined up with the
    other rows', the row's height kept) until hovered, focused or opened. */

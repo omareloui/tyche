@@ -360,10 +360,164 @@ document.addEventListener("alpine:init", () => {
     },
   });
 
+  // txFilterBuilder shows the filters set as pills (txFilterSlot), the
+  // others added from its menu: an added one opens its picker at once, and
+  // goes away again when closed without a value.
+  Alpine.data("txFilterBuilder", () => ({
+    shown: [],
+    menuOpen: false,
+    menuQ: "",
+    menuStyle: "",
+
+    init() {
+      this.shown = [...this.$root.querySelectorAll("[data-slot]")]
+        .filter((s) => this.slotSet(s))
+        .map((s) => s.dataset.slot);
+      this.onViewportChange = () => this.menuOpen && this.placeMenu();
+      window.addEventListener("scroll", this.onViewportChange, true);
+      window.addEventListener("resize", this.onViewportChange);
+    },
+
+    destroy() {
+      window.removeEventListener("scroll", this.onViewportChange, true);
+      window.removeEventListener("resize", this.onViewportChange);
+    },
+
+    slot(key) {
+      return this.$root.querySelector(`[data-slot="${key}"]`);
+    },
+
+    slotSet(slot) {
+      return [...slot.querySelectorAll("input[name]")].some((i) => i.value.trim() !== "");
+    },
+
+    isShown(key) {
+      return this.shown.includes(key);
+    },
+
+    itemShown(key, label) {
+      const q = this.menuQ.trim().toLowerCase();
+      return !this.isShown(key) && (q === "" || label.includes(q));
+    },
+
+    groupShown(items) {
+      return items.some(([key, label]) => this.itemShown(key, label));
+    },
+
+    get noMenuMatches() {
+      return ![...(this.$refs.menu?.querySelectorAll("[data-menu-item]") ?? [])].some((b) =>
+        this.itemShown(b.dataset.key, b.dataset.label),
+      );
+    },
+
+    add(key) {
+      this.closeMenu();
+      if (!this.isShown(key)) this.shown.push(key);
+      // Once the pill shows (and the menu's click is done, or the picker's
+      // click outside would close it again).
+      setTimeout(() => {
+        const slot = this.slot(key);
+        const combo = slot?.querySelector('[x-data="combobox"]');
+        if (combo) Alpine.$data(combo).show();
+        else slot?.querySelector("input:not([type=hidden])")?.focus();
+      });
+    },
+
+    // remove empties a filter's inputs and hides its pill.
+    remove(key) {
+      const slot = this.slot(key);
+      this.shown = this.shown.filter((k) => k !== key);
+      this.$refs.addFilter?.focus();
+      if (!slot) return;
+      const combo = slot.querySelector('[x-data="combobox"]');
+      if (combo) {
+        const none = combo.querySelector('[data-option][data-value=""]');
+        if (none) Alpine.$data(combo).pick(none);
+        return;
+      }
+      let changed = null;
+      for (const i of slot.querySelectorAll("input[name]")) {
+        if (i.value === "") continue;
+        i.value = "";
+        changed = i;
+      }
+      // The item filter is a hidden input alone, out of the form's inputs'
+      // events: changing it still submits the form.
+      changed?.dispatchEvent(new Event("change", { bubbles: true }));
+    },
+
+    // onComboClosed hides a pill closed without a value, e.g. added from
+    // the menu then left.
+    onComboClosed(ev) {
+      const slot = ev.target.closest("[data-slot]");
+      if (!slot) return;
+      this.$nextTick(() => {
+        if (!this.slotSet(slot)) this.shown = this.shown.filter((k) => k !== slot.dataset.slot);
+      });
+    },
+
+    // A pill left without a value (e.g. the amounts) goes away.
+    onSlotFocusOut(ev) {
+      const slot = ev.currentTarget;
+      if (slot.contains(ev.relatedTarget) || this.slotSet(slot)) return;
+      this.shown = this.shown.filter((k) => k !== slot.dataset.slot);
+    },
+
+    toggleMenu() {
+      this.menuOpen ? this.closeMenu() : this.openMenu();
+    },
+
+    openMenu() {
+      this.menuQ = "";
+      this.placeMenu();
+      this.menuOpen = true;
+      // Phones would open the keyboard over the menu.
+      if (window.matchMedia("(hover: hover)").matches) {
+        this.$nextTick(() => this.$refs.menuSearch.focus());
+      }
+    },
+
+    closeMenu(refocus = false) {
+      if (!this.menuOpen) return;
+      this.menuOpen = false;
+      if (refocus) this.$refs.addFilter.focus();
+    },
+
+    // placeMenu anchors the menu under its button (above it when there's
+    // more room there), its height kept to the room it has.
+    placeMenu() {
+      const r = this.$refs.addFilter.getBoundingClientRect();
+      const width = 256;
+      const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8));
+      const below = window.innerHeight - r.bottom - 14;
+      const above = r.top - 14;
+      const up = below < 280 && above > below;
+      const vertical = up
+        ? `bottom: ${window.innerHeight - r.top + 6}px`
+        : `top: ${r.bottom + 6}px`;
+      this.menuStyle = `position: fixed; left: ${left}px; ${vertical}; max-height: ${Math.max(160, up ? above : below)}px`;
+    },
+
+    visibleItems() {
+      return [...this.$refs.menu.querySelectorAll("[data-menu-item]")].filter(
+        (b) => b.offsetParent !== null,
+      );
+    },
+
+    pickFirst() {
+      this.visibleItems()[0]?.click();
+    },
+
+    moveFocus(step) {
+      const items = [this.$refs.menuSearch, ...this.visibleItems()];
+      const i = items.indexOf(document.activeElement);
+      items[(i + step + items.length) % items.length]?.focus();
+    },
+  }));
+
   Alpine.data("txPage", () => ({
     // reviewOnly shows the review strips, when filtering by status=review.
     reviewOnly: false,
-    filtersOpen: false,
     activeFilters: 0,
     // lastG is when g was pressed, for gg.
     lastG: 0,
@@ -371,11 +525,12 @@ document.addEventListener("alpine:init", () => {
     // syncFilters counts the filters set in the form (the search apart, the
     // date and amount ranges once each).
     syncFilters(form) {
-      const set = (name) => !!form.elements[name]?.value.trim();
+      // namedItem: elements["item"] is the collection's item() method.
+      const set = (name) => !!form.elements.namedItem(name)?.value?.trim();
       const keys = ["kind", "account", "category", "counterparty", "goal", "item", "tag", "status", "source", "receipt", "note", "window"];
       this.activeFilters =
         keys.filter(set).length + (set("from") || set("to")) + (set("min") || set("max"));
-      this.reviewOnly = form.elements.status?.value === "review";
+      this.reviewOnly = form.elements.namedItem("status")?.value === "review";
     },
 
     // filterBy narrows the list to what got clicked in it (a category, an
@@ -461,8 +616,8 @@ document.addEventListener("alpine:init", () => {
       }
       if (e.key === "/" && !t.closest?.("input, textarea, select, [contenteditable]")) {
         e.preventDefault();
-        this.$refs.q?.focus();
-        this.$refs.q?.select();
+        // The search opens itself (txSearch).
+        window.dispatchEvent(new CustomEvent("tx-search-open"));
         return;
       }
       if (t.closest?.("input, textarea, select, [contenteditable], form, [role=listbox], [role=menu]")) return;
@@ -921,6 +1076,24 @@ document.addEventListener("alpine:init", () => {
 
 window.addEventListener("pagehide", () => Alpine.store("txs")?.flush());
 // Boosted navigation swaps the page without unloading it.
+// While the list loads for the search / filters (the filters form, Clear,
+// filterBy), the page has data-tx-loading: the search shows a spinner, the
+// list dims. Each request counts until its xhr ends (loaded, aborted by a
+// newer one, failed).
+const txLoading = new Set();
+document.addEventListener("htmx:beforeRequest", (e) => {
+  const { target, requestConfig: cfg, xhr } = e.detail;
+  if (!xhr || cfg?.verb !== "get" || !["tx-list", "tx-body"].includes(target?.id)) return;
+  if (!/^\/transactions(\?|$)/.test(cfg.path)) return;
+  txLoading.add(xhr);
+  document.documentElement.dataset.txLoading = "";
+  xhr.addEventListener("loadend", () => {
+    txLoading.delete(xhr);
+    // After the swap, done in htmx's own load handler.
+    if (txLoading.size === 0) setTimeout(() => txLoading.size || delete document.documentElement.dataset.txLoading);
+  });
+});
+
 document.addEventListener("htmx:beforeHistorySave", () => Alpine.store("txs")?.flush());
 
 // Re-rendering the list after changing a transaction keeps the older months
