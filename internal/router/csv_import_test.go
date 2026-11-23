@@ -101,7 +101,7 @@ func TestCSVImport(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	d := func(daysAgo int) time.Time { return utcToday().AddDate(0, 0, -daysAgo) }
+	d := func(daysAgo int) time.Time { return tenantToday().AddDate(0, 0, -daysAgo) }
 	f := func(t time.Time) string { return t.Format("02/01/2006") }
 
 	// an SMS-like transaction already there: the row of the next day is it

@@ -31,7 +31,7 @@ func TestAccountsForecastRecurrent(t *testing.T) {
 	// Daily, started 10 days ago: the first fulfilled, the next ones written
 	// through next month (the ones until today overdue), the ones after not
 	// written yet.
-	start := time.Now().AddDate(0, 0, -10).Truncate(24 * time.Hour)
+	start := tenantToday().AddDate(0, 0, -10)
 	form := url.Values{
 		"kind":         {models.ExpenseTxKind.String()},
 		"account_id":   {bank.ID},

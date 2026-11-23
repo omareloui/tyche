@@ -20,8 +20,15 @@ import (
 	"github.com/omareloui/tyche/internal/valid"
 )
 
-func utcToday() time.Time {
-	y, m, d := time.Now().UTC().Date()
+// tenantToday is today in the test tenants' time zone (the default one), as a
+// UTC date, like Repository.userToday: between midnight there and in UTC
+// the days differ, so tests working out "today" in UTC fail then.
+func tenantToday() time.Time {
+	loc, err := models.LoadTimezone(models.DefaultTimezone)
+	if err != nil {
+		panic(err)
+	}
+	y, m, d := time.Now().In(loc).Date()
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }
 
@@ -100,7 +107,7 @@ func TestRecurrentEditPauseSkip(t *testing.T) {
 	repo, ctx, _ := setupTenant(t)
 	bank := newTestAccount(t, repo, ctx, "Bank", "EGP", models.AccKindBankAcc, 1000)
 	hd := handler.New(repo, valid.New(), sanitizer.New(), nil, nil, nil)
-	today := utcToday()
+	today := tenantToday()
 
 	rt := createTestRecurrentTx(t, ctx, repo, hd, bank, "100", today.AddDate(0, 0, 3), models.RecurrentUnitMonth, nil)
 	sched, _ := occurrences(t, ctx, repo, rt.ID)
@@ -233,7 +240,7 @@ func TestRecurrentAutoFulfill(t *testing.T) {
 	repo, ctx, _ := setupTenant(t)
 	bank := newTestAccount(t, repo, ctx, "Bank", "EGP", models.AccKindBankAcc, 1000)
 	hd := handler.New(repo, valid.New(), sanitizer.New(), nil, nil, nil)
-	today := utcToday()
+	today := tenantToday()
 
 	// Daily, from 2 days ago, paying by itself: the 3 until today are
 	// fulfilled on their days, flagged for review.
@@ -275,7 +282,7 @@ func TestRecurrentSMSMerge(t *testing.T) {
 	repo, ctx, _ := setupTenant(t)
 	bank := newTestAccount(t, repo, ctx, "Bank", "EGP", models.AccKindBankAcc, 1000)
 	hd := handler.New(repo, valid.New(), sanitizer.New(), nil, nil, nil)
-	today := utcToday()
+	today := tenantToday()
 
 	rt := createTestRecurrentTx(t, ctx, repo, hd, bank, "300", today.AddDate(0, 0, 2), models.RecurrentUnitMonth, nil)
 	sched, _ := occurrences(t, ctx, repo, rt.ID)
@@ -363,7 +370,7 @@ func TestRecurrentGamyaaLocked(t *testing.T) {
 	}
 	gam := &models.Account{ID: idgen.New(), Name: "Office", Currency: *egp, Gamyaa: &models.Gamyaa{
 		Installment: 1000, Members: 3, Shares: 1, Turns: []int{2},
-		StartsOn: utcToday().AddDate(0, 1, 0), PayFrom: bank,
+		StartsOn: tenantToday().AddDate(0, 1, 0), PayFrom: bank,
 	}}
 	for _, k := range kinds {
 		if k.Enum == models.AccKindGamyaa {
@@ -408,7 +415,7 @@ func TestRecurrentNotes(t *testing.T) {
 	repo, ctx, _ := setupTenant(t)
 	bank := newTestAccount(t, repo, ctx, "Bank", "EGP", models.AccKindBankAcc, 1000)
 	hd := handler.New(repo, valid.New(), sanitizer.New(), nil, nil, nil)
-	today := utcToday()
+	today := tenantToday()
 
 	rt := createTestRecurrentTx(t, ctx, repo, hd, bank, "100", today.AddDate(0, 0, 3), models.RecurrentUnitMonth,
 		url.Values{"note": {"  Every **month**\n- towel  "}})

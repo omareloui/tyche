@@ -548,9 +548,5 @@ func TestGoalLoanPayments(t *testing.T) {
 // days are read in (whatever the machine's).
 func userToday(t *testing.T) string {
 	t.Helper()
-	loc, err := models.LoadTimezone(models.DefaultTimezone)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return time.Now().In(loc).Format(time.DateOnly)
+	return tenantToday().Format(time.DateOnly)
 }

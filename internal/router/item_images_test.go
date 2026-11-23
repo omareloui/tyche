@@ -11,7 +11,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/omareloui/tyche/internal/handler"
 	"github.com/omareloui/tyche/internal/idgen"
@@ -40,7 +39,7 @@ func TestItemImages(t *testing.T) {
 		t.Fatal(err)
 	}
 	bank := newTestAccount(t, repo, ctx, "Bank", "EGP", models.AccKindBankAcc, 1000)
-	on := time.Now().AddDate(0, 0, -1).UTC().Truncate(24 * time.Hour)
+	on := tenantToday().AddDate(0, 0, -1)
 	tx := &models.Transaction{
 		ID: idgen.New(), Account: *bank, Kind: models.ExpenseTxKind, Amount: 15, ScheduledTo: on, FulfilledAt: on,
 		Items: []models.TxItem{{Name: "Milk", Quantity: 1, Total: 10}, {Name: "Bread", Quantity: 1, Total: 5}},

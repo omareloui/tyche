@@ -48,7 +48,7 @@ func TestItems(t *testing.T) {
 		}
 	}
 
-	day := time.Now().AddDate(0, 0, -10).UTC().Truncate(24 * time.Hour)
+	day := tenantToday().AddDate(0, 0, -10)
 	newTx := func(cp *models.Counterparty, daysAgo int, items ...models.TxItem) *models.Transaction {
 		t.Helper()
 		on := day.AddDate(0, 0, 10-daysAgo)

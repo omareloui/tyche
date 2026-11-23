@@ -21,7 +21,7 @@ func TestCreateRecurrentTx(t *testing.T) {
 
 	// Started in the past: the first one is fulfilled, the next ones counted
 	// from its day, not today.
-	start := time.Now().AddDate(0, 0, -10).Truncate(24 * time.Hour)
+	start := tenantToday().AddDate(0, 0, -10)
 	form := url.Values{
 		"kind":         {models.ExpenseTxKind.String()},
 		"account_id":   {bank.ID},
@@ -56,7 +56,7 @@ func TestCreateRecurrentTx(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Written through next month.
-	horizon := models.ScheduleHorizon(1, time.Now().UTC())
+	horizon := models.ScheduleHorizon(1, tenantToday())
 	want := 0
 	for k := 1; !rt.OccurrenceOn(k).After(horizon); k++ {
 		want++
