@@ -33,6 +33,8 @@ const PRECACHE = [
 ];
 
 const STATIC = ["/styles/", "/js/", "/fonts/", "/icons/", "/favicons/", "/brand-icons/"];
+// Font files, named after their content: served from the cache first.
+const FONT_FILE = /^\/fonts\/.+\.woff2$/;
 
 self.addEventListener("install", (e) => {
   e.waitUntil(
@@ -84,6 +86,25 @@ self.addEventListener("fetch", (e) => {
 
   if (req.mode === "navigate") {
     e.respondWith(fetch(req).catch(() => caches.match(OFFLINE)));
+    return;
+  }
+
+  // Cache first: font files are named after their content (Google Fonts'
+  // names), so a cached one never goes stale. Their CSS stays network first.
+  if (FONT_FILE.test(url.pathname)) {
+    e.respondWith(
+      caches.match(req).then(
+        (hit) =>
+          hit ??
+          fetch(req).then((res) => {
+            if (res.ok) {
+              const copy = res.clone();
+              e.waitUntil(caches.open(CACHE).then((c) => c.put(req, copy)));
+            }
+            return res;
+          }),
+      ),
+    );
     return;
   }
 

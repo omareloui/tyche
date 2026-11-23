@@ -107,6 +107,23 @@ func TestPWA(t *testing.T) {
 		}
 	})
 
+	t.Run("font files are immutable, their CSS revalidated", func(t *testing.T) {
+		fonts, err := filepath.Glob("web/public/fonts/*/*.woff2")
+		if err != nil || len(fonts) == 0 {
+			t.Fatalf("no font files: %v", err)
+		}
+		font := "/" + filepath.ToSlash(strings.TrimPrefix(fonts[0], "web/public/"))
+		if res, _ := get(font, nil); res.StatusCode != http.StatusOK || !strings.Contains(res.Header.Get("Cache-Control"), "immutable") {
+			t.Fatalf("%s: got %d %q", font, res.StatusCode, res.Header.Get("Cache-Control"))
+		}
+		if res, _ := get("/fonts/Afacad/Afacad.css", nil); res.Header.Get("Cache-Control") != "no-cache" {
+			t.Fatalf("font CSS: got %q", res.Header.Get("Cache-Control"))
+		}
+		if !regexp.MustCompile(`FONT_FILE = /\^\\/fonts\\/\.\+\\\.woff2\$/`).MatchString(swBody(t)) {
+			t.Fatal("sw.js doesn't serve the font files cache first")
+		}
+	})
+
 	t.Run("a share without a service worker opens the create form", func(t *testing.T) {
 		client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 		res, err := client.Post(srv.URL+"/share-receipt", "multipart/form-data; boundary=x", strings.NewReader("--x--\r\n"))

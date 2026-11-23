@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"path/filepath"
+	"strings"
 
 	"github.com/omareloui/tyche/internal/brandicons"
 	"github.com/omareloui/tyche/internal/handler"
@@ -407,8 +408,14 @@ func static(mux *http.ServeMux, paths []string, fspath string) {
 	fileServer := http.StripPrefix("/", http.FileServer(http.Dir(fspath)))
 	// Revalidated on every load (a 304 when unchanged), as their URLs aren't
 	// versioned and browsers would otherwise keep serving stale scripts.
+	// Font files are the exception: named after their content (Google Fonts'
+	// names), a new version is a new url.
 	fs := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "no-cache")
+		if strings.HasPrefix(r.URL.Path, "/fonts/") && strings.HasSuffix(r.URL.Path, ".woff2") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "no-cache")
+		}
 		fileServer.ServeHTTP(w, r)
 	})
 	for _, prefix := range paths {
