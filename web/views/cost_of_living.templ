@@ -498,8 +498,8 @@ templ colBasket(d *ColData) {
 			</summary>
 			<ul class="grid gap-2 px-5 pb-5">
 				for _, c := range d.Categories {
-					<li class="flex items-center justify-between gap-3">
-						<span class="flex items-center gap-2 min-w-0">
+					<li class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+						<span class="flex items-center gap-2 min-w-0 max-w-full">
 							<span class="shrink-0 w-2.5 h-2.5 rounded-full" style={ "background-color: " + cmpColor(c.Color) }></span>
 							<span class="truncate text-sm text-zinc-200">{ c.Name }</span>
 							if c.Monthly > 0 {
@@ -507,9 +507,9 @@ templ colBasket(d *ColData) {
 							}
 						</span>
 						if c.ID == models.UncategorizedKey {
-							<span class="shrink-0 text-xs text-zinc-500">{ models.ColGroupLabel(models.ColAverage) }</span>
+							<span class="ml-auto text-xs text-zinc-500">{ models.ColGroupLabel(models.ColAverage) }</span>
 						} else {
-							<div class="shrink-0">
+							<div class="min-w-0 max-w-full ml-auto">
 								@form.Combobox(colGroupPicker(c))
 							</div>
 						}
