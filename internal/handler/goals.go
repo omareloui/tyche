@@ -467,7 +467,7 @@ func (h Handler) GoalMoneyInputs(w http.ResponseWriter, r *http.Request) (templ.
 		if trigger == "holding_id" {
 			fd.Amount.Value = formatFloatIfNonZero(src.Amount)
 		}
-		if trigger == "account_id" || trigger == "holding_id" || fd.OtherAmount.Value == "" {
+		if trigger == "amount" || trigger == "account_id" || trigger == "holding_id" || fd.OtherAmount.Value == "" {
 			amt, _ := parseFloatIfExists(fd.Amount.Value)
 			fd.OtherAmount.Value = goalOtherAmount(&src.Currency, accs, fd.AccountID.Value, amt)
 		}

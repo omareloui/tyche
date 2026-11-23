@@ -303,7 +303,7 @@ templ GoalMoneyInputs(gl *models.Goal, dir GoalMoneyDir, fd *GoalMoneyFD, accs [
 		x-data
 		hx-target="this"
 		hx-swap="outerHTML"
-		hx-sync="closest form:abort"
+		hx-sync="closest form:replace"
 		class="grid justify-items-center gap-3 py-2"
 	>
 		if dir == GoalDeleteMove {
@@ -311,11 +311,7 @@ templ GoalMoneyInputs(gl *models.Goal, dir GoalMoneyDir, fd *GoalMoneyFD, accs [
 				Move the <span class="sensitive text-zinc-100 tabular-nums">{ goalFundedText(gl, funded) }</span> left in it to an account first. Its transactions stay in the history.
 			</p>
 		} else {
-			@form.HeroMoneyInput("Amount", "amount", sym, gl.ID, fd.Amount, templ.Attributes{
-				"x-ref":      "amount",
-				"hx-post":    fmt.Sprintf("/goals/%s/money-inputs?dir=%s", gl.ID, dir),
-				"hx-trigger": "keyup changed delay:300ms",
-			})
+			@form.HeroMoneyInput("Amount", "amount", sym, gl.ID, fd.Amount, goalAmountAttrs(gl, dir, otherCur != nil))
 		}
 		if dir == GoalWithdraw && len(funded) > 1 {
 			<div class="flex flex-wrap items-center justify-center gap-2 max-w-full">
@@ -379,7 +375,7 @@ templ GoalMoneyInputs(gl *models.Goal, dir GoalMoneyDir, fd *GoalMoneyFD, accs [
 		if dir == GoalDeposit && rest > 0 {
 			<button
 				type="button"
-				@click={ fmt.Sprintf("$refs.amount.value = '%s %.2f'; $refs.amount.dispatchEvent(new Event('input')); $refs.amount.dispatchEvent(new KeyboardEvent('keyup')); $refs.amount.focus()", sym, rest) }
+				@click={ fmt.Sprintf("$refs.amount.value = '%s %.2f'; $refs.amount.dispatchEvent(new Event('input')); $refs.amount.focus()", sym, rest) }
 				class="inline-flex items-center gap-1.5 h-8 px-3 rounded-full border border-zinc-700 text-sm text-zinc-300 cursor-pointer transition-colors hover:border-(--accent) hover:text-(--accent)"
 			>
 				@icons.Sparkles("14")
@@ -387,6 +383,24 @@ templ GoalMoneyInputs(gl *models.Goal, dir GoalMoneyDir, fd *GoalMoneyFD, accs [
 			</button>
 		}
 	</div>
+}
+
+// goalAmountAttrs works what the account receives out again as the amount
+// is typed (a withdraw across currencies), swapping only that input:
+// re-rendering the whole block would put back the amount as it was when the
+// request left.
+func goalAmountAttrs(gl *models.Goal, dir GoalMoneyDir, converts bool) templ.Attributes {
+	attrs := templ.Attributes{"x-ref": "amount"}
+	if dir != GoalWithdraw || !converts {
+		return attrs
+	}
+	sel := "#to_amount-" + gl.ID
+	attrs["hx-post"] = fmt.Sprintf("/goals/%s/money-inputs?dir=%s", gl.ID, dir)
+	attrs["hx-trigger"] = "input changed delay:250ms"
+	attrs["hx-target"] = sel
+	attrs["hx-select"] = sel
+	attrs["hx-swap"] = "outerHTML"
+	return attrs
 }
 
 // goalMoneyOtherCurrency is the currency the money form asks what the
