@@ -62,6 +62,9 @@ func (r *Repository) Reset(ctx context.Context, opts models.ResetOptions) error 
 			if err := qtx.ResetUserSettings(ctx, models.GetDefaultCurrency().String); err != nil {
 				return err
 			}
+			if err := qtx.ResetDeleteSalaryRules(ctx); err != nil {
+				return err
+			}
 		}
 
 		if opts.IsAll() {

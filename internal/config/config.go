@@ -104,6 +104,9 @@ type ReceiptOCR struct {
 	// ColEstimatesPerMonth is how many city estimates (cost of living) a
 	// tenant may ask for a calendar month.
 	ColEstimatesPerMonth int
+	// TaxRulesPerMonth is how many tax rules lookups (salary calculator) a
+	// tenant may ask for a calendar month.
+	TaxRulesPerMonth int
 }
 
 // Prices are the calls' prices.
@@ -112,7 +115,8 @@ func (c ReceiptOCR) Prices() gemini.Prices {
 }
 
 // GetReceiptOCR reads the GEMINI_*, RECEIPT_SCANS_PER_MONTH,
-// SMS_GUESSES_PER_MONTH and COL_ESTIMATES_PER_MONTH variables.
+// SMS_GUESSES_PER_MONTH, COL_ESTIMATES_PER_MONTH and TAX_RULES_PER_MONTH
+// variables.
 func GetReceiptOCR() ReceiptOCR {
 	return ReceiptOCR{
 		APIKey:               getEnvironmentValueWithDefault("GEMINI_API_KEY", ""),
@@ -124,5 +128,6 @@ func GetReceiptOCR() ReceiptOCR {
 		ScansPerMonth:        max(getEnvironmentIntWithDefault("RECEIPT_SCANS_PER_MONTH", 50), 0),
 		SMSGuessesPerMonth:   max(getEnvironmentIntWithDefault("SMS_GUESSES_PER_MONTH", 30), 0),
 		ColEstimatesPerMonth: max(getEnvironmentIntWithDefault("COL_ESTIMATES_PER_MONTH", 20), 0),
+		TaxRulesPerMonth:     max(getEnvironmentIntWithDefault("TAX_RULES_PER_MONTH", 10), 0),
 	}
 }

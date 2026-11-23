@@ -1,0 +1,920 @@
+package views
+
+import (
+	"encoding/json"
+	"fmt"
+	"math"
+	"net/url"
+	"sort"
+	"strconv"
+
+	"github.com/omareloui/tyche/internal/countries"
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/payroll"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+const (
+	SalaryDirGross = "gross"
+	// SalaryDirNet works the gross out of a take-home pay.
+	SalaryDirNet   = "net"
+	SalaryPerMonth = "month"
+	SalaryPerYear  = "year"
+	// SalaryRulesBuiltin and SalaryRulesAI pick the country's built in rules
+	// or the AI's; any other value is the id of the user's own.
+	SalaryRulesBuiltin = "builtin"
+	SalaryRulesAI      = "ai"
+	// SalaryBonusAmount and SalaryBonusPct read the bonus as an amount or as
+	// a percent of the year's gross.
+	SalaryBonusAmount = "amount"
+	SalaryBonusPct    = "pct"
+)
+
+// SalaryForm is the salary calculator's form, as in the query string.
+type SalaryForm struct {
+	// Country is an ISO 3166 alpha-2 code.
+	Country, Rules, Region string
+	Dir, Amount, Per       string
+	// Bonus is a year's (an amount, or a percent of the gross when BonusIn
+	// is SalaryBonusPct), Other a flat tax in percent.
+	Bonus, BonusIn, Other string
+	// Opts are the built in rules' options (opt_<key>).
+	Opts map[string]string
+}
+
+// SalaryURL is the calculator's page with the form.
+func SalaryURL(f SalaryForm) string {
+	v := url.Values{}
+	for k, s := range map[string]string{
+		"country": f.Country, "region": f.Region, "amount": f.Amount, "bonus": f.Bonus, "other": f.Other,
+	} {
+		if s != "" {
+			v.Set(k, s)
+		}
+	}
+	if f.Rules != "" && f.Rules != SalaryRulesBuiltin {
+		v.Set("rules", f.Rules)
+	}
+	if f.Dir == SalaryDirNet {
+		v.Set("dir", f.Dir)
+	}
+	if f.Per == SalaryPerYear {
+		v.Set("per", f.Per)
+	}
+	if f.BonusIn == SalaryBonusPct {
+		v.Set("bonus_in", f.BonusIn)
+	}
+	for k, s := range f.Opts {
+		v.Set("opt_"+k, s)
+	}
+	if len(v) == 0 {
+		return "/tools/salary"
+	}
+	return "/tools/salary?" + v.Encode()
+}
+
+// SalaryData is the calculator: its form and what it comes to.
+type SalaryData struct {
+	Form      SalaryForm
+	Countries []countries.Country
+	Country   countries.Country
+	// Options are the built in rules' choices (none for other rules).
+	Options    []payroll.Option
+	MyRules    []models.SalaryRule
+	HasBuiltin bool
+	AIOn       bool
+
+	// Rules are the picked ones (RuleName the user's name of their own),
+	// nil when NeedAI (none looked up yet; AILeft of AILimit lookups this
+	// month).
+	Rules    *payroll.Rules
+	RuleName string
+	NeedAI   bool
+	AILeft   int
+	AILimit  int
+	Currency string
+	// FromSalary tells the amount is the salary on settings.
+	FromSalary bool
+
+	Result *payroll.Result
+	Error  string
+}
+
+// pays is how many pays a year the rules have.
+func (d *SalaryData) pays() int {
+	if d.Rules != nil {
+		return d.Rules.Pays()
+	}
+	return 12
+}
+
+// SalaryCalc is the gross to net salary calculator.
+templ SalaryCalc(claims *jwt.AccessClaims, balances []models.Balance, d *SalaryData) {
+	@layouts.Main(claims, "Salary calculator", balances) {
+		@components.Container() {
+			<a href="/tools" class="inline-flex items-center gap-1 mb-2 text-sm text-zinc-400 hover:text-zinc-200">
+				@icons.ArrowLeft("14")
+				Tools
+			</a>
+			<div class="flex flex-wrap items-start justify-between gap-3">
+				@components.MainHeader("Salary calculator")
+				<div class="flex flex-wrap gap-2">
+					<a href="/tools/salary/compare" class="txd-action">
+						@icons.Scale("14")
+						Compare offers
+					</a>
+					<button type="button" hx-get="/tools/salary/rules" hx-target={ "#" + components.DrawerSlot } hx-swap="innerHTML" class="txd-action">
+						@icons.Pencil("14")
+						My tax rules
+					</button>
+				</div>
+			</div>
+			<div
+				id="salary-body"
+				x-data
+				@salary-rules-changed.window="salaryReload($event.detail)"
+				class="grid gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:items-start"
+			>
+				@SalaryBody(d)
+			</div>
+		}
+	}
+}
+
+// SalaryBody is the calculator's form and result.
+templ SalaryBody(d *SalaryData) {
+	@salaryForm(d)
+	<div id="salary-result" aria-live="polite">
+		@SalaryResult(d)
+	</div>
+}
+
+// builtinRulesIcon marks the countries with built-in tax rules.
+templ builtinRulesIcon() {
+	<span title="Built-in tax rules" class="inline-flex shrink-0 text-emerald-400">
+		@icons.ShieldCheck("14")
+	</span>
+}
+
+// noRulesIcon keeps the other countries' names in line with the marked.
+templ noRulesIcon() {
+	<span aria-hidden="true" class="inline-block shrink-0 w-3.5"></span>
+}
+
+func salaryCountryOptions(cs []countries.Country) []form.ComboOption {
+	opts := make([]form.ComboOption, len(cs))
+	for i, c := range cs {
+		opts[i] = form.ComboOption{Value: c.ISO2, Label: c.Name, Search: c.ISO2 + " " + c.ISO3 + " " + c.Currency}
+		opts[i].Leading = noRulesIcon()
+		if payroll.HasBuiltin(c.ISO2) {
+			opts[i].Leading = builtinRulesIcon()
+			opts[i].Search += " built-in"
+		}
+	}
+	return opts
+}
+
+// salaryRulesOptions are the rules the country can be worked out with.
+func salaryRulesOptions(country string, hasBuiltin, aiOn bool, mine []models.SalaryRule) []form.ComboOption {
+	var opts []form.ComboOption
+	if hasBuiltin {
+		opts = append(opts, form.ComboOption{Value: SalaryRulesBuiltin, Label: "Built-in rules"})
+	}
+	if aiOn || !hasBuiltin {
+		opts = append(opts, form.ComboOption{Value: SalaryRulesAI, Label: "Looked up by AI"})
+	}
+	for _, s := range mine {
+		if s.Country == country {
+			opts = append(opts, form.ComboOption{Value: s.ID, Label: s.Name})
+		}
+	}
+	return opts
+}
+
+// salaryReloadAttrs re-render the whole form (what it asks depends on the
+// value) instead of the result alone.
+func salaryReloadAttrs(url, formID, target string) templ.Attributes {
+	return templ.Attributes{
+		"data-reload": "1", "hx-get": url, "hx-trigger": "change", "hx-include": formID,
+		"hx-target": target, "hx-swap": "innerHTML", "hx-sync": formID + ":replace",
+	}
+}
+
+// salaryRulesRadios are salaryRulesOptions as a toggle's, with short labels.
+func salaryRulesRadios(country string, hasBuiltin, aiOn bool, mine []models.SalaryRule) []form.RadioOption {
+	var out []form.RadioOption
+	for _, o := range salaryRulesOptions(country, hasBuiltin, aiOn, mine) {
+		label := o.Label
+		switch o.Value {
+		case SalaryRulesBuiltin:
+			label = "Built-in"
+		case SalaryRulesAI:
+			label = "AI lookup"
+		}
+		out = append(out, form.RadioOption{Value: o.Value, Label: label})
+	}
+	return out
+}
+
+// salaryRulesIcon is the icon of a rules' toggle option: built-in, AI or
+// the user's own.
+templ salaryRulesIcon(value string) {
+	switch value {
+		case SalaryRulesBuiltin:
+			@icons.ShieldCheck("14", &templ.Attributes{"class": "shrink-0"})
+		case SalaryRulesAI:
+			@icons.Sparkles("14", &templ.Attributes{"class": "shrink-0"})
+		default:
+			@icons.Pencil("14", &templ.Attributes{"class": "shrink-0"})
+	}
+}
+
+// SalaryRulesToggle picks the rules, like form.SegmentedRadio with each
+// option's icon.
+templ SalaryRulesToggle(name, id string, options []form.RadioOption, value string, attrs templ.Attributes) {
+	<fieldset
+		id={ name + "-" + id }
+		if attrs != nil {
+			{ attrs... }
+		}
+	>
+		<legend class="sr-only">Tax rules</legend>
+		<div class="flex gap-1 p-1 rounded-2xl bg-zinc-800/60 border border-zinc-800">
+			for _, o := range options {
+				<label
+					class="flex flex-1 min-w-0 items-center justify-center gap-1.5 cursor-pointer select-none rounded-xl px-2 py-2 text-sm font-medium text-zinc-400 transition-colors hover:text-white has-checked:bg-(--accent) has-checked:text-zinc-950 has-checked:shadow has-focus-visible:ring-2 has-focus-visible:ring-(--accent)"
+				>
+					<input type="radio" name={ name } value={ o.Value } class="sr-only" checked?={ o.Value == value }/>
+					@salaryRulesIcon(o.Value)
+					<span class="truncate">{ o.Label }</span>
+				</label>
+			}
+		</div>
+	</fieldset>
+}
+
+func optionComboOptions(o payroll.Option) []form.ComboOption {
+	opts := make([]form.ComboOption, len(o.Choices))
+	for i, c := range o.Choices {
+		opts[i] = form.ComboOption{Value: c.Value, Label: c.Label}
+	}
+	return opts
+}
+
+func sortedOptKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+templ salaryForm(d *SalaryData) {
+	{{ perPay := d.pays() != 12 }}
+	<form
+		id="salary-form"
+		x-data={ fmt.Sprintf("{dir: %q, per: %q, bonusIn: %q}", d.Form.Dir, d.Form.Per, d.Form.BonusIn) }
+		hx-get="/tools/salary/result"
+		hx-trigger="input delay:500ms, change[!target.closest('[data-reload]')]"
+		hx-target="#salary-result"
+		hx-swap="innerHTML"
+		hx-sync="this:replace"
+		@submit.prevent
+		class="grid gap-4 p-5 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800"
+	>
+		@form.Field("Country", "country", "salary", icons.Globe("15"), "") {
+			@form.Combobox(form.ComboboxProps{
+				Name: "country", ID: "salary", Label: "Country", Placeholder: "Pick a country",
+				Options: salaryCountryOptions(d.Countries), Data: form.FDInput{Value: d.Form.Country}, Searchable: true,
+				InputAttrs: salaryReloadAttrs("/tools/salary/body", "#salary-form", "#salary-body"),
+			})
+			<p class="mt-1 flex items-center gap-1 text-xs text-zinc-500">
+				@builtinRulesIcon()
+				<span>has built-in rules; others are looked up by AI or typed by you.</span>
+			</p>
+		}
+		<div class="grid gap-2">
+			<span class="input-label">
+				@icons.Receipt("15")
+				Tax rules
+			</span>
+			@SalaryRulesToggle("rules", "salary", salaryRulesRadios(d.Country.ISO2, d.HasBuiltin, d.AIOn, d.MyRules),
+				d.Form.Rules, salaryReloadAttrs("/tools/salary/body", "#salary-form", "#salary-body"))
+		</div>
+		if d.Form.Rules == SalaryRulesAI {
+			@form.Field("Region (optional)", "region", "salary", icons.MapPin("15"), "") {
+				@form.Control("text", "region", "e.g. Bavaria, California", "salary", form.FDInput{Value: d.Form.Region}, templ.Attributes{"autocomplete": "off", "maxlength": "80"})
+				<p class="mt-1 text-xs text-zinc-500">A state or region with its own taxes, looked up apart.</p>
+			}
+		}
+		for _, o := range d.Options {
+			@form.Field(o.Label, "opt_"+o.Key, "salary", nil, "") {
+				@form.Combobox(form.ComboboxProps{
+					Name: "opt_" + o.Key, ID: "salary", Label: o.Label,
+					Options: optionComboOptions(o), Data: form.FDInput{Value: d.Form.Opts[o.Key]},
+				})
+			}
+		}
+		<div class="grid gap-2" @change="dir = $event.target.value">
+			<span class="input-label">
+				@icons.ArrowUpDown("15")
+				Work out
+			</span>
+			@form.SegmentedRadio("Work out", "dir", "salary", []form.RadioOption{
+				{Value: SalaryDirGross, Label: "Gross → net"},
+				{Value: SalaryDirNet, Label: "Net → gross"},
+			}, form.FDInput{Value: d.Form.Dir}, nil)
+		</div>
+		<div class="grid gap-2">
+			<label for="amount-salary" class="input-label">
+				@icons.Coins("15")
+				<span x-text="dir === 'net' ? 'Take-home pay' : 'Gross pay'">
+					if d.Form.Dir == SalaryDirNet {
+						Take-home pay
+					} else {
+						Gross pay
+					}
+				</span>
+			</label>
+			<div class="flex items-center gap-2">
+				@form.Control("text", "amount", "e.g. 30,000", "salary", form.FDInput{Value: d.Form.Amount}, templ.Attributes{
+					"inputmode": "decimal", "autocomplete": "off", "x-mask:dynamic": "$money($input, '.', ',')",
+				})
+				<span class="shrink-0 text-sm text-zinc-400">{ d.Currency }</span>
+			</div>
+			<div @change="per = $event.target.value">
+				@form.SegmentedRadio("Per", "per", "salary", []form.RadioOption{
+					{Value: SalaryPerMonth, Label: ternary(perPay, "A pay", "A month")},
+					{Value: SalaryPerYear, Label: "A year"},
+				}, form.FDInput{Value: d.Form.Per}, nil)
+			</div>
+			if d.FromSalary {
+				<p class="text-xs text-zinc-500">
+					Your salary from <a href={ SettingsURL(SettingsWork) } class="underline hover:text-zinc-300">settings</a>, taken as a take-home pay, in { d.Currency } at today's rate
+				</p>
+			} else if perPay {
+				<p class="text-xs text-zinc-500">{ fmt.Sprintf("Paid in %d pays a year.", d.pays()) }</p>
+			}
+		</div>
+		@form.Field("Yearly bonus (gross)", "bonus", "salary", icons.Gift("15"), "") {
+			<div class="flex items-center gap-2">
+				@form.Control("text", "bonus", "Optional", "salary", form.FDInput{Value: d.Form.Bonus}, templ.Attributes{
+					"inputmode": "decimal", "autocomplete": "off", "x-mask:dynamic": "$money($input, '.', ',')",
+				})
+				<div class="shrink-0 w-28" @change="bonusIn = $event.target.value">
+					@form.SegmentedRadio("Bonus in", "bonus_in", "salary", []form.RadioOption{
+						{Value: SalaryBonusAmount, Label: d.Currency},
+						{Value: SalaryBonusPct, Label: "%"},
+					}, form.FDInput{Value: d.Form.BonusIn}, nil)
+				</div>
+			</div>
+			<p x-show="bonusIn === 'pct'" x-cloak class="mt-1 text-xs text-zinc-500">Of the year's gross pay.</p>
+		}
+		@form.Field("Other tax (%)", "other", "salary", icons.Hash("15"), "") {
+			@form.Control("text", "other", "e.g. a state's tax", "salary", form.FDInput{Value: d.Form.Other}, templ.Attributes{
+				"inputmode": "decimal", "autocomplete": "off",
+			})
+			<p class="mt-1 text-xs text-zinc-500">A flat tax on the gross the rules leave out, e.g. a US state's.</p>
+		}
+	</form>
+}
+
+func ternary(c bool, a, b string) string {
+	if c {
+		return a
+	}
+	return b
+}
+
+// salaryFmt formats an amount with its currency code, whole units past
+// 1,000.
+func salaryFmt(v float64, code string) string {
+	return colFmt(v, code)
+}
+
+func salaryPct(r float64) string {
+	if r != 0 && math.Abs(r) < 0.1 {
+		return strconv.FormatFloat(math.Round(r*10000)/100, 'f', -1, 64) + "%"
+	}
+	return fmt.Sprintf("%.1f%%", r*100)
+}
+
+// SalaryResult is the calculator's result, swapped on every change.
+templ SalaryResult(d *SalaryData) {
+	<div class="grid gap-4">
+		if d.Error != "" {
+			<p class="flex gap-2 p-4 rounded-2xl bg-red-500/10 ring-1 ring-red-500/30 text-sm text-red-200">
+				@icons.Warning("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
+				{ d.Error }
+			</p>
+		}
+		switch {
+			case d.Country.ISO2 == "":
+				@salaryEmpty("Pick a country to work a salary out.")
+			case d.NeedAI:
+				@salaryAskAI(d)
+			case d.Rules != nil && d.Result == nil && d.Error == "":
+				@salaryEmpty("Type a salary to see what it comes to.")
+				@salaryRulesInfo(d)
+			case d.Result != nil:
+				@salaryHero(d)
+				@salaryBreakdown(d.Result, d.Rules, d.Currency)
+				@salaryRulesInfo(d)
+		}
+	</div>
+}
+
+templ salaryEmpty(text string) {
+	<div class="grid place-items-center gap-3 p-10 rounded-3xl ring-1 ring-dashed ring-zinc-800 text-center text-zinc-500">
+		@icons.Calculator("32")
+		<p class="max-w-xs text-sm">{ text }</p>
+	</div>
+}
+
+// salaryNewRuleURL opens the form of new rules for the country (copied from
+// the picked ones when from).
+func salaryNewRuleURL(country string, from bool) string {
+	u := "/tools/salary/rules/new?country=" + url.QueryEscape(country)
+	if from {
+		u += "&from=1"
+	}
+	return u
+}
+
+templ salaryAskAI(d *SalaryData) {
+	{{ place := d.Country.Name }}
+	if d.Form.Region != "" {
+		{{ place = d.Form.Region + ", " + d.Country.Name }}
+	}
+	@components.GlassCard("grid gap-4 p-5 sm:p-6", "bg-violet-400/10") {
+		<p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-violet-300">
+			@icons.Sparkles("14")
+			Tax rules
+		</p>
+		if d.AIOn {
+			<p class="text-zinc-200">
+				There are no built-in rules for <span class="font-semibold">{ place }</span>. Gemini can look its income tax and social contributions up on the web; they're then kept for everyone.
+			</p>
+			<p class="flex gap-2 text-sm text-amber-200/90">
+				@icons.Warning("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
+				It's what it finds on the web, not official figures: it may be wrong or simplified, so check before deciding anything on it.
+			</p>
+			if d.AILeft > 0 {
+				<div class="flex flex-wrap items-center gap-3">
+					@salaryFetchButton("Look up the rules", "#salary-form", "#salary-result", "", nil)
+					<span class="text-xs text-zinc-500">{ fmt.Sprintf("%d left this month", d.AILeft) }</span>
+				</div>
+			} else {
+				<p class="text-sm text-zinc-400">You've used this month's tax rules lookups. They start again on the 1st.</p>
+			}
+		} else {
+			<p class="text-zinc-200">There are no built-in rules for <span class="font-semibold">{ place }</span>.</p>
+		}
+		<p class="text-sm text-zinc-400">
+			Or
+			<button type="button" hx-get={ salaryNewRuleURL(d.Country.ISO2, false) } hx-target={ "#" + components.DrawerSlot } hx-swap="innerHTML" class="underline cursor-pointer hover:text-zinc-200">type the brackets yourself</button>.
+		</p>
+	}
+}
+
+// salaryFetchVals are a lookup's values on top of the form's: refresh to
+// look up again, others to tell which offer's (compare).
+func salaryFetchVals(refresh bool, extra map[string]string) string {
+	v := map[string]string{}
+	for k, x := range extra {
+		v[k] = x
+	}
+	if refresh {
+		v["refresh"] = "1"
+	}
+	b, _ := json.Marshal(v)
+	return string(b)
+}
+
+// salaryFetchButton asks the AI for the rules (again when confirm is set),
+// sending the form of include and vals.
+templ salaryFetchButton(label, include, target, confirm string, vals map[string]string) {
+	<button
+		type="button"
+		hx-post="/tools/salary/rules/fetch"
+		hx-include={ include }
+		hx-target={ target }
+		hx-swap="innerHTML"
+		hx-disabled-elt="this"
+		hx-vals={ salaryFetchVals(confirm != "", vals) }
+		if confirm != "" {
+			hx-confirm={ confirm }
+			data-confirm-label="Look up again"
+			class="group txd-action"
+		} else {
+			class="group inline-flex items-center gap-2 h-10 px-4 rounded-full bg-violet-300 text-sm font-semibold text-zinc-950 cursor-pointer transition-colors hover:bg-violet-200 disabled:opacity-60"
+		}
+	>
+		@icons.Sparkles("16", &templ.Attributes{"class": "group-disabled:animate-pulse"})
+		<span class="group-disabled:hidden">{ label }</span>
+		<span class="hidden group-disabled:inline">Looking up, this takes a bit…</span>
+	</button>
+}
+
+// salaryHeroAmount is the hero's big amount with its period, the other
+// period's under it.
+templ salaryHeroAmount(amount, period, other string) {
+	<p class="sensitive flex flex-wrap items-baseline gap-x-2 text-3xl sm:text-4xl font-bold tabular-nums text-zinc-50">
+		{ amount }
+		<span class="text-base font-medium text-zinc-400">{ period }</span>
+	</p>
+	<p class="sensitive text-sm text-zinc-400 tabular-nums">{ other }</p>
+}
+
+templ salaryHero(d *SalaryData) {
+	{{ res, cur := d.Result, d.Currency }}
+	@components.GlassCard("grid gap-5 p-5 sm:p-6", "bg-emerald-400/10", "bg-sky-400/10") {
+		<div class="grid gap-1">
+			if d.Form.Dir == SalaryDirNet {
+				{{ year, pay := res.Gross - res.Bonus, (res.Gross-res.Bonus)/float64(res.Pays) }}
+				{{ payLabel := ternary(res.Pays != 12, "a pay", "a month") }}
+				<p class="text-sm text-zinc-400">To take that home you'd need a gross of</p>
+				if d.Form.Per == SalaryPerYear {
+					@salaryHeroAmount(salaryFmt(year, cur), "a year", salaryFmt(pay, cur)+" "+payLabel)
+				} else {
+					@salaryHeroAmount(salaryFmt(pay, cur), payLabel, salaryFmt(year, cur)+" a year")
+				}
+			} else {
+				{{ perPay := "" }}
+				if res.Pays != 12 {
+					{{ perPay = " · " + salaryFmt(res.NetPerPay(), cur) + fmt.Sprintf(" a pay (%d pays)", res.Pays) }}
+				}
+				<p class="text-sm text-zinc-400">You'd take home</p>
+				if d.Form.Per == SalaryPerYear {
+					@salaryHeroAmount(salaryFmt(res.Net, cur), "a year", salaryFmt(res.NetMonthly(), cur)+" a month"+perPay)
+				} else {
+					@salaryHeroAmount(salaryFmt(res.NetMonthly(), cur), "a month", salaryFmt(res.Net, cur)+" a year"+perPay)
+				}
+			}
+		</div>
+		@salaryBar(res)
+		<dl class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+			<div class="grid gap-0.5">
+				<dt class="text-xs text-zinc-500">Effective tax rate</dt>
+				<dd class="font-semibold tabular-nums">{ salaryPct(res.EffectiveRate) }</dd>
+			</div>
+			<div class="grid gap-0.5">
+				<dt class="text-xs text-zinc-500">Marginal rate</dt>
+				<dd class="font-semibold tabular-nums">{ salaryPct(res.MarginalRate) }</dd>
+			</div>
+			if res.Bonus > 0 {
+				<div class="grid gap-0.5">
+					<dt class="text-xs text-zinc-500">Bonus takes home</dt>
+					<dd class="sensitive font-semibold tabular-nums">
+						{ salaryFmt(res.BonusNet, cur) }
+						<span class="text-xs font-normal text-zinc-500">{ salaryPct(res.BonusNet / res.Bonus) }</span>
+					</dd>
+				</div>
+			}
+		</dl>
+		<div id="salary-save" class="flex flex-wrap items-center gap-3 pt-4 border-t border-zinc-800">
+			<button
+				type="button"
+				hx-put="/tools/salary/save-net"
+				hx-include="#salary-form"
+				hx-target="#salary-save"
+				hx-swap="innerHTML"
+				hx-confirm={ "Set your salary on settings to " + salaryFmt((res.Net-res.BonusNet)/12, cur) + " a month?" }
+				data-confirm-label="Save"
+				class="txd-action"
+			>
+				@icons.Check("14")
+				Save the take-home pay as my salary
+			</button>
+			<span class="text-xs text-zinc-500">A month, the bonus left out</span>
+		</div>
+	}
+}
+
+// SalarySaved replaces the save button once the salary's saved.
+templ SalarySaved(monthly string) {
+	<p class="flex items-center gap-2 text-sm text-emerald-300">
+		@icons.Check("16")
+		<span>Saved: your salary is now <span class="sensitive font-semibold">{ monthly }</span> a month on <a href={ SettingsURL(SettingsWork) } class="underline hover:text-emerald-200">settings</a>.</span>
+	</p>
+}
+
+// salaryBar splits the gross into net, tax and contributions.
+templ salaryBar(res *payroll.Result) {
+	if res.Gross > 0 {
+		{{ parts := []struct{ label, color string; v float64 }{
+			{"Take-home", "bg-emerald-400", res.Net},
+			{"Income tax", "bg-rose-400", res.Tax + res.Other},
+			{"Contributions", "bg-amber-400", res.TotalContribs()},
+		} }}
+		<div class="grid gap-2">
+			<div class="flex h-3 overflow-hidden rounded-full bg-zinc-800">
+				for _, p := range parts {
+					if p.v > 0 {
+						<span class={ p.color } style={ fmt.Sprintf("width:%.2f%%", 100*p.v/res.Gross) } title={ p.label }></span>
+					}
+				}
+			</div>
+			<ul class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-400">
+				for _, p := range parts {
+					<li class="inline-flex items-center gap-1.5">
+						<span class={ "size-2 rounded-full", p.color }></span>
+						{ p.label }
+						<span class="tabular-nums text-zinc-300">{ salaryPct(p.v / res.Gross) }</span>
+					</li>
+				}
+			</ul>
+		</div>
+	}
+}
+
+// salaryAmt is a year's amount, or a month's (a twelfth) when the
+// breakdown's toggle says so.
+templ salaryAmt(v float64, cur, prefix string) {
+	<span x-show="!monthly">{ prefix + salaryFmt(v, cur) }</span>
+	<span x-show="monthly" x-cloak>{ prefix + salaryFmt(v/12, cur) }</span>
+}
+
+templ salaryRow(label string, v float64, cur, hint string, minus bool) {
+	<li class="flex flex-wrap items-baseline justify-between gap-x-3 py-1.5 text-sm">
+		<span class="text-zinc-300">
+			{ label }
+			if hint != "" {
+				<span class="ml-1 text-xs text-zinc-500">{ hint }</span>
+			}
+		</span>
+		<span class={ "sensitive tabular-nums", templ.KV("text-rose-300", minus), templ.KV("text-zinc-200", !minus) }>
+			@salaryAmt(v, cur, ternary(minus, "−", ""))
+		</span>
+	</li>
+}
+
+templ bracketLabel(s payroll.Slice, cur string) {
+	if s.To == 0 {
+		@salaryAmt(s.From, cur, "Over ")
+	} else {
+		<span x-show="!monthly">{ salaryFmt(s.From, cur) + " – " + salaryFmt(s.To, cur) }</span>
+		<span x-show="monthly" x-cloak>{ salaryFmt(s.From/12, cur) + " – " + salaryFmt(s.To/12, cur) }</span>
+	}
+}
+
+// salaryBreakdownData is the breakdown's year / month toggle, remembered in
+// the browser.
+const salaryBreakdownData = `{
+	monthly: (() => { try { return localStorage.getItem('salaryBreakdown') === 'month' } catch { return false } })(),
+	show(m) { this.monthly = m; try { localStorage.setItem('salaryBreakdown', m ? 'month' : 'year') } catch {} },
+}`
+
+templ salaryPeriodButton(label, expr, active string) {
+	<button
+		type="button"
+		@click={ expr }
+		:aria-pressed={ active }
+		:class={ active + " ? 'bg-zinc-200 text-zinc-950' : 'text-zinc-400 hover:text-zinc-200'" }
+		class="px-3 py-1 rounded-full text-xs font-medium cursor-pointer transition-colors"
+	>{ label }</button>
+}
+
+// salaryBreakdown is the gross down to the take-home pay, a year's or a
+// month's (a twelfth, the bonus spread).
+templ salaryBreakdown(res *payroll.Result, rules *payroll.Rules, cur string) {
+	<section x-data={ salaryBreakdownData } class="grid gap-4 p-5 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800">
+		<div class="flex flex-wrap items-center justify-between gap-2">
+			<h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+				<span x-text="monthly ? 'A month, step by step' : 'A year, step by step'">A year, step by step</span>
+			</h2>
+			<div role="group" aria-label="Show amounts" class="flex gap-0.5 p-0.5 rounded-full bg-zinc-800/60 ring-1 ring-zinc-800">
+				@salaryPeriodButton("Yearly", "show(false)", "!monthly")
+				@salaryPeriodButton("Monthly", "show(true)", "monthly")
+			</div>
+		</div>
+		<ul class="divide-y divide-zinc-800/70">
+			@salaryRow("Gross pay", res.Gross-res.Bonus, cur, "", false)
+			if res.Bonus > 0 {
+				@salaryRow("Bonus", res.Bonus, cur, "", false)
+			}
+			for _, c := range res.Contribs {
+				@salaryRow(c.Name, c.Amount, cur, contribHint(c), true)
+			}
+			if res.Other > 0 {
+				@salaryRow("Other tax", res.Other, cur, salaryShare(res.Other, res.Gross), true)
+			}
+			if len(res.Layers) > 0 {
+				@salaryRow(res.TaxName+" tax", res.MainTax(), cur, salaryShare(res.MainTax(), res.Gross), true)
+				for _, l := range res.Layers {
+					@salaryRow(l.Name+" tax", l.Tax, cur, salaryShare(l.Tax, res.Gross), true)
+				}
+			} else {
+				@salaryRow("Income tax", res.Tax, cur, salaryShare(res.Tax, res.Gross), true)
+			}
+			<li class="flex flex-wrap items-baseline justify-between gap-x-3 pt-2.5 text-sm font-semibold">
+				<span>Take-home pay</span>
+				<span class="sensitive tabular-nums text-emerald-300">
+					@salaryAmt(res.Net, cur, "")
+				</span>
+			</li>
+		</ul>
+		if res.Bonus > 0 {
+			<p x-show="monthly" x-cloak class="-mt-2 text-xs text-zinc-500">A twelfth of the year's, the bonus spread over it.</p>
+		}
+		if !rules.NoIncomeTax() {
+			<details class="group grid gap-2">
+				<summary class="flex items-center gap-1.5 text-sm text-zinc-300 cursor-pointer select-none">
+					@icons.ChevronDown("14", &templ.Attributes{"class": "transition-transform -rotate-90 group-open:rotate-0"})
+					How the income tax is worked out
+				</summary>
+				<ul class="mt-2 divide-y divide-zinc-800/70">
+					@salaryRow("Gross pay", res.Gross, cur, "", false)
+					for _, c := range res.Contribs {
+						if c.Deductible {
+							@salaryRow(c.Name, c.Amount, cur, "deductible", true)
+						}
+					}
+					if res.Reduction > 0 {
+						@salaryRow("Work income reduction", res.Reduction, cur, "", true)
+					}
+					for _, dd := range res.Deductions {
+						if dd.Amount > 0 {
+							@salaryRow(dd.Name, dd.Amount, cur, "", true)
+						}
+					}
+					if res.Allowance > 0 && !rules.Allowance.AsCredit {
+						@salaryRow("Personal allowance", res.Allowance, cur, "", true)
+					}
+					<li class="flex flex-wrap items-baseline justify-between gap-x-3 py-1.5 text-sm font-medium">
+						<span>Taxable income</span>
+						<span class="sensitive tabular-nums">
+							@salaryAmt(res.Taxable, cur, "")
+						</span>
+					</li>
+				</ul>
+				@salaryTaxTable(res.TaxName, res.Slices, res.Credit, ternary(rules.Allowance.AsCredit && len(rules.Credits) == 0, "Personal allowance credit", "Tax credits"), 0, cur)
+				for _, l := range res.Layers {
+					@salaryTaxTable(l.Name, l.Slices, l.Credit, "Tax credits", l.Surtax, cur)
+				}
+			</details>
+		}
+	</section>
+}
+
+// salaryTaxTable is a scale's brackets on the taxable income, less its
+// credits, with its surtax; titled when there are several scales.
+templ salaryTaxTable(title string, slices []payroll.Slice, credit float64, creditLabel string, surtax float64, cur string) {
+	<table class="mt-2 w-full text-sm">
+		if title != "" {
+			<caption class="pb-1 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400">{ title }</caption>
+		}
+		<thead>
+			<tr class="text-xs text-zinc-500">
+				<th class="py-1 text-left font-normal">Bracket</th>
+				<th class="py-1 text-right font-normal">Rate</th>
+				<th class="py-1 text-right font-normal">Tax</th>
+			</tr>
+		</thead>
+		<tbody class="divide-y divide-zinc-800/70">
+			for _, s := range slices {
+				<tr>
+					<td class="py-1.5 text-zinc-300 tabular-nums">
+						@bracketLabel(s, cur)
+					</td>
+					<td class="py-1.5 text-right text-zinc-400 tabular-nums">{ salaryPct(s.Rate) }</td>
+					<td class="sensitive py-1.5 text-right tabular-nums">
+						@salaryAmt(s.Tax, cur, "")
+					</td>
+				</tr>
+			}
+			if credit > 0 {
+				<tr>
+					<td class="py-1.5 text-zinc-300" colspan="2">{ creditLabel }</td>
+					<td class="sensitive py-1.5 text-right tabular-nums text-emerald-300">
+						@salaryAmt(credit, cur, "−")
+					</td>
+				</tr>
+			}
+			if surtax > 0 {
+				<tr>
+					<td class="py-1.5 text-zinc-300" colspan="2">Surtax</td>
+					<td class="sensitive py-1.5 text-right tabular-nums">
+						@salaryAmt(surtax, cur, "")
+					</td>
+				</tr>
+			}
+		</tbody>
+	</table>
+}
+
+// salaryShare is part as a percent of the gross, "" without one.
+func salaryShare(part, gross float64) string {
+	if gross <= 0 || part <= 0 {
+		return ""
+	}
+	return salaryPct(part / gross)
+}
+
+func contribHint(c payroll.Line) string {
+	if c.Rate > 0 {
+		return salaryPct(c.Rate)
+	}
+	return ""
+}
+
+// salaryRulesInfo tells where the rules come from, with what can be done
+// with them.
+templ salaryRulesInfo(d *SalaryData) {
+	{{ r := d.Rules }}
+	if r != nil {
+		<section class="grid gap-3 p-5 rounded-3xl ring-1 ring-zinc-800 text-sm">
+			<p class="flex flex-wrap items-center gap-2">
+				switch r.Source {
+					case payroll.SourceAI:
+						<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-400/15 text-xs font-medium text-violet-300">
+							@icons.Sparkles("12")
+							AI lookup
+						</span>
+						<span class="text-zinc-300">
+							{ salaryRulesPlace(r, d.Country.Name) + fmt.Sprintf(" · %d", r.Year) }
+						</span>
+					case payroll.SourceManual:
+						<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-400/15 text-xs font-medium text-sky-300">
+							@icons.Pencil("12")
+							Yours
+						</span>
+						<span class="text-zinc-300">{ d.RuleName }</span>
+					default:
+						<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-400/15 text-xs font-medium text-emerald-300">
+							@icons.ShieldCheck("12")
+							Built-in
+						</span>
+						<span class="text-zinc-300">{ fmt.Sprintf("%s · %d", d.Country.Name, r.Year) }</span>
+				}
+			</p>
+			if r.Source == payroll.SourceAI {
+				<p class="flex gap-2 text-xs text-amber-200/90">
+					@icons.Warning("14", &templ.Attributes{"class": "shrink-0 mt-px"})
+					<span>
+						Looked up by Gemini on the web
+						if !r.FetchedAt.IsZero() {
+							{ " on " + r.FetchedAt.Format("2 Jan 2006") }
+						}
+						: it may be wrong or out of date.
+					</span>
+				</p>
+			}
+			if r.Notes != "" {
+				<p class="text-zinc-400">{ r.Notes }</p>
+			}
+			if len(r.Sources) > 0 {
+				<ul class="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+					for i, s := range r.Sources {
+						if i < 6 {
+							<li>
+								<a href={ templ.SafeURL(s) } target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-zinc-400 underline hover:text-zinc-200">
+									{ sourceHost(s) }
+									@icons.ExternalLink("11")
+								</a>
+							</li>
+						}
+					}
+				</ul>
+			}
+			<div class="flex flex-wrap gap-2">
+				if r.Source == payroll.SourceManual {
+					<button type="button" hx-get={ "/tools/salary/rules/" + d.Form.Rules + "/edit" } hx-target={ "#" + components.DrawerSlot } hx-swap="innerHTML" class="txd-action">
+						@icons.Pencil("14")
+						Edit these rules
+					</button>
+				} else {
+					<button type="button" hx-get="/tools/salary/rules/new?from=1" hx-include="#salary-form" hx-target={ "#" + components.DrawerSlot } hx-swap="innerHTML" class="txd-action">
+						@icons.Copy("14")
+						Copy to my rules
+					</button>
+				}
+				if r.Source == payroll.SourceAI && d.AIOn && d.AILeft > 0 {
+					@salaryFetchButton("Look up again", "#salary-form", "#salary-result",
+						fmt.Sprintf("Look these rules up again? It uses 1 of your %d lookups left this month, and replaces them for everyone.", d.AILeft), nil)
+				}
+			</div>
+		</section>
+	}
+}
+
+func salaryRulesPlace(r *payroll.Rules, country string) string {
+	if r.Region != "" {
+		return r.Region + ", " + country
+	}
+	return country
+}
+
+// sourceHost is a source link's host, to show.
+func sourceHost(s string) string {
+	u, err := url.Parse(s)
+	if err != nil || u.Host == "" {
+		return s
+	}
+	return u.Host
+}

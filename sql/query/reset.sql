@@ -90,3 +90,6 @@ DELETE FROM item_categories;
 -- transactions.
 -- name: ResetDeleteDismissedSubscriptions :exec
 DELETE FROM dismissed_subscriptions;
+
+-- name: ResetDeleteSalaryRules :exec
+DELETE FROM salary_rules;

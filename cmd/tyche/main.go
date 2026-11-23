@@ -30,6 +30,7 @@ import (
 	"github.com/omareloui/tyche/internal/shareddb"
 	"github.com/omareloui/tyche/internal/smsguess"
 	"github.com/omareloui/tyche/internal/smstemplates"
+	"github.com/omareloui/tyche/internal/taxguess"
 	"github.com/omareloui/tyche/internal/valid"
 	"github.com/omareloui/tyche/internal/vault"
 )
@@ -94,6 +95,7 @@ func main() {
 		h.SetReceiptOCR(receiptocr.New(ocrCfg.APIKey, ocrCfg.Model, ocrCfg.ThinkingLevel), ocrCfg)
 		h.SetSMSGuess(smsguess.New(ocrCfg.APIKey, ocrCfg.Model, ocrCfg.ThinkingLevel))
 		h.SetColGuess(colguess.New(ocrCfg.APIKey, ocrCfg.Model, ocrCfg.ThinkingLevel))
+		h.SetTaxGuess(taxguess.New(ocrCfg.APIKey, ocrCfg.Model, ocrCfg.ThinkingLevel))
 	} else {
 		h.SetReceiptOCR(nil, ocrCfg)
 	}

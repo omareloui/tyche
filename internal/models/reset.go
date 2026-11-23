@@ -43,7 +43,7 @@ var ResetEntities = []ResetEntityInfo{
 	{ResetAccounts, "Accounts", "Every account, gam'yaa and goal, with all their transactions and recurring transactions.", []ResetEntity{ResetTransactions, ResetRecurrent, ResetGoals}},
 	{ResetWishlist, "Wishlist", "The items on the decide page's wishlist.", nil},
 	{ResetDevices, "Devices", "Linked phones, they'll stop forwarding SMS until signed in again.", nil},
-	{ResetSettings, "Settings", "Default currency and account, shown currencies, work settings (salary, hours) and the SMS time zone.", nil},
+	{ResetSettings, "Settings", "Default currency and account, shown currencies, work settings (salary, hours), the SMS time zone and your salary calculator's tax rules.", nil},
 }
 
 // ResetOptions is the set of entities to delete.

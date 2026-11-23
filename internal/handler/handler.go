@@ -11,6 +11,7 @@ import (
 	"github.com/omareloui/tyche/internal/sanitizer"
 	"github.com/omareloui/tyche/internal/smsguess"
 	"github.com/omareloui/tyche/internal/smstemplates"
+	"github.com/omareloui/tyche/internal/taxguess"
 	"github.com/omareloui/tyche/internal/valid"
 	"github.com/omareloui/tyche/internal/vault"
 )
@@ -36,6 +37,9 @@ type Handler struct {
 	// prices, nil when off (its prices and limit in ocrCfg).
 	colJob   *costofliving.Job
 	colGuess colguess.Estimator
+	// taxGuess looks up the salary calculator's tax rules of the countries
+	// without built in ones, nil when off (its prices and limit in ocrCfg).
+	taxGuess taxguess.Guesser
 }
 
 // SetReceiptOCR turns reading receipts on (a nil reader keeps it off).

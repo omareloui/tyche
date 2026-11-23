@@ -1,0 +1,295 @@
+package views
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/omareloui/tyche/internal/countries"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+// SalaryBracketRow is a tax bracket's row of the rules' form (rate in %).
+type SalaryBracketRow struct {
+	UpTo string `json:"up_to"`
+	Rate string `json:"rate"`
+}
+
+// SalaryDeductionRow is a deduction's row.
+type SalaryDeductionRow struct {
+	Name   string `json:"name"`
+	Amount string `json:"amount"`
+}
+
+// SalaryContribRow is a contribution's row (rate in %, bands as
+// payroll.FormatBands' text).
+type SalaryContribRow struct {
+	Name       string `json:"name"`
+	Rate       string `json:"rate"`
+	Floor      string `json:"floor"`
+	Cap        string `json:"cap"`
+	Monthly    bool   `json:"monthly"`
+	Deductible bool   `json:"deductible"`
+	Credit     bool   `json:"credit"`
+	Bands      string `json:"bands"`
+}
+
+// SalaryRuleFD is the form of the user's tax rules.
+type SalaryRuleFD struct {
+	Countries []countries.Country
+	Name, Country, Currency, Pays string
+	Allowance, TaperFrom, TaperRate string
+	AsCredit                        bool
+	Brackets                        []SalaryBracketRow
+	Deductions                      []SalaryDeductionRow
+	Contributions                   []SalaryContribRow
+	// Tables and Steps are payroll.FormatTables' and FormatSteps' text.
+	Tables, Steps string
+	Notes         string
+	// Year and SourceURLs are kept from the rules copied, Extra too (JSON of
+	// their tax credits and other taxes, which the form doesn't edit; named
+	// in ExtraNames).
+	Year       int
+	SourceURLs []string
+	Extra      string
+	ExtraNames []string
+	Error      string
+}
+
+func (fd *SalaryRuleFD) xData() string {
+	rows := struct {
+		Brackets   []SalaryBracketRow   `json:"brackets"`
+		Deductions []SalaryDeductionRow `json:"deductions"`
+		Contribs   []SalaryContribRow   `json:"contribs"`
+	}{fd.Brackets, fd.Deductions, fd.Contributions}
+	if rows.Brackets == nil {
+		rows.Brackets = []SalaryBracketRow{}
+	}
+	if rows.Deductions == nil {
+		rows.Deductions = []SalaryDeductionRow{}
+	}
+	if rows.Contribs == nil {
+		rows.Contribs = []SalaryContribRow{}
+	}
+	b, _ := json.Marshal(rows)
+	return string(b)
+}
+
+const salaryRulesSlot = "#" + components.DrawerSlot
+
+// SalaryRulesDrawer lists the user's own tax rules, each opening its form.
+templ SalaryRulesDrawer(rules []models.SalaryRule) {
+	@components.Drawer(components.DrawerProps{Label: "My tax rules"}) {
+		<div class="drawer-panel flex flex-col flex-1 min-h-0">
+			<header class="flex items-start gap-3 px-5 sm:px-6 pt-5 pb-4">
+				<div class="flex-1 min-w-0">
+					<h2 class="text-lg font-bold">My tax rules</h2>
+					<p class="text-sm text-zinc-400">Your own brackets and contributions, for a country without built-in rules or to fix the ones there are.</p>
+				</div>
+				@components.DrawerClose()
+			</header>
+			<div class="flex-1 grid grid-cols-1 auto-rows-max content-start gap-3 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
+				<button type="button" hx-get="/tools/salary/rules/new" hx-target={ salaryRulesSlot } hx-swap="innerHTML" class="txd-action justify-self-start">
+					@icons.Plus("14")
+					New rules
+				</button>
+				if len(rules) == 0 {
+					<p class="py-6 text-center text-sm text-zinc-500">No rules of your own yet. Add some here, or copy the ones a result uses.</p>
+				}
+				<ul class="grid gap-1.5">
+					for _, s := range rules {
+						<li>
+							<button
+								type="button"
+								hx-get={ "/tools/salary/rules/" + s.ID + "/edit" }
+								hx-target={ salaryRulesSlot }
+								hx-swap="innerHTML"
+								class="flex items-center gap-3 w-full min-w-0 px-3 py-2.5 rounded-xl bg-tx-row text-left cursor-pointer transition-colors hover:bg-zinc-800"
+							>
+								<span class="flex-1 min-w-0 truncate">{ s.Name }</span>
+								<span class="shrink-0 text-xs text-zinc-500">{ s.Country + " · " + s.Rules.Currency }</span>
+								@icons.Pencil("14", &templ.Attributes{"class": "shrink-0 text-zinc-500"})
+							</button>
+						</li>
+					}
+				</ul>
+			</div>
+		</div>
+	}
+}
+
+// SalaryRuleDrawer is the form of the user's rules (id empty: new ones).
+templ SalaryRuleDrawer(id string, fd *SalaryRuleFD) {
+	@components.Drawer(components.DrawerProps{Label: "Tax rules"}) {
+		@SalaryRuleForm(id, fd)
+	}
+}
+
+const salaryRulesBack = "confirmDiscard().then((ok) => ok && htmx.ajax('GET', '/tools/salary/rules', {target: '#drawer', swap: 'innerHTML'}))"
+
+templ salaryRowRemove(expr string) {
+	<button type="button" @click={ expr } aria-label="Remove" class="p-1.5 rounded-full text-zinc-500 cursor-pointer hover:bg-zinc-800 hover:text-zinc-200">
+		@icons.X("14")
+	</button>
+}
+
+// SalaryRuleForm is SalaryRuleDrawer's form alone, answered with its error.
+templ SalaryRuleForm(id string, fd *SalaryRuleFD) {
+	{{ method, url, title, submit, fid := "post", "/tools/salary/rules", "New tax rules", "Add rules", "new-salary-rule" }}
+	if id != "" {
+		{{ method, url, title, submit, fid = "put", "/tools/salary/rules/" + id, "Edit tax rules", "Save changes", id }}
+	}
+	@form.DrawerForm(form.DrawerFormProps{
+		Title: title, Method: method, URL: url, Submit: submit, CancelClick: salaryRulesBack,
+		Attrs: templ.Attributes{"x-data": fd.xData()},
+	}) {
+		if fd.Error != "" {
+			<p class="flex gap-2 p-3 rounded-2xl bg-red-500/10 ring-1 ring-red-500/30 text-sm text-red-200">
+				@icons.Warning("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
+				{ fd.Error }
+			</p>
+		}
+		<input type="hidden" name="year" value={ fmt.Sprint(fd.Year) }/>
+		for _, u := range fd.SourceURLs {
+			<input type="hidden" name="source_url" value={ u }/>
+		}
+		if fd.Extra != "" {
+			<input type="hidden" name="extra" value={ fd.Extra }/>
+			<div class="grid gap-1.5 p-3 rounded-2xl ring-1 ring-zinc-800 text-sm">
+				<p class="text-zinc-300">Also kept from the rules copied, not editable here:</p>
+				<ul class="flex flex-wrap gap-1.5">
+					for _, n := range fd.ExtraNames {
+						<li class="px-2 py-0.5 rounded-full bg-zinc-800 text-xs text-zinc-300">{ n }</li>
+					}
+				</ul>
+				<label class="inline-flex items-center gap-2 text-zinc-400 cursor-pointer">
+					<input type="checkbox" name="drop_extra" value="1"/>
+					Leave them out
+				</label>
+			</div>
+		}
+		@form.Field("Name", "name", fid, icons.Pencil("15"), "") {
+			@form.Control("text", "name", "e.g. Germany 2026", fid, form.FDInput{Value: fd.Name}, templ.Attributes{"maxlength": "80"})
+		}
+		<div class="grid grid-cols-[1fr_6rem] gap-3">
+			@form.Field("Country", "country", fid, icons.Globe("15"), "") {
+				@form.Combobox(form.ComboboxProps{
+					Name: "country", ID: fid, Label: "Country", Placeholder: "Pick a country",
+					Options: colCountryOptions(fd.Countries), Data: form.FDInput{Value: fd.Country}, Searchable: true,
+				})
+			}
+			@form.Field("Currency", "currency", fid, nil, "") {
+				@form.Control("text", "currency", "EUR", fid, form.FDInput{Value: fd.Currency}, templ.Attributes{"maxlength": "3", "class": "input-field uppercase"})
+			}
+		</div>
+		<p class="-mt-2 text-xs text-zinc-500">Every amount is a year's, in the rules' currency; rates are in %.</p>
+		<fieldset class="grid gap-2">
+			<legend class="input-label">Income tax brackets</legend>
+			<template x-for="(b, i) in brackets" :key="i">
+				<div class="grid grid-cols-[1fr_5.5rem_auto] items-center gap-2">
+					<input name="bracket_up_to" x-model="b.up_to" inputmode="decimal" autocomplete="off" :placeholder="i === brackets.length - 1 ? 'The rest' : 'Up to'" class="input-field"/>
+					<input name="bracket_rate" x-model="b.rate" inputmode="decimal" autocomplete="off" placeholder="%" class="input-field"/>
+					@salaryRowRemove("brackets.splice(i, 1)")
+				</div>
+			</template>
+			<button type="button" @click="brackets.push({up_to: '', rate: ''})" class="txd-action justify-self-start">
+				@icons.Plus("14")
+				Bracket
+			</button>
+			<p class="text-xs text-zinc-500">Of the taxable income, going up; leave the last one's limit empty.</p>
+		</fieldset>
+		<fieldset class="grid gap-2">
+			<legend class="input-label">Social contributions (yours)</legend>
+			<template x-for="(c, i) in contribs" :key="i">
+				<div class="grid gap-2 p-3 rounded-2xl ring-1 ring-zinc-800">
+					<div class="grid grid-cols-[1fr_5.5rem_auto] items-center gap-2">
+						<input name="contrib_name" x-model="c.name" autocomplete="off" placeholder="e.g. Pension" class="input-field"/>
+						<input name="contrib_rate" x-model="c.rate" inputmode="decimal" autocomplete="off" placeholder="%" class="input-field"/>
+						@salaryRowRemove("contribs.splice(i, 1)")
+					</div>
+					<div class="grid grid-cols-2 gap-2">
+						<input name="contrib_floor" x-model="c.floor" inputmode="decimal" autocomplete="off" placeholder="Floor (optional)" class="input-field"/>
+						<input name="contrib_cap" x-model="c.cap" inputmode="decimal" autocomplete="off" placeholder="Cap (optional)" class="input-field"/>
+					</div>
+					<input name="contrib_bands" x-model="c.bands" autocomplete="off" placeholder="Bands instead of a rate, e.g. 12570:0 50270:8 *:2" class="input-field text-xs"/>
+					<input type="hidden" name="contrib_monthly" :value="c.monthly ? '1' : ''"/>
+					<input type="hidden" name="contrib_deductible" :value="c.deductible ? '1' : ''"/>
+					<input type="hidden" name="contrib_credit" :value="c.credit ? '1' : ''"/>
+					<div class="flex flex-wrap gap-x-4 gap-y-1 text-sm text-zinc-300">
+						<label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" x-model="c.monthly"/> Floor and cap a month</label>
+						<label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" x-model="c.deductible"/> Comes off the taxable income</label>
+						<label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" x-model="c.credit"/> Gives a tax credit</label>
+					</div>
+				</div>
+			</template>
+			<button type="button" @click="contribs.push({name: '', rate: '', floor: '', cap: '', monthly: false, deductible: false, credit: false, bands: ''})" class="txd-action justify-self-start">
+				@icons.Plus("14")
+				Contribution
+			</button>
+		</fieldset>
+		<fieldset class="grid gap-2">
+			<legend class="input-label">Allowance</legend>
+			<div class="grid grid-cols-3 gap-2">
+				<input name="allowance" value={ fd.Allowance } inputmode="decimal" autocomplete="off" placeholder="Tax free" class="input-field"/>
+				<input name="taper_from" value={ fd.TaperFrom } inputmode="decimal" autocomplete="off" placeholder="Shrinks over" class="input-field"/>
+				<input name="taper_rate" value={ fd.TaperRate } inputmode="decimal" autocomplete="off" placeholder="by %" class="input-field"/>
+			</div>
+			<label class="inline-flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
+				<input type="checkbox" name="as_credit" value="1" checked?={ fd.AsCredit }/>
+				Given as a tax credit (taxed at the scale, taken off the tax)
+			</label>
+		</fieldset>
+		<fieldset class="grid gap-2">
+			<legend class="input-label">Deductions</legend>
+			<template x-for="(d, i) in deductions" :key="i">
+				<div class="grid grid-cols-[1fr_7rem_auto] items-center gap-2">
+					<input name="deduction_name" x-model="d.name" autocomplete="off" placeholder="e.g. Standard deduction" class="input-field"/>
+					<input name="deduction_amount" x-model="d.amount" inputmode="decimal" autocomplete="off" placeholder="A year" class="input-field"/>
+					@salaryRowRemove("deductions.splice(i, 1)")
+				</div>
+			</template>
+			<button type="button" @click="deductions.push({name: '', amount: ''})" class="txd-action justify-self-start">
+				@icons.Plus("14")
+				Deduction
+			</button>
+		</fieldset>
+		@form.Field("Pays a year", "pays", fid, nil, "") {
+			@form.Control("text", "pays", "12", fid, form.FDInput{Value: fd.Pays}, templ.Attributes{"inputmode": "numeric", "maxlength": "2"})
+		}
+		<details class="group grid gap-3" open?={ fd.Tables != "" || fd.Steps != "" }>
+			<summary class="flex items-center gap-1.5 text-sm text-zinc-300 cursor-pointer select-none">
+				@icons.ChevronDown("14", &templ.Attributes{"class": "transition-transform -rotate-90 group-open:rotate-0"})
+				Advanced
+			</summary>
+			<div class="grid gap-4 mt-3">
+				@form.Field("Other scales for higher incomes", "tables", fid, nil, "") {
+					@form.Textarea("tables", "600000 > 55000:10 70000:15 *:27.5", fid, form.FDInput{Value: fd.Tables}, templ.Attributes{"rows": "3", "class": "input-field font-mono text-xs"})
+					<p class="mt-1 text-xs text-zinc-500">A line each: taxable income over which it applies, then its bands (limit:rate%, * for the rest).</p>
+				}
+				@form.Field("Work income reduction", "steps", fid, nil, "") {
+					@form.Textarea("steps", "14852 17673.52 7302 1.75", fid, form.FDInput{Value: fd.Steps}, templ.Attributes{"rows": "3", "class": "input-field font-mono text-xs"})
+					<p class="mt-1 text-xs text-zinc-500">A line each: from, up to (0: no end), amount, less this much per unit of income over from.</p>
+				}
+			</div>
+		</details>
+		@form.Field("Notes", "notes", fid, icons.StickyNote("15"), "") {
+			@form.Textarea("notes", "Optional", fid, form.FDInput{Value: fd.Notes}, templ.Attributes{"rows": "2", "maxlength": "2000"})
+		}
+		if id != "" {
+			<button
+				type="button"
+				hx-delete={ "/tools/salary/rules/" + id }
+				hx-swap="none"
+				hx-confirm="Delete these rules?"
+				data-confirm-label="Delete"
+				data-confirm-danger
+				class="txd-action justify-self-start text-rose-400!"
+			>
+				@icons.Trash("14")
+				Delete rules
+			</button>
+		}
+	}
+}

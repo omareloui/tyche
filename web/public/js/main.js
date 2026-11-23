@@ -713,3 +713,20 @@ document.addEventListener("alpine:init", () => {
     },
   }));
 });
+
+// salaryReload re-renders the salary calculator after the user's tax rules
+// changed (salary-rules-changed): picking the saved ones, or dropping the
+// deleted ones.
+function salaryReload(detail = {}) {
+  const f = document.getElementById("salary-form");
+  if (!f) return;
+  const params = new URLSearchParams(new FormData(f));
+  const rules = params.get("rules") || "";
+  if (detail.id) {
+    params.set("rules", detail.id);
+    if (detail.country) params.set("country", detail.country);
+  } else if (rules !== "builtin" && rules !== "ai") {
+    params.delete("rules");
+  }
+  htmx.ajax("GET", "/tools/salary/body?" + params.toString(), { target: "#salary-body", swap: "innerHTML" });
+}

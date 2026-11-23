@@ -1,0 +1,453 @@
+package views
+
+import (
+	"fmt"
+	"math"
+	"net/url"
+	"strconv"
+
+	"github.com/omareloui/tyche/internal/countries"
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/payroll"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+// SalaryMaxOffers is how many offers can be compared at once.
+const SalaryMaxOffers = 4
+
+// SalaryOfferForm is an offer's part of the comparison's form
+// (o<i>_<field>).
+type SalaryOfferForm struct {
+	Country, Rules, Region, Amount string
+	// Dir tells the amount is a gross or a take-home pay, Per a month's (a
+	// pay's) or a year's; Bonus, BonusIn and Other as the calculator's.
+	Dir, Per              string
+	Bonus, BonusIn, Other string
+	Opts     map[string]string
+}
+
+// SalaryOffer is a job offer: its country, rules and what it takes home.
+type SalaryOffer struct {
+	Form       SalaryOfferForm
+	Country    countries.Country
+	Options    []payroll.Option
+	HasBuiltin bool
+	Rules      *payroll.Rules
+	RuleName   string
+	NeedAI     bool
+	Currency   string
+	Result     *payroll.Result
+	Error      string
+	// NetDefault is the take-home pay a month in the default currency at
+	// today's rate, NetAtHome what it buys at home (the home country's
+	// currency at the countries' price levels); 0 unknown.
+	NetDefault float64
+	NetAtHome  float64
+	// RateDefault is the default currency per the offer's at today's rate;
+	// PriceRatio the offer's currency per home's at the price levels (of
+	// PriceYear's PPPs), MarketRatio the same at today's rate.
+	RateDefault, PriceRatio, MarketRatio float64
+	PriceYear                            int
+}
+
+// SalaryCompareData is the offers' comparison.
+type SalaryCompareData struct {
+	Offers    []SalaryOffer
+	Countries []countries.Country
+	MyRules   []models.SalaryRule
+	// Home is the user's country (time zone), DefaultCurrency theirs.
+	Home            countries.Country
+	DefaultCurrency string
+	AIOn            bool
+	AILeft          int
+	// Best is the index of the offer taking home the most, -1 for none.
+	Best  int
+	Error string
+}
+
+// SalaryCompareURL is the comparison's page with its form.
+func SalaryCompareURL(d *SalaryCompareData) string {
+	v := url.Values{}
+	v.Set("n", strconv.Itoa(len(d.Offers)))
+	for i, o := range d.Offers {
+		p := "o" + strconv.Itoa(i) + "_"
+		for k, s := range map[string]string{"country": o.Form.Country, "region": o.Form.Region, "amount": o.Form.Amount} {
+			if s != "" {
+				v.Set(p+k, s)
+			}
+		}
+		if o.Form.Rules != "" && o.Form.Rules != SalaryRulesBuiltin {
+			v.Set(p+"rules", o.Form.Rules)
+		}
+		if o.Form.Dir == SalaryDirNet {
+			v.Set(p+"dir", o.Form.Dir)
+		}
+		if o.Form.Per == SalaryPerYear {
+			v.Set(p+"per", o.Form.Per)
+		}
+		if o.Form.Bonus != "" {
+			v.Set(p+"bonus", o.Form.Bonus)
+		}
+		if o.Form.BonusIn == SalaryBonusPct {
+			v.Set(p+"bonus_in", o.Form.BonusIn)
+		}
+		if o.Form.Other != "" {
+			v.Set(p+"other", o.Form.Other)
+		}
+		for k, s := range o.Form.Opts {
+			v.Set(p+"opt_"+k, s)
+		}
+	}
+	return "/tools/salary/compare?" + v.Encode()
+}
+
+// SalaryCompare compares job offers of different countries.
+templ SalaryCompare(claims *jwt.AccessClaims, balances []models.Balance, d *SalaryCompareData) {
+	@layouts.Main(claims, "Compare offers", balances) {
+		@components.Container() {
+			<a href="/tools/salary" class="inline-flex items-center gap-1 mb-2 text-sm text-zinc-400 hover:text-zinc-200">
+				@icons.ArrowLeft("14")
+				Salary calculator
+			</a>
+			@components.MainHeader("Compare offers")
+			<div id="salary-compare-body">
+				@SalaryCompareBody(d)
+			</div>
+		}
+	}
+}
+
+// SalaryCompareBody is the comparison's form, each offer with what it comes
+// to.
+templ SalaryCompareBody(d *SalaryCompareData) {
+	<form
+		id="salary-compare-form"
+		x-data
+		hx-get="/tools/salary/compare/result"
+		hx-trigger="change, input delay:700ms[target.dataset.amount]"
+		hx-target="#salary-compare-body"
+		hx-swap="innerHTML"
+		hx-sync="this:replace"
+		@submit.prevent
+		class="grid gap-4"
+	>
+		<input type="hidden" name="n" value={ strconv.Itoa(len(d.Offers)) }/>
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<p class="text-sm text-zinc-400">Each offer's gross, or the take-home pay it promises.</p>
+			if len(d.Offers) < SalaryMaxOffers {
+				<button
+					type="button"
+					hx-get="/tools/salary/compare/result"
+					hx-include="#salary-compare-form"
+					hx-vals={ fmt.Sprintf(`{"n": "%d"}`, len(d.Offers)+1) }
+					hx-target="#salary-compare-body"
+					hx-swap="innerHTML"
+					class="txd-action"
+				>
+					@icons.Plus("14")
+					Add an offer
+				</button>
+			}
+		</div>
+		if d.Error != "" {
+			<p class="flex gap-2 p-4 rounded-2xl bg-red-500/10 ring-1 ring-red-500/30 text-sm text-red-200">
+				@icons.Warning("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
+				{ d.Error }
+			</p>
+		}
+		<div class="grid gap-4 sm:grid-cols-2">
+			for i := range d.Offers {
+				@salaryOfferCard(d, i)
+			}
+		</div>
+		<p class="text-xs text-zinc-500">
+			{ "Take-home pay a month is the year's spread over 12. " }
+			if d.Home.Name != "" {
+				{ "\"Buys at home\" is what it buys in " + d.Home.Name + " (your time zone's country), at the countries' price levels (World Bank PPPs): living costs weighed in, rent too. " }
+			}
+			Taxes are an employee's, single, without children.
+		</p>
+	</form>
+}
+
+templ salaryOfferCard(d *SalaryCompareData, i int) {
+	{{ o := d.Offers[i] }}
+	{{ id := "o" + strconv.Itoa(i) }}
+	{{ best := d.Best == i }}
+	<section class={ "grid gap-4 content-start p-5 rounded-3xl bg-zinc-700/20 ring-1", templ.KV("ring-emerald-400/60", best), templ.KV("ring-zinc-800", !best) }>
+		<header class="flex items-center justify-between gap-2">
+			<h2 class="flex items-center gap-2 font-semibold">
+				{ fmt.Sprintf("Offer %d", i+1) }
+				if best {
+					<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-400/15 text-xs font-medium text-emerald-300">
+						@icons.Trophy("12")
+						Takes home the most
+					</span>
+				}
+			</h2>
+			if len(d.Offers) > 2 {
+				<button
+					type="button"
+					hx-get="/tools/salary/compare/result"
+					hx-include="#salary-compare-form"
+					hx-vals={ fmt.Sprintf(`{"remove": "%d"}`, i) }
+					hx-target="#salary-compare-body"
+					hx-swap="innerHTML"
+					aria-label="Remove this offer"
+					class="p-1.5 rounded-full text-zinc-500 cursor-pointer hover:bg-zinc-800 hover:text-zinc-200"
+				>
+					@icons.X("14")
+				</button>
+			}
+		</header>
+		@form.Field("Country", id+"_country", "c", icons.Globe("15"), "") {
+			@form.Combobox(form.ComboboxProps{
+				Name: id + "_country", ID: "c", Label: "Country", Placeholder: "Pick a country",
+				Options: salaryCountryOptions(d.Countries), Data: form.FDInput{Value: o.Form.Country}, Searchable: true,
+			})
+		}
+		<div class="grid gap-2">
+			<span class="input-label">
+				@icons.Receipt("15")
+				Tax rules
+			</span>
+			@SalaryRulesToggle(id+"_rules", "c", salaryRulesRadios(o.Country.ISO2, o.HasBuiltin, d.AIOn, d.MyRules), o.Form.Rules, nil)
+		</div>
+		if o.Form.Rules == SalaryRulesAI {
+			@form.Field("Region (optional)", id+"_region", "c", icons.MapPin("15"), "") {
+				@form.Control("text", id+"_region", "e.g. Bavaria", "c", form.FDInput{Value: o.Form.Region}, templ.Attributes{"autocomplete": "off", "maxlength": "80"})
+			}
+		}
+		for _, opt := range o.Options {
+			@form.Field(opt.Label, id+"_opt_"+opt.Key, "c", nil, "") {
+				@form.Combobox(form.ComboboxProps{
+					Name: id + "_opt_" + opt.Key, ID: "c", Label: opt.Label,
+					Options: optionComboOptions(opt), Data: form.FDInput{Value: o.Form.Opts[opt.Key]},
+				})
+			}
+		}
+		<div class="grid gap-2">
+			<span class="input-label">
+				@icons.ArrowUpDown("15")
+				Work out
+			</span>
+			@form.SegmentedRadio("Work out", id+"_dir", "c", []form.RadioOption{
+				{Value: SalaryDirGross, Label: "Gross"},
+				{Value: SalaryDirNet, Label: "Net"},
+			}, form.FDInput{Value: o.Form.Dir}, nil)
+		</div>
+		<div class="grid gap-2">
+			<label for={ id + "_amount-c" } class="input-label">
+				@icons.Coins("15")
+				{ ternary(o.Form.Dir == SalaryDirNet, "Take-home pay", "Gross pay") }
+			</label>
+			<div class="flex items-center gap-2">
+				@form.Control("text", id+"_amount", "e.g. 5,000", "c", form.FDInput{Value: o.Form.Amount}, templ.Attributes{
+					"inputmode": "decimal", "autocomplete": "off", "x-mask:dynamic": "$money($input, '.', ',')", "data-amount": "1",
+				})
+				<span class="shrink-0 text-sm text-zinc-400">{ o.Currency }</span>
+			</div>
+			@form.SegmentedRadio("Per", id+"_per", "c", []form.RadioOption{
+				{Value: SalaryPerMonth, Label: ternary(o.Rules != nil && o.Rules.Pays() != 12, "Pay", "Month")},
+				{Value: SalaryPerYear, Label: "Year"},
+			}, form.FDInput{Value: o.Form.Per}, nil)
+		</div>
+		<div class="grid gap-3">
+			<div class="grid gap-2">
+				<label for={ id + "_bonus-c" } class="input-label">
+					@icons.Gift("15")
+					Yearly bonus
+				</label>
+				<div class="flex items-center gap-2">
+					@form.Control("text", id+"_bonus", "Optional", "c", form.FDInput{Value: o.Form.Bonus}, templ.Attributes{
+						"inputmode": "decimal", "autocomplete": "off", "x-mask:dynamic": "$money($input, '.', ',')", "data-amount": "1",
+					})
+					<div class="shrink-0 w-24">
+						@form.SegmentedRadio("Bonus in", id+"_bonus_in", "c", []form.RadioOption{
+							{Value: SalaryBonusAmount, Label: o.Currency},
+							{Value: SalaryBonusPct, Label: "%"},
+						}, form.FDInput{Value: o.Form.BonusIn}, nil)
+					</div>
+				</div>
+			</div>
+			<div class="grid gap-2 content-start">
+				<label for={ id + "_other-c" } class="input-label">
+					@icons.Hash("15")
+					Other tax (%)
+				</label>
+				@form.Control("text", id+"_other", "0", "c", form.FDInput{Value: o.Form.Other}, templ.Attributes{
+					"inputmode": "decimal", "autocomplete": "off", "data-amount": "1", "title": "A flat tax on the gross the rules leave out, e.g. a US state's",
+				})
+			</div>
+		</div>
+		<div class="pt-4 border-t border-zinc-800">
+			switch {
+				case o.NeedAI:
+					<div class="grid gap-2 text-sm">
+						<p class="text-zinc-400">No built-in rules for { o.Country.Name }.</p>
+						if d.AIOn && d.AILeft > 0 {
+							@salaryFetchButton("Look up the rules", "#salary-compare-form", "#salary-compare-body", "", map[string]string{"view": "compare", "fetch": strconv.Itoa(i)})
+						} else if d.AIOn {
+							<p class="text-zinc-500">You've used this month's lookups.</p>
+						}
+						<button type="button" hx-get={ salaryNewRuleURL(o.Country.ISO2, false) } hx-target={ "#" + components.DrawerSlot } hx-swap="innerHTML" class="justify-self-start text-zinc-400 underline cursor-pointer hover:text-zinc-200">Type the brackets yourself</button>
+					</div>
+				case o.Error != "":
+					<p class="text-sm text-red-300">{ o.Error }</p>
+				case o.Result != nil:
+					@salaryOfferResult(d, o)
+				default:
+					<p class="text-sm text-zinc-500">Type the gross pay.</p>
+			}
+		</div>
+	</section>
+}
+
+templ salaryOfferResult(d *SalaryCompareData, o SalaryOffer) {
+	{{ res := o.Result }}
+	<dl class="grid gap-3">
+		<div class="grid gap-0.5">
+			<dt class="text-xs text-zinc-500">
+				Takes home a month
+				if res.Bonus > 0 {
+					<span class="text-zinc-600">· the bonus spread over the year</span>
+				}
+			</dt>
+			<dd class="sensitive text-2xl font-bold tabular-nums">{ salaryFmt(res.NetMonthly(), o.Currency) }</dd>
+			if o.NetDefault > 0 && d.DefaultCurrency != o.Currency {
+				<dd class="flex items-center gap-1 text-sm text-zinc-400">
+					<span class="sensitive tabular-nums">{ "≈ " + salaryFmt(o.NetDefault, d.DefaultCurrency) + " at today's rate" }</span>
+					@salaryInfo("How it's converted") {
+						<p class="text-zinc-300">
+							<span class="sensitive">{ salaryFmt(res.NetMonthly(), o.Currency) }</span>
+							{ " × " + fmtRate(o.RateDefault) + " (" + d.DefaultCurrency + " per " + o.Currency + " at today's exchange rate) = " }
+							<span class="sensitive">{ salaryFmt(o.NetDefault, d.DefaultCurrency) }</span>.
+						</p>
+						<p class="text-zinc-400">Only the money changed at the bank's rate: it says nothing of what it buys there.</p>
+					}
+				</dd>
+			}
+		</div>
+		if o.Form.Dir == SalaryDirNet {
+			<div class="grid gap-0.5">
+				<dt class="text-xs text-zinc-500">Needs a gross of</dt>
+				<dd class="sensitive font-semibold tabular-nums">
+					{ salaryFmt(res.Gross/12, o.Currency) + " a month" }
+					<span class="text-sm font-normal text-zinc-400">{ " · " + salaryFmt(res.Gross, o.Currency) + " a year" }</span>
+				</dd>
+			</div>
+		}
+		if o.NetAtHome > 0 && o.Country.ISO2 != d.Home.ISO2 {
+			<div class="grid gap-0.5">
+				<dt class="flex items-center gap-1 text-xs text-zinc-500">
+					Buys at home like
+					@salaryInfo("How it's worked out") {
+						@salaryAtHomeInfo(d, o)
+					}
+				</dt>
+				<dd class="sensitive font-semibold tabular-nums text-sky-300">{ salaryFmt(o.NetAtHome, d.Home.Currency) + " in " + d.Home.Name }</dd>
+			</div>
+		}
+		<div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-400">
+			<span>{ "Tax + contributions " + salaryPct(res.EffectiveRate) }</span>
+			<span>{ "Marginal " + salaryPct(res.MarginalRate) }</span>
+			if o.Rules != nil {
+				<span>
+					switch o.Rules.Source {
+						case payroll.SourceAI:
+							{ fmt.Sprintf("AI rules, %d", o.Rules.Year) }
+						case payroll.SourceManual:
+							{ o.RuleName }
+						default:
+							{ fmt.Sprintf("Built-in rules, %d", o.Rules.Year) }
+					}
+				</span>
+			}
+		</div>
+		<a href={ templ.SafeURL(salaryOfferCalcURL(d, o)) } class="justify-self-start inline-flex items-center gap-1 text-xs text-zinc-400 underline hover:text-zinc-200">
+			See the breakdown
+			@icons.ArrowRight("12")
+		</a>
+	</dl>
+}
+
+// salaryOfferCalcURL opens the offer in the calculator.
+func salaryOfferCalcURL(d *SalaryCompareData, o SalaryOffer) string {
+	return SalaryURL(SalaryForm{
+		Country: o.Form.Country, Rules: o.Form.Rules, Region: o.Form.Region,
+		Dir: o.Form.Dir, Amount: o.Form.Amount, Per: o.Form.Per, Opts: o.Form.Opts,
+	})
+}
+
+// salaryInfo is an ⓘ button showing how a figure is worked out, on hover or
+// focus, toggled by a tap.
+templ salaryInfo(label string) {
+	<span x-data="{ open: false }" class="group/info relative inline-flex" @click.outside="open = false" @keydown.escape="open = false">
+		<button
+			type="button"
+			@click="open = !open"
+			:aria-expanded="open"
+			aria-label={ label }
+			class="flex items-center p-0.5 text-zinc-500 cursor-pointer hover:text-zinc-300 focus-visible:text-zinc-300"
+		>
+			@icons.Info("13")
+		</button>
+		<span
+			class="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 z-20 hidden w-80 max-w-[calc(100vw-2rem)] group-hover/info:block group-focus-within/info:block"
+			:class="open && '!block'"
+		>
+			<span class="glass-tooltip grid gap-2 text-left text-xs font-normal normal-case tracking-normal whitespace-normal">
+				{ children... }
+			</span>
+		</span>
+	</span>
+}
+
+func fmtRate(r float64) string {
+	switch {
+	case r >= 100:
+		return strconv.FormatFloat(math.Round(r*100)/100, 'f', -1, 64)
+	case r >= 1:
+		return strconv.FormatFloat(math.Round(r*10000)/10000, 'f', -1, 64)
+	}
+	return strconv.FormatFloat(r, 'g', 4, 64)
+}
+
+// salaryAtHomeInfo tells how "buys at home" is worked out: the take-home
+// pay over the price levels' ratio, against the exchange rate's.
+templ salaryAtHomeInfo(d *SalaryCompareData, o SalaryOffer) {
+	{{ monthly := o.Result.NetMonthly() }}
+	<span class="text-zinc-300">
+		What it would take to live like that in { d.Home.Name }, rather than what the money changes to:
+	</span>
+	<span class="grid gap-1 text-zinc-400">
+		<span>
+			{ "1. Takes home " }
+			<span class="sensitive">{ salaryFmt(monthly, o.Currency) }</span>
+			{ " a month in " + o.Country.Name + "." }
+		</span>
+		<span>
+			{ fmt.Sprintf("2. What costs 1 %s in %s costs about %s %s in %s, by the World Bank's price levels (PPPs of %d, brought to today by each country's inflation).",
+				d.Home.Currency, d.Home.Name, fmtRate(o.PriceRatio), o.Currency, o.Country.Name, o.PriceYear) }
+		</span>
+		<span>
+			{ "3. " }
+			<span class="sensitive">{ salaryFmt(monthly, o.Currency) }</span>
+			{ " ÷ " + fmtRate(o.PriceRatio) + " = " }
+			<span class="sensitive">{ salaryFmt(o.NetAtHome, d.Home.Currency) }</span>.
+		</span>
+	</span>
+	if o.MarketRatio > 0 {
+		{{ level := o.PriceRatio / o.MarketRatio }}
+		<span class="text-zinc-400">
+			{ fmt.Sprintf("At today's exchange rate (1 %s = %s %s) it changes to ", d.Home.Currency, fmtRate(o.MarketRatio), o.Currency) }
+			<span class="sensitive">{ salaryFmt(monthly/o.MarketRatio, d.Home.Currency) }</span>
+			{ ": " + colLevelText(level, o.Country.Name, d.Home.Name) + ", so it buys " + ternary(level > 1, "less", "more") + " there than the exchange rate says." }
+		</span>
+	}
+	<span class="text-zinc-500">Average prices of the whole country, rent included; a big city costs more. The cost of living tool weighs them by your own spending.</span>
+}
