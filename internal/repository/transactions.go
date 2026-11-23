@@ -31,6 +31,9 @@ func (r *Repository) CreateTransaction(ctx context.Context, tx *models.Transacti
 		if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, tx); err != nil {
 			return err
 		}
+		if err := autoTagWithTxn(ctx, qtx, tx); err != nil {
+			return err
+		}
 
 		for _, stx := range scheduledTxs {
 			if err := r.createTransactionWithTxn(qtx, ctx, &stx); err != nil {
@@ -210,6 +213,9 @@ func (r *Repository) GetTransactionsPage(ctx context.Context, f models.TxFilter,
 	if err := loadTxItemCounts(ctx, q, page.Upcoming, page.History); err != nil {
 		return nil, err
 	}
+	if err := loadTxTags(ctx, q, page.Upcoming, page.History); err != nil {
+		return nil, err
+	}
 	if err := loadTxWishes(ctx, q, page.Upcoming, page.History); err != nil {
 		return nil, err
 	}
@@ -244,7 +250,7 @@ func (r *Repository) GetTransactionsSummary(ctx context.Context, f models.TxFilt
 	lp := txFilterParams(&f)
 	p := queries.GetTransactionsSummaryParams{
 		Q: lp.Q, Kind: lp.Kind, AccountID: lp.AccountID, CategoryID: lp.CategoryID,
-		CounterpartyID: lp.CounterpartyID, GoalID: lp.GoalID, NeedsReview: lp.NeedsReview,
+		CounterpartyID: lp.CounterpartyID, GoalID: lp.GoalID, ItemID: lp.ItemID, TagID: lp.TagID, NeedsReview: lp.NeedsReview,
 		FromSms: lp.FromSms, FromImport: lp.FromImport, HasReceipt: lp.HasReceipt, HasNote: lp.HasNote, Window: lp.Window, WindowToday: lp.WindowToday, FromDate: lp.FromDate, ToDate: lp.ToDate,
 		MinAmount: lp.MinAmount, MaxAmount: lp.MaxAmount,
 	}
@@ -311,6 +317,9 @@ func txFilterParams(f *models.TxFilter) queries.GetTransactionsParams {
 	}
 	if f.ItemID != "" {
 		p.ItemID = f.ItemID
+	}
+	if f.TagID != "" {
+		p.TagID = f.TagID
 	}
 	if f.Status == models.TxStatusReview {
 		p.NeedsReview = true
@@ -446,6 +455,9 @@ func (r *Repository) GetTransaction(ctx context.Context, id string) (*models.Tra
 		return nil, err
 	}
 	if err := loadTxWishes(ctx, q, one); err != nil {
+		return nil, err
+	}
+	if err := loadTxTags(ctx, q, one); err != nil {
 		return nil, err
 	}
 	tx := &one[0]

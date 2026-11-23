@@ -21,6 +21,9 @@ type TxBulkEdit struct {
 	Date *time.Time
 	// Review marks them reviewed or sends them back to review.
 	Review TxBulkReview
+	// AddTags are tag names added (new ones created on saving), RemoveTags
+	// the ones removed (any case).
+	AddTags, RemoveTags []string
 }
 
 // TxBulkReview is what a bulk edit does to the transactions' review.
@@ -103,7 +106,30 @@ func DescribeBulkLocks(counts map[TxBulkLock]int) string {
 
 func (e *TxBulkEdit) IsZero() bool {
 	return e.Category == nil && !e.ClearCategory && e.Counterparty == nil &&
-		!e.ClearCounterparty && e.Date == nil && e.Review == TxBulkReviewKeep
+		!e.ClearCounterparty && e.Date == nil && e.Review == TxBulkReviewKeep &&
+		len(e.AddTags) == 0 && len(e.RemoveTags) == 0
+}
+
+// applyTags is tags with the edit's tags added and removed (by name, any
+// case), nil (left alone) when the edit has no tags.
+func (e *TxBulkEdit) applyTags(tags []Tag) []Tag {
+	if len(e.AddTags) == 0 && len(e.RemoveTags) == 0 {
+		return nil
+	}
+	out := make([]Tag, 0, len(tags)+len(e.AddTags))
+	for _, t := range tags {
+		if !slices.ContainsFunc(e.RemoveTags, func(n string) bool { return strings.EqualFold(n, t.Name) }) {
+			out = append(out, t)
+		}
+	}
+	for _, n := range e.AddTags {
+		if slices.ContainsFunc(e.RemoveTags, func(r string) bool { return strings.EqualFold(r, n) }) ||
+			slices.ContainsFunc(out, func(t Tag) bool { return strings.EqualFold(t.Name, n) }) {
+			continue
+		}
+		out = append(out, Tag{Name: n})
+	}
+	return out
 }
 
 // Apply is tx with the edit, and why parts of it were skipped (the whole of
@@ -114,6 +140,7 @@ func (e *TxBulkEdit) Apply(tx *Transaction, today time.Time) (*Transaction, []Tx
 		return nil, []TxBulkSkip{TxBulkSkipLocked}
 	}
 	out := *tx
+	out.Tags = e.applyTags(tx.Tags)
 	var skips []TxBulkSkip
 	// Transfers and debts take no category nor counterparty (Transaction's
 	// validation).

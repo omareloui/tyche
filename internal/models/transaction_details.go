@@ -5,6 +5,8 @@ import "time"
 // TxDetails is everything the details drawer of a transaction shows.
 type TxDetails struct {
 	Tx *Transaction
+	// TagSuggestions are the live tags' names offered by its tags' editor.
+	TagSuggestions []string
 	// ReceiptScan tells receipts can be scanned (reading them is on).
 	ReceiptScan bool
 	// SMS is the message the transaction was created from, if any, and

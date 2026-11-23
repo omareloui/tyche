@@ -53,6 +53,9 @@ func (h Handler) txDetails(ctx context.Context, id string) (*models.TxDetails, e
 		d.SMSTemplate = h.smsTemplateName(ctx, d.SMS.TemplateID)
 	}
 	d.ReceiptScan = h.ocr != nil
+	if views.TxTagsEditable(d.Tx) {
+		d.TagSuggestions = h.tagSuggestions(ctx)
+	}
 	if models.TxWindowsEditable(d.Tx) && d.Tx.ReturnOpen(h.userToday(ctx)) {
 		if d.ReturnRefundID, err = h.repo.ReturnRefundCandidate(ctx, d.Tx); err != nil {
 			return nil, err

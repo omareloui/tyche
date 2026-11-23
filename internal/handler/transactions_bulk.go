@@ -133,7 +133,8 @@ func (h Handler) BulkEditTransactionsForm(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		return nil, err
 	}
-	return views.TxBulkEdit(&views.TxBulkEditFD{N: editable, Locked: locked}, cats, cps), nil
+	fd := &views.TxBulkEditFD{N: editable, Locked: locked, TagSuggestions: h.tagSuggestions(r.Context())}
+	return views.TxBulkEdit(fd, cats, cps), nil
 }
 
 // setHXTriggerJSON sets the answer's HX-Trigger to events with details.
@@ -174,7 +175,10 @@ func (h Handler) BulkEditTransactions(w http.ResponseWriter, r *http.Request) (t
 		Counterparty: r.PostForm.Get("counterparty_id"),
 		Date:         strings.TrimSpace(r.PostForm.Get("scheduled_to")),
 		Review:       r.PostForm.Get("review"),
+		AddTags:      r.PostForm.Get("add_tags"),
+		RemoveTags:   r.PostForm.Get("remove_tags"),
 	}
+	fd.TagSuggestions = h.tagSuggestions(r.Context())
 	fd.N, _ = strconv.Atoi(r.PostForm.Get("n"))
 	fd.Locked = r.PostForm.Get("locked")
 	answer := func(msg string) (templ.Component, error) {
@@ -186,7 +190,14 @@ func (h Handler) BulkEditTransactions(w http.ResponseWriter, r *http.Request) (t
 	if !ok {
 		return answer("Invalid review.")
 	}
-	edit := models.TxBulkEdit{Review: review}
+	edit := models.TxBulkEdit{
+		Review:     review,
+		AddTags:    models.ParseTagNames(fd.AddTags),
+		RemoveTags: models.ParseTagNames(fd.RemoveTags),
+	}
+	if msg := validateTagNames(edit.AddTags); msg != "" {
+		return answer(msg)
+	}
 	switch fd.Category {
 	case "":
 	case models.TxFilterNone:

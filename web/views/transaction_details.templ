@@ -75,6 +75,9 @@ templ TxDetailsPanel(d *models.TxDetails, def *models.Currency) {
 			@txDetailsHero(tx, &v, def)
 			@txDetailsActions(tx)
 			@txDetailsFields(d, &v)
+			if len(tx.Tags) > 0 || TxTagsEditable(tx) {
+				@TxDetailsTags(tx, d.TagSuggestions, "")
+			}
 			@NoteEditor(NoteEditorProps{
 				ID: NoteEditorID("tx", tx.ID), URL: fmt.Sprintf("/transactions/%s/note", tx.ID),
 				Note: tx.Note, Editable: TxNoteEditable(tx),

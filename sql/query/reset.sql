@@ -97,3 +97,7 @@ DELETE FROM salary_rules;
 
 -- name: ResetDeleteVisaRules :exec
 DELETE FROM visa_rules;
+
+-- name: ResetDeleteTags :exec
+-- Their transactions stay, untagged (ON DELETE CASCADE of the links).
+DELETE FROM tags;

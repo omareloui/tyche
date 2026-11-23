@@ -41,6 +41,7 @@ const DRAWER_URL_PARAMS = {
   rtx: (id) => `/recurrent-tx/${encodeURIComponent(id)}/details`,
   wish: (id) => `/wishlist/${encodeURIComponent(id)}/details`,
   item: (id) => `/items/${encodeURIComponent(id)}/details`,
+  tg: (id) => `/tags/${encodeURIComponent(id)}/details`,
 };
 
 // DETAILS_URL_PARAMS also has the transaction details' ?tx= (transactions.js).

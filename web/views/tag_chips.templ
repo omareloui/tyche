@@ -1,0 +1,125 @@
+package views
+
+import (
+	"encoding/json"
+	"fmt"
+	"slices"
+	"strings"
+
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+// tagDot is a tag's color, as a tag icon.
+templ tagDot(hex string) {
+	<span class="shrink-0 inline-flex" style={ fmt.Sprintf("color: %s", hex) }>
+		@icons.Tag("14")
+	</span>
+}
+
+// txTagChip is a transaction row's tag, narrowing the list to it on click.
+templ txTagChip(t *models.Tag) {
+	<button
+		type="button"
+		{ txFilterBy(models.TxFilterTag, t.ID)... }
+		title={ "Show only " + t.Name }
+		class="chip max-w-48 cursor-pointer transition-colors hover:bg-zinc-700 hover:text-zinc-200"
+		style={ fmt.Sprintf("color: %s; background-color: %s1a", t.Hex(), t.Hex()) }
+	>
+		@icons.Tag("12", &templ.Attributes{"class": "shrink-0"})
+		<span class="truncate">{ t.Name }</span>
+	</button>
+}
+
+// TxTagsEditable tells the details can tag the transaction: not locked (a
+// balance correction, a goal's or a deleted account's).
+func TxTagsEditable(tx *models.Transaction) bool {
+	return tx.BulkLock() == models.TxBulkLockNone
+}
+
+func txTagsID(id string) string { return "txd-tags-" + id }
+
+// TxDetailsTags is the details' tags, edited in place like a counterparty's
+// labels: clicking one removes it, clicking a suggestion (or typing a new
+// name) adds it, each saved right away with the whole list. err is the last
+// change's error.
+templ TxDetailsTags(tx *models.Transaction, suggestions []string, err string) {
+	{{ editable := TxTagsEditable(tx) }}
+	{{ url := fmt.Sprintf("/transactions/%s/tags", tx.ID) }}
+	{{ names := models.TagNames(tx.Tags) }}
+	<div id={ txTagsID(tx.ID) } hx-target="this" hx-swap="outerHTML">
+		@txDetailsSection("Tags") {
+			if len(tx.Tags) > 0 {
+				<div class="flex flex-wrap gap-1.5">
+					for i := range tx.Tags {
+						{{ t := &tx.Tags[i] }}
+						if editable {
+							<button
+								type="button"
+								hx-put={ url }
+								hx-vals={ tagsVals(without(names, t.Name)) }
+								title={ "Remove " + t.Name }
+								aria-label={ "Remove the " + t.Name + " tag" }
+								class="group/tag inline-flex items-center gap-1 h-8 px-2.5 rounded-lg text-sm cursor-pointer transition-colors hover:bg-red-500/15! hover:text-red-300!"
+								style={ fmt.Sprintf("color: %s; background-color: %s1a", t.Hex(), t.Hex()) }
+							>
+								@icons.Tag("13", &templ.Attributes{"class": "group-hover/tag:hidden"})
+								@icons.X("13", &templ.Attributes{"class": "hidden group-hover/tag:block"})
+								{ t.Name }
+							</button>
+						} else {
+							<a
+								href={ templ.SafeURL("/tags?tg=" + t.ID) }
+								class="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg text-sm"
+								style={ fmt.Sprintf("color: %s; background-color: %s1a", t.Hex(), t.Hex()) }
+							>
+								@icons.Tag("13")
+								{ t.Name }
+							</a>
+						}
+					}
+				</div>
+			}
+			if editable {
+				<div class="flex items-center gap-1.5 -mx-5 sm:-mx-6 px-5 sm:px-6 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+					for _, sug := range suggestions {
+						if !slices.ContainsFunc(names, func(n string) bool { return strings.EqualFold(n, sug) }) {
+							<button
+								type="button"
+								hx-put={ url }
+								hx-vals={ tagsVals(append(slices.Clone(names), sug)) }
+								aria-label={ "Add the " + sug + " tag" }
+								class="shrink-0 inline-flex items-center gap-1 h-8 px-2.5 rounded-lg border border-dashed border-zinc-700 text-sm text-zinc-400 whitespace-nowrap cursor-pointer transition-colors hover:border-zinc-500 hover:text-zinc-200"
+							>
+								@icons.Plus("12")
+								{ sug }
+							</button>
+						}
+					}
+					<form hx-put={ url } class="shrink-0">
+						<input type="hidden" name="tags" value={ strings.Join(names, ", ") }/>
+						<input
+							type="text"
+							name="add"
+							required
+							maxlength="40"
+							placeholder="New tag"
+							aria-label="New tag"
+							autocomplete="off"
+							enterkeyhint="done"
+							class="w-28 h-8 px-2.5 rounded-lg border border-zinc-700 bg-transparent text-sm outline-none placeholder:text-zinc-500 focus:w-40 focus:border-zinc-400 transition-[width,border-color]"
+						/>
+					</form>
+				</div>
+			}
+			@form.ErrorMessage(err)
+		}
+	</div>
+}
+
+// tagsVals is the hx-vals sending tags as the whole list.
+func tagsVals(names []string) string {
+	b, _ := json.Marshal(map[string]string{"tags": strings.Join(names, ", ")})
+	return string(b)
+}

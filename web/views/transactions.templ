@@ -32,6 +32,16 @@ type TransactionFD struct {
 	// Windows are its return / warranty days, nil when it can't have any
 	// (e.g. a recurrent occurrence).
 	Windows *TxWindowsFD
+	// Tags are its tags' names, nil when the form has none (the recurrent
+	// transactions' forms).
+	Tags *TxTagsFD
+}
+
+// TxTagsFD is a transaction's tags field: the names, comma separated, and
+// the live tags' names offered.
+type TxTagsFD struct {
+	form.FDInput
+	Suggestions []string
 }
 
 // BoughtByFD is whether someone bought the expense for the user, and the
@@ -82,7 +92,7 @@ templ Transactions(
 templ TxBody(list TxListData, accs []models.Account,
 	knds []models.TxKind, cats []models.Category,
 	cps []models.Counterparty, gls []models.Goal) {
-	@txFilterBar(&list.Filter, list.Page.MonthStart, accs, knds, cats, cps, gls)
+	@txFilterBar(&list.Filter, list.Page.MonthStart, accs, knds, cats, cps, gls, list.Tags)
 	@TxList(list)
 }
 
@@ -129,6 +139,9 @@ templ TxFormFields(
 		@form.Control("text", "description", "What was it for?", id, fd.Description, nil)
 	}
 	@txNoteField(id, fd.Note)
+	if fd.Tags != nil {
+		@txTagsField(id, fd.Tags)
+	}
 	@txItemsField(id, fd.Items, &fd.Receipt, fd.ItemsCurrency)
 	if fd.Windows != nil {
 		@txWindowsField(id, fd.Windows)
@@ -217,7 +230,7 @@ templ txDateChip(label string, daysAgo int) {
 // query string in the URL. The search is focused with "/" (transactions.js).
 templ txFilterBar(f *models.TxFilter, start models.MonthStart, accs []models.Account,
 	knds []models.TxKind, cats []models.Category,
-	cps []models.Counterparty, gls []models.Goal) {
+	cps []models.Counterparty, gls []models.Goal, tags []models.Tag) {
 	<form
 		id="tx-filters"
 		hx-get="/transactions"
@@ -281,6 +294,9 @@ templ txFilterBar(f *models.TxFilter, start models.MonthStart, accs []models.Acc
 					append([]form.ComboOption{{Value: models.TxFilterNone, Label: "No counterparty"}}, counterpartyComboOptions(cps, f.CounterpartyID)...))
 				if len(gls) > 0 {
 					@txFilterCombo(models.TxFilterGoal, "Goal", "Any goal", f.GoalID, true, goalComboOptions(gls))
+				}
+				if len(tags) > 0 {
+					@txFilterCombo(models.TxFilterTag, "Tag", "Any tag", f.TagID, true, tagComboOptions(tags, f.TagID))
 				}
 				if f.ItemID != "" {
 					// Set from an item's details (/items): kept while the other
@@ -592,7 +608,7 @@ templ txAmountFilter(name, label string, value *float64) {
 func txFilterKeysButQ() []string {
 	return []string{
 		models.TxFilterKind, models.TxFilterAccount, models.TxFilterCategory,
-		models.TxFilterCounterparty, models.TxFilterGoal, models.TxFilterStatus,
+		models.TxFilterCounterparty, models.TxFilterGoal, models.TxFilterTag, models.TxFilterStatus,
 		models.TxFilterSource, models.TxFilterReceipt, models.TxFilterNote, models.TxFilterWindow,
 		models.TxFilterFrom, models.TxFilterTo,
 		models.TxFilterMin, models.TxFilterMax,
@@ -1110,6 +1126,23 @@ func CounterpartyComboOption(cp *models.Counterparty) templ.Component {
 	return form.ComboOptionItem(counterpartyComboOption(cp), true)
 }
 
+// tagComboOptions are the live tags (and the selected one, even archived).
+func tagComboOptions(tags []models.Tag, selected string) []form.ComboOption {
+	var opts []form.ComboOption
+	for i := range tags {
+		t := &tags[i]
+		if t.IsArchived() && t.ID != selected {
+			continue
+		}
+		opts = append(opts, form.ComboOption{
+			Value:   t.ID,
+			Label:   t.Name,
+			Leading: tagDot(t.Hex()),
+		})
+	}
+	return opts
+}
+
 func goalComboOptions(gls []models.Goal) []form.ComboOption {
 	opts := make([]form.ComboOption, len(gls))
 	for i := range gls {
@@ -1186,6 +1219,14 @@ func getCategoriesOfKinds(cats []models.Category, txKind models.TxKind) []models
 		}
 	}
 	return kndsCats
+}
+
+// txTagsField picks a transaction's tags by name, a new name creating the
+// tag on saving.
+templ txTagsField(id string, fd *TxTagsFD) {
+	@form.Field("Tags", "tags", id, icons.Tag("15"), fd.Error) {
+		@form.TagsInputSuggest("tags", "e.g. Dubai trip, Wedding", id, fd.FDInput, fd.Suggestions)
+	}
 }
 
 // txNoteField is a transaction's (or recurrent one's) Markdown note.

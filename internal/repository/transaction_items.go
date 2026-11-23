@@ -155,9 +155,13 @@ func createItemWithTxn(ctx context.Context, qtx *queries.Queries, res *itemResol
 	return createItemSharesWithTxn(ctx, qtx, it.ID, it.SharedWith)
 }
 
-// writeTxExtrasWithTxn writes a saved transaction's lines (when set: nil
-// leaves them as they are, e.g. a bulk edit) and links its scanned receipt.
+// writeTxExtrasWithTxn writes a saved transaction's tags and lines (when
+// set: nil leaves them as they are, e.g. a bulk edit) and links its scanned
+// receipt.
 func writeTxExtrasWithTxn(ctx context.Context, qtx *queries.Queries, tx *models.Transaction, created bool) error {
+	if err := writeTxTagsWithTxn(ctx, qtx, tx, created); err != nil {
+		return err
+	}
 	if tx.Items != nil && (!created || len(tx.Items) > 0) {
 		if err := replaceItemsWithTxn(ctx, qtx, itemOwner{txID: tx.ID}, tx.Items); err != nil {
 			return err

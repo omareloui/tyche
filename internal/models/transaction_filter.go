@@ -64,6 +64,7 @@ const (
 	TxFilterCounterparty = "counterparty"
 	TxFilterGoal         = "goal"
 	TxFilterItem         = "item"
+	TxFilterTag          = "tag"
 	TxFilterStatus       = "status"
 	TxFilterSource       = "source"
 	TxFilterReceipt      = "receipt"
@@ -91,7 +92,9 @@ type TxFilter struct {
 	CounterpartyID string
 	GoalID         string
 	// ItemID matches the transactions with a line of the item (Item).
-	ItemID  string
+	ItemID string
+	// TagID matches the transactions carrying the tag.
+	TagID   string
 	Status  TxStatus
 	Source  TxSource
 	Receipt TxReceipt
@@ -116,6 +119,7 @@ func ParseTxFilter(v url.Values) TxFilter {
 		CounterpartyID: strings.TrimSpace(v.Get(TxFilterCounterparty)),
 		GoalID:         strings.TrimSpace(v.Get(TxFilterGoal)),
 		ItemID:         strings.TrimSpace(v.Get(TxFilterItem)),
+		TagID:          strings.TrimSpace(v.Get(TxFilterTag)),
 	}
 	switch s := TxStatus(v.Get(TxFilterStatus)); s {
 	case TxStatusScheduled, TxStatusFulfilled, TxStatusReview:
@@ -188,6 +192,7 @@ func (f *TxFilter) Values() url.Values {
 	set(TxFilterCounterparty, f.CounterpartyID)
 	set(TxFilterGoal, f.GoalID)
 	set(TxFilterItem, f.ItemID)
+	set(TxFilterTag, f.TagID)
 	set(TxFilterStatus, string(f.Status))
 	set(TxFilterSource, string(f.Source))
 	set(TxFilterReceipt, string(f.Receipt))
@@ -219,7 +224,7 @@ func (f *TxFilter) IsZero() bool {
 func (f *TxFilter) ActiveCount() int {
 	v := f.Values()
 	n := 0
-	for _, k := range []string{TxFilterKind, TxFilterAccount, TxFilterCategory, TxFilterCounterparty, TxFilterGoal, TxFilterItem, TxFilterStatus, TxFilterSource, TxFilterReceipt, TxFilterNote, TxFilterWindow} {
+	for _, k := range []string{TxFilterKind, TxFilterAccount, TxFilterCategory, TxFilterCounterparty, TxFilterGoal, TxFilterItem, TxFilterTag, TxFilterStatus, TxFilterSource, TxFilterReceipt, TxFilterNote, TxFilterWindow} {
 		if v.Has(k) {
 			n++
 		}

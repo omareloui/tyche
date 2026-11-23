@@ -17,6 +17,10 @@ type TxBulkEditFD struct {
 	Category, Counterparty, Date string
 	// Review is a models.TxBulkReview.
 	Review string
+	// AddTags and RemoveTags are tag names, comma separated; TagSuggestions
+	// the live tags' names.
+	AddTags, RemoveTags string
+	TagSuggestions      []string
 	Error                        string
 	// Locked tells the selected ones left out as they can't be edited,
 	// e.g. "2 balance corrections" (models.DescribeBulkLocks).
@@ -70,6 +74,14 @@ templ TxBulkEditForm(fd *TxBulkEditFD, cats []models.Category, cps []models.Coun
 				"x-mask":          "9999-99-99",
 				"data-datepicker": true,
 			})
+		}
+		@form.Field("Add tags", "add_tags", "bulk", icons.Tag("15"), "") {
+			@form.TagsInputSuggest("add_tags", "e.g. Dubai trip", "bulk", form.FDInput{Value: fd.AddTags}, fd.TagSuggestions)
+		}
+		if len(fd.TagSuggestions) > 0 {
+			@form.Field("Remove tags", "remove_tags", "bulk", icons.X("15"), "") {
+				@form.TagsInputSuggest("remove_tags", "Tags to take off", "bulk", form.FDInput{Value: fd.RemoveTags}, fd.TagSuggestions)
+			}
 		}
 		<div>
 			<span aria-hidden="true" class="input-label">Review</span>

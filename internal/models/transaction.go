@@ -64,6 +64,9 @@ type Transaction struct {
 	Receipt *Receipt
 	// Wishes are the wishlist items bought in it.
 	Wishes []WishlistItem
+	// Tags are its tags, by name. Writing a transaction with nil Tags
+	// leaves its tags alone (e.g. a bulk edit), an empty list removes them.
+	Tags []Tag
 	// ReceiptID is a scanned receipt to link on saving it.
 	ReceiptID string
 	// SplitPeople is how many people its bill is split with (see TxSplit),
@@ -98,6 +101,7 @@ type commonFieldsForTxAndRtx struct {
 type createTransaction struct {
 	commonFieldsForTxAndRtx
 	ScheduledTo time.Time `validate:"required"`
+	Tags        []string  `validate:"max=20,dive,not_blank,max=40"`
 }
 
 func (t *Transaction) ViewAmount() string {
@@ -164,6 +168,7 @@ func (t *Transaction) toValidate() *createTransaction {
 			Items:          t.Items,
 		},
 		ScheduledTo: t.ScheduledTo,
+		Tags:        TagNames(t.Tags),
 	}
 }
 

@@ -46,6 +46,9 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 		l.Error("fetching goals", zap.Error(err))
 		return nil, err
 	}
+	if list.Tags, err = h.repo.GetTags(r.Context()); err != nil {
+		return nil, err
+	}
 	if target == "tx-body" {
 		return views.TxBody(*list, accs, knds, cats, cps, gls), nil
 	}
@@ -149,6 +152,13 @@ func (h Handler) txFilterChips(ctx context.Context, f *models.TxFilter) []views.
 			label = it.Item.Name
 		}
 		add(label, models.TxFilterItem)
+	}
+	if f.TagID != "" {
+		label := "Unknown tag"
+		if t, err := h.repo.GetTag(ctx, f.TagID); err == nil {
+			label = t.Name
+		}
+		add(label, models.TxFilterTag)
 	}
 	switch f.Status {
 	case models.TxStatusFulfilled:
@@ -791,6 +801,7 @@ func (h Handler) mapTransactionToFD(ctx context.Context, t *models.Transaction, 
 		Items:         txItemsToFD(t.Items, err),
 		ItemsCurrency: h.itemsCurrencyFD(ctx, t.Items),
 		Receipt:       views.ReceiptFD{Enabled: h.ocr != nil, ID: t.ReceiptID},
+		Tags:          h.txTagsFD(ctx, t.Tags, tagsError(err)),
 	}
 	if models.TxWindowsAllowed(t) {
 		fd.Windows = &views.TxWindowsFD{
@@ -914,6 +925,7 @@ func (h Handler) mapFDToTransaction(r *http.Request, isRecurrent bool) (*models.
 		ScheduledTo:  scheduledTo,
 		Items:        parseTxItems(r),
 		ReceiptID:    strings.TrimSpace(r.FormValue("receipt_id")),
+		Tags:         parseTxTags(r),
 	}
 	if knd == models.ExpenseTxKind && !isRecurrent {
 		tx.ReturnUntil, tx.WarrantyUntil = parseTxWindows(r, scheduledTo)

@@ -1,0 +1,512 @@
+package views
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/markdown"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/tzctx"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+// TagDetailsParam is the tags page's query param holding the tag whose
+// details are open.
+const TagDetailsParam = "tg"
+
+// TagsChangedEvent re-renders the tags list (HX-Trigger).
+const TagsChangedEvent = "tags-changed"
+
+func tagDetailsURL(id string) string { return fmt.Sprintf("/tags/%s/details", id) }
+
+func tagDetailsURLIf(id string) string {
+	if id == "" {
+		return ""
+	}
+	return tagDetailsURL(id)
+}
+
+// TagTxsURL lists the tag's transactions.
+func TagTxsURL(id string) string { return "/transactions?" + models.TxFilterTag + "=" + id }
+
+// TagFD is a tag's form.
+type TagFD struct {
+	Name, Color, StartsOn, EndsOn, AutoTag, Note form.FDInput
+	Budget                                       *form.AmountFD
+	// Error is what went wrong apart from a field.
+	Error string
+}
+
+// TagsData is the tags page's list: every tag's summary, live ones then
+// archived.
+type TagsData struct {
+	Live, Archived []*models.TagSummary
+	Def            *models.Currency
+}
+
+templ Tags(claims *jwt.AccessClaims, balances []models.Balance, fd *TagFD, curs []models.Currency, d *TagsData, openID string) {
+	@layouts.WithCreateForm(claims, "Tags", "New tag", balances, CreateTagForm(fd, curs, &claims.DefaultCurrency)) {
+		<p class="mb-6 text-sm text-zinc-400 max-w-prose">
+			Categories say on what, tags say for what: a trip, a wedding, a move. Tag transactions in their form,
+			their details or many at once from the list; a trip with “Tag new ones” on tags what's added in its days.
+		</p>
+		@TagsList(d)
+		@components.DrawerOnLoad(tagDetailsURLIf(openID))
+	}
+}
+
+// TagsList is every tag's card, re-rendered on TagsChangedEvent.
+templ TagsList(d *TagsData) {
+	<div
+		id="tags"
+		hx-get="/tags/list"
+		hx-trigger={ TagsChangedEvent + " from:body" }
+		hx-swap="outerHTML"
+		class="grid gap-8"
+	>
+		if len(d.Live) == 0 && len(d.Archived) == 0 {
+			<div class="grid place-items-center gap-3 py-16 text-center text-zinc-400">
+				@icons.Tag("32", &templ.Attributes{"class": "text-zinc-600"})
+				<p>No tags yet. Add one, e.g. your next trip.</p>
+			</div>
+		}
+		if len(d.Live) > 0 {
+			<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+				for _, s := range d.Live {
+					@tagCard(s)
+				}
+			</div>
+		}
+		if len(d.Archived) > 0 {
+			<details class="group">
+				<summary class="flex items-center gap-2 cursor-pointer text-sm font-semibold uppercase tracking-wider text-zinc-500 list-none">
+					@icons.ChevronDown("16", &templ.Attributes{"class": "-rotate-90 group-open:rotate-0 transition-transform"})
+					Archived · { fmt.Sprint(len(d.Archived)) }
+				</summary>
+				<div class="grid gap-4 mt-4 sm:grid-cols-2 xl:grid-cols-3 opacity-80">
+					for _, s := range d.Archived {
+						@tagCard(s)
+					}
+				</div>
+			</details>
+		}
+	</div>
+}
+
+// tagDays is a trip's days, e.g. "Mar 3 – Mar 12, 2026 · 10 days".
+func tagDays(t *models.Tag) string {
+	if !t.IsTrip() {
+		return ""
+	}
+	from, to := *t.StartsOn, *t.EndsOn
+	var s string
+	switch {
+	case from.Equal(to):
+		s = from.Format("Jan 2, 2006")
+	case from.Year() == to.Year():
+		s = from.Format("Jan 2") + " – " + to.Format("Jan 2, 2006")
+	default:
+		s = from.Format("Jan 2, 2006") + " – " + to.Format("Jan 2, 2006")
+	}
+	return fmt.Sprintf("%s · %d %s", s, t.Days(), plural(t.Days(), "day", "days"))
+}
+
+// tagState is where a trip is against today: upcoming, on now or over.
+func tagState(t *models.Tag, today time.Time) string {
+	switch {
+	case !t.IsTrip():
+		return ""
+	case today.Before(*t.StartsOn):
+		return "Upcoming"
+	case today.After(*t.EndsOn):
+		return ""
+	default:
+		return "On now"
+	}
+}
+
+templ tagCard(s *models.TagSummary) {
+	{{ t := &s.Tag }}
+	<button
+		type="button"
+		hx-get={ tagDetailsURL(t.ID) }
+		hx-target={ "#" + components.DrawerSlot }
+		hx-swap="innerHTML"
+		class="text-left cursor-pointer rounded-3xl transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-(--accent)"
+	>
+		@components.GlassCard("grid gap-4 p-5") {
+			<div class="flex items-start gap-3">
+				<div class="grid place-items-center shrink-0 w-10 h-10 rounded-xl" style={ fmt.Sprintf("color: %s; background-color: %s26", t.Hex(), t.Hex()) }>
+					@icons.Tag("18")
+				</div>
+				<div class="flex-1 min-w-0">
+					<p class="font-semibold truncate">{ t.Name }</p>
+					<p class="text-xs text-zinc-400 truncate">
+						if d := tagDays(t); d != "" {
+							{ d }
+						} else {
+							{ fmt.Sprint(t.Txs) } { plural(t.Txs, "transaction", "transactions") }
+						}
+					</p>
+				</div>
+				if st := tagState(t, tzctx.Today(ctx)); st != "" {
+					<span class="chip bg-emerald-400/10 text-emerald-300">{ st }</span>
+				}
+				if t.AutoTag && !t.IsArchived() {
+					<span class="chip" title="Tags new transactions dated in its days">
+						@icons.Zap("12")
+						Auto
+					</span>
+				}
+			</div>
+			<div>
+				<p class="text-xs text-zinc-500">Spent</p>
+				<p class="sensitive text-2xl font-semibold tabular-nums">{ s.Currency.Format(s.Spent) }</p>
+				if len(s.ByCurrency) > 1 {
+					<p class="sensitive text-xs text-zinc-500 tabular-nums truncate">{ tagCurrencies(s) }</p>
+				}
+			</div>
+			if s.Budget > 0 {
+				@tagBudgetBar(s)
+			}
+			if top := s.TopCategories(models.TagTopCategories); len(top) > 0 {
+				<div class="flex flex-wrap gap-1.5">
+					for _, c := range top {
+						<span class="chip max-w-40">
+							if c.Category != nil {
+								@categoryDot(c.Category.Color)
+								<span class="truncate">{ c.Category.Name }</span>
+							} else {
+								<span class="truncate">Uncategorized</span>
+							}
+							<span class="sensitive text-zinc-500 tabular-nums">{ fmt.Sprintf("%.0f%%", pctOf(c.Amount, s.Spent)) }</span>
+						</span>
+					}
+				</div>
+			}
+		}
+	</button>
+}
+
+func pctOf(part, whole float64) float64 {
+	if whole <= 0 {
+		return 0
+	}
+	return part / whole * 100
+}
+
+// tagCurrencies is what a tag spent in each currency, e.g. "AED 1,200 · EGP
+// 3,000".
+func tagCurrencies(s *models.TagSummary) string {
+	out := ""
+	for i, c := range s.ByCurrency {
+		if i > 0 {
+			out += " · "
+		}
+		out += c.Currency.Format(c.Amount)
+	}
+	return out
+}
+
+templ tagBudgetBar(s *models.TagSummary) {
+	{{ used := s.BudgetUsed() }}
+	<div>
+		<div class="h-2 rounded-full bg-zinc-800 overflow-hidden">
+			<div
+				class={ "h-full rounded-full", templ.KV("bg-red-400", s.OverBudget()), templ.KV("bg-(--accent)", !s.OverBudget()) }
+				style={ fmt.Sprintf("width: %.1f%%", min(used, 1)*100) }
+			></div>
+		</div>
+		<p class="sensitive mt-1.5 text-xs text-zinc-500 tabular-nums">
+			{ fmt.Sprintf("%.0f%%", used*100) } of { s.Currency.Format(s.Budget) }
+			if s.OverBudget() {
+				· <span class="text-red-300">{ s.Currency.Format(s.Spent - s.Budget) } over</span>
+			} else {
+				· { s.Currency.Format(s.Budget - s.Spent) } left
+			}
+		</p>
+	</div>
+}
+
+// TagDetails is a tag in full, in a drawer: what it spent per category, day
+// and currency, and its actions.
+templ TagDetails(s *models.TagSummary) {
+	{{ t := &s.Tag }}
+	{{ slot := "#" + components.DrawerSlot }}
+	@components.Drawer(components.DrawerProps{Label: t.Name + " details", URLParam: TagDetailsParam, URLValue: t.ID}) {
+		<div class="drawer-panel flex flex-col flex-1 min-h-0">
+			<header class="flex items-start gap-3 px-5 sm:px-6 pt-5 pb-4">
+				<div class="grid place-items-center shrink-0 w-11 h-11 rounded-xl" style={ fmt.Sprintf("color: %s; background-color: %s26", t.Hex(), t.Hex()) }>
+					@icons.Tag("20")
+				</div>
+				<div class="flex-1 min-w-0">
+					<h2 class="text-lg font-bold leading-snug break-words">{ t.Name }</h2>
+					<p class="text-sm text-zinc-400 truncate">
+						if d := tagDays(t); d != "" {
+							Trip · { d }
+						} else {
+							Tag
+						}
+						if t.IsArchived() {
+							· Archived
+						}
+					</p>
+				</div>
+				@components.DrawerClose()
+			</header>
+			<div class="flex-1 grid grid-cols-1 auto-rows-max content-start gap-6 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain">
+				<div class="grid gap-3">
+					<div>
+						<p class="sensitive text-3xl font-semibold font-(family-name:--font-biorhyme-expanded) tabular-nums break-words">{ s.Currency.Format(s.Spent) }</p>
+						<p class="text-sm text-zinc-500">
+							Spent over { fmt.Sprint(t.Txs) } { plural(t.Txs, "transaction", "transactions") }, refunds and reimbursements netted
+							if s.Partial {
+								· some currencies without a rate left out
+							}
+						</p>
+					</div>
+					if s.Budget > 0 {
+						@tagBudgetBar(s)
+					}
+				</div>
+				<div class="flex flex-wrap gap-2">
+					<a href={ templ.SafeURL(TagTxsURL(t.ID)) } class="txd-action">
+						@icons.Receipt("14")
+						Transactions
+					</a>
+					if t.IsTrip() && !t.IsArchived() {
+						<button type="button" hx-get={ fmt.Sprintf("/tags/%s/range", t.ID) } hx-target={ slot } hx-swap="innerHTML" class="txd-action">
+							@icons.Calendar("14")
+							Tag everything in its days
+						</button>
+					}
+					<button type="button" hx-get={ fmt.Sprintf("/tags/%s/edit", t.ID) } hx-target={ slot } hx-swap="innerHTML" class="txd-action">
+						@icons.Pencil("14")
+						Edit
+					</button>
+					<button
+						type="button"
+						hx-put={ fmt.Sprintf("/tags/%s/archive?archived=%t", t.ID, !t.IsArchived()) }
+						hx-target={ slot }
+						hx-swap="innerHTML"
+						class="txd-action"
+					>
+						@icons.Archive("14")
+						if t.IsArchived() {
+							Unarchive
+						} else {
+							Archive
+						}
+					</button>
+					<button
+						type="button"
+						hx-delete={ fmt.Sprintf("/tags/%s", t.ID) }
+						hx-swap="none"
+						hx-confirm={ fmt.Sprintf("Delete %q? Its transactions stay, untagged.", t.Name) }
+						data-confirm-label="Delete"
+						data-confirm-danger
+						class="txd-action"
+					>
+						@icons.Trash("14")
+						Delete
+					</button>
+				</div>
+				if t.Note != "" {
+					@txDetailsSection("Note") {
+						<div class="md-note">
+							@markdown.HTML(t.Note)
+						</div>
+					}
+				}
+				if len(s.ByCurrency) > 1 {
+					@txDetailsSection("By currency") {
+						<ul class="grid gap-1.5 text-sm">
+							for _, c := range s.ByCurrency {
+								<li class="flex justify-between gap-3">
+									<span>{ c.Currency.String }</span>
+									<span class="sensitive tabular-nums">{ c.Currency.Format(c.Amount) }</span>
+								</li>
+							}
+						</ul>
+					}
+				}
+				if len(s.ByCategory) > 0 {
+					@txDetailsSection("By category") {
+						<ul class="grid gap-2">
+							for _, c := range s.ByCategory {
+								@tagCategoryRow(s, c)
+							}
+						</ul>
+					}
+				}
+				if len(s.ByDay) > 0 {
+					@txDetailsSection("By day") {
+						@tagDaysChart(s)
+					}
+				}
+			</div>
+		</div>
+	}
+}
+
+templ tagCategoryRow(s *models.TagSummary, c models.TagCategorySpend) {
+	{{ name, hex, catID := "Uncategorized", models.CategoryColorToHex("gray"), models.TxFilterNone }}
+	if c.Category != nil {
+		{{ name, hex, catID = c.Category.Name, models.CategoryColorToHex(c.Category.Color), c.Category.ID }}
+	}
+	{{ top := s.ByCategory[0].Amount }}
+	<li class="grid grid-cols-[minmax(0,8rem)_1fr_auto] items-center gap-3 text-sm">
+		<a
+			href={ templ.SafeURL(fmt.Sprintf("%s&%s=%s", TagTxsURL(s.Tag.ID), models.TxFilterCategory, catID)) }
+			class="flex items-center gap-2 min-w-0 hover:underline"
+		>
+			<span class="size-2.5 shrink-0 rounded-full" style={ "background-color:" + hex }></span>
+			<span class="truncate">{ name }</span>
+		</a>
+		<div class="h-2 rounded-full bg-zinc-800/70">
+			if top > 0 && c.Amount > 0 {
+				<div class="h-full rounded-full" style={ fmt.Sprintf("width:%.2f%%;background-color:%s", c.Amount/top*100, hex) }></div>
+			}
+		</div>
+		<span class="text-right tabular-nums">
+			<span class="sensitive">{ s.Currency.Format(c.Amount) }</span>
+			<span class="inline-block w-9 text-zinc-500">{ fmt.Sprintf("%.0f%%", pctOf(c.Amount, s.Spent)) }</span>
+		</span>
+	</li>
+}
+
+// tagDaysChart is a bar per day the tag spent on, hovered (or scrubbed on
+// touch screens) for its amount.
+templ tagDaysChart(s *models.TagSummary) {
+	{{ top := s.MaxDay() }}
+	<div class="grid gap-1.5">
+		<div x-data="chartScrub" x-bind="scrub" class="flex items-end gap-0.5 h-28">
+			for _, d := range s.ByDay {
+				<div class="group relative flex-1 h-full flex items-end min-w-0">
+					<div
+						class="w-full rounded-t bg-(--accent)/70 group-hover:bg-(--accent) group-[.is-active]:bg-(--accent)"
+						style={ fmt.Sprintf("height: %.1f%%", tagBarHeight(d.Amount, top)) }
+					></div>
+					<div class="hidden group-hover:block group-[.is-active]:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-10 whitespace-nowrap rounded-lg bg-zinc-800 px-2 py-1 text-xs shadow">
+						{ d.Day.Format("Mon, Jan 2") } · <span class="sensitive">{ s.Currency.Format(d.Amount) }</span>
+					</div>
+				</div>
+			}
+		</div>
+		<div class="flex justify-between text-xs text-zinc-500">
+			<span>{ s.ByDay[0].Day.Format("Jan 2") }</span>
+			if len(s.ByDay) > 1 {
+				<span>{ s.ByDay[len(s.ByDay)-1].Day.Format("Jan 2") }</span>
+			}
+		</div>
+	</div>
+}
+
+func tagBarHeight(amount, top float64) float64 {
+	if top <= 0 || amount <= 0 {
+		return 0
+	}
+	return max(amount/top*100, 2)
+}
+
+templ CreateTagForm(fd *TagFD, curs []models.Currency, def *models.Currency) {
+	@form.SheetForm("New tag", "/tags", "Add tag", "") {
+		@tagFormBody("0", fd, curs, def)
+	}
+}
+
+// EditTag is the tag's edit form, in a drawer in place of its details.
+templ EditTag(id string, fd *TagFD, curs []models.Currency, def *models.Currency) {
+	@components.Drawer(components.DrawerProps{Label: "Edit tag"}) {
+		@EditTagForm(id, fd, curs, def)
+	}
+}
+
+// EditTagForm is EditTag's form alone, answered with its errors; Cancel goes
+// back to the details.
+templ EditTagForm(id string, fd *TagFD, curs []models.Currency, def *models.Currency) {
+	@form.DrawerForm(form.DrawerFormProps{
+		Title: "Edit tag", Method: "put", URL: fmt.Sprintf("/tags/%s", id),
+		Submit: "Save changes",
+		CancelClick: fmt.Sprintf("confirmDiscard().then((ok) => ok && htmx.ajax('GET', '%s', {target: '#%s', swap: 'innerHTML'}))",
+			tagDetailsURL(id), components.DrawerSlot),
+	}) {
+		@tagFormBody(id, fd, curs, def)
+	}
+}
+
+templ tagFormBody(id string, fd *TagFD, curs []models.Currency, def *models.Currency) {
+	@form.Field("Name", "name", id, icons.Pencil("15"), fd.Name.Error) {
+		@form.Control("text", "name", "e.g. Dubai trip", id, fd.Name, templ.Attributes{"maxlength": "40"})
+	}
+	@form.SelectCategoryColor("color", id, fd.Color)
+	<div class="grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-800/20 p-4">
+		<div>
+			<p class="text-zinc-300">Trip days</p>
+			<p class="text-sm text-zinc-500">Optional. With them, tag everything in its days at once.</p>
+		</div>
+		<div class="grid grid-cols-2 gap-3">
+			@form.Field("From", "starts_on", id, icons.Calendar("15"), fd.StartsOn.Error) {
+				@form.Control("text", "starts_on", "yyyy-mm-dd", id, fd.StartsOn, templ.Attributes{
+					"autocomplete": "off", "x-mask": "9999-99-99", "data-datepicker": true,
+				})
+			}
+			@form.Field("To", "ends_on", id, icons.Calendar("15"), fd.EndsOn.Error) {
+				@form.Control("text", "ends_on", "yyyy-mm-dd", id, fd.EndsOn, templ.Attributes{
+					"autocomplete": "off", "x-mask": "9999-99-99", "data-datepicker": true,
+				})
+			}
+		</div>
+		@form.Toggle("Tag new ones in its days", "auto_tag", id, icons.Zap("18"), fd.AutoTag, nil)
+		<p class="-mt-1 text-sm text-zinc-500">Transactions added in its days (by hand, SMS or CSV) get the tag, transfers and goals’ aside.</p>
+	</div>
+	<div class="grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-800/20 p-4">
+		<div>
+			<p class="text-zinc-300">Budget</p>
+			<p class="text-sm text-zinc-500">Optional. Leave the amount empty for no budget.</p>
+		</div>
+		@form.AmountInputsWithCurrency(fd.Budget, id, curs, def)
+	</div>
+	@form.Field("Note", "note", id, icons.StickyNote("15"), fd.Note.Error) {
+		@form.Textarea("note", "Anything to remember about it?", id, fd.Note, nil)
+		@form.MarkdownHint()
+	}
+	if fd.Error != "" {
+		<p role="alert" class="rounded-xl bg-red-400/10 px-4 py-3 text-sm text-red-300">{ fd.Error }</p>
+	}
+}
+
+// TagRange is the preview of tagging everything in a trip's days, in a
+// drawer in place of its details.
+templ TagRange(t *models.Tag, n int, totals []models.CurrencyAmount) {
+	@components.Drawer(components.DrawerProps{Label: "Tag " + t.Name + "'s days"}) {
+		@form.DrawerForm(form.DrawerFormProps{
+			Title: "Tag everything in its days", Method: "post", URL: fmt.Sprintf("/tags/%s/range", t.ID),
+			Target: "#" + components.DrawerSlot, Swap: "innerHTML",
+			Submit: fmt.Sprintf("Tag %d %s", n, plural(n, "transaction", "transactions")),
+			CancelClick: fmt.Sprintf("htmx.ajax('GET', '%s', {target: '#%s', swap: 'innerHTML'})",
+				tagDetailsURL(t.ID), components.DrawerSlot),
+		}) {
+			<p class="text-zinc-300">{ tagDays(t) }</p>
+			if n == 0 {
+				<p class="text-sm text-zinc-400">Every transaction in its days is tagged already.</p>
+			} else {
+				<p class="text-sm text-zinc-400">
+					{ fmt.Sprint(n) } { plural(n, "transaction isn't", "transactions aren't") } tagged with { t.Name } yet. Transfers between your accounts, balance corrections, goals’ money and loan payments are left out.
+				</p>
+				<ul class="grid gap-1.5 text-sm">
+					for _, c := range totals {
+						<li class="flex justify-between gap-3">
+							<span class="text-zinc-400">Moved in { c.Currency.String }</span>
+							<span class="sensitive tabular-nums">{ c.Currency.Format(c.Amount) }</span>
+						</li>
+					}
+				</ul>
+			}
+		}
+	}
+}

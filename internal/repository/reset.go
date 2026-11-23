@@ -44,6 +44,7 @@ func (r *Repository) Reset(ctx context.Context, opts models.ResetOptions) error 
 			{opts.Has(models.ResetCounterparties), qtx.ResetDeleteCounterparties},
 			{opts.Has(models.ResetItems), qtx.ResetDeleteItems},
 			{opts.Has(models.ResetItems), qtx.ResetDeleteItemCategories},
+			{opts.Has(models.ResetTags), qtx.ResetDeleteTags},
 			{opts.Has(models.ResetDevices), qtx.ResetDeleteDevices},
 		}
 		for _, s := range steps {

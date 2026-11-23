@@ -19,6 +19,9 @@ func (r *Repository) CreateBoughtForMe(ctx context.Context, expense, debt *model
 		if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, expense); err != nil {
 			return err
 		}
+		if err := autoTagWithTxn(ctx, qtx, expense); err != nil {
+			return err
+		}
 		if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, debt); err != nil {
 			return err
 		}

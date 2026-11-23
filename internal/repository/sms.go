@@ -207,6 +207,8 @@ func (r *Repository) createIngestedTransactionWithTxn(ctx context.Context, qtx *
 		*tx = *occ
 	} else if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, tx); err != nil {
 		return err
+	} else if err := autoTagWithTxn(ctx, qtx, tx); err != nil {
+		return err
 	}
 	_, err = r.pairTransferWithTxn(ctx, qtx, tx)
 	return err
