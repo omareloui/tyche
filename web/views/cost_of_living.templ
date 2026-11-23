@@ -103,10 +103,7 @@ type ColData struct {
 templ CostOfLiving(claims *jwt.AccessClaims, balances []models.Balance, d *ColData) {
 	@layouts.Main(claims, "Cost of living", balances) {
 		@components.Container() {
-			<a href="/tools" class="inline-flex items-center gap-1 mb-2 text-sm text-zinc-400 hover:text-zinc-200">
-				@icons.ArrowLeft("14")
-				Tools
-			</a>
+			@toolCrumbs("cost-of-living", false)
 			@components.MainHeader("Cost of living")
 			<div class="grid gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:items-start">
 				@colForm(d)

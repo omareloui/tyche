@@ -1,79 +1,359 @@
 package views
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/web/views/icons"
 	"github.com/omareloui/tyche/web/views/layouts"
 )
 
-// toolCard is a calculator on the tools page.
-type toolCard struct {
-	Href, Title, Text string
-	Icon              templ.Component
+// toolGroup is a section of the tools page.
+type toolGroup struct {
+	Key, Title, Text string
+	Icon             templ.Component
+}
+
+// tool is a calculator on the tools page.
+type tool struct {
+	Key, Group, Href, Title, Text string
+	// Keywords are matched by the search on top of the title, text and group.
+	Keywords string
+	Icon     templ.Component
 	// Tint colors the icon's tile.
 	Tint string
+	// Links are the tool's other pages (e.g. a comparison).
+	Links []toolLink
 }
 
-var toolCards = []toolCard{
+// toolLink is another page of a tool.
+type toolLink struct {
+	Href, Title string
+	Icon        templ.Component
+}
+
+// toolGroups are the tools page's sections, in order. A new tool goes in
+// one of them (or a new one) in toolCatalog.
+var toolGroups = []toolGroup{
+	{Key: "pay", Title: "Pay & taxes", Text: "What a salary comes to after tax.", Icon: icons.Wallet("16")},
+	{Key: "abroad", Title: "Moving abroad", Text: "What another country costs, and whether you can go.", Icon: icons.Globe("16")},
+	{Key: "plan", Title: "Planning ahead", Text: "Your money over the years.", Icon: icons.Clock("16")},
+}
+
+var toolCatalog = []tool{
 	{
-		Href:  "/tools/cost-of-living",
-		Title: "Cost of living",
-		Text:  "What living like you do now would cost in another country or city, weighed by your own spending.",
-		Icon:  icons.Globe("22"),
-		Tint:  "bg-sky-400/15 text-sky-300",
+		Key:      "salary",
+		Group:    "pay",
+		Href:     "/tools/salary",
+		Title:    "Salary: gross to net",
+		Text:     "What a salary takes home after income tax and social contributions, or the gross a take-home pay needs.",
+		Keywords: "income tax net gross take home pay brackets social insurance bonus job offer",
+		Icon:     icons.Calculator("22"),
+		Tint:     "bg-emerald-400/15 text-emerald-300",
+		Links:    []toolLink{{Href: "/tools/salary/compare", Title: "Compare offers", Icon: icons.Scale("13")}},
 	},
 	{
-		Href:  "/tools/salary",
-		Title: "Salary: gross to net",
-		Text:  "What a salary takes home after income tax and social contributions, the other way round, and job offers of different countries side by side.",
-		Icon:  icons.Calculator("22"),
-		Tint:  "bg-emerald-400/15 text-emerald-300",
+		Key:      "cost-of-living",
+		Group:    "abroad",
+		Href:     "/tools/cost-of-living",
+		Title:    "Cost of living",
+		Text:     "What living like you do now would cost in another country or city, weighed by your own spending.",
+		Keywords: "relocate move city country prices rent ppp purchasing power",
+		Icon:     icons.Globe("22"),
+		Tint:     "bg-sky-400/15 text-sky-300",
 	},
 	{
-		Href:  "/tools/inflation",
-		Title: "Inflation",
-		Text:  "What an amount of a past year is worth today, by the country's consumer prices.",
-		Icon:  icons.TrendingUp("22"),
-		Tint:  "bg-amber-400/15 text-amber-300",
+		Key:      "visa",
+		Group:    "abroad",
+		Href:     "/tools/visa",
+		Title:    "Visa readiness",
+		Text:     "Whether your income and savings meet a visa's requirements (nomad, work, student, passive income) and what's missing.",
+		Keywords: "immigration residence permit nomad work student golden blue card relocate move",
+		Icon:     icons.Passport("22"),
+		Tint:     "bg-violet-400/15 text-violet-300",
+		Links:    []toolLink{{Href: "/tools/visa/compare", Title: "Compare visas", Icon: icons.Scale("13")}},
 	},
 	{
-		Href:  "/tools/fire",
-		Title: "FIRE",
-		Text:  "When your savings could pay for your life (financial independence, retire early), its lean, fat, coast and barista flavors, and how likely the money lasts.",
-		Icon:  icons.Flame("22"),
-		Tint:  "bg-orange-400/15 text-orange-300",
+		Key:      "fire",
+		Group:    "plan",
+		Href:     "/tools/fire",
+		Title:    "FIRE",
+		Text:     "When your savings could pay for your life, its lean, fat, coast and barista flavors, and how likely the money lasts.",
+		Keywords: "financial independence retire early retirement invest portfolio withdrawal",
+		Icon:     icons.Flame("22"),
+		Tint:     "bg-orange-400/15 text-orange-300",
 	},
 	{
-		Href:  "/tools/visa",
-		Title: "Visa readiness",
-		Text:  "Whether your income and savings meet a visa's requirements (nomad, work, student, passive income), what's missing, and visas side by side.",
-		Icon:  icons.Passport("22"),
-		Tint:  "bg-violet-400/15 text-violet-300",
+		Key:      "inflation",
+		Group:    "plan",
+		Href:     "/tools/inflation",
+		Title:    "Inflation",
+		Text:     "What an amount of a past year is worth today, by the country's consumer prices.",
+		Keywords: "prices cpi buying power value money past year",
+		Icon:     icons.TrendingUp("22"),
+		Tint:     "bg-amber-400/15 text-amber-300",
 	},
 }
 
-// Tools lists the helper calculators.
+// toolsRecentMax is how many tools "Recently used" keeps.
+const toolsRecentMax = 4
+
+func toolByKey(key string) (tool, bool) {
+	for _, t := range toolCatalog {
+		if t.Key == key {
+			return t, true
+		}
+	}
+	return tool{}, false
+}
+
+func toolGroupByKey(key string) toolGroup {
+	for _, g := range toolGroups {
+		if g.Key == key {
+			return g
+		}
+	}
+	return toolGroup{}
+}
+
+func toolsOf(group string) []tool {
+	var ts []tool
+	for _, t := range toolCatalog {
+		if t.Group == group {
+			ts = append(ts, t)
+		}
+	}
+	return ts
+}
+
+// toolSearch is what the page's search matches a tool against.
+func toolSearch(t tool) string {
+	parts := []string{t.Title, t.Text, t.Keywords, toolGroupByKey(t.Group).Title}
+	for _, l := range t.Links {
+		parts = append(parts, l.Title)
+	}
+	return strings.ToLower(strings.Join(parts, " "))
+}
+
+func toolGroupAnchor(key string) string { return "tools-" + key }
+
+// toolsPageData filters the tools by search (data-search) and group
+// (data-group), and keeps the recently used ones (localStorage toolsRecent,
+// written by toolCrumbs).
+const toolsPageData = `{
+	q: '',
+	group: '',
+	recent: [],
+	init() {
+		const known = [...this.$root.querySelectorAll('[data-tool]')].map(el => el.dataset.tool)
+		try {
+			const saved = JSON.parse(localStorage.getItem('toolsRecent') || '[]')
+			if (Array.isArray(saved)) this.recent = saved.filter(k => known.includes(k))
+		} catch {}
+		const g = location.hash.replace(/^#tools-/, '')
+		if (this.$root.querySelector('[data-section="' + CSS.escape(g) + '"]')) this.group = g
+	},
+	matches(el) {
+		const q = this.q.trim().toLowerCase()
+		return (!this.group || el.dataset.group === this.group) && (!q || q.split(/\s+/).every(w => el.dataset.search.includes(w)))
+	},
+	anyIn(section) {
+		this.q
+		this.group
+		return [...section.querySelectorAll('[data-tool]')].some(el => this.matches(el))
+	},
+	any() {
+		this.q
+		this.group
+		return [...this.$root.querySelectorAll('[data-tool]')].some(el => this.matches(el))
+	},
+	pick(g) {
+		this.group = this.group === g ? '' : g
+		history.replaceState(history.state, '', this.group ? '#tools-' + this.group : location.pathname + location.search)
+	},
+	// openFirst opens the first tool the search shows.
+	openFirst() {
+		const el = [...this.$root.querySelectorAll('[data-tool]')].find(el => this.matches(el))
+		el?.querySelector('a[data-main]')?.click()
+	},
+}`
+
+// toolVisitJS records a visit to a tool as the most recent one.
+func toolVisitJS(key string) string {
+	return fmt.Sprintf(`try {
+	const k = %q
+	let r = JSON.parse(localStorage.getItem('toolsRecent') || '[]')
+	if (!Array.isArray(r)) r = []
+	localStorage.setItem('toolsRecent', JSON.stringify([k, ...r.filter(x => x !== k)].slice(0, %d)))
+} catch {}`, key, toolsRecentMax)
+}
+
+// Tools lists the helper calculators by group.
 templ Tools(claims *jwt.AccessClaims, balances []models.Balance) {
 	@layouts.WithTitle(claims, "Tools", balances) {
-		<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-			for _, t := range toolCards {
-				<a
-					href={ templ.SafeURL(t.Href) }
-					class="group flex gap-4 p-5 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800 transition-colors hover:ring-zinc-600 focus-visible:outline-2 focus-visible:outline-sky-400"
-				>
-					<span class={ "grid place-items-center shrink-0 w-12 h-12 rounded-2xl", t.Tint }>
-						@t.Icon
-					</span>
-					<span class="grid gap-1 min-w-0">
-						<span class="flex items-center gap-1.5 font-semibold text-zinc-100">
+		<div
+			x-data={ toolsPageData }
+			@keydown.slash.window="if (!$event.target.closest('input, textarea, select, [contenteditable]')) { $event.preventDefault(); $refs.q.focus(); $refs.q.select() }"
+			class="grid gap-6"
+		>
+			<div class="grid gap-3">
+				<label class="flex items-center gap-3 h-12 px-4 rounded-2xl border-2 border-zinc-700 bg-zinc-800/40 focus-within:border-zinc-400 transition-colors">
+					@icons.Search("20", &templ.Attributes{"class": "text-zinc-500 shrink-0"})
+					<input
+						type="search"
+						x-ref="q"
+						x-model="q"
+						@keydown.escape.prevent="q ? q = '' : $el.blur()"
+						@keydown.enter.prevent="openFirst()"
+						autocomplete="off"
+						enterkeyhint="go"
+						placeholder="Search tools"
+						aria-label="Search tools"
+						class="flex-1 min-w-0 bg-transparent outline-none placeholder:text-zinc-500 [&::-webkit-search-cancel-button]:hidden"
+					/>
+					<kbd class="hidden sm:grid place-items-center shrink-0 w-6 h-6 rounded border border-zinc-600 text-xs text-zinc-500">/</kbd>
+				</label>
+				<div role="group" aria-label="Filter by group" class="flex gap-2 -mx-4 px-4 overflow-x-auto [scrollbar-width:none] sm:flex-wrap sm:mx-0 sm:px-0">
+					<button
+						type="button"
+						@click="pick('')"
+						:aria-pressed="!group"
+						:class="!group ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-800/60 text-zinc-400 hover:text-white'"
+						class="shrink-0 h-8 px-3 rounded-full text-sm font-medium transition-colors cursor-pointer"
+					>All</button>
+					for _, g := range toolGroups {
+						<button
+							type="button"
+							@click={ fmt.Sprintf("pick('%s')", g.Key) }
+							:aria-pressed={ fmt.Sprintf("group === '%s'", g.Key) }
+							:class={ fmt.Sprintf("group === '%s' ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-800/60 text-zinc-400 hover:text-white'", g.Key) }
+							class="inline-flex items-center gap-1.5 shrink-0 h-8 px-3 rounded-full text-sm font-medium transition-colors cursor-pointer"
+						>
+							@g.Icon
+							{ g.Title }
+							<span class="text-xs opacity-60 tabular-nums">{ fmt.Sprint(len(toolsOf(g.Key))) }</span>
+						</button>
+					}
+				</div>
+			</div>
+			<section x-show="recent.length && !q.trim() && !group" x-cloak aria-labelledby="tools-recent-title" class="grid gap-2">
+				<h2 id="tools-recent-title" class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+					@icons.Clock("13")
+					Recently used
+				</h2>
+				<div class="flex gap-2 -mx-4 px-4 overflow-x-auto [scrollbar-width:none] sm:flex-wrap sm:mx-0 sm:px-0">
+					for _, t := range toolCatalog {
+						<a
+							href={ templ.SafeURL(t.Href) }
+							x-show={ fmt.Sprintf("recent.includes('%s')", t.Key) }
+							:style={ fmt.Sprintf("'order:' + recent.indexOf('%s')", t.Key) }
+							class="inline-flex items-center gap-2 shrink-0 h-10 pl-1.5 pr-3.5 rounded-full bg-zinc-800/60 ring-1 ring-zinc-800 text-sm text-zinc-200 transition-colors hover:ring-zinc-600 focus-visible:outline-2 focus-visible:outline-sky-400"
+						>
+							<span class={ "grid place-items-center w-7 h-7 rounded-full [&>svg]:w-4 [&>svg]:h-4", t.Tint }>
+								@t.Icon
+							</span>
 							{ t.Title }
-							@icons.ArrowRight("14", &templ.Attributes{"class": "text-zinc-500 transition-transform group-hover:translate-x-0.5"})
-						</span>
-						<span class="text-sm text-zinc-400">{ t.Text }</span>
-					</span>
-				</a>
+						</a>
+					}
+				</div>
+			</section>
+			for _, g := range toolGroups {
+				if ts := toolsOf(g.Key); len(ts) > 0 {
+					<section
+						id={ toolGroupAnchor(g.Key) }
+						data-section={ g.Key }
+						x-show="anyIn($el)"
+						aria-labelledby={ toolGroupAnchor(g.Key) + "-title" }
+						class="grid gap-3 scroll-mt-20"
+					>
+						<header class="flex items-baseline justify-between gap-3">
+							<div class="min-w-0">
+								<h2 id={ toolGroupAnchor(g.Key) + "-title" } class="flex items-center gap-2 font-semibold text-zinc-100">
+									<span class="text-zinc-500">
+										@g.Icon
+									</span>
+									{ g.Title }
+								</h2>
+								<p class="text-sm text-zinc-500">{ g.Text }</p>
+							</div>
+						</header>
+						<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+							for _, t := range ts {
+								@toolCardView(t)
+							}
+						</div>
+					</section>
+				}
 			}
+			<p x-show="!any()" x-cloak class="py-10 text-center text-zinc-500">
+				No tool matches
+				<span class="text-zinc-300" x-text="'“' + q.trim() + '”'"></span>
+				<button type="button" @click="q = ''; group = ''; $refs.q.focus()" class="ml-1 underline underline-offset-2 cursor-pointer hover:text-zinc-300">Show all</button>
+			</p>
 		</div>
+	}
+}
+
+// toolCardView is a tool's card: the whole card opens it, its other pages
+// are links of their own on top.
+templ toolCardView(t tool) {
+	<div
+		data-tool={ t.Key }
+		data-group={ t.Group }
+		data-search={ toolSearch(t) }
+		x-show="matches($el)"
+		class="group relative flex gap-4 p-5 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800 transition-colors hover:ring-zinc-600 has-[a[data-main]:focus-visible]:outline-2 has-[a[data-main]:focus-visible]:outline-sky-400"
+	>
+		<span class={ "grid place-items-center shrink-0 w-12 h-12 rounded-2xl", t.Tint }>
+			@t.Icon
+		</span>
+		<span class="grid content-start gap-1 min-w-0">
+			<a href={ templ.SafeURL(t.Href) } data-main class="flex items-center gap-1.5 font-semibold text-zinc-100 outline-none after:absolute after:inset-0 after:rounded-3xl">
+				{ t.Title }
+				@icons.ArrowRight("14", &templ.Attributes{"class": "text-zinc-500 transition-transform group-hover:translate-x-0.5"})
+			</a>
+			<span class="text-sm text-zinc-400">{ t.Text }</span>
+			if len(t.Links) > 0 {
+				<span class="flex flex-wrap gap-1.5 mt-2">
+					for _, l := range t.Links {
+						<a
+							href={ templ.SafeURL(l.Href) }
+							class="relative z-10 inline-flex items-center gap-1 h-7 px-2.5 rounded-full bg-zinc-800 text-xs text-zinc-300 ring-1 ring-zinc-700 transition-colors hover:text-white hover:ring-zinc-500"
+						>
+							@l.Icon
+							{ l.Title }
+						</a>
+					}
+				</span>
+			}
+		</span>
+	</div>
+}
+
+// toolCrumbs leads back from a tool's page: Tools › its group, or Tools ›
+// the tool from one of its other pages (sub). It records the visit for the
+// tools page's "Recently used".
+templ toolCrumbs(key string, sub bool) {
+	if t, ok := toolByKey(key); ok {
+		<nav aria-label="Breadcrumb" x-data x-init={ toolVisitJS(key) } class="mb-2">
+			<ol class="flex flex-wrap items-center gap-1 text-sm text-zinc-400">
+				<li>
+					<a href="/tools" class="inline-flex items-center gap-1 hover:text-zinc-200">
+						@icons.ArrowLeft("14")
+						Tools
+					</a>
+				</li>
+				<li aria-hidden="true" class="text-zinc-600">/</li>
+				<li>
+					if sub {
+						<a href={ templ.SafeURL(t.Href) } class="hover:text-zinc-200">{ t.Title }</a>
+					} else {
+						<a href={ templ.SafeURL("/tools#" + toolGroupAnchor(t.Group)) } class="hover:text-zinc-200">{ toolGroupByKey(t.Group).Title }</a>
+					}
+				</li>
+			</ol>
+		</nav>
 	}
 }

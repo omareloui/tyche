@@ -127,10 +127,7 @@ type VisaData struct {
 templ VisaCalc(claims *jwt.AccessClaims, balances []models.Balance, d *VisaData) {
 	@layouts.Main(claims, "Visa readiness", balances) {
 		@components.Container() {
-			<a href="/tools" class="inline-flex items-center gap-1 mb-2 text-sm text-zinc-400 hover:text-zinc-200">
-				@icons.ArrowLeft("14")
-				Tools
-			</a>
+			@toolCrumbs("visa", false)
 			<div class="flex flex-wrap items-start justify-between gap-3">
 				@components.MainHeader("Visa readiness")
 				<div class="flex flex-wrap gap-2 mb-6">

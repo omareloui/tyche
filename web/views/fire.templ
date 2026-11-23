@@ -83,10 +83,7 @@ type FireData struct {
 templ FireCalc(claims *jwt.AccessClaims, balances []models.Balance, d *FireData) {
 	@layouts.Main(claims, "FIRE", balances) {
 		@components.Container() {
-			<a href="/tools" class="inline-flex items-center gap-1 mb-2 text-sm text-zinc-400 hover:text-zinc-200">
-				@icons.ArrowLeft("14")
-				Tools
-			</a>
+			@toolCrumbs("fire", false)
 			<div x-data="{ fireHelp: false }">
 				@components.PageHeader("FIRE") {
 					<button

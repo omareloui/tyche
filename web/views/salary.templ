@@ -116,10 +116,7 @@ func (d *SalaryData) pays() int {
 templ SalaryCalc(claims *jwt.AccessClaims, balances []models.Balance, d *SalaryData) {
 	@layouts.Main(claims, "Salary calculator", balances) {
 		@components.Container() {
-			<a href="/tools" class="inline-flex items-center gap-1 mb-2 text-sm text-zinc-400 hover:text-zinc-200">
-				@icons.ArrowLeft("14")
-				Tools
-			</a>
+			@toolCrumbs("salary", false)
 			<div class="flex flex-wrap items-start justify-between gap-3">
 				@components.MainHeader("Salary calculator")
 				<div class="flex flex-wrap gap-2 mb-6">

@@ -54,10 +54,7 @@ func visaToolURL(d *VisaCompareData, it VisaCompareItem) string {
 templ VisaCompare(claims *jwt.AccessClaims, balances []models.Balance, d *VisaCompareData) {
 	@layouts.Main(claims, "Compare visas", balances) {
 		@components.Container() {
-			<a href="/tools/visa" class="inline-flex items-center gap-1 mb-2 text-sm text-zinc-400 hover:text-zinc-200">
-				@icons.ArrowLeft("14")
-				Visa readiness
-			</a>
+			@toolCrumbs("visa", true)
 			@components.MainHeader("Compare visas")
 			<div id="visa-compare-body">
 				@VisaCompareBody(d)

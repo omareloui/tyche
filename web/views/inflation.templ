@@ -60,10 +60,7 @@ type InflationData struct {
 templ InflationCalc(claims *jwt.AccessClaims, balances []models.Balance, d *InflationData) {
 	@layouts.Main(claims, "Inflation", balances) {
 		@components.Container() {
-			<a href="/tools" class="inline-flex items-center gap-1 mb-2 text-sm text-zinc-400 hover:text-zinc-200">
-				@icons.ArrowLeft("14")
-				Tools
-			</a>
+			@toolCrumbs("inflation", false)
 			@components.MainHeader("Inflation")
 			<div class="grid gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:items-start">
 				@inflationForm(d)

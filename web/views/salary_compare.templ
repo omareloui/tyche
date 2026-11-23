@@ -109,10 +109,7 @@ func SalaryCompareURL(d *SalaryCompareData) string {
 templ SalaryCompare(claims *jwt.AccessClaims, balances []models.Balance, d *SalaryCompareData) {
 	@layouts.Main(claims, "Compare offers", balances) {
 		@components.Container() {
-			<a href="/tools/salary" class="inline-flex items-center gap-1 mb-2 text-sm text-zinc-400 hover:text-zinc-200">
-				@icons.ArrowLeft("14")
-				Salary calculator
-			</a>
+			@toolCrumbs("salary", true)
 			@components.MainHeader("Compare offers")
 			<div id="salary-compare-body">
 				@SalaryCompareBody(d)
