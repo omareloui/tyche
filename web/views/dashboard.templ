@@ -548,7 +548,7 @@ templ DashNetWorth(s *models.AccountsSummary) {
 				<a href="/accounts" class="text-sm text-violet-300 hover:underline">Add an account →</a>
 			</div>
 		} else {
-			<div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+			<div class="relative flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
 				<p>
 					<span class={ "sensitive text-2xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)", templ.KV("text-red-400", s.Shown() < 0) }>{ s.Currency.Format(s.Shown()) }</span>
 					<span class="text-sm text-zinc-500">
