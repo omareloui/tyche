@@ -26,23 +26,7 @@ var heatLevelClasses = [models.HeatmapLevels]string{
 templ DashHeatmap(hm *models.SpendingHeatmap) {
 	<div id="dash-heatmap" class="h-full">
 		@components.GlassCard("grid content-start gap-4 p-5 sm:p-6", "bg-rose-400/10") {
-			<div class="flex flex-wrap items-center justify-between gap-3">
-				<h2 class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-rose-300">
-					@icons.Clock("14")
-					When you spend
-				</h2>
-				<div class="flex flex-wrap items-center gap-2">
-					@accSegmented("Color by") {
-						@accSegment(heatmapLink(hm.Months, models.HeatmapByAmount), "Amount", "Color by the amount spent", hm.Metric == models.HeatmapByAmount)
-						@accSegment(heatmapLink(hm.Months, models.HeatmapByCount), "Count", "Color by the number of transactions", hm.Metric == models.HeatmapByCount)
-					}
-					@accSegmented("Range") {
-						for _, m := range models.HeatmapRanges {
-							@accSegment(heatmapLink(m, hm.Metric), heatmapRangeLabel(m), heatmapRangeTitle(m), hm.Months == m)
-						}
-					}
-				</div>
-			</div>
+			@heatmapHeader(models.HeatmapWeek, hm.Months, hm.Metric)
 			if hm.Total == 0 {
 				<p class="py-10 text-center text-zinc-400">No spending in this range</p>
 			} else {
@@ -77,11 +61,37 @@ templ DashHeatmap(hm *models.SpendingHeatmap) {
 	</div>
 }
 
+// heatmapHeader is the card's title and its view, metric and range
+// toggles.
+templ heatmapHeader(view models.HeatmapView, months int, metric models.HeatmapMetric) {
+	<div class="flex flex-wrap items-center justify-between gap-3">
+		<h2 class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-rose-300">
+			@icons.Clock("14")
+			When you spend
+		</h2>
+		<div class="flex flex-wrap items-center gap-2">
+			@accSegmented("View") {
+				@accSegment(heatmapLink(models.HeatmapWeek, months, metric), "Week", "Weekdays by hours", view == models.HeatmapWeek)
+				@accSegment(heatmapLink(models.HeatmapMonth, months, metric), "Month", "Days of your months", view == models.HeatmapMonth)
+			}
+			@accSegmented("Color by") {
+				@accSegment(heatmapLink(view, months, models.HeatmapByAmount), "Amount", "Color by the amount spent", metric == models.HeatmapByAmount)
+				@accSegment(heatmapLink(view, months, models.HeatmapByCount), "Count", "Color by the number of transactions", metric == models.HeatmapByCount)
+			}
+			@accSegmented("Range") {
+				for _, m := range models.HeatmapRanges {
+					@accSegment(heatmapLink(view, m, metric), heatmapRangeLabel(m), heatmapRangeTitle(m), months == m)
+				}
+			}
+		</div>
+	</div>
+}
+
 // heatmapLink is the attributes of a button re-rendering the heatmap with
-// months and metric.
-func heatmapLink(months int, metric models.HeatmapMetric) templ.Attributes {
+// view, months and metric.
+func heatmapLink(view models.HeatmapView, months int, metric models.HeatmapMetric) templ.Attributes {
 	return templ.Attributes{
-		"hx-get":    fmt.Sprintf("/dashboard/heatmap?months=%d&by=%s", months, metric),
+		"hx-get":    fmt.Sprintf("/dashboard/heatmap?view=%s&months=%d&by=%s", view, months, metric),
 		"hx-target": "#dash-heatmap",
 		"hx-swap":   "outerHTML",
 	}
@@ -162,27 +172,7 @@ templ heatmapCell(hm *models.SpendingHeatmap, wd time.Weekday, col models.HeatCo
 				heatLevelClasses[level],
 			}
 		></div>
-		<div
-			class={
-				"absolute hidden group-hover:block group-focus:block group-[.is-active]:block z-10 pointer-events-none",
-				templ.KV("top-full mt-1", row < 3),
-				templ.KV("bottom-full mb-1", row >= 3),
-				templ.KV("left-0", c < cols/4),
-				templ.KV("right-0", c >= cols-cols/4),
-				templ.KV("left-1/2 -translate-x-1/2", c >= cols/4 && c < cols-cols/4),
-			}
-		>
-			<div class="glass-tooltip">
-				<p class="text-zinc-400">{ shortWeekday(wd) } { col.RangeLabel() } · { heatTxCount(cell.Count) }</p>
-				if cell.Count > 0 || cell.Refunded > 0 {
-					<p class="sensitive text-rose-300 tabular-nums">{ hm.Currency.Format(cell.Amount) }</p>
-					if cell.Refunded > 0 {
-						<p class="text-xs text-emerald-400 tabular-nums"><span class="sensitive">{ hm.Currency.Format(cell.Refunded) }</span> refunded</p>
-					}
-					@heatmapCategories(hm, cell)
-				}
-			</div>
-		</div>
+		@heatTooltip(&hm.HeatScale, hm.Currency, shortWeekday(wd)+" "+col.RangeLabel(), cell, row, 7, c, cols)
 	</div>
 }
 
@@ -210,8 +200,35 @@ templ heatmapWeekdays(hm *models.SpendingHeatmap) {
 	</ul>
 }
 
+// heatTooltip is a cell's tooltip, titled title: its count, amount,
+// refunds and top categories. It opens below the cell in the top half of
+// rows, above it below, and aligned with the grid's edges at its sides.
+templ heatTooltip(hm *models.HeatScale, cur models.Currency, title string, cell models.HeatCell, row, rows, c, cols int) {
+	<div
+		class={
+			"absolute hidden group-hover:block group-focus:block group-[.is-active]:block z-10 pointer-events-none",
+			templ.KV("top-full mt-1", row < (rows+1)/2),
+			templ.KV("bottom-full mb-1", row >= (rows+1)/2),
+			templ.KV("left-0", c < cols/4),
+			templ.KV("right-0", c >= cols-cols/4),
+			templ.KV("left-1/2 -translate-x-1/2", c >= cols/4 && c < cols-cols/4),
+		}
+	>
+		<div class="glass-tooltip">
+			<p class="text-zinc-400">{ title } · { heatTxCount(cell.Count) }</p>
+			if cell.Count > 0 || cell.Refunded > 0 {
+				<p class="sensitive text-rose-300 tabular-nums">{ cur.Format(cell.Amount) }</p>
+				if cell.Refunded > 0 {
+					<p class="text-xs text-emerald-400 tabular-nums"><span class="sensitive">{ cur.Format(cell.Refunded) }</span> refunded</p>
+				}
+				@heatmapCategories(hm, cur, cell)
+			}
+		</div>
+	</div>
+}
+
 // heatmapCategories lists a cell's categories spending the most.
-templ heatmapCategories(hm *models.SpendingHeatmap, cell models.HeatCell) {
+templ heatmapCategories(hm *models.HeatScale, cur models.Currency, cell models.HeatCell) {
 	{{ top, more := hm.TopCategories(cell, models.HeatmapTopCategories) }}
 	if len(top) > 0 {
 		<ul class="grid gap-0.5 pt-1 mt-1 border-t border-white/10 text-xs">
@@ -223,7 +240,7 @@ templ heatmapCategories(hm *models.SpendingHeatmap, cell models.HeatCell) {
 						if hm.Metric == models.HeatmapByCount {
 							{ heatTxCount(c.Count) }
 						} else {
-							<span class="sensitive">{ hm.Currency.Format(c.Amount) }</span>
+							<span class="sensitive">{ cur.Format(c.Amount) }</span>
 						}
 					</span>
 				</li>
@@ -261,4 +278,120 @@ func heatTxCount(n int) string {
 
 func shortWeekday(wd time.Weekday) string {
 	return wd.String()[:3]
+}
+
+// DashMonthDaysHeatmap is when money goes out across the user's months: a
+// row per month, a column per day since its start (payday first), and All
+// summing them, colored on its own scale.
+templ DashMonthDaysHeatmap(hm *models.MonthDaysHeatmap) {
+	<div id="dash-heatmap" class="h-full">
+		@components.GlassCard("grid content-start gap-4 p-5 sm:p-6", "bg-rose-400/10") {
+			@heatmapHeader(models.HeatmapMonth, hm.Months, hm.Metric)
+			if hm.Total == 0 {
+				<p class="py-10 text-center text-zinc-400">No spending in this range</p>
+			} else {
+				@monthDaysSummary(hm)
+				@monthDaysGrid(hm)
+				<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-zinc-500">
+					<p>
+						Columns are days of your months
+						if len(hm.Rows) > 1 {
+							· All has its own colors
+						}
+					</p>
+					@heatmapLegend()
+				</div>
+				if hm.Partial {
+					<p class="text-xs text-amber-300">Some rates are unavailable, those amounts aren’t counted.</p>
+				}
+			}
+		}
+	</div>
+}
+
+// monthDaysSummary is the busiest day of the month and the busiest day.
+templ monthDaysSummary(hm *models.MonthDaysHeatmap) {
+	<p class="flex flex-wrap gap-x-4 gap-y-1 text-sm text-zinc-400">
+		if len(hm.Rows) > 1 {
+			if k, ok := hm.BusiestColumn(); ok {
+				<span>Busiest day of the month <span class="font-semibold text-zinc-100">{ ordinal(hm.ColumnLabel(k)) }</span></span>
+			}
+		}
+		if day, ok := hm.Peak(); ok {
+			<span>Peak <span class="font-semibold text-zinc-100">{ day.Format("Mon, Jan 2") }</span></span>
+		}
+	</p>
+}
+
+// monthDaysGrid is the months (rows) by their days, then All; each grid
+// scrubbed in two dimensions on touch. Days a shorter month lacks are empty
+// placeholders keeping the cells row by row.
+templ monthDaysGrid(hm *models.MonthDaysHeatmap) {
+	{{ cols := hm.Columns() }}
+	{{ gridCols := fmt.Sprintf("grid-template-columns:repeat(%d,minmax(0,1fr))", cols) }}
+	{{ rowsMax := hm.RowsMax() }}
+	<div class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-px sm:gap-y-1">
+		<div class="grid gap-px sm:gap-1 text-xs text-zinc-500">
+			for _, row := range hm.Rows {
+				<span class="flex items-center h-5 sm:h-6" title={ row.Period.RangeLabel() }>{ row.Period.Month.Format("Jan") }</span>
+			}
+		</div>
+		<div
+			x-data="chartScrub"
+			x-bind="scrub"
+			data-scrub-cols={ strconv.Itoa(cols) }
+			class="grid gap-px sm:gap-1 touch-pan-y"
+			style={ gridCols }
+		>
+			for r, row := range hm.Rows {
+				for k := range cols {
+					if !hm.Has(r, k) {
+						<div aria-hidden="true"></div>
+					} else if hm.IsAhead(r, k) {
+						<div aria-hidden="true" class="h-5 sm:h-6 rounded-[3px] sm:rounded-[4px] bg-zinc-800/25"></div>
+					} else {
+						@monthDayCell(&hm.HeatScale, hm.Currency, hm.Date(r, k).Format("Mon, Jan 2"), row.Days[k], hm.Level(row.Days[k], rowsMax), hm.IsToday(r, k), r, len(hm.Rows), k, cols)
+					}
+				}
+			}
+		</div>
+		if len(hm.Rows) > 1 {
+			{{ allMax := hm.AllMax() }}
+			<span class="flex items-center h-5 sm:h-6 mt-1.5 text-xs text-zinc-400" title="Every month, per day">All</span>
+			<div
+				x-data="chartScrub"
+				x-bind="scrub"
+				class="grid gap-px sm:gap-1 mt-1.5 touch-pan-y"
+				style={ gridCols }
+			>
+				for k, cell := range hm.All {
+					@monthDayCell(&hm.HeatScale, hm.Currency, fmt.Sprintf("The %s · %d months", ordinal(hm.ColumnLabel(k)), len(hm.Rows)), cell, hm.Level(cell, allMax), false, 1, 1, k, cols)
+				}
+			</div>
+		}
+		<span></span>
+		<div class="grid gap-px sm:gap-1 text-[10px] text-zinc-500 tabular-nums" style={ gridCols }>
+			for k := range cols {
+				<span
+					class={
+						templ.KV("hidden sm:inline", k%5 != 0 && k%2 == 0),
+						templ.KV("invisible", k%5 != 0 && k%2 != 0),
+					}
+				>{ strconv.Itoa(hm.ColumnLabel(k)) }</span>
+			}
+		</div>
+	</div>
+}
+
+templ monthDayCell(hm *models.HeatScale, cur models.Currency, title string, cell models.HeatCell, level int, today bool, row, rows, c, cols int) {
+	<div tabindex="0" class="group relative h-5 sm:h-6 outline-none">
+		<div
+			class={
+				"absolute inset-0 rounded-[3px] sm:rounded-[4px] transition-shadow group-hover:ring-2 group-focus:ring-2 group-[.is-active]:ring-2 ring-white/70",
+				heatLevelClasses[level],
+				templ.KV("outline outline-offset-1 outline-rose-200/70", today),
+			}
+		></div>
+		@heatTooltip(hm, cur, title, cell, row, rows, c, cols)
+	</div>
 }

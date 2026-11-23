@@ -14,25 +14,56 @@ import (
 // current one included) per weekday and hour of loc, in def at today's
 // rates.
 func (r *Repository) GetSpendingHeatmap(ctx context.Context, months int, metric models.HeatmapMetric, def *models.Currency, loc *time.Location, weekStart time.Weekday) (*models.SpendingHeatmap, error) {
+	sp, err := r.getHeatmapSpending(ctx, months, def)
+	if err != nil {
+		return nil, err
+	}
+	hm := models.NewSpendingHeatmap(*def, metric, months, sp.from, sp.to, weekStart, loc, sp.txs, sp.partial)
+	hm.SetCategories(sp.cats)
+	return hm, nil
+}
+
+// GetMonthDaysHeatmap is the spending of the last months user months (the
+// current one included) per day of each, a day being loc's, in def at
+// today's rates.
+func (r *Repository) GetMonthDaysHeatmap(ctx context.Context, months int, metric models.HeatmapMetric, def *models.Currency, loc *time.Location) (*models.MonthDaysHeatmap, error) {
+	sp, err := r.getHeatmapSpending(ctx, months, def)
+	if err != nil {
+		return nil, err
+	}
+	hm := models.NewMonthDaysHeatmap(monthStartFromCtx(ctx), *def, metric, months, sp.from, sp.to, r.userToday(ctx), loc, sp.txs, sp.partial)
+	hm.SetCategories(sp.cats)
+	return hm, nil
+}
+
+// heatmapSpending is what both heatmaps are made of.
+type heatmapSpending struct {
+	from, to time.Time
+	txs      []models.SpendingTime
+	partial  bool
+	cats     []models.Category
+}
+
+// getHeatmapSpending is the spending of the last months user months, in
+// def, and the categories naming it.
+func (r *Repository) getHeatmapSpending(ctx context.Context, months int, def *models.Currency) (*heatmapSpending, error) {
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	from, to := models.HeatmapPeriod(monthStartFromCtx(ctx), time.Now(), months)
-	rows, err := q.GetSpendingTimes(ctx, queries.GetSpendingTimesParams{FromDate: from, ToDate: to})
+	sp := &heatmapSpending{}
+	sp.from, sp.to = models.HeatmapPeriod(monthStartFromCtx(ctx), r.userToday(ctx), months)
+	rows, err := q.GetSpendingTimes(ctx, queries.GetSpendingTimesParams{FromDate: sp.from, ToDate: sp.to})
 	if err != nil {
 		logger.FromCtx(ctx).Error("querying spending times", zap.Error(err))
 		return nil, err
 	}
-	txs, partial := spendingTimes(rows, def)
-	cats, err := r.GetCategories(ctx)
-	if err != nil {
+	sp.txs, sp.partial = spendingTimes(rows, def)
+	if sp.cats, err = r.GetCategories(ctx); err != nil {
 		return nil, err
 	}
-	hm := models.NewSpendingHeatmap(*def, metric, months, from, to, weekStart, loc, txs, partial)
-	hm.SetCategories(cats)
-	return hm, nil
+	return sp, nil
 }
 
 // spendingTimes are rows in def, partial when a currency had no rate.

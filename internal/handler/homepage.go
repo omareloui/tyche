@@ -207,23 +207,28 @@ func (h *Handler) DashboardAccounts(w http.ResponseWriter, r *http.Request) (tem
 }
 
 // DashboardHeatmap is when the spending of the last ?months= user months
-// went out, per weekday and hour, colored by ?by= (amount or count).
+// went out, colored by ?by= (amount or count): per weekday and hour, or per
+// day of the user's months with ?view=month.
 func (h *Handler) DashboardHeatmap(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	ctx := r.Context()
 	claims := getClaims(ctx)
 	q := r.URL.Query()
+	months := models.ParseHeatmapMonths(q.Get("months"))
+	metric := models.ParseHeatmapMetric(q.Get("by"))
+
+	if models.ParseHeatmapView(q.Get("view")) == models.HeatmapMonth {
+		hm, err := h.repo.GetMonthDaysHeatmap(ctx, months, metric, &claims.DefaultCurrency, claims.Location())
+		if err != nil {
+			return nil, err
+		}
+		return views.DashMonthDaysHeatmap(hm), nil
+	}
 
 	tz := claims.Timezone
 	if tz == "" {
 		tz = models.DefaultTimezone
 	}
-	hm, err := h.repo.GetSpendingHeatmap(ctx,
-		models.ParseHeatmapMonths(q.Get("months")),
-		models.ParseHeatmapMetric(q.Get("by")),
-		&claims.DefaultCurrency,
-		claims.Location(),
-		countries.WeekStartOfTimezone(tz),
-	)
+	hm, err := h.repo.GetSpendingHeatmap(ctx, months, metric, &claims.DefaultCurrency, claims.Location(), countries.WeekStartOfTimezone(tz))
 	if err != nil {
 		return nil, err
 	}

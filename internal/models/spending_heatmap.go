@@ -30,6 +30,24 @@ const HeatmapLevels = 5
 // the grid.
 const heatmapNightEnd = 7
 
+// HeatmapView is what the heatmap's grid is.
+type HeatmapView string
+
+const (
+	// HeatmapWeek is weekdays × hours.
+	HeatmapWeek HeatmapView = "week"
+	// HeatmapMonth is the user's months × their days.
+	HeatmapMonth HeatmapView = "month"
+)
+
+// ParseHeatmapView is v's view, the week when unknown.
+func ParseHeatmapView(v string) HeatmapView {
+	if HeatmapView(v) == HeatmapMonth {
+		return HeatmapMonth
+	}
+	return HeatmapWeek
+}
+
 // HeatmapMetric is what the heatmap colors by.
 type HeatmapMetric string
 
@@ -142,11 +160,19 @@ type HeatCategoryShare struct {
 	HeatSpend
 }
 
+// HeatScale is what both heatmaps color their cells by and the names of
+// their categories.
+type HeatScale struct {
+	Metric HeatmapMetric
+	// Categories name the cells' categories by ID.
+	Categories map[string]HeatCategory
+}
+
 // SpendingHeatmap is when money went out: per weekday × hour of the user's
 // time zone.
 type SpendingHeatmap struct {
+	HeatScale
 	Currency Currency
-	Metric   HeatmapMetric
 	// Months is how many user months it covers, From to To (exclusive).
 	Months   int
 	From, To time.Time
@@ -162,12 +188,10 @@ type SpendingHeatmap struct {
 	Timed, Total int
 	// Partial is when a currency had no rate, its spending left out.
 	Partial bool
-	// Categories name the cells' categories by ID.
-	Categories map[string]HeatCategory
 }
 
 // SetCategories names the cells' categories from cats.
-func (hm *SpendingHeatmap) SetCategories(cats []Category) {
+func (hm *HeatScale) SetCategories(cats []Category) {
 	hm.Categories = make(map[string]HeatCategory, len(cats))
 	for _, c := range cats {
 		hm.Categories[c.ID] = HeatCategory{Name: c.Name, Color: c.Color}
@@ -177,7 +201,7 @@ func (hm *SpendingHeatmap) SetCategories(cats []Category) {
 // TopCategories are c's categories spending the most (by the metric),
 // at most n, and how many more there are. Categories netting to nothing or
 // less (refunds) are left out.
-func (hm *SpendingHeatmap) TopCategories(c HeatCell, n int) ([]HeatCategoryShare, int) {
+func (hm *HeatScale) TopCategories(c HeatCell, n int) ([]HeatCategoryShare, int) {
 	shares := make([]HeatCategoryShare, 0, len(c.Categories))
 	for id, s := range c.Categories {
 		if s.Amount <= 0 {
@@ -225,8 +249,8 @@ func SpendingLocalTime(t time.Time, loc *time.Location) (time.Time, bool) {
 // NewSpendingHeatmap buckets txs (in cur) into weekdays and hours of loc.
 func NewSpendingHeatmap(cur Currency, metric HeatmapMetric, months int, from, to time.Time, weekStart time.Weekday, loc *time.Location, txs []SpendingTime, partial bool) *SpendingHeatmap {
 	hm := &SpendingHeatmap{
+		HeatScale: HeatScale{Metric: metric},
 		Currency:  cur,
-		Metric:    metric,
 		Months:    months,
 		From:      from,
 		To:        to,
@@ -329,7 +353,7 @@ func (hm *SpendingHeatmap) Hour(col HeatColumn) HeatCell {
 }
 
 // Value is what the heatmap colors c by.
-func (hm *SpendingHeatmap) Value(c HeatCell) float64 {
+func (hm *HeatScale) Value(c HeatCell) float64 {
 	if hm.Metric == HeatmapByCount {
 		return float64(c.Count)
 	}
@@ -350,7 +374,7 @@ func (hm *SpendingHeatmap) Max(step int) float64 {
 // Level is c's color, 0 (nothing spent) to HeatmapLevels-1, against the max
 // value. Amounts are scaled by their square root so a few large ones don't
 // wash out the rest.
-func (hm *SpendingHeatmap) Level(c HeatCell, maxValue float64) int {
+func (hm *HeatScale) Level(c HeatCell, maxValue float64) int {
 	v := hm.Value(c)
 	if v <= 0 || maxValue <= 0 || c.Count == 0 {
 		return 0
@@ -372,7 +396,7 @@ func (hm *SpendingHeatmap) WeekdayMax() float64 {
 }
 
 // Pct is v's share of m, 0–100.
-func (hm *SpendingHeatmap) Pct(v, m float64) float64 {
+func (hm *HeatScale) Pct(v, m float64) float64 {
 	if m <= 0 || v <= 0 {
 		return 0
 	}

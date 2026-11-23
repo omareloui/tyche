@@ -62,7 +62,7 @@ func TestSpendingLocalTimeKeepsStoredZone(t *testing.T) {
 }
 
 func TestSpendingHeatmapLevelsAndColumns(t *testing.T) {
-	hm := &SpendingHeatmap{Metric: HeatmapByCount}
+	hm := &SpendingHeatmap{HeatScale: HeatScale{Metric: HeatmapByCount}}
 	hm.Cells[time.Monday][9] = HeatCell{HeatSpend: HeatSpend{Amount: 10, Count: 4}}
 	hm.Cells[time.Monday][10] = HeatCell{HeatSpend: HeatSpend{Amount: 10, Count: 1}}
 	hm.Hours[9] = HeatCell{HeatSpend: HeatSpend{Count: 4}}
