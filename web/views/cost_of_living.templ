@@ -188,20 +188,50 @@ templ colForm(d *ColData) {
 				@form.Control("text", "amount", "e.g. 30,000", "col", form.FDInput{Value: d.Form.Amount}, templ.Attributes{
 					"inputmode": "decimal", "autocomplete": "off", "x-mask:dynamic": "$money($input, '.', ',')",
 				})
-				<span class="shrink-0 text-sm text-zinc-400">{ d.Home.Currency }</span>
+				@colAmountCurrency(d, false)
 			</div>
-			<p class="mt-1 text-xs text-zinc-500">
-				switch d.AmountFrom {
-					case ColAmountSalary:
-						Your salary from <a href={ SettingsURL(SettingsWork) } class="underline hover:text-zinc-300">settings</a>, in { d.Home.Currency } at today's rate
-					case ColAmountSpending:
-						What you spend a month on average
-					default:
-						What you earn or spend a month where you live
-				}
-			</p>
+			@colAmountHint(d, false)
 		}
 	</form>
+}
+
+// colAmountCurrency is the amount's currency, home's: swapped out of band
+// by the result as home changes.
+templ colAmountCurrency(d *ColData, oob bool) {
+	<span
+		id="col-amount-cur"
+		if oob {
+			hx-swap-oob="true"
+		}
+		class="shrink-0 text-sm text-zinc-400"
+	>{ d.Home.Currency }</span>
+}
+
+templ colAmountHint(d *ColData, oob bool) {
+	<p
+		id="col-amount-hint"
+		if oob {
+			hx-swap-oob="true"
+		}
+		class="mt-1 text-xs text-zinc-500"
+	>
+		switch d.AmountFrom {
+			case ColAmountSalary:
+				Your salary from <a href={ SettingsURL(SettingsWork) } class="underline hover:text-zinc-300">settings</a>, in { d.Home.Currency } at today's rate
+			case ColAmountSpending:
+				What you spend a month on average
+			default:
+				What you earn or spend a month where you live
+		}
+	</p>
+}
+
+// ColResultSwap is the result answered to the form, with the amount's
+// currency and hint out of band (home may have changed).
+templ ColResultSwap(d *ColData) {
+	@ColResultBody(d)
+	@colAmountCurrency(d, true)
+	@colAmountHint(d, true)
 }
 
 // colFmt formats an amount with its currency code, whole units past 100.

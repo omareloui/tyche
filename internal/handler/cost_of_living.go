@@ -70,7 +70,7 @@ func (h Handler) CostOfLivingResult(w http.ResponseWriter, r *http.Request) (tem
 		return nil, err
 	}
 	w.Header().Set("HX-Replace-Url", views.CostOfLivingURL(d.Form))
-	return views.ColResultBody(d), nil
+	return views.ColResultSwap(d), nil
 }
 
 // EstimateCostOfLivingCity asks the AI for the cities' prices (the month's
@@ -92,11 +92,11 @@ func (h Handler) EstimateCostOfLivingCity(w http.ResponseWriter, r *http.Request
 	}
 	w.Header().Set("HX-Replace-Url", views.CostOfLivingURL(d.Form))
 	if d.Error != "" || d.Estimate != nil {
-		return views.ColResultBody(d), nil
+		return views.ColResultSwap(d), nil
 	}
 	if d.Market <= 0 {
 		d.Error = "There's no exchange rate between " + d.Home.Currency + " and " + d.Target.Currency + " to compare the cities with."
-		return views.ColResultBody(d), nil
+		return views.ColResultSwap(d), nil
 	}
 
 	in := colCityIn(d)
@@ -108,7 +108,7 @@ func (h Handler) EstimateCostOfLivingCity(w http.ResponseWriter, r *http.Request
 	var msg errScan
 	if errors.As(err, &msg) {
 		d.Error = msg.msg
-		return views.ColResultBody(d), nil
+		return views.ColResultSwap(d), nil
 	}
 	if err != nil {
 		return nil, err
@@ -116,7 +116,7 @@ func (h Handler) EstimateCostOfLivingCity(w http.ResponseWriter, r *http.Request
 
 	d.Estimate, d.NeedEstimate = e, false
 	h.fillColResult(d)
-	return views.ColResultBody(d), nil
+	return views.ColResultSwap(d), nil
 }
 
 // estimateCity asks the AI, within the tenant's monthly estimates, keeping
@@ -204,7 +204,7 @@ func (h Handler) SetColCategoryGroup(w http.ResponseWriter, r *http.Request) (te
 	if err != nil {
 		return nil, err
 	}
-	return views.ColResultBody(d), nil
+	return views.ColResultSwap(d), nil
 }
 
 func parseColForm(v url.Values) views.ColForm {

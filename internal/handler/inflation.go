@@ -39,7 +39,7 @@ func (h Handler) InflationCalc(w http.ResponseWriter, r *http.Request) (templ.Co
 func (h Handler) InflationCalcResult(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	d := inflationData(r.Context(), r.URL.Query(), time.Now(), false)
 	w.Header().Set("HX-Replace-Url", views.InflationURL(d.Form))
-	return views.InflationResultBody(d), nil
+	return views.InflationResultSwap(d), nil
 }
 
 func parseInflationYear(s string) int {

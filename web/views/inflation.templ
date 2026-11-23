@@ -118,7 +118,7 @@ templ inflationForm(d *InflationData) {
 				@form.Control("text", "amount", "e.g. 1,000", "infl", form.FDInput{Value: d.Form.Amount}, templ.Attributes{
 					"inputmode": "decimal", "autocomplete": "off", "x-mask:dynamic": "$money($input, '.', ',')",
 				})
-				<span class="shrink-0 text-sm text-zinc-400">{ d.Country.Currency }</span>
+				@inflationCurrency(d, false)
 			</div>
 		}
 		<div class="grid grid-cols-2 gap-3">
@@ -136,6 +136,25 @@ templ inflationForm(d *InflationData) {
 			}
 		</div>
 	</form>
+}
+
+// inflationCurrency is the amount's currency, swapped out of band by the
+// result as the country changes.
+templ inflationCurrency(d *InflationData, oob bool) {
+	<span
+		id="infl-amount-cur"
+		if oob {
+			hx-swap-oob="true"
+		}
+		class="shrink-0 text-sm text-zinc-400"
+	>{ d.Country.Currency }</span>
+}
+
+// InflationResultSwap is the result answered to the form, with the amount's
+// currency out of band.
+templ InflationResultSwap(d *InflationData) {
+	@InflationResultBody(d)
+	@inflationCurrency(d, true)
 }
 
 // InflationResultBody is what the form comes to.
