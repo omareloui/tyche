@@ -7,6 +7,7 @@ import (
 	"github.com/omareloui/tyche/internal/errs"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/resperr"
 	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views"
 	"github.com/omareloui/tyche/web/views/form"
@@ -95,20 +96,23 @@ func (h Handler) TxInputsSwitch(w http.ResponseWriter, r *http.Request) (templ.C
 	if err != nil {
 		return nil, err
 	}
+	if err := r.ParseForm(); err != nil {
+		return nil, resperr.New(http.StatusBadRequest, "invalid form")
+	}
+	// Swap the accounts (and their units) before parsing, then work the
+	// received amount out again as if the from account was picked.
+	if toAccId := r.Form.Get("to_account_id"); toAccId != "" {
+		accId := r.Form.Get("account_id")
+		r.Form.Set("account_id", toAccId)
+		r.Form.Set("to_account_id", accId)
+		unit, toUnit := r.Form.Get("amount_unit"), r.Form.Get("to_amount_unit")
+		r.Form.Set("amount_unit", toUnit)
+		r.Form.Set("to_amount_unit", unit)
+		r.Header.Set("Hx-Trigger", "account_id-"+r.PathValue("id"))
+	}
 	fd, err := h.parseTransactionAmountsAndKindFD(r, accs, knds)
 	if err != nil {
 		return nil, err
-	}
-
-	accId := fd.AccountIFD.AccountID.Value
-	toAccId := ""
-	if fd.ToAccountIFD != nil {
-		toAccId = fd.ToAccountIFD.AccountID.Value
-		fd.ToAccountIFD.AccountID.Value = accId
-		fd.AccountIFD.Unit, fd.ToAccountIFD.Unit = fd.ToAccountIFD.Unit, fd.AccountIFD.Unit
-	}
-	if toAccId != "" {
-		fd.AccountIFD.AccountID.Value = toAccId
 	}
 
 	claims := getClaims(r.Context())

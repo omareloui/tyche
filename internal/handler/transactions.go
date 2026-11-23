@@ -1081,7 +1081,9 @@ func (h Handler) parseTransactionAmountsAndKindFD(r *http.Request, accs []models
 		Kind: form.FDInput{Value: kindString},
 	}
 
-	trigger := r.Header.Get("Hx-Trigger")
+	// The field that changed: its id is "<name>-<form id>".
+	trigger := strings.TrimSuffix(r.Header.Get("Hx-Trigger"), "-"+r.PathValue("id"))
+	triggered := func(names ...string) bool { return slices.Contains(names, trigger) }
 
 	kind := models.GetTxKindFromString(kindString)
 
@@ -1095,8 +1097,8 @@ func (h Handler) parseTransactionAmountsAndKindFD(r *http.Request, accs []models
 		toAcc := slicesutils.Find(accs, func(a models.Account) bool { return a.ID == toAccId })
 
 		// Set to account
-		if toAccId == "" || strings.HasPrefix(trigger, "kind_id") ||
-			(strings.HasPrefix(trigger, "account_id") && toAccId == accId) {
+		if toAccId == "" || toAcc == nil || triggered("kind") ||
+			(triggered("account_id") && toAccId == accId) {
 			if nAcc := slicesutils.Find(accs, func(a models.Account) bool {
 				isDebtAcc := a.Kind.Enum == models.AccKindDebt
 				if a.ID == accId {
@@ -1112,8 +1114,8 @@ func (h Handler) parseTransactionAmountsAndKindFD(r *http.Request, accs []models
 			}
 		}
 
-		// Set from account
-		if strings.HasPrefix(trigger, "to_account_id") || toAccId == accId {
+		// Set from account, only when the picked to account is the same one
+		if toAccId == accId {
 			if nAcc := slicesutils.Find(accs, func(a models.Account) bool {
 				isDebtAcc := a.Kind.Enum == models.AccKindDebt
 				if a.ID == toAccId {
@@ -1130,18 +1132,18 @@ func (h Handler) parseTransactionAmountsAndKindFD(r *http.Request, accs []models
 		}
 
 		// Set to amount
-		if strings.HasPrefix(trigger, "amount") ||
-			strings.HasPrefix(trigger, "kind_id") ||
-			strings.HasPrefix(trigger, "to_account_id") ||
-			strings.HasPrefix(trigger, "account_id") {
+		if triggered("amount", "amount_unit", "kind", "account_id", "to_account_id", "to_amount_unit") {
+			// The rate is how much of the to currency one of the from is.
 			fxRate := 1.0
 			if acc != nil && toAcc != nil {
-				fxRate, _ = fxrate.GetFxRate(acc.Currency.String, toAcc.Currency.String)
+				if v, err := fxrate.GetFxRate(acc.Currency.String, toAcc.Currency.String); err == nil && v > 0 {
+					fxRate = v
+				}
 			}
 			amt, _ := parseFloatIfExists(fd.AccountIFD.Amount.Value)
 			amt = models.FromUnit(amt, acc.AmountUnit(fd.AccountIFD.Unit.Value))
 			toU := toAcc.AmountUnit(r.FormValue("to_amount_unit"))
-			toAmt = strconv.FormatFloat(models.ToUnit(amt/fxRate, toU), 'f', models.AmountDigits(toU), 64)
+			toAmt = strconv.FormatFloat(models.ToUnit(amt*fxRate, toU), 'f', models.AmountDigits(toU), 64)
 		}
 
 		fd.ToAccountIFD = &form.AccountIFD{

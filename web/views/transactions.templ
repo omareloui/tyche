@@ -932,6 +932,24 @@ func transferPairLikely(a, b *models.Transaction) bool {
 	})
 }
 
+// txAmountAttrs works a transfer's received amount out as the amount is
+// typed, swapping only that input: re-rendering the whole body would put
+// back the amount as it was when the request left, dropping what was typed
+// since.
+func txAmountAttrs(fd *TransactionAmountsAndKindFD, id string) templ.Attributes {
+	if fd.ToAccountIFD == nil {
+		return nil
+	}
+	sel := "#to_amount-" + id
+	return templ.Attributes{
+		"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
+		"hx-trigger": "input changed delay:250ms",
+		"hx-target":  sel,
+		"hx-select":  sel,
+		"hx-swap":    "outerHTML",
+	}
+}
+
 templ TransactionAmountsAndKindFormBody(
 	fd *TransactionAmountsAndKindFD, id string,
 	knds []models.TxKind, cats []models.Category,
@@ -944,7 +962,7 @@ templ TransactionAmountsAndKindFormBody(
 		class="contents"
 		hx-target="this"
 		hx-swap="outerHTML"
-		hx-sync="closest form:abort"
+		hx-sync="closest form:replace"
 	>
 		@form.SelectTxKind("kind", id, getTxKindsForAccounts(accs, knds), fd.Kind, onChange)
 		// One shrinkable column, so long account names truncate in their chips
@@ -952,10 +970,7 @@ templ TransactionAmountsAndKindFormBody(
 		<div class="grid grid-cols-1 justify-items-center gap-3 py-2">
 			{{ unit := txAccount(accs, fd.AccountIFD.AccountID.Value).AmountUnit(fd.AccountIFD.Unit.Value) }}
 			@form.HeroAmountInput("Amount", "amount", form.GetAccoutSym(accs, fd.AccountIFD.AccountID.Value, defaultCur),
-				models.AmountDigits(unit), id, fd.AccountIFD.Amount, templ.Attributes{
-					"hx-post":    fmt.Sprintf("/tx-inputs/%s", id),
-					"hx-trigger": "keyup changed delay:200ms",
-				})
+				models.AmountDigits(unit), id, fd.AccountIFD.Amount, txAmountAttrs(fd, id))
 			if unit != "" {
 				@form.MetalUnitToggle("amount_unit", id, unit, onChange)
 			}

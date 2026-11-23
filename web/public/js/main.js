@@ -64,8 +64,8 @@ document.addEventListener("htmx:confirm", (e) => {
 
 // Inputs re-rendered by the server as they're typed in (the amounts' keyup
 // posts, e.g. /tx-inputs) would get back the value sent once the answer
-// lands, losing what was typed meanwhile (hx-sync drops the requests of
-// those keystrokes while one is in flight). The text inputs of the target
+// lands, losing what was typed meanwhile (hx-sync aborts the older requests
+// of those keystrokes). The text inputs of the target
 // are noted when the request leaves; the ones typed in since keep their
 // value (and caret) through the swap, then fire their trigger again so
 // what the server derives from them (a transfer's received amount) follows.
