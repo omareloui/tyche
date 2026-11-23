@@ -83,6 +83,36 @@ func (d *Data) roll(iso3 string, year, now int) float64 {
 	return f
 }
 
+// Inflation is a country's consumer prices' change (%) per year, nil
+// without any. Read only.
+func (d *Data) Inflation(iso3 string) map[int]float64 {
+	if d == nil {
+		return nil
+	}
+	return d.inflation[iso3]
+}
+
+// InflationYears are the first and last years of a country's inflation, 0
+// without any.
+func (d *Data) InflationYears(iso3 string) (first, last int) {
+	for y := range d.Inflation(iso3) {
+		if first == 0 || y < first {
+			first = y
+		}
+		if y > last {
+			last = y
+		}
+	}
+	return first, last
+}
+
+// needsBackfill tells the stored inflation starts after inflationSince (kept
+// when it was later), so the job fetches the older years right away.
+func (d *Data) needsBackfill() bool {
+	first, _ := d.InflationYears(usISO3)
+	return first > inflationSince
+}
+
 // Has tells the country has price data.
 func (d *Data) Has(iso3 string) bool {
 	_, _, err := d.Prices(iso3, time.Now().Year())
@@ -227,12 +257,12 @@ func (j *Job) Trigger() bool {
 }
 
 // Run fetches the data every interval (right away when the stored ones are
-// older than that, or missing) and on Trigger, until ctx is done.
+// older than that, missing, or lack the older years of inflation) and on Trigger, until ctx is done.
 func (j *Job) Run(ctx context.Context) {
 	l := logger.Get()
 
 	wait := time.Duration(0)
-	if at := j.FetchedAt(ctx); !at.IsZero() {
+	if at := j.FetchedAt(ctx); !at.IsZero() && !Current().needsBackfill() {
 		wait = max(j.interval-time.Since(at), 0)
 	}
 

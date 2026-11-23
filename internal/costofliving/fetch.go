@@ -18,9 +18,9 @@ const (
 	fetchTimeout = 90 * time.Second
 	// maxBody caps a source's answer.
 	maxBody = 32 << 20
-	// inflationSince is the first year of inflation kept (the PPPs rolled
-	// are at most a few years old).
-	inflationSince = 2015
+	// inflationSince is the first year of inflation kept: the IMF's series
+	// start then, read back by the inflation calculator.
+	inflationSince = 1980
 )
 
 type sourceURLs struct {

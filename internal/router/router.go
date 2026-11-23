@@ -221,6 +221,8 @@ func New(h *handler.Handler) Router {
 	mux.Handle("GET /tools/cost-of-living/result", handle(h.CostOfLivingResult, middleware.HTMXOnly))
 	mux.Handle("POST /tools/cost-of-living/city", handle(h.EstimateCostOfLivingCity, middleware.HTMXOnly))
 	mux.Handle("PUT /tools/cost-of-living/categories/{id}", handle(h.SetColCategoryGroup, middleware.HTMXOnly))
+	mux.Handle("GET /tools/inflation", handle(h.InflationCalc))
+	mux.Handle("GET /tools/inflation/result", handle(h.InflationCalcResult, middleware.HTMXOnly))
 	mux.Handle("GET /tools/salary", handle(h.SalaryCalc))
 	mux.Handle("GET /tools/salary/body", handle(h.SalaryCalcBody, middleware.HTMXOnly))
 	mux.Handle("GET /tools/salary/result", handle(h.SalaryCalcResult, middleware.HTMXOnly))

@@ -60,7 +60,7 @@ func TestRunOnce(t *testing.T) {
 		icpEntry("DEU", "9060000", "0.8"),
 		icpEntry("USA", models.ColICPTotal, "1"),
 	}, ",") + `]}}`
-	imf := `{"values":{"PCPIPCH":{"EGY":{"2024":28,"2025":20,"2026":10,"1990":5},"USA":{"2025":2,"2026":2},"DEU":{"2025":2}}}}`
+	imf := `{"values":{"PCPIPCH":{"EGY":{"2024":28,"2025":20,"2026":10,"1975":5},"USA":{"2025":2,"2026":2},"DEU":{"2025":2}}}}`
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -142,5 +142,29 @@ func TestRunOnceAllFail(t *testing.T) {
 	}
 	if j.Status().LastErr == "" {
 		t.Error("last error not kept")
+	}
+}
+
+func TestInflationYears(t *testing.T) {
+	var none *Data
+	if none.Inflation("USA") != nil || none.needsBackfill() {
+		t.Error("nil data")
+	}
+	d := &Data{inflation: map[string]map[int]float64{
+		"USA": {2015: 1, 2016: 2, 2026: 3},
+		"EGY": {1980: 10, 1981: 11},
+	}}
+	if f, l := d.InflationYears("USA"); f != 2015 || l != 2026 {
+		t.Errorf("USA years = %d %d", f, l)
+	}
+	if f, l := d.InflationYears("FRA"); f != 0 || l != 0 {
+		t.Errorf("FRA years = %d %d", f, l)
+	}
+	if !d.needsBackfill() {
+		t.Error("data from 2015 need a backfill")
+	}
+	d.inflation["USA"][inflationSince] = 1
+	if d.needsBackfill() {
+		t.Error("data from inflationSince need none")
 	}
 }

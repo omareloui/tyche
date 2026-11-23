@@ -1,0 +1,350 @@
+package views
+
+import (
+	"fmt"
+	"math"
+	"net/url"
+	"strconv"
+
+	"github.com/omareloui/tyche/internal/countries"
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+// InflationForm is the inflation calculator's form, as in the query string.
+type InflationForm struct {
+	// Country is an ISO 3166 alpha-2 code.
+	Country  string
+	Amount   string
+	From, To string
+}
+
+// InflationURL is the calculator's page with the form.
+func InflationURL(f InflationForm) string {
+	v := url.Values{}
+	for k, s := range map[string]string{"country": f.Country, "amount": f.Amount, "from": f.From, "to": f.To} {
+		if s != "" {
+			v.Set(k, s)
+		}
+	}
+	if len(v) == 0 {
+		return "/tools/inflation"
+	}
+	return "/tools/inflation?" + v.Encode()
+}
+
+// InflationData is the calculator: its form and what it comes to.
+type InflationData struct {
+	Form InflationForm
+	// Countries are the ones with inflation data, Years the ones offered
+	// (latest first).
+	Countries []countries.Country
+	Years     []int
+	Country   countries.Country
+	// CountryFromTZ tells the country is the time zone's.
+	CountryFromTZ bool
+	Amount        float64
+	// NoData tells no inflation is loaded yet.
+	NoData bool
+	Result *models.InflationResult
+	// Estimated is the first year whose figures are the IMF's estimates.
+	Estimated int
+	Error     string
+}
+
+// InflationCalc is the inflation calculator.
+templ InflationCalc(claims *jwt.AccessClaims, balances []models.Balance, d *InflationData) {
+	@layouts.Main(claims, "Inflation", balances) {
+		@components.Container() {
+			<a href="/tools" class="inline-flex items-center gap-1 mb-2 text-sm text-zinc-400 hover:text-zinc-200">
+				@icons.ArrowLeft("14")
+				Tools
+			</a>
+			@components.MainHeader("Inflation")
+			<div class="grid gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:items-start">
+				@inflationForm(d)
+				<div id="infl-result" aria-live="polite">
+					@InflationResultBody(d)
+				</div>
+			</div>
+		}
+	}
+}
+
+func inflationCountryOptions(cs []countries.Country) []form.ComboOption {
+	opts := make([]form.ComboOption, len(cs))
+	for i, c := range cs {
+		opts[i] = form.ComboOption{Value: c.ISO2, Label: c.Name + " · " + c.Currency, Search: c.ISO2 + " " + c.ISO3 + " " + c.Currency}
+	}
+	return opts
+}
+
+func inflationYearOptions(ys []int) []form.ComboOption {
+	opts := make([]form.ComboOption, len(ys))
+	for i, y := range ys {
+		opts[i] = form.ComboOption{Value: strconv.Itoa(y), Label: strconv.Itoa(y)}
+	}
+	return opts
+}
+
+templ inflationForm(d *InflationData) {
+	<form
+		id="infl-form"
+		hx-get="/tools/inflation/result"
+		hx-trigger="input delay:500ms, change"
+		hx-target="#infl-result"
+		hx-swap="innerHTML"
+		hx-sync="this:replace"
+		@submit.prevent
+		class="grid gap-4 p-5 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800"
+	>
+		@form.Field("Country", "country", "infl", icons.Globe("15"), "") {
+			@form.Combobox(form.ComboboxProps{
+				Name: "country", ID: "infl", Label: "Country", Placeholder: "Pick a country",
+				Options: inflationCountryOptions(d.Countries), Data: form.FDInput{Value: d.Form.Country}, Searchable: true,
+			})
+			if d.CountryFromTZ {
+				<p class="mt-1 text-xs text-zinc-500">
+					From your time zone on <a href={ SettingsURL(SettingsRegion) } class="underline hover:text-zinc-300">settings</a>
+				</p>
+			}
+		}
+		@form.Field("Amount", "amount", "infl", icons.Coins("15"), "") {
+			<div class="flex items-center gap-2">
+				@form.Control("text", "amount", "e.g. 1,000", "infl", form.FDInput{Value: d.Form.Amount}, templ.Attributes{
+					"inputmode": "decimal", "autocomplete": "off", "x-mask:dynamic": "$money($input, '.', ',')",
+				})
+				<span class="shrink-0 text-sm text-zinc-400">{ d.Country.Currency }</span>
+			</div>
+		}
+		<div class="grid grid-cols-2 gap-3">
+			@form.Field("In", "from", "infl", icons.Calendar("15"), "") {
+				@form.Combobox(form.ComboboxProps{
+					Name: "from", ID: "infl", Label: "In", Placeholder: "Year",
+					Options: inflationYearOptions(d.Years), Data: form.FDInput{Value: d.Form.From}, Searchable: true,
+				})
+			}
+			@form.Field("Worth in", "to", "infl", icons.Calendar("15"), "") {
+				@form.Combobox(form.ComboboxProps{
+					Name: "to", ID: "infl", Label: "Worth in", Placeholder: "Year",
+					Options: inflationYearOptions(d.Years), Data: form.FDInput{Value: d.Form.To}, Searchable: true,
+				})
+			}
+		</div>
+	</form>
+}
+
+// InflationResultBody is what the form comes to.
+templ InflationResultBody(d *InflationData) {
+	switch  {
+		case d.NoData:
+			@inflationEmpty("The inflation data are being fetched: try again in a minute.")
+		case d.Error != "":
+			<p class="flex gap-2 p-4 rounded-2xl bg-red-500/10 ring-1 ring-red-500/30 text-sm text-red-200">
+				@icons.Warning("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
+				{ d.Error }
+			</p>
+		case d.Result == nil:
+			@inflationEmpty("Pick a country, an amount and the years.")
+		default:
+			@inflationResult(d)
+	}
+}
+
+templ inflationEmpty(text string) {
+	<div class="grid place-items-center gap-3 p-10 rounded-3xl ring-1 ring-dashed ring-zinc-800 text-center text-zinc-500">
+		@icons.TrendingUp("32")
+		<p class="max-w-xs text-sm">{ text }</p>
+	</div>
+}
+
+func inflationPct(v float64) string {
+	digits := 1
+	if math.Abs(v) >= 100 {
+		digits = 0
+	}
+	return strconv.FormatFloat(v, 'f', digits, 64) + "%"
+}
+
+templ inflationResult(d *InflationData) {
+	{{ res := d.Result }}
+	{{ cur := d.Country.Currency }}
+	<div class="grid gap-4">
+		@components.GlassCard("grid gap-5 p-5 sm:p-6", "bg-amber-400/10", "bg-rose-400/10") {
+			<div class="grid gap-1">
+				<p class="text-sm text-zinc-400">
+					{ colFmt(res.Amount, cur) } in { strconv.Itoa(res.From) } { "in " + d.Country.Name } is worth about
+				</p>
+				<p class="text-3xl sm:text-4xl font-bold tabular-nums text-zinc-50">{ colFmt(res.Worth, cur) }</p>
+				<p class="text-xs text-zinc-500">
+					{ "in " + strconv.Itoa(res.To) + "'s money" }
+					if res.To >= d.Estimated && d.Estimated > 0 {
+						(estimated)
+					}
+				</p>
+			</div>
+			if res.From != res.To {
+				<dl class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 border-t border-zinc-800">
+					<div class="grid gap-0.5">
+						<dt class="text-xs text-zinc-500">Prices changed</dt>
+						<dd class="font-semibold tabular-nums text-zinc-100">{ inflationSigned(res.Cumulative * 100) }</dd>
+					</div>
+					<div class="grid gap-0.5">
+						<dt class="text-xs text-zinc-500">On average a year</dt>
+						<dd class="font-semibold tabular-nums text-zinc-100">{ inflationSigned(res.AvgPct) }</dd>
+					</div>
+					<div class="grid gap-0.5">
+						if res.Back() {
+							<dt class="text-xs text-zinc-500">{ strconv.Itoa(res.To) + "'s money bought" }</dt>
+							<dd class="font-semibold tabular-nums text-zinc-100">{ inflationTimes(1 / (1 + res.Cumulative)) }</dd>
+						} else {
+							<dt class="text-xs text-zinc-500">Buying power lost</dt>
+							<dd class="font-semibold tabular-nums text-zinc-100">{ inflationPct(res.PowerLost * 100) }</dd>
+						}
+					</div>
+				</dl>
+				<p class="text-sm text-zinc-300">
+					if res.Back() {
+						{ fmt.Sprintf("What %s buys in %d took %s in %d.", colFmt(res.Amount, cur), res.From, colFmt(res.Worth, cur), res.To) }
+					} else {
+						{ fmt.Sprintf("What %s bought in %d costs %s in %d.", colFmt(res.Amount, cur), res.From, colFmt(res.Worth, cur), res.To) }
+					}
+				</p>
+			}
+		}
+		if len(res.Years) > 1 {
+			@inflationChart(d)
+			@inflationTable(d)
+		}
+		<p class="flex gap-2 text-xs text-zinc-500">
+			@icons.Info("14", &templ.Attributes{"class": "shrink-0 mt-px"})
+			<span>
+				IMF World Economic Outlook, consumer prices' yearly change (annual averages).
+				if d.Estimated > 0 {
+					{ fmt.Sprintf("Figures from %d on are the IMF's estimates.", d.Estimated) }
+				}
+				Amounts are in the country's money of today: older currencies (e.g. before the euro) are counted in it.
+			</span>
+		</p>
+	</div>
+}
+
+func inflationSigned(v float64) string {
+	if v > 0 {
+		return "+" + inflationPct(v)
+	}
+	return inflationPct(v)
+}
+
+func inflationTimes(v float64) string {
+	return strconv.FormatFloat(v, 'f', 2, 64) + "× as much"
+}
+
+func inflationRange(ys []models.InflationYear) (lo, hi float64) {
+	lo, hi = ys[0].Value, ys[0].Value
+	for _, y := range ys {
+		lo, hi = min(lo, y.Value), max(hi, y.Value)
+	}
+	return lo, hi
+}
+
+func inflationPoints(ys []models.InflationYear, lo, hi float64) string {
+	var b []byte
+	for i, y := range ys {
+		b = fmt.Appendf(b, "%.2f,%.2f ", itemChartX(i, len(ys)), itemChartY(y.Value, lo, hi))
+	}
+	return string(b)
+}
+
+// inflationChart draws the amount's value year by year, a tooltip per year.
+templ inflationChart(d *InflationData) {
+	{{ ys := d.Result.Years }}
+	{{ n := len(ys) }}
+	{{ lo, hi := inflationRange(ys) }}
+	{{ cur := d.Country.Currency }}
+	<div class="grid gap-2 p-4 rounded-2xl bg-zinc-800/30 ring-1 ring-zinc-800">
+		<div class="flex justify-between gap-3 text-xs text-zinc-500 tabular-nums">
+			<span>{ colFmt(hi, cur) }</span>
+			<span>Worth year by year</span>
+		</div>
+		<div class="relative h-36">
+			<svg viewBox="0 0 100 100" preserveAspectRatio="none" class="absolute inset-0 size-full overflow-visible" aria-hidden="true">
+				<polyline points={ inflationPoints(ys, lo, hi) } fill="none" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke" class="stroke-amber-400"></polyline>
+			</svg>
+			for _, i := range []int{0, n - 1} {
+				<span
+					aria-hidden="true"
+					class="absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-zinc-900 bg-amber-400"
+					style={ templ.SafeCSS(fmt.Sprintf("left:%.2f%%;top:%.2f%%;", itemChartX(i, n), itemChartY(ys[i].Value, lo, hi))) }
+				></span>
+			}
+			<div x-data="chartScrub" x-bind="scrub" class="absolute inset-0 flex touch-pan-y">
+				for i, y := range ys {
+					<div class="group relative flex-1 h-full">
+						<div class="absolute inset-y-0 left-1/2 border-l border-zinc-500/60 hidden group-hover:block group-[.is-active]:block"></div>
+						<div class={ "absolute bottom-full mb-1 hidden group-hover:block group-[.is-active]:block z-10 pointer-events-none", tooltipSide(i, n) }>
+							<div class="glass-tooltip whitespace-nowrap">
+								<p class="text-zinc-400">
+									{ strconv.Itoa(y.Year) }
+									if i > 0 {
+										{ " · " + inflationSigned(y.Pct) }
+									}
+									if d.Estimated > 0 && y.Year >= d.Estimated {
+										{ " · estimate" }
+									}
+								</p>
+								<p class="tabular-nums">{ colFmt(y.Value, cur) }</p>
+							</div>
+						</div>
+					</div>
+				}
+			</div>
+		</div>
+		<div class="flex justify-between gap-3 text-xs text-zinc-500 tabular-nums">
+			<span>{ strconv.Itoa(ys[0].Year) }</span>
+			<span>{ strconv.Itoa(ys[n-1].Year) }</span>
+		</div>
+	</div>
+}
+
+// inflationTable lists the years' rates, latest first, folded.
+templ inflationTable(d *InflationData) {
+	{{ ys := d.Result.Years }}
+	<details class="group rounded-2xl bg-zinc-800/30 ring-1 ring-zinc-800">
+		<summary class="flex items-center justify-between gap-3 px-4 py-3 cursor-pointer text-sm text-zinc-300 list-none">
+			Year by year
+			@icons.ChevronDown("16", &templ.Attributes{"class": "text-zinc-500 transition-transform group-open:rotate-180"})
+		</summary>
+		<table class="w-full text-sm tabular-nums">
+			<thead class="text-xs text-zinc-500">
+				<tr>
+					<th class="px-4 py-1 text-left font-normal">Year</th>
+					<th class="px-4 py-1 text-right font-normal">Prices</th>
+					<th class="px-4 py-1 text-right font-normal">Worth</th>
+				</tr>
+			</thead>
+			<tbody>
+				for i := len(ys) - 1; i >= 0; i-- {
+					<tr class="border-t border-zinc-800/60">
+						<td class="px-4 py-1.5 text-zinc-300">
+							{ strconv.Itoa(ys[i].Year) }
+							if d.Estimated > 0 && ys[i].Year >= d.Estimated {
+								<span class="ml-1 text-xs text-amber-300/80">est.</span>
+							}
+						</td>
+						<td class="px-4 py-1.5 text-right text-zinc-400">
+							if i > 0 {
+								{ inflationSigned(ys[i].Pct) }
+							}
+						</td>
+						<td class="px-4 py-1.5 text-right text-zinc-100">{ colFmt(ys[i].Value, d.Country.Currency) }</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	</details>
+}
