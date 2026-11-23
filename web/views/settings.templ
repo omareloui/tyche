@@ -41,6 +41,8 @@ type SettingsData struct {
 
 type SettingsProfileFD struct {
 	FirstName, LastName form.FDInput
+	// BirthYear is optional, for the FIRE calculator's ages.
+	BirthYear form.FDInput
 }
 
 type SettingsRegionFD struct {
@@ -170,7 +172,7 @@ templ settingsCard(d *SettingsData, card, title, desc string, icon templ.Compone
 }
 
 templ SettingsProfileCard(d *SettingsData) {
-	@settingsCard(d, SettingsProfile, "Profile", "Your name as Tyche shows it. Signing in again doesn't change it.",
+	@settingsCard(d, SettingsProfile, "Profile", "Your name as Tyche shows it. Signing in again doesn't change it. Your birth year is optional: the FIRE calculator tells your age with it.",
 		icons.User("18"), "bg-violet-400/10", nil) {
 		<div class="grid sm:grid-cols-2 gap-4">
 			@form.Field("First name", "first_name", "settings", nil, d.Profile.FirstName.Error) {
@@ -178,6 +180,11 @@ templ SettingsProfileCard(d *SettingsData) {
 			}
 			@form.Field("Last name", "last_name", "settings", nil, d.Profile.LastName.Error) {
 				@form.Control("text", "last_name", "", "settings", d.Profile.LastName, templ.Attributes{"autocomplete": "family-name"})
+			}
+			@form.Field("Birth year (optional)", "birth_year", "settings", nil, d.Profile.BirthYear.Error) {
+				@form.Control("text", "birth_year", "e.g. 1995", "settings", d.Profile.BirthYear, templ.Attributes{
+					"inputmode": "numeric", "autocomplete": "bday-year", "maxlength": "4",
+				})
 			}
 		</div>
 		if !d.Joined.IsZero() {

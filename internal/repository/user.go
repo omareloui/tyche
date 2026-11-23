@@ -121,6 +121,7 @@ func dbUserRowToUser(dbU queries.GetUserByOAuthIDRow) *models.User {
 	if dbU.SalaryCurrencyString.Valid {
 		u.SalaryCurrency = dbU.SalaryCurrencyString.String
 	}
+	u.BirthYear = int(dbU.User.BirthYear.Int64)
 	return u
 }
 
@@ -164,13 +165,18 @@ func (r *Repository) SetMonthStart(ctx context.Context, s models.MonthStart) err
 	return q.SetStartOfPeriod(ctx, int64(s.Day()))
 }
 
-// SetUserName sets the user's first and last name.
-func (r *Repository) SetUserName(ctx context.Context, first, last string) error {
+// SetUserProfile sets the user's first and last name and birth year (0 =
+// not set).
+func (r *Repository) SetUserProfile(ctx context.Context, first, last string, birthYear int) error {
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {
 		return err
 	}
-	return q.SetUserName(ctx, queries.SetUserNameParams{FirstName: first, LastName: last})
+	return q.SetUserProfile(ctx, queries.SetUserProfileParams{
+		FirstName: first,
+		LastName:  last,
+		BirthYear: sql.NullInt64{Int64: int64(birthYear), Valid: birthYear > 0},
+	})
 }
 
 // SetOnboarded records the user finished (or skipped) the onboarding.

@@ -1,0 +1,706 @@
+package views
+
+import (
+	"fmt"
+	"net/url"
+	"strconv"
+	"strings"
+
+	"github.com/omareloui/tyche/internal/jwt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+	"github.com/omareloui/tyche/web/views/layouts"
+)
+
+// FireForm is the FIRE calculator's form, as in the query string: an empty
+// amount is the user's own, an empty assumption its default.
+type FireForm struct {
+	Portfolio, Spending, Saving, PartTime string
+	// Return, SWR and Vol are percents.
+	Return, SWR, Vol string
+	RetireAge        string
+	// Excluded and Goals count the accounts out of the balance and the
+	// goals' in the portfolio.
+	Excluded, Goals bool
+}
+
+// FireURL is the calculator's page with the form.
+func FireURL(f FireForm) string {
+	v := url.Values{}
+	for k, s := range map[string]string{
+		"portfolio": f.Portfolio, "spending": f.Spending, "saving": f.Saving, "part_time": f.PartTime,
+		"return": f.Return, "swr": f.SWR, "vol": f.Vol, "retire_age": f.RetireAge,
+	} {
+		if s != "" {
+			v.Set(k, s)
+		}
+	}
+	if f.Excluded {
+		v.Set("excluded", "1")
+	}
+	if f.Goals {
+		v.Set("goals", "1")
+	}
+	if len(v) == 0 {
+		return "/tools/fire"
+	}
+	return "/tools/fire?" + v.Encode()
+}
+
+// Where the FIRE calculator's saving comes from when not typed.
+const (
+	FireSavingFromFlow   = "flow"
+	FireSavingFromSalary = "salary"
+)
+
+// FireData is the calculator: its form, the user's money it starts from
+// and what it comes to.
+type FireData struct {
+	Form     FireForm
+	Currency models.Currency
+	Money    *models.FireMoney
+	// PortfolioDef, SpendingDef and SavingDef are the user's own, taken when
+	// not typed; SavingFrom tells where the saving's comes from ("" = none).
+	PortfolioDef, SpendingDef, SavingDef float64
+	SavingFrom                           string
+	// FromData tells some amount is the user's own.
+	FromData bool
+	// BirthYear is the profile's (0 = not set), Age the user's this year.
+	BirthYear, Age int
+	// Inflation is the time zone's country's this year (a fraction, 0 when
+	// unknown).
+	Inflation        float64
+	InflationCountry string
+	Input            models.FireInput
+	Result           *models.FireResult
+	Sim              *models.FireSim
+	Error            string
+}
+
+// FireCalc is the FIRE calculator.
+templ FireCalc(claims *jwt.AccessClaims, balances []models.Balance, d *FireData) {
+	@layouts.Main(claims, "FIRE", balances) {
+		@components.Container() {
+			<a href="/tools" class="inline-flex items-center gap-1 mb-2 text-sm text-zinc-400 hover:text-zinc-200">
+				@icons.ArrowLeft("14")
+				Tools
+			</a>
+			<div x-data="{ fireHelp: false }">
+				@components.PageHeader("FIRE") {
+					<button
+						type="button"
+						@click="fireHelp = true"
+						class="inline-flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-full text-sm text-zinc-300 ring-1 ring-zinc-700 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white"
+					>
+						@icons.Info("15")
+						How it works
+					</button>
+				}
+				@fireHelpDrawer(d)
+			</div>
+			<div class="grid gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:items-start">
+				@fireForm(d)
+				<div id="fire-result" aria-live="polite">
+					@FireResultBody(d)
+				</div>
+			</div>
+		}
+	}
+}
+
+// fireAmountPlaceholder shows the user's own amount an empty input takes.
+func fireAmountPlaceholder(v float64) string {
+	return colFmt(v, "") + " (yours)"
+}
+
+func fireMonthsLabel(n int) string {
+	if n == 1 {
+		return "month"
+	}
+	return fmt.Sprintf("%d months", n)
+}
+
+templ fireForm(d *FireData) {
+	<form
+		id="fire-form"
+		hx-get="/tools/fire/result"
+		hx-trigger="input delay:500ms, change"
+		hx-target="#fire-result"
+		hx-swap="innerHTML"
+		hx-sync="this:replace"
+		@submit.prevent
+		class="grid gap-4 p-5 rounded-3xl bg-zinc-700/20 ring-1 ring-zinc-800 [--accent:var(--color-orange-400)]"
+	>
+		@form.Field("Invested and saved now", "portfolio", "fire", icons.Wallet("15"), "") {
+			@fireAmountInputWith(d, "portfolio", d.Form.Portfolio, "Empty = yours")
+			if d.Money != nil && (d.Money.Excluded > 0 || d.Money.Goals > 0) {
+				<div class="flex flex-wrap items-center gap-1.5 mt-2 text-xs">
+					<span class="text-zinc-500">Include</span>
+					if d.Money.Excluded > 0 {
+						@fireIncludeChip("excluded", "Not in balance", fmt.Sprintf("%d %s", d.Money.Excluded, plural(d.Money.Excluded, "account", "accounts")), d.Form.Excluded)
+					}
+					if d.Money.Goals > 0 {
+						@fireIncludeChip("goals", "Goals", fmt.Sprintf("%d %s", d.Money.Goals, plural(d.Money.Goals, "account", "accounts")), d.Form.Goals)
+					}
+				</div>
+			}
+			@firePortfolioHint(d, false)
+		}
+		@form.Field("Spending a month", "spending", "fire", icons.Coins("15"), "") {
+			@fireAmountInput(d, "spending", d.Form.Spending, d.SpendingDef)
+			if d.Money != nil && d.Money.Months() > 0 {
+				<p class="mt-1 text-xs text-zinc-500">{ "Empty: your average of the last " + fireMonthsLabel(d.Money.Months()) + "." }</p>
+			}
+		}
+		@form.Field("Saving a month", "saving", "fire", icons.PiggyBank("15"), "") {
+			@fireAmountInput(d, "saving", d.Form.Saving, d.SavingDef)
+			@fireSavingHint(d, false)
+		}
+		<details class="group rounded-2xl bg-zinc-800/30 ring-1 ring-zinc-800" open?={ d.Form.Return != "" || d.Form.SWR != "" || d.Form.Vol != "" || d.Form.RetireAge != "" || d.Form.PartTime != "" }>
+			<summary class="flex items-center justify-between gap-3 px-4 py-3 cursor-pointer text-sm text-zinc-300 list-none">
+				Assumptions
+				@icons.ChevronDown("16", &templ.Attributes{"class": "text-zinc-500 transition-transform group-open:rotate-180"})
+			</summary>
+			<div class="grid gap-4 px-4 pb-4">
+				<div class="grid grid-cols-2 gap-3">
+					@form.Field("Return a year", "return", "fire", nil, "") {
+						@firePctInput("return", d.Form.Return, "5")
+					}
+					@form.Field("Withdrawal rate", "swr", "fire", nil, "") {
+						@firePctInput("swr", d.Form.SWR, "4")
+					}
+				</div>
+				<p class="-mt-2 text-xs text-zinc-500">
+					The return is after inflation (real): every amount is in today's money.
+					if d.Inflation != 0 {
+						{ fmt.Sprintf("With %s's %s inflation, %s real is about %s before it.", d.InflationCountry, firePct(d.Inflation), firePct(d.Input.Return), firePct((1+d.Input.Return)*(1+d.Inflation)-1)) }
+					}
+				</p>
+				<div class="grid grid-cols-2 gap-3">
+					@form.Field("Volatility", "vol", "fire", nil, "") {
+						@firePctInput("vol", d.Form.Vol, "15")
+					}
+					@form.Field("Retire at (Coast)", "retire_age", "fire", nil, "") {
+						@form.Control("text", "retire_age", "65", "fire", form.FDInput{Value: d.Form.RetireAge}, templ.Attributes{
+							"inputmode": "numeric", "autocomplete": "off", "maxlength": "3",
+						})
+					}
+				</div>
+				@form.Field("Part-time income a month (Barista)", "part_time", "fire", nil, "") {
+					<div class="flex items-center gap-2">
+						@form.Control("text", "part_time", "e.g. 500", "fire", form.FDInput{Value: d.Form.PartTime}, templ.Attributes{
+							"inputmode": "decimal", "autocomplete": "off", "x-mask:dynamic": "$money($input, '.', ',')", "class": "input-field sensitive",
+						})
+						<span class="shrink-0 text-sm text-zinc-400">{ d.Currency.String }</span>
+					</div>
+				}
+			</div>
+		</details>
+		if d.BirthYear == 0 {
+			<p class="text-xs text-zinc-500">
+				Add your birth year on <a href={ SettingsURL(SettingsProfile) } class="underline hover:text-zinc-300">settings</a> to see your ages and the Coast FIRE.
+			</p>
+		}
+	</form>
+}
+
+// fireIncludeChip counts more accounts in the portfolio, a pill like the
+// accounts summary's Include ones, a checkbox of the form.
+templ fireIncludeChip(name, label, title string, on bool) {
+	<label
+		title={ title }
+		class="group flex items-center gap-1 rounded-full px-2.5 py-1 ring-1 cursor-pointer transition-colors ring-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 has-checked:ring-sky-400/60 has-checked:bg-sky-400/15 has-checked:text-sky-200 has-focus-visible:outline-2 has-focus-visible:outline-sky-400"
+	>
+		<input type="checkbox" name={ name } value="1" class="sr-only" checked?={ on }/>
+		@icons.Check("12", &templ.Attributes{"class": "hidden group-has-checked:block"})
+		@icons.Plus("12", &templ.Attributes{"class": "group-has-checked:hidden"})
+		{ label }
+	</label>
+}
+
+// firePortfolioHint tells what an empty portfolio counts, swapped out of
+// band by the result as the Include pills change.
+templ firePortfolioHint(d *FireData, oob bool) {
+	<p
+		id="fire-portfolio-hint"
+		if oob {
+			hx-swap-oob="true"
+		}
+		class="mt-1.5 text-xs text-zinc-500"
+	>
+		{ "Empty: " + firePortfolioWhat(d.Form) + ", " }
+		<span class="sensitive text-zinc-300">{ colFmt(d.PortfolioDef, d.Currency.String) }</span>.
+	</p>
+}
+
+func firePortfolioWhat(f FireForm) string {
+	switch {
+	case f.Excluded && f.Goals:
+		return "every account and the goals' money"
+	case f.Excluded:
+		return "every account (goals aside)"
+	case f.Goals:
+		return "your accounts in the balance and the goals' money"
+	}
+	return "your accounts in the balance"
+}
+
+templ fireAmountInput(d *FireData, name, value string, def float64) {
+	@fireAmountInputWith(d, name, value, fireAmountPlaceholder(def))
+}
+
+templ fireAmountInputWith(d *FireData, name, value, placeholder string) {
+	<div class="flex items-center gap-2">
+		@form.Control("text", name, placeholder, "fire", form.FDInput{Value: value}, templ.Attributes{
+			"inputmode": "decimal", "autocomplete": "off", "x-mask:dynamic": "$money($input, '.', ',')", "class": "input-field sensitive",
+		})
+		<span class="shrink-0 text-sm text-zinc-400">{ d.Currency.String }</span>
+	</div>
+}
+
+templ firePctInput(name, value, def string) {
+	<div class="flex items-center gap-2">
+		@form.Control("text", name, def, "fire", form.FDInput{Value: value}, templ.Attributes{
+			"inputmode": "decimal", "autocomplete": "off", "maxlength": "6",
+		})
+		<span class="shrink-0 text-sm text-zinc-400">%</span>
+	</div>
+}
+
+// fireSavingHint tells where an empty saving comes from, swapped out of band
+// by the result as the spending changes.
+templ fireSavingHint(d *FireData, oob bool) {
+	<p
+		id="fire-saving-hint"
+		if oob {
+			hx-swap-oob="true"
+		}
+		class="mt-1 text-xs text-zinc-500"
+	>
+		switch d.SavingFrom {
+			case FireSavingFromFlow:
+				Empty: your average income less the spending, <span class="sensitive text-zinc-300">{ colFmt(d.SavingDef, d.Currency.String) }</span>.
+			case FireSavingFromSalary:
+				Empty: your <a href={ SettingsURL(SettingsWork) } class="underline hover:text-zinc-300">salary</a> less the spending, <span class="sensitive text-zinc-300">{ colFmt(d.SavingDef, d.Currency.String) }</span>.
+			default:
+				No income recorded yet: type what you save, or set your <a href={ SettingsURL(SettingsWork) } class="underline hover:text-zinc-300">salary</a>.
+		}
+	</p>
+}
+
+// FireResultSwap is the result answered to the form, with the saving's hint
+// out of band.
+templ FireResultSwap(d *FireData) {
+	@FireResultBody(d)
+	@fireSavingHint(d, true)
+	@firePortfolioHint(d, true)
+	@fireHelpExample(d, true)
+}
+
+// FireResultBody is what the form comes to.
+templ FireResultBody(d *FireData) {
+	switch  {
+		case d.Error != "":
+			<p class="flex gap-2 p-4 rounded-2xl bg-red-500/10 ring-1 ring-red-500/30 text-sm text-red-200">
+				@icons.Warning("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
+				{ d.Error }
+			</p>
+		case d.Result == nil:
+			<div class="grid place-items-center gap-3 p-10 rounded-3xl ring-1 ring-dashed ring-zinc-800 text-center text-zinc-500">
+				@icons.Flame("32")
+				<p class="max-w-xs text-sm">No spending recorded yet: type what you spend a month.</p>
+			</div>
+		default:
+			@fireResult(d)
+	}
+}
+
+func firePct(v float64) string {
+	s := strconv.FormatFloat(v*100, 'f', 1, 64)
+	return strings.TrimSuffix(s, ".0") + "%"
+}
+
+// fireDuration is months as years and months.
+func fireDuration(months int) string {
+	y, m := months/12, months%12
+	var parts []string
+	if y > 0 {
+		parts = append(parts, fmt.Sprintf("%d %s", y, plural(y, "year", "years")))
+	}
+	if m > 0 {
+		parts = append(parts, fmt.Sprintf("%d %s", m, plural(m, "month", "months")))
+	}
+	if len(parts) == 0 {
+		return "now"
+	}
+	return strings.Join(parts, " and ")
+}
+
+// fireWhen is when a number is reached, with the age then.
+func fireWhen(months int, never bool, age int) string {
+	switch {
+	case never:
+		return fmt.Sprintf("Not within %d years at this rate", models.FireMaxYears)
+	case months == 0:
+		return "Reached already"
+	case age > 0:
+		return fmt.Sprintf("In %s, at %d", fireDuration(months), age)
+	}
+	return "In " + fireDuration(months)
+}
+
+func fireSimYears(y int) string {
+	if y < 0 {
+		return fmt.Sprintf("%d+", models.FireMaxYears)
+	}
+	return strconv.Itoa(y)
+}
+
+// fireSuccessTone colors the simulation's success rate.
+func fireSuccessTone(rate float64) string {
+	switch {
+	case rate >= 0.9:
+		return "text-emerald-300"
+	case rate >= 0.75:
+		return "text-amber-300"
+	}
+	return "text-rose-300"
+}
+
+templ fireResult(d *FireData) {
+	{{ res := d.Result }}
+	{{ cur := d.Currency.String }}
+	<div class="grid gap-4">
+		@components.GlassCard("grid gap-5 p-5 sm:p-6", "bg-orange-400/10", "bg-rose-400/10") {
+			<div class="grid gap-1">
+				<p class="text-sm text-zinc-400">
+					Your FIRE number: { firePct(d.Input.SWR) } of it pays a year of what you spend
+				</p>
+				<p class="sensitive text-3xl sm:text-4xl font-bold tabular-nums text-zinc-50">{ colFmt(res.Number, cur) }</p>
+				<p class="text-sm text-zinc-300">{ fireWhen(res.Months, res.Never, res.Age) }</p>
+			</div>
+			<div class="grid gap-1.5">
+				<div class="h-2 rounded-full bg-zinc-800 overflow-hidden">
+					<div class="h-full rounded-full bg-orange-400" style={ templ.SafeCSS(fmt.Sprintf("width:%.2f%%;", res.Progress*100)) }></div>
+				</div>
+				<p class="flex justify-between gap-3 text-xs text-zinc-500 tabular-nums">
+					<span><span class="sensitive">{ colFmt(d.Input.Portfolio, cur) }</span> now</span>
+					<span>{ firePct(res.Progress) } of the way</span>
+				</p>
+				if d.Input.Portfolio < 0 {
+					<p class="text-xs text-amber-300/90">Your debts outweigh your savings: saving pays them off first (at the return's rate), then builds up.</p>
+				}
+			</div>
+			if sim := d.Sim; sim != nil {
+				<dl class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 border-t border-zinc-800">
+					<div class="grid gap-0.5">
+						<dt class="text-xs text-zinc-500">Money lasts</dt>
+						<dd class={ "font-semibold tabular-nums", fireSuccessTone(sim.SuccessRate) }>
+							if sim.ReachRate > 0 {
+								{ firePct(sim.SuccessRate) } of the runs
+							} else {
+								–
+							}
+						</dd>
+					</div>
+					<div class="grid gap-0.5">
+						<dt class="text-xs text-zinc-500">Years to it (likely)</dt>
+						<dd class="font-semibold tabular-nums text-zinc-100">{ fireSimYears(sim.Years[0]) }–{ fireSimYears(sim.Years[2]) }</dd>
+					</div>
+					<div class="grid gap-0.5">
+						<dt class="text-xs text-zinc-500">Reach it within { strconv.Itoa(models.FireMaxYears) } years</dt>
+						<dd class="font-semibold tabular-nums text-zinc-100">{ firePct(sim.ReachRate) } of the runs</dd>
+					</div>
+				</dl>
+				if sim.ReachRate > 0 {
+					<p class="text-sm text-zinc-400">
+						{ fmt.Sprintf("Out of %d runs of random years (%s on average, %s up or down), the money spent from the day it's reached lasts %d years in %s of them.", sim.Runs, firePct(d.Input.Return), firePct(d.Input.Volatility), sim.Horizon, firePct(sim.SuccessRate)) }
+					</p>
+				}
+			}
+		}
+		@fireVariants(d)
+		if len(res.Path) > 1 {
+			@fireChart(d)
+		}
+		<p class="flex gap-2 text-xs text-zinc-500">
+			@icons.Info("14", &templ.Attributes{"class": "shrink-0 mt-px"})
+			<span>
+				Amounts are in today's money, the return after inflation. The FIRE number is a year's spending over the withdrawal rate (the 4% rule: from US stock and bond returns, money lasting 30 years). The runs draw each year's return at random around the average: real markets have streaks and crashes they don't, so take them as a rough guide. Taxes on withdrawals aren't counted.
+			</span>
+		</p>
+	</div>
+}
+
+templ fireVariants(d *FireData) {
+	<div class="grid gap-3 sm:grid-cols-2">
+		for _, v := range d.Result.Variants {
+			<div
+				class={ "grid gap-1 p-4 rounded-2xl ring-1",
+					templ.KV("bg-orange-400/10 ring-orange-400/30", v.Key == "fire"),
+					templ.KV("bg-zinc-800/30 ring-zinc-800", v.Key != "fire") }
+			>
+				<p class="flex items-center justify-between gap-2">
+					<span class="font-semibold text-zinc-100">{ v.Name }</span>
+					if v.Reached() {
+						<span class="px-2 py-0.5 rounded-full text-xs bg-emerald-400/15 text-emerald-300">Reached</span>
+					}
+				</p>
+				<p class="sensitive text-lg font-semibold tabular-nums text-zinc-50">{ colFmt(v.Number, d.Currency.String) }</p>
+				if !v.Reached() {
+					<p class="text-sm text-zinc-300">{ fireWhen(v.Months, v.Never, v.Age) }</p>
+				}
+				<p class="text-xs text-zinc-500">{ v.Text }</p>
+			</div>
+		}
+	</div>
+}
+
+// fireChartMax is the chart's top: the number, the path's and the
+// simulation's 90th percentile's highest.
+func fireChartMax(d *FireData) float64 {
+	hi := d.Result.Number
+	for _, y := range d.Result.Path {
+		hi = max(hi, y.Portfolio)
+	}
+	if d.Sim != nil {
+		for _, b := range d.Sim.Bands {
+			hi = max(hi, b.P90)
+		}
+	}
+	return hi
+}
+
+// fireChartMin is the chart's bottom: 0, or the lowest value when the
+// portfolio starts in debt.
+func fireChartMin(d *FireData) float64 {
+	lo := 0.0
+	for _, y := range d.Result.Path {
+		lo = min(lo, y.Portfolio)
+	}
+	if d.Sim != nil {
+		for _, b := range d.Sim.Bands {
+			lo = min(lo, b.P10)
+		}
+	}
+	return lo
+}
+
+func fireLine(n int, at func(i int) float64, lo, hi float64) string {
+	var b []byte
+	for i := range n {
+		b = fmt.Appendf(b, "%.2f,%.2f ", itemChartX(i, n), itemChartY(at(i), lo, hi))
+	}
+	return string(b)
+}
+
+// fireBand is the polygon between the simulation's 10th and 90th
+// percentiles.
+func fireBand(bands []models.FireBand, lo, hi float64) string {
+	n := len(bands)
+	var b []byte
+	for i := range n {
+		b = fmt.Appendf(b, "%.2f,%.2f ", itemChartX(i, n), itemChartY(bands[i].P90, lo, hi))
+	}
+	for i := n - 1; i >= 0; i-- {
+		b = fmt.Appendf(b, "%.2f,%.2f ", itemChartX(i, n), itemChartY(bands[i].P10, lo, hi))
+	}
+	return string(b)
+}
+
+func fireYearLabel(y models.FireYear) string {
+	if y.Age > 0 {
+		return fmt.Sprintf("Age %d", y.Age)
+	}
+	if y.Year == 0 {
+		return "Now"
+	}
+	return fmt.Sprintf("Year %d", y.Year)
+}
+
+// fireChart draws the portfolio year by year: the projection, the
+// simulation's 10th–90th percentiles and median, and the FIRE number.
+templ fireChart(d *FireData) {
+	{{ path := d.Result.Path }}
+	{{ n := len(path) }}
+	{{ hi := fireChartMax(d) }}
+	{{ lo := fireChartMin(d) }}
+	{{ cur := d.Currency.String }}
+	{{ hasSim := d.Sim != nil && len(d.Sim.Bands) == n }}
+	<div class="grid gap-2 p-4 rounded-2xl bg-zinc-800/30 ring-1 ring-zinc-800">
+		<div class="flex flex-wrap justify-between gap-x-4 gap-y-1 text-xs text-zinc-500">
+			<span>Your portfolio, saving then spending from it</span>
+			<span class="flex flex-wrap gap-3">
+				<span class="inline-flex items-center gap-1"><span class="w-3 h-0.5 bg-orange-400"></span>Projection</span>
+				if hasSim {
+					<span class="inline-flex items-center gap-1"><span class="w-3 h-2 rounded-sm bg-sky-400/25"></span>Runs' 10–90%</span>
+				}
+			</span>
+		</div>
+		<div class="relative h-48">
+			<svg viewBox="0 0 100 100" preserveAspectRatio="none" class="absolute inset-0 size-full overflow-visible" aria-hidden="true">
+				if hasSim {
+					<polygon points={ fireBand(d.Sim.Bands, lo, hi) } class="fill-sky-400/20"></polygon>
+					<polyline points={ fireLine(n, func(i int) float64 { return d.Sim.Bands[i].P50 }, lo, hi) } fill="none" stroke-width="1.5" stroke-dasharray="3 3" vector-effect="non-scaling-stroke" class="stroke-sky-300/70"></polyline>
+				}
+				<line x1="0" x2="100" y1={ fmt.Sprintf("%.2f", itemChartY(d.Result.Number, lo, hi)) } y2={ fmt.Sprintf("%.2f", itemChartY(d.Result.Number, lo, hi)) } stroke-width="1" stroke-dasharray="4 4" vector-effect="non-scaling-stroke" class="stroke-zinc-400/60"></line>
+				<polyline points={ fireLine(n, func(i int) float64 { return path[i].Portfolio }, lo, hi) } fill="none" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke" class="stroke-orange-400"></polyline>
+			</svg>
+			<span
+				class="absolute right-0 -translate-y-full pb-0.5 text-[0.65rem] text-zinc-400"
+				style={ templ.SafeCSS(fmt.Sprintf("top:%.2f%%;", itemChartY(d.Result.Number, lo, hi))) }
+			>FIRE number</span>
+			<div x-data="chartScrub" x-bind="scrub" class="absolute inset-0 flex touch-pan-y">
+				for i, y := range path {
+					<div class="group relative flex-1 h-full">
+						<div class="absolute inset-y-0 left-1/2 border-l border-zinc-500/60 hidden group-hover:block group-[.is-active]:block"></div>
+						<div class={ "absolute bottom-full mb-1 hidden group-hover:block group-[.is-active]:block z-10 pointer-events-none", tooltipSide(i, n) }>
+							<div class="glass-tooltip whitespace-nowrap">
+								<p class="text-zinc-400">
+									{ fireYearLabel(y) }
+									if y.Retired {
+										{ " · spending from it" }
+									}
+								</p>
+								<p class="sensitive tabular-nums">{ colFmt(y.Portfolio, cur) }</p>
+								if hasSim {
+									<p class="sensitive tabular-nums text-xs text-sky-200">
+										{ "Runs: " + colFmt(d.Sim.Bands[i].P10, cur) + " – " + colFmt(d.Sim.Bands[i].P90, cur) }
+									</p>
+								}
+							</div>
+						</div>
+					</div>
+				}
+			</div>
+		</div>
+		<div class="flex justify-between gap-3 text-xs text-zinc-500 tabular-nums">
+			<span>{ fireYearLabel(path[0]) }</span>
+			<span>{ fireYearLabel(path[n-1]) }</span>
+		</div>
+	</div>
+}
+
+// fireHelpDrawer explains FIRE, the FI number and how the calculator works
+// them out, opened by the page header's "How it works".
+templ fireHelpDrawer(d *FireData) {
+	@components.Drawer(components.DrawerProps{Label: "How FIRE works", Bind: "fireHelp"}) {
+		<div class="drawer-panel flex flex-col flex-1 min-h-0 [--accent:var(--color-orange-400)]">
+			<header class="flex items-center justify-between gap-4 px-5 sm:px-6 pt-5 pb-4">
+				<div class="flex items-center gap-3 min-w-0">
+					<span class="grid place-items-center shrink-0 size-9 rounded-full bg-orange-400/15 text-orange-300">
+						@icons.Flame("18")
+					</span>
+					<h2 class="text-lg font-bold">How FIRE works</h2>
+				</div>
+				@components.DrawerClose()
+			</header>
+			<div class="flex-1 grid grid-cols-1 auto-rows-max content-start gap-6 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain text-sm text-zinc-300 leading-relaxed">
+				@fireHelpSection("What is FIRE?") {
+					<p>
+						<strong class="text-zinc-100">Financial Independence, Retire Early.</strong>
+						Save and invest a big share of what you earn until what you've invested can pay for your life on its own. From then on, working is a choice: you can stop, slow down or do something else.
+					</p>
+					<p>The money doesn't run out because you only spend a small share of it each year, while the rest keeps growing.</p>
+				}
+				@fireHelpSection("The FI number") {
+					<p>It's how much you need invested to live off it:</p>
+					<p class="px-4 py-3 rounded-2xl bg-orange-400/10 ring-1 ring-orange-400/30 text-center font-medium text-zinc-100">
+						FI number = a year's spending ÷ withdrawal rate
+					</p>
+					<p>
+						At the usual 4% withdrawal rate that's <strong class="text-zinc-100">25 times</strong> what you spend in a year: spending 1,000 a month (12,000 a year) needs 300,000.
+					</p>
+					@fireHelpExample(d, false)
+				}
+				@fireHelpSection("The 4% rule") {
+					<p>
+						Studies of US stocks and bonds (the Trinity study) found that taking out 4% of a portfolio in its first year, then the same amount raised with inflation every year after, lasted 30 years in almost every period since 1926.
+					</p>
+					<p>
+						A longer retirement, or markets other than the US', call for less: 3–3.5% is safer when you retire young. A lower rate means a bigger number. Change it under Assumptions.
+					</p>
+				}
+				@fireHelpSection("How long it takes") {
+					<p>
+						Starting from what you have invested now, every month it grows by the return and you add what you save, until it reaches the number. Spending less helps twice: you save more, and the number you need gets smaller.
+					</p>
+					<p>
+						When you leave them empty, your amounts come from Tyche: your accounts in the balance, your average spending of up to the last { fireMonthsLabel(models.FireMonths) }, and your income less that spending.
+					</p>
+				}
+				@fireHelpSection("Today's money") {
+					<p>
+						Every amount is in today's money, and the return is the real one: after inflation. A 5% real return with 3% inflation is about 8% before it. So the number stays what your life costs today, whenever you reach it.
+					</p>
+				}
+				@fireHelpSection("Flavors of FIRE") {
+					<dl class="grid gap-3">
+						@fireHelpTerm("Lean FIRE", fmt.Sprintf("Living on %g%% of what you spend now: a smaller number, reached sooner.", models.FireLeanShare*100))
+						@fireHelpTerm("Fat FIRE", fmt.Sprintf("Living on %g%% of what you spend now: more comfort, a bigger number.", models.FireFatShare*100))
+						@fireHelpTerm("Barista FIRE", "Working part-time for part of what you spend, so the portfolio only has to pay the rest. Set the part-time income under Assumptions.")
+						@fireHelpTerm("Coast FIRE", "Having enough that, without saving another penny, it grows to your FI number by the age you'd retire at. From then on you only need to earn what you spend. Needs your birth year.")
+					</dl>
+				}
+				@fireHelpSection("The runs") {
+					<p>
+						Markets don't return the same every year. The calculator plays out { strconv.Itoa(models.FireRuns) } runs where each year's return is drawn at random around the average (the volatility is how far it swings: about 15% for stocks).
+					</p>
+					<p>
+						"Money lasts" is the share of the runs where, once the number is reached, spending from it lasts { fmt.Sprintf("until you're %d (%d years at the least)", models.FireLifeAge, models.FireMinHorizonYears) }, or { strconv.Itoa(models.FireHorizonYears) } years without your birth year. The chart's band holds the middle 80% of the runs.
+					</p>
+				}
+				@fireHelpSection("What it leaves out") {
+					<ul class="grid gap-1.5 pl-4 list-disc marker:text-zinc-600">
+						<li>Taxes on withdrawals and investment fees.</li>
+						<li>Market streaks and crashes: the runs draw every year on its own.</li>
+						<li>Life changing: a family, a house, health costs, pensions.</li>
+					</ul>
+					<p class="text-zinc-400">Take it as a guide to how far you are, not a promise.</p>
+				}
+			</div>
+		</div>
+	}
+}
+
+templ fireHelpSection(title string) {
+	<section class="grid gap-2">
+		<h3 class="font-semibold text-zinc-100">{ title }</h3>
+		{ children... }
+	</section>
+}
+
+templ fireHelpTerm(term, text string) {
+	<div class="grid gap-0.5">
+		<dt class="font-medium text-zinc-100">{ term }</dt>
+		<dd class="text-zinc-400">{ text }</dd>
+	</div>
+}
+
+// fireHelpExample works the FI number out with the user's own spending,
+// swapped out of band by the result as the form changes.
+templ fireHelpExample(d *FireData, oob bool) {
+	<div
+		id="fire-help-example"
+		if oob {
+			hx-swap-oob="true"
+		}
+	>
+		if d.Result != nil && d.Input.Spending > 0 && d.Input.SWR > 0 {
+			{{ cur := d.Currency.String }}
+			<div class="grid gap-1 p-4 rounded-2xl bg-zinc-800/40 ring-1 ring-zinc-800">
+				<p class="text-xs text-zinc-500">Yours</p>
+				<p class="tabular-nums">
+					<span class="sensitive">{ colFmt(d.Input.Spending, cur) }</span> a month × 12 =
+					<span class="sensitive">{ colFmt(d.Input.Spending*12, cur) }</span> a year
+				</p>
+				<p class="tabular-nums">
+					<span class="sensitive">{ colFmt(d.Input.Spending*12, cur) }</span> ÷ { firePct(d.Input.SWR) } =
+					<strong class="sensitive text-orange-300">{ colFmt(d.Result.Number, cur) }</strong>
+				</p>
+			</div>
+		}
+	</div>
+}

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/a-h/templ"
@@ -67,6 +68,7 @@ func (h *Handler) settingsData(ctx context.Context) (*views.SettingsData, error)
 		Profile: views.SettingsProfileFD{
 			FirstName: form.FDInput{Value: usr.FirstName},
 			LastName:  form.FDInput{Value: usr.LastName},
+			BirthYear: form.FDInput{Value: birthYearValue(usr.BirthYear)},
 		},
 		Region: views.SettingsRegionFD{
 			CurrencyID: form.FDInput{Value: usr.DefaultCurrency.ID},
@@ -129,6 +131,11 @@ func (h *Handler) SetProfile(w http.ResponseWriter, r *http.Request) (templ.Comp
 	fd := views.SettingsProfileFD{
 		FirstName: form.FDInput{Value: strings.TrimSpace(r.FormValue("first_name"))},
 		LastName:  form.FDInput{Value: strings.TrimSpace(r.FormValue("last_name"))},
+		BirthYear: form.FDInput{Value: strings.TrimSpace(r.FormValue("birth_year"))},
+	}
+	birthYear, ok := parseBirthYear(fd.BirthYear.Value, time.Now())
+	if !ok {
+		fd.BirthYear.Error = fmt.Sprintf("A year from %d to %d", models.MinBirthYear, time.Now().Year())
 	}
 	for _, in := range []*form.FDInput{&fd.FirstName, &fd.LastName} {
 		switch n := utf8.RuneCountInString(in.Value); {
@@ -138,7 +145,7 @@ func (h *Handler) SetProfile(w http.ResponseWriter, r *http.Request) (templ.Comp
 			in.Error = fmt.Sprintf("At most %d characters", maxNameLen)
 		}
 	}
-	if fd.FirstName.Error != "" || fd.LastName.Error != "" {
+	if fd.FirstName.Error != "" || fd.LastName.Error != "" || fd.BirthYear.Error != "" {
 		d, err := h.settingsData(r.Context())
 		if err != nil {
 			return nil, err
@@ -147,7 +154,7 @@ func (h *Handler) SetProfile(w http.ResponseWriter, r *http.Request) (templ.Comp
 		return views.SettingsProfileCard(d), nil
 	}
 
-	if err := h.repo.SetUserName(r.Context(), fd.FirstName.Value, fd.LastName.Value); err != nil {
+	if err := h.repo.SetUserProfile(r.Context(), fd.FirstName.Value, fd.LastName.Value, birthYear); err != nil {
 		return nil, err
 	}
 	logger.FromCtx(r.Context()).Info("set the user's name")
@@ -297,4 +304,24 @@ func (h *Handler) SetDefaultAccountSettings(w http.ResponseWriter, r *http.Reque
 	}
 	logger.FromCtx(ctx).Info("set the default account", zap.String("id", fd.AccountID.Value))
 	return h.settingsSaved(w, r, views.SettingsAccount, views.SettingsAccountCard)
+}
+
+func birthYearValue(y int) string {
+	if y <= 0 {
+		return ""
+	}
+	return strconv.Itoa(y)
+}
+
+// parseBirthYear reads the profile's birth year: empty is 0 (not set), else
+// a year from MinBirthYear to now's.
+func parseBirthYear(s string, now time.Time) (int, bool) {
+	if s == "" {
+		return 0, true
+	}
+	y, err := strconv.Atoi(s)
+	if err != nil || y < models.MinBirthYear || y > now.Year() {
+		return 0, false
+	}
+	return y, true
 }

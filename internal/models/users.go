@@ -62,7 +62,9 @@ type User struct {
 	// the default currency's when not picked).
 	MonthlySalary  float64
 	SalaryCurrency string
-	SeededAt       time.Time
+	// BirthYear is 0 when not set.
+	BirthYear int
+	SeededAt  time.Time
 	// Onboarded is whether the user finished (or skipped) the onboarding at
 	// /welcome, shown on signing in until then.
 	Onboarded bool
@@ -131,4 +133,16 @@ func (s Salary) IsLike(amount float64, cur *Currency) bool {
 	}
 	v, ok := Convert(math.Abs(amount), cur, s.Currency)
 	return ok && v >= s.Amount*SalaryLikeShare
+}
+
+// MinBirthYear is the earliest birth year settings take.
+const MinBirthYear = 1900
+
+// AgeIn is the age a user born in birthYear turns in the year of t (0 when
+// the birth year isn't set).
+func AgeIn(birthYear int, t time.Time) int {
+	if birthYear <= 0 {
+		return 0
+	}
+	return t.Year() - birthYear
 }

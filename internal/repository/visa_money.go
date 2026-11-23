@@ -14,24 +14,11 @@ func (r *Repository) GetVisaMoney(ctx context.Context, def *models.Currency, tod
 	if err != nil {
 		return nil, err
 	}
-	start := monthStartFromCtx(ctx)
-	first := start.Plus(today, -models.VisaMonths)
-	days, partial, err := dailyFlowSince(ctx, q, first.From, def)
+	in, _, periods, partial, err := lastMonthsFlow(ctx, q, models.VisaMonths, def, today)
 	if err != nil {
 		return nil, err
 	}
-	m := &models.VisaMoney{Months: make([]float64, models.VisaMonths), Periods: make([]models.Period, models.VisaMonths), Partial: partial}
-	for i, p := 0, first; i < models.VisaMonths; i, p = i+1, p.Next() {
-		m.Periods[i] = p
-	}
-	for _, d := range days {
-		for i, p := range m.Periods {
-			if !d.Day.Before(p.From) && d.Day.Before(p.To) {
-				m.Months[i] += d.In
-				break
-			}
-		}
-	}
+	m := &models.VisaMoney{Months: in, Periods: periods, Partial: partial}
 
 	bal, err := r.GetBalances(ctx)
 	if err != nil {
