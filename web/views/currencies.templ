@@ -132,7 +132,7 @@ const currenciesFilterData = `{
 templ currenciesList(currencies []models.Currency, defaultCur *models.Currency, rates FxRatesFreshness) {
 	<div
 		x-data={ currenciesFilterData }
-		@keydown.slash.window="if (!['INPUT', 'TEXTAREA'].includes($event.target.tagName)) { $event.preventDefault(); $refs.q.focus() }"
+		@keydown.slash.window="if (!$event.target.closest('input, textarea, select, [contenteditable]')) { $event.preventDefault(); $dispatch('search-open') }"
 		class="grid gap-8"
 	>
 		for _, cur := range currencies {
@@ -254,23 +254,10 @@ func unitPrefix(cur *models.Currency) string {
 }
 
 templ currenciesToolbar() {
-	<div class="grid gap-3 sm:flex sm:items-center">
-		<label
-			class="flex flex-1 items-center gap-3 h-11 px-4 rounded-xl border border-zinc-700 bg-zinc-800/60 transition-[border-color,box-shadow] hover:border-zinc-600 focus-within:border-(--accent) focus-within:shadow-[0_0_0_4px_color-mix(in_oklab,var(--accent)_15%,transparent)]"
-		>
-			@icons.Search("18", &templ.Attributes{"class": "shrink-0 text-zinc-500"})
-			<input
-				type="search"
-				x-ref="q"
-				x-model="q"
-				@keydown.escape="q = ''; $el.blur()"
-				placeholder="Search by code or symbol"
-				aria-label="Search currencies"
-				autocomplete="off"
-				class="flex-1 min-w-0 bg-transparent outline-none placeholder:text-zinc-500"
-			/>
-			<kbd class="hidden sm:grid place-items-center w-6 h-6 rounded border border-zinc-600 text-xs text-zinc-500">/</kbd>
-		</label>
+	<div class="flex flex-wrap items-center gap-2">
+		@components.ExpandingSearch(components.SearchProps{
+			Placeholder: "Code or symbol", Label: "Search currencies",
+		})
 		<div role="group" aria-label="Currency kind" class="flex gap-1.5 overflow-x-auto">
 			@currencyKindPill("All", "")
 			@currencyKindPill("Fiat", currencyKindSlug(models.CurrencyKindFiat))

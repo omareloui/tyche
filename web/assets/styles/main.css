@@ -168,26 +168,26 @@ input[type="number"] {
   @apply size-4 text-zinc-500;
 }
 
-/* The transactions' search (views.txSearch): an icon pill, opened into a
+/* A list's search (components.ExpandingSearch): an icon pill, opened into a
    box (data-open, rendered set when it has text). Animated only once ready,
    so a page loaded with a search doesn't grow it. */
-.tx-search {
-  @apply flex items-center w-9 h-9 overflow-hidden rounded-full border border-zinc-700/80 bg-zinc-800/50;
+.search-expand {
+  @apply flex items-center shrink-0 w-9 h-9 overflow-hidden rounded-full border border-zinc-700/80 bg-zinc-800/50;
 }
 
-.tx-search[data-ready] {
+.search-expand[data-ready] {
   @apply transition-[width,border-color,background-color] duration-200 ease-out;
 }
 
-.tx-search:hover {
+.search-expand:hover {
   @apply border-zinc-600;
 }
 
-.tx-search[data-open] {
+.search-expand[data-open] {
   @apply w-72 max-w-full bg-zinc-800/80;
 }
 
-.tx-search[data-open]:focus-within {
+.search-expand[data-open]:focus-within {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 15%, transparent);
 }
@@ -197,7 +197,7 @@ input[type="number"] {
   transition: opacity 150ms;
 }
 
-[data-tx-loading] #tx-list {
+[data-search-loading] #tx-list {
   opacity: 0.5;
   transition-delay: 120ms;
 }

@@ -129,7 +129,7 @@ templ ItemsList(d *ItemsData) {
 		hx-trigger={ ItemsChangedEvent + " from:body" }
 		hx-swap="outerHTML"
 		x-data={ itemsFilterData }
-		@keydown.slash.window="if (!$event.target.closest('input, textarea, select, [contenteditable]')) { $event.preventDefault(); $refs.q.focus(); $refs.q.select() }"
+		@keydown.slash.window="if (!$event.target.closest('input, textarea, select, [contenteditable]')) { $event.preventDefault(); $dispatch('search-open') }"
 		class="grid gap-4"
 	>
 		if !d.Any {
@@ -142,22 +142,10 @@ templ ItemsList(d *ItemsData) {
 		}
 		if len(d.Items) > 0 {
 			<div class="grid gap-3">
-				<label class="flex items-center gap-3 h-12 px-4 rounded-2xl border-2 border-zinc-700 bg-zinc-800/40 focus-within:border-zinc-400 transition-colors">
-					@icons.Search("20", &templ.Attributes{"class": "text-zinc-500 shrink-0"})
-					<input
-						type="search"
-						x-ref="q"
-						x-model="q"
-						@keydown.escape.prevent="q ? q = '' : $el.blur()"
-						autocomplete="off"
-						enterkeyhint="search"
-						placeholder="Search by name or alias"
-						aria-label="Search items"
-						class="flex-1 min-w-0 bg-transparent outline-none placeholder:text-zinc-500 [&::-webkit-search-cancel-button]:hidden"
-					/>
-					<kbd class="hidden sm:grid place-items-center shrink-0 w-6 h-6 rounded border border-zinc-600 text-xs text-zinc-500">/</kbd>
-				</label>
 				<div class="flex flex-wrap items-center gap-2" role="group" aria-label="Sort">
+					@components.ExpandingSearch(components.SearchProps{
+						Placeholder: "Name or alias", Label: "Search items",
+					})
 					<button
 						type="button"
 						hx-get="/items/categories"

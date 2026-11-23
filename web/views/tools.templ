@@ -6,6 +6,7 @@ import (
 
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/icons"
 	"github.com/omareloui/tyche/web/views/layouts"
 )
@@ -195,27 +196,15 @@ templ Tools(claims *jwt.AccessClaims, balances []models.Balance) {
 	@layouts.WithTitle(claims, "Tools", balances) {
 		<div
 			x-data={ toolsPageData }
-			@keydown.slash.window="if (!$event.target.closest('input, textarea, select, [contenteditable]')) { $event.preventDefault(); $refs.q.focus(); $refs.q.select() }"
+			@keydown.slash.window="if (!$event.target.closest('input, textarea, select, [contenteditable]')) { $event.preventDefault(); $dispatch('search-open') }"
 			class="grid gap-6"
 		>
 			<div class="grid gap-3">
-				<label class="flex items-center gap-3 h-12 px-4 rounded-2xl border-2 border-zinc-700 bg-zinc-800/40 focus-within:border-zinc-400 transition-colors">
-					@icons.Search("20", &templ.Attributes{"class": "text-zinc-500 shrink-0"})
-					<input
-						type="search"
-						x-ref="q"
-						x-model="q"
-						@keydown.escape.prevent="q ? q = '' : $el.blur()"
-						@keydown.enter.prevent="openFirst()"
-						autocomplete="off"
-						enterkeyhint="go"
-						placeholder="Search tools"
-						aria-label="Search tools"
-						class="flex-1 min-w-0 bg-transparent outline-none placeholder:text-zinc-500 [&::-webkit-search-cancel-button]:hidden"
-					/>
-					<kbd class="hidden sm:grid place-items-center shrink-0 w-6 h-6 rounded border border-zinc-600 text-xs text-zinc-500">/</kbd>
-				</label>
-				<div role="group" aria-label="Filter by group" class="flex gap-2 -mx-4 px-4 overflow-x-auto [scrollbar-width:none] sm:flex-wrap sm:mx-0 sm:px-0">
+				<div role="group" aria-label="Filter by group" class="flex items-center gap-2 -mx-4 px-4 overflow-x-auto [scrollbar-width:none] sm:flex-wrap sm:mx-0 sm:px-0">
+					@components.ExpandingSearch(components.SearchProps{
+						Placeholder: "Search tools", Label: "Search tools",
+						InputAttrs:  templ.Attributes{"@keydown.enter.prevent": "openFirst()", "enterkeyhint": "go"},
+					})
 					<button
 						type="button"
 						@click="pick('')"
@@ -290,7 +279,7 @@ templ Tools(claims *jwt.AccessClaims, balances []models.Balance) {
 			<p x-show="!any()" x-cloak class="py-10 text-center text-zinc-500">
 				No tool matches
 				<span class="text-zinc-300" x-text="'“' + q.trim() + '”'"></span>
-				<button type="button" @click="q = ''; group = ''; $refs.q.focus()" class="ml-1 underline underline-offset-2 cursor-pointer hover:text-zinc-300">Show all</button>
+				<button type="button" @click="q = ''; group = ''; $dispatch('search-open')" class="ml-1 underline underline-offset-2 cursor-pointer hover:text-zinc-300">Show all</button>
 			</p>
 		</div>
 	}

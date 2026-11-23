@@ -378,7 +378,7 @@ templ counterpartiesList(counterparties []models.Counterparty) {
 	<div
 		id="counterparties"
 		x-data={ counterpartiesFilterData }
-		@keydown.slash.window="if (!openCreateForm && !$event.target.closest('input, textarea, select, [contenteditable]')) { $event.preventDefault(); $refs.q.focus(); $refs.q.select() }"
+		@keydown.slash.window="if (!openCreateForm && !$event.target.closest('input, textarea, select, [contenteditable]')) { $event.preventDefault(); $dispatch('search-open') }"
 		class="grid gap-6"
 	>
 		if len(counterparties) > 0 {
@@ -386,9 +386,10 @@ templ counterpartiesList(counterparties []models.Counterparty) {
 				@counterpartiesSummaryLazy()
 			}
 			<div class="grid gap-3">
-				@counterpartiesSearch()
 				if slices.ContainsFunc(counterparties, func(cp models.Counterparty) bool { return cp.IsMerchant }) {
 					@counterpartiesRatingBar()
+				} else {
+					@counterpartiesSearch()
 				}
 				@counterpartiesLabelBar(models.CounterpartyLabels(counterparties))
 			</div>
@@ -475,6 +476,7 @@ var counterpartiesRatingFilters = [][2]string{{"", "Any"}, {"3", "3+"}, {"4", "4
 // by stars; picking a least number of stars sorts by rating.
 templ counterpartiesRatingBar() {
 	<div class="flex flex-wrap items-center gap-2">
+		@counterpartiesSearch()
 		<div role="group" aria-label="Filter by rating" class="flex flex-wrap items-center gap-1.5">
 			for _, f := range counterpartiesRatingFilters {
 				<button
@@ -577,23 +579,9 @@ templ counterpartiesLabelBar(labels []string) {
 }
 
 templ counterpartiesSearch() {
-	<label
-		class="flex items-center gap-3 h-12 px-4 rounded-2xl border-2 border-zinc-700 bg-zinc-800/40 focus-within:border-zinc-400 transition-colors"
-	>
-		@icons.Search("20", &templ.Attributes{"class": "text-zinc-500 shrink-0"})
-		<input
-			type="search"
-			x-ref="q"
-			x-model="q"
-			@keydown.escape.prevent="q ? q = '' : $el.blur()"
-			autocomplete="off"
-			enterkeyhint="search"
-			placeholder="Search by name or SMS alias"
-			aria-label="Search counterparties"
-			class="flex-1 min-w-0 bg-transparent outline-none placeholder:text-zinc-500 [&::-webkit-search-cancel-button]:hidden"
-		/>
-		<kbd class="hidden sm:grid place-items-center shrink-0 w-6 h-6 rounded border border-zinc-600 text-xs text-zinc-500">/</kbd>
-	</label>
+	@components.ExpandingSearch(components.SearchProps{
+		Placeholder: "Name, alias, label or note", Label: "Search counterparties",
+	})
 }
 
 // counterpartyAliasChips is how many aliases a card shows, the rest counted.

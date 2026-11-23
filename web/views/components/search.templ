@@ -1,0 +1,86 @@
+package components
+
+import "github.com/omareloui/tyche/web/views/icons"
+
+// SearchProps configures an ExpandingSearch.
+type SearchProps struct {
+	// Model is the Alpine property (of the enclosing scope) the input is bound
+	// to, "q" when empty.
+	Model string
+	// Name and Value make it a form field (e.g. the transactions' filters).
+	Name, Value string
+	Placeholder string
+	// Label is the input's accessible name.
+	Label string
+	// InputAttrs go on the input, e.g. a key handler or data-filter-input.
+	InputAttrs templ.Attributes
+}
+
+func (p SearchProps) model() string {
+	if p.Model == "" {
+		return "q"
+	}
+	return p.Model
+}
+
+// ExpandingSearch is a list's search: an icon pill, opened into a box
+// (animated, .search-expand in main.css) by a click or a "search-open" window
+// event (the pages' "/" key), staying open while it has text. Escape empties
+// it, then closes it; clearing dispatches input so forms submit. Its icon
+// turns into a spinner while the page has data-search-loading (e.g. the
+// transactions' list loading).
+templ ExpandingSearch(p SearchProps) {
+	{{ m := p.model() }}
+	<div
+		x-data="{ open: false }"
+		x-init="$nextTick(() => { open = $refs.input.value !== ''; requestAnimationFrame(() => $el.dataset.ready = '') })"
+		@search-open.window="open = true; $nextTick(() => { $refs.input.focus(); $refs.input.select() })"
+		@focusout={ "if (!" + m + " && !$el.contains($event.relatedTarget)) open = false" }
+		:data-open="open"
+		class="search-expand"
+		if p.Value != "" {
+			data-open
+		}
+	>
+		<button
+			type="button"
+			@click="open = true; $nextTick(() => $refs.input.focus())"
+			:aria-expanded="open"
+			aria-label={ p.Label }
+			title={ p.Label + " (/)" }
+			class="grid place-items-center shrink-0 size-9 -m-px rounded-full text-zinc-400 cursor-pointer transition-colors hover:text-white"
+		>
+			@icons.Search("16", &templ.Attributes{"class": "in-[[data-search-loading]]:hidden"})
+			<span class="hidden in-[[data-search-loading]]:block size-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" aria-hidden="true"></span>
+		</button>
+		<input
+			type="search"
+			if p.Name != "" {
+				name={ p.Name }
+				value={ p.Value }
+			}
+			x-ref="input"
+			x-model={ m }
+			:tabindex="open ? 0 : -1"
+			autocomplete="off"
+			enterkeyhint="search"
+			placeholder={ p.Placeholder }
+			aria-label={ p.Label }
+			@keydown.escape.prevent.stop={ "if ($el.value) { " + m + " = ''; $nextTick(() => $el.dispatchEvent(new Event('input', { bubbles: true }))) } else { $el.blur() }" }
+			class="flex-1 min-w-0 pr-2 bg-transparent text-sm outline-none placeholder:text-zinc-500 [&::-webkit-search-cancel-button]:hidden"
+			if p.InputAttrs != nil {
+				{ p.InputAttrs... }
+			}
+		/>
+		<button
+			type="button"
+			x-cloak
+			x-show={ m }
+			@click={ m + " = ''; $nextTick(() => { $refs.input.dispatchEvent(new Event('input', { bubbles: true })); $refs.input.focus() })" }
+			aria-label="Clear the search"
+			class="grid place-items-center shrink-0 size-6 mr-1.5 rounded-full text-zinc-500 cursor-pointer transition-colors hover:bg-white/10 hover:text-white"
+		>
+			@icons.X("13")
+		</button>
+	</div>
+}

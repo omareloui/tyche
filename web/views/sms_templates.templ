@@ -57,7 +57,7 @@ templ SMSTemplates(claims *jwt.AccessClaims, balances []models.Balance, lists SM
 				@SMSSandbox(&SMSSandboxResult{Body: sms, IsAdmin: claims.IsAdmin()})
 				<div
 					x-data={ smsTemplatesFilterData }
-					@keydown.slash.window="if (!$event.target.closest('input, textarea, select, [contenteditable]')) { $event.preventDefault(); $refs.q.focus(); $refs.q.select() }"
+					@keydown.slash.window="if (!$event.target.closest('input, textarea, select, [contenteditable]')) { $event.preventDefault(); $dispatch('search-open') }"
 					class="grid gap-10 min-w-0"
 				>
 					@smsTemplatesSearch()
@@ -294,23 +294,11 @@ const smsTemplatesFilterData = `{
 }`
 
 templ smsTemplatesSearch() {
-	<label
-		class="flex items-center gap-3 h-12 px-4 rounded-2xl border-2 border-zinc-700 bg-zinc-800/40 focus-within:border-zinc-400 transition-colors"
-	>
-		@icons.Search("20", &templ.Attributes{"class": "text-zinc-500 shrink-0"})
-		<input
-			type="search"
-			x-ref="q"
-			x-model="q"
-			@keydown.escape.prevent="q ? q = '' : $el.blur()"
-			autocomplete="off"
-			enterkeyhint="search"
-			placeholder="Search by name, bank or SMS"
-			aria-label="Search templates"
-			class="flex-1 min-w-0 bg-transparent outline-none placeholder:text-zinc-500 [&::-webkit-search-cancel-button]:hidden"
-		/>
-		<kbd class="hidden sm:grid place-items-center shrink-0 w-6 h-6 rounded border border-zinc-600 text-xs text-zinc-500">/</kbd>
-	</label>
+	<div class="flex">
+		@components.ExpandingSearch(components.SearchProps{
+			Placeholder: "Name, bank or SMS", Label: "Search templates",
+		})
+	</div>
 }
 
 // smsTemplateList lists templates, editable unless they're shared and the

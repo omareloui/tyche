@@ -364,12 +364,16 @@ document.addEventListener("alpine:init", () => {
   // others added from its menu: an added one opens its picker at once, and
   // goes away again when closed without a value.
   Alpine.data("txFilterBuilder", () => ({
+    // q is the search's text (txSearch), read from the page before its
+    // x-model sets it.
+    q: "",
     shown: [],
     menuOpen: false,
     menuQ: "",
     menuStyle: "",
 
     init() {
+      this.q = this.$root.querySelector("input[name=q]")?.value ?? "";
       this.shown = [...this.$root.querySelectorAll("[data-slot]")]
         .filter((s) => this.slotSet(s))
         .map((s) => s.dataset.slot);
@@ -616,8 +620,8 @@ document.addEventListener("alpine:init", () => {
       }
       if (e.key === "/" && !t.closest?.("input, textarea, select, [contenteditable]")) {
         e.preventDefault();
-        // The search opens itself (txSearch).
-        window.dispatchEvent(new CustomEvent("tx-search-open"));
+        // The search opens itself (components.ExpandingSearch).
+        window.dispatchEvent(new CustomEvent("search-open"));
         return;
       }
       if (t.closest?.("input, textarea, select, [contenteditable], form, [role=listbox], [role=menu]")) return;
@@ -1077,7 +1081,7 @@ document.addEventListener("alpine:init", () => {
 window.addEventListener("pagehide", () => Alpine.store("txs")?.flush());
 // Boosted navigation swaps the page without unloading it.
 // While the list loads for the search / filters (the filters form, Clear,
-// filterBy), the page has data-tx-loading: the search shows a spinner, the
+// filterBy), the page has data-search-loading: the search shows a spinner, the
 // list dims. Each request counts until its xhr ends (loaded, aborted by a
 // newer one, failed).
 const txLoading = new Set();
@@ -1086,11 +1090,11 @@ document.addEventListener("htmx:beforeRequest", (e) => {
   if (!xhr || cfg?.verb !== "get" || !["tx-list", "tx-body"].includes(target?.id)) return;
   if (!/^\/transactions(\?|$)/.test(cfg.path)) return;
   txLoading.add(xhr);
-  document.documentElement.dataset.txLoading = "";
+  document.documentElement.dataset.searchLoading = "";
   xhr.addEventListener("loadend", () => {
     txLoading.delete(xhr);
     // After the swap, done in htmx's own load handler.
-    if (txLoading.size === 0) setTimeout(() => txLoading.size || delete document.documentElement.dataset.txLoading);
+    if (txLoading.size === 0) setTimeout(() => txLoading.size || delete document.documentElement.dataset.searchLoading);
   });
 });
 
