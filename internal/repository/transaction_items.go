@@ -41,6 +41,8 @@ func dbItemToTxItem(it queries.TransactionItem) models.TxItem {
 		SharedByAll: it.SharedByAll,
 		SplitMode:   models.ChargeSplitModeOf(it.SplitMode),
 		ItemID:      it.ItemID.String,
+		// A charge never has one (NormalizeTxItems).
+		WarrantyUntil: dayPtr(it.WarrantyUntil),
 	}
 	if it.Rate.Valid {
 		r := it.Rate.Float64
@@ -142,6 +144,7 @@ func createItemWithTxn(ctx context.Context, qtx *queries.Queries, res *itemResol
 		Position:      int64(position),
 		CurrencyID:    curID,
 		ItemID:        sql.NullString{String: it.ItemID, Valid: it.ItemID != ""},
+		WarrantyUntil: itemWarrantyParam(it, owner),
 	}); err != nil {
 		logger.FromCtx(ctx).Error("creating item", zap.Error(err), zap.Any("owner", owner))
 		return err
@@ -229,8 +232,8 @@ func loadTxItems(ctx context.Context, q *queries.Queries, txs []models.Transacti
 	return loadReceipts(ctx, q, txs, ids, at)
 }
 
-// loadTxItemCounts sets how many lines each transaction has and its receipt,
-// for lists.
+// loadTxItemCounts sets how many lines each transaction has, their latest
+// own warranty and its receipt, for lists.
 func loadTxItemCounts(ctx context.Context, q *queries.Queries, lists ...[]models.Transaction) error {
 	var ids []string
 	type ref struct{ list, i int }
@@ -252,6 +255,16 @@ func loadTxItemCounts(ctx context.Context, q *queries.Queries, lists ...[]models
 	for _, row := range rows {
 		if r, ok := at[row.TransactionID.String]; ok {
 			lists[r.list][r.i].ItemsCount = int(row.N)
+		}
+	}
+	warranties, err := q.GetLinesWarrantyOfTxs(ctx, nullStrings(ids))
+	if err != nil {
+		logger.FromCtx(ctx).Error("querying lines' warranties", zap.Error(err))
+		return err
+	}
+	for _, row := range warranties {
+		if r, ok := at[row.TransactionID.String]; ok {
+			lists[r.list][r.i].LinesWarranty = parseDay(row.WarrantyUntil)
 		}
 	}
 	recs, err := q.GetReceiptsOfTxs(ctx, nullStrings(ids))

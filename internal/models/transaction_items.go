@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/idgen"
@@ -92,6 +93,9 @@ type TxItem struct {
 	// ItemID is the catalog item (Item) an item line is, set when saved
 	// (picked, matched by its name or created); never a charge's.
 	ItemID string `validate:"-"`
+	// WarrantyUntil is the item line's own warranty's last day, else its
+	// transaction's applies (EffectiveWarranty); never a charge's.
+	WarrantyUntil *time.Time `validate:"-"`
 }
 
 // Label is its name, else its kind's with the rate (e.g. "VAT 14%").
@@ -119,6 +123,7 @@ func NormalizeTxItems(items []TxItem, cur *Currency) {
 	for i := range items {
 		it := &items[i]
 		if it.Kind.IsCharge() {
+			it.WarrantyUntil = nil
 			continue
 		}
 		if it.Quantity == 0 {
@@ -252,6 +257,8 @@ func CopyTxItems(items []TxItem) []TxItem {
 		it.ID = idgen.New()
 		// A split is its transaction's, never copied.
 		it.SharedByAll, it.SharedWith, it.SplitMode = false, nil, ChargeSplitDefault
+		// So is a warranty: the copy is another purchase.
+		it.WarrantyUntil = nil
 		if it.Rate != nil {
 			r := *it.Rate
 			it.Rate = &r

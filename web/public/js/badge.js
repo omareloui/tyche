@@ -1,5 +1,6 @@
 // The installed app's badge: the sms needing attention, the transactions to
-// review and the overdue scheduled ones (internal/badge). Each device picks
+// review, the overdue scheduled ones and the return windows / warranties
+// ending soon (internal/badge). Each device picks
 // what it counts (the settings page's "App badge" card, only shown in the
 // installed app), kept in localStorage and sent with its Web Push
 // subscription: the server pushes what needs attention when it changes, the
@@ -9,7 +10,7 @@
 // until turned on, which needs the notifications allowed: without them every
 // source is turned off again.
 
-const BADGE_SOURCES = ["sms", "review", "overdue"];
+const BADGE_SOURCES = ["sms", "review", "overdue", "warranty"];
 const BADGE_SOURCES_KEY = "badgeSources";
 // When dismissed notifications are shown again while unhandled, in hours (0
 // = never), sent with the subscription.

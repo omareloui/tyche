@@ -372,7 +372,7 @@ document.addEventListener("alpine:init", () => {
     // date and amount ranges once each).
     syncFilters(form) {
       const set = (name) => !!form.elements[name]?.value.trim();
-      const keys = ["kind", "account", "category", "counterparty", "goal", "item", "status", "source", "receipt", "note"];
+      const keys = ["kind", "account", "category", "counterparty", "goal", "item", "status", "source", "receipt", "note", "window"];
       this.activeFilters =
         keys.filter(set).length + (set("from") || set("to")) + (set("min") || set("max"));
       this.reviewOnly = form.elements.status?.value === "review";
@@ -1116,3 +1116,27 @@ document.addEventListener("htmx:afterSettle", () => {
   document.querySelector(`#tx-${txRefocusId} [data-tx-row]`)?.focus({ preventScroll: true });
   txRefocusId = null;
 });
+
+// txWindowDay is the day a return / warranty preset ("14d", "12m") ends on,
+// from the form's purchase day (its scheduled_to, today when empty), as
+// YYYY-MM-DD; a day the month lacks falls on its last (like
+// models.ParseWindowValue).
+function txWindowDay(form, spec) {
+  const v = form?.elements.scheduled_to?.value || "";
+  let y, m, d;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+    [y, m, d] = v.split("-").map(Number);
+  } else {
+    const t = new Date();
+    [y, m, d] = [t.getFullYear(), t.getMonth() + 1, t.getDate()];
+  }
+  const n = parseInt(spec, 10);
+  let day;
+  if (spec.endsWith("d")) {
+    day = new Date(Date.UTC(y, m - 1, d + n));
+  } else {
+    const last = new Date(Date.UTC(y, m + n, 0)).getUTCDate();
+    day = new Date(Date.UTC(y, m - 1 + n, Math.min(d, last)));
+  }
+  return day.toISOString().slice(0, 10);
+}

@@ -1,6 +1,7 @@
 // Package badge keeps the installed apps' badge in sync with what needs the
-// user's attention: sms that made no transaction, transactions to review and
-// overdue scheduled ones. Every installed app (a Web Push subscription)
+// user's attention: sms that made no transaction, transactions to review,
+// overdue scheduled ones and purchases whose return window or warranty ends
+// soon. Every installed app (a Web Push subscription)
 // picks the counts it shows; on a change it gets the items needing attention,
 // shown as one notification each: Android has no Badging API, its launchers
 // count the app's notifications.
@@ -19,10 +20,13 @@ const (
 	SourceSMS     Source = "sms"
 	SourceReview  Source = "review"
 	SourceOverdue Source = "overdue"
+	// SourceWarranty is the purchases whose return window or warranty (the
+	// purchase's or a line's) ends soon.
+	SourceWarranty Source = "warranty"
 )
 
 // Sources are every source, in the order shown.
-var Sources = []Source{SourceSMS, SourceReview, SourceOverdue}
+var Sources = []Source{SourceSMS, SourceReview, SourceOverdue, SourceWarranty}
 
 // MaxItems is how many items the counts carry at most, the rest only
 // counted (a push's payload is limited to 4 KB).
@@ -33,6 +37,8 @@ type Counts struct {
 	SMS     int `json:"sms"`
 	Review  int `json:"review"`
 	Overdue int `json:"overdue"`
+	// Warranty counts the return windows and warranties ending soon.
+	Warranty int `json:"warranty"`
 	// Items are the first MaxItems of them, each shown as a notification.
 	Items []Item `json:"items,omitempty"`
 }
@@ -56,6 +62,8 @@ func (c Counts) Of(s Source) int {
 		return c.Review
 	case SourceOverdue:
 		return c.Overdue
+	case SourceWarranty:
+		return c.Warranty
 	}
 	return 0
 }
@@ -72,6 +80,9 @@ func (c Counts) Only(srcs []Source) Counts {
 	if slices.Contains(srcs, SourceOverdue) {
 		o.Overdue = c.Overdue
 	}
+	if slices.Contains(srcs, SourceWarranty) {
+		o.Warranty = c.Warranty
+	}
 	for _, it := range c.Items {
 		if slices.Contains(srcs, it.Source) {
 			o.Items = append(o.Items, it)
@@ -82,7 +93,7 @@ func (c Counts) Only(srcs []Source) Counts {
 
 // Total is the badge's number.
 func (c Counts) Total() int {
-	return c.SMS + c.Review + c.Overdue
+	return c.SMS + c.Review + c.Overdue + c.Warranty
 }
 
 // Title sums the counts up, e.g. "3 SMS to check · 2 to review".
@@ -97,6 +108,9 @@ func (c Counts) Title() string {
 	if c.Overdue > 0 {
 		parts = append(parts, fmt.Sprintf("%d overdue", c.Overdue))
 	}
+	if c.Warranty > 0 {
+		parts = append(parts, fmt.Sprintf("%d ending soon", c.Warranty))
+	}
 	return strings.Join(parts, " · ")
 }
 
@@ -110,6 +124,8 @@ func (c Counts) URL() string {
 		return "/transactions?status=review"
 	case c.Overdue > 0:
 		return "/transactions?status=scheduled"
+	case c.Warranty > 0:
+		return "/transactions?window=return_open"
 	}
 	return "/"
 }

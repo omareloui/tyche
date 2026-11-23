@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"time"
 
 	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/tzctx"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
@@ -55,6 +57,11 @@ templ ItemDetails(s *models.ItemSummary) {
 				<dl class="grid gap-px overflow-hidden rounded-2xl bg-zinc-800/60 ring-1 ring-zinc-800">
 					@txDetailsRow("Category", icons.Tag("15")) {
 						@ItemCategoryPick(it)
+					}
+					if st.Warranty != nil {
+						@txDetailsRow("Warranty", icons.ShieldCheck("15")) {
+							@itemWarrantyText(st.Warranty)
+						}
 					}
 				</dl>
 				if st.Times > 0 {
@@ -402,7 +409,12 @@ templ itemDetailsPurchases(st *models.ItemStats) {
 							<a href={ templ.SafeURL("/transactions?" + TxDetailsParam + "=" + p.TxID) } class="flex items-center gap-3 min-w-0 px-3 py-2 rounded-xl bg-tx-row hover:bg-zinc-800 transition-colors">
 								<div class="flex-1 min-w-0">
 									<p class="text-sm truncate">{ formatTxDay(p.Day) } · { itemMerchantName(p.Merchant) }</p>
-									<p class="text-xs text-zinc-500 tabular-nums">{ fmt.Sprintf("%s × %s", strconv.FormatFloat(p.Quantity, 'f', -1, 64), def.Format(p.UnitPrice)) }</p>
+									<p class="text-xs text-zinc-500 tabular-nums">
+										{ fmt.Sprintf("%s × %s", strconv.FormatFloat(p.Quantity, 'f', -1, 64), def.Format(p.UnitPrice)) }
+										if p.Warranty != nil {
+											· warranty until { formatWindowDay(ctx, *p.Warranty) }
+										}
+									</p>
 								</div>
 								<span class="shrink-0 text-sm tabular-nums">{ def.Format(p.Total) }</span>
 							</a>
@@ -414,6 +426,18 @@ templ itemDetailsPurchases(st *models.ItemStats) {
 				<p class="text-xs text-zinc-500">{ fmt.Sprintf("The last %d of %d.", itemDetailsMaxPurchases, len(st.Purchases)) }</p>
 			}
 		}
+	}
+}
+
+// itemWarrantyText is the latest purchase's warranty: until when, or ended.
+templ itemWarrantyText(d *time.Time) {
+	{{ today := tzctx.Today(ctx) }}
+	if models.WarrantyActive(d, today) {
+		<span class={ templ.KV("text-amber-300", models.WarrantySoon(d, today)) }>
+			Until { formatWindowDay(ctx, *d) } · its latest purchase
+		</span>
+	} else {
+		<span class="text-zinc-500">Ended on { formatWindowDay(ctx, *d) } · its latest purchase</span>
 	}
 }
 

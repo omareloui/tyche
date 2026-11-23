@@ -20,7 +20,7 @@ ORDER BY recurrent_id, position;
 
 -- name: CreateTransactionItem :exec
 INSERT INTO transaction_items (
-    id, transaction_id, recurrent_id, kind, name, quantity, unit_price, total, rate, included, shared_by_all, split_mode, position, currency_id, item_id
+    id, transaction_id, recurrent_id, kind, name, quantity, unit_price, total, rate, included, shared_by_all, split_mode, position, currency_id, item_id, warranty_until
 ) VALUES (
     sqlc.arg(id),
     sqlc.narg(transaction_id),
@@ -36,7 +36,8 @@ INSERT INTO transaction_items (
     sqlc.arg(split_mode),
     sqlc.arg(position),
     sqlc.narg(currency_id),
-    sqlc.narg(item_id)
+    sqlc.narg(item_id),
+    sqlc.narg(warranty_until)
 );
 
 -- name: DeleteTransactionItems :exec
@@ -72,3 +73,17 @@ WHERE recurrent_id = sqlc.arg(recurrent_id)
 -- name: MarkTransactionOverridden :exec
 UPDATE transactions SET recurrent_overridden = recurrent_id IS NOT NULL
 WHERE id = sqlc.arg(id);
+
+-- name: SetTransactionItemWarranty :execrows
+-- Sets an item line's own warranty (its transaction's details).
+UPDATE transaction_items
+SET warranty_until = sqlc.narg(warranty_until)
+WHERE id = sqlc.arg(id) AND transaction_id = sqlc.arg(transaction_id) AND kind = 0;
+
+-- name: GetLinesWarrantyOfTxs :many
+-- The latest own warranty of each transaction's item lines, for the list's
+-- chips (lines aren't loaded there).
+SELECT transaction_id, CAST(MAX(SUBSTR(warranty_until, 1, 10)) AS TEXT) AS warranty_until
+FROM transaction_items
+WHERE transaction_id IN (sqlc.slice(ids)) AND kind = 0 AND warranty_until IS NOT NULL
+GROUP BY transaction_id;

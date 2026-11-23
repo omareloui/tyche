@@ -29,6 +29,9 @@ type Item struct {
 	Quantity  float64 `json:"quantity"`
 	UnitPrice float64 `json:"unit_price"`
 	Total     float64 `json:"total"`
+	// WarrantyMonths is the item's own warranty when printed next to it, 0
+	// when not.
+	WarrantyMonths int `json:"warranty_months"`
 }
 
 // Charge is a line on top of (or inside) the items' prices.
@@ -51,6 +54,10 @@ type Result struct {
 	Total     float64  `json:"total"`
 	Items     []Item   `json:"items"`
 	Charges   []Charge `json:"charges"`
+	// ReturnDays and WarrantyMonths are the receipt's return policy and
+	// whole purchase's warranty when printed, 0 when not.
+	ReturnDays     int `json:"return_days"`
+	WarrantyMonths int `json:"warranty_months"`
 }
 
 // Usage is what a call used, as billed.
@@ -69,13 +76,23 @@ var chargeKinds = map[string]models.TxItemKind{
 
 // TxItems are the result's lines: the items, then the charges.
 func (r *Result) TxItems() []models.TxItem {
+	return r.TxItemsOn(time.Time{})
+}
+
+// TxItemsOn are TxItems of a purchase on day, the items' printed warranties
+// counted from it (none when day is zero).
+func (r *Result) TxItemsOn(day time.Time) []models.TxItem {
 	items := []models.TxItem{}
 	for _, it := range r.Items {
 		name := strings.TrimSpace(it.Name)
 		if name == "" {
 			continue
 		}
-		items = append(items, models.TxItem{Name: name, Quantity: it.Quantity, UnitPrice: it.UnitPrice, Total: it.Total})
+		line := models.TxItem{Name: name, Quantity: it.Quantity, UnitPrice: it.UnitPrice, Total: it.Total}
+		if !day.IsZero() {
+			_, line.WarrantyUntil = models.WindowsFromReceipt(day, 0, it.WarrantyMonths)
+		}
+		items = append(items, line)
 	}
 	for _, c := range r.Charges {
 		kind, ok := chargeKinds[strings.ToLower(strings.TrimSpace(c.Kind))]
@@ -127,29 +144,34 @@ Extract, as printed:
 - items: every product line with its name as printed, quantity (1 when not printed), unit price and line total
 - charges: every line that isn't a product: VAT or other tax, service, tip, delivery, fees, discounts, rounding. kind is one of vat, tax, service, tip, delivery, fee, discount, rounding; rate is the percentage when printed (14 for 14%); amount is negative for discounts; included is true when the line says the charge is already included in the prices (e.g. "VAT included", "شامل الضريبة")
 - subtotal and total: as printed, the total being what was paid
+- return_days: the days the receipt says the purchase can be returned or exchanged within (14 for "returns within 14 days"), 0 when not printed
+- warranty_months: the warranty the receipt prints for the whole purchase, in months (24 for "2 years warranty"), 0 when not printed; an item's own warranty printed next to it goes in that item's warranty_months (0 when none)
 Don't invent lines or prices you can't read. Set is_receipt to false when the image isn't a receipt or bill.`
 
 var responseSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{
-		"is_receipt": map[string]any{"type": "boolean"},
-		"merchant":   map[string]any{"type": "string"},
-		"date":       map[string]any{"type": "string"},
-		"time":       map[string]any{"type": "string"},
-		"currency":   map[string]any{"type": "string"},
-		"subtotal":   map[string]any{"type": "number"},
-		"total":      map[string]any{"type": "number"},
+		"is_receipt":      map[string]any{"type": "boolean"},
+		"merchant":        map[string]any{"type": "string"},
+		"date":            map[string]any{"type": "string"},
+		"time":            map[string]any{"type": "string"},
+		"currency":        map[string]any{"type": "string"},
+		"subtotal":        map[string]any{"type": "number"},
+		"total":           map[string]any{"type": "number"},
+		"return_days":     map[string]any{"type": "integer"},
+		"warranty_months": map[string]any{"type": "integer"},
 		"items": map[string]any{
 			"type": "array",
 			"items": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"name":       map[string]any{"type": "string"},
-					"quantity":   map[string]any{"type": "number"},
-					"unit_price": map[string]any{"type": "number"},
-					"total":      map[string]any{"type": "number"},
+					"name":            map[string]any{"type": "string"},
+					"quantity":        map[string]any{"type": "number"},
+					"unit_price":      map[string]any{"type": "number"},
+					"total":           map[string]any{"type": "number"},
+					"warranty_months": map[string]any{"type": "integer"},
 				},
-				"required": []string{"name", "quantity", "unit_price", "total"},
+				"required": []string{"name", "quantity", "unit_price", "total", "warranty_months"},
 			},
 		},
 		"charges": map[string]any{
@@ -167,7 +189,7 @@ var responseSchema = map[string]any{
 			},
 		},
 	},
-	"required": []string{"is_receipt", "merchant", "date", "time", "currency", "subtotal", "total", "items", "charges"},
+	"required": []string{"is_receipt", "merchant", "date", "time", "currency", "subtotal", "total", "items", "charges", "return_days", "warranty_months"},
 }
 
 // Read reads the receipt in img. The usage is returned even on errors when

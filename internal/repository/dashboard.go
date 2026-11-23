@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -316,12 +318,23 @@ func (r *Repository) GetBadgeCounts(ctx context.Context) (badge.Counts, error) {
 	}
 	now := time.Now().UTC()
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	// The windows are user days.
+	userToday := r.userToday(ctx)
 	overdue, err := q.CountOverdueTransactions(ctx, today)
 	if err != nil {
 		l.Error("counting overdue transactions", zap.Error(err))
 		return badge.Counts{}, err
 	}
-	c := badge.Counts{SMS: sms, Review: review, Overdue: int(overdue)}
+	ending, err := q.ListWindowsEnding(ctx, queries.ListWindowsEndingParams{
+		Today:      sql.NullTime{Time: userToday, Valid: true},
+		ReturnBy:   sql.NullTime{Time: userToday.AddDate(0, 0, models.ReturnSoonDays), Valid: true},
+		WarrantyBy: sql.NullTime{Time: userToday.AddDate(0, 0, models.WarrantySoonDays), Valid: true},
+	})
+	if err != nil {
+		l.Error("listing the windows ending", zap.Error(err))
+		return badge.Counts{}, err
+	}
+	c := badge.Counts{SMS: sms, Review: review, Overdue: int(overdue), Warranty: len(ending)}
 
 	if sms > 0 {
 		rows, err := q.ListSMSMessagesByStatus(ctx, queries.ListSMSMessagesByStatusParams{
@@ -360,7 +373,59 @@ func (r *Repository) GetBadgeCounts(ctx context.Context) (badge.Counts, error) {
 			c.Items = append(c.Items, badgeTxItem(src, row))
 		}
 	}
+	for _, row := range ending {
+		if len(c.Items) >= badge.MaxItems {
+			break
+		}
+		c.Items = append(c.Items, badgeWindowItem(row, userToday))
+	}
 	return c, nil
+}
+
+// badgeWindowItem is the notification of a return window or warranty ending
+// soon, e.g. "Return by Dec 2 · Zara", "Warranty ends · TV".
+func badgeWindowItem(row queries.ListWindowsEndingRow, today time.Time) badge.Item {
+	name := row.LineName
+	if name == "" {
+		name = row.CounterpartyName.String
+	}
+	if name == "" {
+		name = row.Description.String
+	}
+	if name == "" {
+		name = "Purchase"
+	}
+	ends := parseDay(row.EndsOn)
+	when := ""
+	if ends != nil {
+		switch n := models.DaysUntil(*ends, today); n {
+		case 0:
+			when = "ends today"
+		case 1:
+			when = "ends tomorrow"
+		default:
+			when = fmt.Sprintf("ends %s, in %d days", ends.Format("Jan 2"), n)
+		}
+	}
+	cur := models.Currency{Symbol: row.CurrencySymbol, InGrams: row.CurrencyInGrams}
+	title, tag := "Return window · "+name, "return:"+row.TransactionID
+	if row.What == "warranty" {
+		title, tag = "Warranty · "+name, "warranty:"+row.TransactionID
+		if row.LineID != "" {
+			tag = "warranty:" + row.LineID
+		}
+	}
+	body := cur.Format(row.Amount)
+	if when != "" {
+		body = when + " · " + body
+	}
+	return badge.Item{
+		Source: badge.SourceWarranty,
+		Tag:    tag,
+		Title:  title,
+		Body:   body,
+		URL:    "/transactions?tx=" + row.TransactionID,
+	}
 }
 
 // smsNeedingAttention are the statuses of the sms that created no

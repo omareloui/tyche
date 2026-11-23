@@ -230,6 +230,7 @@ func updateCounterpartyParams(it *models.Counterparty) (queries.UpdateCounterpar
 		DefaultCategoryID: defaultCategoryID(it),
 		IsArchived:        it.IsArchived,
 		Rating:            ratingParam(it.Rating),
+		ReturnDays:        ratingParam(it.ReturnDays),
 		Note:              it.Note,
 		Labels:            labels,
 	}, nil
@@ -256,6 +257,7 @@ func (r *Repository) CreateCounterparty(ctx context.Context, it *models.Counterp
 			IsMerchant:        it.IsMerchant,
 			DefaultCategoryID: defaultCategoryID(it),
 			Rating:            ratingParam(it.Rating),
+			ReturnDays:        ratingParam(it.ReturnDays),
 			Note:              it.Note,
 			Labels:            labels,
 		}); err != nil {
@@ -295,6 +297,7 @@ func dbCounterpartyToCounterparty(dbP *queries.Counterparty) *models.Counterpart
 		IsMerchant: dbP.IsMerchant,
 		IsArchived: dbP.IsArchived,
 		Rating:     int(dbP.Rating.Int64),
+		ReturnDays: int(dbP.ReturnDays.Int64),
 		Note:       dbP.Note,
 		Labels:     labels,
 		CreatedAt:  dbP.CreatedAt,
@@ -305,7 +308,7 @@ func dbLocationToLocation(loc queries.CounterpartyLocation) models.CounterpartyL
 	return models.CounterpartyLocation{ID: loc.ID, Label: loc.Label, Address: loc.Address, MapsURL: loc.MapsUrl}
 }
 
-// ratingParam is NULL for an unrated (0) counterparty.
+// ratingParam is NULL for an unrated (0) counterparty (or 0 return days).
 func ratingParam(rating int) sql.NullInt64 {
 	return sql.NullInt64{Int64: int64(rating), Valid: rating > 0}
 }

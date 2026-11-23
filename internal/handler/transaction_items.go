@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/errs"
@@ -46,7 +47,7 @@ func parseRate(s string) *float64 {
 }
 
 // parseTxItems reads the line rows (parallel item_* fields, one value per
-// row: every row sends all nine), dropping blank rows; never nil, so saving
+// row: every row sends all ten), dropping blank rows; never nil, so saving
 // replaces the lines.
 func parseTxItems(r *http.Request) []models.TxItem {
 	_ = r.ParseForm()
@@ -70,6 +71,9 @@ func parseTxItems(r *http.Request) []models.TxItem {
 			Total:     parseSignedFloat(at("item_total", i)),
 			Rate:      parseRate(at("item_rate", i)),
 			Included:  at("item_included", i) != "",
+		}
+		if !it.Kind.IsCharge() {
+			it.WarrantyUntil, _ = models.ParseWindowValue(at("item_warranty_until", i), time.Time{})
 		}
 		if it.Name == "" && it.UnitPrice == 0 && it.Total == 0 && it.Rate == nil {
 			continue

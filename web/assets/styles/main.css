@@ -456,6 +456,12 @@ input[type="number"] {
     @apply flex flex-wrap items-center gap-2 mt-1.5 ml-3 sm:ml-[4.25rem] mr-3 px-3 py-2 rounded-xl bg-amber-400/6 ring-1 ring-amber-400/15;
   }
 
+  /* A return / warranty preset (return_warranty.templ), pressed when it's
+     the day set. */
+  .win-pill {
+    @apply inline-flex items-center h-8 px-3 rounded-full border border-zinc-700 text-sm text-zinc-300 cursor-pointer select-none transition-colors hover:border-violet-400 hover:text-violet-300 aria-pressed:border-violet-400 aria-pressed:bg-violet-500/20 aria-pressed:text-violet-200;
+  }
+
   /* The transaction details drawer (transaction_details.templ). */
   .txd-action {
     @apply inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full border border-zinc-700 text-sm text-zinc-300 cursor-pointer transition-colors hover:border-violet-400 hover:text-violet-300;

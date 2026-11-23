@@ -203,6 +203,10 @@ func (r *Repository) itemLines(ctx context.Context, q *queries.Queries, itemID s
 			Quantity: row.Quantity, Total: row.Total,
 			Foreign:    row.LinesCurrencyID.Valid && row.LinesCurrencyID.String != row.Currency.ID,
 			LinesTotal: row.LinesTotal, Amount: row.Amount, Currency: *cur,
+			Warranty: dayPtr(row.WarrantyUntil),
+		}
+		if lines[i].Warranty == nil {
+			lines[i].Warranty = dayPtr(row.TxWarrantyUntil)
 		}
 		if row.CounterpartyID.Valid {
 			lines[i].Merchant = &models.Counterparty{

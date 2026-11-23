@@ -82,6 +82,8 @@ func (r *Repository) createTransactionWithTxn(qtx *queries.Queries, ctx context.
 		ScheduledTo:    tx.ScheduledTo,
 		FulfilledAt:    sql.NullTime{Time: tx.FulfilledAt, Valid: !tx.FulfilledAt.IsZero()},
 		NeedsReview:    tx.NeedsReview,
+		ReturnUntil:    nullDay(tx.ReturnUntil),
+		WarrantyUntil:  nullDay(tx.WarrantyUntil),
 	}); err != nil {
 		l.Error("create transaction", zap.Error(err), zap.String("id", tx.ID))
 		return err
@@ -141,6 +143,7 @@ func (r *Repository) GetTransactionsPage(ctx context.Context, f models.TxFilter,
 		return r.listTransactions(ctx, p)
 	}
 
+	r.setFilterToday(ctx, &f)
 	base := txFilterParams(&f)
 	if before.IsZero() && f.Status != models.TxStatusFulfilled {
 		p := base
@@ -237,11 +240,12 @@ func (r *Repository) GetTransactionsSummary(ctx context.Context, f models.TxFilt
 		return nil, err
 	}
 
+	r.setFilterToday(ctx, &f)
 	lp := txFilterParams(&f)
 	p := queries.GetTransactionsSummaryParams{
 		Q: lp.Q, Kind: lp.Kind, AccountID: lp.AccountID, CategoryID: lp.CategoryID,
 		CounterpartyID: lp.CounterpartyID, GoalID: lp.GoalID, NeedsReview: lp.NeedsReview,
-		FromSms: lp.FromSms, FromImport: lp.FromImport, HasReceipt: lp.HasReceipt, HasNote: lp.HasNote, FromDate: lp.FromDate, ToDate: lp.ToDate,
+		FromSms: lp.FromSms, FromImport: lp.FromImport, HasReceipt: lp.HasReceipt, HasNote: lp.HasNote, Window: lp.Window, WindowToday: lp.WindowToday, FromDate: lp.FromDate, ToDate: lp.ToDate,
 		MinAmount: lp.MinAmount, MaxAmount: lp.MaxAmount,
 	}
 	switch f.Status {
@@ -275,6 +279,13 @@ func (r *Repository) GetTransactionsSummary(ctx context.Context, f models.TxFilt
 		s.Out += out
 	}
 	return s, nil
+}
+
+// setFilterToday sets the user's today a windows filter compares with.
+func (r *Repository) setFilterToday(ctx context.Context, f *models.TxFilter) {
+	if f.Window != models.TxWindowAny && f.Today.IsZero() {
+		f.Today = r.userToday(ctx)
+	}
 }
 
 // txFilterParams is the list query for the filter, all of it (no limit).
@@ -324,6 +335,10 @@ func txFilterParams(f *models.TxFilter) queries.GetTransactionsParams {
 		p.HasNote = true
 	case models.TxNoteWithout:
 		p.HasNote = false
+	}
+	if f.Window != models.TxWindowAny {
+		p.Window = string(f.Window)
+		p.WindowToday = sql.NullTime{Time: f.Today, Valid: true}
 	}
 	if !f.From.IsZero() {
 		p.FromDate = f.From.UTC()
@@ -552,6 +567,7 @@ func (r *Repository) BulkUpdateTransactions(ctx context.Context, olds, news []*m
 // (both legs of a transfer pair), and how many rows the list shows of them,
 // up to limit rows (-1 for all).
 func (r *Repository) GetFilteredTransactionIDs(ctx context.Context, f models.TxFilter, limit int) ([]string, int, error) {
+	r.setFilterToday(ctx, &f)
 	p := txFilterParams(&f)
 	p.Lim = int64(limit)
 	switch f.Status {
@@ -604,6 +620,8 @@ func (r *Repository) updateTransactionWithTxn(ctx context.Context, qtx *queries.
 		Description:    sql.NullString{String: tx.Description, Valid: tx.Description != ""},
 		Note:           tx.Note,
 		ScheduledTo:    tx.ScheduledTo,
+		ReturnUntil:    nullDay(tx.ReturnUntil),
+		WarrantyUntil:  nullDay(tx.WarrantyUntil),
 	}); err != nil {
 		l.Error("updating transaction", zap.Error(err), zap.String("id", tx.ID))
 		return err
@@ -708,6 +726,9 @@ func dbTransactionToTransaction(
 		RecurrentTxID:  dbTx.RecurrentID.String,
 		LoanGoalID:     dbTx.LoanGoalID.String,
 		FromImport:     dbTx.ImportID.Valid,
+		ReturnUntil:    dayPtr(dbTx.ReturnUntil),
+		WarrantyUntil:  dayPtr(dbTx.WarrantyUntil),
+		ReturnedAt:     dayPtr(dbTx.ReturnedAt),
 	}
 
 	if acc != nil {

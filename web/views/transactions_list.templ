@@ -725,6 +725,7 @@ templ txChips(tx *models.Transaction, v *txView) {
 					}
 				</span>
 			}
+			@txWindowChips(tx)
 			if tx.ItemsCount > 0 {
 				<span class="chip" title="Its items, in its details">
 					@icons.Receipt("12")

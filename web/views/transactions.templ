@@ -29,6 +29,9 @@ type TransactionFD struct {
 	Receipt       ReceiptFD
 	// BoughtBy is the create form's "someone bought it for me".
 	BoughtBy BoughtByFD
+	// Windows are its return / warranty days, nil when it can't have any
+	// (e.g. a recurrent occurrence).
+	Windows *TxWindowsFD
 }
 
 // BoughtByFD is whether someone bought the expense for the user, and the
@@ -127,6 +130,9 @@ templ TxFormFields(
 	}
 	@txNoteField(id, fd.Note)
 	@txItemsField(id, fd.Items, &fd.Receipt, fd.ItemsCurrency)
+	if fd.Windows != nil {
+		@txWindowsField(id, fd.Windows)
+	}
 	<div x-data>
 		@form.Field("Date", "scheduled_to", id, icons.Calendar("15"), fd.ScheduledTo.Error) {
 			<div class="flex gap-2">
@@ -298,6 +304,10 @@ templ txFilterBar(f *models.TxFilter, start models.MonthStart, accs []models.Acc
 				@txFilterCombo(models.TxFilterNote, "Note", "Any note", string(f.Note), false, []form.ComboOption{
 					{Value: string(models.TxNoteWith), Label: "With a note", Leading: icons.StickyNote("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 					{Value: string(models.TxNoteWithout), Label: "Without a note", Leading: icons.X("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
+				})
+				@txFilterCombo(models.TxFilterWindow, "Return / warranty", "Any return / warranty", string(f.Window), false, []form.ComboOption{
+					{Value: string(models.TxWindowReturnOpen), Label: "Can still be returned", Leading: icons.RotateCcw("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
+					{Value: string(models.TxWindowWarrantyActive), Label: "Under warranty", Leading: icons.ShieldCheck("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 				})
 				@txDateRangeFilter(f)
 				@txDatePresets(f, start)
@@ -583,7 +593,8 @@ func txFilterKeysButQ() []string {
 	return []string{
 		models.TxFilterKind, models.TxFilterAccount, models.TxFilterCategory,
 		models.TxFilterCounterparty, models.TxFilterGoal, models.TxFilterStatus,
-		models.TxFilterSource, models.TxFilterReceipt, models.TxFilterFrom, models.TxFilterTo,
+		models.TxFilterSource, models.TxFilterReceipt, models.TxFilterNote, models.TxFilterWindow,
+		models.TxFilterFrom, models.TxFilterTo,
 		models.TxFilterMin, models.TxFilterMax,
 	}
 }

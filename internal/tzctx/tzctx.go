@@ -26,3 +26,10 @@ func In(ctx context.Context, t time.Time) time.Time {
 	}
 	return t
 }
+
+// Today is today in the user's time zone as the date-only form values parse
+// (midnight UTC), UTC's without one in ctx.
+func Today(ctx context.Context) time.Time {
+	y, m, d := In(ctx, time.Now()).Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+}

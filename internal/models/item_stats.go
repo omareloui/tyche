@@ -23,6 +23,8 @@ type ItemLine struct {
 	Currency           Currency
 	// Merchant is its transaction's counterparty, nil when none.
 	Merchant *Counterparty
+	// Warranty is the line's warranty: its own, else its transaction's.
+	Warranty *time.Time
 }
 
 // ItemPurchase is one line of an item, in the default currency.
@@ -33,6 +35,8 @@ type ItemPurchase struct {
 	Quantity  float64
 	UnitPrice float64
 	Total     float64
+	// Warranty is the purchase's warranty's last day, nil when none.
+	Warranty *time.Time
 }
 
 // ItemMerchantPrice is what an item cost at one merchant.
@@ -65,6 +69,8 @@ type ItemStats struct {
 	PerMerchant []ItemMerchantPrice
 	// Partial tells some lines were left out, their currency having no rate.
 	Partial bool
+	// Warranty is the latest purchase's with a warranty, nil when none.
+	Warranty *time.Time
 }
 
 // ChangePct is how much the unit price moved from the first purchase to
@@ -92,7 +98,7 @@ func itemPurchase(l ItemLine, def Currency) (ItemPurchase, bool) {
 	}
 	return ItemPurchase{
 		TxID: l.TxID, Day: l.Day, Merchant: l.Merchant, Quantity: qty,
-		UnitPrice: def.Round(total / qty), Total: def.Round(total),
+		UnitPrice: def.Round(total / qty), Total: def.Round(total), Warranty: l.Warranty,
 	}, true
 }
 
@@ -108,6 +114,9 @@ func NewItemStats(lines []ItemLine, def Currency) *ItemStats {
 			continue
 		}
 		s.add(p)
+		if p.Warranty != nil {
+			s.Warranty = p.Warranty
+		}
 
 		key := ""
 		if p.Merchant != nil {

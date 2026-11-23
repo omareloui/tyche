@@ -619,6 +619,7 @@ func (h Handler) mapCounterpartyToFD(cp *models.Counterparty, err *errs.Validati
 		DefaultCategoryID: form.FDInput{Value: defaultCategoryID, Error: err.Errors.MsgFor("DefaultCategoryID")},
 		IsArchived:        form.FDInput{Value: formatBooleanIfNonZero(cp.IsArchived), Error: err.Errors.MsgFor("IsArchived")},
 		Rating:            form.FDInput{Value: formatIntIfNonZero(cp.Rating), Error: err.Errors.MsgFor("Rating")},
+		ReturnDays:        form.FDInput{Value: formatIntIfNonZero(cp.ReturnDays), Error: err.Errors.MsgFor("ReturnDays")},
 		Note:              form.FDInput{Value: cp.Note, Error: err.Errors.MsgFor("Note")},
 		Labels:            form.FDInput{Value: strings.Join(cp.Labels, ", "), Error: labelsError(err)},
 		LabelsInUse:       labels,
@@ -658,6 +659,7 @@ func (h Handler) mapFDToCounterparty(r *http.Request) (*models.Counterparty, err
 		DefaultCategory: defaultCategory,
 		IsArchived:      parseBoolean(r.FormValue("is_archived")),
 		Rating:          parseRating(r.FormValue("rating")),
+		ReturnDays:      parseReturnDays(r.FormValue("return_days")),
 		Note:            r.FormValue("note"),
 		Labels:          parseAliases(r.FormValue("labels")),
 		Locations:       parseCounterpartyLocations(r),
@@ -681,6 +683,16 @@ func labelsError(err *errs.ValidationError) string {
 func parseRating(s string) int {
 	n, err := strconv.Atoi(strings.TrimSpace(s))
 	if err != nil || n < 0 || n > models.MaxRating {
+		return 0
+	}
+	return n
+}
+
+// parseReturnDays reads a merchant's return window, 0 (none) when blank;
+// out of range ones are left to the validation.
+func parseReturnDays(s string) int {
+	n, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil {
 		return 0
 	}
 	return n
@@ -720,6 +732,7 @@ func clearNonMerchantFields(cp *models.Counterparty) {
 	cp.Icon = ""
 	cp.DefaultCategory = nil
 	cp.Rating = 0
+	cp.ReturnDays = 0
 	cp.Locations = nil
 }
 

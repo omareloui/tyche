@@ -23,7 +23,9 @@ type TxItemFD struct {
 	Total     string
 	Rate      string
 	Included  bool
-	Error     string
+	// WarrantyUntil is an item line's own warranty's last day (YYYY-MM-DD).
+	WarrantyUntil string
+	Error         string
 }
 
 // ItemsCurrencyFD is the lines' currency picker: Value the picked one's id
@@ -95,6 +97,8 @@ func TxItemsToFD(items []models.TxItem) []TxItemFD {
 		if it.Kind.IsCharge() {
 			fd.UnitPrice = ""
 			fd.Quantity = ""
+		} else {
+			fd.WarrantyUntil = dayValue(it.WarrantyUntil)
 		}
 		fds[i] = fd
 	}
@@ -337,6 +341,7 @@ templ txItemRow(it TxItemFD) {
 		<input type="hidden" name="item_id" value={ it.ID }/>
 		if charge {
 			<input type="hidden" name="item_item_id" value=""/>
+			<input type="hidden" name="item_warranty_until" value=""/>
 		}
 		if !charge {
 			<input type="hidden" name="item_kind" value="0"/>
@@ -394,6 +399,21 @@ templ txItemRow(it TxItemFD) {
 				<input type="text" inputmode="decimal" name="item_quantity" value={ it.Quantity } placeholder="Qty" aria-label="Quantity" class="input-field text-center tabular-nums"/>
 				<input type="text" inputmode="decimal" name="item_total" value={ it.Total } placeholder="Total" aria-label="Total" class="input-field tabular-nums" data-total-manual?={ itemTotalManual(it) }/>
 			</div>
+			<label class="hidden [form:has(input[name=kind][value=Expense]:checked)_&]:flex items-center gap-2 text-sm text-zinc-400">
+				@icons.ShieldCheck("14", &templ.Attributes{"class": "shrink-0"})
+				<span class="shrink-0">Warranty until</span>
+				<input
+					type="text"
+					name="item_warranty_until"
+					value={ it.WarrantyUntil }
+					placeholder="yyyy-mm-dd (optional)"
+					aria-label="Warranty until"
+					autocomplete="off"
+					x-mask="9999-99-99"
+					data-datepicker
+					class="input-field h-9! flex-1 min-w-0 text-sm"
+				/>
+			</label>
 		}
 		@form.ErrorMessage(it.Error)
 	</div>
@@ -431,13 +451,15 @@ func onIfTrue(b bool) string {
 }
 
 // TxItemsList shows the lines: the items, a subtotal when there are charges,
-// the charges, then what they add up to, against amount.
-templ TxItemsList(items []models.TxItem, acc *models.Currency, amount float64, onDelete func(models.TxItem) string) {
+// the charges, then what they add up to, against amount. owner is the
+// transaction they're of (nil for a recurrent one's), showing the items'
+// warranties.
+templ TxItemsList(items []models.TxItem, acc *models.Currency, amount float64, onDelete func(models.TxItem) string, owner *models.Transaction) {
 	{{ cur := models.TxItemsCurrency(items, acc) }}
 	<ul class="grid grid-cols-1 gap-1">
 		for _, it := range items {
 			if !it.Kind.IsCharge() {
-				@txItemLine(it, cur, onDelete)
+				@txItemLine(it, cur, onDelete, owner)
 			}
 		}
 	</ul>
@@ -449,7 +471,7 @@ templ TxItemsList(items []models.TxItem, acc *models.Currency, amount float64, o
 		<ul class="grid grid-cols-1 gap-1">
 			for _, it := range items {
 				if it.Kind.IsCharge() {
-					@txItemLine(it, cur, onDelete)
+					@txItemLine(it, cur, onDelete, owner)
 				}
 			}
 		</ul>
@@ -489,7 +511,7 @@ func abs(v float64) float64 {
 	return v
 }
 
-templ txItemLine(it models.TxItem, cur *models.Currency, onDelete func(models.TxItem) string) {
+templ txItemLine(it models.TxItem, cur *models.Currency, onDelete func(models.TxItem) string, owner *models.Transaction) {
 	<li class="flex items-center gap-3 min-w-0 px-3 py-1.5 rounded-xl bg-tx-row" data-tx-item-line>
 		<div class="flex-1 min-w-0">
 			<p class="text-sm [overflow-wrap:anywhere]">
@@ -507,6 +529,11 @@ templ txItemLine(it models.TxItem, cur *models.Currency, onDelete func(models.Tx
 			</p>
 			if !it.Kind.IsCharge() && it.Quantity != 1 {
 				<p class="text-xs text-zinc-500 tabular-nums">{ fmt.Sprintf("%s × %s", strconv.FormatFloat(it.Quantity, 'f', -1, 64), cur.Format(it.UnitPrice)) }</p>
+			}
+			if owner != nil && !it.Kind.IsCharge() && owner.Kind == models.ExpenseTxKind {
+				<div class="mt-1">
+					@txItemWarranty(owner, &it, onDelete != nil && models.TxWindowsEditable(owner))
+				</div>
 			}
 		</div>
 		<span
@@ -709,7 +736,7 @@ templ TxDetailsItems(tx *models.Transaction, add *TxItemFD, rec *ReceiptFD) {
 				if !locked {
 					{{ onDelete = func(it models.TxItem) string { return fmt.Sprintf("/transactions/%s/items/%s", tx.ID, it.ID) } }}
 				}
-				@TxItemsList(tx.Items, &tx.Account.Currency, tx.Amount, onDelete)
+				@TxItemsList(tx.Items, &tx.Account.Currency, tx.Amount, onDelete, tx)
 				if len(tx.Wishes) > 0 {
 					@txWishChips(tx)
 				}
@@ -891,7 +918,7 @@ templ RecurrentTxDetailsItems(rt *models.RecurrentTx, add *TxItemFD) {
 				if !rt.IsGamyaa() {
 					{{ onDelete = func(it models.TxItem) string { return fmt.Sprintf("/recurrent-tx/%s/items/%s", rt.ID, it.ID) } }}
 				}
-				@TxItemsList(rt.Items, &rt.Account.Currency, rt.Amount, onDelete)
+				@TxItemsList(rt.Items, &rt.Account.Currency, rt.Amount, onDelete, nil)
 			}
 			if !rt.IsGamyaa() {
 				@txItemAddForm(fmt.Sprintf("/recurrent-tx/%s/items", rt.ID), add, models.TxItemsSubtotal(rt.Items), txCounterpartyID(rt.Counterparty))

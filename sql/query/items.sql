@@ -127,6 +127,8 @@ SELECT
     ti.quantity,
     ti.total,
     ti.currency_id AS lines_currency_id,
+    ti.warranty_until,
+    t.warranty_until AS tx_warranty_until,
     t.id AS transaction_id,
     t.scheduled_to,
     t.amount,

@@ -25,6 +25,9 @@ type Counterparty struct {
 	IsArchived bool
 	// Rating is a merchant's stars, 1 to 5, 0 when unrated.
 	Rating int `validate:"min=0,max=5"`
+	// ReturnDays is a merchant's usual return window, prefilling its new
+	// purchases' (ReturnUntilFor), 0 when none.
+	ReturnDays int `validate:"min=0,max=365"`
 	// Labels group it, e.g. Restaurant or Online store, to filter by.
 	Labels []string `validate:"max=20,dive,not_blank,max=40"`
 	// Note is free text about any counterparty.
@@ -149,6 +152,9 @@ func (cp *Counterparty) Absorb(other *Counterparty) {
 	}
 	if cp.IsMerchant && cp.Rating == 0 {
 		cp.Rating = other.Rating
+	}
+	if cp.IsMerchant && cp.ReturnDays == 0 {
+		cp.ReturnDays = other.ReturnDays
 	}
 }
 

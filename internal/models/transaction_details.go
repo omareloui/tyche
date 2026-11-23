@@ -33,4 +33,7 @@ type TxDetails struct {
 	Month time.Time
 	// Period is the user's month of the transaction, the stats are of.
 	Period Period
+	// ReturnRefundID is a refund looking like its return (see
+	// Repository.ReturnRefundCandidate), offered to mark it returned.
+	ReturnRefundID string
 }

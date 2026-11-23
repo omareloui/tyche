@@ -356,7 +356,12 @@ func (h Handler) ScanReceiptIntoForm(w http.ResponseWriter, r *http.Request) (te
 			tx.Description = merchant
 		}
 	}
-	tx.Items = res.TxItems()
+	windows := tx.Kind == models.ExpenseTxKind && tx.RecurrentTx == nil
+	var itemsDay time.Time
+	if windows {
+		itemsDay = tx.ScheduledTo
+	}
+	tx.Items = res.TxItemsOn(itemsDay)
 	models.SetTxItemsCurrency(tx.Items, lineCur, &tx.Account.Currency)
 	models.NormalizeTxItems(tx.Items, lineCur)
 	tx.Items = models.SortTxItems(tx.Items)
@@ -368,6 +373,22 @@ func (h Handler) ScanReceiptIntoForm(w http.ResponseWriter, r *http.Request) (te
 	accs, knds, cats, cps, err := h.getTxDeps(ctx)
 	if err != nil {
 		return nil, err
+	}
+	// The windows the receipt prints, else (a new one) its merchant's
+	// usual return window; the ones set kept.
+	if windows {
+		ret, war := models.WindowsFromReceipt(tx.ScheduledTo, res.ReturnDays, res.WarrantyMonths)
+		if tx.ReturnUntil == nil && ret != nil {
+			tx.ReturnUntil = ret
+			filled = append(filled, "return window")
+		}
+		if tx.WarrantyUntil == nil && war != nil {
+			tx.WarrantyUntil = war
+			filled = append(filled, "warranty")
+		}
+		if !isEdit {
+			applyCounterpartyReturnDays(tx, cps)
+		}
 	}
 	fd := h.mapTransactionToFD(r.Context(), tx, new(errs.ValidationError))
 	if isEdit {
@@ -416,6 +437,10 @@ func (h Handler) ScanReceiptIntoTx(w http.ResponseWriter, r *http.Request) (temp
 		return nil, scanError(w, "#txd-scan-error-"+tx.ID, err)
 	}
 	items := scan.result.TxItems()
+	if models.TxWindowsEditable(tx) {
+		// The items' printed warranties, from its day.
+		items = scan.result.TxItemsOn(tx.ScheduledTo)
+	}
 	lineCur, warning := h.receiptCurrency(r.Context(), scan.result, &tx.Account)
 	models.SetTxItemsCurrency(items, lineCur, &tx.Account.Currency)
 	models.NormalizeTxItems(items, lineCur)

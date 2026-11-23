@@ -35,6 +35,14 @@ func TestCountsOnly(t *testing.T) {
 	if got := c.Title(); got != "1 SMS to check · 2 to review · 4 overdue" {
 		t.Errorf("title: got %q", got)
 	}
+
+	w := Counts{Review: 2, Warranty: 3, Items: []Item{{Source: SourceWarranty, Tag: "return:1"}, {Source: SourceReview, Tag: "tx:2"}}}
+	if got := w.Only(ParseSources("warranty")); got.Total() != 3 || len(got.Items) != 1 || got.Title() != "3 ending soon" {
+		t.Errorf("warranty only: got %+v %q", got, got.Title())
+	}
+	if got := (Counts{Warranty: 1}).URL(); got != "/transactions?window=return_open" {
+		t.Errorf("warranty url: got %q", got)
+	}
 }
 
 func TestPayloadFits(t *testing.T) {

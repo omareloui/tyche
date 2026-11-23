@@ -1,0 +1,515 @@
+package views
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/tzctx"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+// Return + warranty windows of a purchase (models/return_warranty.go): its
+// details' section setting them in place (PUT /transactions/{id}/windows),
+// a line's warranty picker, the form's fields and the row's chips.
+
+// TxWindowsProps is a purchase's return / warranty section.
+type TxWindowsProps struct {
+	Tx *models.Transaction
+	// RefundID is a refund looking like its return, offered to mark it.
+	RefundID string
+	// Error is a refused change's.
+	Error string
+}
+
+// TxWindowsID is the section's element id, its answer replacing it.
+func TxWindowsID(txID string) string {
+	return "txw-" + txID
+}
+
+func txWindowsURL(txID string) string {
+	return fmt.Sprintf("/transactions/%s/windows", txID)
+}
+
+func windowVals(key, value string) string {
+	b, _ := json.Marshal(map[string]string{key: value})
+	return string(b)
+}
+
+// formatWindowDay is a window's last day, with the year when not this one.
+func formatWindowDay(ctx context.Context, d time.Time) string {
+	if d.Year() == tzctx.Today(ctx).Year() {
+		return d.Format("Jan 2")
+	}
+	return d.Format("Jan 2, 2006")
+}
+
+// daysLeftLabel is "today", "tomorrow" or "in N days".
+func daysLeftLabel(n int) string {
+	switch n {
+	case 0:
+		return "today"
+	case 1:
+		return "tomorrow"
+	}
+	return fmt.Sprintf("in %d days", n)
+}
+
+func warrantyPresetLabel(months int) string {
+	if months%12 == 0 {
+		if months == 12 {
+			return "1 year"
+		}
+		return fmt.Sprintf("%d years", months/12)
+	}
+	return fmt.Sprintf("%d months", months)
+}
+
+func dayValue(d *time.Time) string {
+	if d == nil {
+		return ""
+	}
+	return d.Format(time.DateOnly)
+}
+
+// TxWindows is the details' "Return / warranty" section: a row each, like
+// the details' fields (what's set, amber when ending soon), tapping it
+// showing its presets, a picked day and removing it when editable; the
+// return's "Mark returned" / "Undo" by it. Folded into an "Add" row while
+// nothing's set; nothing when it can't have any and has none.
+templ TxWindows(p TxWindowsProps) {
+	{{ tx := p.Tx }}
+	{{ editable := models.TxWindowsEditable(tx) }}
+	if editable || tx.ReturnUntil != nil || tx.WarrantyUntil != nil || tx.ReturnedAt != nil {
+		{{ today := tzctx.Today(ctx) }}
+		{{ set := tx.ReturnUntil != nil || tx.WarrantyUntil != nil || tx.ReturnedAt != nil }}
+		<div id={ TxWindowsID(tx.ID) } x-data={ fmt.Sprintf("{ open: %t }", set || p.Error != "") }>
+			if !set {
+				<button
+					type="button"
+					x-show="!open"
+					@click="open = true"
+					class="flex items-center gap-2 w-full px-4 py-3 rounded-2xl border border-dashed border-zinc-700 text-left text-sm text-zinc-400 cursor-pointer transition-colors hover:border-violet-400 hover:text-violet-300"
+				>
+					@icons.Plus("15", &templ.Attributes{"class": "shrink-0"})
+					Add a return window or warranty
+				</button>
+			}
+			<dl
+				if !set {
+					x-cloak
+					x-show="open"
+					x-collapse
+				}
+				class="grid gap-px overflow-hidden rounded-2xl bg-zinc-800/60 ring-1 ring-zinc-800"
+			>
+				@txReturnRow(p, editable, today)
+				@txWarrantyRow(tx, editable, today)
+			</dl>
+			if p.Error != "" {
+				<p class="mt-2 text-sm text-red-400" role="alert">{ p.Error }</p>
+			}
+		</div>
+	}
+}
+
+// windowBar is how much of a window is gone by, under its value: a
+// percent (< 0: none) and its color.
+type windowBar struct {
+	pct   int
+	color string
+}
+
+var noBar = windowBar{pct: -1}
+
+// newWindowBar is the bar of a window from start to end on today, amber
+// when soon, else color.
+func newWindowBar(start, end, today time.Time, soon bool, color string) windowBar {
+	if soon {
+		color = "bg-amber-400"
+	}
+	pct := 100
+	if total := models.DaysUntil(end, start); total > 0 {
+		pct = max(0, min(100, models.DaysUntil(today, start)*100/total))
+	}
+	return windowBar{pct: max(pct, 3), color: color}
+}
+
+// txWindowRow is a window's row: its label, what's set (value, a button
+// showing the picker when editable), the bar of the window gone by and the
+// picker under it.
+templ txWindowRow(label string, icon templ.Component, editable bool, value templ.Component, bar windowBar, picker templ.Component) {
+	<div class="grid gap-2 px-4 py-3 bg-zinc-900" x-data="{ edit: false }">
+		<div class="flex items-center gap-3">
+			<dt class="flex items-center gap-2 w-28 shrink-0 text-sm text-zinc-500">
+				@icon
+				{ label }
+			</dt>
+			<dd class="flex flex-1 flex-wrap items-center gap-x-3 gap-y-1 min-w-0 text-sm">
+				if editable {
+					<button type="button" @click="edit = !edit" :aria-expanded="edit" class="txd-link inline-flex items-center gap-1.5">
+						@value
+						@icons.ChevronDown("14", &templ.Attributes{"class": "shrink-0 text-zinc-500 transition-transform", ":class": "edit && 'rotate-180'"})
+					</button>
+				} else {
+					@value
+				}
+				{ children... }
+			</dd>
+		</div>
+		if bar.pct >= 0 {
+			<div class="pl-31" role="presentation">
+				<div class="h-1 rounded-full bg-zinc-800 overflow-hidden">
+					<div class={ "h-full rounded-full", bar.color } style={ fmt.Sprintf("width: %d%%", bar.pct) }></div>
+				</div>
+			</div>
+		}
+		if editable {
+			<div x-cloak x-show="edit" x-collapse class="pl-31">
+				@picker
+			</div>
+		}
+	</div>
+}
+
+templ txReturnRow(p TxWindowsProps, editable bool, today time.Time) {
+	{{ tx := p.Tx }}
+	{{ bar := noBar }}
+	if tx.ReturnOpen(today) {
+		{{ bar = newWindowBar(models.DayOf(tx.ScheduledTo), *tx.ReturnUntil, today, tx.ReturnSoon(today), "bg-violet-400") }}
+	}
+	@txWindowRow("Return", icons.RotateCcw("15"), editable && tx.ReturnedAt == nil, txReturnValue(tx, today), bar,
+		txWindowPicker(tx, "return", "Return by", tx.ReturnUntil, returnPresets())) {
+		if editable && tx.ReturnOpen(today) {
+			<button
+				type="button"
+				class="ml-auto txd-more"
+				if p.RefundID != "" {
+					title="A refund from this merchant looks like its return"
+				}
+				hx-put={ txWindowsURL(tx.ID) }
+				hx-vals={ windowVals("returned", "1") }
+				hx-target={ "#" + TxWindowsID(tx.ID) }
+				hx-swap="outerHTML"
+			>
+				Mark returned
+				if p.RefundID != "" {
+					<span class="ml-0.5 inline-block w-1.5 h-1.5 rounded-full bg-violet-400 align-middle" aria-hidden="true"></span>
+				}
+			</button>
+		}
+		if editable && tx.ReturnedAt != nil {
+			<span class="ml-auto flex items-center gap-1">
+				if p.RefundID == "" {
+					<button
+						type="button"
+						class="txd-more"
+						hx-get={ fmt.Sprintf("/transactions/%s/duplicate?as=refund", tx.ID) }
+						hx-target="#tx-create"
+						hx-swap="innerHTML"
+						@click="openCreateForm = true"
+						@htmx:after-request="close()"
+					>Add refund</button>
+				}
+				<button
+					type="button"
+					title="Not returned after all"
+					aria-label="Not returned after all"
+					class="grid place-items-center w-7 h-7 rounded-lg text-zinc-500 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white"
+					hx-put={ txWindowsURL(tx.ID) }
+					hx-vals={ windowVals("returned", "0") }
+					hx-target={ "#" + TxWindowsID(tx.ID) }
+					hx-swap="outerHTML"
+				>
+					@icons.X("14")
+				</button>
+			</span>
+		}
+	}
+}
+
+templ txReturnValue(tx *models.Transaction, today time.Time) {
+	switch  {
+		case tx.ReturnedAt != nil:
+			<span class="text-emerald-300">Returned { formatWindowDay(ctx, *tx.ReturnedAt) }</span>
+		case tx.ReturnUntil == nil:
+			<span class="text-zinc-500">None</span>
+		case tx.ReturnOpen(today):
+			<span class={ templ.KV("text-amber-300", tx.ReturnSoon(today)) }>
+				By { formatWindowDay(ctx, *tx.ReturnUntil) }
+				<span class={ templ.KV("text-zinc-500", !tx.ReturnSoon(today)) }>· { daysLeftLabel(models.DaysUntil(*tx.ReturnUntil, today)) }</span>
+			</span>
+		default:
+			<span class="text-zinc-500">Closed { formatWindowDay(ctx, *tx.ReturnUntil) }</span>
+	}
+}
+
+templ txWarrantyRow(tx *models.Transaction, editable bool, today time.Time) {
+	{{ bar := noBar }}
+	if w := tx.WarrantyUntil; models.WarrantyActive(w, today) {
+		{{ bar = newWindowBar(models.DayOf(tx.ScheduledTo), *w, today, models.WarrantySoon(w, today), "bg-emerald-400") }}
+	}
+	@txWindowRow("Warranty", icons.ShieldCheck("15"), editable, txWarrantyValue(tx, today), bar,
+		txWindowPicker(tx, "warranty", "Warranty until", tx.WarrantyUntil, warrantyPresets())) {
+	}
+}
+
+templ txWarrantyValue(tx *models.Transaction, today time.Time) {
+	{{ w := tx.WarrantyUntil }}
+	switch  {
+		case w == nil:
+			<span class="text-zinc-500">
+				None
+				if slicesHasItemLine(tx.Items) {
+					· items can have their own
+				}
+			</span>
+		case models.WarrantyActive(w, today):
+			<span class={ templ.KV("text-amber-300", models.WarrantySoon(w, today)) }>Until { formatWindowDay(ctx, *w) }</span>
+		default:
+			<span class="text-zinc-500">Ended { formatWindowDay(ctx, *w) }</span>
+	}
+}
+
+type windowPreset struct{ value, label string }
+
+func returnPresets() []windowPreset {
+	ps := make([]windowPreset, len(models.ReturnPresets))
+	for i, d := range models.ReturnPresets {
+		ps[i] = windowPreset{strconv.Itoa(d) + "d", fmt.Sprintf("%d days", d)}
+	}
+	return ps
+}
+
+func warrantyPresets() []windowPreset {
+	ps := make([]windowPreset, len(models.WarrantyPresets))
+	for i, m := range models.WarrantyPresets {
+		ps[i] = windowPreset{strconv.Itoa(m) + "m", warrantyPresetLabel(m)}
+	}
+	return ps
+}
+
+// presetIsSet tells the preset ends on cur, from the purchase's day.
+func presetIsSet(ps windowPreset, purchase time.Time, cur *time.Time) bool {
+	d, err := models.ParseWindowValue(ps.value, purchase)
+	return err == nil && d != nil && cur != nil && d.Equal(*cur)
+}
+
+func slicesHasItemLine(items []models.TxItem) bool {
+	for i := range items {
+		if !items[i].Kind.IsCharge() {
+			return true
+		}
+	}
+	return false
+}
+
+// txWindowPicker sets one window (key: return / warranty) from the
+// purchase's day: presets (the set one pressed), a picked day
+// (datepickers.js) or clearing it.
+templ txWindowPicker(tx *models.Transaction, key, label string, cur *time.Time, presets []windowPreset) {
+	<div class="flex flex-wrap items-center gap-2">
+		for _, ps := range presets {
+			<button
+				type="button"
+				class="win-pill"
+				aria-pressed={ strconv.FormatBool(presetIsSet(ps, tx.ScheduledTo, cur)) }
+				hx-put={ txWindowsURL(tx.ID) }
+				hx-vals={ windowVals(key, ps.value) }
+				hx-target={ "#" + TxWindowsID(tx.ID) }
+				hx-swap="outerHTML"
+			>{ ps.label }</button>
+		}
+		<div class="relative">
+			@icons.Calendar("14", &templ.Attributes{"class": "pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"})
+			<input
+				type="text"
+				name={ key }
+				value={ dayValue(cur) }
+				placeholder="Pick a day"
+				aria-label={ label }
+				autocomplete="off"
+				x-mask="9999-99-99"
+				data-datepicker
+				data-datepicker-change
+				class="h-8 w-36 pl-8 pr-3 rounded-full bg-transparent border border-zinc-700 text-sm text-zinc-200 placeholder:text-zinc-500 tabular-nums outline-none transition-colors hover:border-zinc-500 focus:border-violet-400"
+				hx-put={ txWindowsURL(tx.ID) }
+				hx-trigger="change"
+				hx-target={ "#" + TxWindowsID(tx.ID) }
+				hx-swap="outerHTML"
+			/>
+		</div>
+		if cur != nil {
+			<button type="button" class="txd-more text-zinc-400!" hx-put={ txWindowsURL(tx.ID) } hx-vals={ windowVals(key, "") } hx-target={ "#" + TxWindowsID(tx.ID) } hx-swap="outerHTML">Remove</button>
+		}
+	</div>
+}
+
+// TxItemWarrantyID is a line's warranty picker's element id.
+func TxItemWarrantyID(itemID string) string {
+	return "txiw-" + itemID
+}
+
+func txItemWarrantyURL(txID, itemID string) string {
+	return fmt.Sprintf("/transactions/%s/items/%s/warranty", txID, itemID)
+}
+
+// txItemWarranty is an item line's warranty in the details: a chip with its
+// own (or the purchase's) last day, opening a picker when editable.
+templ txItemWarranty(tx *models.Transaction, it *models.TxItem, editable bool) {
+	{{ d, own := it.EffectiveWarranty(tx) }}
+	{{ today := tzctx.Today(ctx) }}
+	if d != nil || editable {
+		<span id={ TxItemWarrantyID(it.ID) } x-data="{ open: false }" class="inline-flex flex-wrap items-center gap-1.5">
+			<button
+				type="button"
+				if editable {
+					@click="open = !open"
+				} else {
+					disabled
+				}
+				class={ "inline-flex items-center gap-1 h-6 px-2 rounded-full text-xs ring-1 transition-colors",
+					templ.KV("ring-zinc-700 text-zinc-500 hover:text-zinc-300 cursor-pointer", d == nil),
+					templ.KV("ring-amber-400/30 text-amber-300", d != nil && models.WarrantySoon(d, today)),
+					templ.KV("ring-emerald-400/25 text-emerald-300", d != nil && models.WarrantyActive(d, today) && !models.WarrantySoon(d, today)),
+					templ.KV("ring-zinc-700 text-zinc-500", d != nil && !models.WarrantyActive(d, today)) }
+			>
+				@icons.ShieldCheck("12")
+				if d == nil {
+					Warranty
+				} else {
+					{ formatWindowDay(ctx, *d) }
+					if !own {
+						<span class="text-zinc-500">(purchase)</span>
+					}
+				}
+			</button>
+			if editable {
+				<span x-cloak x-show="open" class="inline-flex flex-wrap items-center gap-1.5">
+					for _, ps := range warrantyPresets() {
+						<button type="button" class="split-seg ring-1 ring-zinc-700" hx-put={ txItemWarrantyURL(tx.ID, it.ID) } hx-vals={ windowVals("warranty", ps.value) } hx-target="closest [data-tx-items-section]" hx-swap="outerHTML">{ ps.label }</button>
+					}
+					<input
+						type="text"
+						name="warranty"
+						value={ dayValue(it.WarrantyUntil) }
+						placeholder="Pick a day"
+						aria-label="Warranty until"
+						autocomplete="off"
+						x-mask="9999-99-99"
+						data-datepicker
+						data-datepicker-change
+						class="input-field h-7! w-28 text-xs"
+						hx-put={ txItemWarrantyURL(tx.ID, it.ID) }
+						hx-trigger="change"
+						hx-target="closest [data-tx-items-section]"
+						hx-swap="outerHTML"
+					/>
+					if own {
+						<button type="button" class="txd-more text-xs text-zinc-400!" hx-put={ txItemWarrantyURL(tx.ID, it.ID) } hx-vals={ windowVals("warranty", "") } hx-target="closest [data-tx-items-section]" hx-swap="outerHTML">Clear</button>
+					}
+				</span>
+			}
+		</span>
+	}
+}
+
+// TxWindowsFD is the form's return / warranty (whole purchase) days.
+type TxWindowsFD struct {
+	ReturnUntil   form.FDInput
+	WarrantyUntil form.FDInput
+}
+
+// txWindowsField is the form's collapsed return / warranty days, for
+// expenses only (shown while Expense is picked): each a day with presets
+// counted from the form's date (txWindowDay, transactions.js), like the
+// details'.
+templ txWindowsField(id string, fd *TxWindowsFD) {
+	{{ set := fd.ReturnUntil.Value != "" || fd.WarrantyUntil.Value != "" }}
+	<div
+		x-data={ fmt.Sprintf("{ on: %t, ret: %q, war: %q }", set, fd.ReturnUntil.Value, fd.WarrantyUntil.Value) }
+		class="hidden [form:has(input[name=kind][value=Expense]:checked)_&]:grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-800/20 p-4"
+	>
+		<input type="hidden" name="windows" value="1"/>
+		<button type="button" @click="on = !on" :aria-expanded="on" class="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
+			@icons.ShieldCheck("16")
+			<span class="flex-1 text-left">Return / warranty</span>
+			<span x-show="!on && (ret || war)" class="text-xs text-zinc-500 tabular-nums" x-text="[ret && 'return ' + ret, war && 'warranty ' + war].filter(Boolean).join(' · ')"></span>
+			@icons.ChevronDown("16", &templ.Attributes{":class": "on && 'rotate-180'", "class": "transition-transform text-zinc-500"})
+		</button>
+		<div x-cloak x-show="on" x-collapse class="grid gap-4 sm:grid-cols-2">
+			@txWindowFormDay(id, "return_until", "Return by", icons.RotateCcw("15"), fd.ReturnUntil, "ret", returnPresets())
+			@txWindowFormDay(id, "warranty_until", "Warranty until", icons.ShieldCheck("15"), fd.WarrantyUntil, "war", warrantyPresets())
+			<p class="sm:col-span-2 text-xs text-zinc-500">Presets count from the date above. The warranty is the whole purchase's; an item's own goes on its line under Items.</p>
+		</div>
+	</div>
+}
+
+// txWindowFormDay is one of the form's window days: its input (bound to
+// model in the field's x-data) and the presets setting it.
+templ txWindowFormDay(id, name, label string, icon templ.Component, data form.FDInput, model string, presets []windowPreset) {
+	<div class="grid gap-2 content-start">
+		@form.Field(label, name, id, icon, data.Error) {
+			@form.Control("text", name, "yyyy-mm-dd", id, data, templ.Attributes{
+				"autocomplete": "off", "x-mask": "9999-99-99", "data-datepicker": true, "data-datepicker-change": true,
+				"x-model": model, "@change": model + " = $event.target.value",
+			})
+		}
+		<div class="flex flex-wrap items-center gap-2">
+			for _, ps := range presets {
+				<button
+					type="button"
+					class="win-pill"
+					@click={ fmt.Sprintf("%s = txWindowDay($el.form, %q)", model, ps.value) }
+					:aria-pressed={ fmt.Sprintf("%s !== '' && %s === txWindowDay($el.form, %q)", model, model, ps.value) }
+				>{ ps.label }</button>
+			}
+			<button type="button" x-show={ model + " !== ''" } @click={ model + " = ''" } aria-label={ "Remove the " + strings.ToLower(label) + " day" } title="Remove" class="win-pill px-2!">
+				@icons.X("14")
+			</button>
+		</div>
+	</div>
+}
+
+// txWindowChips are a purchase's row chips: its open return window, returned,
+// its latest active warranty.
+templ txWindowChips(tx *models.Transaction) {
+	if tx.Kind == models.ExpenseTxKind {
+		{{ today := tzctx.Today(ctx) }}
+		if tx.ReturnedAt != nil {
+			<span class="chip bg-emerald-400/15! text-emerald-300">
+				@icons.RotateCcw("12")
+				Returned
+			</span>
+		} else if tx.ReturnOpen(today) {
+			<span
+				class={ "chip", templ.KV("bg-amber-400/15! text-amber-300", tx.ReturnSoon(today)), templ.KV("bg-violet-500/15! text-violet-300", !tx.ReturnSoon(today)) }
+			>
+				@icons.RotateCcw("12")
+				Return by { formatWindowDay(ctx, *tx.ReturnUntil) }
+			</span>
+		}
+		if w := tx.LatestWarranty(); tx.ReturnedAt == nil && models.WarrantyActive(w, today) {
+			<span
+				class={ "chip", templ.KV("bg-amber-400/15! text-amber-300", models.WarrantySoon(w, today)), templ.KV("bg-emerald-400/15! text-emerald-300", !models.WarrantySoon(w, today)) }
+			>
+				@icons.ShieldCheck("12")
+				Warranty → { warrantyChipLabel(ctx, *w, today) }
+			</span>
+		}
+	}
+}
+
+// warrantyChipLabel is the year a warranty ends, the day when it ends
+// within a year.
+func warrantyChipLabel(ctx context.Context, d, today time.Time) string {
+	if models.DaysUntil(d, today) <= 365 {
+		return formatWindowDay(ctx, d)
+	}
+	return strconv.Itoa(d.Year())
+}

@@ -167,3 +167,22 @@ func TestNewWithoutKey(t *testing.T) {
 		t.Error("expected no client without an API key")
 	}
 }
+
+func TestWindowsRead(t *testing.T) {
+	var res Result
+	if err := json.Unmarshal([]byte(`{"is_receipt":true,"date":"2026-11-23","return_days":14,"warranty_months":12,
+		"items":[{"name":"TV","quantity":1,"unit_price":900,"total":900,"warranty_months":24},{"name":"Cable","quantity":1,"unit_price":10,"total":10,"warranty_months":0}]}`), &res); err != nil {
+		t.Fatal(err)
+	}
+	if res.ReturnDays != 14 || res.WarrantyMonths != 12 {
+		t.Errorf("windows = %d %d", res.ReturnDays, res.WarrantyMonths)
+	}
+	day := time.Date(2026, 11, 23, 0, 0, 0, 0, time.UTC)
+	items := res.TxItemsOn(day)
+	if items[0].WarrantyUntil == nil || items[0].WarrantyUntil.Format(time.DateOnly) != "2028-11-23" || items[1].WarrantyUntil != nil {
+		t.Errorf("items' warranties = %v %v", items[0].WarrantyUntil, items[1].WarrantyUntil)
+	}
+	if res.TxItems()[0].WarrantyUntil != nil {
+		t.Error("TxItems without a day set a warranty")
+	}
+}

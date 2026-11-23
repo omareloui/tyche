@@ -394,6 +394,8 @@ templ BadgeSwitches() {
 			templ.Attributes{"x-model": "sources.review", "@change": "save()", ":disabled": "busy"})
 		@form.Toggle("Overdue scheduled transactions", "badge_overdue", "", icons.Clock("16"), form.FDInput{},
 			templ.Attributes{"x-model": "sources.overdue", "@change": "save()", ":disabled": "busy"})
+		@form.Toggle("Returns and warranties ending soon", "badge_warranty", "", icons.ShieldCheck("16"), form.FDInput{},
+			templ.Attributes{"x-model": "sources.warranty", "@change": "save()", ":disabled": "busy"})
 		<div x-show="anyOn" class="min-w-0">
 			<label for="badge_repost_hours" class="input-label">Show dismissed ones again</label>
 			<div class="relative min-w-0">

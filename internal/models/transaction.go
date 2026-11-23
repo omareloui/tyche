@@ -69,6 +69,16 @@ type Transaction struct {
 	// SplitPeople is how many people its bill is split with (see TxSplit),
 	// only set on a transaction fetched alone.
 	SplitPeople int
+	// ReturnUntil is the last day it can be returned, WarrantyUntil the last
+	// day the whole purchase is under warranty (its lines may have their
+	// own), ReturnedAt the day it was returned; expenses only (see
+	// return_warranty.go).
+	ReturnUntil   *time.Time
+	WarrantyUntil *time.Time
+	ReturnedAt    *time.Time
+	// LinesWarranty is the latest own warranty of its item lines, set in
+	// lists where the lines aren't loaded.
+	LinesWarranty *time.Time
 }
 
 type commonFieldsForTxAndRtx struct {

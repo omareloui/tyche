@@ -126,6 +126,8 @@ func New(h *handler.Handler) Router {
 	mux.Handle("POST /transactions/{id}/receipt", handle(h.ScanReceiptIntoTx, middleware.HTMXOnly))
 	mux.Handle("POST /transactions/{id}/items", handle(h.AddTxItem))
 	mux.Handle("DELETE /transactions/{id}/items/{itemID}", handle(h.DeleteTxItem))
+	mux.Handle("PUT /transactions/{id}/items/{itemID}/warranty", handle(h.SetTxItemWarranty, middleware.HTMXOnly))
+	mux.Handle("PUT /transactions/{id}/windows", handle(h.SetTransactionWindows, middleware.HTMXOnly))
 	mux.Handle("GET /transactions/{id}/wishes", handle(h.GetTxWishes))
 	mux.Handle("PUT /transactions/{id}/wishes", handle(h.AddTxWish, middleware.HTMXOnly))
 	mux.Handle("DELETE /transactions/{id}/wishes/{wishID}", handle(h.DeleteTxWish, middleware.HTMXOnly))

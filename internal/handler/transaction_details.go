@@ -53,6 +53,11 @@ func (h Handler) txDetails(ctx context.Context, id string) (*models.TxDetails, e
 		d.SMSTemplate = h.smsTemplateName(ctx, d.SMS.TemplateID)
 	}
 	d.ReceiptScan = h.ocr != nil
+	if models.TxWindowsEditable(d.Tx) && d.Tx.ReturnOpen(h.userToday(ctx)) {
+		if d.ReturnRefundID, err = h.repo.ReturnRefundCandidate(ctx, d.Tx); err != nil {
+			return nil, err
+		}
+	}
 	if d.Tx.Kind == models.ExpenseTxKind && len(d.Tx.Items) > 0 {
 		s, err := h.repo.TxSplitOf(ctx, d.Tx)
 		if err != nil {

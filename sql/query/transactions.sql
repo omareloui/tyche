@@ -13,7 +13,9 @@ INSERT INTO transactions (
     recurrent_id,
     scheduled_to,
     fulfilled_at,
-    needs_review
+    needs_review,
+    return_until,
+    warranty_until
 )
 VALUES (
     sqlc.arg(id),
@@ -29,7 +31,9 @@ VALUES (
     sqlc.arg(recurrent_id),
     sqlc.arg(scheduled_to),
     sqlc.arg(fulfilled_at),
-    sqlc.arg(needs_review)
+    sqlc.arg(needs_review),
+    IIF(sqlc.arg(kind) = 1, sqlc.narg(return_until), NULL),
+    IIF(sqlc.arg(kind) = 1, sqlc.narg(warranty_until), NULL)
 );
 
 -- name: GetTransactions :many
@@ -166,6 +170,12 @@ WHERE
         SELECT 1 FROM receipts AS rc WHERE rc.transaction_id = t.id
     ) = sqlc.narg(has_receipt))
     AND (sqlc.narg(has_note) IS NULL OR (t.note != '') = sqlc.narg(has_note))
+    AND (sqlc.narg(window) IS NULL
+        OR (sqlc.narg(window) = 'return_open' AND t.kind = 1 AND t.returned_at IS NULL AND t.return_until >= sqlc.narg(window_today))
+        OR (sqlc.narg(window) = 'warranty_active' AND t.kind = 1 AND (t.warranty_until >= sqlc.narg(window_today) OR EXISTS (
+            SELECT 1 FROM transaction_items AS wti
+            WHERE wti.transaction_id = t.id AND wti.kind = 0 AND wti.warranty_until >= sqlc.narg(window_today)
+        ))))
     AND (sqlc.narg(from_date) IS NULL OR t.scheduled_to >= sqlc.narg(from_date))
     AND (sqlc.narg(to_date) IS NULL OR t.scheduled_to < sqlc.narg(to_date))
     AND (sqlc.narg(min_amount) IS NULL OR t.amount >= sqlc.narg(min_amount))
@@ -274,6 +284,12 @@ WHERE
         SELECT 1 FROM receipts AS rc WHERE rc.transaction_id = t.id
     ) = sqlc.narg(has_receipt))
     AND (sqlc.narg(has_note) IS NULL OR (t.note != '') = sqlc.narg(has_note))
+    AND (sqlc.narg(window) IS NULL
+        OR (sqlc.narg(window) = 'return_open' AND t.kind = 1 AND t.returned_at IS NULL AND t.return_until >= sqlc.narg(window_today))
+        OR (sqlc.narg(window) = 'warranty_active' AND t.kind = 1 AND (t.warranty_until >= sqlc.narg(window_today) OR EXISTS (
+            SELECT 1 FROM transaction_items AS wti
+            WHERE wti.transaction_id = t.id AND wti.kind = 0 AND wti.warranty_until >= sqlc.narg(window_today)
+        ))))
     AND (sqlc.narg(from_date) IS NULL OR t.scheduled_to >= sqlc.narg(from_date))
     AND (sqlc.narg(to_date) IS NULL OR t.scheduled_to < sqlc.narg(to_date))
     AND (sqlc.narg(min_amount) IS NULL OR t.amount >= sqlc.narg(min_amount))
@@ -399,6 +415,11 @@ SET
     to_account_id = sqlc.narg(to_account_id),
     to_amount = ROUND(sqlc.narg(to_amount), 6),
     scheduled_to = sqlc.arg(scheduled_to),
+    -- Return / warranty windows are an expense's only; its returned day is
+    -- set from its details alone.
+    return_until = IIF(sqlc.arg(kind) = 1, sqlc.narg(return_until), NULL),
+    warranty_until = IIF(sqlc.arg(kind) = 1, sqlc.narg(warranty_until), NULL),
+    returned_at = IIF(sqlc.arg(kind) = 1, returned_at, NULL),
     needs_review = FALSE,
     -- An occurrence edited on its own keeps its edit when its recurrent
     -- transaction is edited.
@@ -1243,3 +1264,68 @@ SET
     note = sqlc.arg(note),
     recurrent_overridden = recurrent_overridden OR recurrent_id IS NOT NULL
 WHERE id = sqlc.arg(id);
+
+-- name: SetTransactionWindows :exec
+-- Sets an expense's return / warranty windows and returned day alone (its
+-- details' section).
+UPDATE transactions
+SET
+    return_until = sqlc.narg(return_until),
+    warranty_until = sqlc.narg(warranty_until),
+    returned_at = sqlc.narg(returned_at)
+WHERE id = sqlc.arg(id) AND kind = 1;
+
+-- name: ListWindowsEnding :many
+-- What the badge reminds of, the soonest first: the expenses whose return
+-- window ends from today through return_by (not returned), whose warranty
+-- ends from today through warranty_by, and their item lines' own warranties
+-- ending then. what = 'return' | 'warranty', line_id set for a line's.
+SELECT * FROM (
+    SELECT
+        'return' AS what, t.id AS transaction_id, CAST('' AS TEXT) AS line_id,
+        CAST(SUBSTR(t.return_until, 1, 10) AS TEXT) AS ends_on, t.amount, t.description,
+        CAST('' AS TEXT) AS line_name, c.symbol AS currency_symbol,
+        c.in_grams AS currency_in_grams, cp.name AS counterparty_name
+    FROM transactions AS t
+    JOIN accounts AS a ON a.id = t.account_id
+    JOIN currencies AS c ON c.id = a.currency_id
+    LEFT JOIN counterparties AS cp ON cp.id = t.counterparty_id
+    WHERE t.kind = 1 AND a.deleted_at IS NULL AND t.returned_at IS NULL
+        AND t.return_until >= sqlc.arg(today) AND t.return_until <= sqlc.arg(return_by)
+    UNION ALL
+    SELECT
+        'warranty', t.id, '', CAST(SUBSTR(t.warranty_until, 1, 10) AS TEXT), t.amount, t.description,
+        '', c.symbol, c.in_grams, cp.name
+    FROM transactions AS t
+    JOIN accounts AS a ON a.id = t.account_id
+    JOIN currencies AS c ON c.id = a.currency_id
+    LEFT JOIN counterparties AS cp ON cp.id = t.counterparty_id
+    WHERE t.kind = 1 AND a.deleted_at IS NULL AND t.returned_at IS NULL
+        AND t.warranty_until >= sqlc.arg(today) AND t.warranty_until <= sqlc.arg(warranty_by)
+    UNION ALL
+    SELECT
+        'warranty', t.id, ti.id, CAST(SUBSTR(ti.warranty_until, 1, 10) AS TEXT), ti.total, t.description,
+        ti.name, c.symbol, c.in_grams, cp.name
+    FROM transaction_items AS ti
+    JOIN transactions AS t ON t.id = ti.transaction_id
+    JOIN accounts AS a ON a.id = t.account_id
+    JOIN currencies AS c ON c.id = a.currency_id
+    LEFT JOIN counterparties AS cp ON cp.id = t.counterparty_id
+    WHERE ti.kind = 0 AND t.kind = 1 AND a.deleted_at IS NULL AND t.returned_at IS NULL
+        AND ti.warranty_until >= sqlc.arg(today) AND ti.warranty_until <= sqlc.arg(warranty_by)
+)
+ORDER BY ends_on, transaction_id, line_id;
+
+-- name: GetReturnRefundCandidate :one
+-- A refund at the same counterparty, on another transaction, dated from
+-- the expense's day through its return window, of at least half its amount:
+-- it was likely returned.
+SELECT r.id FROM transactions AS r
+WHERE r.kind = 5
+    AND r.counterparty_id = sqlc.arg(counterparty_id)
+    AND r.account_id = sqlc.arg(account_id)
+    AND r.scheduled_to >= sqlc.arg(from_day)
+    AND r.scheduled_to < sqlc.arg(until)
+    AND r.amount >= sqlc.arg(min_amount)
+ORDER BY r.scheduled_to
+LIMIT 1;

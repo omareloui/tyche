@@ -45,6 +45,16 @@ const (
 	TxNoteWithout TxNote = "without"
 )
 
+// TxWindow narrows expenses by their return / warranty windows (see
+// return_warranty.go).
+type TxWindow string
+
+const (
+	TxWindowAny            TxWindow = ""
+	TxWindowReturnOpen     TxWindow = "return_open"
+	TxWindowWarrantyActive TxWindow = "warranty_active"
+)
+
 // Query keys of the transactions filters, also the form field names.
 const (
 	TxFilterQ            = "q"
@@ -58,6 +68,7 @@ const (
 	TxFilterSource       = "source"
 	TxFilterReceipt      = "receipt"
 	TxFilterNote         = "note"
+	TxFilterWindow       = "window"
 	TxFilterFrom         = "from"
 	TxFilterTo           = "to"
 	TxFilterMin          = "min"
@@ -85,6 +96,10 @@ type TxFilter struct {
 	Source  TxSource
 	Receipt TxReceipt
 	Note    TxNote
+	Window  TxWindow
+	// Today is the user's today the windows are compared with, set by the
+	// repository (never in the query string).
+	Today time.Time
 	// From and To are inclusive days, zero for no bound.
 	From, To time.Time
 	// MinAmount and MaxAmount bound the amount, in the account's currency.
@@ -117,6 +132,10 @@ func ParseTxFilter(v url.Values) TxFilter {
 	switch s := TxNote(v.Get(TxFilterNote)); s {
 	case TxNoteWith, TxNoteWithout:
 		f.Note = s
+	}
+	switch s := TxWindow(v.Get(TxFilterWindow)); s {
+	case TxWindowReturnOpen, TxWindowWarrantyActive:
+		f.Window = s
 	}
 	f.From = parseFilterDate(v.Get(TxFilterFrom))
 	f.To = parseFilterDate(v.Get(TxFilterTo))
@@ -173,6 +192,7 @@ func (f *TxFilter) Values() url.Values {
 	set(TxFilterSource, string(f.Source))
 	set(TxFilterReceipt, string(f.Receipt))
 	set(TxFilterNote, string(f.Note))
+	set(TxFilterWindow, string(f.Window))
 	set(TxFilterFrom, f.FromString())
 	set(TxFilterTo, f.ToString())
 	set(TxFilterMin, FilterAmountString(f.MinAmount))
@@ -199,7 +219,7 @@ func (f *TxFilter) IsZero() bool {
 func (f *TxFilter) ActiveCount() int {
 	v := f.Values()
 	n := 0
-	for _, k := range []string{TxFilterKind, TxFilterAccount, TxFilterCategory, TxFilterCounterparty, TxFilterGoal, TxFilterItem, TxFilterStatus, TxFilterSource, TxFilterReceipt, TxFilterNote} {
+	for _, k := range []string{TxFilterKind, TxFilterAccount, TxFilterCategory, TxFilterCounterparty, TxFilterGoal, TxFilterItem, TxFilterStatus, TxFilterSource, TxFilterReceipt, TxFilterNote, TxFilterWindow} {
 		if v.Has(k) {
 			n++
 		}

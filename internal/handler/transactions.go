@@ -178,6 +178,12 @@ func (h Handler) txFilterChips(ctx context.Context, f *models.TxFilter) []views.
 	case models.TxNoteWithout:
 		add("Without a note", models.TxFilterNote)
 	}
+	switch f.Window {
+	case models.TxWindowReturnOpen:
+		add("Can still be returned", models.TxFilterWindow)
+	case models.TxWindowWarrantyActive:
+		add("Under warranty", models.TxFilterWindow)
+	}
 	if !f.From.IsZero() || !f.To.IsZero() {
 		add(views.FormatTxRange(f.From, f.To), models.TxFilterFrom, models.TxFilterTo)
 	}
@@ -228,6 +234,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 	}
 
 	applyCounterpartyDefaultCategory(tx, cps)
+	applyCounterpartyReturnDays(tx, cps)
 
 	claims := getClaims(r.Context())
 
@@ -399,6 +406,11 @@ func (h Handler) EditTransaction(w http.ResponseWriter, r *http.Request) (templ.
 
 	tx.FulfilledAt = oldTx.FulfilledAt
 	tx.CreatedAt = oldTx.CreatedAt
+	// A form without the windows' fields (one that can't have them) leaves
+	// them alone.
+	if r.FormValue("windows") == "" || !models.TxWindowsAllowed(oldTx) {
+		tx.ReturnUntil, tx.WarrantyUntil = oldTx.ReturnUntil, oldTx.WarrantyUntil
+	}
 	// The form only edits the date, keep the original time of day so the
 	// transaction keeps its order within the day.
 	tx.ScheduledTo = models.KeepTimeOfDay(tx.ScheduledTo, oldTx.ScheduledTo)
@@ -603,6 +615,17 @@ func (h Handler) DuplicateTransaction(w http.ResponseWriter, r *http.Request) (t
 	dup.RecurrentTx = nil
 	dup.Items = models.CopyTxItems(tx.Items)
 	dup.Receipt, dup.ReceiptID = nil, ""
+	// The copy is another purchase, with windows of its own.
+	dup.ReturnUntil, dup.WarrantyUntil, dup.ReturnedAt = nil, nil, nil
+	// ?as=refund: the purchase's refund (it was returned), at today.
+	if r.URL.Query().Get("as") == "refund" && tx.Kind == models.ExpenseTxKind {
+		dup.Kind = models.RefundTxKind
+		dup.Items, dup.Note, dup.Wishes = nil, "", nil
+		dup.ScheduledTo = h.userToday(r.Context())
+		if dup.Description == "" && dup.Counterparty != nil {
+			dup.Description = "Return to " + dup.Counterparty.Name
+		}
+	}
 
 	claims := getClaims(r.Context())
 	fd := h.mapTransactionToFD(r.Context(), &dup, new(errs.ValidationError))
@@ -769,6 +792,12 @@ func (h Handler) mapTransactionToFD(ctx context.Context, t *models.Transaction, 
 		ItemsCurrency: h.itemsCurrencyFD(ctx, t.Items),
 		Receipt:       views.ReceiptFD{Enabled: h.ocr != nil, ID: t.ReceiptID},
 	}
+	if models.TxWindowsAllowed(t) {
+		fd.Windows = &views.TxWindowsFD{
+			ReturnUntil:   form.FDInput{Value: formatDay(t.ReturnUntil)},
+			WarrantyUntil: form.FDInput{Value: formatDay(t.WarrantyUntil)},
+		}
+	}
 	if t.ReceiptID != "" {
 		fd.Receipt.URL = (&models.Receipt{ID: t.ReceiptID, Hash: "new"}).URL()
 	}
@@ -885,6 +914,9 @@ func (h Handler) mapFDToTransaction(r *http.Request, isRecurrent bool) (*models.
 		ScheduledTo:  scheduledTo,
 		Items:        parseTxItems(r),
 		ReceiptID:    strings.TrimSpace(r.FormValue("receipt_id")),
+	}
+	if knd == models.ExpenseTxKind && !isRecurrent {
+		tx.ReturnUntil, tx.WarrantyUntil = parseTxWindows(r, scheduledTo)
 	}
 	// The account isn't resolved yet: the lines' currency is dropped when
 	// it's the account's by normalizeTxItems.
