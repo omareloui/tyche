@@ -546,8 +546,9 @@ document.addEventListener("alpine:init", () => {
 // group-hover never applies (Tailwind's hover needs a hover-capable pointer):
 // touching or dragging across the chart marks the target under the finger
 // `is-active` (its tooltip shown by group-[.is-active]), kept a moment after
-// lifting it. Its children are the targets, side by side; touch-pan-y on it
-// leaves vertical drags to scrolling (cancelling the scrub).
+// lifting it. Its children are the targets, side by side, or a grid's cells
+// row by row with data-scrub-cols; touch-pan-y on it leaves vertical drags to
+// scrolling (cancelling the scrub).
 document.addEventListener("alpine:init", () => {
   Alpine.data("chartScrub", () => ({
     timer: null,
@@ -574,8 +575,13 @@ document.addEventListener("alpine:init", () => {
       if (this.$root.contains(document.activeElement)) document.activeElement.blur();
       const targets = this.$root.children;
       const r = this.$root.getBoundingClientRect();
-      const i = Math.floor(((e.clientX - r.left) / r.width) * targets.length);
-      this.show(Math.min(Math.max(i, 0), targets.length - 1));
+      // A grid's cells (data-scrub-cols, row by row) are picked by both axes.
+      const cols = Number(this.$root.dataset.scrubCols) || targets.length;
+      const rows = Math.ceil(targets.length / cols);
+      const clamp = (v, n) => Math.min(Math.max(v, 0), n - 1);
+      const col = clamp(Math.floor(((e.clientX - r.left) / r.width) * cols), cols);
+      const row = rows > 1 ? clamp(Math.floor(((e.clientY - r.top) / r.height) * rows), rows) : 0;
+      this.show(Math.min(row * cols + col, targets.length - 1));
     },
 
     release() {

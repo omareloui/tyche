@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/a-h/templ"
+	"github.com/omareloui/tyche/internal/countries"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/resperr"
 	"github.com/omareloui/tyche/web/views"
@@ -203,4 +204,28 @@ func (h *Handler) DashboardAccounts(w http.ResponseWriter, r *http.Request) (tem
 		return nil, err
 	}
 	return views.DashAccounts(accs, &claims.DefaultCurrency), nil
+}
+
+// DashboardHeatmap is when the spending of the last ?months= user months
+// went out, per weekday and hour, colored by ?by= (amount or count).
+func (h *Handler) DashboardHeatmap(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	ctx := r.Context()
+	claims := getClaims(ctx)
+	q := r.URL.Query()
+
+	tz := claims.Timezone
+	if tz == "" {
+		tz = models.DefaultTimezone
+	}
+	hm, err := h.repo.GetSpendingHeatmap(ctx,
+		models.ParseHeatmapMonths(q.Get("months")),
+		models.ParseHeatmapMetric(q.Get("by")),
+		&claims.DefaultCurrency,
+		claims.Location(),
+		countries.WeekStartOfTimezone(tz),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return views.DashHeatmap(hm), nil
 }

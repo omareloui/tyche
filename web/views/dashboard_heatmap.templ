@@ -1,0 +1,235 @@
+package views
+
+import (
+	"fmt"
+	"strconv"
+	"time"
+
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+// heatLevelClasses are the heatmap cells' colors per models.SpendingHeatmap
+// level, nothing spent first.
+var heatLevelClasses = [models.HeatmapLevels]string{
+	"bg-zinc-800/60",
+	"bg-rose-400/20",
+	"bg-rose-400/40",
+	"bg-rose-400/65",
+	"bg-rose-400",
+}
+
+// DashHeatmap is when money goes out: a weekday × hour grid colored by the
+// spending (or the number of transactions), 3-hour columns on phones, or
+// only the weekdays when few transactions have a time.
+templ DashHeatmap(hm *models.SpendingHeatmap) {
+	<div id="dash-heatmap" class="h-full">
+		@components.GlassCard("grid content-start gap-4 p-5 sm:p-6", "bg-rose-400/10") {
+			<div class="flex flex-wrap items-center justify-between gap-3">
+				<h2 class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-rose-300">
+					@icons.Clock("14")
+					When you spend
+				</h2>
+				<div class="flex flex-wrap items-center gap-2">
+					@accSegmented("Color by") {
+						@accSegment(heatmapLink(hm.Months, models.HeatmapByAmount), "Amount", "Color by the amount spent", hm.Metric == models.HeatmapByAmount)
+						@accSegment(heatmapLink(hm.Months, models.HeatmapByCount), "Count", "Color by the number of transactions", hm.Metric == models.HeatmapByCount)
+					}
+					@accSegmented("Range") {
+						for _, m := range models.HeatmapRanges {
+							@accSegment(heatmapLink(m, hm.Metric), heatmapRangeLabel(m), heatmapRangeTitle(m), hm.Months == m)
+						}
+					}
+				</div>
+			</div>
+			if hm.Total == 0 {
+				<p class="py-10 text-center text-zinc-400">No spending in this range</p>
+			} else {
+				@heatmapSummary(hm)
+				if hm.ShowHours() {
+					<div class="hidden sm:block">
+						@heatmapGrid(hm, 1)
+					</div>
+					<div class="sm:hidden">
+						@heatmapGrid(hm, 3)
+					</div>
+					<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-zinc-500">
+						<p>
+							Times known for { strconv.Itoa(hm.Timed) } of { strconv.Itoa(hm.Total) } transactions
+							if hm.FirstHour() > 0 {
+								· nothing before { fmt.Sprintf("%02d:00", hm.FirstHour()) }
+							}
+						</p>
+						@heatmapLegend()
+					</div>
+				} else {
+					@heatmapWeekdays(hm)
+					<p class="text-xs text-zinc-500">
+						Times known for { strconv.Itoa(hm.Timed) } of { strconv.Itoa(hm.Total) } transactions, too few to show the hours. Transactions from SMS carry their time.
+					</p>
+				}
+				if hm.Partial {
+					<p class="text-xs text-amber-300">Some rates are unavailable, those amounts aren’t counted.</p>
+				}
+			}
+		}
+	</div>
+}
+
+// heatmapLink is the attributes of a button re-rendering the heatmap with
+// months and metric.
+func heatmapLink(months int, metric models.HeatmapMetric) templ.Attributes {
+	return templ.Attributes{
+		"hx-get":    fmt.Sprintf("/dashboard/heatmap?months=%d&by=%s", months, metric),
+		"hx-target": "#dash-heatmap",
+		"hx-swap":   "outerHTML",
+	}
+}
+
+func heatmapRangeLabel(m int) string {
+	if m == 1 {
+		return "Month"
+	}
+	return accSummaryRangeLabel(m)
+}
+
+func heatmapRangeTitle(m int) string {
+	if m == 1 {
+		return "This month"
+	}
+	return fmt.Sprintf("Last %d months", m)
+}
+
+// heatmapSummary is the busiest day and hour.
+templ heatmapSummary(hm *models.SpendingHeatmap) {
+	<p class="flex flex-wrap gap-x-4 gap-y-1 text-sm text-zinc-400">
+		if wd, ok := hm.BusiestDay(); ok {
+			<span>Busiest day <span class="font-semibold text-zinc-100">{ wd.String() }</span></span>
+		}
+		if hm.ShowHours() {
+			if wd, col, ok := hm.Busiest(1); ok {
+				<span>Peak <span class="font-semibold text-zinc-100">{ shortWeekday(wd) } { col.RangeLabel() }</span></span>
+			}
+		}
+	</p>
+}
+
+// heatmapGrid is the weekdays (rows) by hours in columns of step hours; its
+// cells scrubbed in two dimensions on touch (chartScrub's data-scrub-cols).
+templ heatmapGrid(hm *models.SpendingHeatmap, step int) {
+	{{ cols := hm.Columns(step) }}
+	{{ maxValue := hm.Max(step) }}
+	{{ gridCols := fmt.Sprintf("grid-template-columns:repeat(%d,minmax(0,1fr))", len(cols)) }}
+	<div class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1">
+		<div class="grid grid-rows-7 gap-1 text-xs text-zinc-500">
+			for _, wd := range hm.Days() {
+				<span class="flex items-center h-6" title={ heatWeekdayTitle(hm, wd) }>{ shortWeekday(wd) }</span>
+			}
+		</div>
+		<div
+			x-data="chartScrub"
+			x-bind="scrub"
+			data-scrub-cols={ strconv.Itoa(len(cols)) }
+			class="grid gap-1 touch-pan-y"
+			style={ gridCols }
+		>
+			for r, wd := range hm.Days() {
+				for c, col := range cols {
+					@heatmapCell(hm, wd, col, hm.Level(hm.Cell(wd, col), maxValue), r, c, len(cols))
+				}
+			}
+		</div>
+		<span></span>
+		<div class="grid gap-1 text-[10px] text-zinc-500 tabular-nums" style={ gridCols }>
+			for _, col := range cols {
+				<span>
+					if step > 1 || col.From%3 == 0 {
+						{ col.Label() }
+					}
+				</span>
+			}
+		</div>
+	</div>
+}
+
+templ heatmapCell(hm *models.SpendingHeatmap, wd time.Weekday, col models.HeatColumn, level, row, c, cols int) {
+	{{ cell := hm.Cell(wd, col) }}
+	<div tabindex="0" class="group relative h-6 outline-none">
+		<div
+			class={
+				"absolute inset-0 rounded-[4px] transition-shadow group-hover:ring-2 group-focus:ring-2 group-[.is-active]:ring-2 ring-white/70",
+				heatLevelClasses[level],
+			}
+		></div>
+		<div
+			class={
+				"absolute hidden group-hover:block group-focus:block group-[.is-active]:block z-10 pointer-events-none",
+				templ.KV("top-full mt-1", row < 3),
+				templ.KV("bottom-full mb-1", row >= 3),
+				templ.KV("left-0", c < cols/4),
+				templ.KV("right-0", c >= cols-cols/4),
+				templ.KV("left-1/2 -translate-x-1/2", c >= cols/4 && c < cols-cols/4),
+			}
+		>
+			<div class="glass-tooltip">
+				<p class="text-zinc-400">{ shortWeekday(wd) } { col.RangeLabel() } · { heatTxCount(cell.Count) }</p>
+				if cell.Count > 0 {
+					<p class="sensitive text-rose-300 tabular-nums">{ hm.Currency.Format(cell.Amount) }</p>
+				}
+			</div>
+		</div>
+	</div>
+}
+
+// heatmapWeekdays is the spending per weekday, for when few transactions
+// have a time.
+templ heatmapWeekdays(hm *models.SpendingHeatmap) {
+	{{ m := hm.WeekdayMax() }}
+	<ul class="grid gap-2">
+		for _, wd := range hm.Days() {
+			{{ c := hm.Weekdays[wd] }}
+			<li class="grid grid-cols-[2.5rem_1fr_auto] items-center gap-3 text-sm">
+				<span class="text-zinc-400">{ shortWeekday(wd) }</span>
+				<div class="h-2.5 rounded-full bg-zinc-800/60">
+					<div class="h-full rounded-full bg-rose-400" style={ fmt.Sprintf("width:%.2f%%", hm.Pct(hm.Value(c), m)) }></div>
+				</div>
+				<span class="text-right tabular-nums text-zinc-300">
+					if hm.Metric == models.HeatmapByCount {
+						{ heatTxCount(c.Count) }
+					} else {
+						<span class="sensitive">{ hm.Currency.Format(c.Amount) }</span>
+					}
+				</span>
+			</li>
+		}
+	</ul>
+}
+
+templ heatmapLegend() {
+	<div class="flex items-center gap-1.5" aria-hidden="true">
+		<span>Less</span>
+		for _, cls := range heatLevelClasses {
+			<span class={ "size-3 rounded-[3px]", cls }></span>
+		}
+		<span>More</span>
+	</div>
+}
+
+// heatWeekdayTitle is a weekday's spending, every hour (and the untimed
+// transactions) included.
+func heatWeekdayTitle(hm *models.SpendingHeatmap, wd time.Weekday) string {
+	c := hm.Weekdays[wd]
+	return fmt.Sprintf("%s · %s", wd, heatTxCount(c.Count))
+}
+
+func heatTxCount(n int) string {
+	if n == 1 {
+		return "1 tx"
+	}
+	return fmt.Sprintf("%d txs", n)
+}
+
+func shortWeekday(wd time.Weekday) string {
+	return wd.String()[:3]
+}

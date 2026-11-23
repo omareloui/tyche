@@ -1074,6 +1074,35 @@ WHERE
 GROUP BY day, cur.id
 ORDER BY day;
 
+-- name: GetSpendingTimes :many
+-- Fulfilled spending (expenses net of their reimbursements, refunds
+-- negative) one row per transaction between from_date and to_date
+-- (exclusive), with its time as stored (in the zone it was written in), for
+-- the spending heatmap. Follows the analysis rule; goals' purchases and loan
+-- payments are left out.
+SELECT
+    t.scheduled_to,
+    sqlc.embed(cur),
+    CAST(IIF(
+        t.kind = 1,
+        t.amount - (
+            SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id
+        ),
+        -t.amount
+    ) AS FLOAT) AS amount
+FROM transactions AS t
+JOIN accounts AS a ON t.account_id = a.id
+JOIN currencies AS cur ON a.currency_id = cur.id
+WHERE
+    t.kind IN (1, 5)
+    AND t.reimburses_id IS NULL
+    AND t.transfer_pair_id IS NULL
+    AND t.loan_goal_id IS NULL
+    AND a.goal_id IS NULL
+    AND t.fulfilled_at IS NOT NULL
+    AND t.scheduled_to >= sqlc.arg(from_date)
+    AND t.scheduled_to < sqlc.arg(to_date);
+
 -- name: GetCategorySpending :many
 -- Fulfilled spending (expenses net of their reimbursements, minus refunds)
 -- per category (empty for none) and account currency between from_date and

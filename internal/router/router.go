@@ -51,6 +51,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("GET /dashboard/glance", handle(h.DashboardGlance))
 	mux.Handle("GET /dashboard/activity", handle(h.DashboardActivity))
 	mux.Handle("GET /dashboard/accounts", handle(h.DashboardAccounts))
+	mux.Handle("GET /dashboard/heatmap", handle(h.DashboardHeatmap))
 	mux.Handle("GET /recap", handle(h.MonthRecap))
 
 	mux.Handle("GET /health", handlePubJSON(h.Health))
