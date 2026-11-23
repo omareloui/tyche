@@ -498,18 +498,18 @@ templ colBasket(d *ColData) {
 			</summary>
 			<ul class="grid gap-2 px-5 pb-5">
 				for _, c := range d.Categories {
-					<li class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-						<span class="flex items-center gap-2 min-w-0 max-w-full">
-							<span class="shrink-0 w-2.5 h-2.5 rounded-full" style={ "background-color: " + cmpColor(c.Color) }></span>
+					<li class="grid gap-1.5 sm:flex sm:items-center sm:justify-between sm:gap-3">
+						<span class="flex items-center gap-2 min-w-0">
+							<span class="shrink-0 w-2.5 h-2.5 rounded-full" style={ "background-color: " + models.CategoryColorToHex(c.Color) }></span>
 							<span class="truncate text-sm text-zinc-200">{ c.Name }</span>
 							if c.Monthly > 0 {
 								<span class="shrink-0 text-xs text-zinc-500 tabular-nums">{ colFmt(c.Monthly, d.Home.Currency) }</span>
 							}
 						</span>
 						if c.ID == models.UncategorizedKey {
-							<span class="ml-auto text-xs text-zinc-500">{ models.ColGroupLabel(models.ColAverage) }</span>
+							<span class="pl-4.5 sm:pl-0 text-xs text-zinc-500">{ models.ColGroupLabel(models.ColAverage) }</span>
 						} else {
-							<div class="min-w-0 max-w-full ml-auto">
+							<div class="flex min-w-0 pl-4.5 sm:pl-0 sm:shrink-0 sm:max-w-[60%]">
 								@form.Combobox(colGroupPicker(c))
 							</div>
 						}
@@ -518,13 +518,6 @@ templ colBasket(d *ColData) {
 			</ul>
 		</details>
 	}
-}
-
-func cmpColor(c string) string {
-	if c == "" {
-		return "var(--color-zinc-500)"
-	}
-	return c
 }
 
 func colGroupPicker(c models.ColCategory) form.ComboboxProps {
