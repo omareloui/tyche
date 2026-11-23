@@ -374,7 +374,8 @@ templ monthDaysGrid(hm *models.MonthDaysHeatmap) {
 			for k := range cols {
 				<span
 					class={
-						templ.KV("hidden sm:inline", k%5 != 0 && k%2 == 0),
+						// invisible, not hidden: a hidden label would leave the grid, shifting the next ones.
+						templ.KV("invisible sm:visible", k%5 != 0 && k%2 == 0),
 						templ.KV("invisible", k%5 != 0 && k%2 != 0),
 					}
 				>{ strconv.Itoa(hm.ColumnLabel(k)) }</span>
