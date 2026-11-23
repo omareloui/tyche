@@ -15,6 +15,16 @@ type ComboOption struct {
 	Leading templ.Component
 	// Attrs go on the option's <li>, e.g. a counterparty's default category.
 	Attrs templ.Attributes
+	// Flagged options are the ones ComboboxProps.FlagFilter keeps.
+	Flagged bool
+}
+
+// ComboFlagFilter is a toggle in a combobox's panel showing only its
+// Flagged options, e.g. the countries with built-in rules. Key remembers
+// it per browser (localStorage), shared by the comboboxes of a key.
+type ComboFlagFilter struct {
+	Label, Key string
+	Icon       templ.Component
 }
 
 type ComboboxProps struct {
@@ -35,6 +45,8 @@ type ComboboxProps struct {
 	// and the response must be the new option's ComboOptionItem.
 	CreateURL  string
 	InputAttrs templ.Attributes
+	// FlagFilter, when set, offers showing only the Flagged options.
+	FlagFilter *ComboFlagFilter
 }
 
 // Combobox is a custom select, with an optional search box focused on opening.
@@ -45,6 +57,9 @@ templ Combobox(p ComboboxProps) {
 		x-data="combobox"
 		if p.CreateURL != "" && p.Searchable {
 			data-create-url={ p.CreateURL }
+		}
+		if p.FlagFilter != nil {
+			data-flag-key={ p.FlagFilter.Key }
 		}
 		class="relative min-w-0"
 		@keyup.escape="onEscape($event)"
@@ -116,6 +131,20 @@ templ Combobox(p ComboboxProps) {
 					/>
 				</div>
 			}
+			if p.FlagFilter != nil {
+				<button
+					type="button"
+					@click="toggleFlagged()"
+					:aria-pressed="onlyFlagged"
+					aria-pressed="false"
+					class="flex items-center gap-1.5 mb-1.5 px-2.5 py-1 rounded-full border border-white/10 text-xs font-medium text-zinc-300 cursor-pointer transition-colors hover:text-white aria-pressed:border-(--accent) aria-pressed:bg-(--accent)/15 aria-pressed:text-white"
+				>
+					if p.FlagFilter.Icon != nil {
+						@p.FlagFilter.Icon
+					}
+					{ p.FlagFilter.Label }
+				</button>
+			}
 			<ul x-ref="list" role="listbox" tabindex="-1" aria-label={ p.Label } class="max-h-64 overflow-y-auto outline-none">
 				if p.Nullable {
 					@ComboOptionItem(ComboOption{Label: nullLabel(p)}, p.Data.Value == "")
@@ -151,6 +180,9 @@ templ ComboOptionItem(o ComboOption, selected bool) {
 		data-value={ o.Value }
 		data-label={ strings.ToLower(o.Label) }
 		data-search={ strings.ToLower(o.Label + " " + o.Search) }
+		if o.Flagged {
+			data-flagged
+		}
 		if o.Attrs != nil {
 			{ o.Attrs... }
 		}

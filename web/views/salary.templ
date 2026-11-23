@@ -173,6 +173,7 @@ func salaryCountryOptions(cs []countries.Country) []form.ComboOption {
 		if payroll.HasBuiltin(c.ISO2) {
 			opts[i].Leading = builtinRulesIcon()
 			opts[i].Search += " built-in"
+			opts[i].Flagged = true
 		}
 	}
 	return opts
@@ -291,6 +292,7 @@ templ salaryForm(d *SalaryData) {
 			@form.Combobox(form.ComboboxProps{
 				Name: "country", ID: "salary", Label: "Country", Placeholder: "Pick a country",
 				Options: salaryCountryOptions(d.Countries), Data: form.FDInput{Value: d.Form.Country}, Searchable: true,
+				FlagFilter: salaryBuiltinFilter(),
 				InputAttrs: salaryReloadAttrs("/tools/salary/body", "#salary-form", "#salary-body"),
 			})
 			<p class="mt-1 flex items-center gap-1 text-xs text-zinc-500">
@@ -917,4 +919,10 @@ func sourceHost(s string) string {
 		return s
 	}
 	return u.Host
+}
+
+// salaryBuiltinFilter shows only the countries with built-in tax rules in a
+// country picker.
+func salaryBuiltinFilter() *form.ComboFlagFilter {
+	return &form.ComboFlagFilter{Label: "Built-in rules only", Key: "salary-builtin", Icon: icons.ShieldCheck("13")}
 }

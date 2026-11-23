@@ -208,6 +208,7 @@ templ salaryOfferCard(d *SalaryCompareData, i int) {
 			@form.Combobox(form.ComboboxProps{
 				Name: id + "_country", ID: "c", Label: "Country", Placeholder: "Pick a country",
 				Options: salaryCountryOptions(d.Countries), Data: form.FDInput{Value: o.Form.Country}, Searchable: true,
+				FlagFilter: salaryBuiltinFilter(),
 			})
 		}
 		<div class="grid gap-2">

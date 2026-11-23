@@ -20,6 +20,9 @@ document.addEventListener("alpine:init", () => {
       canCreate: false,
       creating: false,
       panelStyle: "",
+      // onlyFlagged shows only the [data-flagged] options (FlagFilter),
+      // remembered per data-flag-key.
+      onlyFlagged: false,
 
       options() {
         return this.$refs.list.querySelectorAll("[data-option]");
@@ -30,7 +33,9 @@ document.addEventListener("alpine:init", () => {
         visible = [];
         let exact = false;
         for (const o of this.options()) {
-          const ok = q === "" || o.dataset.search.includes(q);
+          const ok =
+            (q === "" || o.dataset.search.includes(q)) &&
+            (!this.onlyFlagged || "flagged" in o.dataset);
           o.hidden = !ok;
           if (ok) visible.push(o);
           if (o.dataset.value !== "" && o.dataset.label === q) exact = true;
@@ -40,6 +45,17 @@ document.addEventListener("alpine:init", () => {
         if (this.canCreate) visible.push(create);
         this.noMatches = visible.length === 0;
         this.setActive(0);
+      },
+
+      toggleFlagged() {
+        this.onlyFlagged = !this.onlyFlagged;
+        const key = this.$root.dataset.flagKey;
+        try {
+          if (this.onlyFlagged) localStorage.setItem("comboFlag:" + key, "1");
+          else localStorage.removeItem("comboFlag:" + key);
+        } catch {}
+        this.filter();
+        (this.$refs.search ?? this.$refs.list).focus();
       },
 
       setActive(i) {
@@ -162,6 +178,12 @@ document.addEventListener("alpine:init", () => {
       },
 
       init() {
+        const key = this.$root.dataset.flagKey;
+        if (key) {
+          try {
+            this.onlyFlagged = localStorage.getItem("comboFlag:" + key) === "1";
+          } catch {}
+        }
         this.onViewportChange = (ev) => {
           if (this.open && !this.$refs.panel.contains(ev.target)) this.close();
         };
