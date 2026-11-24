@@ -176,7 +176,7 @@ func TestBoughtForOthers(t *testing.T) {
 			t.Errorf("spent = %v / %v / %v / %v, want 100 everywhere", cat, budget, sum, flow)
 		}
 		// Asking again schedules nothing more.
-		res, body = do("PUT", "/transactions/"+c.ID+"/for-others", url.Values{"keep_person": {"1"}, "payback": {"1"}, "details_id": {c.ID}}, "HX-Target", "txd-panel")
+		res, body = do("PUT", "/transactions/"+c.ID+"/for-others", url.Values{"for_person": {"someone"}, "payback": {"1"}}, "HX-Target", "txd-panel")
 		if res.StatusCode != http.StatusOK {
 			t.Fatalf("status %d: %s", res.StatusCode, body)
 		}
@@ -214,19 +214,18 @@ func TestBoughtForOthers(t *testing.T) {
 		if res.StatusCode != http.StatusOK || !strings.Contains(body, "for_person") {
 			t.Fatalf("form %d: %s", res.StatusCode, body)
 		}
-		res, body = do("PUT", "/transactions/"+lunch.ID+"/for-others", url.Values{"for_person": {sara.ID}, "details_id": {lunch.ID}}, "HX-Target", "txd-panel")
+		res, body = do("PUT", "/transactions/"+lunch.ID+"/for-others", url.Values{"for_person": {sara.ID}}, "HX-Target", "txd-panel")
 		if res.StatusCode != http.StatusOK {
 			t.Fatalf("status %d: %s", res.StatusCode, body)
 		}
-		if !strings.Contains(body, "Bought for someone") {
-			t.Error("details without the section")
+		if !strings.Contains(body, "Bought for") || !strings.Contains(body, "not counted") {
+			t.Error("details without the row")
 		}
 		if cat, _, _, _ := spent(); cat != 0 {
 			t.Errorf("category = %v, want 0", cat)
 		}
-		// htmx sends a DELETE's parameters in the url (layouts' htmx-config).
-		res, body = do("DELETE", "/transactions/"+lunch.ID+"/for-others?details_id="+lunch.ID, nil, "HX-Target", "txd-panel")
-		if res.StatusCode != http.StatusOK || !strings.Contains(body, "I bought it for someone") {
+		res, body = do("PUT", "/transactions/"+lunch.ID+"/for-others", url.Values{"for_person": {"me"}}, "HX-Target", "txd-panel")
+		if res.StatusCode != http.StatusOK || !strings.Contains(body, "Bought for") || strings.Contains(body, "not counted") {
 			t.Fatalf("status %d: details not answered", res.StatusCode)
 		}
 		if l := find("Lunch", models.ExpenseTxKind); l.ForOthers || l.ForPerson != nil {

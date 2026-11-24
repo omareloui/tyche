@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/errs"
@@ -70,13 +69,22 @@ func forOthersOf(r *http.Request, tx *models.Transaction, cps []models.Counterpa
 	return &forOthers{Person: person, Payback: fd.Payback.Value != ""}, nil
 }
 
-// GetTxForOthersForm answers the details' "I bought it for someone" with its
-// form.
-func (h Handler) GetTxForOthersForm(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	return h.renderTxForOthersForm(r, "")
+// GetTxForOthersPicker answers the details' "Bought for" quick pick.
+func (h Handler) GetTxForOthersPicker(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	tx, err := h.forOthersTx(r)
+	if err != nil {
+		return nil, err
+	}
+	cps, err := h.repo.GetCounterparties(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	return views.TxForOthersPicker(tx, cps), nil
 }
 
-func (h Handler) renderTxForOthersForm(r *http.Request, errMsg string) (templ.Component, error) {
+// forOthersTx is the {id} expense when the details can change who it was
+// bought for.
+func (h Handler) forOthersTx(r *http.Request) (*models.Transaction, error) {
 	id := r.PathValue("id")
 	if id == "" {
 		return nil, errs.ErrInvalidID
@@ -85,69 +93,55 @@ func (h Handler) renderTxForOthersForm(r *http.Request, errMsg string) (templ.Co
 	if err != nil {
 		return nil, err
 	}
-	if !views.TxForOthersEditable(tx) {
+	if !views.TxForOthersEditable(tx) && !(tx.ForOthers && tx.CanBeForOthers()) {
 		return nil, resperr.New(http.StatusUnprocessableEntity, models.ErrForOthersKind.Error())
 	}
-	cps, err := h.repo.GetCounterparties(r.Context())
+	return tx, nil
+}
+
+// SetTxForOthers sets who the expense in the path was bought for: for_person
+// "me" makes it the user's again, "someone" for someone unnamed, else a
+// counterparty's id; payback schedules the income paying back what isn't
+// yet. Answers the details and the list out of band.
+func (h Handler) SetTxForOthers(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	ctx := r.Context()
+	l := logger.FromCtx(ctx)
+	tx, err := h.forOthersTx(r)
 	if err != nil {
 		return nil, err
 	}
-	return views.TxForOthersForm(tx, cps, errMsg), nil
-}
+	pickID := views.QuickPickID("tx", tx.ID, views.QuickPickForOthers)
 
-// SetTxForOthers marks the expense in the path bought for someone: for_person
-// (none when empty; keep_person keeps who it's for), payback scheduling the
-// income paying back what isn't yet. Answers the details again.
-func (h Handler) SetTxForOthers(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	l := logger.FromCtx(r.Context())
-	id := r.PathValue("id")
-	if id == "" {
-		return nil, errs.ErrInvalidID
-	}
-	refused := func(msg string) (templ.Component, error) {
-		w.Header().Set("HX-Retarget", "#"+views.TxForOthersID(id))
-		w.Header().Set("HX-Reswap", "outerHTML")
-		return h.renderTxForOthersForm(r, msg)
-	}
-
+	on := true
 	var person *models.Counterparty
-	if r.FormValue("keep_person") != "" {
-		tx, err := h.repo.GetTransaction(r.Context(), id)
-		if err != nil {
-			return nil, err
+	switch v := strings.TrimSpace(r.FormValue("for_person")); v {
+	case views.ForOthersMe, "":
+		on = false
+	case views.ForOthersSomeone:
+	default:
+		if person, err = h.repo.GetCounterparty(ctx, v); err != nil {
+			return nil, pickRefused(w, pickID, "Pick someone from the list.")
 		}
-		person = tx.ForPerson
-	} else if pid := strings.TrimSpace(r.FormValue("for_person")); pid != "" {
-		cp, err := h.repo.GetCounterparty(r.Context(), pid)
-		if err != nil {
-			return refused("Pick someone from the list")
-		}
-		person = cp
 	}
 
 	payback := r.FormValue("payback") != ""
-	if err := h.repo.SetForOthers(r.Context(), id, true, person, payback, h.userToday(r.Context())); err != nil {
+	if err := h.repo.SetForOthers(ctx, tx.ID, on, person, payback, h.userToday(ctx)); err != nil {
 		for _, e := range forOthersErrs {
 			if errors.Is(err, e) {
-				return refused(e.Error())
+				return nil, pickRefused(w, pickID, e.Error())
 			}
 		}
 		l.Error("setting bought for others", zap.Error(err))
 		return nil, err
 	}
-	l.Info("set bought for others", zap.Bool("payback", payback))
-	return h.answerBoughtForLink(w, r)
-}
+	l.Info("set bought for others", zap.Bool("on", on), zap.Bool("payback", payback))
 
-// UnsetTxForOthers makes the expense in the path the user's again.
-func (h Handler) UnsetTxForOthers(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	id := r.PathValue("id")
-	if id == "" {
-		return nil, errs.ErrInvalidID
-	}
-	if err := h.repo.SetForOthers(r.Context(), id, false, nil, false, time.Time{}); err != nil {
+	if err := h.renderTransactionsListOOB(w, r); err != nil {
 		return nil, err
 	}
-	logger.FromCtx(r.Context()).Info("unset bought for others")
-	return h.answerBoughtForLink(w, r)
+	d, err := h.txDetails(ctx, tx.ID)
+	if err != nil {
+		return nil, err
+	}
+	return views.TxDetailsPanel(d, &getClaims(ctx).DefaultCurrency), nil
 }
