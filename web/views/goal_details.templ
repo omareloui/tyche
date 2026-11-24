@@ -103,6 +103,9 @@ templ goalDetailsHero(gl *models.Goal, st goalState) {
 		if gl.FulfilledAt.IsZero() && gl.HasHoldings() {
 			@goalHoldings(gl)
 		}
+		if gl.FulfilledAt.IsZero() && len(gl.Funded()) > 0 {
+			@holdingGainLazy(fmt.Sprintf("/goals/%s/gains", gl.ID))
+		}
 	</div>
 }
 

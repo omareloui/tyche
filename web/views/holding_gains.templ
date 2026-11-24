@@ -1,0 +1,157 @@
+package views
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/omareloui/tyche/internal/formatters"
+	"github.com/omareloui/tyche/internal/models"
+)
+
+// HoldingGainRow is a holding's (or a currency's holdings') gain, in
+// Currency's units.
+type HoldingGainRow struct {
+	Currency *models.Currency
+	Gain     *models.HoldingGain
+}
+
+// holdingPerUnit is a per stored unit amount (a troy ounce for metals) per
+// unit cur is shown in.
+func holdingPerUnit(v float64, cur *models.Currency) float64 {
+	return v / cur.Shown(1)
+}
+
+// holdingGainTitle tells what a unit cost and is worth now, e.g. "Bought at
+// avg 48.2, now 50.1".
+func holdingGainTitle(def, cur *models.Currency, g *models.HoldingGain) string {
+	s := fmt.Sprintf("1 %s%s: bought at avg %s %s, now %s",
+		unitPrefix(cur), cur.String, def.Symbol, formatters.FormatRate(holdingPerUnit(g.AvgCost(), cur)),
+		formatters.FormatRate(holdingPerUnit(g.Rate, cur)))
+	if g.Estimated {
+		s += " (cost partly estimated)"
+	}
+	return s
+}
+
+func holdingGainClass(v float64) string {
+	switch {
+	case v > 0:
+		return "text-emerald-300"
+	case v < 0:
+		return "text-rose-300"
+	}
+	return "text-zinc-400"
+}
+
+func holdingGainPct(g *models.HoldingGain) string {
+	return fmt.Sprintf("%+.1f%%", g.UnrealizedPct())
+}
+
+// accGainSlotID is the span of a currency's row in the accounts summary
+// its gain is swapped into.
+func accGainSlotID(code string) string {
+	return "acc-gain-" + strings.ToLower(code)
+}
+
+// accSummaryGainsLazy loads the gains of the summary's currencies, with the
+// summary's options.
+templ accSummaryGainsLazy() {
+	<div
+		id="acc-gains"
+		hx-get="/accounts/summary/gains"
+		hx-trigger="load"
+		hx-vals="js:{...accSummaryParams()}"
+		hx-swap="outerHTML"
+	></div>
+}
+
+// AccSummaryGains swaps each currency's gain into its row of the accounts
+// summary, then what was gained selling (realized) under them.
+templ AccSummaryGains(def *models.Currency, rows []HoldingGainRow) {
+	{{ var realized float64 }}
+	{{ estimated := false }}
+	for _, r := range rows {
+		{{ realized += r.Gain.Realized }}
+		{{ estimated = estimated || r.Gain.Estimated }}
+		<span id={ accGainSlotID(r.Currency.String) } hx-swap-oob="true">
+			if r.Gain.Shows() {
+				<span
+					class={ "sensitive tabular-nums", holdingGainClass(r.Gain.Unrealized) }
+					title={ holdingGainTitle(def, r.Currency, r.Gain) }
+				>
+					{ formatSignedAmount(r.Gain.Unrealized, def) } · { holdingGainPct(r.Gain) }
+					if r.Gain.Estimated {
+						<span class="text-zinc-500">*</span>
+					}
+				</span>
+			}
+		</span>
+	}
+	<div id="acc-gains" class="grid gap-1 text-xs text-zinc-500">
+		if len(rows) > 0 {
+			<p>
+				Gains at today’s rates against what the money cost (average), hover one for its rates.
+				if realized != 0 {
+					Sold or spent: <span class={ "sensitive tabular-nums", holdingGainClass(realized) }>{ formatSignedAmount(realized, def) }</span> gained.
+				}
+			</p>
+			if estimated {
+				<p>* Partly estimated: a starting balance, or a day without its rate.</p>
+			}
+		}
+	</div>
+}
+
+// HoldingGainDetails is an account's cost, value and gain, in its details.
+templ HoldingGainDetails(def, cur *models.Currency, g *models.HoldingGain) {
+	if g != nil && (g.Shows() || g.Realized != 0) {
+		@txDetailsSection("Cost and gain") {
+			<dl class="grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-zinc-800/60 ring-1 ring-zinc-800">
+				if g.Shows() {
+					@holdingStat("Avg cost", fmt.Sprintf("%s %s / %s%s", def.Symbol, formatters.FormatRate(holdingPerUnit(g.AvgCost(), cur)), unitPrefix(cur), cur.String), "")
+					@holdingStat("Today", fmt.Sprintf("%s %s / %s%s", def.Symbol, formatters.FormatRate(holdingPerUnit(g.Rate, cur)), unitPrefix(cur), cur.String), "")
+					@holdingStat("Cost", def.Format(g.Basis), "")
+					@holdingStat("Worth", def.Format(g.Value), "")
+					@holdingStat("Gain", formatSignedAmount(g.Unrealized, def)+" · "+holdingGainPct(g), holdingGainClass(g.Unrealized))
+				}
+				if g.Realized != 0 {
+					@holdingStat("Gained selling", formatSignedAmount(g.Realized, def), holdingGainClass(g.Realized))
+				}
+			</dl>
+			<p class="text-xs text-zinc-500">
+				What it cost in { def.String } (average cost), against today’s rate.
+				if g.Estimated {
+					Partly estimated: a starting balance, or a day without its rate.
+				}
+			</p>
+		}
+	}
+}
+
+templ holdingStat(label, value, class string) {
+	<div class="px-4 py-3 bg-zinc-900 min-w-0">
+		<dt class="text-xs text-zinc-500">{ label }</dt>
+		<dd class={ "sensitive mt-0.5 truncate text-sm font-semibold tabular-nums", class }>{ value }</dd>
+	</div>
+}
+
+// holdingGainLazy loads a holding's gain into the details.
+templ holdingGainLazy(url string) {
+	<div hx-get={ url } hx-trigger="load" hx-swap="outerHTML"></div>
+}
+
+// GoalHoldingGains is the gain of each of a goal's accounts in another
+// currency than the default one.
+templ GoalHoldingGains(def *models.Currency, rows []HoldingGainRow) {
+	if len(rows) > 0 {
+		<div class="grid gap-1.5 rounded-xl bg-zinc-800/40 px-3 py-2.5 text-sm">
+			for _, r := range rows {
+				<div class="flex items-center justify-between gap-3 tabular-nums" title={ holdingGainTitle(def, r.Currency, r.Gain) }>
+					<span class="text-zinc-400">{ r.Currency.String } cost <span class="sensitive">{ def.Format(r.Gain.Basis) }</span></span>
+					<span class={ "sensitive", holdingGainClass(r.Gain.Unrealized) }>{ formatSignedAmount(r.Gain.Unrealized, def) } · { holdingGainPct(r.Gain) }</span>
+				</div>
+			}
+			<p class="text-xs text-zinc-500">Gain at today’s rates against what the money cost in { def.String }.</p>
+		</div>
+	}
+}

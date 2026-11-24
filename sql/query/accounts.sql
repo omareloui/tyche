@@ -381,3 +381,54 @@ WHERE
 UPDATE accounts
 SET note = sqlc.narg(note)
 WHERE id = sqlc.arg(id);
+
+-- name: GetHoldingAccounts :many
+-- The accounts in another currency than def (deleted, archived and goals'
+-- ones included: money moved through them carries its cost), for the
+-- holdings' gains.
+SELECT
+    a.id,
+    CAST(c.string AS TEXT) AS code,
+    a.amount,
+    a.created_at,
+    CAST(k.enum AS INTEGER) AS kind,
+    a.is_archived,
+    a.exclude_from_balance,
+    CAST(a.deleted_at IS NOT NULL AS BOOLEAN) AS is_deleted,
+    a.goal_id
+FROM accounts AS a
+JOIN currencies AS c ON a.currency_id = c.id
+JOIN account_kinds AS k ON a.kind_id = k.id
+WHERE a.currency_id != sqlc.arg(def_currency_id)
+ORDER BY a.created_at, a.id;
+
+-- name: GetHoldingMoves :many
+-- The fulfilled transactions moving an account in another currency than
+-- def, in order (their day, then when written), with both sides' currency,
+-- to walk the holdings' average cost.
+SELECT
+    t.id,
+    t.kind,
+    t.amount,
+    t.to_amount,
+    t.account_id,
+    t.to_account_id,
+    CAST(SUBSTR(t.scheduled_to, 1, 10) AS TEXT) AS day,
+    CAST(ac.string AS TEXT) AS from_code,
+    CAST(COALESCE(tc.string, '') AS TEXT) AS to_code,
+    -- A transfer pair's other leg (both SMS of a transfer between own
+    -- accounts): its amount and currency are the rate paid.
+    CAST(COALESCE(p.amount, 0) AS FLOAT) AS pair_amount,
+    CAST(COALESCE(pc.string, '') AS TEXT) AS pair_code
+FROM transactions AS t
+JOIN accounts AS a ON t.account_id = a.id
+JOIN currencies AS ac ON a.currency_id = ac.id
+LEFT JOIN accounts AS ta ON t.to_account_id = ta.id
+LEFT JOIN currencies AS tc ON ta.currency_id = tc.id
+LEFT JOIN transactions AS p ON t.transfer_pair_id = p.id
+LEFT JOIN accounts AS pa ON p.account_id = pa.id
+LEFT JOIN currencies AS pc ON pa.currency_id = pc.id
+WHERE
+    t.fulfilled_at IS NOT NULL
+    AND (a.currency_id != sqlc.arg(def_currency_id) OR (ta.id IS NOT NULL AND ta.currency_id != sqlc.arg(def_currency_id)))
+ORDER BY t.scheduled_to, t.created_at, t.id;

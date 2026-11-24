@@ -279,9 +279,12 @@ templ accSummaryCurrencies(s *models.AccountsSummary) {
 							<span class="sensitive text-zinc-500 tabular-nums">· { c.Currency.Format(c.Native) }</span>
 						</p>
 						if c.Currency.String != s.Currency.String {
-							if rate := currencyRate(&c.Currency, &s.Currency); rate > 0 {
-								<p class="text-xs text-zinc-500 tabular-nums">1 { unitPrefix(&c.Currency) }{ c.Currency.String } = { s.Currency.Symbol } { formatters.FormatRate(rate) }</p>
-							}
+							<p class="flex flex-wrap gap-x-2 text-xs text-zinc-500 tabular-nums">
+								if rate := currencyRate(&c.Currency, &s.Currency); rate > 0 {
+									<span>1 { unitPrefix(&c.Currency) }{ c.Currency.String } = { s.Currency.Symbol } { formatters.FormatRate(rate) }</span>
+								}
+								<span id={ accGainSlotID(c.Currency.String) }></span>
+							</p>
 						}
 					</div>
 					<div class="shrink-0 text-right tabular-nums">
@@ -291,6 +294,7 @@ templ accSummaryCurrencies(s *models.AccountsSummary) {
 				</li>
 			}
 		</ul>
+		@accSummaryGainsLazy()
 	</div>
 }
 

@@ -93,6 +93,9 @@ templ AccountDetails(d *AccountDetailsData) {
 					@gamyaaDetails(a)
 				}
 				@accountDetailsChart(a, d.History)
+				if a.Currency.String != d.Def.String {
+					@holdingGainLazy(fmt.Sprintf("/accounts/%s/gain", a.ID))
+				}
 				@accountDetailsMoney(d)
 				if len(d.Upcoming) > 0 {
 					@accountDetailsTxs("Upcoming", a, d.Upcoming)
