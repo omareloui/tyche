@@ -56,6 +56,11 @@ templ head(pageTitle string) {
 	<meta name="apple-mobile-web-app-title" content="Tyche"/>
 	<meta name="apple-mobile-web-app-status-bar-style" content="black"/>
 	<link rel="stylesheet" href="/styles/main.css"/>
+	<!--
+		htmx 1.x sends a DELETE's parameters in its body, which Go's ParseForm
+		ignores: send them in the url like GET (htmx 2's default).
+	-->
+	<meta name="htmx-config" content='{"methodsThatUseUrlParams":["get","delete"]}'/>
 	<script src="/js/vendor/htmx.lib.js"></script>
 	<!--
 		Every page loads every script: the navbar's hx-boost swaps only
