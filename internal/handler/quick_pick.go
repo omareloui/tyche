@@ -34,6 +34,14 @@ func pickField(r *http.Request) (string, error) {
 	return "", errUnknownPick
 }
 
+// txPickField is a transaction's {field}: pickField's or its account.
+func txPickField(r *http.Request) (string, error) {
+	if f := r.PathValue("field"); f == views.QuickPickAccount {
+		return f, nil
+	}
+	return pickField(r)
+}
+
 // pickRefused shows msg in place of the pick (pickID's) rather than over
 // the details.
 func pickRefused(w http.ResponseWriter, pickID, msg string) error {
@@ -87,13 +95,23 @@ func (h Handler) pickableTx(r *http.Request) (*models.Transaction, error) {
 }
 
 func (h Handler) TxPicker(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	field, err := pickField(r)
+	field, err := txPickField(r)
 	if err != nil {
 		return nil, err
 	}
 	tx, err := h.pickableTx(r)
 	if err != nil {
 		return nil, err
+	}
+	if field == views.QuickPickAccount {
+		if !views.TxAccountEditable(tx) {
+			return nil, resperr.New(http.StatusUnprocessableEntity, "This transaction's account can't change here.")
+		}
+		accs, err := h.repo.GetAccounts(r.Context())
+		if err != nil {
+			return nil, err
+		}
+		return views.TxAccountPicker(tx, accs), nil
 	}
 	if field == views.QuickPickCategory {
 		cats, err := h.repo.GetCategories(r.Context())
@@ -113,7 +131,7 @@ func (h Handler) TxPicker(w http.ResponseWriter, r *http.Request) (templ.Compone
 // it reviewed, as editing it does), answering its details panel and the
 // list out of band.
 func (h Handler) SetTxPick(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	field, err := pickField(r)
+	field, err := txPickField(r)
 	if err != nil {
 		return nil, err
 	}
@@ -124,6 +142,10 @@ func (h Handler) SetTxPick(w http.ResponseWriter, r *http.Request) (templ.Compon
 	ctx := r.Context()
 	l := logger.FromCtx(ctx)
 	pickID := views.QuickPickID("tx", tx.ID, field)
+
+	if field == views.QuickPickAccount {
+		return h.setTxAccountPick(w, r, tx, pickID)
+	}
 
 	var edit models.TxBulkEdit
 	if field == views.QuickPickCategory {
@@ -373,4 +395,52 @@ func (h Handler) SetItemCategoryPick(w http.ResponseWriter, r *http.Request) (te
 	}
 	addHXTrigger(w, views.ItemsChangedEvent)
 	return views.ItemCategoryPick(&it.Item), nil
+}
+
+// setTxAccountPick moves the transaction to the picked account, one of the
+// same currency it can be in (views.TxAccountOptions), as editing it does:
+// its balance effect moves too. Answers the details, the list and the
+// balances out of band.
+func (h Handler) setTxAccountPick(w http.ResponseWriter, r *http.Request, tx *models.Transaction, pickID string) (templ.Component, error) {
+	ctx := r.Context()
+	l := logger.FromCtx(ctx)
+	if !views.TxAccountEditable(tx) {
+		return nil, pickRefused(w, pickID, "This transaction's account can't change here.")
+	}
+	accs, err := h.repo.GetAccounts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	id := r.FormValue("account_id")
+	i := slices.IndexFunc(views.TxAccountOptions(tx, accs), func(a models.Account) bool { return a.ID == id })
+	if i < 0 {
+		return nil, pickRefused(w, pickID, "Pick an account in "+tx.Account.Currency.String+".")
+	}
+	acc := views.TxAccountOptions(tx, accs)[i]
+
+	if acc.ID != tx.Account.ID {
+		out := *tx
+		out.Account = acc
+		// Its lines, tags and receipt stay as they are.
+		out.Items, out.Tags, out.ReceiptID = nil, nil, ""
+		if err := h.repo.UpdateTransaction(ctx, tx, &out); err != nil {
+			l.Error("moving transaction to an account", zap.Error(err), zap.String("id", tx.ID))
+			return nil, err
+		}
+		l.Info("picked transaction account", zap.String("id", tx.ID))
+	}
+
+	if err := h.renderTransactionsListOOB(w, r); err != nil {
+		return nil, err
+	}
+	if !tx.FulfilledAt.IsZero() {
+		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
+			return nil, err
+		}
+	}
+	d, err := h.txDetails(ctx, tx.ID)
+	if err != nil {
+		return nil, err
+	}
+	return views.TxDetailsPanel(d, &getClaims(ctx).DefaultCurrency), nil
 }

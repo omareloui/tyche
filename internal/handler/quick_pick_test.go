@@ -189,7 +189,7 @@ func TestSetTxPick(t *testing.T) {
 	}
 
 	// Unknown fields aren't picked.
-	w, r = e.put("/", url.Values{}, map[string]string{"id": tx.ID, "field": "account"})
+	w, r = e.put("/", url.Values{}, map[string]string{"id": tx.ID, "field": "goal"})
 	if _, err := e.h.SetTxPick(w, r); statusOf(err) != http.StatusNotFound {
 		t.Errorf("unknown field: err = %v, want 404", err)
 	}

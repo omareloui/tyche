@@ -83,7 +83,6 @@ templ TxDetailsPanel(d *models.TxDetails, def *models.Currency) {
 				Note: tx.Note, Editable: TxNoteEditable(tx),
 			})
 			@TxWindows(TxWindowsProps{Tx: tx, RefundID: d.ReturnRefundID})
-			@txDetailsForOthers(tx)
 			if tx.Kind != models.AdjustmentTxKind && (len(tx.Items) > 0 || tx.Receipt != nil || len(tx.Wishes) > 0 || !tx.IsLocked()) {
 				@TxDetailsItems(tx, nil, &ReceiptFD{Enabled: d.ReceiptScan})
 			}
@@ -301,20 +300,25 @@ templ txDetailsFields(d *models.TxDetails, v *txView) {
 	{{ tx := d.Tx }}
 	<dl class="grid gap-px overflow-hidden rounded-2xl bg-zinc-800/60 ring-1 ring-zinc-800">
 		@txDetailsRow("Account", icons.Wallet("15")) {
-			<button
-				type="button"
-				{ txFilterBy(models.TxFilterAccount, tx.Account.ID)... }
-				title={ "Show only " + tx.Account.Name }
-				class="txd-link"
-			>{ tx.Account.DisplayName() }</button>
-			if tx.ToAccount != nil && tx.ToAccount.Name != "" {
-				<span class="text-zinc-500">→</span>
+			if TxAccountEditable(tx) {
+				@QuickPick(txAccountPick(tx))
+				@txDetailsFilterBy(models.TxFilterAccount, tx.Account.ID, tx.Account.Name)
+			} else {
 				<button
 					type="button"
-					{ txFilterBy(models.TxFilterAccount, tx.ToAccount.ID)... }
-					title={ "Show only " + tx.ToAccount.Name }
+					{ txFilterBy(models.TxFilterAccount, tx.Account.ID)... }
+					title={ "Show only " + tx.Account.Name }
 					class="txd-link"
-				>{ tx.ToAccount.DisplayName() }</button>
+				>{ tx.Account.DisplayName() }</button>
+				if tx.ToAccount != nil && tx.ToAccount.Name != "" {
+					<span class="text-zinc-500">→</span>
+					<button
+						type="button"
+						{ txFilterBy(models.TxFilterAccount, tx.ToAccount.ID)... }
+						title={ "Show only " + tx.ToAccount.Name }
+						class="txd-link"
+					>{ tx.ToAccount.DisplayName() }</button>
+				}
 			}
 		}
 		if tx.ToAccount != nil && tx.ToAmount != 0 && (tx.Kind == models.TransferTxKind || tx.Kind == models.DebtTxKind) {
@@ -366,6 +370,7 @@ templ txDetailsFields(d *models.TxDetails, v *txView) {
 				}
 			}
 		}
+		@txDetailsForOthers(tx)
 		if tx.Goal != nil {
 			@txDetailsRow("Goal", icons.Target("15")) {
 				@txGoalProgress(tx)

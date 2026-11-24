@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
@@ -107,7 +108,54 @@ templ QuickPicker(p QuickPickerProps) {
 const (
 	QuickPickCategory     = "category"
 	QuickPickCounterparty = "counterparty"
+	// QuickPickAccount is a transaction's only.
+	QuickPickAccount = "account"
 )
+
+// TxAccountEditable tells the details can move the transaction to another
+// account: an expense, income or refund whose refs are editable.
+func TxAccountEditable(tx *models.Transaction) bool {
+	return TxRefsEditable(tx) && tx.ToAccount == nil
+}
+
+// TxAccountOptions are the accounts the transaction can move to: the ones
+// its kind can be in (getTxAccs), of its currency (its amount, lines,
+// reimbursements and split stay as they are), live (its own kept).
+func TxAccountOptions(tx *models.Transaction, accs []models.Account) []models.Account {
+	return slicesutils.Filter(getTxAccs(accs, tx.Kind, false), func(a models.Account) bool {
+		return a.ID == tx.Account.ID ||
+			(a.Currency.ID == tx.Account.Currency.ID && !a.IsArchive && !a.IsDeleted() && !a.IsGoal())
+	})
+}
+
+func txAccountPick(tx *models.Transaction) QuickPickProps {
+	return QuickPickProps{
+		ID: QuickPickID("tx", tx.ID, QuickPickAccount), Label: "account",
+		PickerURL: txPickURL(tx.ID, QuickPickAccount), Display: accountPickDisplay(&tx.Account),
+		Editable: TxAccountEditable(tx),
+	}
+}
+
+templ accountPickDisplay(a *models.Account) {
+	<span class="shrink-0 text-zinc-500">
+		@accKindIcon(a.Kind.Enum, "16")
+	</span>
+	<span class="truncate">{ a.DisplayName() }</span>
+}
+
+// TxAccountPicker moves a transaction to another account of its currency.
+func TxAccountPicker(tx *models.Transaction, accs []models.Account) templ.Component {
+	opts := TxAccountOptions(tx, accs)
+	return QuickPicker(QuickPickerProps{
+		ID: QuickPickID("tx", tx.ID, QuickPickAccount),
+		Combo: form.ComboboxProps{
+			Name: "account_id", ID: "pick-acc-" + tx.ID, Label: "Account", Placeholder: "Account",
+			Options: form.AccountComboOptions(opts), Data: form.FDInput{Value: tx.Account.ID},
+		},
+		SaveURL: txPickURL(tx.ID, QuickPickAccount),
+		Target:  "#txd-panel", Swap: "innerHTML", Class: "txd-pick max-w-full",
+	})
+}
 
 templ categoryDisplay(color, name string) {
 	@categoryDot(color)
