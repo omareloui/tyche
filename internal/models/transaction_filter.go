@@ -55,6 +55,16 @@ const (
 	TxNoteWithout TxNote = "without"
 )
 
+// TxPaid narrows transactions by the currency they were paid in: another
+// one than their account's (foreign, see foreign.go) or the account's.
+type TxPaid string
+
+const (
+	TxPaidAny     TxPaid = ""
+	TxPaidForeign TxPaid = "foreign"
+	TxPaidLocal   TxPaid = "local"
+)
+
 // TxWindow narrows expenses by their return / warranty windows (see
 // return_warranty.go).
 type TxWindow string
@@ -79,6 +89,7 @@ const (
 	TxFilterSource       = "source"
 	TxFilterReceipt      = "receipt"
 	TxFilterNote         = "note"
+	TxFilterPaid         = "paid"
 	TxFilterFor          = "for"
 	TxFilterWindow       = "window"
 	TxFilterFrom         = "from"
@@ -110,6 +121,7 @@ type TxFilter struct {
 	Source  TxSource
 	Receipt TxReceipt
 	Note    TxNote
+	Paid    TxPaid
 	Window  TxWindow
 	For     TxFor
 	// Today is the user's today the windows are compared with, set by the
@@ -152,6 +164,10 @@ func ParseTxFilter(v url.Values) TxFilter {
 	switch s := TxNote(v.Get(TxFilterNote)); s {
 	case TxNoteWith, TxNoteWithout:
 		f.Note = s
+	}
+	switch s := TxPaid(v.Get(TxFilterPaid)); s {
+	case TxPaidForeign, TxPaidLocal:
+		f.Paid = s
 	}
 	switch s := TxWindow(v.Get(TxFilterWindow)); s {
 	case TxWindowReturnOpen, TxWindowWarrantyActive:
@@ -213,6 +229,7 @@ func (f *TxFilter) Values() url.Values {
 	set(TxFilterSource, string(f.Source))
 	set(TxFilterReceipt, string(f.Receipt))
 	set(TxFilterNote, string(f.Note))
+	set(TxFilterPaid, string(f.Paid))
 	set(TxFilterWindow, string(f.Window))
 	set(TxFilterFor, string(f.For))
 	set(TxFilterFrom, f.FromString())
@@ -241,7 +258,7 @@ func (f *TxFilter) IsZero() bool {
 func (f *TxFilter) ActiveCount() int {
 	v := f.Values()
 	n := 0
-	for _, k := range []string{TxFilterKind, TxFilterAccount, TxFilterCategory, TxFilterCounterparty, TxFilterGoal, TxFilterItem, TxFilterTag, TxFilterStatus, TxFilterSource, TxFilterReceipt, TxFilterNote, TxFilterWindow, TxFilterFor} {
+	for _, k := range []string{TxFilterKind, TxFilterAccount, TxFilterCategory, TxFilterCounterparty, TxFilterGoal, TxFilterItem, TxFilterTag, TxFilterStatus, TxFilterSource, TxFilterReceipt, TxFilterNote, TxFilterPaid, TxFilterWindow, TxFilterFor} {
 		if v.Has(k) {
 			n++
 		}

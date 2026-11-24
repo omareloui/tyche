@@ -13,15 +13,16 @@ import (
 // RunDailyUpkeep runs, on the tenant's first request of the day (in the
 // user's time zone), what's due once a day: TopUpRecurrentTxs, then purging
 // the receipts scanned for a transaction never saved. What fails is logged:
-// the request goes on without.
-func (r *Repository) RunDailyUpkeep(ctx context.Context, tenantID string) {
+// the request goes on without. It reports whether it ran (false when it
+// already did that day or failed).
+func (r *Repository) RunDailyUpkeep(ctx context.Context, tenantID string) bool {
 	y, m, d := tzctx.In(ctx, time.Now()).Date()
 	day := time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Format(time.DateOnly)
 
 	r.upkeepMu.Lock()
 	if r.keptUp[tenantID] == day {
 		r.upkeepMu.Unlock()
-		return
+		return false
 	}
 	r.keptUp[tenantID] = day
 	r.upkeepMu.Unlock()
@@ -31,12 +32,13 @@ func (r *Repository) RunDailyUpkeep(ctx context.Context, tenantID string) {
 		if !errors.Is(err, ErrTenantLocked) && !errors.Is(err, ErrTenantDeleted) {
 			logger.FromCtx(ctx).Error("writing the recurrent transactions' occurrences", zap.Error(err))
 		}
-		return
+		return false
 	}
 	if _, q, err := r.dbFromCtx(ctx); err == nil {
 		purgeOrphanReceipts(ctx, q, time.Now())
 		purgePendingCSVImports(ctx, q, time.Now())
 	}
+	return true
 }
 
 // forgetDailyUpkeep makes the tenant's next request run its daily upkeep

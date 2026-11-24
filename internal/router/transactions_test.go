@@ -145,7 +145,8 @@ func TestTransactionsPage(t *testing.T) {
 			}
 		}
 	}
-	// The only one with a receipt's image.
+	// The only one with a receipt's image, a note and paid in another
+	// currency.
 	receiptID, err := repo.CreateReceipt(ctx, &repository.ScannedReceipt{Data: []byte("jpeg"), ContentType: "image/jpeg", Hash: "h"})
 	if err != nil {
 		t.Fatal(err)
@@ -154,6 +155,7 @@ func TestTransactionsPage(t *testing.T) {
 		Kind: models.ExpenseTxKind, Amount: 500, Description: "rent",
 		Note:        "Paid to the **landlord**",
 		ScheduledTo: time.Now().AddDate(0, 1, 0), ReceiptID: receiptID,
+		Original:    &models.ForeignAmount{Amount: 10, Currency: "USD"},
 	})
 	// Pays back a January expense, from the June chunk.
 	refund := create(&models.Transaction{
@@ -267,6 +269,8 @@ func TestTransactionsPage(t *testing.T) {
 			{"with a note", models.TxFilter{Note: models.TxNoteWith}, 1},
 			{"without a note", models.TxFilter{Note: models.TxNoteWithout}, 120},
 			{"search a note", models.TxFilter{Q: "LANDLORD"}, 1},
+			{"paid in another currency", models.TxFilter{Paid: models.TxPaidForeign}, 1},
+			{"paid in the account's currency", models.TxFilter{Paid: models.TxPaidLocal}, 120},
 			{"amounts", models.TxFilter{MinAmount: &min, MaxAmount: &max}, 12},
 			{"account", models.TxFilter{AccountID: bank.ID}, 121},
 			{"other account", models.TxFilter{AccountID: idgen.New()}, 0},

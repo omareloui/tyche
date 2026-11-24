@@ -113,3 +113,9 @@ UPDATE user SET
 -- name: GetUserPicture :one
 SELECT picture_data, picture_type, picture_hash FROM user
 WHERE picture_data IS NOT NULL LIMIT 1;
+
+-- name: GetFxReconvertedAt :one
+SELECT fx_reconverted_at FROM user LIMIT 1;
+
+-- name: SetFxReconverted :exec
+UPDATE user SET fx_reconverted_at = CURRENT_TIMESTAMP;

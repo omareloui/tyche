@@ -182,6 +182,11 @@ WHERE
     ) = sqlc.narg(has_receipt))
     AND (sqlc.narg(for_others) IS NULL OR t.for_others = sqlc.narg(for_others))
     AND (sqlc.narg(has_note) IS NULL OR (t.note != '') = sqlc.narg(has_note))
+    -- Paid in another currency than its account's.
+    AND (sqlc.narg(foreign) IS NULL OR EXISTS (
+        SELECT 1 FROM accounts AS fa JOIN currencies AS fc ON fc.id = fa.currency_id
+        WHERE fa.id = t.account_id AND UPPER(fc.string) != UPPER(t.original_currency)
+    ) = sqlc.narg(foreign))
     AND (sqlc.narg(window) IS NULL
         OR (sqlc.narg(window) = 'return_open' AND t.kind = 1 AND t.returned_at IS NULL AND t.return_until >= sqlc.narg(window_today))
         OR (sqlc.narg(window) = 'warranty_active' AND t.kind = 1 AND (t.warranty_until >= sqlc.narg(window_today) OR EXISTS (
@@ -301,6 +306,11 @@ WHERE
     ) = sqlc.narg(has_receipt))
     AND (sqlc.narg(for_others) IS NULL OR t.for_others = sqlc.narg(for_others))
     AND (sqlc.narg(has_note) IS NULL OR (t.note != '') = sqlc.narg(has_note))
+    -- Paid in another currency than its account's.
+    AND (sqlc.narg(foreign) IS NULL OR EXISTS (
+        SELECT 1 FROM accounts AS fa JOIN currencies AS fc ON fc.id = fa.currency_id
+        WHERE fa.id = t.account_id AND UPPER(fc.string) != UPPER(t.original_currency)
+    ) = sqlc.narg(foreign))
     AND (sqlc.narg(window) IS NULL
         OR (sqlc.narg(window) = 'return_open' AND t.kind = 1 AND t.returned_at IS NULL AND t.return_until >= sqlc.narg(window_today))
         OR (sqlc.narg(window) = 'warranty_active' AND t.kind = 1 AND (t.warranty_until >= sqlc.narg(window_today) OR EXISTS (
@@ -1376,3 +1386,33 @@ WHERE r.kind = 5
     AND r.amount >= sqlc.arg(min_amount)
 ORDER BY r.scheduled_to
 LIMIT 1;
+
+-- name: GetForeignTxsToReconvert :many
+-- The transactions paid in another currency than their account's, for the
+-- one-off reconversion at their day's rate (fx_reconvert.go).
+SELECT
+    t.id,
+    t.account_id,
+    t.kind,
+    t.amount,
+    CAST(t.original_amount AS FLOAT) AS original_amount,
+    CAST(t.original_currency AS TEXT) AS original_currency,
+    t.scheduled_to,
+    CAST(t.fulfilled_at IS NOT NULL AS BOOLEAN) AS fulfilled,
+    c.string AS account_currency,
+    CAST(COALESCE(a.fx_fee_percent, 0) AS FLOAT) AS fx_fee_percent,
+    CAST(COALESCE(a.fx_fee_min, 0) AS FLOAT) AS fx_fee_min
+FROM transactions AS t
+JOIN accounts AS a ON a.id = t.account_id
+JOIN currencies AS c ON c.id = a.currency_id
+WHERE t.kind IN (1, 2, 5)
+    AND t.original_amount > 0
+    AND t.original_currency IS NOT NULL
+    AND UPPER(t.original_currency) != UPPER(c.string);
+
+-- name: SetTransactionConversion :exec
+UPDATE transactions
+SET
+    amount = ROUND(sqlc.arg(amount), 6),
+    fx_fee = sqlc.narg(fx_fee)
+WHERE id = sqlc.arg(id);

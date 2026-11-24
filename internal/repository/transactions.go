@@ -257,7 +257,7 @@ func (r *Repository) GetTransactionsSummary(ctx context.Context, f models.TxFilt
 	p := queries.GetTransactionsSummaryParams{
 		Q: lp.Q, Kind: lp.Kind, AccountID: lp.AccountID, CategoryID: lp.CategoryID,
 		CounterpartyID: lp.CounterpartyID, GoalID: lp.GoalID, ItemID: lp.ItemID, TagID: lp.TagID, NeedsReview: lp.NeedsReview,
-		FromSms: lp.FromSms, FromImport: lp.FromImport, HasReceipt: lp.HasReceipt, ForOthers: lp.ForOthers, HasNote: lp.HasNote, Window: lp.Window, WindowToday: lp.WindowToday, FromDate: lp.FromDate, ToDate: lp.ToDate,
+		FromSms: lp.FromSms, FromImport: lp.FromImport, HasReceipt: lp.HasReceipt, ForOthers: lp.ForOthers, HasNote: lp.HasNote, Foreign: lp.Foreign, Window: lp.Window, WindowToday: lp.WindowToday, FromDate: lp.FromDate, ToDate: lp.ToDate,
 		MinAmount: lp.MinAmount, MaxAmount: lp.MaxAmount,
 	}
 	switch f.Status {
@@ -356,6 +356,12 @@ func txFilterParams(f *models.TxFilter) queries.GetTransactionsParams {
 		p.HasNote = true
 	case models.TxNoteWithout:
 		p.HasNote = false
+	}
+	switch f.Paid {
+	case models.TxPaidForeign:
+		p.Foreign = true
+	case models.TxPaidLocal:
+		p.Foreign = false
 	}
 	if f.Window != models.TxWindowAny {
 		p.Window = string(f.Window)

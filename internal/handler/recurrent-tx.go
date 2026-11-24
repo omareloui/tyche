@@ -524,5 +524,16 @@ func (h Handler) parseRecurrenceFD(r *http.Request, err *errs.ValidationError) *
 // recurrent transactions' occurrences due, ...), once a day
 // (middleware.DailyUpkeep).
 func (h *Handler) DailyUpkeep(ctx context.Context, tenantID string) {
-	h.repo.RunDailyUpkeep(ctx, tenantID)
+	if !h.repo.RunDailyUpkeep(ctx, tenantID) || h.fxJob == nil {
+		return
+	}
+	// One-off, see repository/fx_reconvert.go: remove once every tenant ran
+	// it. In the background, as fetching the days' rates it lacks takes a
+	// while; the request's context values (tenant, vault key) kept.
+	go func() {
+		ctx := context.WithoutCancel(ctx)
+		if err := h.repo.ReconvertForeignTxs(ctx, h.fxJob.RateOn); err != nil {
+			logger.FromCtx(ctx).Error("reconverting the foreign transactions", zap.Error(err))
+		}
+	}()
 }
