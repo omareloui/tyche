@@ -55,6 +55,11 @@ type Transaction struct {
 	// BoughtBy are the debts of the people who bought this expense for the
 	// user, nested under it.
 	BoughtBy []Transaction
+	// ForOthers is an expense the user bought for someone else (a gift, or
+	// paid back by incomes reimbursing it): out of every analysis.
+	// ForPerson is who, nil when unnamed (see bought_for_others.go).
+	ForOthers bool
+	ForPerson *Counterparty
 	// Items are its lines (items bought, then charges), in order.
 	Items []TxItem
 	// ItemsCount is how many lines it has, set in lists where the lines
@@ -126,9 +131,10 @@ func (t *Transaction) NetAmount() float64 {
 // AnalysisAmount is the amount every analysis (spending, income, charts) must
 // use: expenses count net of their reimbursements and the reimbursements
 // themselves count as 0, as they're already netted from their expense. Both
-// legs of a transfer pair count as 0, the money stays the user's.
+// legs of a transfer pair count as 0, the money stays the user's, and so does
+// what the user bought for others.
 func (t *Transaction) AnalysisAmount() float64 {
-	if t.IsReimbursement() || t.IsTransferLeg() {
+	if t.IsReimbursement() || t.IsTransferLeg() || t.ForOthers {
 		return 0
 	}
 	return t.NetAmount()
@@ -204,7 +210,7 @@ func (t *Transaction) IsGoalPurchase() bool {
 // CanHoldWishes tells wishlist items can be marked bought in it: an expense
 // of the user's (not locked, a reimbursement or a transfer's leg).
 func (t *Transaction) CanHoldWishes() bool {
-	return t.Kind == ExpenseTxKind && !t.IsLocked() && !t.IsTransferLeg() && !t.IsReimbursement() && !t.IsLoanPayment()
+	return t.Kind == ExpenseTxKind && !t.IsLocked() && !t.IsTransferLeg() && !t.IsReimbursement() && !t.IsLoanPayment() && !t.ForOthers
 }
 
 func (t *Transaction) IsLocked() bool {

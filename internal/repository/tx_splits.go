@@ -218,23 +218,7 @@ func (r *Repository) RequestSplitPayments(ctx context.Context, expense *models.T
 			}
 			reimbursed += amount
 
-			income := &models.Transaction{
-				ID:           idgen.New(),
-				Account:      expense.Account,
-				Amount:       amount,
-				Kind:         models.IncomeTxKind,
-				Counterparty: &models.Counterparty{ID: s.Person.ID},
-				Description:  splitIncomeDescription(expense),
-				ScheduledTo:  day,
-			}
-			if err := r.createTransactionWithTxn(qtx, ctx, income); err != nil {
-				return err
-			}
-			if err := qtx.SetTransactionReimburses(ctx, queries.SetTransactionReimbursesParams{
-				ID:           income.ID,
-				ReimbursesID: sql.NullString{String: expense.ID, Valid: true},
-			}); err != nil {
-				l.Error("linking split payment", zap.Error(err), zap.String("id", income.ID))
+			if err := r.scheduleReimbursementWithTxn(ctx, qtx, expense, s.Person.ID, amount, day, splitIncomeDescription(expense)); err != nil {
 				return err
 			}
 			n++
@@ -246,6 +230,34 @@ func (r *Repository) RequestSplitPayments(ctx context.Context, expense *models.T
 		return 0, err
 	}
 	return n, nil
+}
+
+// scheduleReimbursementWithTxn schedules an income of amount from personID
+// (none when empty) on day, into the expense's account, reimbursing it: what
+// they owe shows as upcoming until they pay, fulfilling it then.
+func (r *Repository) scheduleReimbursementWithTxn(ctx context.Context, qtx *queries.Queries, expense *models.Transaction, personID string, amount float64, day time.Time, description string) error {
+	income := &models.Transaction{
+		ID:          idgen.New(),
+		Account:     expense.Account,
+		Amount:      amount,
+		Kind:        models.IncomeTxKind,
+		Description: description,
+		ScheduledTo: day,
+	}
+	if personID != "" {
+		income.Counterparty = &models.Counterparty{ID: personID}
+	}
+	if err := r.createTransactionWithTxn(qtx, ctx, income); err != nil {
+		return err
+	}
+	if err := qtx.SetTransactionReimburses(ctx, queries.SetTransactionReimbursesParams{
+		ID:           income.ID,
+		ReimbursesID: sql.NullString{String: expense.ID, Valid: true},
+	}); err != nil {
+		logger.FromCtx(ctx).Error("linking a reimbursement", zap.Error(err), zap.String("id", income.ID))
+		return err
+	}
+	return nil
 }
 
 // splitIncomeDescription names a share's income after its bill.

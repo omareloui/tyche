@@ -153,6 +153,7 @@ WHERE ti.kind = 0
     AND t.fulfilled_at IS NOT NULL
     AND t.reimburses_id IS NULL
     AND t.transfer_pair_id IS NULL
+    AND NOT t.for_others
     AND (sqlc.narg(from_date) IS NULL OR t.scheduled_to >= sqlc.narg(from_date))
     AND (sqlc.narg(to_date) IS NULL OR t.scheduled_to < sqlc.narg(to_date))
 ORDER BY t.scheduled_to, t.id, ti.position;

@@ -172,6 +172,7 @@ WHERE
     AND (sqlc.narg(has_receipt) IS NULL OR EXISTS (
         SELECT 1 FROM receipts AS rc WHERE rc.transaction_id = t.id
     ) = sqlc.narg(has_receipt))
+    AND (sqlc.narg(for_others) IS NULL OR t.for_others = sqlc.narg(for_others))
     AND (sqlc.narg(has_note) IS NULL OR (t.note != '') = sqlc.narg(has_note))
     AND (sqlc.narg(window) IS NULL
         OR (sqlc.narg(window) = 'return_open' AND t.kind = 1 AND t.returned_at IS NULL AND t.return_until >= sqlc.narg(window_today))
@@ -200,14 +201,15 @@ LIMIT sqlc.arg(lim) OFFSET sqlc.arg(off);
 -- What the transactions list's filter matches as a whole, per account
 -- currency and fulfilled or not: how many rows the list shows, what they
 -- earn and spend following the analysis rule (expenses net of their
--- reimbursements, refunds netted against spending, transfer pairs left out).
+-- reimbursements, refunds netted against spending, transfer pairs and what
+-- was bought for others left out).
 -- Keep the WHERE in sync with GetTransactions'.
 SELECT
     sqlc.embed(c),
     CAST(t.fulfilled_at IS NOT NULL AS BOOLEAN) AS fulfilled,
     COUNT(*) AS count,
     CAST(TOTAL(IIF(t.kind = 2 AND t.transfer_pair_id IS NULL, t.amount, 0)) AS FLOAT) AS income,
-    CAST(TOTAL(CASE WHEN t.transfer_pair_id IS NOT NULL THEN 0 ELSE CASE t.kind
+    CAST(TOTAL(CASE WHEN t.transfer_pair_id IS NOT NULL OR t.for_others THEN 0 ELSE CASE t.kind
         WHEN 1 THEN t.amount - (
             SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id
         )
@@ -289,6 +291,7 @@ WHERE
     AND (sqlc.narg(has_receipt) IS NULL OR EXISTS (
         SELECT 1 FROM receipts AS rc WHERE rc.transaction_id = t.id
     ) = sqlc.narg(has_receipt))
+    AND (sqlc.narg(for_others) IS NULL OR t.for_others = sqlc.narg(for_others))
     AND (sqlc.narg(has_note) IS NULL OR (t.note != '') = sqlc.narg(has_note))
     AND (sqlc.narg(window) IS NULL
         OR (sqlc.narg(window) = 'return_open' AND t.kind = 1 AND t.returned_at IS NULL AND t.return_until >= sqlc.narg(window_today))
@@ -426,6 +429,9 @@ SET
     return_until = IIF(sqlc.arg(kind) = 1, sqlc.narg(return_until), NULL),
     warranty_until = IIF(sqlc.arg(kind) = 1, sqlc.narg(warranty_until), NULL),
     returned_at = IIF(sqlc.arg(kind) = 1, returned_at, NULL),
+    -- Bought for others is an expense's only, set from its own actions.
+    for_others = IIF(sqlc.arg(kind) = 1, for_others, FALSE),
+    for_person_id = IIF(sqlc.arg(kind) = 1, for_person_id, NULL),
     needs_review = FALSE,
     -- An occurrence edited on its own keeps its edit when its recurrent
     -- transaction is edited.
@@ -497,6 +503,7 @@ WHERE
     AND t.reimburses_id IS NULL
     -- Transfer pairs move money between own accounts.
     AND t.transfer_pair_id IS NULL
+    AND NOT t.for_others
     AND t.fulfilled_at IS NOT NULL
     AND cp.is_merchant IS TRUE
     AND t.scheduled_to >= sqlc.arg(from_date)
@@ -513,6 +520,7 @@ JOIN counterparties AS cp ON t.counterparty_id = cp.id
 WHERE
     t.kind = 1
     AND t.transfer_pair_id IS NULL
+    AND NOT t.for_others
     AND t.fulfilled_at IS NOT NULL
     AND cp.is_merchant IS TRUE
 ORDER BY day DESC;
@@ -543,6 +551,7 @@ WHERE
     t.kind IN (1, 2, 5)
     AND t.reimburses_id IS NULL
     AND t.transfer_pair_id IS NULL
+    AND NOT t.for_others
     AND t.fulfilled_at IS NOT NULL
     AND cp.is_merchant IS TRUE
     AND t.scheduled_to >= sqlc.arg(from_date)
@@ -760,6 +769,20 @@ UPDATE transactions
 SET
     bought_for_id = sqlc.narg(bought_for_id)
 WHERE id = sqlc.arg(id);
+
+-- name: SetTransactionForOthers :exec
+-- Marks the expense as bought for someone (for_person_id, NULL = unnamed):
+-- out of every analysis. Off clears the person too.
+UPDATE transactions
+SET
+    for_others = sqlc.arg(for_others),
+    for_person_id = IIF(sqlc.arg(for_others), sqlc.narg(for_person_id), NULL)
+WHERE id = sqlc.arg(id);
+
+-- name: GetCounterpartyNamesOf :many
+-- The names of the counterparties ids.
+SELECT id, name FROM counterparties
+WHERE id IN (sqlc.slice(ids));
 
 -- name: ClearBoughtForOf :exec
 UPDATE transactions
@@ -1096,6 +1119,7 @@ WHERE
     AND t.reimburses_id IS NULL
     -- Transfer pairs move money between own accounts.
     AND t.transfer_pair_id IS NULL
+    AND NOT t.for_others
     AND t.fulfilled_at IS NOT NULL
     AND t.scheduled_to >= sqlc.arg(from_date)
 GROUP BY day, cur.id
@@ -1125,6 +1149,7 @@ WHERE
     t.kind IN (1, 5)
     AND t.reimburses_id IS NULL
     AND t.transfer_pair_id IS NULL
+    AND NOT t.for_others
     AND t.loan_goal_id IS NULL
     AND a.goal_id IS NULL
     AND t.fulfilled_at IS NOT NULL
@@ -1152,6 +1177,7 @@ WHERE
     t.kind IN (1, 5)
     AND t.reimburses_id IS NULL
     AND t.transfer_pair_id IS NULL
+    AND NOT t.for_others
     AND t.fulfilled_at IS NOT NULL
     AND t.scheduled_to >= sqlc.arg(from_date)
     AND t.scheduled_to < sqlc.arg(to_date)
@@ -1178,6 +1204,7 @@ WHERE
     t.kind IN (1, 5)
     AND t.reimburses_id IS NULL
     AND t.transfer_pair_id IS NULL
+    AND NOT t.for_others
     AND t.fulfilled_at IS NOT NULL
     AND t.scheduled_to >= sqlc.arg(from_date)
     AND t.scheduled_to < sqlc.arg(to_date)
@@ -1200,6 +1227,8 @@ WHERE
     t.kind = 1
     AND t.fulfilled_at IS NULL
     AND t.category_id IS NOT NULL
+    -- Bought for others: out of the budgets, the forecast counts it apart.
+    AND NOT t.for_others
     AND t.scheduled_to < sqlc.arg(to_date)
 GROUP BY day, t.category_id, cur.id
 ORDER BY day;
@@ -1228,7 +1257,7 @@ WHERE fulfilled_at IS NOT NULL;
 -- The unfulfilled money scheduled to leave the balance before to_date (the
 -- overdue included) that no budget covers, per currency, for the
 -- dashboard's safe to spend: expenses of a category without a budget (or
--- none), but a goal's loan payments (its plan asks them), and transfers /
+-- none, or bought for others), but a goal's loan payments (its plan asks them), and transfers /
 -- debts to an account out of the balance (a gam'yaa, a goal, lent money).
 SELECT
     sqlc.embed(cur),
@@ -1248,7 +1277,8 @@ WHERE
         (
             t.kind = 1
             AND t.loan_goal_id IS NULL
-            AND (cat.id IS NULL OR cat.budget_currency_id IS NULL OR IFNULL(cat.budget_amount, 0) <= 0)
+            -- Bought for others is out of the budgets whatever its category.
+            AND (t.for_others OR cat.id IS NULL OR cat.budget_currency_id IS NULL OR IFNULL(cat.budget_amount, 0) <= 0)
         )
         OR (
             t.kind IN (3, 4)

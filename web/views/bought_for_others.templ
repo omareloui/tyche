@@ -1,0 +1,128 @@
+package views
+
+import (
+	"fmt"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+// TxForOthersID is the details' "Bought for someone" section's id.
+func TxForOthersID(txID string) string {
+	return "txd-for-others-" + txID
+}
+
+// TxForOthersEditable tells the expense can be marked bought for someone in
+// its details: it can, and isn't already bought by someone nor split.
+func TxForOthersEditable(tx *models.Transaction) bool {
+	return tx.CanBeForOthers() && len(tx.BoughtBy) == 0 && tx.SplitPeople == 0
+}
+
+// txDetailsForOthers is the details' "Bought for <person>" section: who it
+// was for, what they still owe, asking them to pay it back and making it the
+// user's again; while it isn't, a folded row opening TxForOthersForm.
+templ txDetailsForOthers(tx *models.Transaction) {
+	if tx.ForOthers {
+		@txDetailsSection("Bought for someone") {
+			<div id={ TxForOthersID(tx.ID) } class="txd-card grid gap-3">
+				<div class="flex items-center justify-between gap-3 text-sm">
+					<span class="flex items-center gap-2 min-w-0">
+						<span class="shrink-0 text-zinc-500">
+							@icons.Users("16")
+						</span>
+						<span class="truncate">
+							if name := tx.ForPersonName(); name != "" {
+								For { name }
+							} else {
+								For someone
+							}
+						</span>
+					</span>
+					if owed := tx.ForOthersOwed(); owed >= 0.01 {
+						<span class="shrink-0 text-xs text-zinc-400 tabular-nums">{ tx.Account.Currency.Format(owed) } not asked back</span>
+					}
+				</div>
+				<p class="text-xs text-zinc-500">Left out of your budgets and spending.</p>
+				<div class="flex flex-wrap gap-2">
+					if tx.ForOthersOwed() >= 0.01 {
+						<button
+							type="button"
+							hx-put={ fmt.Sprintf("/transactions/%s/for-others", tx.ID) }
+							hx-vals={ fmt.Sprintf(`{"details_id": %q, "keep_person": "1", "payback": "1"}`, tx.ID) }
+							hx-target="#txd-panel"
+							hx-swap="innerHTML"
+							class="txd-action"
+						>
+							@icons.Coins("14")
+							They'll pay me back
+						</button>
+					}
+					<button
+						type="button"
+						hx-delete={ fmt.Sprintf("/transactions/%s/for-others", tx.ID) }
+						hx-vals={ fmt.Sprintf(`{"details_id": %q}`, tx.ID) }
+						hx-target="#txd-panel"
+						hx-swap="innerHTML"
+						class="txd-action"
+					>
+						@icons.RotateCcw("14")
+						It was for me
+					</button>
+				</div>
+			</div>
+		}
+	} else if TxForOthersEditable(tx) {
+		<div id={ TxForOthersID(tx.ID) }>
+			<button
+				type="button"
+				hx-get={ fmt.Sprintf("/transactions/%s/for-others", tx.ID) }
+				hx-target={ "#" + TxForOthersID(tx.ID) }
+				hx-swap="outerHTML"
+				class="flex items-center gap-2 w-full px-4 py-3 rounded-2xl border border-dashed border-zinc-700 text-left text-sm text-zinc-400 cursor-pointer transition-colors hover:border-violet-400 hover:text-violet-300"
+			>
+				@icons.Users("15", &templ.Attributes{"class": "shrink-0"})
+				I bought it for someone
+			</button>
+		</div>
+	}
+}
+
+// TxForOthersForm marks an expense bought for someone from its details: who
+// (optional) and whether they'll pay it back.
+templ TxForOthersForm(tx *models.Transaction, cps []models.Counterparty, errMsg string) {
+	<form
+		id={ TxForOthersID(tx.ID) }
+		hx-put={ fmt.Sprintf("/transactions/%s/for-others", tx.ID) }
+		hx-vals={ fmt.Sprintf(`{"details_id": %q}`, tx.ID) }
+		hx-target="#txd-panel"
+		hx-swap="innerHTML"
+		class="txd-card grid gap-4"
+	>
+		<h3 class="flex items-center gap-2 text-sm font-semibold">
+			@icons.Users("16")
+			I bought it for someone
+		</h3>
+		@form.Field("Who it's for", "for_person", tx.ID, icons.User("15"), "") {
+			@form.Combobox(form.ComboboxProps{
+				Name: "for_person", ID: tx.ID, Label: "Who it's for", Placeholder: "Pick or type a name (optional)",
+				Options: forOthersPeopleOptions(cps, ""), Searchable: true,
+				CreateURL: "/counterparties/quick?person",
+			})
+		}
+		@form.Toggle("They'll pay me back", "payback", tx.ID, icons.Coins("18"), form.FDInput{}, nil)
+		<p class="text-xs text-zinc-500">It's left out of your budgets and spending. Paying back schedules an income from them for its amount, upcoming until they pay.</p>
+		if errMsg != "" {
+			<p class="text-sm text-red-400">{ errMsg }</p>
+		}
+		<div class="flex justify-end gap-2">
+			<button
+				type="button"
+				hx-get={ txDetailsURL(tx.ID) }
+				hx-target="#txd-panel"
+				hx-swap="innerHTML"
+				class="px-4 py-2 rounded-full text-sm text-zinc-400 cursor-pointer hover:text-zinc-200"
+			>Cancel</button>
+			<button type="submit" class="px-4 py-2 rounded-full bg-violet-500 text-sm font-semibold text-white cursor-pointer hover:bg-violet-400">Save</button>
+		</div>
+	</form>
+}

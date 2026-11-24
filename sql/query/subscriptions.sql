@@ -21,6 +21,7 @@ WHERE
     AND t.recurrent_id IS NULL
     AND t.reimburses_id IS NULL
     AND t.transfer_pair_id IS NULL
+    AND NOT t.for_others
     AND t.loan_goal_id IS NULL
     AND t.fulfilled_at IS NOT NULL
     AND a.goal_id IS NULL

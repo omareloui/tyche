@@ -83,6 +83,7 @@ templ TxDetailsPanel(d *models.TxDetails, def *models.Currency) {
 				Note: tx.Note, Editable: TxNoteEditable(tx),
 			})
 			@TxWindows(TxWindowsProps{Tx: tx, RefundID: d.ReturnRefundID})
+			@txDetailsForOthers(tx)
 			if tx.Kind != models.AdjustmentTxKind && (len(tx.Items) > 0 || tx.Receipt != nil || len(tx.Wishes) > 0 || !tx.IsLocked()) {
 				@TxDetailsItems(tx, nil, &ReceiptFD{Enabled: d.ReceiptScan})
 			}

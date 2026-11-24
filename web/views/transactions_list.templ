@@ -631,13 +631,19 @@ templ txTile(tx *models.Transaction, v *txView) {
 
 templ txChips(tx *models.Transaction, v *txView) {
 	{{ isRefund := tx.Kind == models.RefundTxKind }}
-	{{ hasChips := isRefund || tx.Category != nil || v.isScheduled || tx.FromSMS || tx.FromImport || tx.RecurrentTxID != "" || tx.Goal != nil || len(tx.Reimbursements) > 0 || len(tx.BoughtBy) > 0 || tx.ItemsCount > 0 || tx.Receipt != nil || len(tx.Wishes) > 0 || tx.Note != "" || len(tx.Tags) > 0 }}
+	{{ hasChips := isRefund || tx.Category != nil || v.isScheduled || tx.FromSMS || tx.FromImport || tx.RecurrentTxID != "" || tx.Goal != nil || len(tx.Reimbursements) > 0 || len(tx.BoughtBy) > 0 || tx.ForOthers || tx.ItemsCount > 0 || tx.Receipt != nil || len(tx.Wishes) > 0 || tx.Note != "" || len(tx.Tags) > 0 }}
 	if hasChips {
 		<div class="flex flex-wrap items-center gap-1.5 mt-1.5">
 			if isRefund {
 				<span class="chip bg-teal-400/10 text-teal-300" title="Money back from a merchant, netted against spending">
 					@icons.RotateCcw("12")
 					Refund
+				</span>
+			}
+			if tx.ForOthers {
+				<span class="chip max-w-48 bg-pink-400/10 text-pink-300" title="Bought for someone: left out of your budgets and spending">
+					@icons.Users("12")
+					<span class="truncate">{ tx.ForOthersLabel() }</span>
 				</span>
 			}
 			@txCategoryChip(tx)

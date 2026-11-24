@@ -124,6 +124,7 @@ WHERE
     t.kind IN (1, 5)
     AND t.reimburses_id IS NULL
     AND t.transfer_pair_id IS NULL
+    AND NOT t.for_others
     AND t.fulfilled_at IS NOT NULL
     AND (sqlc.narg(tag_id) IS NULL OR tt.tag_id = sqlc.narg(tag_id))
 GROUP BY tt.tag_id, day, t.category_id, cur.id

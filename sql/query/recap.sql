@@ -23,6 +23,7 @@ WHERE
     cp.is_merchant IS TRUE
     AND t.reimburses_id IS NULL
     AND t.transfer_pair_id IS NULL
+    AND NOT t.for_others
     AND t.fulfilled_at IS NOT NULL
     AND t.scheduled_to >= sqlc.arg(from_date)
     AND t.scheduled_to < sqlc.arg(to_date)
@@ -66,6 +67,7 @@ LEFT JOIN categories AS cat ON t.category_id = cat.id
 WHERE
     t.kind = 1
     AND t.transfer_pair_id IS NULL
+    AND NOT t.for_others
     AND t.fulfilled_at IS NOT NULL
     AND t.scheduled_to >= sqlc.arg(from_date)
     AND t.scheduled_to < sqlc.arg(to_date);

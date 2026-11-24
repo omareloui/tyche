@@ -216,6 +216,9 @@ func (r *Repository) GetTransactionsPage(ctx context.Context, f models.TxFilter,
 	if err := loadTxTags(ctx, q, page.Upcoming, page.History); err != nil {
 		return nil, err
 	}
+	if err := loadForPersons(ctx, q, page.Upcoming, page.History); err != nil {
+		return nil, err
+	}
 	if err := loadTxWishes(ctx, q, page.Upcoming, page.History); err != nil {
 		return nil, err
 	}
@@ -251,7 +254,7 @@ func (r *Repository) GetTransactionsSummary(ctx context.Context, f models.TxFilt
 	p := queries.GetTransactionsSummaryParams{
 		Q: lp.Q, Kind: lp.Kind, AccountID: lp.AccountID, CategoryID: lp.CategoryID,
 		CounterpartyID: lp.CounterpartyID, GoalID: lp.GoalID, ItemID: lp.ItemID, TagID: lp.TagID, NeedsReview: lp.NeedsReview,
-		FromSms: lp.FromSms, FromImport: lp.FromImport, HasReceipt: lp.HasReceipt, HasNote: lp.HasNote, Window: lp.Window, WindowToday: lp.WindowToday, FromDate: lp.FromDate, ToDate: lp.ToDate,
+		FromSms: lp.FromSms, FromImport: lp.FromImport, HasReceipt: lp.HasReceipt, ForOthers: lp.ForOthers, HasNote: lp.HasNote, Window: lp.Window, WindowToday: lp.WindowToday, FromDate: lp.FromDate, ToDate: lp.ToDate,
 		MinAmount: lp.MinAmount, MaxAmount: lp.MaxAmount,
 	}
 	switch f.Status {
@@ -338,6 +341,12 @@ func txFilterParams(f *models.TxFilter) queries.GetTransactionsParams {
 		p.HasReceipt = true
 	case models.TxReceiptWithout:
 		p.HasReceipt = false
+	}
+	switch f.For {
+	case models.TxForOthers:
+		p.ForOthers = true
+	case models.TxForMine:
+		p.ForOthers = false
 	}
 	switch f.Note {
 	case models.TxNoteWith:
@@ -458,6 +467,9 @@ func (r *Repository) GetTransaction(ctx context.Context, id string) (*models.Tra
 		return nil, err
 	}
 	if err := loadTxTags(ctx, q, one); err != nil {
+		return nil, err
+	}
+	if err := loadForPersons(ctx, q, one); err != nil {
 		return nil, err
 	}
 	tx := &one[0]
@@ -735,12 +747,17 @@ func dbTransactionToTransaction(
 		ReimbursesID:   dbTx.ReimbursesID.String,
 		TransferPairID: dbTx.TransferPairID.String,
 		BoughtForID:    dbTx.BoughtForID.String,
+		ForOthers:      dbTx.ForOthers,
 		RecurrentTxID:  dbTx.RecurrentID.String,
 		LoanGoalID:     dbTx.LoanGoalID.String,
 		FromImport:     dbTx.ImportID.Valid,
 		ReturnUntil:    dayPtr(dbTx.ReturnUntil),
 		WarrantyUntil:  dayPtr(dbTx.WarrantyUntil),
 		ReturnedAt:     dayPtr(dbTx.ReturnedAt),
+	}
+
+	if dbTx.ForPersonID.Valid {
+		tx.ForPerson = &models.Counterparty{ID: dbTx.ForPersonID.String}
 	}
 
 	if acc != nil {

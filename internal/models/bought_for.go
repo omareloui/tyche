@@ -42,7 +42,7 @@ func (t *Transaction) IsBoughtFor() bool {
 // payment, nor a transfer's leg.
 func (t *Transaction) CanBeBoughtBy() bool {
 	return t.Kind == ExpenseTxKind && !t.IsLocked() && t.Goal == nil &&
-		!t.IsTransferLeg() && !t.IsLoanPayment()
+		!t.IsTransferLeg() && !t.IsLoanPayment() && !t.ForOthers
 }
 
 // CanPayFor reports whether the debt can be linked to an expense it paid for.

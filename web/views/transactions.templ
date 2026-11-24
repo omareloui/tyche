@@ -30,6 +30,8 @@ type TransactionFD struct {
 	Receipt       ReceiptFD
 	// BoughtBy is the create form's "someone bought it for me".
 	BoughtBy BoughtByFD
+	// ForOthers is the create form's "I bought it for someone".
+	ForOthers ForOthersFD
 	// Windows are its return / warranty days, nil when it can't have any
 	// (e.g. a recurrent occurrence).
 	Windows *TxWindowsFD
@@ -50,6 +52,14 @@ type TxTagsFD struct {
 type BoughtByFD struct {
 	On        form.FDInput
 	AccountID form.FDInput
+}
+
+// ForOthersFD is whether the user bought the expense for someone else, who
+// (a counterparty, optional) and whether they'll pay it back.
+type ForOthersFD struct {
+	On       form.FDInput
+	PersonID form.FDInput
+	Payback  form.FDInput
 }
 
 type TransactionAmountsAndKindFD struct {
@@ -165,6 +175,7 @@ templ TxFormFields(
 	</div>
 	if fd.RecurrenceFD != nil {
 		@boughtByField(id, fd.BoughtBy, accs)
+		@forOthersField(id, fd.ForOthers, cps)
 		@RecurrenceFormBody(id, fd.RecurrenceFD)
 	}
 }
@@ -189,6 +200,45 @@ templ boughtByField(id string, fd BoughtByFD, accs []models.Account) {
 			<p class="text-xs text-zinc-500">You'll owe them its amount: a debt from them is saved with it, into the same account.</p>
 		</div>
 	</div>
+}
+
+// forOthersField saves an expense the user bought for someone else, out of
+// every analysis, optionally scheduling the income paying it back (only for
+// expenses, on creating them).
+templ forOthersField(id string, fd ForOthersFD, cps []models.Counterparty) {
+	<div
+		x-data={ fmt.Sprintf("{ on: %t }", fd.On.Value != "") }
+		class="hidden [form:has(input[name=kind][value=Expense]:checked)_&]:grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-800/20 p-4"
+	>
+		@form.Toggle("I bought it for someone", "for_others_on", id, icons.Users("18"), fd.On,
+			templ.Attributes{"@change": "on = $event.target.checked"})
+		if fd.On.Error != "" {
+			<p class="text-xs text-red-400">{ fd.On.Error }</p>
+		}
+		<div x-cloak x-show="on" x-collapse class="grid gap-4">
+			@form.Field("Who it's for", "for_person", id, icons.User("15"), fd.PersonID.Error) {
+				@form.Combobox(form.ComboboxProps{
+					Name: "for_person", ID: id, Label: "Who it's for", Placeholder: "Pick or type a name (optional)",
+					Options: forOthersPeopleOptions(cps, fd.PersonID.Value), Data: fd.PersonID, Searchable: true,
+					CreateURL: "/counterparties/quick?person",
+				})
+			}
+			@form.Toggle("They'll pay me back", "for_others_payback", id, icons.Coins("18"), fd.Payback, nil)
+			<p class="text-xs text-zinc-500">It's left out of your budgets and spending. Paying back schedules an income from them for its amount, upcoming until they pay.</p>
+		</div>
+	</div>
+}
+
+// forOthersPeopleOptions are the people (non-merchant counterparties) an
+// expense can be bought for.
+func forOthersPeopleOptions(cps []models.Counterparty, selected string) []form.ComboOption {
+	var people []models.Counterparty
+	for _, cp := range cps {
+		if !cp.IsMerchant || cp.ID == selected {
+			people = append(people, cp)
+		}
+	}
+	return counterpartyComboOptions(people, selected)
 }
 
 // boughtByComboOptions are the Debt accounts (people) who can buy something
@@ -314,6 +364,12 @@ templ txFilterBar(f *models.TxFilter, start models.MonthStart, accs []models.Acc
 					{Value: string(models.TxWindowWarrantyActive), Label: "Under warranty", Leading: icons.ShieldCheck("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 				})
 			}
+			@txFilterSlot(models.TxFilterFor, "Bought for", icons.Users("15")) {
+				@txFilterCombo(models.TxFilterFor, "Bought for", string(f.For), false, []form.ComboOption{
+					{Value: string(models.TxForOthers), Label: "Someone else", Leading: icons.Users("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
+					{Value: string(models.TxForMine), Label: "Me", Leading: icons.User("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
+				})
+			}
 			@txFilterSlot(txFilterAmountSlot, "Amount", icons.Coins("15")) {
 				@txAmountFilter(models.TxFilterMin, "Min", f.MinAmount)
 				<span class="text-zinc-600">–</span>
@@ -422,6 +478,9 @@ func txFilterMenuGroups(goals, tags bool) []txFilterMenuGroup {
 			{models.TxFilterReceipt, "Receipt", icons.Receipt("16")},
 			{models.TxFilterNote, "Note", icons.StickyNote("16")},
 			{models.TxFilterWindow, "Return / warranty", icons.ShieldCheck("16")},
+		}},
+		{"Who for", []txFilterMenuItem{
+			{models.TxFilterFor, "Bought for", icons.Users("16")},
 		}},
 	}
 }
@@ -807,7 +866,7 @@ func txFilterKeysButQ() []string {
 	return []string{
 		models.TxFilterKind, models.TxFilterAccount, models.TxFilterCategory,
 		models.TxFilterCounterparty, models.TxFilterGoal, models.TxFilterTag, models.TxFilterStatus,
-		models.TxFilterSource, models.TxFilterReceipt, models.TxFilterNote, models.TxFilterWindow,
+		models.TxFilterSource, models.TxFilterReceipt, models.TxFilterNote, models.TxFilterWindow, models.TxFilterFor,
 		models.TxFilterFrom, models.TxFilterTo,
 		models.TxFilterMin, models.TxFilterMax,
 	}

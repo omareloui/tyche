@@ -531,7 +531,7 @@ document.addEventListener("alpine:init", () => {
     syncFilters(form) {
       // namedItem: elements["item"] is the collection's item() method.
       const set = (name) => !!form.elements.namedItem(name)?.value?.trim();
-      const keys = ["kind", "account", "category", "counterparty", "goal", "item", "tag", "status", "source", "receipt", "note", "window"];
+      const keys = ["kind", "account", "category", "counterparty", "goal", "item", "tag", "status", "source", "receipt", "note", "window", "for"];
       this.activeFilters =
         keys.filter(set).length + (set("from") || set("to")) + (set("min") || set("max"));
       this.reviewOnly = form.elements.namedItem("status")?.value === "review";

@@ -36,6 +36,16 @@ const (
 	TxReceiptWithout TxReceipt = "without"
 )
 
+// TxFor narrows transactions by whether the user bought them for someone
+// else (see bought_for_others.go).
+type TxFor string
+
+const (
+	TxForAny    TxFor = ""
+	TxForOthers TxFor = "others"
+	TxForMine   TxFor = "mine"
+)
+
 // TxNote narrows transactions by whether they have a note.
 type TxNote string
 
@@ -69,6 +79,7 @@ const (
 	TxFilterSource       = "source"
 	TxFilterReceipt      = "receipt"
 	TxFilterNote         = "note"
+	TxFilterFor          = "for"
 	TxFilterWindow       = "window"
 	TxFilterFrom         = "from"
 	TxFilterTo           = "to"
@@ -100,6 +111,7 @@ type TxFilter struct {
 	Receipt TxReceipt
 	Note    TxNote
 	Window  TxWindow
+	For     TxFor
 	// Today is the user's today the windows are compared with, set by the
 	// repository (never in the query string).
 	Today time.Time
@@ -132,6 +144,10 @@ func ParseTxFilter(v url.Values) TxFilter {
 	switch s := TxReceipt(v.Get(TxFilterReceipt)); s {
 	case TxReceiptWith, TxReceiptWithout:
 		f.Receipt = s
+	}
+	switch s := TxFor(v.Get(TxFilterFor)); s {
+	case TxForOthers, TxForMine:
+		f.For = s
 	}
 	switch s := TxNote(v.Get(TxFilterNote)); s {
 	case TxNoteWith, TxNoteWithout:
@@ -198,6 +214,7 @@ func (f *TxFilter) Values() url.Values {
 	set(TxFilterReceipt, string(f.Receipt))
 	set(TxFilterNote, string(f.Note))
 	set(TxFilterWindow, string(f.Window))
+	set(TxFilterFor, string(f.For))
 	set(TxFilterFrom, f.FromString())
 	set(TxFilterTo, f.ToString())
 	set(TxFilterMin, FilterAmountString(f.MinAmount))
@@ -224,7 +241,7 @@ func (f *TxFilter) IsZero() bool {
 func (f *TxFilter) ActiveCount() int {
 	v := f.Values()
 	n := 0
-	for _, k := range []string{TxFilterKind, TxFilterAccount, TxFilterCategory, TxFilterCounterparty, TxFilterGoal, TxFilterItem, TxFilterTag, TxFilterStatus, TxFilterSource, TxFilterReceipt, TxFilterNote, TxFilterWindow} {
+	for _, k := range []string{TxFilterKind, TxFilterAccount, TxFilterCategory, TxFilterCounterparty, TxFilterGoal, TxFilterItem, TxFilterTag, TxFilterStatus, TxFilterSource, TxFilterReceipt, TxFilterNote, TxFilterWindow, TxFilterFor} {
 		if v.Has(k) {
 			n++
 		}

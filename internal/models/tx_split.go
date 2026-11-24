@@ -31,7 +31,7 @@ func (p *SplitPerson) IsMe() bool { return p.ID == SplitMe }
 // CanSplit tells the transaction's bill can be split with people: an expense
 // of the user's (not locked, a reimbursement or a transfer's leg).
 func (t *Transaction) CanSplit() bool {
-	return t.Kind == ExpenseTxKind && !t.IsLocked() && !t.IsTransferLeg() && !t.IsReimbursement()
+	return t.Kind == ExpenseTxKind && !t.IsLocked() && !t.IsTransferLeg() && !t.IsReimbursement() && !t.ForOthers
 }
 
 // TxSplit is a transaction's bill split between the user and People, by its

@@ -168,6 +168,9 @@ func (r *Repository) MergeCounterparties(ctx context.Context, fromID, intoID str
 		if err := qtx.ReassignTransactionsCounterparty(ctx, queries.ReassignTransactionsCounterpartyParams{ToID: to, FromID: from}); err != nil {
 			return err
 		}
+		if err := qtx.ReassignTransactionsForPerson(ctx, queries.ReassignTransactionsForPersonParams{ToID: to, FromID: from}); err != nil {
+			return err
+		}
 		if err := qtx.ReassignRecurrentTxsCounterparty(ctx, queries.ReassignRecurrentTxsCounterpartyParams{ToID: to, FromID: from}); err != nil {
 			return err
 		}

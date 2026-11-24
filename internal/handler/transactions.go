@@ -158,6 +158,7 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 	if fd != nil {
 		fd.WishlistID = wishlistID
 		fd.BoughtBy = boughtByFD(r)
+		fd.ForOthers = forOthersFD(r)
 		return views.CreateTransactionForm(fd, accs, knds, cats, cps, &claims.DefaultCurrency), nil
 	}
 	if err != nil {
@@ -175,6 +176,8 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 				l.Error("validating recurrent transaction", zap.Error(valerr), zap.Any("errors", valerr.Errors))
 				fd := h.mapTransactionToFD(r.Context(), tx, &valerr)
 				fd.WishlistID = wishlistID
+				fd.BoughtBy = boughtByFD(r)
+				fd.ForOthers = forOthersFD(r)
 				return views.CreateTransactionForm(fd, accs, knds, cats, cps, &claims.DefaultCurrency), nil
 			}
 			l.Error("sanitizing recurrent transaction", zap.Error(err))
@@ -190,6 +193,17 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		fd.WishlistID = wishlistID
 		fd.BoughtBy = boughtByFD(r)
 		fd.BoughtBy.AccountID.Error = valerr.Errors.MsgFor("BoughtBy")
+		fd.ForOthers = forOthersFD(r)
+		return views.CreateTransactionForm(fd, accs, knds, cats, cps, &claims.DefaultCurrency), nil
+	}
+
+	// The user bought it for someone else: out of every analysis.
+	forOthers, fofd := forOthersOf(r, tx, cps, debt != nil, wishlistID != "")
+	if fofd != nil {
+		fd := h.mapTransactionToFD(r.Context(), tx, new(errs.ValidationError))
+		fd.WishlistID = wishlistID
+		fd.BoughtBy = boughtByFD(r)
+		fd.ForOthers = *fofd
 		return views.CreateTransactionForm(fd, accs, knds, cats, cps, &claims.DefaultCurrency), nil
 	}
 
@@ -201,7 +215,13 @@ func (h Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) (temp
 		scheduledTxs = append(scheduledTxs, wishlistPlanTxs(item, tx)...)
 	}
 
-	if debt != nil && len(scheduledTxs) == 0 {
+	if forOthers != nil {
+		tx.ForPerson = forOthers.Person
+		if err := h.repo.CreateForOthers(r.Context(), tx, forOthers.Payback, h.userToday(r.Context())); err != nil {
+			l.Error("creating bought for others", zap.Error(err))
+			return nil, err
+		}
+	} else if debt != nil && len(scheduledTxs) == 0 {
 		if err := h.repo.CreateBoughtForMe(r.Context(), tx, debt); err != nil {
 			l.Error("creating bought for me", zap.Error(err))
 			return nil, err
