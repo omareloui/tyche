@@ -81,6 +81,14 @@ func (t *Transaction) BulkLock() TxBulkLock {
 	return TxBulkLockNone
 }
 
+// DateEditable tells tx can move to another day on its own (the details'
+// date pick): as a bulk edit can, and a balance correction too, as moving
+// it changes only the balance's history, never today's.
+func (t *Transaction) DateEditable() bool {
+	l := t.BulkLock()
+	return l == TxBulkLockNone || l == TxBulkLockAdjustment
+}
+
 // DescribeBulkLocks tells how many of each lock there are, e.g. "2 balance
 // corrections, 1 goal transaction".
 func DescribeBulkLocks(counts map[TxBulkLock]int) string {

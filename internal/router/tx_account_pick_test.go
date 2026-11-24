@@ -125,4 +125,38 @@ func TestTxAccountPick(t *testing.T) {
 	if b, c := balance(bank.ID), balance(cash.ID); b != 1000 || c != 400 {
 		t.Errorf("balances moved: %v / %v", b, c)
 	}
+
+	// A balance correction moves too (a decrease, signed), its balance kept.
+	if _, err := repo.FixBalances(ctx, []models.BalanceFix{{AccountID: bank.ID, Amount: 900}}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	page, err = repo.GetTransactionsPage(ctx, models.TxFilter{AccountID: bank.ID}, time.Time{}, &time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var adj *models.Transaction
+	for i := range page.History {
+		if page.History[i].Kind == models.AdjustmentTxKind {
+			adj = &page.History[i]
+		}
+	}
+	if adj == nil {
+		t.Fatal("no adjustment")
+	}
+	adjPath := "/transactions/" + adj.ID + "/pick/date"
+	if _, body = do("GET", adjPath, nil); !strings.Contains(body, "data-datepicker") {
+		t.Error("adjustment: no date picker")
+	}
+	if res, body = do("PUT", adjPath, url.Values{"scheduled_to": {day.Format(time.DateOnly)}}); res.StatusCode != http.StatusOK {
+		t.Fatalf("adjustment date: status %d: %s", res.StatusCode, body)
+	}
+	if got, err = repo.GetTransaction(ctx, adj.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got.ScheduledTo.Format(time.DateOnly) != day.Format(time.DateOnly) || got.Amount != -100 {
+		t.Errorf("adjustment = %v %v, want %v -100", got.ScheduledTo, got.Amount, day.Format(time.DateOnly))
+	}
+	if b := balance(bank.ID); b != 900 {
+		t.Errorf("bank = %v after moving the adjustment, want 900", b)
+	}
 }

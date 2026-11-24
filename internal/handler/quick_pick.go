@@ -174,6 +174,7 @@ func (h Handler) SetTxPick(w http.ResponseWriter, r *http.Request) (templ.Compon
 	}
 
 	var edit models.TxBulkEdit
+	var out *models.Transaction
 	if field == views.QuickPickDate {
 		day, err := time.Parse(time.DateOnly, strings.TrimSpace(r.FormValue("scheduled_to")))
 		if err != nil {
@@ -182,7 +183,11 @@ func (h Handler) SetTxPick(w http.ResponseWriter, r *http.Request) (templ.Compon
 		if !tx.FulfilledAt.IsZero() && day.After(h.userToday(ctx)) {
 			return nil, pickRefused(w, pickID, "A fulfilled transaction can't move ahead of today.")
 		}
-		edit.Date = &day
+		// Not through TxBulkEdit.Apply, which refuses balance corrections.
+		moved := *tx
+		moved.Tags = nil
+		moved.ScheduledTo = models.KeepTimeOfDay(day, tx.ScheduledTo)
+		out = &moved
 	} else if field == views.QuickPickCategory {
 		cat, ok, err := h.pickedCategory(ctx, r.FormValue("category_id"), tx.Kind)
 		if err != nil {
@@ -207,9 +212,12 @@ func (h Handler) SetTxPick(w http.ResponseWriter, r *http.Request) (templ.Compon
 		}
 	}
 
-	out, skips := edit.Apply(tx, h.userToday(ctx))
-	if out == nil || len(skips) > 0 {
-		return nil, pickRefused(w, pickID, "This transaction can't take it.")
+	if out == nil {
+		var skips []models.TxBulkSkip
+		out, skips = edit.Apply(tx, h.userToday(ctx))
+		if out == nil || len(skips) > 0 {
+			return nil, pickRefused(w, pickID, "This transaction can't take it.")
+		}
 	}
 	// Its lines and receipt stay as they are.
 	out.Items, out.ReceiptID = nil, ""

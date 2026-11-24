@@ -114,10 +114,10 @@ const (
 	QuickPickDate    = "date"
 )
 
-// TxDateEditable tells the details can move the transaction to another day,
-// as a bulk edit can.
+// TxDateEditable tells the details can move the transaction to another day
+// (models.Transaction.DateEditable).
 func TxDateEditable(tx *models.Transaction) bool {
-	return tx.BulkLock() == models.TxBulkLockNone
+	return tx.DateEditable()
 }
 
 templ txDateDisplay(tx *models.Transaction) {
