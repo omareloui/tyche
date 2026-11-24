@@ -73,9 +73,9 @@ templ NoteEditor(p NoteEditorProps) {
 					<button
 						type="button"
 						@click="editing = true; $nextTick(() => $refs.note.focus())"
-						class="inline-flex items-center gap-1.5 text-sm text-zinc-500 cursor-pointer transition-colors hover:text-zinc-200"
+						class="flex items-center gap-2 w-full px-4 py-3 rounded-2xl border border-dashed border-zinc-700 text-left text-sm text-zinc-400 cursor-pointer transition-colors hover:border-violet-400 hover:text-violet-300"
 					>
-						@icons.StickyNote("14")
+						@icons.Plus("15", &templ.Attributes{"class": "shrink-0"})
 						Add a note
 					</button>
 				}
