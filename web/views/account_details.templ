@@ -550,6 +550,9 @@ templ accountDetailsInfo(a *models.Account) {
 			if a.Cycle.IsSet() {
 				@accountInfoRow("Statement", cardCycleText(a.Cycle), "", false)
 			}
+			if a.HasFxFee() {
+				@accountInfoRow("Foreign currency fee", a.ViewFxFee(), "", false)
+			}
 			if a.Iban != "" {
 				@accountInfoRow("IBAN", formatIban(a.Iban), a.Iban, true)
 			}

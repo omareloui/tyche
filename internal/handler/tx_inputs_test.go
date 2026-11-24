@@ -13,6 +13,7 @@ import (
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/shareddb"
 	"github.com/omareloui/tyche/internal/sharedqueries"
+	"github.com/omareloui/tyche/web/views"
 )
 
 func TestTransferInputs(t *testing.T) {
@@ -143,5 +144,47 @@ func TestTransferInputsDayRate(t *testing.T) {
 	}
 	if got := toAmount(time.Now().UTC().Format(time.DateOnly)); got != "500.00" {
 		t.Errorf("today = %s, want 500.00 (today's rate)", got)
+	}
+}
+
+func TestForeignInputs(t *testing.T) {
+	restore := fxrate.SetRates(map[string]map[string]float64{"usd": {"egp": 50}})
+	t.Cleanup(restore)
+
+	h := Handler{}
+	bank := models.AccountKind{Enum: models.AccKindBankAcc}
+	egp := models.Currency{String: "EGP", Symbol: "EGP"}
+	accs := []models.Account{
+		{ID: "card", Currency: egp, Kind: bank, FxFeePercent: 3, FxFeeMin: 20},
+	}
+	parse := func(kind models.TxKind, cur, orig, trigger string) *views.TransactionAmountsAndKindFD {
+		t.Helper()
+		vals := url.Values{
+			"kind": {kind.String()}, "account_id": {"card"}, "amount": {""},
+			"original_currency": {cur}, "original_amount": {orig},
+		}
+		r := httptest.NewRequest("POST", "/tx-inputs/f1", strings.NewReader(vals.Encode()))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.Header.Set("Hx-Trigger", trigger+"-f1")
+		r.SetPathValue("id", "f1")
+		fd, err := h.parseTransactionAmountsAndKindFD(r, accs, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return fd
+	}
+
+	fd := parse(models.ExpenseTxKind, "usd", "100", "original_amount")
+	if fd.AccountIFD.Amount.Value != "5150.00" || fd.Foreign == nil || fd.Foreign.Fee != "150" {
+		t.Errorf("expense = %s, fee %+v, want 5150.00 with a 150 fee", fd.AccountIFD.Amount.Value, fd.Foreign)
+	}
+	if fd := parse(models.IncomeTxKind, "USD", "100", "kind"); fd.AccountIFD.Amount.Value != "5000.00" || fd.Foreign.Fee != "" {
+		t.Errorf("income = %s, fee %q, want 5000.00 without a fee", fd.AccountIFD.Amount.Value, fd.Foreign.Fee)
+	}
+	if fd := parse(models.ExpenseTxKind, "EGP", "100", "original_amount"); fd.Foreign.Currency.Value != "" || fd.AccountIFD.Amount.Value != "" {
+		t.Errorf("paid in the account's currency = %+v, amount %q", fd.Foreign, fd.AccountIFD.Amount.Value)
+	}
+	if fd := parse(models.TransferTxKind, "USD", "100", "kind"); fd.Foreign != nil {
+		t.Errorf("transfers can't be foreign, got %+v", fd.Foreign)
 	}
 }

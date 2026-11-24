@@ -58,6 +58,8 @@ func (r *Repository) createAccountWithTxn(q *queries.Queries, ctx context.Contex
 		StatementDay:       nullInt(a.Cycle.StatementDay),
 		DueDays:            nullInt(a.Cycle.DueDays),
 		DueDay:             nullInt(a.Cycle.DueDay),
+		FxFeePercent:       nullFloat(a.FxFeePercent),
+		FxFeeMin:           nullFloat(a.FxFeeMin),
 	}); err != nil {
 		l.Error("creating account", zap.Error(err))
 		if strings.Contains(err.Error(), "UNIQUE constraint failed: accounts.name") {
@@ -224,6 +226,8 @@ func (r *Repository) UpdateAccount(ctx context.Context, a *models.Account) error
 		StatementDay:       nullInt(a.Cycle.StatementDay),
 		DueDays:            nullInt(a.Cycle.DueDays),
 		DueDay:             nullInt(a.Cycle.DueDay),
+		FxFeePercent:       nullFloat(a.FxFeePercent),
+		FxFeeMin:           nullFloat(a.FxFeeMin),
 	}); err != nil {
 		l.Error("updating account", zap.Error(err))
 
@@ -505,6 +509,8 @@ func dbAccountToAccount(
 			DueDays:      int(dbAcc.DueDays.Int64),
 			DueDay:       int(dbAcc.DueDay.Int64),
 		},
+		FxFeePercent: dbAcc.FxFeePercent.Float64,
+		FxFeeMin:     dbAcc.FxFeeMin.Float64,
 
 		Currency: models.Currency{ID: dbAcc.CurrencyID},
 		Kind:     models.AccountKind{ID: dbAcc.KindID},
@@ -564,6 +570,10 @@ func dbBalancesToBalances(dbBs []queries.GetBalancesRow) []models.Balance {
 		}
 	}
 	return b
+}
+
+func nullFloat(f float64) sql.NullFloat64 {
+	return sql.NullFloat64{Float64: f, Valid: f != 0}
 }
 
 func nullInt(n int) sql.NullInt64 {

@@ -68,6 +68,20 @@ type TransactionAmountsAndKindFD struct {
 	CategoryID     *form.FDInput
 	CounterpartyID *form.FDInput
 	ToAccountIFD   *form.AccountIFD
+	// Foreign is the "Paid in" fields, nil where it can't be foreign.
+	Foreign *TxForeignFD
+}
+
+// TxForeignFD is what a transaction was paid in when not its account's
+// currency: the currency's code (empty = the account's), the amount in it,
+// the account's fee worked out last and a hint of the rate and fee.
+type TxForeignFD struct {
+	AccountCurrency string
+	Currency        form.FDInput
+	Amount          form.FDInput
+	Fee             string
+	Hint            string
+	Currencies      []models.Currency
 }
 
 templ Transactions(
@@ -1264,6 +1278,9 @@ templ TransactionAmountsAndKindFormBody(
 				}
 			</div>
 			@form.ErrorMessage(fd.AccountIFD.AccountID.Error)
+			if fd.Foreign != nil {
+				@txForeignFields(fd.Foreign, id, onChange)
+			}
 			if fd.ToAccountIFD != nil {
 				{{ toSym := form.GetAccoutSym(accs, fd.ToAccountIFD.AccountID.Value, defaultCur) }}
 				{{ toUnit := txAccount(accs, fd.ToAccountIFD.AccountID.Value).AmountUnit(fd.ToAccountIFD.Unit.Value) }}
@@ -1324,6 +1341,69 @@ templ TransactionAmountsAndKindFormBody(
 			</div>
 		}
 	</div>
+}
+
+// txForeignFields pick the currency a transaction was paid in when not its
+// account's (a card used abroad) and the amount in it, which works the
+// account's amount out at the day's rate plus the account's fee: typing it
+// swaps only the amount and the hint, re-rendering the body would drop what
+// was typed since the request left.
+templ txForeignFields(fd *TxForeignFD, id string, onChange templ.Attributes) {
+	<div class="flex flex-wrap items-center justify-center gap-2 text-sm text-zinc-400">
+		<span>Paid in</span>
+		@form.Combobox(form.ComboboxProps{
+			Name: "original_currency", ID: id, Label: "Currency paid in",
+			Options: foreignCurrencyOptions(fd.Currencies, fd.AccountCurrency), Data: fd.Currency,
+			Nullable: true, NullLabel: foreignNullLabel(fd.AccountCurrency), Searchable: len(fd.Currencies) > 7, Chip: true,
+			InputAttrs: onChange,
+		})
+		if fd.Currency.Value != "" {
+			<input
+				id={ "original_amount-" + id }
+				type="text"
+				name="original_amount"
+				value={ fd.Amount.Value }
+				placeholder={ fd.Currency.Value + " 0.00" }
+				aria-label={ "Amount in " + fd.Currency.Value }
+				autocomplete="off"
+				inputmode="decimal"
+				x-mask:dynamic={ form.MoneyMask(fd.Currency.Value, 2) }
+				hx-post={ fmt.Sprintf("/tx-inputs/%s", id) }
+				hx-trigger="input changed delay:300ms, change[target.name=='scheduled_to'] from:closest form"
+				hx-target={ "#amount-" + id }
+				hx-select={ "#amount-" + id }
+				hx-select-oob={ "#tx-foreign-hint-" + id }
+				hx-swap="outerHTML"
+				class="input-field w-40! h-9! text-center tabular-nums"
+			/>
+		}
+	</div>
+	<div id={ "tx-foreign-hint-" + id } class="-mt-1 text-xs text-zinc-500 text-center">
+		if fd.Currency.Value != "" {
+			<input type="hidden" name="fx_fee" value={ fd.Fee }/>
+			{ fd.Hint }
+		}
+	</div>
+}
+
+// foreignCurrencyOptions are the currencies to pay in, by code, the
+// account's left out (it's the empty option).
+func foreignCurrencyOptions(curs []models.Currency, accCur string) []form.ComboOption {
+	opts := make([]form.ComboOption, 0, len(curs))
+	for _, c := range curs {
+		if strings.EqualFold(c.String, accCur) {
+			continue
+		}
+		opts = append(opts, form.ComboOption{Value: c.String, Label: c.String, Search: c.Symbol})
+	}
+	return opts
+}
+
+func foreignNullLabel(accCur string) string {
+	if accCur == "" {
+		return "Account's currency"
+	}
+	return accCur
 }
 
 templ categoryDot(color string) {

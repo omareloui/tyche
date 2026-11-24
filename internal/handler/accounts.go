@@ -704,6 +704,9 @@ func (d *accDeps) resolveAccount(a *models.Account) {
 	if a.Kind.Enum != models.AccKindCreditCard {
 		a.Cycle = models.CardCycle{}
 	}
+	if a.Kind.Enum != models.AccKindBankAcc && a.Kind.Enum != models.AccKindCreditCard {
+		a.FxFeePercent, a.FxFeeMin = 0, 0
+	}
 
 	if a.Kind.Enum != models.AccKindGamyaa {
 		a.Gamyaa = nil
@@ -771,6 +774,8 @@ func (h *Handler) mapFDToAcc(r *http.Request) (*models.Account, error) {
 	}
 
 	cardLimit, _ := parseFloatIfExists(r.FormValue("card_limit"))
+	fxFeePct, _ := parseFloatIfExists(r.FormValue("fx_fee_percent"))
+	fxFeeMin, _ := parseFloatIfExists(r.FormValue("fx_fee_min"))
 	var cycle models.CardCycle
 	cycle.StatementDay, _ = parseIntIfExists(r.FormValue("statement_day"))
 	dueValue, _ := parseIntIfExists(r.FormValue("due_value"))
@@ -815,6 +820,8 @@ func (h *Handler) mapFDToAcc(r *http.Request) (*models.Account, error) {
 		ExpirationDate:     expirationDate,
 		Gamyaa:             g,
 		Cycle:              cycle,
+		FxFeePercent:       fxFeePct,
+		FxFeeMin:           fxFeeMin,
 	}, nil
 }
 
@@ -838,6 +845,14 @@ func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, de
 		knd.Enum == models.AccKindCreditCard {
 		cc = &form.FDInput{Value: acc.CardNumber, Error: errs.Errors.MsgFor("CardNumber")}
 		noc = &form.FDInput{Value: acc.NameOnCard, Error: errs.Errors.MsgFor("NameOnCard")}
+	}
+
+	var fxFee *views.FxFeeFD
+	if knd.Enum == models.AccKindBankAcc || knd.Enum == models.AccKindCreditCard {
+		fxFee = &views.FxFeeFD{
+			Percent: form.FDInput{Value: formatPercentIfNonZero(acc.FxFeePercent), Error: errs.Errors.MsgFor("FxFeePercent")},
+			Min:     form.FDInput{Value: formatFloatIfNonZero(acc.FxFeeMin), Error: errs.Errors.MsgFor("FxFeeMin")},
+		}
 	}
 
 	var cycle *views.CardCycleFD
@@ -882,6 +897,7 @@ func (h *Handler) mapAccToFD(acc *models.Account, errs *errs.ValidationError, de
 			CardLimit:      limit,
 			ExpirationDate: exp,
 			Cycle:          cycle,
+			FxFee:          fxFee,
 		},
 		Note:               form.FDInput{Value: acc.Note, Error: errs.Errors.MsgFor("Note")},
 		SmsRefs:            form.FDInput{Value: strings.Join(acc.SmsRefs, ", "), Error: errs.Errors.MsgFor("SmsRefs")},
@@ -1133,4 +1149,12 @@ func (h *Handler) activeAccounts(ctx context.Context) ([]models.Account, error) 
 		return nil, err
 	}
 	return slicesutils.Filter(accs, func(a models.Account) bool { return !a.IsArchive }), nil
+}
+
+// formatPercentIfNonZero is a percent as its masked input shows it, "2.5%".
+func formatPercentIfNonZero(f float64) string {
+	if f == 0 {
+		return ""
+	}
+	return formatFloatIfNonZero(f) + "%"
 }

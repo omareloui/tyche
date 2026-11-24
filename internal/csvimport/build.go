@@ -32,7 +32,7 @@ func Build(row *Row, acc *models.Account, counterparties []models.Counterparty, 
 		at = time.Date(y, m, d, 0, 0, 0, 0, loc).Add(row.Clock)
 	}
 
-	amount, note, err := smsingest.Convert(abs(row.Amount), row.Currency, acc, fxRate)
+	conv, err := smsingest.Convert(abs(row.Amount), row.Currency, acc, kind, fxRate)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +41,9 @@ func Build(row *Row, acc *models.Account, counterparties []models.Counterparty, 
 		ID:          idgen.New(),
 		Account:     *acc,
 		Kind:        kind,
-		Amount:      amount,
+		Amount:      conv.Amount,
+		Original:    conv.Original,
+		FxFee:       conv.Fee,
 		ScheduledTo: at,
 		FulfilledAt: at,
 		NeedsReview: true,
@@ -62,9 +64,6 @@ func Build(row *Row, acc *models.Account, counterparties []models.Counterparty, 
 	}
 	if row.Description != "" {
 		notes = append(notes, row.Description)
-	}
-	if note != "" {
-		notes = append(notes, note)
 	}
 	tx.Description = strings.Join(notes, " · ")
 	return tx, nil

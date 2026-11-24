@@ -87,12 +87,14 @@ func BuildTransaction(
 		notes = append(notes, sms.Note)
 	}
 
-	amount, note, err := Convert(sms.Amount, sms.Currency, acc, fxRate)
+	conv, err := Convert(sms.Amount, sms.Currency, acc, kind, fxRate)
 	if err != nil {
 		return nil, err
 	}
-	tx.Amount = amount
-	if note != "" {
+	tx.Amount = conv.Amount
+	if kind.CanBeForeign() {
+		tx.Original, tx.FxFee = conv.Original, conv.Fee
+	} else if note := conv.Note(); note != "" {
 		notes = append(notes, note)
 	}
 
@@ -101,13 +103,13 @@ func BuildTransaction(
 		if toAmount == 0 {
 			toAmount = sms.Amount
 		}
-		toAmount, note, err := Convert(toAmount, toCurrency(sms), to, fxRate)
+		toConv, err := Convert(toAmount, toCurrency(sms), to, kind, fxRate)
 		if err != nil {
 			return nil, err
 		}
 		tx.ToAccount = to
-		tx.ToAmount = toAmount
-		if note != "" {
+		tx.ToAmount = toConv.Amount
+		if note := toConv.Note(); note != "" {
 			notes = append(notes, note)
 		}
 	} else if cp := MatchCounterparty(sms.Counterparty, counterparties); cp != nil {
@@ -182,20 +184,46 @@ func toCurrency(sms *smsparser.SMS) string {
 	return sms.Currency
 }
 
-// Convert puts amount of cur in acc's currency at today's rate, with a note
-// of the original amount when it converted it.
-func Convert(amount float64, cur string, acc *models.Account, fxRate FxRateFunc) (float64, string, error) {
+// Converted is an amount put in an account's currency.
+type Converted struct {
+	// Amount is what the account moves, Fee included.
+	Amount float64
+	// Fee is the account's foreign currency fee (models.Account.FxFee).
+	Fee float64
+	// Original is the amount as paid, nil when it was in the account's
+	// currency.
+	Original *models.ForeignAmount
+}
+
+// Note is the original amount as a description's note ("originally USD
+// 10"), for where it has no field of its own (a transfer's received side).
+func (c Converted) Note() string {
+	if c.Original == nil {
+		return ""
+	}
+	return "originally " + formatters.FormatAmount(c.Original.Amount, c.Original.Currency)
+}
+
+// Convert puts amount of cur in acc's currency at today's rate, adding acc's
+// foreign currency fee on a transaction of kind that takes it
+// (models.ForeignCharge).
+func Convert(amount float64, cur string, acc *models.Account, kind models.TxKind, fxRate FxRateFunc) (Converted, error) {
 	if cur == "" || strings.EqualFold(cur, acc.Currency.String) {
-		return amount, "", nil
+		return Converted{Amount: amount}, nil
 	}
 	rate, err := fxRate(cur, acc.Currency.String)
 	if err != nil {
-		return 0, "", fmt.Errorf("getting fx rate from %s to %s: %w", cur, acc.Currency.String, err)
+		return Converted{}, fmt.Errorf("getting fx rate from %s to %s: %w", cur, acc.Currency.String, err)
 	}
 	if rate == 0 {
-		return 0, "", fmt.Errorf("got zero fx rate from %s to %s", cur, acc.Currency.String)
+		return Converted{}, fmt.Errorf("got zero fx rate from %s to %s", cur, acc.Currency.String)
 	}
-	return acc.Currency.Round(amount * rate), "originally " + formatters.FormatAmount(amount, cur), nil
+	total, fee := models.ForeignCharge(amount, rate, acc, kind)
+	return Converted{
+		Amount:   total,
+		Fee:      fee,
+		Original: &models.ForeignAmount{Amount: amount, Currency: strings.ToUpper(cur)},
+	}, nil
 }
 
 func matchAccount(ref, cur string, accounts []models.Account) *models.Account {

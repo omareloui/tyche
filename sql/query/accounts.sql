@@ -110,7 +110,9 @@ INSERT INTO accounts (
     sms_refs,
     statement_day,
     due_days,
-    due_day
+    due_day,
+    fx_fee_percent,
+    fx_fee_min
 )
 VALUES (
     sqlc.arg(id),
@@ -130,7 +132,9 @@ VALUES (
     sqlc.arg(sms_refs),
     sqlc.narg(statement_day),
     sqlc.narg(due_days),
-    sqlc.narg(due_day)
+    sqlc.narg(due_day),
+    sqlc.narg(fx_fee_percent),
+    sqlc.narg(fx_fee_min)
 );
 
 -- name: UpdateAccount :exec
@@ -151,7 +155,9 @@ SET
     sms_refs = sqlc.arg(sms_refs),
     statement_day = sqlc.narg(statement_day),
     due_days = sqlc.narg(due_days),
-    due_day = sqlc.narg(due_day)
+    due_day = sqlc.narg(due_day),
+    fx_fee_percent = sqlc.narg(fx_fee_percent),
+    fx_fee_min = sqlc.narg(fx_fee_min)
 WHERE id = sqlc.arg(id);
 
 -- name: DeleteAccount :exec

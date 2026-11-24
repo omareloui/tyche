@@ -329,6 +329,19 @@ templ txDetailsFields(d *models.TxDetails, v *txView) {
 				<span class={ "tabular-nums", templ.KV("sensitive", hide) }>{ tx.ViewToAmount() }</span>
 			}
 		}
+		if tx.IsForeign() {
+			@txDetailsRow("Paid", icons.Globe("15")) {
+				<span class="flex flex-col">
+					<span class="tabular-nums">{ tx.Original.View() }</span>
+					<span class="text-xs text-zinc-500 tabular-nums">
+						{ fmt.Sprintf("1 %s = %s", tx.Original.Currency, tx.Account.Currency.Format(tx.OriginalRate())) }
+						if tx.FxFee > 0 {
+							{ " · incl. " + tx.ViewFxFee() + " foreign currency fee" }
+						}
+					</span>
+				</span>
+			}
+		}
 		{{ pickable := TxRefsEditable(tx) }}
 		if tx.Category != nil || pickable {
 			@txDetailsRow("Category", icons.Tag("15")) {

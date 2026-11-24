@@ -71,22 +71,25 @@ func (r *Repository) createTransactionWithTxn(qtx *queries.Queries, ctx context.
 	}
 
 	if err := qtx.CreateTransaction(ctx, queries.CreateTransactionParams{
-		ID:             tx.ID,
-		AccountID:      tx.Account.ID,
-		Amount:         tx.Amount,
-		Kind:           int64(tx.Kind),
-		CategoryID:     catID,
-		CounterpartyID: cpID,
-		Description:    sql.NullString{String: tx.Description, Valid: tx.Description != ""},
-		Note:           tx.Note,
-		ToAccountID:    toAccID,
-		ToAmount:       sql.NullFloat64{Float64: tx.ToAmount, Valid: tx.ToAmount != 0},
-		RecurrentID:    recurrentID,
-		ScheduledTo:    tx.ScheduledTo,
-		FulfilledAt:    sql.NullTime{Time: tx.FulfilledAt, Valid: !tx.FulfilledAt.IsZero()},
-		NeedsReview:    tx.NeedsReview,
-		ReturnUntil:    nullDay(tx.ReturnUntil),
-		WarrantyUntil:  nullDay(tx.WarrantyUntil),
+		ID:               tx.ID,
+		AccountID:        tx.Account.ID,
+		Amount:           tx.Amount,
+		Kind:             int64(tx.Kind),
+		CategoryID:       catID,
+		CounterpartyID:   cpID,
+		Description:      sql.NullString{String: tx.Description, Valid: tx.Description != ""},
+		Note:             tx.Note,
+		ToAccountID:      toAccID,
+		ToAmount:         sql.NullFloat64{Float64: tx.ToAmount, Valid: tx.ToAmount != 0},
+		RecurrentID:      recurrentID,
+		ScheduledTo:      tx.ScheduledTo,
+		FulfilledAt:      sql.NullTime{Time: tx.FulfilledAt, Valid: !tx.FulfilledAt.IsZero()},
+		NeedsReview:      tx.NeedsReview,
+		ReturnUntil:      nullDay(tx.ReturnUntil),
+		WarrantyUntil:    nullDay(tx.WarrantyUntil),
+		OriginalAmount:   originalAmountArg(tx),
+		OriginalCurrency: originalCurrencyArg(tx),
+		FxFee:            fxFeeArg(tx),
 	}); err != nil {
 		l.Error("create transaction", zap.Error(err), zap.String("id", tx.ID))
 		return err
@@ -633,19 +636,22 @@ func (r *Repository) updateTransactionWithTxn(ctx context.Context, qtx *queries.
 	}
 
 	if err := qtx.UpdateTransaction(ctx, queries.UpdateTransactionParams{
-		ID:             tx.ID,
-		AccountID:      tx.Account.ID,
-		Amount:         tx.Amount,
-		Kind:           int64(tx.Kind),
-		CategoryID:     catID,
-		CounterpartyID: cpID,
-		ToAccountID:    toAccID,
-		ToAmount:       sql.NullFloat64{Float64: tx.ToAmount, Valid: tx.ToAmount != 0},
-		Description:    sql.NullString{String: tx.Description, Valid: tx.Description != ""},
-		Note:           tx.Note,
-		ScheduledTo:    tx.ScheduledTo,
-		ReturnUntil:    nullDay(tx.ReturnUntil),
-		WarrantyUntil:  nullDay(tx.WarrantyUntil),
+		ID:               tx.ID,
+		AccountID:        tx.Account.ID,
+		Amount:           tx.Amount,
+		Kind:             int64(tx.Kind),
+		CategoryID:       catID,
+		CounterpartyID:   cpID,
+		ToAccountID:      toAccID,
+		ToAmount:         sql.NullFloat64{Float64: tx.ToAmount, Valid: tx.ToAmount != 0},
+		Description:      sql.NullString{String: tx.Description, Valid: tx.Description != ""},
+		Note:             tx.Note,
+		ScheduledTo:      tx.ScheduledTo,
+		ReturnUntil:      nullDay(tx.ReturnUntil),
+		WarrantyUntil:    nullDay(tx.WarrantyUntil),
+		OriginalAmount:   originalAmountArg(tx),
+		OriginalCurrency: originalCurrencyArg(tx),
+		FxFee:            fxFeeArg(tx),
 	}); err != nil {
 		l.Error("updating transaction", zap.Error(err), zap.String("id", tx.ID))
 		return err
@@ -754,6 +760,10 @@ func dbTransactionToTransaction(
 		ReturnUntil:    dayPtr(dbTx.ReturnUntil),
 		WarrantyUntil:  dayPtr(dbTx.WarrantyUntil),
 		ReturnedAt:     dayPtr(dbTx.ReturnedAt),
+		FxFee:          dbTx.FxFee.Float64,
+	}
+	if dbTx.OriginalCurrency.Valid && dbTx.OriginalCurrency.String != "" {
+		tx.Original = &models.ForeignAmount{Amount: dbTx.OriginalAmount.Float64, Currency: dbTx.OriginalCurrency.String}
 	}
 
 	if dbTx.ForPersonID.Valid {
@@ -908,4 +918,28 @@ func (r *Repository) ReviewTransactionCategory(ctx context.Context, id, category
 		return err
 	}
 	return nil
+}
+
+// originalAmountArg, originalCurrencyArg and fxFeeArg are what a transaction
+// was paid in when foreign, NULL otherwise (the queries also drop them on
+// the kinds that can't have them).
+func originalAmountArg(tx *models.Transaction) any {
+	if tx.Original == nil || tx.Original.Currency == "" {
+		return nil
+	}
+	return tx.Original.Amount
+}
+
+func originalCurrencyArg(tx *models.Transaction) any {
+	if tx.Original == nil || tx.Original.Currency == "" {
+		return nil
+	}
+	return strings.ToUpper(tx.Original.Currency)
+}
+
+func fxFeeArg(tx *models.Transaction) any {
+	if tx.Original == nil || tx.Original.Currency == "" || tx.FxFee == 0 {
+		return nil
+	}
+	return tx.FxFee
 }

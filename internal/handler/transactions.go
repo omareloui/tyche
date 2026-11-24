@@ -726,6 +726,15 @@ func (h Handler) mapTransactionToFD(ctx context.Context, t *models.Transaction, 
 		Receipt:       views.ReceiptFD{Enabled: h.ocr != nil, ID: t.ReceiptID},
 		Tags:          h.txTagsFD(ctx, t.Tags, tagsError(err)),
 	}
+	fd.Foreign = h.txForeignFD(ctx, t)
+	// Lines not typed yet go in what it was paid in, like its receipt.
+	if len(t.Items) == 0 && t.IsForeign() {
+		if c := slicesutils.Find(fd.ItemsCurrency.Currencies, func(c models.Currency) bool {
+			return strings.EqualFold(c.String, t.Original.Currency)
+		}); c != nil {
+			fd.ItemsCurrency.Value = c.ID
+		}
+	}
 	if models.TxWindowsAllowed(t) {
 		fd.Windows = &views.TxWindowsFD{
 			ReturnUntil:   form.FDInput{Value: formatDay(t.ReturnUntil)},
@@ -965,6 +974,7 @@ func (h Handler) prepareTx(r *http.Request, tx *models.Transaction,
 		return h.mapTransactionToFD(r.Context(), tx, valerr), nil
 	}
 	tx.Account = *a
+	h.applyForeign(r, tx)
 	normalizeTxItems(tx)
 
 	if c := slicesutils.Find(cats, func(c models.Category) bool { return tx.Category != nil && c.ID == tx.Category.ID }); c != nil {
@@ -1091,6 +1101,11 @@ func (h Handler) parseTransactionAmountsAndKindFD(r *http.Request, accs []models
 	} else {
 		fd.CategoryID = &form.FDInput{Value: r.FormValue("category_id")}
 		fd.CounterpartyID = &form.FDInput{Value: r.FormValue("counterparty_id")}
+		// Only the transaction form has "Paid in" (not the recurrent one).
+		if r.Form.Has(originalCurrencyField) {
+			acc := slicesutils.Find(accs, func(a models.Account) bool { return a.ID == accId })
+			fd.Foreign = h.parseTxForeignFD(r, fd, acc, kind, triggered)
+		}
 	}
 
 	return fd, nil

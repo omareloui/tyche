@@ -92,6 +92,7 @@ func (t *Transaction) MergeSMS(sms *Transaction) {
 		t.ToAmount = t.ToAmount * sms.Amount / t.Amount
 	}
 	t.Amount = sms.Amount
+	t.Original, t.FxFee = sms.Original, sms.FxFee
 	t.ScheduledTo = sms.ScheduledTo
 	t.FulfilledAt = sms.FulfilledAt
 	t.NeedsReview = true

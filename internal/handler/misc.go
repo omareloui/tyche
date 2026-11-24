@@ -87,6 +87,7 @@ func (h Handler) TxInputs(w http.ResponseWriter, r *http.Request) (templ.Compone
 	if err != nil {
 		return nil, err
 	}
+	h.fillForeignCurrencies(r.Context(), fd)
 	claims := getClaims(r.Context())
 	return views.TransactionAmountsAndKindFormBody(fd, r.PathValue("id"), knds, cats, accs, cps, &claims.DefaultCurrency), nil
 }
@@ -114,6 +115,7 @@ func (h Handler) TxInputsSwitch(w http.ResponseWriter, r *http.Request) (templ.C
 	if err != nil {
 		return nil, err
 	}
+	h.fillForeignCurrencies(r.Context(), fd)
 
 	claims := getClaims(r.Context())
 	return views.TransactionAmountsAndKindFormBody(fd, r.PathValue("id"), knds, cats, accs, cps, &claims.DefaultCurrency), nil

@@ -554,6 +554,9 @@ templ transaction(tx *models.Transaction, def *models.Currency) {
 						templ.KV("text-zinc-400", v.tone == txToneNeutral),
 					}
 				>{ v.amount }</p>
+				if tx.IsForeign() {
+					<p class="text-xs text-zinc-500" title={ txForeignTitle(tx) }>{ "Paid " + tx.Original.View() }</p>
+				}
 				{{ conv := txConverted(tx, def) }}
 				if conv != "" {
 					<p class="text-xs text-zinc-500">{ conv }</p>
@@ -1555,6 +1558,16 @@ func txFlow(tx *models.Transaction, def *models.Currency) (in, out float64) {
 
 // txConverted is the transaction's amount in def, for ones in another
 // currency.
+// txForeignTitle tells what a foreign transaction converted at, its fee
+// included.
+func txForeignTitle(tx *models.Transaction) string {
+	t := fmt.Sprintf("Paid %s · 1 %s = %s", tx.Original.View(), tx.Original.Currency, tx.Account.Currency.Format(tx.OriginalRate()))
+	if tx.FxFee > 0 {
+		t += " · incl. " + tx.ViewFxFee() + " foreign currency fee"
+	}
+	return t
+}
+
 func txConverted(tx *models.Transaction, def *models.Currency) string {
 	if def == nil || tx.Kind == models.TransferTxKind {
 		return ""

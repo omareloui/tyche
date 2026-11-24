@@ -87,6 +87,11 @@ type Transaction struct {
 	// LinesWarranty is the latest own warranty of its item lines, set in
 	// lists where the lines aren't loaded.
 	LinesWarranty *time.Time
+	// Original is what it was paid in when not its account's currency (a
+	// card used abroad), nil otherwise; FxFee the part of Amount the
+	// account's foreign currency fee took (see foreign.go).
+	Original *ForeignAmount
+	FxFee    float64
 }
 
 type commonFieldsForTxAndRtx struct {

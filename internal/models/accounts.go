@@ -41,6 +41,11 @@ type Account struct {
 	Gamyaa *Gamyaa
 	// Cycle is a credit card's statement cycle.
 	Cycle CardCycle
+	// FxFeePercent is the fee it charges on a purchase in another currency,
+	// a percent of the converted amount, at least FxFeeMin (in its currency);
+	// 0 = none (see foreign.go).
+	FxFeePercent float64
+	FxFeeMin     float64
 	// Statement is a credit card's last statement, set where it's shown.
 	Statement *CardStatement
 }
@@ -163,6 +168,12 @@ func (a *Account) SanitizeAndValidate(sani *sanitizer.Sanitizer, valid *valid.Va
 			}
 			maps.Copy(valerr.Errors, ce)
 		}
+	}
+	if fe := validateFxFee(a.FxFeePercent, a.FxFeeMin); len(fe) > 0 {
+		if valerr == nil {
+			valerr = &errs.ValidationError{Errors: errs.ValidationErrors{}}
+		}
+		maps.Copy(valerr.Errors, fe)
 	}
 	if valerr != nil {
 		return *valerr

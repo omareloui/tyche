@@ -48,6 +48,7 @@ func TestBuildTransaction(t *testing.T) {
 		wantNewCp   string
 		wantDescrip string
 		wantMerch   bool
+		wantOrig    *models.ForeignAmount
 	}{
 		{
 			name:        "expense by sms ref",
@@ -126,7 +127,8 @@ func TestBuildTransaction(t *testing.T) {
 			wantKind:    models.ExpenseTxKind,
 			wantAcc:     "cib-card",
 			wantAmount:  500,
-			wantDescrip: "Netflix · originally USD 10",
+			wantDescrip: "Netflix",
+			wantOrig:    &models.ForeignAmount{Amount: 10, Currency: "USD"},
 		},
 		{
 			name:    "missing fx rate fails",
@@ -221,8 +223,44 @@ func TestBuildTransaction(t *testing.T) {
 			if tx.Description != tt.wantDescrip {
 				t.Errorf("description = %q, want %q", tx.Description, tt.wantDescrip)
 			}
+			if (tx.Original == nil) != (tt.wantOrig == nil) || (tx.Original != nil && *tx.Original != *tt.wantOrig) {
+				t.Errorf("original = %+v, want %+v", tx.Original, tt.wantOrig)
+			}
 			if !tx.NeedsReview || !tx.FulfilledAt.Equal(receivedAt) || !tx.ScheduledTo.Equal(receivedAt) {
 				t.Errorf("expected fulfilled, scheduled at received time and needing review, got %+v", tx)
+			}
+		})
+	}
+}
+
+func TestBuildTransactionFxFee(t *testing.T) {
+	card := cibCard
+	card.FxFeePercent, card.FxFeeMin = 3, 20
+	accs := []models.Account{card}
+
+	tests := []struct {
+		name       string
+		kind       models.TxKind
+		amount     float64
+		wantAmount float64
+		wantFee    float64
+	}{
+		{name: "percent of the converted amount", kind: models.ExpenseTxKind, amount: 100, wantAmount: 5150, wantFee: 150},
+		{name: "at least the minimum", kind: models.ExpenseTxKind, amount: 10, wantAmount: 520, wantFee: 20},
+		{name: "refunds take no fee", kind: models.RefundTxKind, amount: 100, wantAmount: 5000},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sms := smsparser.SMS{TxKind: tt.kind, AccountID: "1234", Currency: "USD", Amount: tt.amount}
+			tx, err := smsingest.BuildTransaction(&sms, accs, nil, receivedAt, time.UTC, fx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tx.Amount != tt.wantAmount || tx.FxFee != tt.wantFee {
+				t.Errorf("amount, fee = %v, %v, want %v, %v", tx.Amount, tx.FxFee, tt.wantAmount, tt.wantFee)
+			}
+			if tx.Original == nil || tx.Original.Amount != tt.amount || tx.Original.Currency != "USD" {
+				t.Errorf("original = %+v", tx.Original)
 			}
 		})
 	}

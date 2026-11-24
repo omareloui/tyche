@@ -15,7 +15,10 @@ INSERT INTO transactions (
     fulfilled_at,
     needs_review,
     return_until,
-    warranty_until
+    warranty_until,
+    original_amount,
+    original_currency,
+    fx_fee
 )
 VALUES (
     sqlc.arg(id),
@@ -33,7 +36,12 @@ VALUES (
     sqlc.arg(fulfilled_at),
     sqlc.arg(needs_review),
     IIF(sqlc.arg(kind) = 1, sqlc.narg(return_until), NULL),
-    IIF(sqlc.arg(kind) = 1, sqlc.narg(warranty_until), NULL)
+    IIF(sqlc.arg(kind) = 1, sqlc.narg(warranty_until), NULL),
+    -- Paid in another currency: expenses, incomes and refunds only, the fee
+    -- an expense's only.
+    IIF(sqlc.arg(kind) = 1 OR sqlc.arg(kind) = 2 OR sqlc.arg(kind) = 5, sqlc.narg(original_amount), NULL),
+    IIF(sqlc.arg(kind) = 1 OR sqlc.arg(kind) = 2 OR sqlc.arg(kind) = 5, sqlc.narg(original_currency), NULL),
+    IIF(sqlc.arg(kind) = 1, sqlc.narg(fx_fee), NULL)
 );
 
 -- name: GetTransactions :many
@@ -432,6 +440,9 @@ SET
     -- Bought for others is an expense's only, set from its own actions.
     for_others = IIF(sqlc.arg(kind) = 1, for_others, FALSE),
     for_person_id = IIF(sqlc.arg(kind) = 1, for_person_id, NULL),
+    original_amount = IIF(sqlc.arg(kind) = 1 OR sqlc.arg(kind) = 2 OR sqlc.arg(kind) = 5, sqlc.narg(original_amount), NULL),
+    original_currency = IIF(sqlc.arg(kind) = 1 OR sqlc.arg(kind) = 2 OR sqlc.arg(kind) = 5, sqlc.narg(original_currency), NULL),
+    fx_fee = IIF(sqlc.arg(kind) = 1, sqlc.narg(fx_fee), NULL),
     needs_review = FALSE,
     -- An occurrence edited on its own keeps its edit when its recurrent
     -- transaction is edited.
