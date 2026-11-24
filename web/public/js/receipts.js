@@ -185,7 +185,7 @@
       const total = field(row, "item_total");
       if (!total.hasAttribute("data-total-manual") && rate.value.trim() !== "") {
         let v = round2((sub * num(rate.value)) / 100);
-        if (row.querySelector("select[name=item_kind]")?.value === "6") v = -Math.abs(v);
+        if (row.querySelector("[name=item_kind]")?.value === "6") v = -Math.abs(v);
         total.value = v ? String(v) : "";
       }
       const included = row.querySelector("input[type=hidden][name=item_included]")?.value === "on";
@@ -226,7 +226,7 @@
   // quantity × unit price (an item) or the rate on the items already there
   // (data-subtotal, a charge) until typed by hand, like the form's rows.
   function recomputeAddForm(f) {
-    const charge = f.querySelector("select[name=kind]")?.value !== "0";
+    const charge = f.querySelector("input[name=kind]")?.value !== "0";
     // Alpine disables the other kind's total.
     const total = f.querySelector("[name=total]:not([disabled])");
     if (!total || total.hasAttribute("data-total-manual")) return;
@@ -234,7 +234,7 @@
       const rate = f.querySelector("[name=rate]")?.value.trim();
       if (!rate) return;
       let v = round2((num(f.dataset.subtotal) * num(rate)) / 100);
-      if (f.querySelector("select[name=kind]").value === "6") v = -Math.abs(v);
+      if (f.querySelector("input[name=kind]").value === "6") v = -Math.abs(v);
       total.value = v ? String(v) : "";
       return;
     }
@@ -256,7 +256,7 @@
   document.addEventListener("change", (e) => {
     const f = e.target instanceof Element && e.target.closest("form[data-item-add]");
     // After Alpine swapped which total is enabled.
-    if (f && e.target.matches("select[name=kind]")) setTimeout(() => recomputeAddForm(f));
+    if (f && e.target.matches("input[name=kind]")) setTimeout(() => recomputeAddForm(f));
   });
 
   // "Use as the amount": the answer's data-items-amount goes in the form's

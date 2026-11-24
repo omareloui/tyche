@@ -156,16 +156,6 @@ templ txItemsField(id string, items []TxItemFD, rec *ReceiptFD, cur ItemsCurrenc
 		}
 		<input type="hidden" name="receipt_id" value={ rec.ID }/>
 		<div x-show="open" x-cloak?={ !open } class="grid gap-2">
-			<div class="flex flex-wrap items-center gap-2 text-sm text-zinc-400">
-				<span>Prices in</span>
-				@form.Combobox(form.ComboboxProps{
-					Name: "items_currency_id", ID: id, Label: "Currency of the lines",
-					Options: itemsCurrencyOptions(cur.Currencies), Data: form.FDInput{Value: cur.Value},
-					Nullable: true, NullLabel: "Account's currency", Searchable: len(cur.Currencies) > 7, Chip: true,
-					InputAttrs: templ.Attributes{"data-items-currency": true},
-				})
-				<span class="text-xs text-zinc-500">Paid abroad? Pick the receipt's: the amount charged converts them.</span>
-			</div>
 			if rec.URL != "" {
 				<div class="flex items-center gap-3 p-2 rounded-xl border border-zinc-800 bg-zinc-900/40" x-data="{full: false}">
 					<button type="button" @click="full = true" class="shrink-0 cursor-zoom-in" aria-label="Open the receipt">
@@ -209,23 +199,33 @@ templ txItemsField(id string, items []TxItemFD, rec *ReceiptFD, cur ItemsCurrenc
 				</button>
 			</div>
 			<div id={ TxItemsEstimateID(id) } class="text-sm empty:hidden" aria-live="polite"></div>
-			<div class="flex flex-wrap gap-1">
+			<div class="flex flex-wrap items-center gap-1">
 				<button
 					type="button"
 					@click="$refs.rows.append($refs.item.content.cloneNode(true)); $nextTick(() => $refs.rows.lastElementChild.querySelector('input[name=item_name]').focus())"
 					class="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm text-zinc-300 cursor-pointer transition-colors hover:bg-zinc-800"
 				>
 					@icons.Plus("15")
-					Add item
+					Item
 				</button>
 				<button
 					type="button"
-					@click="$refs.rows.append($refs.charge.content.cloneNode(true)); $nextTick(() => $refs.rows.lastElementChild.querySelector('select').focus())"
+					@click="$refs.rows.append($refs.charge.content.cloneNode(true)); $nextTick(() => $refs.rows.lastElementChild.querySelector('input[name=item_rate]:not([type=hidden])').focus())"
+					title="VAT, service, tip, delivery, a discount…"
 					class="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm text-zinc-300 cursor-pointer transition-colors hover:bg-zinc-800"
 				>
 					@icons.Plus("15")
-					Add VAT, service, discount…
+					Tax, tip or discount
 				</button>
+				<div class="ml-auto flex items-center gap-1.5 text-sm text-zinc-500" title="Paid abroad? Pick the receipt's currency: the amount charged converts the lines.">
+					<span>Prices in</span>
+					@form.Combobox(form.ComboboxProps{
+						Name: "items_currency_id", ID: id, Label: "Currency of the lines",
+						Options: itemsCurrencyOptions(cur.Currencies), Data: form.FDInput{Value: cur.Value},
+						Nullable: true, NullLabel: "Account's currency", Searchable: len(cur.Currencies) > 7, Chip: true,
+						InputAttrs: templ.Attributes{"data-items-currency": true},
+					})
+				</div>
 			</div>
 		</div>
 	</div>
@@ -334,37 +334,36 @@ templ txScanAction(on bool) {
 }
 
 // txItemRow is a line's inputs: an item's name, quantity, unit price and
-// total, or a charge's kind, name, rate, amount and whether it's included.
+// total (+ a warranty, folded while empty), or a charge's kind, name, rate,
+// amount and whether it's included.
 templ txItemRow(it TxItemFD) {
 	{{ charge := it.Kind.IsCharge() }}
-	<div data-tx-item class="grid gap-2 p-3 rounded-xl border border-zinc-800 bg-zinc-900/40">
+	<div data-tx-item class="grid gap-1.5 p-2 rounded-xl bg-zinc-900/50">
 		<input type="hidden" name="item_id" value={ it.ID }/>
 		if charge {
 			<input type="hidden" name="item_item_id" value=""/>
 			<input type="hidden" name="item_warranty_until" value=""/>
-		}
-		if !charge {
+			<input type="hidden" name="item_quantity" value=""/>
+			<input type="hidden" name="item_unit_price" value=""/>
+		} else {
 			<input type="hidden" name="item_kind" value="0"/>
 			<input type="hidden" name="item_rate" value=""/>
 			<input type="hidden" name="item_included" value=""/>
 		}
-		<div class="flex gap-2">
+		<div class="flex items-center gap-1.5">
 			if charge {
-				<select name="item_kind" aria-label="Charge" class="input-field w-32! shrink-0">
-					for _, k := range models.TxItemChargeKinds() {
-						<option value={ strconv.Itoa(int(k)) } selected?={ k == it.Kind }>{ k.String() }</option>
-					}
-				</select>
-			}
-			if charge {
+				@form.Combobox(form.ComboboxProps{
+					Name: "item_kind", ID: "", Label: "Charge",
+					Options: itemKindOptions(false), Data: form.FDInput{Value: strconv.Itoa(int(it.Kind))}, Chip: true,
+				})
 				<input
 					type="text"
 					name="item_name"
 					value={ it.Name }
-					placeholder="Name as printed (optional)"
+					placeholder="Name on the receipt (optional)"
 					aria-label="Name"
 					autocomplete="off"
-					class="input-field flex-1 min-w-0"
+					class="input-field h-10! flex-1 min-w-0"
 					if it.Error != "" {
 						aria-invalid="true"
 					}
@@ -372,51 +371,99 @@ templ txItemRow(it TxItemFD) {
 			} else {
 				@itemNameInput("item_name", "item_item_id", it.Name, it.ItemID, it.Error != "")
 			}
-			<button
-				type="button"
-				@click="$el.closest('[data-tx-item]').remove()"
-				aria-label="Remove line"
-				class="grid place-items-center shrink-0 w-11 h-11 rounded-xl text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white"
-			>
-				@icons.Trash("16")
-			</button>
+			@itemRowRemove()
 		</div>
 		if charge {
-			<div class="grid grid-cols-[5.5rem_1fr] gap-2">
-				<input type="hidden" name="item_quantity" value=""/>
-				<input type="hidden" name="item_unit_price" value=""/>
-				<input type="text" inputmode="decimal" name="item_rate" value={ it.Rate } placeholder="Rate %" aria-label="Rate in %" class="input-field tabular-nums"/>
-				<input type="text" inputmode="decimal" name="item_total" value={ it.Total } placeholder="Amount (from the rate when empty)" aria-label="Amount" class="input-field tabular-nums" data-total-manual?={ it.Total != "" && it.Rate == "" }/>
+			<div class="flex items-center gap-1.5">
+				@itemRateInput("item_rate", it.Rate)
+				<input type="text" inputmode="decimal" name="item_total" value={ it.Total } placeholder="Amount" title="Worked out from the rate when empty" aria-label="Amount" class={ itemNumClass, "flex-1 min-w-0" } data-total-manual?={ it.Total != "" && it.Rate == "" }/>
+				<label x-data={ fmt.Sprintf("{inc: %t}", it.Included) } title="Already included in the prices: shown, not added" class="item-toggle" :aria-pressed="inc">
+					<input type="checkbox" x-model="inc" class="sr-only"/>
+					<input type="hidden" name="item_included" :value="inc ? 'on' : ''" value={ onIfTrue(it.Included) }/>
+					Included
+				</label>
 			</div>
-			<label class="inline-flex items-center gap-2 text-sm text-zinc-400 cursor-pointer" x-data={ fmt.Sprintf("{inc: %t}", it.Included) }>
-				<input type="checkbox" x-model="inc" class="accent-emerald-500"/>
-				<input type="hidden" name="item_included" :value="inc ? 'on' : ''" value={ onIfTrue(it.Included) }/>
-				Already included in the prices
-			</label>
 		} else {
-			<div class="grid grid-cols-[1fr_4.5rem_1fr] gap-2">
-				<input type="text" inputmode="decimal" name="item_unit_price" value={ it.UnitPrice } placeholder="Unit price" aria-label="Unit price" class="input-field tabular-nums"/>
-				<input type="text" inputmode="decimal" name="item_quantity" value={ it.Quantity } placeholder="Qty" aria-label="Quantity" class="input-field text-center tabular-nums"/>
-				<input type="text" inputmode="decimal" name="item_total" value={ it.Total } placeholder="Total" aria-label="Total" class="input-field tabular-nums" data-total-manual?={ itemTotalManual(it) }/>
+			<div x-data={ fmt.Sprintf("{warranty: %t}", it.WarrantyUntil != "") } class="grid gap-1.5">
+				<div class="flex items-center gap-1.5">
+					@itemPriceInputs("item_quantity", "item_unit_price", "item_total", it.Quantity, it.UnitPrice, it.Total, itemTotalManual(it))
+					<button
+						type="button"
+						x-show="!warranty"
+						@click="warranty = true; $nextTick(() => $refs.warranty.focus())"
+						title="Add a warranty"
+						aria-label="Add a warranty"
+						class="hidden [form:has(input[name=kind][value=Expense]:checked)_&]:grid place-items-center shrink-0 w-9 h-9 rounded-lg text-zinc-500 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+					>
+						@icons.ShieldCheck("15")
+					</button>
+				</div>
+				<label x-show="warranty" x-cloak?={ it.WarrantyUntil == "" } class="hidden [form:has(input[name=kind][value=Expense]:checked)_&]:flex items-center gap-2 text-sm text-zinc-400">
+					@icons.ShieldCheck("14", &templ.Attributes{"class": "shrink-0"})
+					<span class="shrink-0">Warranty until</span>
+					<input
+						type="text"
+						name="item_warranty_until"
+						value={ it.WarrantyUntil }
+						placeholder="yyyy-mm-dd"
+						aria-label="Warranty until"
+						autocomplete="off"
+						x-ref="warranty"
+						x-mask="9999-99-99"
+						data-datepicker
+						class="input-field h-9! flex-1 min-w-0 text-sm"
+					/>
+				</label>
 			</div>
-			<label class="hidden [form:has(input[name=kind][value=Expense]:checked)_&]:flex items-center gap-2 text-sm text-zinc-400">
-				@icons.ShieldCheck("14", &templ.Attributes{"class": "shrink-0"})
-				<span class="shrink-0">Warranty until</span>
-				<input
-					type="text"
-					name="item_warranty_until"
-					value={ it.WarrantyUntil }
-					placeholder="yyyy-mm-dd (optional)"
-					aria-label="Warranty until"
-					autocomplete="off"
-					x-mask="9999-99-99"
-					data-datepicker
-					class="input-field h-9! flex-1 min-w-0 text-sm"
-				/>
-			</label>
 		}
 		@form.ErrorMessage(it.Error)
 	</div>
+}
+
+// itemNumClass is a line's number input, smaller than a form's field.
+const itemNumClass = "input-field h-9! px-2.5! text-sm! tabular-nums"
+
+// itemPriceInputs are an item's "qty × unit price = total", the total
+// following them until typed (receipts.js).
+templ itemPriceInputs(qtyName, priceName, totalName, qty, price, total string, manual bool) {
+	<input type="text" inputmode="decimal" name={ qtyName } value={ qty } placeholder="1" aria-label="Quantity" class={ itemNumClass, "w-12! shrink-0 text-center" }/>
+	<span class="text-zinc-500 text-sm" aria-hidden="true">×</span>
+	<input type="text" inputmode="decimal" name={ priceName } value={ price } placeholder="Price" aria-label="Unit price" class={ itemNumClass, "flex-1 min-w-0" }/>
+	<span class="text-zinc-500 text-sm" aria-hidden="true">=</span>
+	<input type="text" inputmode="decimal" name={ totalName } value={ total } placeholder="Total" aria-label="Total" class={ itemNumClass, "flex-1 min-w-0" } data-total-manual?={ manual }/>
+}
+
+// itemRateInput is a charge's rate, in %.
+templ itemRateInput(name, rate string) {
+	<div class="relative w-20 shrink-0">
+		<input type="text" inputmode="decimal" name={ name } value={ rate } placeholder="Rate" aria-label="Rate in %" class={ itemNumClass, "w-full pr-6!" }/>
+		<span class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-sm text-zinc-500">%</span>
+	</div>
+}
+
+templ itemRowRemove() {
+	<button
+		type="button"
+		@click="$el.closest('[data-tx-item]').remove()"
+		aria-label="Remove line"
+		title="Remove line"
+		class="grid place-items-center shrink-0 w-9 h-9 rounded-lg text-zinc-500 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white"
+	>
+		@icons.X("16")
+	</button>
+}
+
+// itemKindOptions are the line types for the combobox: the charges, after
+// "Item" when withItem.
+func itemKindOptions(withItem bool) []form.ComboOption {
+	var opts []form.ComboOption
+	if withItem {
+		opts = append(opts, form.ComboOption{Value: "0", Label: "Item"})
+	}
+	for _, k := range models.TxItemChargeKinds() {
+		opts = append(opts, form.ComboOption{Value: strconv.Itoa(int(k)), Label: k.String()})
+	}
+	return opts
 }
 
 // itemTotalManual tells an item's total isn't its quantity × unit price,
@@ -575,15 +622,14 @@ templ txItemAddForm(url string, fd *TxItemFD, subtotal float64, cpID string) {
 			data-item-add
 			data-subtotal={ strconv.FormatFloat(subtotal, 'f', -1, 64) }
 			data-counterparty={ cpID }
-			class="grid gap-2 p-3 rounded-xl border border-zinc-800 bg-zinc-900/40"
+			class="grid gap-1.5 p-2 rounded-xl bg-zinc-900/50"
 		>
-			<div class="flex gap-2">
-				<select name="kind" x-model="kind" aria-label="Line" class="input-field w-32! shrink-0">
-					<option value="0">Item</option>
-					for _, k := range models.TxItemChargeKinds() {
-						<option value={ strconv.Itoa(int(k)) }>{ k.String() }</option>
-					}
-				</select>
+			<div class="flex items-center gap-1.5">
+				@form.Combobox(form.ComboboxProps{
+					Name: "kind", ID: "item-add", Label: "Line",
+					Options: itemKindOptions(true), Data: form.FDInput{Value: strconv.Itoa(int(fd.Kind))}, Chip: true,
+					InputAttrs: templ.Attributes{"@change": "kind = $event.target.value"},
+				})
 				<div class="contents" x-effect="if (adding) $nextTick(() => $el.parentElement.querySelector('input[type=text]')?.focus())"></div>
 				<template x-if="kind === '0'">
 					@itemNameInput("name", "item_ref", fd.Name, fd.ItemID, false)
@@ -593,32 +639,32 @@ templ txItemAddForm(url string, fd *TxItemFD, subtotal float64, cpID string) {
 						type="text"
 						name="name"
 						value={ fd.Name }
-						placeholder="Name as printed (optional)"
+						placeholder="Name on the receipt (optional)"
 						aria-label="Name"
 						autocomplete="off"
-						class="input-field flex-1 min-w-0"
+						class="input-field h-10! flex-1 min-w-0"
 					/>
 				</template>
 			</div>
-			<div x-show="kind === '0'" class="grid grid-cols-[1fr_4.5rem_1fr] gap-2">
-				<input type="text" inputmode="decimal" name="unit_price" value={ fd.UnitPrice } placeholder="Unit price" aria-label="Unit price" class="input-field tabular-nums"/>
-				<input type="text" inputmode="decimal" name="quantity" value={ fd.Quantity } placeholder="Qty" aria-label="Quantity" class="input-field text-center tabular-nums"/>
-				<input type="text" inputmode="decimal" name="total" value={ fd.Total } placeholder="Total" aria-label="Total" class="input-field tabular-nums" :disabled="kind !== '0'"/>
-			</div>
-			<div x-show="kind !== '0'" x-cloak class="grid gap-2">
-				<div class="grid grid-cols-[5.5rem_1fr] gap-2">
-					<input type="text" inputmode="decimal" name="rate" value={ fd.Rate } placeholder="Rate %" aria-label="Rate in %" class="input-field tabular-nums"/>
-					<input type="text" inputmode="decimal" name="total" value={ fd.Total } placeholder="Amount (from the rate when empty)" aria-label="Amount" class="input-field tabular-nums" :disabled="kind === '0'"/>
+			<template x-if="kind === '0'">
+				<div class="flex items-center gap-1.5">
+					@itemPriceInputs("quantity", "unit_price", "total", fd.Quantity, fd.UnitPrice, fd.Total, false)
 				</div>
-				<label class="inline-flex items-center gap-2 text-sm text-zinc-400 cursor-pointer">
-					<input type="checkbox" name="included" checked?={ fd.Included } class="accent-emerald-500"/>
-					Already included in the prices
-				</label>
-			</div>
+			</template>
+			<template x-if="kind !== '0'">
+				<div class="flex items-center gap-1.5">
+					@itemRateInput("rate", fd.Rate)
+					<input type="text" inputmode="decimal" name="total" value={ fd.Total } placeholder="Amount" title="Worked out from the rate when empty" aria-label="Amount" class={ itemNumClass, "flex-1 min-w-0" }/>
+					<label x-data={ fmt.Sprintf("{inc: %t}", fd.Included) } title="Already included in the prices: shown, not added" class="item-toggle" :aria-pressed="inc">
+						<input type="checkbox" name="included" x-model="inc" class="sr-only"/>
+						Included
+					</label>
+				</div>
+			</template>
 			@form.ErrorMessage(fd.Error)
-			<div class="flex justify-end gap-2">
-				<button type="button" @click="adding = false" class="btn-ghost h-9!">Cancel</button>
-				<button type="submit" class="btn-primary h-9!">Add</button>
+			<div class="flex items-center justify-end gap-1">
+				<button type="button" @click="adding = false" class="h-8 px-3 rounded-lg text-sm text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-zinc-200">Cancel</button>
+				<button type="submit" class="btn-primary h-8! px-4! text-sm">Add</button>
 			</div>
 		</form>
 		<button type="button" x-show="!adding" @click="adding = true" class="txd-action justify-self-start">
