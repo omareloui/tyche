@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strings"
+	"time"
 
 	"github.com/a-h/templ"
 	"go.uber.org/zap"
@@ -34,9 +36,10 @@ func pickField(r *http.Request) (string, error) {
 	return "", errUnknownPick
 }
 
-// txPickField is a transaction's {field}: pickField's or its account.
+// txPickField is a transaction's {field}: pickField's, its account or its
+// date.
 func txPickField(r *http.Request) (string, error) {
-	if f := r.PathValue("field"); f == views.QuickPickAccount {
+	if f := r.PathValue("field"); f == views.QuickPickAccount || f == views.QuickPickDate {
 		return f, nil
 	}
 	return pickField(r)
@@ -94,10 +97,29 @@ func (h Handler) pickableTx(r *http.Request) (*models.Transaction, error) {
 	return tx, nil
 }
 
+// datePickableTx is the {id} transaction when the details can move its day.
+func (h Handler) datePickableTx(r *http.Request) (*models.Transaction, error) {
+	tx, err := h.editableTx(r)
+	if err != nil {
+		return nil, err
+	}
+	if !views.TxDateEditable(tx) {
+		return nil, resperr.New(http.StatusUnprocessableEntity, "This transaction's date can't change here.")
+	}
+	return tx, nil
+}
+
 func (h Handler) TxPicker(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	field, err := txPickField(r)
 	if err != nil {
 		return nil, err
+	}
+	if field == views.QuickPickDate {
+		tx, err := h.datePickableTx(r)
+		if err != nil {
+			return nil, err
+		}
+		return views.TxDatePicker(tx), nil
 	}
 	tx, err := h.pickableTx(r)
 	if err != nil {
@@ -135,7 +157,11 @@ func (h Handler) SetTxPick(w http.ResponseWriter, r *http.Request) (templ.Compon
 	if err != nil {
 		return nil, err
 	}
-	tx, err := h.pickableTx(r)
+	pickable := h.pickableTx
+	if field == views.QuickPickDate {
+		pickable = h.datePickableTx
+	}
+	tx, err := pickable(r)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +174,16 @@ func (h Handler) SetTxPick(w http.ResponseWriter, r *http.Request) (templ.Compon
 	}
 
 	var edit models.TxBulkEdit
-	if field == views.QuickPickCategory {
+	if field == views.QuickPickDate {
+		day, err := time.Parse(time.DateOnly, strings.TrimSpace(r.FormValue("scheduled_to")))
+		if err != nil {
+			return nil, pickRefused(w, pickID, "Pick a day.")
+		}
+		if !tx.FulfilledAt.IsZero() && day.After(h.userToday(ctx)) {
+			return nil, pickRefused(w, pickID, "A fulfilled transaction can't move ahead of today.")
+		}
+		edit.Date = &day
+	} else if field == views.QuickPickCategory {
 		cat, ok, err := h.pickedCategory(ctx, r.FormValue("category_id"), tx.Kind)
 		if err != nil {
 			return nil, err

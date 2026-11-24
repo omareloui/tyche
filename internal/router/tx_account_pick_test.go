@@ -99,4 +99,30 @@ func TestTxAccountPick(t *testing.T) {
 	if !strings.Contains(body, "Wallet") {
 		t.Error("details not answered")
 	}
+
+	// The date: moved back a day, its time of day kept; never ahead of today
+	// while fulfilled.
+	datePath := "/transactions/" + tx.ID + "/pick/date"
+	if _, body = do("GET", datePath, nil); !strings.Contains(body, "data-datepicker") {
+		t.Error("no date picker")
+	}
+	ahead := time.Now().AddDate(0, 0, 3).Format(time.DateOnly)
+	if res, _ = do("PUT", datePath, url.Values{"scheduled_to": {ahead}}); res.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("ahead: status %d", res.StatusCode)
+	}
+	before := got.ScheduledTo
+	day := before.AddDate(0, 0, -2)
+	if res, body = do("PUT", datePath, url.Values{"scheduled_to": {day.Format(time.DateOnly)}}); res.StatusCode != http.StatusOK {
+		t.Fatalf("date: status %d: %s", res.StatusCode, body)
+	}
+	if got, err = repo.GetTransaction(ctx, tx.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got.ScheduledTo.Format(time.DateOnly) != day.Format(time.DateOnly) ||
+		got.ScheduledTo.Format("15:04:05") != before.Format("15:04:05") {
+		t.Errorf("scheduled to = %v, want %v at %v", got.ScheduledTo, day.Format(time.DateOnly), before.Format("15:04:05"))
+	}
+	if b, c := balance(bank.ID), balance(cash.ID); b != 1000 || c != 400 {
+		t.Errorf("balances moved: %v / %v", b, c)
+	}
 }

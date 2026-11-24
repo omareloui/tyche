@@ -2,6 +2,7 @@ package views
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/slicesutils"
@@ -108,9 +109,54 @@ templ QuickPicker(p QuickPickerProps) {
 const (
 	QuickPickCategory     = "category"
 	QuickPickCounterparty = "counterparty"
-	// QuickPickAccount is a transaction's only.
+	// QuickPickAccount and QuickPickDate are a transaction's only.
 	QuickPickAccount = "account"
+	QuickPickDate    = "date"
 )
+
+// TxDateEditable tells the details can move the transaction to another day,
+// as a bulk edit can.
+func TxDateEditable(tx *models.Transaction) bool {
+	return tx.BulkLock() == models.TxBulkLockNone
+}
+
+templ txDateDisplay(tx *models.Transaction) {
+	<span class="truncate">{ tx.ScheduledTo.Format("Monday, January 2 2006") }</span>
+}
+
+func txDatePick(tx *models.Transaction) QuickPickProps {
+	return QuickPickProps{
+		ID: QuickPickID("tx", tx.ID, QuickPickDate), Label: "date",
+		PickerURL: txPickURL(tx.ID, QuickPickDate), Display: txDateDisplay(tx),
+		Editable: TxDateEditable(tx),
+	}
+}
+
+// TxDatePicker moves a transaction to another day (its time of day kept),
+// a datepicker opened right away saving the picked day.
+templ TxDatePicker(tx *models.Transaction) {
+	<div
+		id={ QuickPickID("tx", tx.ID, QuickPickDate) }
+		class="min-w-0 txd-pick max-w-full"
+		x-init="$nextTick(() => { loadDatePickers($el); $el.querySelector('input')?.click() })"
+	>
+		<input
+			type="text"
+			name="scheduled_to"
+			value={ tx.ScheduledTo.Format(time.DateOnly) }
+			aria-label="Date"
+			autocomplete="off"
+			readonly
+			data-datepicker
+			data-datepicker-change
+			hx-put={ txPickURL(tx.ID, QuickPickDate) }
+			hx-trigger="change"
+			hx-target="#txd-panel"
+			hx-swap="innerHTML"
+			class="combo-chip txd-pick w-full cursor-pointer"
+		/>
+	</div>
+}
 
 // TxAccountEditable tells the details can move the transaction to another
 // account: an expense, income or refund whose refs are editable.

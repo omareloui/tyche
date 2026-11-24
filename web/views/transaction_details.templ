@@ -382,7 +382,7 @@ templ txDetailsFields(d *models.TxDetails, v *txView) {
 			}
 		}
 		@txDetailsRow("Date", icons.Calendar("15")) {
-			<span>{ tx.ScheduledTo.Format("Monday, January 2 2006") }</span>
+			@QuickPick(txDatePick(tx))
 		}
 		@txDetailsRow("Fulfilled", icons.Check("15")) {
 			if tx.FulfilledAt.IsZero() {
