@@ -1386,33 +1386,3 @@ WHERE r.kind = 5
     AND r.amount >= sqlc.arg(min_amount)
 ORDER BY r.scheduled_to
 LIMIT 1;
-
--- name: GetForeignTxsToReconvert :many
--- The transactions paid in another currency than their account's, for the
--- one-off reconversion at their day's rate (fx_reconvert.go).
-SELECT
-    t.id,
-    t.account_id,
-    t.kind,
-    t.amount,
-    CAST(t.original_amount AS FLOAT) AS original_amount,
-    CAST(t.original_currency AS TEXT) AS original_currency,
-    t.scheduled_to,
-    CAST(t.fulfilled_at IS NOT NULL AS BOOLEAN) AS fulfilled,
-    c.string AS account_currency,
-    CAST(COALESCE(a.fx_fee_percent, 0) AS FLOAT) AS fx_fee_percent,
-    CAST(COALESCE(a.fx_fee_min, 0) AS FLOAT) AS fx_fee_min
-FROM transactions AS t
-JOIN accounts AS a ON a.id = t.account_id
-JOIN currencies AS c ON c.id = a.currency_id
-WHERE t.kind IN (1, 2, 5)
-    AND t.original_amount > 0
-    AND t.original_currency IS NOT NULL
-    AND UPPER(t.original_currency) != UPPER(c.string);
-
--- name: SetTransactionConversion :exec
-UPDATE transactions
-SET
-    amount = ROUND(sqlc.arg(amount), 6),
-    fx_fee = sqlc.narg(fx_fee)
-WHERE id = sqlc.arg(id);
