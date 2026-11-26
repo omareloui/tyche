@@ -184,6 +184,9 @@ func TestMerchantGuess(t *testing.T) {
 		if on, _ := repo.GetAIMerchants(ctx); !on {
 			t.Fatal("still off")
 		}
+		if _, page := do(srv, http.MethodGet, "/settings", nil); !strings.Contains(page, " of 100 checks") {
+			t.Error("the settings don't show the month's checks")
+		}
 	})
 
 	t.Run("matches a merchant, then the alias does", func(t *testing.T) {

@@ -13,6 +13,7 @@ import (
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/repository"
 	"github.com/omareloui/tyche/internal/resperr"
 	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views"
@@ -67,11 +68,25 @@ func (h *Handler) settingsData(ctx context.Context) (*views.SettingsData, error)
 	if err != nil {
 		return nil, err
 	}
+	var aiUsed, aiLimit int
+	if h.merchantGuess != nil {
+		tenantID, err := repository.TenantIDFromCtx(ctx)
+		if err != nil {
+			return nil, err
+		}
+		left, limit, err := h.repo.AICallsLeft(ctx, tenantID, models.ScanMerchant, h.ocrCfg.MerchantGuessesPerMonth, time.Now())
+		if err != nil {
+			return nil, err
+		}
+		aiUsed, aiLimit = limit-left, limit
+	}
 
 	d := &views.SettingsData{
-		Badge:       h.badges.Enabled(),
-		AIAvailable: h.merchantGuess != nil,
-		AI:          views.SettingsAIFD{Merchants: form.FDInput{Value: formatBooleanIfNonZero(aiMerchants)}},
+		Badge:            h.badges.Enabled(),
+		AIAvailable:      h.merchantGuess != nil,
+		AIMerchantsUsed:  aiUsed,
+		AIMerchantsLimit: aiLimit,
+		AI:               views.SettingsAIFD{Merchants: form.FDInput{Value: formatBooleanIfNonZero(aiMerchants)}},
 		Profile: views.SettingsProfileFD{
 			FirstName: form.FDInput{Value: usr.FirstName},
 			LastName:  form.FDInput{Value: usr.LastName},

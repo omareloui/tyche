@@ -31,6 +31,9 @@ type SettingsData struct {
 	// AIAvailable is whether the AI features the user turns on are
 	// available (an API key set): their card only shows then.
 	AIAvailable bool
+	// AIMerchantsUsed are the merchant matching calls made this calendar
+	// month (UTC) out of AIMerchantsLimit.
+	AIMerchantsUsed, AIMerchantsLimit int
 
 	// Currencies are the fiat ones, to pick the main currency from;
 	// ShownCurrencies the ones in use, for the salary.
@@ -320,6 +323,8 @@ templ SettingsAICard(d *SettingsData) {
 				merchants or creates it with a clean name and a category. Only the merchant names and your expense categories' names
 				are sent: never people, amounts or the SMS. The transactions still come for review, and a wrong match is undone from them.
 			</p>
+			@aiQuota(d.AIMerchantsUsed, d.AIMerchantsLimit, "checks", "One check covers a batch of SMS with new merchants. Merchants it already matched cost nothing again.",
+				"Used up: until then, new merchants are named after the SMS, as without AI.")
 		</div>
 	}
 }
@@ -440,4 +445,34 @@ templ BadgeSwitches() {
 		</div>
 	</div>
 	<p x-show="status" x-text="status" class="text-sm" :class="failed ? 'text-red-400' : 'text-zinc-500'"></p>
+}
+
+// aiQuota is an AI feature's calls this month against its limit, which
+// starts again on the 1st (UTC).
+templ aiQuota(used, limit int, unit, hint, usedUp string) {
+	{{ pct := 100 }}
+	if limit > 0 {
+		{{ pct = min(used*100/limit, 100) }}
+	}
+	{{ out := used >= limit }}
+	<div class="grid gap-1.5 rounded-2xl bg-zinc-900/50 ring-1 ring-zinc-800 px-4 py-3 text-sm">
+		<p class="flex flex-wrap justify-between gap-x-4">
+			<span class="text-zinc-400">This month</span>
+			<span class="tabular-nums">
+				<span class={ templ.KV("text-amber-300", out) }>{ fmt.Sprint(used) }</span>
+				<span class="text-zinc-500">{ fmt.Sprintf(" of %d %s", limit, unit) }</span>
+			</span>
+		</p>
+		<div class="h-1.5 rounded-full bg-zinc-800 overflow-hidden" role="progressbar" aria-valuemin="0" aria-valuemax={ fmt.Sprint(limit) } aria-valuenow={ fmt.Sprint(used) }>
+			<div class={ "h-full rounded-full", templ.KV("bg-violet-400", !out), templ.KV("bg-amber-400", out) } style={ fmt.Sprintf("width: %d%%", pct) }></div>
+		</div>
+		<p class="text-xs text-zinc-500">
+			if out {
+				<span class="text-amber-300">{ usedUp }</span>
+			} else {
+				{ hint }
+			}
+			{ " Starts again on the 1st." }
+		</p>
+	</div>
 }
