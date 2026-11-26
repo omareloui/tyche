@@ -38,13 +38,21 @@ func TestParseRating(t *testing.T) {
 	}
 }
 
+func TestParsePriceLevel(t *testing.T) {
+	for in, want := range map[string]int{"": 0, "1": 1, " 4 ": 4, "5": 0, "-1": 0, "x": 0} {
+		if got := parsePriceLevel(in); got != want {
+			t.Errorf("parsePriceLevel(%q) = %d, want %d", in, got, want)
+		}
+	}
+}
+
 func TestClearNonMerchantFieldsKeepsNote(t *testing.T) {
 	cp := &models.Counterparty{
-		Name: "Ahmed", Note: "Cousin", Rating: 4, Icon: "uber",
+		Name: "Ahmed", Note: "Cousin", Rating: 4, PriceLevel: 2, Icon: "uber",
 		Locations: []models.CounterpartyLocation{{Label: "Home"}},
 	}
 	clearNonMerchantFields(cp)
-	if cp.Rating != 0 || cp.Locations != nil || cp.Icon != "" {
+	if cp.Rating != 0 || cp.PriceLevel != 0 || cp.Locations != nil || cp.Icon != "" {
 		t.Errorf("merchant fields kept: %+v", cp)
 	}
 	if cp.Note != "Cousin" {

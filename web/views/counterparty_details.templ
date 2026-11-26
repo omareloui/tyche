@@ -69,7 +69,10 @@ templ CounterpartyDetails(d *CounterpartyDetailsData) {
 					</p>
 					if cp.IsMerchant {
 						<div class="mt-1.5">
-							@counterpartyStars(cp, CounterpartyFromDetails, "18")
+							<div class="flex flex-wrap items-center gap-x-3">
+								@counterpartyStars(cp, CounterpartyFromDetails, "18")
+								@counterpartyPrice(cp, CounterpartyFromDetails, "text-base")
+							</div>
 						</div>
 					}
 				</div>

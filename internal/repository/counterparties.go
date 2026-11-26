@@ -132,6 +132,16 @@ func (r *Repository) SetCounterpartyRating(ctx context.Context, id string, ratin
 	return q.SetCounterpartyRating(ctx, queries.SetCounterpartyRatingParams{ID: id, Rating: ratingParam(rating)})
 }
 
+// SetCounterpartyPriceLevel sets a merchant's price level, 0 clearing it.
+func (r *Repository) SetCounterpartyPriceLevel(ctx context.Context, id string, level int) error {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+
+	return q.SetCounterpartyPriceLevel(ctx, queries.SetCounterpartyPriceLevelParams{ID: id, PriceLevel: ratingParam(level)})
+}
+
 // MergeCounterparties moves everything referencing the from counterparty to
 // the into one, adds its name and aliases to the into aliases, then deletes it.
 func (r *Repository) MergeCounterparties(ctx context.Context, fromID, intoID string) (*models.Counterparty, error) {
@@ -233,6 +243,7 @@ func updateCounterpartyParams(it *models.Counterparty) (queries.UpdateCounterpar
 		DefaultCategoryID: defaultCategoryID(it),
 		IsArchived:        it.IsArchived,
 		Rating:            ratingParam(it.Rating),
+		PriceLevel:        ratingParam(it.PriceLevel),
 		ReturnDays:        ratingParam(it.ReturnDays),
 		Note:              it.Note,
 		Labels:            labels,
@@ -260,6 +271,7 @@ func (r *Repository) CreateCounterparty(ctx context.Context, it *models.Counterp
 			IsMerchant:        it.IsMerchant,
 			DefaultCategoryID: defaultCategoryID(it),
 			Rating:            ratingParam(it.Rating),
+			PriceLevel:        ratingParam(it.PriceLevel),
 			ReturnDays:        ratingParam(it.ReturnDays),
 			Note:              it.Note,
 			Labels:            labels,
@@ -300,6 +312,7 @@ func dbCounterpartyToCounterparty(dbP *queries.Counterparty) *models.Counterpart
 		IsMerchant: dbP.IsMerchant,
 		IsArchived: dbP.IsArchived,
 		Rating:     int(dbP.Rating.Int64),
+		PriceLevel: int(dbP.PriceLevel.Int64),
 		ReturnDays: int(dbP.ReturnDays.Int64),
 		Note:       dbP.Note,
 		Labels:     labels,
@@ -311,7 +324,8 @@ func dbLocationToLocation(loc queries.CounterpartyLocation) models.CounterpartyL
 	return models.CounterpartyLocation{ID: loc.ID, Label: loc.Label, Address: loc.Address, MapsURL: loc.MapsUrl}
 }
 
-// ratingParam is NULL for an unrated (0) counterparty (or 0 return days).
+// ratingParam is NULL for an unrated (0) counterparty (or 0 return days or
+// price level).
 func ratingParam(rating int) sql.NullInt64 {
 	return sql.NullInt64{Int64: int64(rating), Valid: rating > 0}
 }

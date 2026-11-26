@@ -440,6 +440,40 @@ func (h Handler) RateCounterparty(w http.ResponseWriter, r *http.Request) (templ
 	return views.Counterparty(cp), nil
 }
 
+// SetCounterpartyPriceLevel sets a merchant's price level from its card's
+// dollar signs (0 clears it) and answers the card.
+func (h Handler) SetCounterpartyPriceLevel(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	id := r.PathValue("id")
+	if id == "" {
+		return nil, errs.ErrInvalidID
+	}
+
+	l := logger.FromCtx(r.Context())
+
+	cp, err := h.repo.GetCounterparty(r.Context(), id)
+	if err != nil {
+		l.Error("fetching counterparty", zap.Error(err))
+		return nil, err
+	}
+	if !cp.IsMerchant {
+		return nil, resperr.New(http.StatusUnprocessableEntity, "Only merchants have a price level")
+	}
+
+	cp.PriceLevel = parsePriceLevel(r.FormValue("price_level"))
+	if err := h.repo.SetCounterpartyPriceLevel(r.Context(), id, cp.PriceLevel); err != nil {
+		l.Error("setting counterparty price level", zap.Error(err))
+		return nil, err
+	}
+	l.Info("set counterparty price level", zap.String("id", id), zap.Int("price_level", cp.PriceLevel))
+
+	// The details' signs keep their state, only the card is updated.
+	if r.FormValue("from") == views.CounterpartyFromDetails {
+		w.Header().Set("HX-Reswap", "none")
+		return views.CounterpartyReplaceOOB(cp), nil
+	}
+	return views.Counterparty(cp), nil
+}
+
 // SetCounterpartyLabels replaces the counterparty's labels from its details
 // with labels (the whole list) plus add (one typed in), answering their labels
 // section (with its error, if any) and its card out of band.
@@ -619,6 +653,7 @@ func (h Handler) mapCounterpartyToFD(cp *models.Counterparty, err *errs.Validati
 		DefaultCategoryID: form.FDInput{Value: defaultCategoryID, Error: err.Errors.MsgFor("DefaultCategoryID")},
 		IsArchived:        form.FDInput{Value: formatBooleanIfNonZero(cp.IsArchived), Error: err.Errors.MsgFor("IsArchived")},
 		Rating:            form.FDInput{Value: formatIntIfNonZero(cp.Rating), Error: err.Errors.MsgFor("Rating")},
+		PriceLevel:        form.FDInput{Value: formatIntIfNonZero(cp.PriceLevel), Error: err.Errors.MsgFor("PriceLevel")},
 		ReturnDays:        form.FDInput{Value: formatIntIfNonZero(cp.ReturnDays), Error: err.Errors.MsgFor("ReturnDays")},
 		Note:              form.FDInput{Value: cp.Note, Error: err.Errors.MsgFor("Note")},
 		Labels:            form.FDInput{Value: strings.Join(cp.Labels, ", "), Error: labelsError(err)},
@@ -659,6 +694,7 @@ func (h Handler) mapFDToCounterparty(r *http.Request) (*models.Counterparty, err
 		DefaultCategory: defaultCategory,
 		IsArchived:      parseBoolean(r.FormValue("is_archived")),
 		Rating:          parseRating(r.FormValue("rating")),
+		PriceLevel:      parsePriceLevel(r.FormValue("price_level")),
 		ReturnDays:      parseReturnDays(r.FormValue("return_days")),
 		Note:            r.FormValue("note"),
 		Labels:          parseAliases(r.FormValue("labels")),
@@ -683,6 +719,15 @@ func labelsError(err *errs.ValidationError) string {
 func parseRating(s string) int {
 	n, err := strconv.Atoi(strings.TrimSpace(s))
 	if err != nil || n < 0 || n > models.MaxRating {
+		return 0
+	}
+	return n
+}
+
+// parsePriceLevel reads a price level, 0 (unset) when blank or out of range.
+func parsePriceLevel(s string) int {
+	n, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil || n < 0 || n > models.MaxPriceLevel {
 		return 0
 	}
 	return n
@@ -732,6 +777,7 @@ func clearNonMerchantFields(cp *models.Counterparty) {
 	cp.Icon = ""
 	cp.DefaultCategory = nil
 	cp.Rating = 0
+	cp.PriceLevel = 0
 	cp.ReturnDays = 0
 	cp.Locations = nil
 }

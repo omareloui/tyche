@@ -75,20 +75,23 @@ func TestCounterpartyAbsorbRatingAndNote(t *testing.T) {
 		into       Counterparty
 		other      Counterparty
 		wantRating int
+		wantPrice  int
 		wantNote   string
 	}{
 		{
 			name:       "merchant takes rating and note",
 			into:       Counterparty{Name: "Uber", IsMerchant: true},
-			other:      Counterparty{Name: "Uber Trip", Rating: 4, Note: "Late at night"},
+			other:      Counterparty{Name: "Uber Trip", Rating: 4, PriceLevel: 2, Note: "Late at night"},
 			wantRating: 4,
+			wantPrice:  2,
 			wantNote:   "Late at night",
 		},
 		{
 			name:       "keeps own rating, joins notes",
-			into:       Counterparty{Name: "Uber", IsMerchant: true, Rating: 2, Note: "Pricey"},
-			other:      Counterparty{Name: "Uber Trip", Rating: 5, Note: "Fast"},
+			into:       Counterparty{Name: "Uber", IsMerchant: true, Rating: 2, PriceLevel: 3, Note: "Pricey"},
+			other:      Counterparty{Name: "Uber Trip", Rating: 5, PriceLevel: 1, Note: "Fast"},
 			wantRating: 2,
+			wantPrice:  3,
 			wantNote:   "Pricey\n\nFast",
 		},
 		{
@@ -100,7 +103,7 @@ func TestCounterpartyAbsorbRatingAndNote(t *testing.T) {
 		{
 			name:     "non merchant doesn't take rating",
 			into:     Counterparty{Name: "Ahmed"},
-			other:    Counterparty{Name: "Ahmed M", Rating: 3, Note: "Cousin"},
+			other:    Counterparty{Name: "Ahmed M", Rating: 3, PriceLevel: 2, Note: "Cousin"},
 			wantNote: "Cousin",
 		},
 	}
@@ -110,6 +113,9 @@ func TestCounterpartyAbsorbRatingAndNote(t *testing.T) {
 			tt.into.Absorb(&tt.other)
 			if tt.into.Rating != tt.wantRating {
 				t.Errorf("rating = %d, want %d", tt.into.Rating, tt.wantRating)
+			}
+			if tt.into.PriceLevel != tt.wantPrice {
+				t.Errorf("price level = %d, want %d", tt.into.PriceLevel, tt.wantPrice)
 			}
 			if tt.into.Note != tt.wantNote {
 				t.Errorf("note = %q, want %q", tt.into.Note, tt.wantNote)
@@ -156,5 +162,13 @@ func TestCounterpartyLabels(t *testing.T) {
 	into.Absorb(&Counterparty{Name: "Uber Eats", Labels: []string{"transport", "Restaurant"}})
 	if want := []string{"Transport", "Restaurant"}; !slices.Equal(into.Labels, want) {
 		t.Errorf("absorbed labels = %q, want %q", into.Labels, want)
+	}
+}
+
+func TestPriceLevelSignsAndName(t *testing.T) {
+	for level, want := range map[int][2]string{0: {"", ""}, 1: {"$", "Cheap"}, 4: {"$$$$", "Very expensive"}, 5: {"", ""}} {
+		if got := [2]string{PriceLevelSigns(level), PriceLevelName(level)}; got != want {
+			t.Errorf("level %d = %q, want %q", level, got, want)
+		}
 	}
 }

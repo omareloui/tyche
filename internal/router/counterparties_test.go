@@ -124,7 +124,7 @@ func TestCounterpartyRatingNoteAndLocations(t *testing.T) {
 	repo, ctx, _ := setupTenant(t)
 
 	cp := &models.Counterparty{
-		ID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZJ", Name: "Cilantro", IsMerchant: true, Rating: 4, Note: "Good wifi",
+		ID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZJ", Name: "Cilantro", IsMerchant: true, Rating: 4, PriceLevel: 2, Note: "Good wifi",
 		Locations: []models.CounterpartyLocation{
 			{Label: "Zamalek", Address: "26 July St"},
 			{Label: "Maadi", MapsURL: "https://maps.app.goo.gl/x"},
@@ -137,8 +137,8 @@ func TestCounterpartyRatingNoteAndLocations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Rating != 4 || got.Note != "Good wifi" {
-		t.Errorf("rating, note = %d, %q, want 4, Good wifi", got.Rating, got.Note)
+	if got.Rating != 4 || got.PriceLevel != 2 || got.Note != "Good wifi" {
+		t.Errorf("rating, price, note = %d, %d, %q, want 4, 2, Good wifi", got.Rating, got.PriceLevel, got.Note)
 	}
 	if labels := locationLabels(got.Locations); !slices.Equal(labels, []string{"Zamalek", "Maadi"}) {
 		t.Errorf("locations = %q, want Zamalek, Maadi", labels)
@@ -167,6 +167,18 @@ func TestCounterpartyRatingNoteAndLocations(t *testing.T) {
 	if got, err = repo.GetCounterparty(ctx, cp.ID); err != nil || got.Rating != 0 {
 		t.Errorf("cleared rating = %+v (%v), want 0", got, err)
 	}
+	if err := repo.SetCounterpartyPriceLevel(ctx, cp.ID, 3); err != nil {
+		t.Fatal(err)
+	}
+	if got, err = repo.GetCounterparty(ctx, cp.ID); err != nil || got.PriceLevel != 3 {
+		t.Errorf("price level = %+v (%v), want 3", got, err)
+	}
+	if err := repo.SetCounterpartyPriceLevel(ctx, cp.ID, 0); err != nil {
+		t.Fatal(err)
+	}
+	if got, err = repo.GetCounterparty(ctx, cp.ID); err != nil || got.PriceLevel != 0 {
+		t.Errorf("cleared price level = %+v (%v), want 0", got, err)
+	}
 
 	// Deleting it drops its locations.
 	if err := repo.DeleteCounterparty(ctx, cp.ID); err != nil {
@@ -187,7 +199,7 @@ func TestMergeCounterpartiesLocations(t *testing.T) {
 	repo, ctx, _ := setupTenant(t)
 
 	from := &models.Counterparty{
-		ID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZK", Name: "Cilantro Cafe", IsMerchant: true, Rating: 5, Note: "Quiet",
+		ID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZK", Name: "Cilantro Cafe", IsMerchant: true, Rating: 5, PriceLevel: 4, Note: "Quiet",
 		Locations: []models.CounterpartyLocation{{Label: "Maadi"}},
 	}
 	into := &models.Counterparty{
@@ -209,6 +221,9 @@ func TestMergeCounterpartiesLocations(t *testing.T) {
 	}
 	if labels := locationLabels(got.Locations); !slices.Equal(labels, []string{"Zamalek", "Maadi"}) {
 		t.Errorf("locations = %q, want Zamalek, Maadi", labels)
+	}
+	if got.PriceLevel != 4 {
+		t.Errorf("price level = %d, want 4 taken from the merged one", got.PriceLevel)
 	}
 	if got.Rating != 5 || got.Note != "Good wifi\n\nQuiet" {
 		t.Errorf("rating, note = %d, %q, want 5, joined notes", got.Rating, got.Note)

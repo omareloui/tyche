@@ -114,6 +114,32 @@ func TestCounterpartyRatingLocationsHTTP(t *testing.T) {
 		}
 	})
 
+	t.Run("price level from the card", func(t *testing.T) {
+		res, body := do("PUT", "/counterparties/"+cafe.ID+"/price-level", url.Values{"price_level": {"3"}})
+		if res.StatusCode != http.StatusOK || !strings.Contains(body, `data-price="3"`) {
+			t.Fatalf("status %d: %s", res.StatusCode, body)
+		}
+		got, err := repo.GetCounterparty(ctx, cafe.ID)
+		if err != nil || got.PriceLevel != 3 || got.Rating != 2 {
+			t.Errorf("stored = %+v (%v), want price level 3, rating kept", got, err)
+		}
+		res, _ = do("PUT", "/counterparties/"+cafe.ID+"/price-level", url.Values{"price_level": {"3"}, "from": {"details"}})
+		if res.StatusCode != http.StatusOK || res.Header.Get("HX-Reswap") != "none" {
+			t.Errorf("from details: status %d, reswap %q", res.StatusCode, res.Header.Get("HX-Reswap"))
+		}
+	})
+
+	t.Run("people have no price level", func(t *testing.T) {
+		friend := &models.Counterparty{ID: "01K8KQZ4N1XQ5WJ5M3Q6G7Y8ZP", Name: "Friend"}
+		if err := repo.CreateCounterparty(ctx, friend); err != nil {
+			t.Fatal(err)
+		}
+		res, _ := do("PUT", "/counterparties/"+friend.ID+"/price-level", url.Values{"price_level": {"2"}})
+		if res.StatusCode != http.StatusUnprocessableEntity {
+			t.Errorf("status %d, want 422", res.StatusCode)
+		}
+	})
+
 	t.Run("?cp= opens the details, which keep it in the url", func(t *testing.T) {
 		_, body := do("GET", "/counterparties?cp="+cafe.ID, nil)
 		if !strings.Contains(body, `hx-get="/counterparties/`+cafe.ID+`/details" hx-trigger="load"`) {

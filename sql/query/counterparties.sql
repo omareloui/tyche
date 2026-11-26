@@ -8,6 +8,7 @@ INSERT INTO counterparties (
     is_merchant,
     default_category_id,
     rating,
+    price_level,
     return_days,
     note,
     labels
@@ -21,6 +22,7 @@ VALUES (
     sqlc.arg(is_merchant),
     sqlc.arg(default_category_id),
     sqlc.narg(rating),
+    sqlc.narg(price_level),
     sqlc.narg(return_days),
     sqlc.arg(note),
     sqlc.arg(labels)
@@ -57,6 +59,7 @@ SET
     default_category_id = sqlc.arg(default_category_id),
     is_archived = sqlc.arg(is_archived),
     rating = sqlc.narg(rating),
+    price_level = sqlc.narg(price_level),
     return_days = sqlc.narg(return_days),
     note = sqlc.arg(note),
     labels = sqlc.arg(labels)
@@ -77,6 +80,11 @@ WHERE id = sqlc.arg(id);
 -- name: SetCounterpartyRating :exec
 UPDATE counterparties
 SET rating = sqlc.narg(rating)
+WHERE id = sqlc.arg(id);
+
+-- name: SetCounterpartyPriceLevel :exec
+UPDATE counterparties
+SET price_level = sqlc.narg(price_level)
 WHERE id = sqlc.arg(id);
 
 -- name: DeleteCounterparty :exec

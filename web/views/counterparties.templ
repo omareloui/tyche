@@ -3,6 +3,7 @@ package views
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/omareloui/tyche/internal/jwt"
@@ -26,10 +27,12 @@ type CounterpartyFD struct {
 	DefaultCategoryID form.FDInput
 	IsArchived        form.FDInput
 	Rating            form.FDInput
+	// PriceLevel is a merchant's 1 ($) to 4 ($$$$).
+	PriceLevel form.FDInput
 	// ReturnDays is a merchant's usual return window, in days.
 	ReturnDays form.FDInput
 	Note       form.FDInput
-	Labels            form.FDInput
+	Labels     form.FDInput
 	// LabelsInUse are the counterparties' labels, suggested with the
 	// default ones.
 	LabelsInUse []string
@@ -155,6 +158,7 @@ templ counterpartyFormBody(id string, isNew bool, fd *CounterpartyFD, cats []mod
 			}
 			@counterpartyIconField(id, isNew, fd.Icon)
 			@counterpartyRatingField(id, fd.Rating)
+			@counterpartyPriceLevelField(id, fd.PriceLevel)
 			@form.Field("Return window (days)", "return_days", id, icons.RotateCcw("15"), fd.ReturnDays.Error) {
 				@form.Control("text", "return_days", "e.g. 14", id, fd.ReturnDays, templ.Attributes{"inputmode": "numeric", "x-mask": "999"})
 				<p class="mt-1 text-xs text-zinc-500">New purchases here get a return-by day this many days after.</p>
@@ -194,6 +198,44 @@ templ counterpartyRatingField(id string, data form.FDInput) {
 			</div>
 		}
 	</div>
+}
+
+// counterpartyPriceLevelField picks $ to $$$$, clicking the picked one again
+// clears it.
+templ counterpartyPriceLevelField(id string, data form.FDInput) {
+	<div
+		x-data={ fmt.Sprintf("{level: Number($el.dataset.level) || 0, hover: 0, names: %s}", priceLevelNamesJS()) }
+		data-level={ data.Value }
+	>
+		@form.Field("Price level", "price_level", id, nil, data.Error) {
+			<input type="hidden" name="price_level" :value="level || ''" value={ data.Value }/>
+			<div class="flex items-center gap-1" @mouseleave="hover = 0">
+				for i := 1; i <= models.MaxPriceLevel; i++ {
+					<button
+						type="button"
+						@click={ fmt.Sprintf("level = level === %d ? 0 : %d", i, i) }
+						@mouseenter={ fmt.Sprintf("hover = %d", i) }
+						:class={ fmt.Sprintf("(hover || level) >= %d ? 'text-emerald-400' : 'text-zinc-600'", i) }
+						:aria-pressed={ fmt.Sprintf("level === %d", i) }
+						aria-label={ fmt.Sprintf("%s (%s)", models.PriceLevelSigns(i), models.PriceLevelName(i)) }
+						class="grid place-items-center w-9 h-9 rounded-lg text-xl font-semibold cursor-pointer transition-colors hover:bg-zinc-800"
+					>
+						$
+					</button>
+				}
+				<span x-show="hover || level" x-cloak class="ml-2 text-sm text-zinc-400" x-text="names[(hover || level) - 1]"></span>
+			</div>
+		}
+	</div>
+}
+
+// priceLevelNamesJS are the levels' names as a JS array.
+func priceLevelNamesJS() string {
+	names := make([]string, models.MaxPriceLevel)
+	for i := range names {
+		names[i] = fmt.Sprintf("%q", models.PriceLevelName(i+1))
+	}
+	return "[" + strings.Join(names, ", ") + "]"
 }
 
 // counterpartyLocationsField edits the merchant's branches as rows, sent as
@@ -307,27 +349,31 @@ templ counterpartyIconField(id string, isNew bool, data form.FDInput) {
 // when no card is left to match.
 const counterpartiesFilterData = `{
 	q: '',
-	// sort is 'name' or 'rating'; stars is '' (any), 'unrated' or the least
-	// stars. Both are remembered in localStorage.
+	// sort is 'name', 'rating' or 'price'; stars is '' (any), 'unrated' or
+	// the least stars; price is '' (any), 'unset' or a level ('1' to '4').
+	// All are remembered in localStorage.
 	sort: 'name',
 	stars: '',
+	price: '',
 	// labels are the picked label filters (lowercase), a card matching any.
 	labels: [],
 	init() {
 		try {
 			const saved = JSON.parse(localStorage.getItem('counterpartiesView') || '{}')
-			this.sort = saved.sort === 'rating' ? 'rating' : 'name'
+			this.sort = ['rating', 'price'].includes(saved.sort) ? saved.sort : 'name'
 			this.stars = ['', 'unrated', '3', '4', '5'].includes(saved.stars) ? saved.stars : ''
+			this.price = ['', 'unset', '1', '2', '3', '4'].includes(saved.price) ? saved.price : ''
 			// Labels no counterparty has anymore are dropped.
 			const known = [...this.$el.querySelectorAll('[data-labels]')].flatMap(c => c.dataset.labels.split('|'))
 			this.labels = Array.isArray(saved.labels) ? saved.labels.filter(l => known.includes(l)) : []
 		} catch {}
 		this.$watch('sort', () => this.save())
 		this.$watch('stars', () => this.save())
+		this.$watch('price', () => this.save())
 		this.$watch('labels', () => this.save())
 	},
 	save() {
-		try { localStorage.setItem('counterpartiesView', JSON.stringify({sort: this.sort, stars: this.stars, labels: this.labels})) } catch {}
+		try { localStorage.setItem('counterpartiesView', JSON.stringify({sort: this.sort, stars: this.stars, price: this.price, labels: this.labels})) } catch {}
 	},
 	toggleLabel(label) {
 		const l = label.toLowerCase()
@@ -349,9 +395,15 @@ const counterpartiesFilterData = `{
 		if (this.stars === 'unrated') return el.dataset.merchant !== undefined && r === 0
 		return r >= Number(this.stars)
 	},
+	matchesPrice(el) {
+		if (!this.price) return true
+		const p = Number(el.dataset.price) || 0
+		if (this.price === 'unset') return el.dataset.merchant !== undefined && p === 0
+		return p === Number(this.price)
+	},
 	matches(el) {
 		const q = this.q.trim().toLowerCase()
-		return (!q || el.dataset.search.includes(q)) && this.matchesStars(el) && this.matchesLabels(el)
+		return (!q || el.dataset.search.includes(q)) && this.matchesStars(el) && this.matchesPrice(el) && this.matchesLabels(el)
 	},
 	// openCounterpartyDetails opens the card's details on a click on it,
 	// unless on one of its controls or selecting its text, like a
@@ -361,14 +413,17 @@ const counterpartiesFilterData = `{
 		if (getSelection()?.toString()) return
 		htmx.ajax('GET', card.dataset.details, {target: '#drawer', swap: 'innerHTML'})
 	},
-	// order puts the best rated first when sorting by rating, unrated last,
-	// keeping the name order among equals.
+	// order puts the best rated first when sorting by rating, or the cheapest
+	// first when sorting by price, unrated / unset last, keeping the name
+	// order among equals.
 	order(el) {
+		if (this.sort === 'price') return Number(el.dataset.price) || 5
 		return this.sort === 'rating' ? -(Number(el.dataset.rating) || 0) : 0
 	},
 	any(el) {
 		this.q
 		this.stars
+		this.price
 		this.labels
 		return [...el.querySelectorAll('[data-counterparty]')].some(c => this.matches(c))
 	},
@@ -472,6 +527,21 @@ templ counterpartiesEmpty() {
 // counterpartiesRatingFilters are the star filter chips: value and label.
 var counterpartiesRatingFilters = [][2]string{{"", "Any"}, {"3", "3+"}, {"4", "4+"}, {"5", "5"}, {"unrated", "Unrated"}}
 
+// counterpartiesPriceFilters are the price filter chips: value and label.
+func counterpartiesPriceFilters() [][2]string {
+	fs := [][2]string{{"", "Any"}}
+	for i := 1; i <= models.MaxPriceLevel; i++ {
+		fs = append(fs, [2]string{fmt.Sprint(i), models.PriceLevelSigns(i)})
+	}
+	return append(fs, [2]string{"unset", "No price"})
+}
+
+// priceFilterTitle names a price filter chip's level, "" for the others.
+func priceFilterTitle(value string) string {
+	n, _ := strconv.Atoi(value)
+	return models.PriceLevelName(n)
+}
+
 // counterpartiesRatingBar sorts the cards by name or rating and filters them
 // by stars; picking a least number of stars sorts by rating.
 templ counterpartiesRatingBar() {
@@ -497,6 +567,20 @@ templ counterpartiesRatingBar() {
 				</button>
 			}
 		</div>
+		<div role="group" aria-label="Filter by price" class="flex flex-wrap items-center gap-1.5">
+			for _, f := range counterpartiesPriceFilters() {
+				<button
+					type="button"
+					@click={ fmt.Sprintf("price = %q", f[0]) }
+					:aria-pressed={ fmt.Sprintf("price === %q", f[0]) }
+					:class={ fmt.Sprintf("price === %q ? 'bg-zinc-200 text-zinc-900' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'", f[0]) }
+					title={ priceFilterTitle(f[0]) }
+					class="inline-flex items-center h-8 px-3 rounded-full text-sm cursor-pointer transition-colors"
+				>
+					{ f[1] }
+				</button>
+			}
+		</div>
 		<div x-data="{openSort: false}" class="relative ml-auto">
 			<button
 				type="button"
@@ -508,12 +592,13 @@ templ counterpartiesRatingBar() {
 			>
 				@icons.ArrowUpDown("14", &templ.Attributes{"class": "text-zinc-500"})
 				<span class="text-zinc-500">Sort:</span>
-				<span x-text="sort === 'rating' ? 'Rating' : 'Name'">Name</span>
+				<span x-text="({rating: 'Rating', price: 'Price'})[sort] || 'Name'">Name</span>
 				@icons.ChevronDown("14", &templ.Attributes{"class": "text-zinc-500 transition-transform", ":class": "openSort && 'rotate-180'"})
 			</button>
 			@components.EntryMenuAt("openSort", "top-full mt-1 right-0 origin-top-right", []templ.Component{
 				counterpartiesSortItem("name", "Name"),
 				counterpartiesSortItem("rating", "Rating, best first"),
+				counterpartiesSortItem("price", "Price, cheapest first"),
 			})
 		</div>
 	</div>
@@ -597,6 +682,7 @@ templ Counterparty(cp *models.Counterparty) {
 		data-search={ strings.ToLower(cp.Name + " " + strings.Join(cp.Aliases, " ") + " " + strings.Join(cp.Labels, " ") + " " + cp.Note) }
 		data-labels={ strings.ToLower(strings.Join(cp.Labels, "|")) }
 		data-rating={ fmt.Sprint(cp.Rating) }
+		data-price={ fmt.Sprint(cp.PriceLevel) }
 		data-merchant?={ cp.IsMerchant }
 		x-show="matches($el)"
 		:style="{order: order($el)}"
@@ -621,6 +707,9 @@ templ Counterparty(cp *models.Counterparty) {
 					<div class="flex flex-wrap items-center gap-1.5 mt-1">
 						if cp.IsMerchant {
 							<span class="px-2 py-0.5 rounded-full bg-zinc-800 text-xs text-zinc-400">Merchant</span>
+						}
+						if signs := models.PriceLevelSigns(cp.PriceLevel); signs != "" {
+							<span title={ "Price level: " + models.PriceLevelName(cp.PriceLevel) } class="px-2 py-0.5 rounded-full bg-emerald-500/10 text-xs font-semibold text-emerald-400">{ signs }</span>
 						}
 						if n := len(cp.Locations); n > 0 {
 							<span title={ counterpartyLocationLabels(cp) } class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800 text-xs text-zinc-400">
@@ -750,6 +839,51 @@ templ counterpartyStars(cp *models.Counterparty, from, size string) {
 			</button>
 		}
 	</div>
+}
+
+// counterpartyPrice (in the details; the card only shows a chip) sets the
+// merchant's price level like counterpartyStars sets its rating: hovering previews, clicking a sign sets it, clicking the
+// current level clears it. size is the signs' text size class.
+templ counterpartyPrice(cp *models.Counterparty, from, size string) {
+	<div
+		x-data={ fmt.Sprintf("{level: %d, shown: null, hover: 0, get value() { return this.hover || (this.shown ?? this.level) }}", cp.PriceLevel) }
+		@mouseleave="hover = 0"
+		@htmx:after-request="if ($event.detail.successful && shown !== null) level = shown; shown = null"
+		class="flex items-center mt-0.5"
+		role="group"
+		aria-label="Price level"
+		if name := models.PriceLevelName(cp.PriceLevel); name != "" {
+			title={ name }
+		} else {
+			title="No price level"
+		}
+	>
+		for i := 1; i <= models.MaxPriceLevel; i++ {
+			<button
+				type="button"
+				hx-put={ fmt.Sprintf("/counterparties/%s/price-level", cp.ID) }
+				:hx-vals={ fmt.Sprintf(`JSON.stringify({price_level: String(level === %d ? 0 : %d), from: %q})`, i, i, from) }
+				hx-vals={ fmt.Sprintf(`{"price_level": "%d", "from": %q}`, nextRating(cp.PriceLevel, i), from) }
+				:aria-label={ fmt.Sprintf("level === %d ? 'Clear the %s price level' : 'Price level %s'", i, models.PriceLevelSigns(i), models.PriceLevelSigns(i)) }
+				aria-label={ fmt.Sprintf("Price level %s", models.PriceLevelSigns(i)) }
+				:aria-pressed={ fmt.Sprintf("level === %d", i) }
+				@mouseenter={ fmt.Sprintf("hover = %d", i) }
+				@click={ fmt.Sprintf("shown = level === %d ? 0 : %d; hover = 0", i, i) }
+				:class={ fmt.Sprintf("{'text-emerald-400': value >= %d, 'text-zinc-600': value < %d}", i, i) }
+				class={ "grid place-items-center w-4 h-6 rounded font-semibold cursor-pointer transition-colors hover:bg-zinc-800", size, priceSignClass(i <= cp.PriceLevel) }
+			>
+				$
+			</button>
+		}
+	</div>
+}
+
+// priceSignClass is a sign's color before Alpine starts.
+func priceSignClass(on bool) string {
+	if on {
+		return "text-emerald-400"
+	}
+	return "text-zinc-600"
 }
 
 // nextRating is what clicking star i sets: i, or 0 when it's the current one.

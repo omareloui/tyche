@@ -25,6 +25,8 @@ type Counterparty struct {
 	IsArchived bool
 	// Rating is a merchant's stars, 1 to 5, 0 when unrated.
 	Rating int `validate:"min=0,max=5"`
+	// PriceLevel is how pricey a merchant is, 1 ($) to 4 ($$$$), 0 when unset.
+	PriceLevel int `validate:"min=0,max=4"`
 	// ReturnDays is a merchant's usual return window, prefilling its new
 	// purchases' (ReturnUntilFor), 0 when none.
 	ReturnDays int `validate:"min=0,max=365"`
@@ -81,6 +83,28 @@ func MatchLabelCasing(labels, known []string) []string {
 // MaxRating is the most stars a merchant can get.
 const MaxRating = 5
 
+// MaxPriceLevel is the priciest a merchant can be ($$$$).
+const MaxPriceLevel = 4
+
+// priceLevelNames name the price levels, from 1.
+var priceLevelNames = [MaxPriceLevel]string{"Cheap", "Moderate", "Pricey", "Very expensive"}
+
+// PriceLevelSigns is the level as dollar signs, "" when unset.
+func PriceLevelSigns(level int) string {
+	if level < 1 || level > MaxPriceLevel {
+		return ""
+	}
+	return strings.Repeat("$", level)
+}
+
+// PriceLevelName names the level, e.g. Moderate, "" when unset.
+func PriceLevelName(level int) string {
+	if level < 1 || level > MaxPriceLevel {
+		return ""
+	}
+	return priceLevelNames[level-1]
+}
+
 // CounterpartyLocation is a merchant's branch.
 type CounterpartyLocation struct {
 	ID      string
@@ -117,7 +141,7 @@ func (cp *Counterparty) DefaultCategoryFor(kind TxKind) *Category {
 
 // Absorb adds the other counterparty's name and aliases to the aliases,
 // skipping blanks and case-insensitive duplicates, adds its labels and note, and takes
-// its default category and rating if this merchant has none. Locations are
+// its default category, rating and price level if this merchant has none. Locations are
 // moved separately.
 func (cp *Counterparty) Absorb(other *Counterparty) {
 	seen := map[string]bool{strings.ToLower(strings.TrimSpace(cp.Name)): true}
@@ -152,6 +176,9 @@ func (cp *Counterparty) Absorb(other *Counterparty) {
 	}
 	if cp.IsMerchant && cp.Rating == 0 {
 		cp.Rating = other.Rating
+	}
+	if cp.IsMerchant && cp.PriceLevel == 0 {
+		cp.PriceLevel = other.PriceLevel
 	}
 	if cp.IsMerchant && cp.ReturnDays == 0 {
 		cp.ReturnDays = other.ReturnDays
