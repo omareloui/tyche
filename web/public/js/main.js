@@ -7,6 +7,28 @@ function entryMenuMove(menu, dir) {
   items[(i + dir + items.length) % items.length].focus();
 }
 
+// entryMenuFit moves an opened components.EntryMenuAt up when it runs past
+// the screen's bottom or the phones' bottom nav: above its anchor (its
+// positioned ancestor) when that's a small trigger and it fits there, else
+// just enough to fit.
+function entryMenuFit(menu) {
+  menu.style.translate = "";
+  const gap = 8;
+  const nav = document.querySelector("[data-bottom-nav]");
+  const navTop = nav?.getClientRects().length ? nav.getBoundingClientRect().top : window.innerHeight;
+  const limit = Math.min(window.innerHeight, navTop) - gap;
+  const rect = menu.getBoundingClientRect();
+  const height = menu.offsetHeight;
+  if (rect.top + height <= limit) return;
+
+  const header = document.querySelector("header");
+  const minTop = Math.max(gap, header ? header.getBoundingClientRect().bottom + gap : gap);
+  const anchor = menu.offsetParent?.getBoundingClientRect();
+  let top = limit - height;
+  if (anchor && anchor.height <= 64 && anchor.top - height - 4 >= minTop) top = anchor.top - height - 4;
+  menu.style.translate = `0 ${Math.max(top, minTop) - rect.top}px`;
+}
+
 // askConfirm asks question through components.ConfirmDialog instead of the
 // browser's confirm(), resolving to whether it got confirmed. The question
 // is split at its first "? ", the rest shown as details. label names the

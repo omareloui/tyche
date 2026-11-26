@@ -99,13 +99,15 @@ templ EntryMenuSeparator() {
 
 // EntryMenuAt is an entry's actions menu, placed by position (absolute offsets
 // + transform origin) in its closest positioned ancestor, which should get
-// z-30 while it's open so later entries don't cover it. It takes the focus when
-// opened, arrow keys move it, Escape closes the menu.
+// z-30 while it's open so later entries don't cover it. Opened where it doesn't
+// fit above the screen's bottom (or the phones' bottom nav), it moves up
+// (entryMenuFit, main.js). It takes the focus when opened, arrow keys move it,
+// Escape closes the menu.
 templ EntryMenuAt(showKey string, position string, entries []templ.Component) {
 	<div
 		x-cloak
 		x-show={ showKey }
-		x-effect={ "if (" + showKey + ") $nextTick(() => $el.querySelector('[role=menuitem]')?.focus())" }
+		x-effect={ "if (" + showKey + ") $nextTick(() => { entryMenuFit($el); $el.querySelector('[role=menuitem]')?.focus({ preventScroll: true }) })" }
 		@click.away={ showKey + " = false" }
 		@click={ "if ($event.target.closest('[data-opens-drawer]')) " + showKey + " = false" }
 		@keydown.escape.window={ showKey + " = false" }
