@@ -210,6 +210,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("POST /tags", handle(h.CreateTag))
 	mux.Handle("GET /tags/list", handle(h.TagsList))
 	mux.Handle("GET /tags/{id}/details", handle(h.TagDetails))
+	mux.Handle("GET /tags/{id}/days", handle(h.TagDays))
 	mux.Handle("GET /tags/{id}/edit", handle(h.GetEditTag))
 	mux.Handle("PUT /tags/{id}", handle(h.EditTag, middleware.HTMXOnly))
 	mux.Handle("PUT /tags/{id}/archive", handle(h.ArchiveTag, middleware.HTMXOnly))

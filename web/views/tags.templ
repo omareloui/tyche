@@ -234,7 +234,7 @@ templ tagBudgetBar(s *models.TagSummary) {
 
 // TagDetails is a tag in full, in a drawer: what it spent per category, day
 // and currency, and its actions.
-templ TagDetails(s *models.TagSummary) {
+templ TagDetails(s *models.TagSummary, m *models.TagMonth) {
 	{{ t := &s.Tag }}
 	{{ slot := "#" + components.DrawerSlot }}
 	@components.Drawer(components.DrawerProps{Label: t.Name + " details", URLParam: TagDetailsParam, URLValue: t.ID}) {
@@ -338,30 +338,35 @@ templ TagDetails(s *models.TagSummary) {
 					@txDetailsSection("By category") {
 						<ul class="grid gap-2">
 							for _, c := range s.ByCategory {
-								@tagCategoryRow(s, c)
+								@tagCategoryRow(s, c, s.ByCategory[0].Amount, s.Spent, TagTxsURL(s.Tag.ID))
 							}
 						</ul>
 					}
 				}
 				if len(s.ByDay) > 0 {
-					@txDetailsSection("By day") {
-						@tagDaysChart(s)
-					}
+					@TagDaysSection(s, m)
 				}
 			</div>
 		</div>
 	}
 }
 
-templ tagCategoryRow(s *models.TagSummary, c models.TagCategorySpend) {
-	{{ name, hex, catID := "Uncategorized", models.CategoryColorToHex("gray"), models.TxFilterNone }}
-	if c.Category != nil {
-		{{ name, hex, catID = c.Category.Name, models.CategoryColorToHex(c.Category.Color), c.Category.ID }}
+// tagCatLook is a category's (nil = uncategorized) name, color and key (its
+// id, models.TxFilterNone when uncategorized).
+func tagCatLook(c *models.Category) (string, string, string) {
+	if c == nil {
+		return "Uncategorized", models.CategoryColorToHex("gray"), models.TxFilterNone
 	}
-	{{ top := s.ByCategory[0].Amount }}
+	return c.Name, models.CategoryColorToHex(c.Color), c.ID
+}
+
+// tagCategoryRow is a category's bar against the top one's, its amount and
+// share of whole, linking its transactions (txsURL narrowed to it).
+templ tagCategoryRow(s *models.TagSummary, c models.TagCategorySpend, top, whole float64, txsURL string) {
+	{{ name, hex, catID := tagCatLook(c.Category) }}
 	<li class="grid grid-cols-[minmax(0,8rem)_1fr_auto] items-center gap-3 text-sm">
 		<a
-			href={ templ.SafeURL(fmt.Sprintf("%s&%s=%s", TagTxsURL(s.Tag.ID), models.TxFilterCategory, catID)) }
+			href={ templ.SafeURL(fmt.Sprintf("%s&%s=%s", txsURL, models.TxFilterCategory, catID)) }
 			class="flex items-center gap-2 min-w-0 hover:underline"
 		>
 			<span class="size-2.5 shrink-0 rounded-full" style={ "background-color:" + hex }></span>
@@ -374,35 +379,195 @@ templ tagCategoryRow(s *models.TagSummary, c models.TagCategorySpend) {
 		</div>
 		<span class="text-right tabular-nums">
 			<span class="sensitive">{ s.Currency.Format(c.Amount) }</span>
-			<span class="inline-block w-9 text-zinc-500">{ fmt.Sprintf("%.0f%%", pctOf(c.Amount, s.Spent)) }</span>
+			<span class="inline-block w-9 text-zinc-500">{ fmt.Sprintf("%.0f%%", pctOf(c.Amount, whole)) }</span>
 		</span>
 	</li>
 }
 
-// tagDaysChart is a bar per day the tag spent on, hovered (or scrubbed on
-// touch screens) for its amount.
-templ tagDaysChart(s *models.TagSummary) {
-	{{ top := s.MaxDay() }}
-	<div class="grid gap-1.5">
-		<div x-data="chartScrub" x-bind="scrub" class="flex items-end gap-0.5 h-28">
-			for _, d := range s.ByDay {
-				<div class="group relative flex-1 h-full flex items-end min-w-0">
-					<div
-						class="w-full rounded-t bg-(--accent)/70 group-hover:bg-(--accent) group-[.is-active]:bg-(--accent)"
-						style={ fmt.Sprintf("height: %.1f%%", tagBarHeight(d.Amount, top)) }
-					></div>
-					<div class="hidden group-hover:block group-[.is-active]:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-10 whitespace-nowrap rounded-lg bg-zinc-800 px-2 py-1 text-xs shadow">
-						{ d.Day.Format("Mon, Jan 2") } · <span class="sensitive">{ s.Currency.Format(d.Amount) }</span>
-					</div>
+func tagDaysID(id string) string { return "tag-days-" + id }
+
+func tagDaysURL(id, month string) string {
+	return fmt.Sprintf("/tags/%s/days?month=%s", id, month)
+}
+
+// tagMonthLabel names a user month by the month it's named after, with its
+// year only when not this year's (e.g. "Nov", "Dec 2025").
+func tagMonthLabel(p models.Period, today time.Time) string {
+	if p.Month.Year() == today.Year() {
+		return p.Month.Format("Jan")
+	}
+	return p.Month.Format("Jan 2006")
+}
+
+func tagMonthOptions(m *models.TagMonth, today time.Time) []form.ComboOption {
+	opts := make([]form.ComboOption, len(m.Months))
+	for i, o := range m.Months {
+		opts[i] = form.ComboOption{Value: o.Period.Key(), Label: tagMonthLabel(o.Period, today)}
+	}
+	return opts
+}
+
+// tagRangeTxsURL lists the tag's transactions of r's days.
+func tagRangeTxsURL(id string, r *models.TagRange) string {
+	return fmt.Sprintf("%s&%s=%s&%s=%s", TagTxsURL(id), models.TxFilterFrom, r.From.Format(time.DateOnly), models.TxFilterTo, r.To.Format(time.DateOnly))
+}
+
+// TagDaysSection is the details' day chart of one of the user's months
+// (picked by its chip and arrows), each day's bar split by category, and the
+// breakdown of the days picked on it (dragging across bars, or tapping two),
+// else of the month.
+templ TagDaysSection(s *models.TagSummary, m *models.TagMonth) {
+	{{ id := tagDaysID(s.Tag.ID) }}
+	{{ url := fmt.Sprintf("/tags/%s/days", s.Tag.ID) }}
+	<section id={ id } class="grid grid-cols-1 gap-3" hx-target={ "#" + id } hx-swap="outerHTML">
+		<div class="flex items-center justify-between gap-2">
+			<h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500">By day</h3>
+			<form hx-get={ url } hx-trigger="change" class="flex items-center gap-1 min-w-0">
+				@tagMonthNav(s.Tag.ID, m.Prev, "Previous month", "M3.828 7l4.95 4.95-1.414 1.414L1 7 7.364.636 8.778 2.05z")
+				@form.Combobox(form.ComboboxProps{
+					Name: "month", ID: id + "-month", Label: "Month", Options: tagMonthOptions(m, tzctx.Today(ctx)),
+					Data: form.FDInput{Value: m.Period.Key()}, Chip: true,
+				})
+				@tagMonthNav(s.Tag.ID, m.Next, "Next month", "M6.172 7L1.222 2.05 2.636.636 9 7l-6.364 6.364-1.414-1.414z")
+			</form>
+		</div>
+		@tagDaysChart(s, m)
+		@tagDaysBreakdown(s, m)
+	</section>
+}
+
+templ tagMonthNav(id, month, label, path string) {
+	<button
+		type="button"
+		aria-label={ label }
+		title={ label }
+		class="p-1.5 rounded-full enabled:cursor-pointer enabled:hover:bg-zinc-700 disabled:opacity-30"
+		if month == "" {
+			disabled
+		} else {
+			hx-get={ tagDaysURL(id, month) }
+		}
+	>
+		<svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor" aria-hidden="true">
+			<path d={ path }></path>
+		</svg>
+	</button>
+}
+
+// tagDaysChart is a bar per day of the month, stacked by category; hovered
+// (or scrubbed on touch screens) it tells the day per category. Its days are
+// picked by the tagDaysChart Alpine component (main.js).
+templ tagDaysChart(s *models.TagSummary, m *models.TagMonth) {
+	{{ n := len(m.Days) }}
+	<div
+		x-data="tagDaysChart"
+		data-url={ tagDaysURL(s.Tag.ID, m.Period.Key()) }
+		data-target={ "#" + tagDaysID(s.Tag.ID) }
+		data-has-selection?={ m.Selection != nil }
+		class="group/chart grid gap-1.5 select-none"
+	>
+		<div x-ref="bars" x-bind="bars" class="flex items-end gap-0.5 h-32 touch-pan-y cursor-crosshair">
+			for i, d := range m.Days {
+				<div
+					data-day={ d.Day.Format(time.DateOnly) }
+					data-selected?={ m.Selected(d.Day) }
+					class="group relative flex-1 h-full flex flex-col justify-end min-w-0 rounded-t transition-opacity group-data-has-selection/chart:opacity-35 data-selected:opacity-100! hover:bg-zinc-800/40 [&.is-active]:bg-zinc-800/40"
+				>
+					if d.Amount > 0 {
+						<div class="w-full flex flex-col-reverse overflow-hidden rounded-t" style={ fmt.Sprintf("height: %.1f%%", tagBarHeight(d.Amount, m.Max)) }>
+							for _, c := range d.ByCategory {
+								{{ _, hex, key := tagCatLook(c.Category) }}
+								<div data-cat={ key } class="w-full shrink-0" style={ fmt.Sprintf("height: %.2f%%; background-color: %s", pctOf(c.Amount, d.Amount), hex) }></div>
+							}
+						</div>
+					}
+					@tagDayTooltip(s, d, i, n)
 				</div>
 			}
 		</div>
 		<div class="flex justify-between text-xs text-zinc-500">
-			<span>{ s.ByDay[0].Day.Format("Jan 2") }</span>
-			if len(s.ByDay) > 1 {
-				<span>{ s.ByDay[len(s.ByDay)-1].Day.Format("Jan 2") }</span>
-			}
+			<span>{ m.Period.From.Format("Jan 2") }</span>
+			<span>{ m.Period.From.AddDate(0, 0, n/2).Format("Jan 2") }</span>
+			<span>{ m.Period.Last().Format("Jan 2") }</span>
 		</div>
+	</div>
+}
+
+// tagDayTooltip is a day's total and categories, the one under the pointer
+// highlighted; kept inside the chart at its edges.
+templ tagDayTooltip(s *models.TagSummary, d models.TagDaySpend, i, n int) {
+	{{ pos := "left-1/2 -translate-x-1/2" }}
+	if i < n/4 {
+		{{ pos = "left-0" }}
+	} else if i >= n-n/4 {
+		{{ pos = "right-0" }}
+	}
+	<div class={ "glass-tooltip hidden group-hover:block group-[.is-active]:block absolute bottom-full mb-1 z-10 min-w-40 text-xs pointer-events-none", pos }>
+		<p class="flex justify-between gap-4 font-medium">
+			<span>{ d.Day.Format("Mon, Jan 2") }</span>
+			if d.Amount != 0 {
+				<span class="sensitive tabular-nums">{ s.Currency.Format(d.Amount) }</span>
+			}
+		</p>
+		if len(d.ByCategory) == 0 {
+			<p class="text-zinc-400">Nothing spent</p>
+		} else {
+			<ul class="mt-1 grid gap-0.5 text-zinc-400">
+				for _, c := range d.ByCategory {
+					{{ name, hex, key := tagCatLook(c.Category) }}
+					<li class="flex items-center gap-1.5" :class={ fmt.Sprintf("hoverCat === '%s' && 'text-zinc-100 font-semibold'", key) }>
+						<span class="size-2 shrink-0 rounded-full" style={ "background-color:" + hex }></span>
+						<span class="truncate">{ name }</span>
+						<span class="ml-auto pl-3 tabular-nums"><span class="sensitive">{ s.Currency.Format(c.Amount) }</span> · { fmt.Sprintf("%.0f%%", pctOf(c.Amount, d.Amount)) }</span>
+					</li>
+				}
+			</ul>
+		}
+	</div>
+}
+
+// tagDaysBreakdown is what the picked days (else the month) spent per
+// category.
+templ tagDaysBreakdown(s *models.TagSummary, m *models.TagMonth) {
+	{{ r := m.Shown() }}
+	<div class="grid gap-2 rounded-xl bg-zinc-800/30 p-3">
+		<div class="flex items-start justify-between gap-3">
+			<div class="min-w-0">
+				<p class="text-sm text-zinc-400">
+					if m.Selection != nil {
+						if r.Days() == 1 {
+							{ r.From.Format("Mon, Jan 2") }
+						} else {
+							{ r.From.Format("Jan 2") } – { r.To.Format("Jan 2") } · { fmt.Sprint(r.Days()) } days
+						}
+					} else {
+						{ m.Period.RangeLabel() }
+					}
+				</p>
+				<p class="sensitive text-lg font-semibold tabular-nums">{ s.Currency.Format(r.Amount) }</p>
+			</div>
+			<div class="flex shrink-0 gap-2">
+				if r.Amount != 0 {
+					<a href={ templ.SafeURL(tagRangeTxsURL(s.Tag.ID, r)) } class="txd-action">
+						@icons.Receipt("14")
+						Transactions
+					</a>
+				}
+				if m.Selection != nil {
+					<button type="button" hx-get={ tagDaysURL(s.Tag.ID, m.Period.Key()) } class="txd-action">Clear</button>
+				}
+			</div>
+		</div>
+		if len(r.ByCategory) > 0 {
+			<ul class="grid gap-2">
+				for _, c := range r.ByCategory {
+					@tagCategoryRow(s, c, r.ByCategory[0].Amount, r.Amount, tagRangeTxsURL(s.Tag.ID, r))
+				}
+			</ul>
+		}
+		if m.Selection == nil {
+			<p class="text-xs text-zinc-500">Drag across the bars, or tap two, to see a range of days.</p>
+		}
 	</div>
 }
 

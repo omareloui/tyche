@@ -210,6 +210,14 @@ func TestTags(t *testing.T) {
 	if res, body := do("GET", "/tags/"+trip.ID+"/details", nil); res.StatusCode != 200 || !strings.Contains(body, "By category") {
 		t.Errorf("GET details = %d", res.StatusCode)
 	}
+	month := today.Format("2006-01")
+	if res, body := do("GET", "/tags/"+trip.ID+"/days?month="+month, nil); res.StatusCode != 200 || !strings.Contains(body, "tag-days-"+trip.ID) || !strings.Contains(body, "Drag across the bars") {
+		t.Errorf("GET days = %d", res.StatusCode)
+	}
+	day := today.Format(time.DateOnly)
+	if res, body := do("GET", "/tags/"+trip.ID+"/days?month="+month+"&from="+day+"&to="+day, nil); res.StatusCode != 200 || !strings.Contains(body, "Clear") || !strings.Contains(body, "from="+day) {
+		t.Errorf("GET days with a range = %d", res.StatusCode)
+	}
 	if res, body := do("POST", "/tags", url.Values{"name": {"Wedding"}, "color": {"pink"}, "amount": {"5000"}, "currency_id": {egp.ID}}); res.StatusCode != 200 || strings.Contains(body, "role=\"alert\"") {
 		t.Errorf("POST /tags = %d", res.StatusCode)
 	}

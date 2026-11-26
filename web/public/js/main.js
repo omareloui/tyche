@@ -595,6 +595,146 @@ document.addEventListener("alpine:init", () => {
   }));
 });
 
+// tagDaysChart picks a range of days on a tag's day chart (views.tagDaysChart)
+// and fetches its breakdown: dragging across the bars (mouse or a horizontal
+// finger), clicking one (a mouse), shift-clicking to extend the picked days,
+// or tapping two bars one after the other. On touch screens the bar under the
+// finger shows its tooltip like chartScrub; hoverCat is the category under the
+// pointer, highlighted in the tooltip.
+document.addEventListener("alpine:init", () => {
+  Alpine.data("tagDaysChart", () => ({
+    anchor: -1,
+    end: -1,
+    dragging: false,
+    moved: false,
+    tapAnchor: -1,
+    hoverCat: "",
+    timer: null,
+
+    bars: {
+      "@pointerdown"(e) {
+        this.down(e);
+      },
+      "@pointermove"(e) {
+        this.move(e);
+      },
+      "@pointerup"(e) {
+        this.up(e);
+      },
+      "@pointercancel"() {
+        this.cancel();
+      },
+      "@pointerleave"(e) {
+        if (e.pointerType === "mouse" && !this.dragging) this.hoverCat = "";
+      },
+    },
+
+    cols() {
+      return [...this.$refs.bars.children];
+    },
+
+    colAt(e) {
+      const n = this.cols().length;
+      const r = this.$refs.bars.getBoundingClientRect();
+      return Math.min(Math.max(Math.floor(((e.clientX - r.left) / r.width) * n), 0), n - 1);
+    },
+
+    catAt(e) {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      this.hoverCat = el?.closest("[data-cat]")?.dataset.cat ?? "";
+    },
+
+    selected() {
+      const cols = this.cols();
+      const first = cols.findIndex((c) => c.hasAttribute("data-selected"));
+      if (first < 0) return null;
+      return [first, cols.findLastIndex((c) => c.hasAttribute("data-selected"))];
+    },
+
+    down(e) {
+      if (e.button > 0) return;
+      const i = this.colAt(e);
+      this.dragging = true;
+      this.moved = false;
+      this.anchor = i;
+      // Shift extends the picked days from their far end.
+      const sel = e.shiftKey && this.selected();
+      if (sel) this.anchor = Math.abs(i - sel[0]) > Math.abs(i - sel[1]) ? sel[0] : sel[1];
+      this.end = i;
+      this.$refs.bars.setPointerCapture?.(e.pointerId);
+      if (e.pointerType !== "mouse") {
+        clearTimeout(this.timer);
+        this.show(i);
+      }
+      this.catAt(e);
+    },
+
+    move(e) {
+      this.catAt(e);
+      if (!this.dragging) return;
+      const i = this.colAt(e);
+      if (e.pointerType !== "mouse") this.show(i);
+      if (i === this.end) return;
+      this.end = i;
+      this.moved = true;
+      this.paint(this.anchor, this.end);
+    },
+
+    up(e) {
+      if (!this.dragging) return;
+      this.dragging = false;
+      const touch = e.pointerType !== "mouse";
+      if (touch) this.release();
+      if (touch && !this.moved) {
+        // A tap shows its day; tapping another bar next picks the days
+        // between, tapping the same one again picks it alone.
+        const i = this.anchor;
+        if (this.tapAnchor >= 0) {
+          const a = this.tapAnchor;
+          this.tapAnchor = -1;
+          this.pick(a, i);
+        } else {
+          this.tapAnchor = i;
+          this.paint(i, i);
+        }
+        return;
+      }
+      this.tapAnchor = -1;
+      this.pick(this.anchor, this.end);
+    },
+
+    cancel() {
+      this.dragging = false;
+      this.release();
+    },
+
+    release() {
+      clearTimeout(this.timer);
+      this.timer = setTimeout(() => this.show(-1), 1500);
+    },
+
+    show(i) {
+      this.cols().forEach((c, k) => c.classList.toggle("is-active", k === i));
+    },
+
+    paint(a, b) {
+      const [lo, hi] = [Math.min(a, b), Math.max(a, b)];
+      this.$root.toggleAttribute("data-has-selection", true);
+      this.cols().forEach((c, k) => c.toggleAttribute("data-selected", k >= lo && k <= hi));
+    },
+
+    pick(a, b) {
+      const cols = this.cols();
+      const [lo, hi] = [Math.min(a, b), Math.max(a, b)];
+      this.paint(lo, hi);
+      const from = cols[lo].dataset.day;
+      const to = cols[hi].dataset.day;
+      const url = `${this.$root.dataset.url}&from=${from}&to=${to}`;
+      htmx.ajax("GET", url, { target: this.$root.dataset.target, swap: "outerHTML" });
+    },
+  }));
+});
+
 // balanceFix backs a balance typed as the bank shows it (views.balanceStep):
 // the amount input's mask (signed, prefixed with the symbol, the metal
 // unit's digits) and its difference with the current one. cur is in troy

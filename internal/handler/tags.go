@@ -115,7 +115,33 @@ func (h Handler) tagDetails(ctx context.Context, t *models.Tag) (templ.Component
 	if err != nil {
 		return nil, err
 	}
-	return views.TagDetails(sums[t.ID]), nil
+	s := sums[t.ID]
+	m := s.Month(s.DefaultMonth(getClaims(ctx).MonthStart, h.userToday(ctx)), time.Time{}, time.Time{})
+	return views.TagDetails(s, m), nil
+}
+
+// TagDays is the details' day chart of one of the user's months (?month=,
+// else the default one), with the days ?from= to ?to= picked.
+func (h Handler) TagDays(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	t, err := h.tagOf(r)
+	if err != nil {
+		return nil, err
+	}
+	ctx := r.Context()
+	sums, err := h.tagSummaries(ctx, []models.Tag{*t}, t.ID)
+	if err != nil {
+		return nil, err
+	}
+	s := sums[t.ID]
+	start := getClaims(ctx).MonthStart
+	q := r.URL.Query()
+	p := s.DefaultMonth(start, h.userToday(ctx))
+	if month, err := time.Parse("2006-01", q.Get("month")); err == nil {
+		p = start.For(month)
+	}
+	from, _ := time.Parse(time.DateOnly, q.Get("from"))
+	to, _ := time.Parse(time.DateOnly, q.Get("to"))
+	return views.TagDaysSection(s, s.Month(p, from, to)), nil
 }
 
 // tagAnswer answers a tag's action from its details with them again, in the
