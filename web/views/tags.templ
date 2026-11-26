@@ -464,6 +464,8 @@ templ tagDaysChart(s *models.TagSummary, m *models.TagMonth) {
 		data-url={ tagDaysURL(s.Tag.ID, m.Period.Key()) }
 		data-target={ "#" + tagDaysID(s.Tag.ID) }
 		data-has-selection?={ m.Selection != nil }
+		data-picked?={ m.Selection != nil }
+		@click.outside="away($event)"
 		class="group/chart grid gap-1.5 select-none"
 	>
 		<div x-ref="bars" x-bind="bars" class="flex items-end gap-0.5 h-32 touch-pan-y cursor-crosshair">
@@ -494,7 +496,8 @@ templ tagDaysChart(s *models.TagSummary, m *models.TagMonth) {
 }
 
 // tagDayTooltip is a day's total and categories, the one under the pointer
-// highlighted; kept inside the chart at its edges.
+// highlighted; over the chart's top, inside it (above it, a drawer scrolled
+// to the chart clipped it), and kept inside at its edges.
 templ tagDayTooltip(s *models.TagSummary, d models.TagDaySpend, i, n int) {
 	{{ pos := "left-1/2 -translate-x-1/2" }}
 	if i < n/4 {
@@ -502,7 +505,7 @@ templ tagDayTooltip(s *models.TagSummary, d models.TagDaySpend, i, n int) {
 	} else if i >= n-n/4 {
 		{{ pos = "right-0" }}
 	}
-	<div class={ "glass-tooltip hidden group-hover:block group-[.is-active]:block absolute bottom-full mb-1 z-10 min-w-40 text-xs pointer-events-none", pos }>
+	<div class={ "glass-tooltip hidden group-hover:block group-[.is-active]:block absolute top-0 z-10 min-w-40 text-xs pointer-events-none", pos }>
 		<p class="flex justify-between gap-4 font-medium">
 			<span>{ d.Day.Format("Mon, Jan 2") }</span>
 			if d.Amount != 0 {

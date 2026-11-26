@@ -600,7 +600,8 @@ document.addEventListener("alpine:init", () => {
 // finger), clicking one (a mouse), shift-clicking to extend the picked days,
 // or tapping two bars one after the other. On touch screens the bar under the
 // finger shows its tooltip like chartScrub; hoverCat is the category under the
-// pointer, highlighted in the tooltip.
+// pointer, highlighted in the tooltip. Clicking away (elsewhere in the
+// drawer, its breakdown aside) drops the picked days.
 document.addEventListener("alpine:init", () => {
   Alpine.data("tagDaysChart", () => ({
     anchor: -1,
@@ -661,7 +662,9 @@ document.addEventListener("alpine:init", () => {
       const sel = e.shiftKey && this.selected();
       if (sel) this.anchor = Math.abs(i - sel[0]) > Math.abs(i - sel[1]) ? sel[0] : sel[1];
       this.end = i;
-      this.$refs.bars.setPointerCapture?.(e.pointerId);
+      try {
+        this.$refs.bars.setPointerCapture(e.pointerId);
+      } catch {}
       if (e.pointerType !== "mouse") {
         clearTimeout(this.timer);
         this.show(i);
@@ -721,6 +724,19 @@ document.addEventListener("alpine:init", () => {
       const [lo, hi] = [Math.min(a, b), Math.max(a, b)];
       this.$root.toggleAttribute("data-has-selection", true);
       this.cols().forEach((c, k) => c.toggleAttribute("data-selected", k >= lo && k <= hi));
+    },
+
+    away(e) {
+      // Not the section's own controls (the breakdown, the month), nor a
+      // click closing the drawer.
+      if (e.target.closest(this.$root.dataset.target) || !e.target.closest(".drawer-sheet")) return;
+      this.tapAnchor = -1;
+      if (this.$root.hasAttribute("data-picked")) {
+        htmx.ajax("GET", this.$root.dataset.url, { target: this.$root.dataset.target, swap: "outerHTML" });
+        return;
+      }
+      this.$root.removeAttribute("data-has-selection");
+      this.cols().forEach((c) => c.removeAttribute("data-selected"));
     },
 
     pick(a, b) {
