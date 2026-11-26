@@ -203,6 +203,23 @@ input[type="number"] {
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 15%, transparent);
 }
 
+/* A row of filter chips scrolling sideways instead of wrapping, without a
+   scrollbar, padded so the chips' rings aren't clipped, its end faded (the
+   last chip clear of it once scrolled to). */
+.filter-scroll {
+  @apply min-w-0 overflow-x-auto overscroll-x-contain py-1 -my-1 pl-1 -ml-1 pr-5;
+  scrollbar-width: none;
+  mask-image: linear-gradient(to right, #000 calc(100% - 1rem), transparent);
+}
+
+.filter-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.filter-scroll > * {
+  flex-shrink: 0;
+}
+
 /* The list dims while it loads for the search / filters (transactions.js). */
 #tx-list {
   transition: opacity 150ms;

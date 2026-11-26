@@ -355,14 +355,20 @@ const counterpartiesFilterData = `{
 	sort: 'name',
 	stars: '',
 	price: '',
-	// labels are the picked label filters (lowercase), a card matching any.
+	// kind is '' (any), 'merchant' or 'other' (people & others).
+	kind: '',
+	// labels are the picked label filters (lowercase), a card matching any;
+	// unlabeled matches the cards without a label too.
 	labels: [],
+	unlabeled: false,
 	init() {
 		try {
 			const saved = JSON.parse(localStorage.getItem('counterpartiesView') || '{}')
 			this.sort = ['rating', 'price'].includes(saved.sort) ? saved.sort : 'name'
 			this.stars = ['', 'unrated', '3', '4', '5'].includes(saved.stars) ? saved.stars : ''
 			this.price = ['', 'unset', '1', '2', '3', '4'].includes(saved.price) ? saved.price : ''
+			this.kind = ['merchant', 'other'].includes(saved.kind) ? saved.kind : ''
+			this.unlabeled = saved.unlabeled === true
 			// Labels no counterparty has anymore are dropped.
 			const known = [...this.$el.querySelectorAll('[data-labels]')].flatMap(c => c.dataset.labels.split('|'))
 			this.labels = Array.isArray(saved.labels) ? saved.labels.filter(l => known.includes(l)) : []
@@ -371,9 +377,11 @@ const counterpartiesFilterData = `{
 		this.$watch('stars', () => this.save())
 		this.$watch('price', () => this.save())
 		this.$watch('labels', () => this.save())
+		this.$watch('kind', () => this.save())
+		this.$watch('unlabeled', () => this.save())
 	},
 	save() {
-		try { localStorage.setItem('counterpartiesView', JSON.stringify({sort: this.sort, stars: this.stars, price: this.price, labels: this.labels})) } catch {}
+		try { localStorage.setItem('counterpartiesView', JSON.stringify({sort: this.sort, stars: this.stars, price: this.price, labels: this.labels, kind: this.kind, unlabeled: this.unlabeled})) } catch {}
 	},
 	toggleLabel(label) {
 		const l = label.toLowerCase()
@@ -385,9 +393,14 @@ const counterpartiesFilterData = `{
 		return this.labels.filter(l => !listed.includes(l))
 	},
 	matchesLabels(el) {
-		if (!this.labels.length) return true
+		if (!this.labels.length && !this.unlabeled) return true
 		const own = el.dataset.labels ? el.dataset.labels.split('|') : []
+		if (!own.length) return this.unlabeled
 		return this.labels.some(l => own.includes(l))
+	},
+	matchesKind(el) {
+		if (!this.kind) return true
+		return (el.dataset.merchant !== undefined) === (this.kind === 'merchant')
 	},
 	matchesStars(el) {
 		if (!this.stars) return true
@@ -403,7 +416,7 @@ const counterpartiesFilterData = `{
 	},
 	matches(el) {
 		const q = this.q.trim().toLowerCase()
-		return (!q || el.dataset.search.includes(q)) && this.matchesStars(el) && this.matchesPrice(el) && this.matchesLabels(el)
+		return (!q || el.dataset.search.includes(q)) && this.matchesStars(el) && this.matchesPrice(el) && this.matchesLabels(el) && this.matchesKind(el)
 	},
 	// openCounterpartyDetails opens the card's details on a click on it,
 	// unless on one of its controls or selecting its text, like a
@@ -425,6 +438,8 @@ const counterpartiesFilterData = `{
 		this.stars
 		this.price
 		this.labels
+		this.unlabeled
+		this.kind
 		return [...el.querySelectorAll('[data-counterparty]')].some(c => this.matches(c))
 	},
 }`
@@ -434,13 +449,13 @@ templ counterpartiesList(counterparties []models.Counterparty) {
 		id="counterparties"
 		x-data={ counterpartiesFilterData }
 		@keydown.slash.window="if (!openCreateForm && !$event.target.closest('input, textarea, select, [contenteditable]')) { $event.preventDefault(); $dispatch('search-open') }"
-		class="grid gap-6"
+		class="grid grid-cols-[minmax(0,1fr)] gap-6"
 	>
 		if len(counterparties) > 0 {
 			if slices.ContainsFunc(counterparties, func(cp models.Counterparty) bool { return cp.IsMerchant }) {
 				@counterpartiesSummaryLazy()
 			}
-			<div class="grid gap-3">
+			<div class="grid grid-cols-[minmax(0,1fr)] gap-3">
 				if slices.ContainsFunc(counterparties, func(cp models.Counterparty) bool { return cp.IsMerchant }) {
 					@counterpartiesRatingBar()
 				} else {
@@ -453,7 +468,7 @@ templ counterpartiesList(counterparties []models.Counterparty) {
 		@counterpartiesSection(counterpartiesOthers, "People & others", icons.Users("16"), counterparties)
 		<details
 			class="group hidden has-[[data-counterparty]]:block"
-			x-effect="if ((q.trim() || stars || labels.length) && any($el)) $el.open = true"
+			x-effect="if ((q.trim() || stars || price || kind || labels.length || unlabeled) && any($el)) $el.open = true"
 		>
 			<summary class="flex items-center gap-2 mb-3 list-none cursor-pointer select-none text-zinc-500 hover:text-zinc-300 [&::-webkit-details-marker]:hidden">
 				@icons.Archive("16")
@@ -545,43 +560,60 @@ func priceFilterTitle(value string) string {
 // counterpartiesRatingBar sorts the cards by name or rating and filters them
 // by stars; picking a least number of stars sorts by rating.
 templ counterpartiesRatingBar() {
-	<div class="flex flex-wrap items-center gap-2">
-		@counterpartiesSearch()
-		<div role="group" aria-label="Filter by rating" class="flex flex-wrap items-center gap-1.5">
-			for _, f := range counterpartiesRatingFilters {
-				<button
-					type="button"
-					if f[0] != "" && f[0] != "unrated" {
-						@click={ fmt.Sprintf("stars = %q; sort = 'rating'", f[0]) }
-					} else {
-						@click={ fmt.Sprintf("stars = %q", f[0]) }
-					}
-					:aria-pressed={ fmt.Sprintf("stars === %q", f[0]) }
-					:class={ fmt.Sprintf("stars === %q ? 'bg-zinc-200 text-zinc-900' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'", f[0]) }
-					class="inline-flex items-center gap-1 h-8 px-3 rounded-full text-sm cursor-pointer transition-colors"
-				>
-					if f[0] != "" && f[0] != "unrated" {
-						@icons.Star("13", &templ.Attributes{"class": "fill-current"})
-					}
-					{ f[1] }
-				</button>
-			}
+	<div class="flex min-w-0 items-center gap-2">
+		// one row scrolling sideways; the sort stays out of it, its menu not
+		// clipped by the scroll
+		<div class="filter-scroll flex items-center gap-2 flex-1">
+			@counterpartiesSearch()
+			<div role="group" aria-label="Filter by kind" class="flex shrink-0 items-center gap-1.5">
+				for _, f := range counterpartiesKindFilters {
+					<button
+						type="button"
+						@click={ fmt.Sprintf("kind = %q", f[0]) }
+						:aria-pressed={ fmt.Sprintf("kind === %q", f[0]) }
+						:class={ fmt.Sprintf("kind === %q ? 'bg-zinc-200 text-zinc-900' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'", f[0]) }
+						class="inline-flex items-center h-8 px-3 rounded-full text-sm whitespace-nowrap cursor-pointer transition-colors"
+					>{ f[1] }</button>
+				}
+			</div>
+			<span aria-hidden="true" class="shrink-0 w-px h-5 bg-zinc-800"></span>
+			<div role="group" aria-label="Filter by rating" class="flex shrink-0 items-center gap-1.5">
+				for _, f := range counterpartiesRatingFilters {
+					<button
+						type="button"
+						if f[0] != "" && f[0] != "unrated" {
+							@click={ fmt.Sprintf("stars = %q; sort = 'rating'", f[0]) }
+						} else {
+							@click={ fmt.Sprintf("stars = %q", f[0]) }
+						}
+						:aria-pressed={ fmt.Sprintf("stars === %q", f[0]) }
+						:class={ fmt.Sprintf("stars === %q ? 'bg-zinc-200 text-zinc-900' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'", f[0]) }
+						class="inline-flex items-center gap-1 h-8 px-3 rounded-full text-sm cursor-pointer transition-colors"
+					>
+						if f[0] != "" && f[0] != "unrated" {
+							@icons.Star("13", &templ.Attributes{"class": "fill-current"})
+						}
+						{ f[1] }
+					</button>
+				}
+			</div>
+			<span aria-hidden="true" class="shrink-0 w-px h-5 bg-zinc-800"></span>
+			<div role="group" aria-label="Filter by price" class="flex shrink-0 items-center gap-1.5">
+				for _, f := range counterpartiesPriceFilters() {
+					<button
+						type="button"
+						@click={ fmt.Sprintf("price = %q", f[0]) }
+						:aria-pressed={ fmt.Sprintf("price === %q", f[0]) }
+						:class={ fmt.Sprintf("price === %q ? 'bg-zinc-200 text-zinc-900' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'", f[0]) }
+						title={ priceFilterTitle(f[0]) }
+						class="inline-flex items-center h-8 px-3 rounded-full text-sm cursor-pointer transition-colors"
+					>
+						{ f[1] }
+					</button>
+				}
+			</div>
 		</div>
-		<div role="group" aria-label="Filter by price" class="flex flex-wrap items-center gap-1.5">
-			for _, f := range counterpartiesPriceFilters() {
-				<button
-					type="button"
-					@click={ fmt.Sprintf("price = %q", f[0]) }
-					:aria-pressed={ fmt.Sprintf("price === %q", f[0]) }
-					:class={ fmt.Sprintf("price === %q ? 'bg-zinc-200 text-zinc-900' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'", f[0]) }
-					title={ priceFilterTitle(f[0]) }
-					class="inline-flex items-center h-8 px-3 rounded-full text-sm cursor-pointer transition-colors"
-				>
-					{ f[1] }
-				</button>
-			}
-		</div>
-		<div x-data="{openSort: false}" class="relative ml-auto">
+		<div x-data="{openSort: false}" class="relative shrink-0">
 			<button
 				type="button"
 				@click="openSort = !openSort"
@@ -603,6 +635,9 @@ templ counterpartiesRatingBar() {
 		</div>
 	</div>
 }
+
+// counterpartiesKindFilters are the kind filter's values and labels.
+var counterpartiesKindFilters = [][2]string{{"", "All"}, {"merchant", "Merchants"}, {"other", "Others"}}
 
 // counterpartiesSortItem picks the sort, checked while it's the current one.
 func counterpartiesSortItem(value, label string) templ.Component {
@@ -629,11 +664,19 @@ templ counterpartiesLabelBar(labels []string) {
 	<div
 		role="group"
 		aria-label="Filter by label"
-		x-show={ fmt.Sprintf("%t || labels.length", len(labels) > 0) }
+		x-show={ fmt.Sprintf("%t || labels.length || unlabeled", len(labels) > 0) }
 		x-cloak?={ len(labels) == 0 }
-		class="flex flex-wrap items-center gap-1.5"
+		class="filter-scroll flex items-center gap-1.5"
 	>
-		@icons.Tag("14", &templ.Attributes{"class": "text-zinc-500 mr-0.5"})
+		@icons.Tag("14", &templ.Attributes{"class": "shrink-0 text-zinc-500 mr-0.5"})
+		<button
+			type="button"
+			@click="unlabeled = !unlabeled"
+			:aria-pressed="unlabeled"
+			:class="unlabeled ? 'bg-violet-400/20 text-violet-200 ring-1 ring-violet-400/50' : 'bg-zinc-800 text-zinc-500 italic hover:text-zinc-200'"
+			title="Counterparties without a label"
+			class="shrink-0 h-7 px-2.5 rounded-full text-xs whitespace-nowrap cursor-pointer transition-colors"
+		>No label</button>
 		for _, l := range labels {
 			<button
 				type="button"
@@ -641,7 +684,7 @@ templ counterpartiesLabelBar(labels []string) {
 				@click="toggleLabel($el.dataset.labelFilter)"
 				:aria-pressed="labels.includes($el.dataset.labelFilter)"
 				:class="labels.includes($el.dataset.labelFilter) ? 'bg-violet-400/20 text-violet-200 ring-1 ring-violet-400/50' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'"
-				class="h-7 px-2.5 rounded-full text-xs cursor-pointer transition-colors"
+				class="shrink-0 h-7 px-2.5 rounded-full text-xs whitespace-nowrap cursor-pointer transition-colors"
 			>{ l }</button>
 		}
 		<template x-for="l in unlistedLabels()" :key="l">
@@ -649,16 +692,16 @@ templ counterpartiesLabelBar(labels []string) {
 				type="button"
 				@click="toggleLabel(l)"
 				aria-pressed="true"
-				class="h-7 px-2.5 rounded-full text-xs cursor-pointer bg-violet-400/20 text-violet-200 ring-1 ring-violet-400/50"
+				class="shrink-0 h-7 px-2.5 rounded-full text-xs whitespace-nowrap cursor-pointer bg-violet-400/20 text-violet-200 ring-1 ring-violet-400/50"
 				x-text="l"
 			></button>
 		</template>
 		<button
 			type="button"
-			x-show="labels.length"
+			x-show="labels.length || unlabeled"
 			x-cloak
-			@click="labels = []"
-			class="h-7 px-2 rounded-full text-xs text-zinc-500 cursor-pointer hover:text-zinc-300"
+			@click="labels = []; unlabeled = false"
+			class="shrink-0 h-7 px-2 rounded-full text-xs text-zinc-500 cursor-pointer hover:text-zinc-300"
 		>Clear</button>
 	</div>
 }
