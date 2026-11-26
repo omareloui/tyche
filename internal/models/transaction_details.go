@@ -38,4 +38,7 @@ type TxDetails struct {
 	// ReturnRefundID is a refund looking like its return (see
 	// Repository.ReturnRefundCandidate), offered to mark it returned.
 	ReturnRefundID string
+	// MerchantGuess is the AI's match giving it its counterparty, nil when
+	// it wasn't.
+	MerchantGuess *MerchantGuess
 }

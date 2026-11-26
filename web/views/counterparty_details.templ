@@ -23,6 +23,8 @@ type CounterpartyDetailsData struct {
 	Def    *models.Currency
 	// LabelsInUse are every counterparty's labels, suggested when editing.
 	LabelsInUse []string
+	// AIAliases are its aliases the AI added (models.MerchantGuessKey's).
+	AIAliases map[string]bool
 }
 
 // CounterpartyDetailsParam is the counterparties page's query param holding
@@ -88,6 +90,7 @@ templ CounterpartyDetails(d *CounterpartyDetailsData) {
 					</dl>
 				}
 				@CounterpartyDetailsLabels(cp, d.LabelsInUse, "")
+				@counterpartyDetailsAliases(cp, d.AIAliases)
 				@txDetailsSection("Note") {
 					@NoteEditor(NoteEditorProps{
 						ID: NoteEditorID("cp", cp.ID), URL: fmt.Sprintf("/counterparties/%s/note", cp.ID),
@@ -393,4 +396,28 @@ func counterpartyTxTitle(tx *models.Transaction, v *txView) string {
 		return t
 	}
 	return txDetailsKind(tx)
+}
+
+// counterpartyDetailsAliases are the names bank SMS give it (edited in its
+// form), the ones the AI matched marked.
+templ counterpartyDetailsAliases(cp *models.Counterparty, ai map[string]bool) {
+	if len(cp.Aliases) > 0 {
+		@txDetailsSection("SMS names") {
+			<div class="flex flex-wrap gap-1.5">
+				for _, a := range cp.Aliases {
+					if ai[models.MerchantGuessKey(a)] {
+						<span
+							title="Matched by AI"
+							class="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg bg-violet-400/10 font-mono text-xs text-violet-300 ring-1 ring-violet-400/20"
+						>
+							@icons.Sparkles("12", &templ.Attributes{"class": "shrink-0"})
+							{ a }
+						</span>
+					} else {
+						<span class="inline-flex items-center h-8 px-2.5 rounded-lg bg-zinc-800/60 font-mono text-xs text-zinc-300">{ a }</span>
+					}
+				}
+			</div>
+		}
+	}
 }

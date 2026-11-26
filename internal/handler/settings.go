@@ -13,6 +13,7 @@ import (
 	"github.com/a-h/templ"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/resperr"
 	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views"
 	"github.com/omareloui/tyche/web/views/form"
@@ -62,9 +63,15 @@ func (h *Handler) settingsData(ctx context.Context) (*views.SettingsData, error)
 	if err != nil {
 		return nil, err
 	}
+	aiMerchants, err := h.repo.GetAIMerchants(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	d := &views.SettingsData{
-		Badge: h.badges.Enabled(),
+		Badge:       h.badges.Enabled(),
+		AIAvailable: h.merchantGuess != nil,
+		AI:          views.SettingsAIFD{Merchants: form.FDInput{Value: formatBooleanIfNonZero(aiMerchants)}},
 		Profile: views.SettingsProfileFD{
 			FirstName: form.FDInput{Value: usr.FirstName},
 			LastName:  form.FDInput{Value: usr.LastName},
@@ -325,3 +332,18 @@ func parseBirthYear(s string, now time.Time) (int, bool) {
 	}
 	return y, true
 }
+
+// SetAISettings turns the AI features the user opts in to on or off.
+func (h *Handler) SetAISettings(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	if h.merchantGuess == nil {
+		return nil, errNoAI
+	}
+	on := r.FormValue("ai_merchants") == "on"
+	if err := h.repo.SetAIMerchants(r.Context(), on); err != nil {
+		return nil, err
+	}
+	logger.FromCtx(r.Context()).Info("set ai merchant matching", zap.Bool("on", on))
+	return h.settingsSaved(w, r, views.SettingsAI, views.SettingsAICard)
+}
+
+var errNoAI = resperr.New(http.StatusNotFound, "AI features are off")

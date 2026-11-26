@@ -365,7 +365,16 @@ templ txDetailsFields(d *models.TxDetails, v *txView) {
 		}
 		if tx.Counterparty != nil || pickable {
 			@txDetailsRow("Counterparty", icons.User("15")) {
-				if pickable {
+				if pickable && d.MerchantGuess != nil {
+					// "Wrong match" swaps it all for the counterparty's picker
+					<span id={ txMerchantGuessID(tx.ID) } class="contents">
+						@QuickPick(txCounterpartyPick(tx))
+						if tx.Counterparty != nil {
+							@txDetailsFilterBy(models.TxFilterCounterparty, tx.Counterparty.ID, tx.Counterparty.Name)
+						}
+						@txMerchantGuess(tx, d.MerchantGuess)
+					</span>
+				} else if pickable {
 					@QuickPick(txCounterpartyPick(tx))
 					if tx.Counterparty != nil {
 						@txDetailsFilterBy(models.TxFilterCounterparty, tx.Counterparty.ID, tx.Counterparty.Name)
@@ -785,4 +794,32 @@ templ goalProgressBar(gl *models.Goal) {
 // TxNoteEditable tells the details can edit its note: as its form can.
 func TxNoteEditable(tx *models.Transaction) bool {
 	return tx.Kind != models.AdjustmentTxKind && !tx.IsLocked()
+}
+
+func txMerchantGuessID(txID string) string {
+	return "txd-cp-guess-" + txID
+}
+
+// txMerchantGuess tells the AI matched (or created) the counterparty from
+// the sms' merchant string, with "Wrong match" undoing it.
+templ txMerchantGuess(tx *models.Transaction, g *models.MerchantGuess) {
+	{{ label := "AI matched" }}
+	if g.Created {
+		{{ label = "AI created" }}
+	}
+	<span
+		class="inline-flex items-center gap-1 rounded-full bg-violet-400/10 px-2 py-0.5 text-xs text-violet-300 ring-1 ring-violet-400/20"
+		title={ fmt.Sprintf("The SMS says %q", g.Raw) }
+	>
+		@icons.Sparkles("12", &templ.Attributes{"class": "shrink-0"})
+		{ label }
+	</span>
+	<button
+		type="button"
+		hx-delete={ fmt.Sprintf("/transactions/%s/merchant-guess", tx.ID) }
+		hx-target={ "#" + txMerchantGuessID(tx.ID) }
+		hx-swap="outerHTML"
+		title={ fmt.Sprintf("%q isn't this merchant: stop matching it and pick the right one", g.Raw) }
+		class="text-xs text-zinc-500 cursor-pointer hover:text-zinc-200 hover:underline"
+	>Wrong match</button>
 }

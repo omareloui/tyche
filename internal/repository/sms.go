@@ -204,11 +204,18 @@ func (r *Repository) createIngestedTransactionWithTxn(ctx context.Context, qtx *
 		return err
 	}
 	if occ != nil {
+		// the occurrence keeps its own counterparty
 		*tx = *occ
 	} else if err := r.createTransactionAndApplyToAccountIfNeededWithTxn(ctx, qtx, tx); err != nil {
 		return err
 	} else if err := autoTagWithTxn(ctx, qtx, tx); err != nil {
 		return err
+	} else if tx.MerchantGuessID != "" {
+		if err := qtx.SetTransactionMerchantGuess(ctx, queries.SetTransactionMerchantGuessParams{
+			ID: tx.ID, MerchantGuessID: sql.NullString{String: tx.MerchantGuessID, Valid: true},
+		}); err != nil {
+			return err
+		}
 	}
 	_, err = r.pairTransferWithTxn(ctx, qtx, tx)
 	return err

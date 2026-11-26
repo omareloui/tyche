@@ -184,6 +184,7 @@ func (h Handler) aiLimits() map[models.ScanKind]int {
 		models.ScanColEstimate: h.ocrCfg.ColEstimatesPerMonth,
 		models.ScanTaxRules:    h.ocrCfg.TaxRulesPerMonth,
 		models.ScanVisaRules:   h.ocrCfg.VisaRulesPerMonth,
+		models.ScanMerchant:    h.ocrCfg.MerchantGuessesPerMonth,
 	}
 }
 
@@ -245,6 +246,7 @@ func (h Handler) adminAIData(r *http.Request) (views.AdminAIData, error) {
 			models.ScanColEstimate: h.colGuess != nil,
 			models.ScanTaxRules:    h.taxGuess != nil,
 			models.ScanVisaRules:   h.visaGuess != nil,
+			models.ScanMerchant:    h.merchantGuess != nil,
 		},
 		Model:         h.ocrCfg.Model,
 		Prices:        h.ocrCfg.Prices(),

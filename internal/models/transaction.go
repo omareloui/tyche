@@ -38,7 +38,10 @@ type Transaction struct {
 	SMSBody     string
 	// FromImport tells it came from a CSV import.
 	FromImport bool
-	CreatedAt  time.Time
+	// MerchantGuessID is the AI merchant guess (MerchantGuess) giving an sms
+	// transaction its counterparty, only set when creating it.
+	MerchantGuessID string
+	CreatedAt       time.Time
 	// ReimbursesID is the expense this income pays back (part of).
 	ReimbursesID string
 	// Reimbursed is the total of the incomes reimbursing this expense.

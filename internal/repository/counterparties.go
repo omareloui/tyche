@@ -252,6 +252,12 @@ func updateCounterpartyParams(it *models.Counterparty) (queries.UpdateCounterpar
 
 // CreateCounterparty saves the counterparty with its locations.
 func (r *Repository) CreateCounterparty(ctx context.Context, it *models.Counterparty) error {
+	return r.transact(ctx, func(qtx *queries.Queries) error {
+		return createCounterpartyWithTxn(ctx, qtx, it)
+	})
+}
+
+func createCounterpartyWithTxn(ctx context.Context, qtx *queries.Queries, it *models.Counterparty) error {
 	aliases, err := marshalStrings(it.Aliases)
 	if err != nil {
 		return err
@@ -260,26 +266,23 @@ func (r *Repository) CreateCounterparty(ctx context.Context, it *models.Counterp
 	if err != nil {
 		return err
 	}
-
-	return r.transact(ctx, func(qtx *queries.Queries) error {
-		if err := qtx.CreateCounterparty(ctx, queries.CreateCounterpartyParams{
-			ID:                it.ID,
-			Name:              it.Name,
-			Aliases:           aliases,
-			Icon:              sql.NullString{String: it.Icon, Valid: true},
-			Color:             sql.NullString{String: it.Color, Valid: it.Color != ""},
-			IsMerchant:        it.IsMerchant,
-			DefaultCategoryID: defaultCategoryID(it),
-			Rating:            ratingParam(it.Rating),
-			PriceLevel:        ratingParam(it.PriceLevel),
-			ReturnDays:        ratingParam(it.ReturnDays),
-			Note:              it.Note,
-			Labels:            labels,
-		}); err != nil {
-			return err
-		}
-		return replaceCounterpartyLocations(ctx, qtx, it)
-	})
+	if err := qtx.CreateCounterparty(ctx, queries.CreateCounterpartyParams{
+		ID:                it.ID,
+		Name:              it.Name,
+		Aliases:           aliases,
+		Icon:              sql.NullString{String: it.Icon, Valid: true},
+		Color:             sql.NullString{String: it.Color, Valid: it.Color != ""},
+		IsMerchant:        it.IsMerchant,
+		DefaultCategoryID: defaultCategoryID(it),
+		Rating:            ratingParam(it.Rating),
+		PriceLevel:        ratingParam(it.PriceLevel),
+		ReturnDays:        ratingParam(it.ReturnDays),
+		Note:              it.Note,
+		Labels:            labels,
+	}); err != nil {
+		return err
+	}
+	return replaceCounterpartyLocations(ctx, qtx, it)
 }
 
 func (r *Repository) SetCounterpartyArchived(ctx context.Context, id string, archived bool) error {

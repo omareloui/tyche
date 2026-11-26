@@ -61,6 +61,11 @@ func (h Handler) txDetails(ctx context.Context, id string) (*models.TxDetails, e
 			return nil, err
 		}
 	}
+	if d.Tx.Counterparty != nil && d.Tx.FromSMS {
+		if d.MerchantGuess, err = h.repo.GetTxMerchantGuess(ctx, d.Tx.ID); err != nil {
+			return nil, err
+		}
+	}
 	if d.Tx.Kind == models.ExpenseTxKind && len(d.Tx.Items) > 0 {
 		s, err := h.repo.TxSplitOf(ctx, d.Tx)
 		if err != nil {

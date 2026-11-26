@@ -21,12 +21,16 @@ type SettingsData struct {
 	Month   SettingsMonthFD
 	Work    *WorkSettingsFD
 	Account SettingsAccountFD
+	AI      SettingsAIFD
 
 	// Saved names the card just saved, to show it.
 	Saved string
 	// Badge is whether the installed app's badge can be pushed (VAPID keys
 	// set): its card only shows then, and in the installed app.
 	Badge bool
+	// AIAvailable is whether the AI features the user turns on are
+	// available (an API key set): their card only shows then.
+	AIAvailable bool
 
 	// Currencies are the fiat ones, to pick the main currency from;
 	// ShownCurrencies the ones in use, for the salary.
@@ -58,6 +62,11 @@ type SettingsAccountFD struct {
 	AccountID form.FDInput
 }
 
+type SettingsAIFD struct {
+	// Merchants matches the sms' unknown merchants with AI.
+	Merchants form.FDInput
+}
+
 // The settings cards, the ids they swap and are linked to by.
 const (
 	SettingsProfile = "profile"
@@ -66,6 +75,7 @@ const (
 	SettingsWork    = "work"
 	SettingsAccount = "account"
 	SettingsBadge   = "badge"
+	SettingsAI      = "ai"
 )
 
 // SettingsURL links to a card of the settings page.
@@ -90,6 +100,9 @@ templ Settings(claims *jwt.AccessClaims, balances []models.Balance, d *SettingsD
 					@settingsNavLink(SettingsMonth, "Start of the month")
 					@settingsNavLink(SettingsWork, "Salary and work hours")
 					@settingsNavLink(SettingsAccount, "Default account")
+					if d.AIAvailable {
+						@settingsNavLink(SettingsAI, "AI")
+					}
 					if d.Badge {
 						<span x-data x-show="isInstalledPWA()" x-cloak class="contents">
 							@settingsNavLink(SettingsBadge, "App badge")
@@ -109,6 +122,9 @@ templ Settings(claims *jwt.AccessClaims, balances []models.Balance, d *SettingsD
 				@SettingsMonthCard(d)
 				@SettingsWorkCard(d)
 				@SettingsAccountCard(d)
+				if d.AIAvailable {
+					@SettingsAICard(d)
+				}
 				if d.Badge {
 					@SettingsBadgeCard()
 				}
@@ -291,6 +307,20 @@ templ SettingsAccountCard(d *SettingsData) {
 				Options: form.AccountComboOptions(d.Accounts), Data: d.Account.AccountID, Searchable: true,
 			})
 		}
+	}
+}
+
+templ SettingsAICard(d *SettingsData) {
+	@settingsCard(d, SettingsAI, "AI", "Features that send some of your data to Google's Gemini, each off until you turn it on.",
+		icons.Sparkles("18"), "bg-violet-400/10", nil) {
+		<div class="grid gap-2">
+			@form.Toggle("Match merchants with AI", "ai_merchants", "settings", nil, d.AI.Merchants, nil)
+			<p class="text-sm text-zinc-500">
+				When a bank SMS names a merchant you have none for (like "AMZN MKTP EG*4821"), the AI matches it to one of your
+				merchants or creates it with a clean name and a category. Only the merchant names and your expense categories' names
+				are sent: never people, amounts or the SMS. The transactions still come for review, and a wrong match is undone from them.
+			</p>
+		</div>
 	}
 }
 

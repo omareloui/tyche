@@ -66,6 +66,7 @@ SET
     salary_currency_id = NULL,
     work_hours_per_week = 40,
     birth_year = NULL,
+    ai_merchants = FALSE,
     timezone = 'Africa/Cairo',
     default_account_id = NULL,
     default_currency_id = COALESCE(

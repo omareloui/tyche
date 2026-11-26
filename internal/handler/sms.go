@@ -66,6 +66,12 @@ type smsContext struct {
 	registry *smsparser.Registry
 	// loc is the time zone of the dates in the user's sms.
 	loc *time.Location
+	// aiMerchants tells the user has the unknown merchants matched with AI
+	// (resolveMerchants); guesses are the AI's decisions by their string's
+	// key, the rejected ones' keys in rejected.
+	aiMerchants bool
+	guesses     map[string]models.MerchantGuess
+	rejected    map[string]bool
 }
 
 func (h *Handler) IngestSMS(w http.ResponseWriter, r *http.Request) ([]byte, error) {
@@ -86,6 +92,19 @@ func (h *Handler) IngestSMS(w http.ResponseWriter, r *http.Request) ([]byte, err
 	}
 
 	deviceID, _ := ctx.Value(middleware.DeviceIDCtxKey{}).(string)
+
+	// the new sms' unknown merchants, matched by the AI in one call
+	var fresh []smsText
+	for _, in := range req.Messages {
+		sender, body := strings.TrimSpace(in.Sender), strings.TrimSpace(in.Body)
+		if body == "" {
+			continue
+		}
+		if _, err := h.repo.GetSMSMessageByHash(ctx, smsingest.Hash(sender, body, in.ReceivedAt)); errors.Is(err, sql.ErrNoRows) {
+			fresh = append(fresh, smsText{sender: sender, body: body, receivedAt: in.ReceivedAt})
+		}
+	}
+	h.resolveMerchants(ctx, sctx, fresh)
 
 	resp := ingestSMSResp{Results: make([]smsResult, len(req.Messages))}
 	for i, in := range req.Messages {
@@ -167,6 +186,7 @@ func (h *Handler) processSMS(ctx context.Context, sctx *smsContext, msg *models.
 		}
 		return nil
 	}
+	sctx.markMerchantGuess(tx, m.SMS.Counterparty)
 
 	newCp := tx.Counterparty
 	if newCp != nil && newCp.ID == "" {
@@ -252,6 +272,7 @@ func (h *Handler) RetrySMS(w http.ResponseWriter, r *http.Request) (templ.Compon
 	if err != nil {
 		return nil, err
 	}
+	h.resolveMerchants(ctx, sctx, []smsText{{sender: msg.Sender, body: msg.Body, receivedAt: msg.ReceivedAt}})
 
 	tx := h.processSMS(ctx, sctx, msg)
 	if err := h.repo.UpdateSMSMessageResult(ctx, msg, tx); err != nil {
@@ -297,6 +318,11 @@ func (h *Handler) RetryAllSMS(w http.ResponseWriter, r *http.Request) (templ.Com
 	if err != nil {
 		return nil, err
 	}
+	texts := make([]smsText, len(msgs))
+	for i, m := range msgs {
+		texts[i] = smsText{sender: m.Sender, body: m.Body, receivedAt: m.ReceivedAt}
+	}
+	h.resolveMerchants(ctx, sctx, texts)
 
 	created := 0
 	for i := range msgs {
@@ -441,7 +467,26 @@ func (h *Handler) loadSMSContext(ctx context.Context) (*smsContext, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &smsContext{accounts: accounts, counterparties: counterparties, registry: registry, loc: loc}, nil
+	sctx := &smsContext{
+		accounts: accounts, counterparties: counterparties, registry: registry, loc: loc,
+		guesses: map[string]models.MerchantGuess{}, rejected: map[string]bool{},
+	}
+	if sctx.aiMerchants, err = h.repo.GetAIMerchants(ctx); err != nil {
+		return nil, err
+	}
+	guesses, err := h.repo.GetMerchantGuesses(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, g := range guesses {
+		key := models.MerchantGuessKey(g.Raw)
+		if g.RejectedAt != nil {
+			sctx.rejected[key] = true
+		} else {
+			sctx.guesses[key] = g
+		}
+	}
+	return sctx, nil
 }
 
 // smsRegistry has the user's templates, tried first, then the shared ones.

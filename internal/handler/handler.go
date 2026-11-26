@@ -6,6 +6,7 @@ import (
 	"github.com/omareloui/tyche/internal/config"
 	"github.com/omareloui/tyche/internal/costofliving"
 	"github.com/omareloui/tyche/internal/fxrate"
+	"github.com/omareloui/tyche/internal/merchantguess"
 	"github.com/omareloui/tyche/internal/receiptocr"
 	"github.com/omareloui/tyche/internal/repository"
 	"github.com/omareloui/tyche/internal/sanitizer"
@@ -45,6 +46,9 @@ type Handler struct {
 	// visas without built in ones, nil when off (its prices and limit in
 	// ocrCfg).
 	visaGuess visaguess.Guesser
+	// merchantGuess matches the sms' unknown merchants, nil when off (its
+	// prices and limit in ocrCfg).
+	merchantGuess merchantguess.Guesser
 }
 
 // SetReceiptOCR turns reading receipts on (a nil reader keeps it off).

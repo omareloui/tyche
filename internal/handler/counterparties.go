@@ -121,6 +121,18 @@ func (h Handler) CounterpartyDetails(w http.ResponseWriter, r *http.Request) (te
 		l.Error("fetching counterparty transactions", zap.Error(err))
 		return nil, err
 	}
+	guesses, err := h.repo.GetMerchantGuesses(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	for _, g := range guesses {
+		if g.CounterpartyID == id && g.RejectedAt == nil {
+			if d.AIAliases == nil {
+				d.AIAliases = map[string]bool{}
+			}
+			d.AIAliases[models.MerchantGuessKey(g.Raw)] = true
+		}
+	}
 
 	return views.CounterpartyDetails(d), nil
 }

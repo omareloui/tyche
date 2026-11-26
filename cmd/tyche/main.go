@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -22,6 +23,7 @@ import (
 	"github.com/omareloui/tyche/internal/fxrate"
 	"github.com/omareloui/tyche/internal/handler"
 	"github.com/omareloui/tyche/internal/logger"
+	"github.com/omareloui/tyche/internal/merchantguess"
 	"github.com/omareloui/tyche/internal/receiptocr"
 	"github.com/omareloui/tyche/internal/repository"
 	"github.com/omareloui/tyche/internal/router"
@@ -98,6 +100,8 @@ func main() {
 		h.SetColGuess(colguess.New(ocrCfg.APIKey, ocrCfg.Model, ocrCfg.ThinkingLevel))
 		h.SetTaxGuess(taxguess.New(ocrCfg.APIKey, ocrCfg.Model, ocrCfg.ThinkingLevel))
 		h.SetVisaGuess(visaguess.New(ocrCfg.APIKey, ocrCfg.Model, ocrCfg.ThinkingLevel))
+		// on every ingest with unknown merchants: a cheap model fits
+		h.SetMerchantGuess(merchantguess.New(ocrCfg.APIKey, cmp.Or(ocrCfg.MerchantModel, ocrCfg.Model), cmp.Or(ocrCfg.MerchantThinkingLevel, ocrCfg.ThinkingLevel)))
 	} else {
 		h.SetReceiptOCR(nil, ocrCfg)
 	}
