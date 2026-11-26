@@ -334,3 +334,83 @@ func (s *TagSummary) Month(p Period, from, to time.Time) *TagMonth {
 	}
 	return m
 }
+
+// TagHeroTop is how many tags the tags page's hero ranks.
+const TagHeroTop = 5
+
+// TagMonthSpend is what a tag spent in a month.
+type TagMonthSpend struct {
+	Summary *TagSummary
+	Amount  float64
+}
+
+// TagsHero is the tags page's summary: what the tags spent in the user's
+// current month (a transaction with several tags counting in each), the
+// trips on now and the next one, and the live tags' budgets.
+type TagsHero struct {
+	Period Period
+	Spent  float64
+	// ByTag are the tags that spent this month, most first.
+	ByTag []TagMonthSpend
+	// OnNow are the live trips covering today; Next the soonest upcoming.
+	OnNow []*TagSummary
+	Next  *TagSummary
+	// Budgets are the live tags with a budget, the most used first.
+	Budgets []*TagSummary
+	// Live counts the live tags.
+	Live int
+}
+
+// NewTagsHero sums the tags' summaries for the month today is in.
+func NewTagsHero(sums []*TagSummary, start MonthStart, today time.Time, def Currency) *TagsHero {
+	h := &TagsHero{Period: start.Of(today)}
+	for _, s := range sums {
+		var amount float64
+		for _, d := range s.ByDay {
+			if h.Period.Contains(d.Day) {
+				amount += d.Amount
+			}
+		}
+		if amount != 0 {
+			h.ByTag = append(h.ByTag, TagMonthSpend{Summary: s, Amount: def.Round(amount)})
+			h.Spent += amount
+		}
+		t := &s.Tag
+		if t.IsArchived() {
+			continue
+		}
+		h.Live++
+		if s.Budget > 0 {
+			h.Budgets = append(h.Budgets, s)
+		}
+		if !t.IsTrip() {
+			continue
+		}
+		switch {
+		case t.Covers(today):
+			h.OnNow = append(h.OnNow, s)
+		case today.Before(*t.StartsOn) && (h.Next == nil || t.StartsOn.Before(*h.Next.Tag.StartsOn)):
+			h.Next = s
+		}
+	}
+	h.Spent = def.Round(h.Spent)
+	sort.SliceStable(h.ByTag, func(i, j int) bool { return h.ByTag[i].Amount > h.ByTag[j].Amount })
+	sort.SliceStable(h.Budgets, func(i, j int) bool { return h.Budgets[i].BudgetUsed() > h.Budgets[j].BudgetUsed() })
+	return h
+}
+
+// Top are its first n tags by this month's spending.
+func (h *TagsHero) Top(n int) []TagMonthSpend {
+	if len(h.ByTag) <= n {
+		return h.ByTag
+	}
+	return h.ByTag[:n]
+}
+
+// DaysUntil counts the days from today to the next trip.
+func (h *TagsHero) DaysUntil(today time.Time) int {
+	if h.Next == nil {
+		return 0
+	}
+	return int(h.Next.Tag.StartsOn.Sub(dateOnly(today)).Hours() / 24)
+}

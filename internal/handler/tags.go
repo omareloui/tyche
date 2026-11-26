@@ -47,14 +47,18 @@ func (h Handler) tagsData(ctx context.Context) (*views.TagsData, error) {
 	if err != nil {
 		return nil, err
 	}
-	d := &views.TagsData{Def: &getClaims(ctx).DefaultCurrency}
+	claims := getClaims(ctx)
+	d := &views.TagsData{Def: &claims.DefaultCurrency, Today: h.userToday(ctx)}
+	all := make([]*models.TagSummary, 0, len(tags))
 	for _, t := range tags {
+		all = append(all, sums[t.ID])
 		if t.IsArchived() {
 			d.Archived = append(d.Archived, sums[t.ID])
 		} else {
 			d.Live = append(d.Live, sums[t.ID])
 		}
 	}
+	d.Hero = models.NewTagsHero(all, claims.MonthStart, d.Today, claims.DefaultCurrency)
 	return d, nil
 }
 

@@ -46,14 +46,12 @@ type TagFD struct {
 type TagsData struct {
 	Live, Archived []*models.TagSummary
 	Def            *models.Currency
+	Hero           *models.TagsHero
+	Today          time.Time
 }
 
 templ Tags(claims *jwt.AccessClaims, balances []models.Balance, fd *TagFD, curs []models.Currency, d *TagsData, openID string) {
 	@layouts.WithCreateForm(claims, "Tags", "New tag", balances, CreateTagForm(fd, curs, &claims.DefaultCurrency)) {
-		<p class="mb-6 text-sm text-zinc-400 max-w-prose">
-			Categories say on what, tags say for what: a trip, a wedding, a move. Tag transactions in their form,
-			their details or many at once from the list; a trip with “Tag new ones” on tags what's added in its days.
-		</p>
 		@TagsList(d)
 		@components.DrawerOnLoad(tagDetailsURLIf(openID))
 	}
@@ -73,6 +71,9 @@ templ TagsList(d *TagsData) {
 				@icons.Tag("32", &templ.Attributes{"class": "text-zinc-600"})
 				<p>No tags yet. Add one, e.g. your next trip.</p>
 			</div>
+		}
+		if len(d.Live) > 0 || len(d.Archived) > 0 {
+			@tagsHero(d)
 		}
 		if len(d.Live) > 0 {
 			<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -95,6 +96,122 @@ templ TagsList(d *TagsData) {
 			</details>
 		}
 	</div>
+}
+
+// tagsHero sums the tags up: what they spent this month and on which, the
+// trips on now or next, and the budgets.
+templ tagsHero(d *TagsData) {
+	{{ h := d.Hero }}
+	@components.GlassCard("grid content-start gap-5 p-5 sm:p-6", "bg-sky-400/10", "bg-fuchsia-400/10") {
+		<div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+			<h2 class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-sky-300">
+				@icons.Tag("14")
+				Tagged this month
+				<span class="font-normal normal-case tracking-normal text-zinc-500">· { h.Period.RangeLabel() }</span>
+			</h2>
+			<span class="text-xs text-zinc-500">{ fmt.Sprint(h.Live) } { plural(h.Live, "tag", "tags") }</span>
+		</div>
+		<p>
+			<span class="sensitive text-2xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">{ d.Def.Format(h.Spent) }</span>
+			<span class="text-sm text-zinc-500">
+				if len(h.ByTag) == 0 {
+					nothing tagged spent yet
+				} else {
+					over { fmt.Sprint(len(h.ByTag)) } { plural(len(h.ByTag), "tag", "tags") }
+				}
+			</span>
+		</p>
+		if len(h.OnNow) > 0 || h.Next != nil {
+			<div class="flex flex-wrap gap-2">
+				for _, s := range h.OnNow {
+					@tagHeroTrip(s, "On now", tagDays(&s.Tag))
+				}
+				if h.Next != nil {
+					@tagHeroTrip(h.Next, tagInDays(h.DaysUntil(d.Today)), tagDays(&h.Next.Tag))
+				}
+			</div>
+		}
+		if top := h.Top(models.TagHeroTop); len(top) > 0 {
+			@budgetCollapse("tags-top", budgetSummaryTitle("Most spent on")) {
+				<ul class="grid gap-1 mt-2">
+					for _, ts := range top {
+						<li>
+							@tagHeroRow(ts.Summary, d.Def.Format(ts.Amount), pctLabel(ts.Amount, h.Spent), barPct(ts.Amount, top[0].Amount), ts.Summary.Tag.Hex())
+						</li>
+					}
+				</ul>
+			}
+		}
+		if len(h.Budgets) > 0 {
+			@budgetCollapse("tags-budgets", budgetSummaryTitle("Budgets, all time")) {
+				<ul class="grid gap-1 mt-2">
+					for _, s := range h.Budgets {
+						{{ color := s.Tag.Hex() }}
+						if s.OverBudget() {
+							{{ color = "#f87171" }}
+						}
+						<li>
+							@tagHeroRow(s, d.Def.Format(s.Spent)+" of "+d.Def.Format(s.Budget), pctLabel(s.Spent, s.Budget), barPct(min(s.Spent, s.Budget), s.Budget), color)
+						</li>
+					}
+				</ul>
+			}
+		}
+		<p class="text-xs text-zinc-500">
+			In your main currency at today's rates; a transaction with several tags counts in each.
+		</p>
+	}
+}
+
+// tagHeroTrip is a trip's pill: when, its name and days, opening its
+// details.
+templ tagHeroTrip(s *models.TagSummary, when, days string) {
+	<button
+		type="button"
+		hx-get={ tagDetailsURL(s.Tag.ID) }
+		hx-target={ "#" + components.DrawerSlot }
+		hx-swap="innerHTML"
+		title={ days }
+		class="flex items-center gap-2 max-w-full rounded-full px-3 py-1.5 text-sm cursor-pointer ring-1 ring-zinc-700/70 bg-zinc-800/40 transition-colors hover:bg-zinc-800"
+	>
+		<span class="size-2 shrink-0 rounded-full" style={ "background-color:" + s.Tag.Hex() }></span>
+		<span class="shrink-0 text-xs text-zinc-400">{ when }</span>
+		<span class="truncate font-medium">{ s.Tag.Name }</span>
+	</button>
+}
+
+// tagHeroRow is a tag's line in the hero: its name, amount and share, and a
+// bar, opening its details.
+templ tagHeroRow(s *models.TagSummary, amount, pct, width, hex string) {
+	<button
+		type="button"
+		hx-get={ tagDetailsURL(s.Tag.ID) }
+		hx-target={ "#" + components.DrawerSlot }
+		hx-swap="innerHTML"
+		class="grid gap-1.5 w-full px-2 py-1.5 rounded-lg text-left cursor-pointer transition-colors hover:bg-zinc-800/60"
+	>
+		<span class="flex items-center gap-2 min-w-0 text-sm">
+			<span class="size-2 shrink-0 rounded-full" style={ "background-color:" + s.Tag.Hex() }></span>
+			<span class="flex-1 min-w-0 truncate">{ s.Tag.Name }</span>
+			<span class="sensitive shrink-0 tabular-nums">{ amount }</span>
+			<span class="shrink-0 w-10 text-right text-xs text-zinc-500 tabular-nums">{ pct }</span>
+		</span>
+		<span class="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+			<span class="block h-full rounded-full" style={ fmt.Sprintf("width:%s;background-color:%s", width, hex) }></span>
+		</span>
+	</button>
+}
+
+func pctLabel(part, whole float64) string {
+	return fmt.Sprintf("%.0f%%", pctOf(part, whole))
+}
+
+// tagInDays is when a trip starts, e.g. "Tomorrow", "In 5 days".
+func tagInDays(n int) string {
+	if n <= 1 {
+		return "Tomorrow"
+	}
+	return fmt.Sprintf("In %d days", n)
 }
 
 // tagDays is a trip's days, e.g. "Mar 3 – Mar 12, 2026 · 10 days".

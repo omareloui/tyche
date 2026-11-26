@@ -95,3 +95,37 @@ func TestTagSummaryDefaultMonth(t *testing.T) {
 		t.Errorf("none: %s", got)
 	}
 }
+
+func TestNewTagsHero(t *testing.T) {
+	egp := Currency{String: "EGP"}
+	budget := 500.0
+	now, next, later := day("2026-11-20"), day("2026-12-05"), day("2027-01-10")
+	tags := []Tag{
+		{ID: "work", Name: "Work", Budget: &budget, BudgetCurrency: &egp},
+		{ID: "trip", Name: "Trip", StartsOn: &now, EndsOn: &now},
+		{ID: "soon", Name: "Soon", StartsOn: &next, EndsOn: &next},
+		{ID: "later", Name: "Later", StartsOn: &later, EndsOn: &later},
+		{ID: "old", Name: "Old", ArchivedAt: &now},
+	}
+	spends := []TagSpend{
+		{TagID: "work", Day: "2026-11-03", Currency: egp, Amount: 100},
+		{TagID: "work", Day: "2026-10-03", Currency: egp, Amount: 900}, // last month
+		{TagID: "trip", Day: "2026-11-20", Currency: egp, Amount: 300},
+		{TagID: "old", Day: "2026-11-02", Currency: egp, Amount: 5},
+	}
+	m := NewTagSummaries(tags, spends, nil, egp)
+	var sums []*TagSummary
+	for _, tg := range tags {
+		sums = append(sums, m[tg.ID])
+	}
+	h := NewTagsHero(sums, MonthStart(1), now, egp)
+	if h.Spent != 405 || len(h.ByTag) != 3 || h.ByTag[0].Summary.Tag.ID != "trip" || h.ByTag[1].Amount != 100 {
+		t.Errorf("spent %v by tag %+v", h.Spent, h.ByTag)
+	}
+	if len(h.OnNow) != 1 || h.OnNow[0].Tag.ID != "trip" || h.Next == nil || h.Next.Tag.ID != "soon" || h.DaysUntil(now) != 15 {
+		t.Errorf("on now %v next %v", h.OnNow, h.Next)
+	}
+	if h.Live != 4 || len(h.Budgets) != 1 {
+		t.Errorf("live %d budgets %d", h.Live, len(h.Budgets))
+	}
+}
