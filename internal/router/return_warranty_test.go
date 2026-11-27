@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -157,6 +158,68 @@ func TestReturnWarrantyWindows(t *testing.T) {
 		}
 		if !slices.Contains(tags, "warranty:"+tv) || counts.Warranty < 1 {
 			t.Errorf("badge: %d %v", counts.Warranty, tags)
+		}
+	})
+
+	t.Run("edit a line, keeping its warranty", func(t *testing.T) {
+		tx := newTx(t, models.ExpenseTxKind, []models.TxItem{
+			{Name: "TV", Quantity: 1, UnitPrice: 900, Total: 900},
+			{Kind: models.TxItemVAT, Total: 100},
+		})
+		full, _ := repo.GetTransaction(ctx, tx.ID)
+		tv := full.Items[0].ID
+		vat := full.Items[1].ID
+		body, err := put(t, hd.UpdateTxItem, tx.ID, tv, url.Values{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(body, "Name the item.") {
+			t.Errorf("a nameless item saved: %s", body)
+		}
+		// No warranty: the add button, no chip.
+		if !strings.Contains(body, `title="Add a warranty"`) {
+			t.Errorf("no add warranty button: %s", body)
+		}
+
+		soon := today.AddDate(0, 0, 10).Format(time.DateOnly)
+		if _, err := put(t, hd.SetTxItemWarranty, tx.ID, tv, url.Values{"warranty": {soon}}); err != nil {
+			t.Fatal(err)
+		}
+		body, err = put(t, hd.UpdateTxItem, tx.ID, tv, url.Values{
+			"kind": {"0"}, "name": {"TV 55"}, "quantity": {"2"}, "unit_price": {"450"}, "total": {""},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(body, `title="Add a warranty"`) {
+			t.Errorf("add warranty shown with one")
+		}
+		full, _ = repo.GetTransaction(ctx, tx.ID)
+		var got *models.TxItem
+		for i := range full.Items {
+			if full.Items[i].ID == tv {
+				got = &full.Items[i]
+			}
+		}
+		if got == nil || got.Name != "TV 55" || got.Quantity != 2 || got.Total != 900 || got.ItemID == "" {
+			t.Fatalf("edited = %+v", got)
+		}
+		if got.WarrantyUntil == nil || got.WarrantyUntil.Format(time.DateOnly) != soon {
+			t.Errorf("warranty lost: %v", got.WarrantyUntil)
+		}
+
+		// A charge turned into a service with a rate.
+		if _, err := put(t, hd.UpdateTxItem, tx.ID, vat, url.Values{"kind": {strconv.Itoa(int(models.TxItemService))}, "rate": {"10"}}); err != nil {
+			t.Fatal(err)
+		}
+		full, _ = repo.GetTransaction(ctx, tx.ID)
+		for _, it := range full.Items {
+			if it.ID == vat && (it.Kind != models.TxItemService || it.Total != 90) {
+				t.Errorf("charge = %+v", it)
+			}
+		}
+		if _, err := put(t, hd.UpdateTxItem, tx.ID, "nope", url.Values{"kind": {"0"}, "name": {"X"}}); err == nil {
+			t.Error("an unknown line edited")
 		}
 	})
 

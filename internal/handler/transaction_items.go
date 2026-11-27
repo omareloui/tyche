@@ -264,6 +264,72 @@ func (h Handler) DeleteTxItem(w http.ResponseWriter, r *http.Request) (templ.Com
 	return h.txItemsAnswer(w, r, tx.ID, nil, nil)
 }
 
+// editedItems is the lines with the path's line (itemID) edited from the
+// details' edit form, worked out again in their currency (acc the
+// account's); its split shares, currency and an item's own warranty kept.
+// fd is the form's data, its Error set when invalid (items nil then).
+func (h Handler) editedItems(r *http.Request, items []models.TxItem, acc *models.Currency) ([]models.TxItem, *views.TxItemFD, error) {
+	itemID := r.PathValue("itemID")
+	i := slices.IndexFunc(items, func(it models.TxItem) bool { return it.ID == itemID })
+	if i < 0 {
+		return nil, nil, resperr.New(http.StatusNotFound, "Line not found")
+	}
+	it, fd := parseTxItemFD(r)
+	fd.ID = itemID
+	if !h.validateTxItem(it, fd) {
+		return nil, fd, nil
+	}
+	out := append([]models.TxItem{}, items...)
+	line := &out[i]
+	line.Kind, line.Name, line.ItemID = it.Kind, it.Name, it.ItemID
+	line.Quantity, line.UnitPrice, line.Total = it.Quantity, it.UnitPrice, it.Total
+	line.Rate, line.Included = it.Rate, it.Included
+	models.NormalizeTxItems(out, models.TxItemsCurrency(out, acc))
+	return models.SortTxItems(out), fd, nil
+}
+
+// UpdateTxItem edits a line of a transaction from its details.
+func (h Handler) UpdateTxItem(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	tx, err := h.editableTx(r)
+	if err != nil {
+		return nil, err
+	}
+	items, fd, err := h.editedItems(r, tx.Items, &tx.Account.Currency)
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		return h.txItemsAnswer(w, r, tx.ID, fd, nil)
+	}
+	if err := h.repo.SetTxItems(r.Context(), tx.ID, items, ""); err != nil {
+		logger.FromCtx(r.Context()).Error("editing a line", zap.Error(err))
+		return nil, err
+	}
+	return h.txItemsAnswer(w, r, tx.ID, nil, nil)
+}
+
+// UpdateRecurrentTxItem edits a line of a recurrent transaction from its
+// details, and its copies on the scheduled occurrences not edited on their
+// own.
+func (h Handler) UpdateRecurrentTxItem(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	rt, err := h.liveRecurrentTx(r)
+	if err != nil {
+		return nil, err
+	}
+	items, fd, err := h.editedItems(r, rt.Items, &rt.Account.Currency)
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		return views.RecurrentTxDetailsItems(rt, fd), nil
+	}
+	if err := h.repo.SetRecurrentTxItems(r.Context(), rt, items); err != nil {
+		logger.FromCtx(r.Context()).Error("editing a recurrent line", zap.Error(err))
+		return nil, err
+	}
+	return views.RecurrentTxDetailsItems(rt, nil), nil
+}
+
 // AddRecurrentTxItem adds a line to a recurrent transaction from its details,
 // and to its scheduled occurrences not edited on their own.
 func (h Handler) AddRecurrentTxItem(w http.ResponseWriter, r *http.Request) (templ.Component, error) {

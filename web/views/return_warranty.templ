@@ -369,37 +369,39 @@ func txItemWarrantyURL(txID, itemID string) string {
 }
 
 // txItemWarranty is an item line's warranty in the details: a chip with its
-// own (or the purchase's) last day, opening a picker when editable.
+// own (or the purchase's) last day, its picker shown while the line's
+// warranty is true when editable; without one, only the picker (opened by
+// the line's "Add a warranty" button).
 templ txItemWarranty(tx *models.Transaction, it *models.TxItem, editable bool) {
 	{{ d, own := it.EffectiveWarranty(tx) }}
 	{{ today := tzctx.Today(ctx) }}
 	if d != nil || editable {
-		<span id={ TxItemWarrantyID(it.ID) } x-data="{ open: false }" class="inline-flex flex-wrap items-center gap-1.5">
-			<button
-				type="button"
-				if editable {
-					@click="open = !open"
-				} else {
-					disabled
-				}
-				class={ "inline-flex items-center gap-1 h-6 px-2 rounded-full text-xs ring-1 transition-colors",
-					templ.KV("ring-zinc-700 text-zinc-500 hover:text-zinc-300 cursor-pointer", d == nil),
-					templ.KV("ring-amber-400/30 text-amber-300", d != nil && models.WarrantySoon(d, today)),
-					templ.KV("ring-emerald-400/25 text-emerald-300", d != nil && models.WarrantyActive(d, today) && !models.WarrantySoon(d, today)),
-					templ.KV("ring-zinc-700 text-zinc-500", d != nil && !models.WarrantyActive(d, today)) }
-			>
-				@icons.ShieldCheck("12")
-				if d == nil {
-					Warranty
-				} else {
+		<span id={ TxItemWarrantyID(it.ID) } class="inline-flex flex-wrap items-center gap-1.5 empty:hidden">
+			if d != nil {
+				<button
+					type="button"
+					if editable {
+						@click="warranty = !warranty"
+					} else {
+						disabled
+					}
+					class={ "inline-flex items-center gap-1 h-6 px-2 rounded-full text-xs ring-1 transition-colors",
+						templ.KV("ring-amber-400/30 text-amber-300", models.WarrantySoon(d, today)),
+						templ.KV("ring-emerald-400/25 text-emerald-300", models.WarrantyActive(d, today) && !models.WarrantySoon(d, today)),
+						templ.KV("ring-zinc-700 text-zinc-500", !models.WarrantyActive(d, today)) }
+				>
+					@icons.ShieldCheck("12")
 					{ formatWindowDay(ctx, *d) }
 					if !own {
 						<span class="text-zinc-500">(purchase)</span>
 					}
-				}
-			</button>
+				</button>
+			}
 			if editable {
-				<span x-cloak x-show="open" class="inline-flex flex-wrap items-center gap-1.5">
+				<span x-cloak x-show="warranty" class="inline-flex flex-wrap items-center gap-1.5">
+					if d == nil {
+						<span class="text-xs text-zinc-400">Warranty</span>
+					}
 					for _, ps := range warrantyPresets() {
 						<button type="button" class="split-seg ring-1 ring-zinc-700" hx-put={ txItemWarrantyURL(tx.ID, it.ID) } hx-vals={ windowVals("warranty", ps.value) } hx-target="closest [data-tx-items-section]" hx-swap="outerHTML">{ ps.label }</button>
 					}
@@ -421,6 +423,8 @@ templ txItemWarranty(tx *models.Transaction, it *models.TxItem, editable bool) {
 					/>
 					if own {
 						<button type="button" class="txd-more text-xs text-zinc-400!" hx-put={ txItemWarrantyURL(tx.ID, it.ID) } hx-vals={ windowVals("warranty", "") } hx-target="closest [data-tx-items-section]" hx-swap="outerHTML">Clear</button>
+					} else if d == nil {
+						<button type="button" class="txd-more text-xs text-zinc-400!" @click="warranty = false">Cancel</button>
 					}
 				</span>
 			}

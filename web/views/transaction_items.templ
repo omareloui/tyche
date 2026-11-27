@@ -2,17 +2,17 @@ package views
 
 import (
 	"fmt"
-	"math"
 	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
+	"math"
 	"strconv"
 )
 
 // TxItemFD is a line's inputs, sent as parallel item_* fields.
 type TxItemFD struct {
-	ID        string
+	ID string
 	// ItemID is the catalog item picked for an item line (models.Item),
 	// empty to match or create one by its name when saved.
 	ItemID    string
@@ -500,13 +500,15 @@ func onIfTrue(b bool) string {
 // TxItemsList shows the lines: the items, a subtotal when there are charges,
 // the charges, then what they add up to, against amount. owner is the
 // transaction they're of (nil for a recurrent one's), showing the items'
-// warranties.
-templ TxItemsList(items []models.TxItem, acc *models.Currency, amount float64, onDelete func(models.TxItem) string, owner *models.Transaction) {
+// warranties. lineURL is a line's url (DELETE removes it, PUT edits it), nil
+// when read only; edit is the line being edited with its error, nil when
+// none.
+templ TxItemsList(items []models.TxItem, acc *models.Currency, amount float64, lineURL func(models.TxItem) string, owner *models.Transaction, edit *TxItemFD) {
 	{{ cur := models.TxItemsCurrency(items, acc) }}
 	<ul class="grid grid-cols-1 gap-1">
 		for _, it := range items {
 			if !it.Kind.IsCharge() {
-				@txItemLine(it, cur, onDelete, owner)
+				@txItemLine(it, cur, lineURL, owner, edit, models.TxItemsSubtotal(items))
 			}
 		}
 	</ul>
@@ -518,7 +520,7 @@ templ TxItemsList(items []models.TxItem, acc *models.Currency, amount float64, o
 		<ul class="grid grid-cols-1 gap-1">
 			for _, it := range items {
 				if it.Kind.IsCharge() {
-					@txItemLine(it, cur, onDelete, owner)
+					@txItemLine(it, cur, lineURL, owner, edit, models.TxItemsSubtotal(items))
 				}
 			}
 		</ul>
@@ -558,47 +560,172 @@ func abs(v float64) float64 {
 	return v
 }
 
-templ txItemLine(it models.TxItem, cur *models.Currency, onDelete func(models.TxItem) string, owner *models.Transaction) {
-	<li class="flex items-center gap-3 min-w-0 px-3 py-1.5 rounded-xl bg-tx-row" data-tx-item-line>
-		<div class="flex-1 min-w-0">
-			<p class="text-sm [overflow-wrap:anywhere]">
-				if it.ItemID != "" && !it.Kind.IsCharge() {
-					<a href={ ItemURL(it.ItemID) } class="hover:underline" title="The item's prices over time">{ it.Label() }</a>
-				} else {
-					{ it.Label() }
+// txItemLine is a line in the details: its name, quantity × price, the
+// item's warranty, total, then (editable) Edit, Add a warranty (an item of
+// an expense without one) and Remove; Edit swaps the row for its form.
+templ txItemLine(it models.TxItem, cur *models.Currency, lineURL func(models.TxItem) string, owner *models.Transaction, edit *TxItemFD, subtotal float64) {
+	{{ editing := edit != nil && edit.ID == it.ID }}
+	{{ showWarranty := owner != nil && !it.Kind.IsCharge() && owner.Kind == models.ExpenseTxKind }}
+	{{ warrantyEditable := showWarranty && lineURL != nil && models.TxWindowsEditable(owner) }}
+	{{ d, _ := it.EffectiveWarranty(owner) }}
+	<li x-data={ fmt.Sprintf("{editing: %t, warranty: false}", editing) } class="min-w-0 rounded-xl bg-tx-row" data-tx-item-line>
+		<div x-show="!editing" x-cloak?={ editing } class="flex items-center gap-3 min-w-0 px-3 py-1.5">
+			<div class="flex-1 min-w-0">
+				<p class="text-sm [overflow-wrap:anywhere]">
+					if it.ItemID != "" && !it.Kind.IsCharge() {
+						<a href={ ItemURL(it.ItemID) } class="hover:underline" title="The item's prices over time">{ it.Label() }</a>
+					} else {
+						{ it.Label() }
+					}
+					if it.Kind.IsCharge() && it.Name != "" && it.Rate != nil {
+						<span class="text-zinc-500">{ fmt.Sprintf(" · %s%%", strconv.FormatFloat(*it.Rate, 'f', -1, 64)) }</span>
+					}
+					if it.Included {
+						<span class="text-zinc-500">· included</span>
+					}
+				</p>
+				if !it.Kind.IsCharge() && it.Quantity != 1 {
+					<p class="text-xs text-zinc-500 tabular-nums">{ fmt.Sprintf("%s × %s", strconv.FormatFloat(it.Quantity, 'f', -1, 64), cur.Format(it.UnitPrice)) }</p>
 				}
-				if it.Kind.IsCharge() && it.Name != "" && it.Rate != nil {
-					<span class="text-zinc-500">{ fmt.Sprintf(" · %s%%", strconv.FormatFloat(*it.Rate, 'f', -1, 64)) }</span>
+				if showWarranty && (d != nil || warrantyEditable) {
+					<div
+						class="mt-1"
+						if d == nil {
+							x-cloak
+							x-show="warranty"
+						}
+					>
+						@txItemWarranty(owner, &it, warrantyEditable)
+					</div>
 				}
-				if it.Included {
-					<span class="text-zinc-500"> · included</span>
-				}
-			</p>
-			if !it.Kind.IsCharge() && it.Quantity != 1 {
-				<p class="text-xs text-zinc-500 tabular-nums">{ fmt.Sprintf("%s × %s", strconv.FormatFloat(it.Quantity, 'f', -1, 64), cur.Format(it.UnitPrice)) }</p>
-			}
-			if owner != nil && !it.Kind.IsCharge() && owner.Kind == models.ExpenseTxKind {
-				<div class="mt-1">
-					@txItemWarranty(owner, &it, onDelete != nil && models.TxWindowsEditable(owner))
+			</div>
+			<span
+				class={ "text-sm tabular-nums", templ.KV("text-emerald-400", it.Total < 0), templ.KV("text-zinc-500 line-through decoration-zinc-600", it.Included) }
+			>{ cur.Format(it.Total) }</span>
+			if lineURL != nil {
+				<div class="flex items-center shrink-0 -mr-1.5">
+					if warrantyEditable && d == nil {
+						<button
+							type="button"
+							@click="warranty = !warranty"
+							:aria-pressed="warranty"
+							aria-label={ "Add a warranty to " + it.Label() }
+							title="Add a warranty"
+							class="grid place-items-center w-8 h-8 rounded-lg text-zinc-500 cursor-pointer transition-colors hover:bg-zinc-700 hover:text-white aria-pressed:text-emerald-300"
+						>
+							@icons.ShieldCheck("14")
+						</button>
+					}
+					<button
+						type="button"
+						@click="editing = true"
+						aria-label={ "Edit " + it.Label() }
+						title="Edit"
+						class="grid place-items-center w-8 h-8 rounded-lg text-zinc-500 cursor-pointer transition-colors hover:bg-zinc-700 hover:text-white"
+					>
+						@icons.Pencil("14")
+					</button>
+					<button
+						type="button"
+						hx-delete={ lineURL(it) }
+						hx-target="closest [data-tx-items-section]"
+						hx-swap="outerHTML"
+						aria-label={ "Remove " + it.Label() }
+						title="Remove"
+						class="grid place-items-center w-8 h-8 rounded-lg text-zinc-500 cursor-pointer transition-colors hover:bg-zinc-700 hover:text-white"
+					>
+						@icons.X("14")
+					</button>
 				</div>
 			}
 		</div>
-		<span
-			class={ "text-sm tabular-nums", templ.KV("text-emerald-400", it.Total < 0), templ.KV("text-zinc-500 line-through decoration-zinc-600", it.Included) }
-		>{ cur.Format(it.Total) }</span>
-		if onDelete != nil {
-			<button
-				type="button"
-				hx-delete={ onDelete(it) }
-				hx-target="closest [data-tx-items-section]"
-				hx-swap="outerHTML"
-				aria-label={ "Remove " + it.Label() }
-				class="grid place-items-center shrink-0 w-8 h-8 rounded-lg text-zinc-500 cursor-pointer transition-colors hover:bg-zinc-700 hover:text-white"
-			>
-				@icons.X("14")
-			</button>
+		if lineURL != nil {
+			{{ fd := edit }}
+			if !editing {
+				{{ fd = &TxItemsToFD([]models.TxItem{it})[0] }}
+			}
+			@txItemEditForm(lineURL(it), fd, subtotal, txCounterpartyID(ownerCounterparty(owner)), editing)
 		}
 	</li>
+}
+
+// ownerCounterparty is the transaction's counterparty, nil for none (or a
+// recurrent transaction's line, owner nil).
+func ownerCounterparty(owner *models.Transaction) *models.Counterparty {
+	if owner == nil {
+		return nil
+	}
+	return owner.Counterparty
+}
+
+// txItemFormFields are a line's inputs in the details' add / edit forms: its
+// kind, name, then an item's quantity × unit price = total or a charge's
+// rate, amount and included; Alpine's kind picks which (the scope's).
+// focus is the scope's variable that focuses the name when it turns true.
+templ txItemFormFields(fd *TxItemFD, comboID, focus string) {
+	<div class="flex items-center gap-1.5">
+		@form.Combobox(form.ComboboxProps{
+			Name: "kind", ID: comboID, Label: "Line",
+			Options: itemKindOptions(true), Data: form.FDInput{Value: strconv.Itoa(int(fd.Kind))}, Chip: true,
+			InputAttrs: templ.Attributes{"@change": "kind = $event.target.value"},
+		})
+		<div class="contents" x-effect={ fmt.Sprintf("if (%s) $nextTick(() => $el.parentElement.querySelector('input[type=text]')?.focus())", focus) }></div>
+		<template x-if="kind === '0'">
+			@itemNameInput("name", "item_ref", fd.Name, fd.ItemID, false)
+		</template>
+		<template x-if="kind !== '0'">
+			<input
+				type="text"
+				name="name"
+				value={ fd.Name }
+				placeholder="Name on the receipt (optional)"
+				aria-label="Name"
+				autocomplete="off"
+				class="input-field h-10! flex-1 min-w-0"
+			/>
+		</template>
+	</div>
+	<template x-if="kind === '0'">
+		<div class="flex items-center gap-1.5">
+			@itemPriceInputs("quantity", "unit_price", "total", fd.Quantity, fd.UnitPrice, fd.Total, !fd.Kind.IsCharge() && itemTotalManual(*fd))
+		</div>
+	</template>
+	<template x-if="kind !== '0'">
+		<div class="flex items-center gap-1.5">
+			@itemRateInput("rate", fd.Rate)
+			<input type="text" inputmode="decimal" name="total" value={ fd.Total } placeholder="Amount" title="Worked out from the rate when empty" aria-label="Amount" class={ itemNumClass, "flex-1 min-w-0" } data-total-manual?={ fd.Kind.IsCharge() && fd.Total != "" && fd.Rate == "" }/>
+			<label x-data={ fmt.Sprintf("{inc: %t}", fd.Included) } title="Already included in the prices: shown, not added" class="item-toggle" :aria-pressed="inc">
+				<input type="checkbox" name="included" x-model="inc" class="sr-only"/>
+				Included
+			</label>
+		</div>
+	</template>
+	@form.ErrorMessage(fd.Error)
+}
+
+// txItemEditForm edits a line in the details, PUT to url, in place of its
+// row while the line's editing is true (open: already); fd is its data,
+// with its error.
+templ txItemEditForm(url string, fd *TxItemFD, subtotal float64, cpID string, open bool) {
+	<form
+		x-data={ fmt.Sprintf("{kind: '%d'}", fd.Kind) }
+		x-show="editing"
+		x-cloak?={ !open }
+		hx-put={ url }
+		hx-target="closest [data-tx-items-section]"
+		hx-swap="outerHTML"
+		@keydown.escape.stop="editing = false"
+		data-item-add
+		data-subtotal={ strconv.FormatFloat(subtotal, 'f', -1, 64) }
+		data-counterparty={ cpID }
+		class="grid gap-1.5 p-2 rounded-xl bg-zinc-900/50"
+	>
+		@txItemFormFields(fd, "item-edit-"+fd.ID, "editing")
+		<div class="flex items-center justify-end gap-1">
+			<button type="button" @click="editing = false" class="h-8 px-3 rounded-lg text-sm text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-zinc-200">Cancel</button>
+			<button type="submit" class="btn-primary h-8! px-4! text-sm">Save</button>
+		</div>
+	</form>
 }
 
 // TxItemAddForm adds a line from the details (an item or a charge, picked
@@ -624,44 +751,7 @@ templ txItemAddForm(url string, fd *TxItemFD, subtotal float64, cpID string) {
 			data-counterparty={ cpID }
 			class="grid gap-1.5 p-2 rounded-xl bg-zinc-900/50"
 		>
-			<div class="flex items-center gap-1.5">
-				@form.Combobox(form.ComboboxProps{
-					Name: "kind", ID: "item-add", Label: "Line",
-					Options: itemKindOptions(true), Data: form.FDInput{Value: strconv.Itoa(int(fd.Kind))}, Chip: true,
-					InputAttrs: templ.Attributes{"@change": "kind = $event.target.value"},
-				})
-				<div class="contents" x-effect="if (adding) $nextTick(() => $el.parentElement.querySelector('input[type=text]')?.focus())"></div>
-				<template x-if="kind === '0'">
-					@itemNameInput("name", "item_ref", fd.Name, fd.ItemID, false)
-				</template>
-				<template x-if="kind !== '0'">
-					<input
-						type="text"
-						name="name"
-						value={ fd.Name }
-						placeholder="Name on the receipt (optional)"
-						aria-label="Name"
-						autocomplete="off"
-						class="input-field h-10! flex-1 min-w-0"
-					/>
-				</template>
-			</div>
-			<template x-if="kind === '0'">
-				<div class="flex items-center gap-1.5">
-					@itemPriceInputs("quantity", "unit_price", "total", fd.Quantity, fd.UnitPrice, fd.Total, false)
-				</div>
-			</template>
-			<template x-if="kind !== '0'">
-				<div class="flex items-center gap-1.5">
-					@itemRateInput("rate", fd.Rate)
-					<input type="text" inputmode="decimal" name="total" value={ fd.Total } placeholder="Amount" title="Worked out from the rate when empty" aria-label="Amount" class={ itemNumClass, "flex-1 min-w-0" }/>
-					<label x-data={ fmt.Sprintf("{inc: %t}", fd.Included) } title="Already included in the prices: shown, not added" class="item-toggle" :aria-pressed="inc">
-						<input type="checkbox" name="included" x-model="inc" class="sr-only"/>
-						Included
-					</label>
-				</div>
-			</template>
-			@form.ErrorMessage(fd.Error)
+			@txItemFormFields(fd, "item-add", "adding")
 			<div class="flex items-center justify-end gap-1">
 				<button type="button" @click="adding = false" class="h-8 px-3 rounded-lg text-sm text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-zinc-200">Cancel</button>
 				<button type="submit" class="btn-primary h-8! px-4! text-sm">Add</button>
@@ -672,6 +762,15 @@ templ txItemAddForm(url string, fd *TxItemFD, subtotal float64, cpID string) {
 			Add a line
 		</button>
 	</div>
+}
+
+// splitItemFD tells the details' add form's data (no ID) from a line's edit
+// form's.
+func splitItemFD(fd *TxItemFD) (add, edit *TxItemFD) {
+	if fd != nil && fd.ID != "" {
+		return nil, fd
+	}
+	return fd, nil
 }
 
 func txItemsSectionID(prefix, id string) string { return prefix + "-items-" + id }
@@ -740,10 +839,11 @@ templ ReceiptViewer(url string) {
 }
 
 // TxDetailsItems is the transaction details' lines, receipt and scan; add is
-// the add form's data, open with its error, nil when closed; rec the scan's
-// state.
+// the add form's data, open with its error, nil when closed (a line's edit
+// form's when it has the line's ID); rec the scan's state.
 templ TxDetailsItems(tx *models.Transaction, add *TxItemFD, rec *ReceiptFD) {
 	{{ locked := tx.IsLocked() }}
+	{{ add, edit := splitItemFD(add) }}
 	<div id={ txItemsSectionID("tx", tx.ID) } data-tx-items-section>
 		@txDetailsSection("Items") {
 			if tx.Receipt != nil {
@@ -782,7 +882,7 @@ templ TxDetailsItems(tx *models.Transaction, add *TxItemFD, rec *ReceiptFD) {
 				if !locked {
 					{{ onDelete = func(it models.TxItem) string { return fmt.Sprintf("/transactions/%s/items/%s", tx.ID, it.ID) } }}
 				}
-				@TxItemsList(tx.Items, &tx.Account.Currency, tx.Amount, onDelete, tx)
+				@TxItemsList(tx.Items, &tx.Account.Currency, tx.Amount, onDelete, tx, edit)
 				if len(tx.Wishes) > 0 {
 					@txWishChips(tx)
 				}
@@ -955,6 +1055,7 @@ templ detailsScanButtons(tx *models.Transaction) {
 // RecurrentTxDetailsItems is the recurrent transaction details' lines, copied
 // to its occurrences; add is the add form's data, nil when closed.
 templ RecurrentTxDetailsItems(rt *models.RecurrentTx, add *TxItemFD) {
+	{{ add, edit := splitItemFD(add) }}
 	<div id={ txItemsSectionID("rtx", rt.ID) } data-tx-items-section>
 		@txDetailsSection("Items") {
 			if len(rt.Items) == 0 {
@@ -964,7 +1065,7 @@ templ RecurrentTxDetailsItems(rt *models.RecurrentTx, add *TxItemFD) {
 				if !rt.IsGamyaa() {
 					{{ onDelete = func(it models.TxItem) string { return fmt.Sprintf("/recurrent-tx/%s/items/%s", rt.ID, it.ID) } }}
 				}
-				@TxItemsList(rt.Items, &rt.Account.Currency, rt.Amount, onDelete, nil)
+				@TxItemsList(rt.Items, &rt.Account.Currency, rt.Amount, onDelete, nil, edit)
 			}
 			if !rt.IsGamyaa() {
 				@txItemAddForm(fmt.Sprintf("/recurrent-tx/%s/items", rt.ID), add, models.TxItemsSubtotal(rt.Items), txCounterpartyID(rt.Counterparty))

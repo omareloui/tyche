@@ -133,6 +133,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("POST /transactions/{id}/receipt", handle(h.ScanReceiptIntoTx, middleware.HTMXOnly))
 	mux.Handle("POST /transactions/{id}/items", handle(h.AddTxItem))
 	mux.Handle("DELETE /transactions/{id}/items/{itemID}", handle(h.DeleteTxItem))
+	mux.Handle("PUT /transactions/{id}/items/{itemID}", handle(h.UpdateTxItem, middleware.HTMXOnly))
 	mux.Handle("PUT /transactions/{id}/items/{itemID}/warranty", handle(h.SetTxItemWarranty, middleware.HTMXOnly))
 	mux.Handle("PUT /transactions/{id}/windows", handle(h.SetTransactionWindows, middleware.HTMXOnly))
 	mux.Handle("GET /transactions/{id}/wishes", handle(h.GetTxWishes))
@@ -165,6 +166,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("DELETE /recurrent-tx/{id}", handle(h.DeleteRecurrentTx))
 	mux.Handle("POST /recurrent-tx/{id}/items", handle(h.AddRecurrentTxItem))
 	mux.Handle("DELETE /recurrent-tx/{id}/items/{itemID}", handle(h.DeleteRecurrentTxItem))
+	mux.Handle("PUT /recurrent-tx/{id}/items/{itemID}", handle(h.UpdateRecurrentTxItem, middleware.HTMXOnly))
 
 	mux.Handle("GET /goals", handle(h.Goals))
 	mux.Handle("POST /goals", handle(h.CreateGoal))

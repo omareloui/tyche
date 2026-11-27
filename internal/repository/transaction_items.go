@@ -450,6 +450,15 @@ func (r *Repository) AddRecurrentTxItem(ctx context.Context, rt *models.Recurren
 	})
 }
 
+// SetRecurrentTxItems replaces the recurrent transaction's lines, and the
+// ones of its scheduled occurrences not edited on their own.
+func (r *Repository) SetRecurrentTxItems(ctx context.Context, rt *models.RecurrentTx, items []models.TxItem) error {
+	rt.Items = items
+	return r.transact(ctx, func(qtx *queries.Queries) error {
+		return writeRecurrentItemsWithTxn(ctx, qtx, rt, true)
+	})
+}
+
 // DeleteRecurrentTxItem deletes a line of the recurrent transaction, and its
 // copies on the scheduled occurrences not edited on their own.
 func (r *Repository) DeleteRecurrentTxItem(ctx context.Context, rt *models.RecurrentTx, itemID string) error {
