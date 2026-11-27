@@ -1,0 +1,360 @@
+package views
+
+import (
+	"math"
+	"net/url"
+	"strconv"
+	"strings"
+
+	"github.com/omareloui/tyche/internal/formatters"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/sqlguess"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+// ConsoleAsk is the console's Ask tab: a question the AI turned into SQL.
+type ConsoleAsk struct {
+	Question string
+	// Answered is whether there's an answer (SQL, or why there's none).
+	Answered bool
+	// Cached is whether the SQL came from the history, without a call.
+	Cached  bool
+	Explain string
+	Chart   sqlguess.Chart
+	// Refused tells why the question wasn't asked (too long, over the
+	// limit, the call failed).
+	Refused     string
+	History     []models.ConsoleQuestion
+	Used, Limit int
+}
+
+// ConsoleAskURL asks the question (from the history: no call).
+func ConsoleAskURL(question string) string {
+	return "/console?" + url.Values{"ask": {question}}.Encode()
+}
+
+// consoleStat is a value of a result shown big, its row's other cells as
+// its label.
+type consoleStat struct {
+	Label string
+	Value float64
+	Text  string
+}
+
+// consoleStats are the result's rows as labelled numbers: each row's single
+// number cell (the same column in every row), the others its label; false
+// when the rows aren't that, or more than max of them.
+func consoleStats(res *models.ConsoleResult, max int) ([]consoleStat, bool) {
+	if res == nil || len(res.Rows) == 0 || len(res.Rows) > max {
+		return nil, false
+	}
+	col := -1
+	var stats []consoleStat
+	for _, row := range res.Rows {
+		num := -1
+		var label []string
+		for i, v := range row {
+			if v.Number {
+				if num >= 0 {
+					return nil, false
+				}
+				num = i
+				continue
+			}
+			if !v.Null && v.Blob < 0 {
+				label = append(label, v.Text)
+			}
+		}
+		if num < 0 || (col >= 0 && num != col) {
+			return nil, false
+		}
+		col = num
+		f, err := strconv.ParseFloat(row[num].Raw, 64)
+		if err != nil {
+			return nil, false
+		}
+		stats = append(stats, consoleStat{Label: strings.Join(label, " · "), Value: f, Text: consoleNumText(f)})
+	}
+	return stats, true
+}
+
+// consoleNumText is a number with thousands separators, at most 2 decimals.
+func consoleNumText(f float64) string {
+	if f == math.Trunc(f) && math.Abs(f) < 1e15 {
+		return formatters.FormatNum(int64(f))
+	}
+	return formatters.FormatAmountDigits(f, "", 2)
+}
+
+// consoleBarWidth is a bar's width in percent of the largest value's.
+func consoleBarWidth(stats []consoleStat, v float64) string {
+	top := 0.0
+	for _, s := range stats {
+		top = max(top, math.Abs(s.Value))
+	}
+	if top == 0 {
+		return "0%"
+	}
+	return strconv.FormatFloat(math.Max(math.Abs(v)/top*100, 0.5), 'f', 1, 64) + "%"
+}
+
+// consoleAskBody is the Ask tab: the question box, the answer (its rows
+// shown as asked, its SQL in the editor to change and run again) and the
+// questions asked before.
+templ consoleAskBody(data ConsoleData) {
+	{{ ask := data.Ask }}
+	<div
+		id={ ConsoleTarget }
+		x-data="consoleAsk"
+		@htmx:before-request="start($event)"
+		@htmx:after-request="!$event.detail.successful && stop()"
+		class="grid gap-5 pb-10 max-w-4xl"
+	>
+		<div>
+			@consoleTabs(consoleTabAsk, data.AskOn)
+		</div>
+		<form
+			hx-get="/console"
+			hx-target={ "#" + ConsoleTarget }
+			hx-swap="outerHTML"
+			hx-push-url="true"
+			data-ask
+			class="grid gap-2"
+		>
+			<div class="flex gap-2">
+				<input
+					type="text"
+					x-ref="question"
+					:disabled="loading"
+					name="ask"
+					value={ ask.Question }
+					maxlength={ strconv.Itoa(sqlguess.MaxQuestionLen) }
+					placeholder="How much did I spend on Uber this year?"
+					aria-label="Your question"
+					autocomplete="off"
+					class="input-field flex-1 min-w-0"
+					autofocus?={ ask.Question == "" }
+				/>
+				<button
+					type="submit"
+					class="btn-primary inline-flex items-center gap-2 shrink-0 disabled:opacity-60 disabled:cursor-wait"
+					:class="loading && 'busy-swap htmx-request'"
+					:disabled="loading"
+				>
+					@icons.Sparkles("16")
+					<span x-text="loading ? 'Asking…' : 'Ask'">Ask</span>
+				</button>
+			</div>
+			<div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
+				<span>Only your question and the tables' layout are sent to the AI, never your data.</span>
+				if ask.Limit > 0 {
+					<span class="ml-auto tabular-nums">{ strconv.Itoa(ask.Used) } of { strconv.Itoa(ask.Limit) } questions this month</span>
+				}
+			</div>
+		</form>
+		@consoleAskBusy()
+		if ask.Refused != "" {
+			<p x-show="!busy" class="flex gap-2 p-3 rounded-2xl bg-amber-400/10 text-sm text-amber-200">
+				@icons.Warning("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
+				{ ask.Refused }
+			</p>
+		}
+		<div x-show="!busy" class="grid gap-5">
+			if ask.Answered {
+				@consoleAskAnswer(data)
+			}
+			if len(ask.History) > 0 {
+				@consoleAskHistory(ask)
+			} else if !ask.Answered {
+				@consoleAskExamples()
+			}
+		</div>
+	</div>
+}
+
+// consoleAskBusy stands in for the answer while it's being written, laid
+// out like it (consoleAskAnswer: the explain line, the rows, the query's
+// editor): the explain line tells the step it's likely at (consoleAsk,
+// console.js) and the seconds gone by, the rest pulses.
+templ consoleAskBusy() {
+	<div x-show="busy" x-cloak role="status" aria-live="polite" class="grid gap-4">
+		<p class="flex gap-2 text-sm text-zinc-300">
+			@icons.Sparkles("16", &templ.Attributes{"class": "shrink-0 mt-0.5 text-(--accent) animate-pulse motion-reduce:animate-none"})
+			<span>
+				<span x-text="step">Reading your question…</span>
+				<span class="text-zinc-500 tabular-nums" x-show="secs > 0" x-text="'· ' + secs + 's'"></span>
+			</span>
+		</p>
+		<div class="grid gap-4 animate-pulse motion-reduce:animate-none" aria-hidden="true">
+			// consoleResult: the rows' count and time, then the table
+			<div class="grid gap-2">
+				<div class="flex items-center h-4">
+					<span class="h-2.5 w-14 rounded-full bg-white/10"></span>
+					<span class="ml-auto h-2.5 w-10 rounded-full bg-white/10"></span>
+				</div>
+				<div class="rounded-2xl ring-1 ring-zinc-800 bg-zinc-900/40 overflow-hidden">
+					<div class="flex items-center gap-8 h-9 px-3 bg-zinc-900 border-b border-zinc-800">
+						<span class="h-2.5 w-20 rounded-full bg-white/10"></span>
+						<span class="h-2.5 w-14 rounded-full bg-white/10"></span>
+						<span class="h-2.5 w-16 rounded-full bg-white/10"></span>
+					</div>
+					for _, w := range [][3]string{{"w-28", "w-12", "w-16"}, {"w-20", "w-10", "w-14"}, {"w-32", "w-14", "w-12"}} {
+						<div class="flex items-center gap-8 h-8 px-3 border-t border-zinc-800/70">
+							<span class={ "h-2.5 rounded-full bg-white/5", w[0] }></span>
+							<span class={ "h-2.5 rounded-full bg-white/5", w[1] }></span>
+							<span class={ "h-2.5 rounded-full bg-white/5", w[2] }></span>
+						</div>
+					}
+				</div>
+			</div>
+			// consoleEditor under its label
+			<div class="grid gap-1">
+				<span class="text-xs text-zinc-500">The query: change it and run it again</span>
+				<div class="grid gap-2">
+					<div class="input-field h-auto! min-h-24 py-3! grid content-start gap-2.5">
+						<span class="h-2.5 w-3/4 rounded-full bg-white/10"></span>
+						<span class="h-2.5 w-1/2 rounded-full bg-white/10"></span>
+						<span class="h-2.5 w-2/3 rounded-full bg-white/10"></span>
+					</div>
+					<div class="flex items-center">
+						<span class="h-11 w-24 rounded-xl bg-white/10"></span>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+templ consoleAskAnswer(data ConsoleData) {
+	{{ ask := data.Ask }}
+	<div class="grid gap-4">
+		if ask.Explain != "" {
+			<p class="flex gap-2 text-sm text-zinc-300">
+				@icons.Sparkles("16", &templ.Attributes{"class": "shrink-0 mt-0.5 text-(--accent)"})
+				<span>
+					{ ask.Explain }
+					if ask.Cached {
+						<span class="text-zinc-500">· from your history</span>
+					}
+				</span>
+			</p>
+		}
+		if data.SQL == "" {
+			<p class="text-sm text-zinc-400">There's no query for this one: try asking about your transactions, accounts, categories, merchants or tags.</p>
+		} else {
+			if data.Err != "" {
+				@consoleError(data.Err)
+			}
+			if data.Result != nil {
+				@consoleAskChart(data)
+			}
+			<div class="grid gap-1">
+				<span class="text-xs text-zinc-500">The query: change it and run it again</span>
+				@consoleEditor(data)
+			</div>
+		}
+	</div>
+}
+
+// consoleAskChart shows the rows as the AI asked: a number, bars, else the
+// table (also when the rows don't fit the chart asked).
+templ consoleAskChart(data ConsoleData) {
+	{{ res := data.Result }}
+	if stats, ok := consoleStats(res, 6); ok && data.Ask.Chart == sqlguess.ChartNumber {
+		<div class="flex flex-wrap gap-3">
+			for _, s := range stats {
+				<div class="grid gap-1 min-w-40 px-5 py-4 rounded-2xl bg-zinc-700/20 ring-1 ring-zinc-800">
+					<span class="text-3xl font-semibold tabular-nums text-white">{ s.Text }</span>
+					if s.Label != "" {
+						<span class="text-sm text-zinc-400">{ s.Label }</span>
+					}
+				</div>
+			}
+		</div>
+	} else if stats, ok := consoleStats(res, 60); ok && data.Ask.Chart == sqlguess.ChartBar {
+		<div class="grid gap-1.5 p-4 rounded-2xl bg-zinc-700/20 ring-1 ring-zinc-800">
+			for _, s := range stats {
+				<div class="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)_auto] items-center gap-3 text-sm">
+					<span class="truncate text-zinc-300" title={ s.Label }>{ s.Label }</span>
+					<span class="h-3 rounded-full bg-white/5 overflow-hidden">
+						<span
+							class={ "block h-full rounded-full", templ.KV("bg-(--accent)", s.Value >= 0), templ.KV("bg-red-400", s.Value < 0) }
+							style={ "width: " + consoleBarWidth(stats, s.Value) }
+						></span>
+					</span>
+					<span class="tabular-nums text-zinc-200">{ s.Text }</span>
+				</div>
+			}
+		</div>
+		<details class="group">
+			<summary class="cursor-pointer select-none text-xs text-zinc-500 hover:text-zinc-300">Rows</summary>
+			<div class="mt-2">
+				@consoleResult(data)
+			</div>
+		</details>
+	} else {
+		@consoleResult(data)
+	}
+}
+
+templ consoleAskHistory(ask *ConsoleAsk) {
+	<div class="grid gap-2">
+		<h2 class="text-xs uppercase tracking-wide text-zinc-500">Asked before · no AI call to ask again</h2>
+		<ul class="grid gap-0.5 text-sm">
+			for _, q := range ask.History {
+				<li class="group flex items-center gap-1 rounded-lg hover:bg-white/5">
+					@consoleAskLink(q.Question, "flex-1 min-w-0 truncate px-2.5 py-1.5 "+consoleTableClass(strings.EqualFold(q.Question, ask.Question))) {
+						{ q.Question }
+					}
+					<button
+						type="button"
+						hx-delete={ "/console/questions/" + q.ID }
+						hx-target={ "#" + ConsoleTarget }
+						hx-swap="outerHTML"
+						class="shrink-0 p-1.5 mr-1 rounded-md text-zinc-500 hover:text-white hover:bg-white/10 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
+						aria-label="Remove from history"
+						title="Remove from history"
+					>
+						@icons.X("14")
+					</button>
+				</li>
+			}
+		</ul>
+	</div>
+}
+
+var consoleAskExampleQuestions = []string{
+	"How much did I spend on Uber this year?",
+	"What was my biggest grocery month?",
+	"Spending by category this month",
+	"My 10 largest expenses last month",
+}
+
+templ consoleAskExamples() {
+	<div class="grid gap-2">
+		<h2 class="text-xs uppercase tracking-wide text-zinc-500">Try</h2>
+		<div class="flex flex-wrap gap-2 text-sm">
+			for _, q := range consoleAskExampleQuestions {
+				@consoleAskLink(q, "px-3 py-1.5 rounded-full bg-white/5 text-zinc-300 hover:bg-white/10 hover:text-white") {
+					{ q }
+				}
+			}
+		</div>
+	</div>
+}
+
+// consoleAskLink asks the question again (data-ask: consoleAsk shows it
+// being answered).
+templ consoleAskLink(question string, class string) {
+	<a
+		href={ templ.SafeURL(ConsoleAskURL(question)) }
+		hx-get={ ConsoleAskURL(question) }
+		hx-target={ "#" + ConsoleTarget }
+		hx-swap="outerHTML"
+		hx-push-url="true"
+		data-ask={ question }
+		class={ class }
+	>
+		{ children... }
+	</a>
+}

@@ -87,6 +87,56 @@ document.addEventListener("alpine:init", () => {
     },
   }));
 
+  // consoleAsk is the Ask tab while a question is being answered (the form,
+  // a history entry or an example, marked data-ask): loading at once (the
+  // box and the button disabled, so it's asked once), then, unless it
+  // answered meanwhile (the history's are instant), busy: the answer and
+  // history give way to its skeleton with the step it's likely at.
+  Alpine.data("consoleAsk", () => ({
+    loading: false,
+    busy: false,
+    secs: 0,
+    timer: null,
+    pending: null,
+
+    get step() {
+      if (this.secs < 2) return "Reading your question…";
+      if (this.secs < 7) return "Writing the query…";
+      if (this.secs < 15) return "Running it on your data…";
+      return "Still on it: a query that fails gets one more try…";
+    },
+
+    start(e) {
+      const el = e.target.closest("[data-ask]");
+      if (!el || !this.$root.contains(el)) return;
+      const question = el.dataset.ask || this.$refs.question.value.trim();
+      if (!question) return;
+      if (this.loading) {
+        e.preventDefault();
+        return;
+      }
+      this.$refs.question.value = question;
+      this.stop();
+      this.loading = true;
+      this.secs = 0;
+      this.pending = setTimeout(() => {
+        this.busy = true;
+        this.timer = setInterval(() => this.secs++, 1000);
+      }, 200);
+    },
+
+    stop() {
+      this.loading = false;
+      this.busy = false;
+      clearTimeout(this.pending);
+      clearInterval(this.timer);
+    },
+
+    destroy() {
+      this.stop();
+    },
+  }));
+
   Alpine.data("consoleEditor", () => ({
     // runKey runs the editor's SQL on Ctrl/Cmd + Enter.
     runKey(e) {

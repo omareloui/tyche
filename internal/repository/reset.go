@@ -29,6 +29,7 @@ func (r *Repository) Reset(ctx context.Context, opts models.ResetOptions) error 
 			{opts.Has(models.ResetTransactions), qtx.ResetDeleteTransactions},
 			{opts.Has(models.ResetTransactions), qtx.ResetDeleteCSVImports},
 			{opts.Has(models.ResetTransactions), qtx.ResetDeleteQuickAdds},
+			{opts.Has(models.ResetTransactions), qtx.ResetDeleteConsoleQuestions},
 			// Balances are the sum of the transactions, so kept accounts
 			// start again from 0.
 			{opts.Has(models.ResetTransactions) && !opts.Has(models.ResetAccounts), qtx.ResetZeroAccountBalances},

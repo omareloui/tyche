@@ -9,6 +9,10 @@ DELETE FROM csv_imports;
 -- name: ResetDeleteQuickAdds :exec
 DELETE FROM quick_adds;
 
+-- The console's asked questions go with the transactions they asked about.
+-- name: ResetDeleteConsoleQuestions :exec
+DELETE FROM console_questions;
+
 -- name: ResetZeroAccountBalances :exec
 UPDATE accounts SET amount = 0;
 

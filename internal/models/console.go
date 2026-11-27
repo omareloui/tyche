@@ -199,3 +199,18 @@ func ConsoleRanks(tables []ConsoleTableInfo) map[string]int {
 func (t ConsoleTableInfo) IsKey(c ConsoleColumn) bool {
 	return c.PK > 0 || t.FK(c.Name) != nil
 }
+
+// ConsoleHistoryLen is how many asked questions the console keeps.
+const ConsoleHistoryLen = 50
+
+// ConsoleQuestion is a question asked in the console's Ask tab with the SQL
+// the AI wrote for it, its line about it and how its rows show (Chart:
+// number / table / bar).
+type ConsoleQuestion struct {
+	ID        string
+	Question  string
+	SQL       string
+	Explain   string
+	Chart     string
+	CreatedAt time.Time
+}

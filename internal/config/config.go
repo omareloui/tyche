@@ -127,6 +127,9 @@ type ReceiptOCR struct {
 	// SplitGuessesPerMonth is how many split bills a tenant may have read
 	// from a sentence a calendar month.
 	SplitGuessesPerMonth int
+	// AskQuestionsPerMonth is how many questions a tenant may have turned
+	// into SQL a calendar month (the console's Ask tab).
+	AskQuestionsPerMonth int
 }
 
 // Prices are the calls' prices.
@@ -136,8 +139,8 @@ func (c ReceiptOCR) Prices() gemini.Prices {
 
 // GetReceiptOCR reads the GEMINI_*, RECEIPT_SCANS_PER_MONTH,
 // SMS_GUESSES_PER_MONTH, COL_ESTIMATES_PER_MONTH, TAX_RULES_PER_MONTH,
-// VISA_RULES_PER_MONTH, MERCHANT_GUESSES_PER_MONTH, QUICK_ADDS_PER_MONTH and
-// SPLIT_GUESSES_PER_MONTH variables.
+// VISA_RULES_PER_MONTH, MERCHANT_GUESSES_PER_MONTH, QUICK_ADDS_PER_MONTH,
+// SPLIT_GUESSES_PER_MONTH and ASK_QUESTIONS_PER_MONTH variables.
 func GetReceiptOCR() ReceiptOCR {
 	return ReceiptOCR{
 		APIKey:                  getEnvironmentValueWithDefault("GEMINI_API_KEY", ""),
@@ -157,5 +160,6 @@ func GetReceiptOCR() ReceiptOCR {
 		QuickModel:              getEnvironmentValueWithDefault("GEMINI_QUICK_MODEL", ""),
 		QuickAddsPerMonth:       max(getEnvironmentIntWithDefault("QUICK_ADDS_PER_MONTH", 200), 0),
 		SplitGuessesPerMonth:    max(getEnvironmentIntWithDefault("SPLIT_GUESSES_PER_MONTH", 30), 0),
+		AskQuestionsPerMonth:    max(getEnvironmentIntWithDefault("ASK_QUESTIONS_PER_MONTH", 50), 0),
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/omareloui/tyche/internal/smsguess"
 	"github.com/omareloui/tyche/internal/smstemplates"
 	"github.com/omareloui/tyche/internal/splitguess"
+	"github.com/omareloui/tyche/internal/sqlguess"
 	"github.com/omareloui/tyche/internal/taxguess"
 	"github.com/omareloui/tyche/internal/txguess"
 	"github.com/omareloui/tyche/internal/valid"
@@ -56,6 +57,8 @@ type Handler struct {
 	txGuess txguess.Guesser
 	// splitGuess reads a split bill from a sentence, nil when off.
 	splitGuess splitguess.Guesser
+	// sqlGuess turns the console's questions into SQL, nil when off.
+	sqlGuess sqlguess.Guesser
 }
 
 // SetReceiptOCR turns reading receipts on (a nil reader keeps it off).

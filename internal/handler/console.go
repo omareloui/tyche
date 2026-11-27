@@ -16,7 +16,8 @@ import (
 )
 
 // Console is the SQL console: the user's database as is, browsing a table
-// (?t=&sort=&desc=1&col=&val=&p=) or running their SQL (?sql=), read only.
+// (?t=&sort=&desc=1&col=&val=&p=), running their SQL (?sql=) or asking a
+// question the AI turns into SQL (?ask=, see consoleAsk), read only.
 // The console's own requests (HX-Target: console) get its body alone.
 func (h *Handler) Console(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	ctx := r.Context()
@@ -26,9 +27,13 @@ func (h *Handler) Console(w http.ResponseWriter, r *http.Request) (templ.Compone
 	if err != nil {
 		return nil, err
 	}
-	data := views.ConsoleData{Tables: tables}
+	data := views.ConsoleData{Tables: tables, AskOn: h.sqlGuess != nil}
 
-	if q.Has("sql") {
+	if q.Has("ask") {
+		if err := h.consoleAsk(r, &data); err != nil {
+			return nil, err
+		}
+	} else if q.Has("sql") {
 		data.Query = true
 		data.SQL = q.Get("sql")
 		if len(data.SQL) > models.ConsoleMaxSQL {
@@ -116,7 +121,7 @@ func (h *Handler) ConsoleDiagram(w http.ResponseWriter, r *http.Request) (templ.
 	if err != nil {
 		return nil, err
 	}
-	data := views.ConsoleDiagramData{Tables: tables, Ranks: models.ConsoleRanks(tables)}
+	data := views.ConsoleDiagramData{Tables: tables, Ranks: models.ConsoleRanks(tables), AskOn: h.sqlGuess != nil}
 	if r.Header.Get("HX-Target") == views.ConsoleTarget {
 		return views.ConsoleDiagramBody(data), nil
 	}

@@ -389,6 +389,7 @@ func New(h *handler.Handler) Router {
 
 	mux.Handle("GET /console", handle(h.Console))
 	mux.Handle("GET /console/diagram", handle(h.ConsoleDiagram))
+	mux.Handle("DELETE /console/questions/{id}", handle(h.DeleteConsoleQuestion, middleware.HTMXOnly))
 
 	// Public: signing out of a locked database has no access token.
 	mux.Handle("GET /signout", handlePub(h.Signout))
