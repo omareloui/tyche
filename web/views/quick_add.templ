@@ -118,12 +118,13 @@ const (
 templ QuickAddDrawer(quota *QuickAddQuota) {
 	@components.Drawer(components.DrawerProps{Label: "Quick add", Bind: QuickAddBind}) {
 		@form.DrawerForm(form.DrawerFormProps{
-			Title: "Quick add", Method: "post", URL: "/transactions/quick", Submit: "Add",
+			Title: "Quick add", Method: "post", URL: "/transactions/quick", Submit: "Add", SubmitBusy: "Adding…",
 			Target: "#tx-list", Swap: "outerHTML",
 			Attrs: templ.Attributes{
 				"x-data":              "quickAddForm",
 				"hx-disabled-elt":     "find button[type=submit]",
-				"@htmx:before-request": "error = ''",
+				"@htmx:before-request": "error = ''; busy = true",
+				"@htmx:after-request":  "busy = false",
 			},
 		}) {
 			<div class="grid gap-2">
@@ -140,13 +141,16 @@ templ QuickAddDrawer(quota *QuickAddQuota) {
 						placeholder="coffee 85 cib yesterday, uber 120"
 						autocomplete="off"
 						dir="auto"
-						class="input-field pr-12"
+						class="input-field pr-12 transition-opacity"
+						:readonly="busy"
+						:class="busy && 'opacity-50'"
 					></textarea>
 					<button
 						type="button"
 						x-cloak
 						x-show="canDictate"
 						@click="dictate()"
+						:disabled="busy"
 						:aria-pressed="listening"
 						:title="listening ? 'Stop listening' : 'Say it'"
 						:class="listening ? 'bg-rose-500/20 text-rose-300 animate-pulse' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'"

@@ -10,6 +10,9 @@ type DrawerFormProps struct {
 	// Method ("post", "put") and URL the form is sent to.
 	Method, URL string
 	Submit      string
+	// SubmitBusy replaces the submit's label with a spinner and this text
+	// while the form is being sent (e.g. "Reading…" for an AI call).
+	SubmitBusy string
 	// Target and Swap default to the form itself, outerHTML: an answer with
 	// errors is the form again, a saved one retargets (HX-Retarget) to what
 	// changed.
@@ -72,7 +75,17 @@ templ DrawerForm(p DrawerFormProps) {
 				}
 				class="btn-ghost"
 			>Cancel</button>
-			<button type="submit" class="btn-primary">{ p.Submit }</button>
+			if p.SubmitBusy != "" {
+				<button type="submit" class="btn-primary">
+					<span class="in-[form.htmx-request]:hidden">{ p.Submit }</span>
+					<span class="hidden in-[form.htmx-request]:inline-flex items-center gap-2" aria-live="polite">
+						<span class="size-3.5 rounded-full border-2 border-current border-t-transparent animate-spin"></span>
+						{ p.SubmitBusy }
+					</span>
+				</button>
+			} else {
+				<button type="submit" class="btn-primary">{ p.Submit }</button>
+			}
 		</footer>
 	</form>
 }

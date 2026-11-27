@@ -1391,6 +1391,8 @@ document.addEventListener("alpine:init", () => {
     error: "",
     // skipped is what the last quick add left out, with why.
     skipped: [],
+    // busy while the text is being read (the submit shows a spinner).
+    busy: false,
     listening: false,
     canDictate: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
     rec: null,
@@ -1414,6 +1416,7 @@ document.addEventListener("alpine:init", () => {
     submit(e) {
       if (e.shiftKey || e.isComposing) return;
       e.preventDefault();
+      if (this.busy) return;
       if (this.text.trim()) this.$root.requestSubmit();
     },
 
