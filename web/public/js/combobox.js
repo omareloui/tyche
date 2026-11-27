@@ -186,8 +186,17 @@ document.addEventListener("alpine:init", () => {
             this.onlyFlagged = localStorage.getItem("comboFlag:" + key) === "1";
           } catch {}
         }
+        // A scroll moves the panel with its button (e.g. the browser's scroll
+        // anchoring when a filter pill just added wraps the bar onto a new
+        // row, a frame after it opened), closing it once the button is off
+        // screen; a resize closes it.
         this.onViewportChange = (ev) => {
-          if (this.open && !this.$refs.panel.contains(ev.target)) this.close();
+          if (!this.open || this.$refs.panel.contains(ev.target)) return;
+          if (ev.type === "scroll") {
+            const r = this.$refs.button.getBoundingClientRect();
+            if (r.bottom > 0 && r.top < window.innerHeight) return this.place();
+          }
+          this.close();
         };
         window.addEventListener("scroll", this.onViewportChange, true);
         window.addEventListener("resize", this.onViewportChange);
