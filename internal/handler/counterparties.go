@@ -117,6 +117,12 @@ func (h Handler) CounterpartyDetails(w http.ResponseWriter, r *http.Request) (te
 		l.Error("summing counterparty transactions of the month", zap.Error(err))
 		return nil, err
 	}
+	if cp.IsMerchant {
+		if d.Charges, err = h.repo.GetChargeStats(r.Context(), *d.Def, id, models.ItemsRange{}); err != nil {
+			l.Error("fetching counterparty charges", zap.Error(err))
+			return nil, err
+		}
+	}
 	if d.Recent, err = h.repo.GetCounterpartyRecentTransactions(r.Context(), id, counterpartyRecentTxs); err != nil {
 		l.Error("fetching counterparty transactions", zap.Error(err))
 		return nil, err

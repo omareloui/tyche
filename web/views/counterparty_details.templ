@@ -25,6 +25,8 @@ type CounterpartyDetailsData struct {
 	LabelsInUse []string
 	// AIAliases are its aliases the AI added (models.MerchantGuessKey's).
 	AIAliases map[string]bool
+	// Charges are its receipts' charges (merchants only), nil when none.
+	Charges *models.ChargeStats
 }
 
 // CounterpartyDetailsParam is the counterparties page's query param holding
@@ -137,6 +139,9 @@ templ counterpartyDetailsSpending(d *CounterpartyDetailsData) {
 				@counterpartyDetailsStat("Last one", "Never")
 			}
 		</dl>
+		if d.Charges != nil && len(d.Charges.Kinds) > 0 {
+			@counterpartyDetailsCharges(d.Charges)
+		}
 		if d.AllTime.Partial {
 			<p class="text-xs text-zinc-500">Some currencies have no exchange rate yet and are left out.</p>
 		}

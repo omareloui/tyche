@@ -68,6 +68,10 @@ func (h Handler) itemsList(r *http.Request) (*views.ItemsData, error) {
 		return nil, err
 	}
 	d := &views.ItemsData{Items: items, Def: &def, Range: rng, Any: len(items) > 0}
+	if d.Charges, err = h.repo.GetChargeStats(r.Context(), def, "", rng); err != nil {
+		l.Error("fetching charges", zap.Error(err))
+		return nil, err
+	}
 	if !rng.IsAll() {
 		// Only the ones bought in it.
 		d.Items = slices.DeleteFunc(items, func(s models.ItemSummary) bool { return s.Stats.Times == 0 })

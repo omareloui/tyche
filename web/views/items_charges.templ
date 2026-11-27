@@ -1,0 +1,271 @@
+package views
+
+import (
+	"fmt"
+	"math"
+	"strconv"
+	"strings"
+
+	"github.com/omareloui/tyche/internal/formatters"
+	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+// itemsChargesTop is how many merchants the charges card lists.
+const itemsChargesTop = 8
+
+// chargeKindColors are the charges' colors in the items page's card.
+var chargeKindColors = map[models.TxItemKind]string{
+	models.TxItemVAT:      "#38bdf8",
+	models.TxItemService:  "#a78bfa",
+	models.TxItemTip:      "#fbbf24",
+	models.TxItemDelivery: "#2dd4bf",
+	models.TxItemFee:      "#fb7185",
+	models.TxItemDiscount: "#34d399",
+	models.TxItemRounding: "#a1a1aa",
+}
+
+func chargeKindColor(k models.TxItemKind) string {
+	if c, ok := chargeKindColors[k]; ok {
+		return c
+	}
+	return "#a1a1aa"
+}
+
+// chargeRate is a rate as shown, e.g. "12%".
+func chargeRate(v float64) string {
+	return formatters.FormatNum(math.Round(v*10)/10) + "%"
+}
+
+// chargeKindsMax is the biggest kind's size, for the bars.
+func chargeKindsMax(ks []models.ChargeKindStat) float64 {
+	top := 0.0
+	for _, k := range ks {
+		top = max(top, math.Abs(k.Total))
+	}
+	return top
+}
+
+// chargeKindsLine is the kinds in a line, e.g. "Service 12% · Tip 8%".
+func chargeKindsLine(ks []models.ChargeKindStat, def *models.Currency, n int) string {
+	parts := make([]string, 0, len(ks))
+	for i, k := range ks {
+		if n > 0 && i == n {
+			break
+		}
+		if k.HasRate() {
+			parts = append(parts, k.Kind.String()+" "+chargeRate(k.Rate))
+		} else {
+			parts = append(parts, k.Kind.String())
+		}
+	}
+	return strings.Join(parts, " · ")
+}
+
+// itemsCharges is the receipts' charges of the items page's range: by kind,
+// by merchant and by month.
+templ itemsCharges(d *ItemsData) {
+	{{ c := d.Charges }}
+	@components.GlassCard("grid content-start gap-5 p-5 sm:p-6", "bg-violet-400/10", "bg-sky-400/10") {
+		<h2 class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-violet-300">
+			@icons.Receipt("14")
+			Charges
+			if days := d.Range.Days(); days != "" {
+				<span class="font-normal normal-case tracking-normal text-zinc-500">· { days }</span>
+			}
+		</h2>
+		if len(c.Kinds) > 0 {
+			<p>
+				<span class="sensitive text-2xl font-bold tabular-nums font-(family-name:--font-biorhyme-expanded)">{ d.Def.Format(c.Total) }</span>
+				<span class="text-sm text-zinc-500">
+					on top of the prices of { strconv.Itoa(c.Receipts) } { plural(c.Receipts, "receipt", "receipts") }
+					if share := c.Share(); share > 0 {
+						· { chargeRate(share) } of what they cost
+					}
+				</span>
+			</p>
+			@budgetCollapse("items-charges-kinds", budgetSummaryTitle("By kind")) {
+				{{ top := chargeKindsMax(c.Kinds) }}
+				<ul class="grid gap-2 mt-2">
+					for _, k := range c.Kinds {
+						@chargeKindRow(k, d.Def, top)
+					}
+				</ul>
+			}
+		} else {
+			<p class="text-sm text-zinc-500">No charges on top of the prices { strings.ToLower(itemsRangeIn(d.Range)) }.</p>
+		}
+		if len(c.Included) > 0 {
+			@budgetCollapse("items-charges-included", budgetSummaryTitle("Inside the prices")) {
+				{{ top := chargeKindsMax(c.Included) }}
+				<ul class="grid gap-2 mt-2">
+					for _, k := range c.Included {
+						@chargeKindRow(k, d.Def, top)
+					}
+				</ul>
+				<p class="mt-2 px-2 text-xs text-zinc-500">Already in the items' prices (e.g. VAT included): not counted on top.</p>
+			}
+		}
+		if len(c.Merchants) > 0 {
+			@budgetCollapse("items-charges-merchants", budgetSummaryTitle("By merchant")) {
+				<ul class="grid gap-1 mt-2">
+					for i, m := range c.Merchants {
+						if i < itemsChargesTop {
+							<li>
+								@chargeMerchantRow(m, d.Def, c.Merchants[0].Total)
+							</li>
+						}
+					}
+				</ul>
+			}
+		}
+		if len(c.Months) > 1 {
+			@budgetCollapse("items-charges-months", budgetSummaryTitle("By month")) {
+				<div class="mt-2">
+					@chargesMonthsChart(c, d.Def)
+				</div>
+			}
+		}
+		<p class="text-xs text-zinc-500">
+			From the charge lines of your expenses' receipts (VAT, service, tips, delivery, fees, discounts), at today's rates.
+			if c.Partial {
+				Some currencies have no exchange rate yet and are left out.
+			}
+		</p>
+	}
+}
+
+templ chargeKindRow(k models.ChargeKindStat, def *models.Currency, top float64) {
+	<li class="grid gap-1.5 px-2">
+		<span class="flex items-center gap-2 min-w-0 text-sm">
+			<span class="size-2 shrink-0 rounded-full" style={ "background-color:" + chargeKindColor(k.Kind) }></span>
+			<span class="flex-1 min-w-0 truncate">
+				{ k.Kind.String() }
+				if k.HasRate() {
+					<span class="text-xs text-zinc-500">· { chargeRate(k.Rate) } avg</span>
+				}
+			</span>
+			<span class="shrink-0 text-xs text-zinc-500 tabular-nums">{ fmt.Sprintf("×%d", k.Count) }</span>
+			<span class={ "sensitive shrink-0 tabular-nums", templ.KV("text-emerald-300", k.Total < 0) }>{ def.Format(k.Total) }</span>
+		</span>
+		<span class="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+			<span class="block h-full rounded-full" style={ fmt.Sprintf("width:%s;background-color:%s", barPct(math.Abs(k.Total), top), chargeKindColor(k.Kind)) }></span>
+		</span>
+	</li>
+}
+
+templ chargeMerchantRow(m models.ChargeMerchantStat, def *models.Currency, top float64) {
+	{{ name := "No merchant" }}
+	if m.Merchant != nil {
+		{{ name = m.Merchant.Name }}
+	}
+	<div
+		if m.Merchant != nil {
+			hx-get={ counterpartyDetailsURL(m.Merchant.ID) }
+			hx-target={ "#" + components.DrawerSlot }
+			hx-swap="innerHTML"
+			role="button"
+			tabindex="0"
+		}
+		class={ "grid gap-1.5 w-full px-2 py-1.5 rounded-lg text-left", templ.KV("cursor-pointer transition-colors hover:bg-zinc-800/60", m.Merchant != nil) }
+	>
+		<span class="flex items-center gap-3 min-w-0 text-sm">
+			if m.Merchant != nil {
+				@components.CounterpartyIcon(m.Merchant.Name, m.Merchant.Icon, m.Merchant.Color, "w-5 h-5 text-[10px]")
+			}
+			<span class="flex-1 min-w-0">
+				<span class="block truncate">{ name }</span>
+				<span class="block truncate text-xs text-zinc-500">{ chargeKindsLine(m.Kinds, def, 3) }</span>
+			</span>
+			<span class="shrink-0 text-xs text-zinc-500 tabular-nums">{ fmt.Sprintf("×%d", m.Receipts) }</span>
+			<span class="sensitive shrink-0 tabular-nums">{ def.Format(m.Total) }</span>
+		</span>
+		<span class="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+			<span class="block h-full rounded-full bg-violet-400/70" style={ "width:" + barPct(math.Max(m.Total, 0), top) }></span>
+		</span>
+	</div>
+}
+
+// chargesMonthsChart is a bar a month, stacked by kind (discounts left out
+// of the bars, netted in the tooltip's total).
+templ chargesMonthsChart(c *models.ChargeStats, def *models.Currency) {
+	{{ tops := make([]float64, len(c.Months)) }}
+	{{ labels := make([]string, len(c.Months)) }}
+	for i, m := range c.Months {
+		for _, k := range m.Kinds {
+			if k.Total > 0 {
+				{{ tops[i] += k.Total }}
+			}
+		}
+		{{ labels[i] = m.Period.Month.Format("Jan") }}
+		if m.Period.Month.Month() == 1 || i == 0 {
+			{{ labels[i] = m.Period.Month.Format("Jan 06") }}
+		}
+	}
+	{{ axisMax := axisOf(tops...) }}
+	{{ every := max(1, (len(c.Months)+5)/6) }}
+	@adminBarPlot(axisMax, labels, every) {
+		for _, m := range c.Months {
+			@chargesMonthBar(m, def, axisMax)
+		}
+	}
+	<div class="flex flex-wrap gap-x-3 gap-y-1 mt-3 text-xs text-zinc-400">
+		for _, k := range c.Kinds {
+			if k.Total > 0 {
+				<span class="inline-flex items-center gap-1.5">
+					<span class="size-2 rounded-full" style={ "background-color:" + chargeKindColor(k.Kind) }></span>
+					{ k.Kind.String() }
+				</span>
+			}
+		}
+	</div>
+}
+
+templ chargesMonthBar(m models.ChargeMonth, def *models.Currency, axisMax float64) {
+	{{ segs := make([]adminSegment, 0, len(m.Kinds)) }}
+	for _, k := range m.Kinds {
+		if k.Total > 0 {
+			{{ segs = append(segs, adminSegment{value: k.Total, color: chargeKindColor(k.Kind)}) }}
+		}
+	}
+	<div tabindex="0" class="group relative flex-1 min-w-0 flex flex-col-reverse items-center justify-start h-full outline-none">
+		<div class="absolute inset-0 rounded-md transition-colors group-hover:bg-white/4 group-focus:bg-white/4 group-[.is-active]:bg-white/4"></div>
+		for i, s := range segs {
+			<div
+				class={ "relative w-full max-w-4", templ.KV("rounded-t-[4px]", i == len(segs)-1), templ.KV("mt-[2px]", i > 0) }
+				style={ templ.SafeCSS(fmt.Sprintf("height:%.2f%%;background:%s;", axisPct(s.value, axisMax), s.color)) }
+			></div>
+		}
+		<div class="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 hidden group-hover:block group-focus:block group-[.is-active]:block z-10 pointer-events-none">
+			<div class="glass-tooltip whitespace-nowrap">
+				<p class="text-zinc-400">{ m.Period.Month.Format("January 2006") }</p>
+				for _, k := range m.Kinds {
+					<p class="flex items-center gap-1.5 tabular-nums text-zinc-200">
+						<span class="size-1.5 rounded-full" style={ "background-color:" + chargeKindColor(k.Kind) }></span>
+						{ k.Kind.String() } <span class="sensitive">{ def.Format(k.Total) }</span>
+					</p>
+				}
+				<p class="tabular-nums text-zinc-200 font-semibold">Total <span class="sensitive">{ def.Format(m.Total) }</span></p>
+			</div>
+		</div>
+	</div>
+}
+
+// counterpartyDetailsCharges is what a merchant's receipts add on top of the
+// prices, e.g. "Service 12% · Tip 8%".
+templ counterpartyDetailsCharges(c *models.ChargeStats) {
+	<div class="flex items-start gap-2 px-4 py-3 rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 text-sm">
+		@icons.Receipt("16", &templ.Attributes{"class": "shrink-0 mt-0.5 text-violet-300"})
+		<div class="min-w-0">
+			<p class="text-xs text-zinc-500">Charges on its receipts</p>
+			<p class="mt-0.5">{ chargeKindsLine(c.Kinds, &c.Currency, 0) }</p>
+			<p class="mt-0.5 text-xs text-zinc-500">
+				<span class="sensitive">{ c.Currency.Format(c.Total) }</span> on { strconv.Itoa(c.Receipts) } { plural(c.Receipts, "receipt", "receipts") }
+				if share := c.Share(); share > 0 {
+					· { chargeRate(share) } of what they cost
+				}
+			</p>
+		</div>
+	</div>
+}

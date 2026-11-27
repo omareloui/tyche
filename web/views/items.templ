@@ -23,6 +23,8 @@ type ItemsData struct {
 	Range models.ItemsRange
 	// Any tells there's an item at all, bought in Range or not.
 	Any bool
+	// Charges are the receipts' charges (VAT, service, tip, ...) of Range.
+	Charges *models.ChargeStats
 }
 
 // itemsListURL re-renders the page's body with its range.
@@ -138,6 +140,9 @@ templ ItemsList(d *ItemsData) {
 			@itemsEmpty()
 		} else {
 			@itemsHero(d)
+		}
+		if d.Charges != nil && !d.Charges.Empty() {
+			@itemsCharges(d)
 		}
 		if d.Any && len(d.Items) == 0 {
 			<p class="py-10 text-center text-zinc-500">Nothing bought { strings.ToLower(itemsRangeIn(d.Range)) }.</p>
@@ -382,7 +387,7 @@ templ itemsHero(d *ItemsData) {
 			}
 		}
 		<p class="text-xs text-zinc-500">
-			From the receipt lines of your expenses, at today's rates. Charges (VAT, service, tips, …) and transactions without lines aren't in it.
+			From the receipt lines of your expenses, at today's rates. Charges (VAT, service, tips, …) are in their own card; transactions without lines aren't in it.
 		</p>
 	}
 }

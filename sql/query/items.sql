@@ -158,6 +158,50 @@ WHERE ti.kind = 0
     AND (sqlc.narg(to_date) IS NULL OR t.scheduled_to < sqlc.narg(to_date))
 ORDER BY t.scheduled_to, t.id, ti.position;
 
+-- name: GetChargeLines :many
+-- The charge lines (VAT, service, tip, ...) of fulfilled expenses, like
+-- GetItemLines, of one counterparty or every one (counterparty_id NULL),
+-- dated (scheduled_to) from from_date to to_date (exclusive, either NULL for
+-- no bound), oldest first, with what models.ItemsRate needs and the items'
+-- subtotal its rate is of.
+SELECT
+    ti.kind,
+    ti.total,
+    ti.rate,
+    ti.included,
+    ti.currency_id AS lines_currency_id,
+    t.id AS transaction_id,
+    t.scheduled_to,
+    t.amount,
+    CAST((
+        SELECT TOTAL(lt.total) FROM transaction_items AS lt
+        WHERE lt.transaction_id = t.id AND (lt.kind = 0 OR NOT lt.included)
+    ) AS FLOAT) AS lines_total,
+    CAST((
+        SELECT TOTAL(st.total) FROM transaction_items AS st
+        WHERE st.transaction_id = t.id AND st.kind = 0
+    ) AS FLOAT) AS subtotal,
+    sqlc.embed(cur),
+    cp.id AS counterparty_id,
+    cp.name AS counterparty_name,
+    cp.icon AS counterparty_icon,
+    cp.color AS counterparty_color
+FROM transaction_items AS ti
+JOIN transactions AS t ON t.id = ti.transaction_id
+JOIN accounts AS a ON a.id = t.account_id
+JOIN currencies AS cur ON cur.id = a.currency_id
+LEFT JOIN counterparties AS cp ON cp.id = t.counterparty_id
+WHERE ti.kind > 0
+    AND (sqlc.narg(counterparty_id) IS NULL OR t.counterparty_id = sqlc.narg(counterparty_id))
+    AND t.kind = 1
+    AND t.fulfilled_at IS NOT NULL
+    AND t.reimburses_id IS NULL
+    AND t.transfer_pair_id IS NULL
+    AND NOT t.for_others
+    AND (sqlc.narg(from_date) IS NULL OR t.scheduled_to >= sqlc.narg(from_date))
+    AND (sqlc.narg(to_date) IS NULL OR t.scheduled_to < sqlc.narg(to_date))
+ORDER BY t.scheduled_to, t.id, ti.position;
+
 -- name: SearchItems :many
 -- The items whose name or an alias holds q (lowercased), the ones bought at
 -- counterparty_id first, then the most bought, with the last line's unit

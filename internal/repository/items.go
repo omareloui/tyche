@@ -461,3 +461,50 @@ func (r *Repository) DeleteItemImage(ctx context.Context, id string) error {
 	}
 	return q.DeleteItemImage(ctx, id)
 }
+
+// GetChargeStats is what the receipts' charges (VAT, service, tip, ...) of
+// the range (every day when zero) came to, of one counterparty or every one
+// (""), in def at today's rates.
+func (r *Repository) GetChargeStats(ctx context.Context, def models.Currency, cpID string, rng models.ItemsRange) (*models.ChargeStats, error) {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	p := queries.GetChargeLinesParams{}
+	if cpID != "" {
+		p.CounterpartyID = cpID
+	}
+	if !rng.From.IsZero() {
+		p.FromDate = rng.From
+	}
+	if !rng.To.IsZero() {
+		p.ToDate = rng.To
+	}
+	rows, err := q.GetChargeLines(ctx, p)
+	if err != nil {
+		logger.FromCtx(ctx).Error("querying charge lines", zap.Error(err))
+		return nil, err
+	}
+	lines := make([]models.ChargeLine, len(rows))
+	for i, row := range rows {
+		cur := dbCurrencyToCurrency(&row.Currency, false)
+		lines[i] = models.ChargeLine{
+			TxID: row.TransactionID, Day: row.ScheduledTo,
+			Kind: models.TxItemKindOf(row.Kind), Total: row.Total, Included: row.Included,
+			Subtotal:   row.Subtotal,
+			Foreign:    row.LinesCurrencyID.Valid && row.LinesCurrencyID.String != row.Currency.ID,
+			LinesTotal: row.LinesTotal, Amount: row.Amount, Currency: *cur,
+		}
+		if row.Rate.Valid {
+			rate := row.Rate.Float64
+			lines[i].Rate = &rate
+		}
+		if row.CounterpartyID.Valid {
+			lines[i].Merchant = &models.Counterparty{
+				ID: row.CounterpartyID.String, Name: row.CounterpartyName.String,
+				Icon: row.CounterpartyIcon.String, Color: row.CounterpartyColor.String,
+			}
+		}
+	}
+	return models.NewChargeStats(lines, def, monthStartFromCtx(ctx)), nil
+}
