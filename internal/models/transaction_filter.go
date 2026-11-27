@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
@@ -98,6 +99,8 @@ const (
 	TxFilterTo           = "to"
 	TxFilterMin          = "min"
 	TxFilterMax          = "max"
+	TxFilterTimeFrom     = "time_from"
+	TxFilterTimeTo       = "time_to"
 )
 
 // TxFilterNone is the value of the category and counterparty filters
@@ -105,6 +108,20 @@ const (
 const TxFilterNone = UncategorizedKey
 
 const txFilterDate = "2006-01-02"
+
+// TxTimePreset is a named time of day range of the filter.
+type TxTimePreset struct {
+	Label    string
+	From, To int
+}
+
+// TxTimePresets are the time of day filter's ranges picked in one tap.
+var TxTimePresets = []TxTimePreset{
+	{"Morning", 5 * 60, 11*60 + 59},
+	{"Afternoon", 12 * 60, 16*60 + 59},
+	{"Evening", 17 * 60, 21*60 + 59},
+	{"Night", 22 * 60, 4*60 + 59},
+}
 
 // TxFilter is what the transactions list is narrowed by, kept in the page's
 // query string. The zero value matches everything.
@@ -133,6 +150,14 @@ type TxFilter struct {
 	From, To time.Time
 	// MinAmount and MaxAmount bound the amount, in the account's currency.
 	MinAmount, MaxAmount *float64
+	// TimeFrom and TimeTo bound the time of day (minutes since midnight,
+	// both inclusive, nil for no bound) in the user's time zone: a range
+	// past midnight (22:00–02:00) wraps. Transactions without a time of day
+	// don't match it.
+	TimeFrom, TimeTo *int
+	// Timezone is the user's the times are read in, set by the repository
+	// (never in the query string).
+	Timezone string
 }
 
 // ParseTxFilter reads the filter from a query string, ignoring bad values.
@@ -179,7 +204,49 @@ func ParseTxFilter(v url.Values) TxFilter {
 	f.To = parseFilterDate(v.Get(TxFilterTo))
 	f.MinAmount = parseFilterAmount(v.Get(TxFilterMin))
 	f.MaxAmount = parseFilterAmount(v.Get(TxFilterMax))
+	f.TimeFrom = parseFilterTime(v.Get(TxFilterTimeFrom))
+	f.TimeTo = parseFilterTime(v.Get(TxFilterTimeTo))
 	return f
+}
+
+// parseFilterTime reads a time of day (HH:MM) as minutes since midnight.
+func parseFilterTime(s string) *int {
+	t, err := time.Parse("15:04", strings.TrimSpace(s))
+	if err != nil {
+		return nil
+	}
+	m := t.Hour()*60 + t.Minute()
+	return &m
+}
+
+// FilterTimeString is a time of day bound as in the query string (HH:MM),
+// "" when not set.
+func FilterTimeString(m *int) string {
+	if m == nil {
+		return ""
+	}
+	return fmt.Sprintf("%02d:%02d", *m/60, *m%60)
+}
+
+// HasTime tells the time of day is filtered.
+func (f *TxFilter) HasTime() bool {
+	return f.TimeFrom != nil || f.TimeTo != nil
+}
+
+// TimeRange is the time of day range as both bounds, the missing one the
+// day's edge, ok false when not filtered.
+func (f *TxFilter) TimeRange() (from, to int, ok bool) {
+	if !f.HasTime() {
+		return 0, 0, false
+	}
+	from, to = 0, 24*60-1
+	if f.TimeFrom != nil {
+		from = *f.TimeFrom
+	}
+	if f.TimeTo != nil {
+		to = *f.TimeTo
+	}
+	return from, to, true
 }
 
 func parseFilterDate(s string) time.Time {
@@ -238,6 +305,8 @@ func (f *TxFilter) Values() url.Values {
 	set(TxFilterTo, f.ToString())
 	set(TxFilterMin, FilterAmountString(f.MinAmount))
 	set(TxFilterMax, FilterAmountString(f.MaxAmount))
+	set(TxFilterTimeFrom, FilterTimeString(f.TimeFrom))
+	set(TxFilterTimeTo, FilterTimeString(f.TimeTo))
 	return v
 }
 
@@ -269,6 +338,9 @@ func (f *TxFilter) ActiveCount() int {
 		n++
 	}
 	if v.Has(TxFilterMin) || v.Has(TxFilterMax) {
+		n++
+	}
+	if v.Has(TxFilterTimeFrom) || v.Has(TxFilterTimeTo) {
 		n++
 	}
 	return n

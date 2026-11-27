@@ -15,6 +15,8 @@ import (
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/queries"
 	"github.com/omareloui/tyche/internal/seeder"
+	// The sqlcipher driver with the app's SQL functions (local_minute).
+	_ "github.com/omareloui/tyche/internal/sqlite"
 	"github.com/omareloui/tyche/internal/sharedqueries"
 	"github.com/omareloui/tyche/internal/vault"
 	"go.uber.org/zap"

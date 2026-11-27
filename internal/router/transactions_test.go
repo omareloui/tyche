@@ -410,3 +410,92 @@ func TestDeleteTransactionsBatch(t *testing.T) {
 		}
 	}
 }
+
+func TestTxFilterTimeOfDay(t *testing.T) {
+	repo, ctx, _ := setupTenant(t)
+
+	egp, err := repo.GetCurrencyByString(ctx, "EGP")
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds, err := repo.GetAccountKinds(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bankKind models.AccountKind
+	for _, k := range kinds {
+		if k.Enum == models.AccKindBankAcc {
+			bankKind = k
+		}
+	}
+	bank := &models.Account{ID: idgen.New(), Name: "Bank", Amount: 1000, Currency: *egp, Kind: bankKind}
+	if err := repo.CreateAccount(ctx, bank); err != nil {
+		t.Fatal(err)
+	}
+	cairo, err := time.LoadLocation("Africa/Cairo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SetTimezone(ctx, cairo); err != nil {
+		t.Fatal(err)
+	}
+
+	create := func(at time.Time) {
+		t.Helper()
+		tx := &models.Transaction{
+			ID: idgen.New(), Account: *bank, Kind: models.ExpenseTxKind, Amount: 10,
+			ScheduledTo: at, FulfilledAt: at,
+		}
+		if err := repo.CreateTransaction(ctx, tx, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Cairo is +02:00 in March.
+	create(time.Date(2026, time.March, 10, 9, 15, 0, 0, cairo))
+	// 21:30 UTC is 23:30 in Cairo.
+	create(time.Date(2026, time.March, 10, 21, 30, 0, 0, time.UTC))
+	create(time.Date(2026, time.March, 11, 1, 0, 0, 0, cairo))
+	// A day without a time never matches.
+	create(time.Date(2026, time.March, 12, 0, 0, 0, 0, time.UTC))
+
+	at := func(h, m int) *int { v := h*60 + m; return &v }
+	tests := []struct {
+		name string
+		f    models.TxFilter
+		want int
+	}{
+		{"morning", models.TxFilter{TimeFrom: at(5, 0), TimeTo: at(11, 59)}, 1},
+		{"bounds inclusive", models.TxFilter{TimeFrom: at(9, 15), TimeTo: at(9, 15)}, 1},
+		{"utc read in the user's zone", models.TxFilter{TimeFrom: at(23, 0), TimeTo: at(23, 59)}, 1},
+		{"wraps past midnight", models.TxFilter{TimeFrom: at(22, 0), TimeTo: at(4, 59)}, 2},
+		{"from alone", models.TxFilter{TimeFrom: at(9, 0)}, 2},
+		{"to alone", models.TxFilter{TimeTo: at(9, 30)}, 2},
+		{"no filter", models.TxFilter{}, 4},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			all := time.Time{}
+			page, err := repo.GetTransactionsPage(ctx, tt.f, time.Time{}, &all)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := len(page.History); got != tt.want {
+				t.Errorf("got %d transactions, want %d", got, tt.want)
+			}
+			sum, err := repo.GetTransactionsSummary(ctx, tt.f, egp)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if sum.Count != tt.want {
+				t.Errorf("summary counts %d, want %d", sum.Count, tt.want)
+			}
+			ids, _, err := repo.GetFilteredTransactionIDs(ctx, tt.f, -1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(ids) != tt.want {
+				t.Errorf("ids %d, want %d", len(ids), tt.want)
+			}
+		})
+	}
+}

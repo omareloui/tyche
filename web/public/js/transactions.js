@@ -360,6 +360,20 @@ document.addEventListener("alpine:init", () => {
     },
   });
 
+  // txTimeFilter is the time of day filter's range (views.txTimeFilter): a
+  // preset sets both bounds, then submits the filters once.
+  Alpine.data("txTimeFilter", () => ({
+    presets: false,
+
+    pick(from, to) {
+      this.$root.querySelector("[name=time_from]").value = from;
+      const t = this.$root.querySelector("[name=time_to]");
+      t.value = to;
+      this.presets = false;
+      t.dispatchEvent(new Event("change", { bubbles: true }));
+    },
+  }));
+
   // txFilterBuilder shows the filters set as pills (txFilterSlot), the
   // others added from its menu: an added one opens its picker at once, and
   // goes away again when closed without a value.
@@ -545,7 +559,10 @@ document.addEventListener("alpine:init", () => {
       const set = (name) => !!form.elements.namedItem(name)?.value?.trim();
       const keys = ["kind", "account", "category", "counterparty", "goal", "item", "tag", "status", "source", "receipt", "note", "paid", "window", "for"];
       this.activeFilters =
-        keys.filter(set).length + (set("from") || set("to")) + (set("min") || set("max"));
+        keys.filter(set).length +
+        (set("from") || set("to")) +
+        (set("min") || set("max")) +
+        (set("time_from") || set("time_to"));
       this.reviewOnly = form.elements.namedItem("status")?.value === "review";
     },
 

@@ -402,6 +402,9 @@ templ txFilterBar(f *models.TxFilter, start models.MonthStart, accs []models.Acc
 				<span class="text-zinc-600">–</span>
 				@txAmountFilter(models.TxFilterMax, "Max", f.MaxAmount)
 			}
+			@txFilterSlot(txFilterTimeSlot, "Time of day", icons.Clock("15")) {
+				@txTimeFilter(f)
+			}
 			@txFilterMenu(len(gls) > 0, len(tags) > 0)
 			<button
 				type="button"
@@ -438,6 +441,9 @@ templ txSearch(q string) {
 
 // txFilterAmountSlot is the amount range's pill (min and max).
 const txFilterAmountSlot = "amount"
+
+// txFilterTimeSlot is the time of day range's pill (from and to).
+const txFilterTimeSlot = "time"
 
 // txFilterSlot is a filter's pill: its icon and name, the value picked in
 // place, a button removing it. Shown while set or just added from the menu.
@@ -497,6 +503,7 @@ func txFilterMenuGroups(goals, tags bool) []txFilterMenuGroup {
 		{"What", what},
 		{"Where & who", who},
 		{"How much", []txFilterMenuItem{{txFilterAmountSlot, "Amount", icons.Coins("16")}}},
+		{"When", []txFilterMenuItem{{txFilterTimeSlot, "Time of day", icons.Clock("16")}}},
 		{"State", []txFilterMenuItem{
 			{models.TxFilterStatus, "Status", icons.CheckCheck("16")},
 			{models.TxFilterSource, "Source", icons.Download("16")},
@@ -902,7 +909,65 @@ func txFilterKeysButQ() []string {
 		models.TxFilterSource, models.TxFilterReceipt, models.TxFilterNote, models.TxFilterPaid, models.TxFilterWindow, models.TxFilterFor,
 		models.TxFilterFrom, models.TxFilterTo,
 		models.TxFilterMin, models.TxFilterMax,
+		models.TxFilterTimeFrom, models.TxFilterTimeTo,
 	}
+}
+
+// txTimeFilter is the time of day range (the time shown on the rows, in the
+// user's zone; from > to wraps past midnight) and its presets, which set
+// both bounds at once.
+templ txTimeFilter(f *models.TxFilter) {
+	<div
+		x-data="txTimeFilter"
+		@keydown.escape.stop="presets = false"
+		@click.outside="presets = false"
+		class="relative flex items-center gap-1"
+	>
+		@txTimeInput(models.TxFilterTimeFrom, "From", f.TimeFrom)
+		<span class="text-zinc-600">–</span>
+		@txTimeInput(models.TxFilterTimeTo, "To", f.TimeTo)
+		<button
+			type="button"
+			@click="presets = !presets"
+			:aria-expanded="presets"
+			aria-haspopup="menu"
+			aria-label="Time of day presets"
+			title="Presets"
+			class="grid place-items-center shrink-0 w-7 h-7 rounded-full text-zinc-500 cursor-pointer transition-colors hover:bg-white/10 hover:text-white aria-expanded:text-white"
+		>
+			@icons.ChevronDown("14")
+		</button>
+		<div
+			x-cloak
+			x-show="presets"
+			x-transition.opacity.duration.100ms
+			role="menu"
+			class={ "absolute right-0 top-full mt-2 z-70 flex flex-col w-48 p-1.5 rounded-xl", components.PopupSurface }
+		>
+			for _, p := range models.TxTimePresets {
+				<button
+					type="button"
+					role="menuitem"
+					@click={ fmt.Sprintf("pick(%q, %q)", models.FilterTimeString(&p.From), models.FilterTimeString(&p.To)) }
+					class="flex items-center justify-between gap-3 h-9 px-3 rounded-lg text-sm text-zinc-200 cursor-pointer transition-colors hover:bg-white/10"
+				>
+					{ p.Label }
+					<span class="text-xs text-zinc-500 tabular-nums">{ models.FilterTimeString(&p.From) }–{ models.FilterTimeString(&p.To) }</span>
+				</button>
+			}
+		</div>
+	</div>
+}
+
+templ txTimeInput(name, label string, value *int) {
+	<input
+		type="time"
+		name={ name }
+		value={ models.FilterTimeString(value) }
+		data-filter
+		aria-label={ label + " time of day" }
+		class="w-[6.5rem] h-7 px-2 rounded-md bg-white/5 text-sm tabular-nums outline-none focus:bg-white/10 focus:ring-1 focus:ring-(--accent)"
+	/>
 }
 
 func txKindFilterOptions(knds []models.TxKind) []form.ComboOption {

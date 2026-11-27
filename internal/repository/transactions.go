@@ -259,6 +259,7 @@ func (r *Repository) GetTransactionsSummary(ctx context.Context, f models.TxFilt
 		CounterpartyID: lp.CounterpartyID, GoalID: lp.GoalID, ItemID: lp.ItemID, TagID: lp.TagID, NeedsReview: lp.NeedsReview,
 		FromSms: lp.FromSms, FromImport: lp.FromImport, FromQuick: lp.FromQuick, HasReceipt: lp.HasReceipt, ForOthers: lp.ForOthers, HasNote: lp.HasNote, Foreign: lp.Foreign, Window: lp.Window, WindowToday: lp.WindowToday, FromDate: lp.FromDate, ToDate: lp.ToDate,
 		MinAmount: lp.MinAmount, MaxAmount: lp.MaxAmount,
+		TimeFrom: lp.TimeFrom, TimeTo: lp.TimeTo, TimeTz: lp.TimeTz,
 	}
 	switch f.Status {
 	case models.TxStatusFulfilled:
@@ -293,10 +294,17 @@ func (r *Repository) GetTransactionsSummary(ctx context.Context, f models.TxFilt
 	return s, nil
 }
 
-// setFilterToday sets the user's today a windows filter compares with.
+// setFilterToday sets the user's today a windows filter compares with, and
+// the time zone a time of day filter reads the times in.
 func (r *Repository) setFilterToday(ctx context.Context, f *models.TxFilter) {
 	if f.Window != models.TxWindowAny && f.Today.IsZero() {
 		f.Today = r.userToday(ctx)
+	}
+	if f.HasTime() && f.Timezone == "" {
+		f.Timezone = "UTC"
+		if loc, err := r.GetTimezone(ctx); err == nil {
+			f.Timezone = loc.String()
+		}
 	}
 }
 
@@ -383,6 +391,13 @@ func txFilterParams(f *models.TxFilter) queries.GetTransactionsParams {
 	}
 	if f.MaxAmount != nil {
 		p.MaxAmount = *f.MaxAmount
+	}
+	if from, to, ok := f.TimeRange(); ok {
+		p.TimeFrom, p.TimeTo = int64(from), int64(to)
+		p.TimeTz = f.Timezone
+		if p.TimeTz == "" {
+			p.TimeTz = "UTC"
+		}
 	}
 	return p
 }

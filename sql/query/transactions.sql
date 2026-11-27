@@ -201,6 +201,15 @@ WHERE
     AND (sqlc.narg(to_date) IS NULL OR t.scheduled_to < sqlc.narg(to_date))
     AND (sqlc.narg(min_amount) IS NULL OR t.amount >= sqlc.narg(min_amount))
     AND (sqlc.narg(max_amount) IS NULL OR t.amount <= sqlc.narg(max_amount))
+    -- The time of day shown (local_minute: in the user's zone, -1 without
+    -- one), both bounds inclusive, wrapping past midnight when from > to.
+    AND (sqlc.narg(time_from) IS NULL OR (
+        sqlc.narg(time_from) <= sqlc.narg(time_to)
+            AND local_minute(COALESCE(t.fulfilled_at, t.scheduled_to), sqlc.narg(time_tz)) BETWEEN sqlc.narg(time_from) AND sqlc.narg(time_to)
+        OR sqlc.narg(time_from) > sqlc.narg(time_to)
+            AND (local_minute(COALESCE(t.fulfilled_at, t.scheduled_to), sqlc.narg(time_tz)) >= sqlc.narg(time_from)
+                OR local_minute(COALESCE(t.fulfilled_at, t.scheduled_to), sqlc.narg(time_tz)) BETWEEN 0 AND sqlc.narg(time_to))
+    ))
     -- Not a filter of the list, for the details' other occurrences.
     AND (sqlc.narg(recurrent_tx_id) IS NULL OR t.recurrent_id = sqlc.narg(recurrent_tx_id))
     AND (sqlc.narg(before) IS NULL OR t.scheduled_to < sqlc.narg(before))
@@ -326,6 +335,15 @@ WHERE
     AND (sqlc.narg(to_date) IS NULL OR t.scheduled_to < sqlc.narg(to_date))
     AND (sqlc.narg(min_amount) IS NULL OR t.amount >= sqlc.narg(min_amount))
     AND (sqlc.narg(max_amount) IS NULL OR t.amount <= sqlc.narg(max_amount))
+    -- The time of day shown (local_minute: in the user's zone, -1 without
+    -- one), both bounds inclusive, wrapping past midnight when from > to.
+    AND (sqlc.narg(time_from) IS NULL OR (
+        sqlc.narg(time_from) <= sqlc.narg(time_to)
+            AND local_minute(COALESCE(t.fulfilled_at, t.scheduled_to), sqlc.narg(time_tz)) BETWEEN sqlc.narg(time_from) AND sqlc.narg(time_to)
+        OR sqlc.narg(time_from) > sqlc.narg(time_to)
+            AND (local_minute(COALESCE(t.fulfilled_at, t.scheduled_to), sqlc.narg(time_tz)) >= sqlc.narg(time_from)
+                OR local_minute(COALESCE(t.fulfilled_at, t.scheduled_to), sqlc.narg(time_tz)) BETWEEN 0 AND sqlc.narg(time_to))
+    ))
 GROUP BY c.id, fulfilled;
 
 -- name: CountTransactionsNeedingReview :one
