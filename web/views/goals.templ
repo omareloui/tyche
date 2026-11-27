@@ -568,11 +568,12 @@ templ goalsList(goals []models.Goal, plans map[string]*GoalPlanCard, defaultCur 
 				}
 			}
 		</section>
-		<section class="hidden has-[[data-goal]]:block">
-			<h2 class="flex items-center gap-2 mb-3 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+		<details class="group hidden has-[[data-goal]]:block">
+			<summary class="flex items-center gap-2 mb-3 list-none cursor-pointer select-none text-zinc-500 hover:text-zinc-300 [&::-webkit-details-marker]:hidden">
 				@icons.Calendar("16")
-				Planned
-			</h2>
+				<h2 class="text-sm font-semibold uppercase tracking-wider">Planned</h2>
+				@icons.ChevronDown("16", &templ.Attributes{"class": "transition-transform group-open:rotate-180"})
+			</summary>
 			@goalSectionGrid(goalSectionPlanned) {
 				for _, gl := range goals {
 					if goalSectionOf(&gl) == goalSectionPlanned {
@@ -580,7 +581,7 @@ templ goalsList(goals []models.Goal, plans map[string]*GoalPlanCard, defaultCur 
 					}
 				}
 			}
-		</section>
+		</details>
 		<details class="group hidden has-[[data-goal]]:block">
 			<summary class="flex items-center gap-2 mb-3 list-none cursor-pointer select-none text-zinc-500 hover:text-zinc-300 [&::-webkit-details-marker]:hidden">
 				@icons.Trophy("16")
