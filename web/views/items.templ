@@ -83,7 +83,9 @@ const itemsFilterData = `{
 	},
 	matches(el) {
 		const q = this.q.trim().toLowerCase()
-		return (!q || el.dataset.search.includes(q)) && (!this.category || el.dataset.category === this.category)
+		// category 'none' matches the items without one
+		const cat = this.category === 'none' ? '' : this.category
+		return (!q || el.dataset.search.includes(q)) && (!this.category || el.dataset.category === cat)
 	},
 	order(el) {
 		switch (this.sort) {
@@ -130,7 +132,7 @@ templ ItemsList(d *ItemsData) {
 		hx-swap="outerHTML"
 		x-data={ itemsFilterData }
 		@keydown.slash.window="if (!$event.target.closest('input, textarea, select, [contenteditable]')) { $event.preventDefault(); $dispatch('search-open') }"
-		class="grid gap-4"
+		class="grid grid-cols-[minmax(0,1fr)] gap-4"
 	>
 		if !d.Any {
 			@itemsEmpty()
@@ -141,41 +143,57 @@ templ ItemsList(d *ItemsData) {
 			<p class="py-10 text-center text-zinc-500">Nothing bought { strings.ToLower(itemsRangeIn(d.Range)) }.</p>
 		}
 		if len(d.Items) > 0 {
-			<div class="grid gap-3">
-				<div class="flex flex-wrap items-center gap-2" role="group" aria-label="Sort">
-					@components.ExpandingSearch(components.SearchProps{
-						Placeholder: "Name or alias", Label: "Search items",
-					})
+			<div class="grid grid-cols-[minmax(0,1fr)] gap-3">
+				<div class="flex min-w-0 items-center gap-2">
+					// one row scrolling sideways, like the counterparties' filters;
+					// the categories button stays out of it
+					<div class="filter-scroll flex items-center gap-2 flex-1" role="group" aria-label="Sort">
+						@components.ExpandingSearch(components.SearchProps{
+							Placeholder: "Name or alias", Label: "Search items",
+						})
+						for _, s := range itemsSorts {
+							<button
+								type="button"
+								@click={ fmt.Sprintf("sort = '%s'", s[0]) }
+								:class={ fmt.Sprintf("sort === '%s' ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-800/60 text-zinc-400 hover:text-white'", s[0]) }
+								:aria-pressed={ fmt.Sprintf("sort === '%s'", s[0]) }
+								class="h-8 px-3 rounded-full text-sm font-medium whitespace-nowrap transition-colors cursor-pointer"
+							>{ s[1] }</button>
+						}
+					</div>
 					<button
 						type="button"
 						hx-get="/items/categories"
 						hx-target={ "#" + components.DrawerSlot }
 						hx-swap="innerHTML"
-						class="order-last ml-auto inline-flex items-center gap-1.5 h-8 px-3 rounded-full ring-1 ring-zinc-700 text-sm text-zinc-300 transition-colors cursor-pointer hover:text-white hover:ring-zinc-500"
+						class="shrink-0 inline-flex items-center gap-1.5 h-8 px-3 rounded-full ring-1 ring-zinc-700 text-sm text-zinc-300 transition-colors cursor-pointer hover:text-white hover:ring-zinc-500"
 					>
 						@icons.Tag("14")
 						Categories
 					</button>
-					for _, s := range itemsSorts {
-						<button
-							type="button"
-							@click={ fmt.Sprintf("sort = '%s'", s[0]) }
-							:class={ fmt.Sprintf("sort === '%s' ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-800/60 text-zinc-400 hover:text-white'", s[0]) }
-							:aria-pressed={ fmt.Sprintf("sort === '%s'", s[0]) }
-							class="h-8 px-3 rounded-full text-sm font-medium transition-colors cursor-pointer"
-						>{ s[1] }</button>
-					}
 				</div>
 				if cats := itemsCategories(d.Items); len(cats) > 0 {
-					<div role="group" aria-label="Filter by category" class="flex flex-wrap items-center gap-1.5">
-						@icons.Tag("14", &templ.Attributes{"class": "text-zinc-500 mr-0.5"})
+					<div role="group" aria-label="Filter by category" class="filter-scroll flex items-center gap-1.5">
+						@icons.Tag("14", &templ.Attributes{"class": "shrink-0 text-zinc-500 mr-0.5"})
+						if slices.ContainsFunc(d.Items, func(it models.ItemSummary) bool { return it.Item.Category == nil }) {
+							<button
+								type="button"
+								@click="category = category === 'none' ? '' : 'none'"
+								:aria-pressed="category === 'none'"
+								:class="category === 'none' ? 'bg-violet-400/20 text-violet-200 ring-1 ring-violet-400/50' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'"
+								class="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-xs whitespace-nowrap cursor-pointer transition-colors"
+							>
+								<span class="size-1.5 rounded-full ring-1 ring-zinc-500"></span>
+								No category
+							</button>
+						}
 						for _, c := range cats {
 							<button
 								type="button"
 								@click={ fmt.Sprintf("category = category === '%s' ? '' : '%s'", c.ID, c.ID) }
 								:aria-pressed={ fmt.Sprintf("category === '%s'", c.ID) }
 								:class={ fmt.Sprintf("category === '%s' ? 'bg-violet-400/20 text-violet-200 ring-1 ring-violet-400/50' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'", c.ID) }
-								class="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-xs cursor-pointer transition-colors"
+								class="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-xs whitespace-nowrap cursor-pointer transition-colors"
 							>
 								<span class="size-1.5 rounded-full" style={ "background-color:" + c.Hex() }></span>
 								{ c.Name }
