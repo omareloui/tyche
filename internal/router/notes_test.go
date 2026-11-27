@@ -70,7 +70,7 @@ func TestQuickNoteEdit(t *testing.T) {
 	})
 
 	t.Run("recurrent tx and its occurrences", func(t *testing.T) {
-		rt := createTestRecurrentTx(t, ctx, repo, hd, bank, "100", tenantToday().AddDate(0, 0, 3), models.RecurrentUnitMonth, nil)
+		rt := createTestRecurrentTx(t, ctx, repo, hd, bank, "100", tenantToday().AddDate(0, 0, 3), models.RecurrentUnitDay, url.Values{"every": {"7"}})
 		sched, _ := occurrences(t, ctx, repo, rt.ID)
 		if len(sched) < 2 {
 			t.Fatalf("scheduled = %d", len(sched))

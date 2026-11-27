@@ -109,7 +109,7 @@ func TestRecurrentEditPauseSkip(t *testing.T) {
 	hd := handler.New(repo, valid.New(), sanitizer.New(), nil, nil, nil)
 	today := tenantToday()
 
-	rt := createTestRecurrentTx(t, ctx, repo, hd, bank, "100", today.AddDate(0, 0, 3), models.RecurrentUnitMonth, nil)
+	rt := createTestRecurrentTx(t, ctx, repo, hd, bank, "100", today.AddDate(0, 0, 3), models.RecurrentUnitDay, url.Values{"every": {"7"}})
 	sched, _ := occurrences(t, ctx, repo, rt.ID)
 	if len(sched) < 2 {
 		t.Fatalf("scheduled = %d, want through next month", len(sched))
@@ -136,8 +136,8 @@ func TestRecurrentEditPauseSkip(t *testing.T) {
 		"amount":       {"150"},
 		"description":  {"Gym"},
 		"is_recurrent": {"on"},
-		"every":        {"1"},
-		"unit":         {strconv.Itoa(int(models.RecurrentUnitMonth))},
+		"every":        {"7"},
+		"unit":         {strconv.Itoa(int(models.RecurrentUnitDay))},
 		"next_on":      {sched[len(sched)-1].ScheduledTo.Format(time.DateOnly)},
 	}
 	if _, err := callHandler(ctx, hd.EditRecurrentTx)(httptest.NewRecorder(), "PUT", "/recurrent-tx/"+rt.ID, rt.ID, editForm); err != nil {
@@ -169,8 +169,8 @@ func TestRecurrentEditPauseSkip(t *testing.T) {
 		if tx.ID == overridden.ID {
 			continue
 		}
-		if tx.ScheduledTo.Day() != next.Day() && next.Day() <= 28 {
-			t.Errorf("moved one on %s, want on day %d", tx.ScheduledTo, next.Day())
+		if tx.ScheduledTo.Weekday() != next.Weekday() {
+			t.Errorf("moved one on %s, want on a %s", tx.ScheduledTo, next.Weekday())
 		}
 	}
 	if !containsTx(moved, overridden.ID) {
@@ -417,8 +417,8 @@ func TestRecurrentNotes(t *testing.T) {
 	hd := handler.New(repo, valid.New(), sanitizer.New(), nil, nil, nil)
 	today := tenantToday()
 
-	rt := createTestRecurrentTx(t, ctx, repo, hd, bank, "100", today.AddDate(0, 0, 3), models.RecurrentUnitMonth,
-		url.Values{"note": {"  Every **month**\n- towel  "}})
+	rt := createTestRecurrentTx(t, ctx, repo, hd, bank, "100", today.AddDate(0, 0, 3), models.RecurrentUnitDay,
+		url.Values{"every": {"7"}, "note": {"  Every **month**\n- towel  "}})
 	if want := "Every **month**\n- towel"; rt.Note != want {
 		t.Fatalf("recurrent note = %q, want %q", rt.Note, want)
 	}
@@ -446,8 +446,8 @@ func TestRecurrentNotes(t *testing.T) {
 		"description":  {"Gym"},
 		"note":         {"changed"},
 		"is_recurrent": {"on"},
-		"every":        {"1"},
-		"unit":         {strconv.Itoa(int(models.RecurrentUnitMonth))},
+		"every":        {"7"},
+		"unit":         {strconv.Itoa(int(models.RecurrentUnitDay))},
 	}
 	if _, err := callHandler(ctx, hd.EditRecurrentTx)(httptest.NewRecorder(), "PUT", "/recurrent-tx/"+rt.ID, rt.ID, editForm); err != nil {
 		t.Fatal(err)
