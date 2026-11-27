@@ -157,3 +157,56 @@ func TestParseTags(t *testing.T) {
 		t.Errorf("cheap = %+v %v", g, ok)
 	}
 }
+
+func TestPromptDebtsAndBalances(t *testing.T) {
+	in := testIn()
+	in.Accounts[0].Balance = 1250.5
+	in.Counterparties[1].Debts = []Debt{{Amount: -300, Currency: "EGP"}, {Amount: 20, Currency: "USD"}}
+	in.Counterparties[0].Aliases = []string{"a1", "a2", "a3", "a4"}
+	p := Prompt(in)
+	for _, want := range []string{"A1: CIB, EGP, Bank account, 1250.5", "P2: Ahmed Ali, person; the user owes them 300 EGP; owes the user 20 USD", "| a1 | a2 | a3\n"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("prompt lacks %q", want)
+		}
+	}
+	if strings.Contains(p, "a4") {
+		t.Error("prompt has more than MaxAliases aliases")
+	}
+}
+
+func TestFindCounterparty(t *testing.T) {
+	cps := []Counterparty{
+		{ID: "shop", Name: "Goods Shop", IsMerchant: true, Aliases: []string{"GOODS*12"}},
+		{ID: "manuel", Name: "Manuel García"},
+		{ID: "sara1", Name: "Sara Adel"},
+		{ID: "sara2", Name: "Sara Nabil"},
+		{ID: "uber", Name: "Uber", IsMerchant: true},
+	}
+	for _, c := range []struct {
+		name     string
+		merchant bool
+		want     string
+	}{
+		{"goods shop.", true, "shop"},
+		{"Goods*12", true, "shop"},
+		{"manuel garcia", false, "manuel"},
+		{"Manuel", false, "manuel"},
+		{"Sara", false, ""},      // two Saras
+		{"Uber Eats", true, ""}, // no prefix matching for businesses
+		{"Manuel", true, ""},
+		{"Nobody", false, ""},
+	} {
+		if got := FindCounterparty(c.name, c.merchant, cps); got != c.want {
+			t.Errorf("FindCounterparty(%q) = %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+func TestTooLong(t *testing.T) {
+	if TooLong(strings.Repeat("ق", MaxTextLen)) {
+		t.Error("MaxTextLen runes is too long")
+	}
+	if !TooLong(strings.Repeat("a", MaxTextLen+1)) {
+		t.Error("over MaxTextLen isn't too long")
+	}
+}

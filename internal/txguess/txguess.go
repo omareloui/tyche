@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"regexp"
 	"slices"
 	"strconv"
@@ -18,16 +19,21 @@ import (
 
 	"github.com/omareloui/tyche/internal/gemini"
 	"github.com/omareloui/tyche/internal/models"
+	"golang.org/x/text/unicode/norm"
 )
 
 // MaxTxs is the most transactions a text makes.
 const MaxTxs = 10
 
-// MaxTextLen is the longest text read (in runes).
-const MaxTextLen = 1000
+// MaxTextLen is the longest text read (in runes), longer ones refused.
+const MaxTextLen = 300
 
-// MaxCounterparties is how many counterparties (the most used) are sent.
-const MaxCounterparties = 100
+// MaxCounterparties is how many counterparties (the most used) are sent,
+// on top of the people with a debt open.
+const MaxCounterparties = 40
+
+// MaxAliases is how many of a counterparty's aliases are sent.
+const MaxAliases = 3
 
 // MaxNameLen is the longest name of a new counterparty, longer ones dropped.
 const MaxNameLen = 60
@@ -80,6 +86,8 @@ type Account struct {
 	Name     string
 	Currency string
 	Kind     string
+	// Balance is what it holds (a credit card's debt negative).
+	Balance float64
 }
 
 // Category is one of the user's categories, with the kinds it takes.
@@ -104,6 +112,15 @@ type Counterparty struct {
 	Name       string
 	IsMerchant bool
 	Aliases    []string
+	// Debts are a person's open debts, one per currency.
+	Debts []Debt
+}
+
+// Debt is what's open with a person: Amount > 0 they owe the user, < 0
+// the user owes them.
+type Debt struct {
+	Amount   float64
+	Currency string
 }
 
 // In is what's asked: the text, with what its transactions can be.
@@ -273,7 +290,7 @@ Today is %s (%s), in the time zone %s.
 
 For each transaction:
 - "kind": expense (spent), income (earned, salary, a gift received), refund (money back from a business for something bought), transfer (between two of the user's accounts), lend (money given to a person: lent to them or paid back to them), borrow (money from a person: borrowed from them or them paying the user back).
-- "amount": positive, as a number ("40k" = 40000, "1.5m" = 1500000). "currency": its ISO 4217 code when the text tells one ("$" = USD, "€" = EUR, "جنيه" = EGP), else empty (the account's). For gold, silver, platinum or palladium (XAU, XAG, XPT, XPD), "grams" true when the amount is in grams.
+- "amount": positive, as a number ("40k" = 40000, "1.5m" = 1500000). When the text tells none but settles a debt listed with the person ("paid Manuel back", "Sara paid me back"), the debt's amount (and "currency"); when it moves all of an account ("moved all my cash to hsbc"), the account's balance. "currency": its ISO 4217 code when the text tells one ("$" = USD, "€" = EUR, "جنيه" = EGP), else empty (the account's). For gold, silver, platinum or palladium (XAU, XAG, XPT, XPD), "grams" true when the amount is in grams.
 - "account": the ref of the account the money leaves (expense, transfer, lend) or comes into (income, refund, borrow), when the text names it (by name, bank or kind, e.g. "cash", "cib", "visa"); else empty (the default account, %s). "to_account": a transfer's receiving account's ref.
 - "category": the ref of the category that fits best among the ones taking the kind (empty when none fits; never on transfers, lend or borrow).
 - "counterparty": the ref of the business or person the text names (expense, income, refund) or the person of a lend / borrow; when none of the user's is them, "counterparty" empty and "new_counterparty" a clean name for them (title case, as people call it), "new_is_merchant" true for a business, false for a person. Both empty when the text names nobody (e.g. "coffee 85": no counterparty, the category tells what it was). Never a counterparty on a transfer.
@@ -286,12 +303,12 @@ Only refs listed below are valid. Leave out what isn't a transaction (no amount)
 `, MaxTxs, in.Today.Format(time.DateOnly), in.Today.Weekday(), in.Timezone, nonEmpty(in.DefaultAccount, "none"))
 
 	fmt.Fprintf(&b, "The user's main currency: %s\n", nonEmpty(in.DefaultCurrency, "unknown"))
-	b.WriteString("\nAccounts (ref: name, currency, kind):\n")
+	b.WriteString("\nAccounts (ref: name, currency, kind, balance):\n")
 	if len(in.Accounts) == 0 {
 		b.WriteString("(none)\n")
 	}
 	for i, a := range in.Accounts {
-		fmt.Fprintf(&b, "%s: %s, %s, %s\n", accountRef(i), a.Name, a.Currency, a.Kind)
+		fmt.Fprintf(&b, "%s: %s, %s, %s, %s\n", accountRef(i), a.Name, a.Currency, a.Kind, number(a.Balance))
 	}
 	b.WriteString("\nCategories (ref: name, kinds it takes):\n")
 	if len(in.Categories) == 0 {
@@ -304,7 +321,7 @@ Only refs listed below are valid. Leave out what isn't a transaction (no amount)
 		}
 		fmt.Fprintf(&b, "%s: %s (%s)\n", categoryRef(i), c.Name, strings.Join(kinds, ", "))
 	}
-	b.WriteString("\nCounterparties (ref: name, business or person, then aliases):\n")
+	b.WriteString("\nCounterparties (ref: name, business or person, then aliases, then a person's open debts):\n")
 	if len(in.Counterparties) == 0 {
 		b.WriteString("(none)\n")
 	}
@@ -315,7 +332,14 @@ Only refs listed below are valid. Leave out what isn't a transaction (no amount)
 		}
 		fmt.Fprintf(&b, "%s: %s, %s", counterpartyRef(i), cp.Name, what)
 		if len(cp.Aliases) > 0 {
-			fmt.Fprintf(&b, " | %s", strings.Join(cp.Aliases, " | "))
+			fmt.Fprintf(&b, " | %s", strings.Join(cp.Aliases[:min(len(cp.Aliases), MaxAliases)], " | "))
+		}
+		for _, d := range cp.Debts {
+			if d.Amount > 0 {
+				fmt.Fprintf(&b, "; owes the user %s %s", number(d.Amount), d.Currency)
+			} else if d.Amount < 0 {
+				fmt.Fprintf(&b, "; the user owes them %s %s", number(-d.Amount), d.Currency)
+			}
 		}
 		b.WriteByte('\n')
 	}
@@ -323,6 +347,11 @@ Only refs listed below are valid. Leave out what isn't a transaction (no amount)
 	b.WriteString(in.Text)
 	b.WriteByte('\n')
 	return b.String()
+}
+
+// number is an amount as sent, without trailing zeros.
+func number(v float64) string {
+	return strconv.FormatFloat(math.Round(v*1e6)/1e6, 'f', -1, 64)
 }
 
 func nonEmpty(s, def string) string {
@@ -529,6 +558,64 @@ func NormalizeDigits(s string) string {
 // Clean is the text as read: digits normalized, trimmed, cut to MaxTextLen.
 func Clean(text string) string {
 	return clip(strings.TrimSpace(NormalizeDigits(text)), MaxTextLen)
+}
+
+// TooLong tells the text is over MaxTextLen.
+func TooLong(text string) bool {
+	return utf8.RuneCountInString(strings.TrimSpace(text)) > MaxTextLen
+}
+
+// looseKey is a name compared any case, spaces folded, punctuation and
+// accents' marks dropped ("Dr. José" = "dr jose").
+func looseKey(s string) string {
+	var b strings.Builder
+	for _, r := range norm.NFD.String(strings.ToLower(s)) {
+		switch {
+		case unicode.Is(unicode.Mn, r):
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			b.WriteRune(r)
+		default:
+			b.WriteRune(' ')
+		}
+	}
+	return strings.Join(strings.Fields(b.String()), " ")
+}
+
+// FindCounterparty is the id of the user's counterparty (any of them, not
+// only the ones sent) a new name is: its name or an alias, loosely
+// (looseKey), names over aliases; for a person a lone first name ("Manuel")
+// matching exactly one person's first name ("Manuel Garcia"). "" for none.
+func FindCounterparty(name string, merchant bool, cps []Counterparty) string {
+	key := looseKey(name)
+	if key == "" {
+		return ""
+	}
+	for _, cp := range cps {
+		if looseKey(cp.Name) == key {
+			return cp.ID
+		}
+	}
+	for _, cp := range cps {
+		if slices.ContainsFunc(cp.Aliases, func(a string) bool { return looseKey(a) == key }) {
+			return cp.ID
+		}
+	}
+	if merchant || strings.Contains(key, " ") {
+		return ""
+	}
+	found := ""
+	for _, cp := range cps {
+		if cp.IsMerchant {
+			continue
+		}
+		if first, _, _ := strings.Cut(looseKey(cp.Name), " "); first == key {
+			if found != "" {
+				return ""
+			}
+			found = cp.ID
+		}
+	}
+	return found
 }
 
 // Cheap reads, without the model, a text that's only an amount ("85") or a

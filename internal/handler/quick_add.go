@@ -103,6 +103,9 @@ func (h Handler) QuickAdd(w http.ResponseWriter, r *http.Request) (templ.Compone
 	if quota == nil {
 		return nil, errQuickAddOff
 	}
+	if txguess.TooLong(r.FormValue("text")) {
+		return nil, quickAddErr(w, fmt.Sprintf("That's a lot at once: keep it under %d characters.", txguess.MaxTextLen))
+	}
 	text := txguess.Clean(r.FormValue("text"))
 	if text == "" {
 		return nil, quickAddErr(w, "Type what you spent, like “coffee 85 cash”.")
@@ -195,8 +198,9 @@ func describeSkipped(skipped []txguess.Skipped) string {
 	return strings.Join(parts, "; ") + "."
 }
 
-// quickAddInput is what the text's transactions can be: the live accounts,
-// the categories and the most used counterparties.
+// quickAddInput is what the text's transactions can be: the live accounts
+// with their balances, the categories, the most used counterparties and
+// the people with a debt open (with what's open).
 func (h Handler) quickAddInput(ctx context.Context, text string) (*quickDeps, txguess.In, error) {
 	accs, err := h.repo.GetAccounts(ctx)
 	if err != nil {
@@ -232,7 +236,14 @@ func (h Handler) quickAddInput(ctx context.Context, text string) (*quickDeps, tx
 		if a.IsArchive || a.Kind.Enum == models.AccKindDebt || a.Kind.Enum == models.AccKindGamyaa {
 			continue
 		}
-		in.Accounts = append(in.Accounts, txguess.Account{ID: a.ID, Name: a.Name, Currency: a.Currency.String, Kind: a.Kind.Enum.String()})
+		in.Accounts = append(in.Accounts, txguess.Account{ID: a.ID, Name: a.Name, Currency: a.Currency.String, Kind: a.Kind.Enum.String(), Balance: a.Amount})
+	}
+	debts := map[string][]txguess.Debt{}
+	for _, a := range accs {
+		if a.IsArchive || a.Kind.Enum != models.AccKindDebt || a.Counterparty == nil || a.Currency.Round(a.Amount) == 0 {
+			continue
+		}
+		debts[a.Counterparty.ID] = append(debts[a.Counterparty.ID], txguess.Debt{Amount: a.Amount, Currency: a.Currency.String})
 	}
 	for _, c := range cats {
 		in.Categories = append(in.Categories, txguess.Category{ID: c.ID, Name: c.Name, Kinds: c.Kinds})
@@ -244,8 +255,11 @@ func (h Handler) quickAddInput(ctx context.Context, text string) (*quickDeps, tx
 		}
 	}
 	slices.SortStableFunc(live, func(a, b models.Counterparty) int { return cmp.Compare(uses[b.ID], uses[a.ID]) })
-	for _, cp := range live[:min(len(live), txguess.MaxCounterparties)] {
-		in.Counterparties = append(in.Counterparties, txguess.Counterparty{ID: cp.ID, Name: cp.Name, IsMerchant: cp.IsMerchant, Aliases: cp.Aliases})
+	for i, cp := range live {
+		if i >= txguess.MaxCounterparties && debts[cp.ID] == nil {
+			continue
+		}
+		in.Counterparties = append(in.Counterparties, txguess.Counterparty{ID: cp.ID, Name: cp.Name, IsMerchant: cp.IsMerchant, Aliases: cp.Aliases, Debts: debts[cp.ID]})
 	}
 	return d, in, nil
 }
@@ -423,7 +437,9 @@ func (h Handler) quickAddTx(ctx context.Context, d *quickDeps, g txguess.Guess) 
 }
 
 // quickAddCounterparty is the guess' counterparty: one of the user's, or
-// the new one found or created (merchant: a business), nil for none.
+// the new one: first looked for among all the user's (only the most used
+// are sent, txguess.FindCounterparty), else created (merchant: a
+// business). nil for none.
 func (h Handler) quickAddCounterparty(ctx context.Context, d *quickDeps, g txguess.Guess, merchant bool) (*models.Counterparty, error) {
 	if g.CounterpartyID != "" {
 		if i := slices.IndexFunc(d.cps, func(c models.Counterparty) bool { return c.ID == g.CounterpartyID }); i >= 0 {
@@ -435,7 +451,20 @@ func (h Handler) quickAddCounterparty(ctx context.Context, d *quickDeps, g txgue
 	if g.NewCounterparty == "" {
 		return nil, nil
 	}
-	return h.findOrCreateCounterparty(ctx, &models.Counterparty{ID: idgen.New(), Name: g.NewCounterparty, IsMerchant: merchant})
+	all := make([]txguess.Counterparty, len(d.cps))
+	for i, c := range d.cps {
+		all[i] = txguess.Counterparty{ID: c.ID, Name: c.Name, IsMerchant: c.IsMerchant, Aliases: c.Aliases}
+	}
+	name := g.NewCounterparty
+	if id := txguess.FindCounterparty(name, merchant, all); id != "" {
+		// by its own name, so an archived one is unarchived
+		name = d.cps[slices.IndexFunc(d.cps, func(c models.Counterparty) bool { return c.ID == id })].Name
+	}
+	cp, err := h.findOrCreateCounterparty(ctx, &models.Counterparty{ID: idgen.New(), Name: name, IsMerchant: merchant})
+	if err == nil && cp != nil && !slices.ContainsFunc(d.cps, func(c models.Counterparty) bool { return c.ID == cp.ID }) {
+		d.cps = append(d.cps, *cp)
+	}
+	return cp, err
 }
 
 // isMetal tells an amount in cur (the account's when "") is a precious

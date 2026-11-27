@@ -2,7 +2,9 @@ package views
 
 import (
 	"fmt"
+	"strconv"
 
+	"github.com/omareloui/tyche/internal/txguess"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
@@ -134,7 +136,7 @@ templ QuickAddDrawer(quota *QuickAddQuota) {
 						id="quick-add-text"
 						name="text"
 						rows="2"
-						maxlength="1000"
+						maxlength={ strconv.Itoa(txguess.MaxTextLen) }
 						x-ref="text"
 						x-model="text"
 						@keydown.enter="submit($event)"
@@ -159,6 +161,13 @@ templ QuickAddDrawer(quota *QuickAddQuota) {
 						@icons.Mic("17")
 					</button>
 				</div>
+				<p
+					x-cloak
+					x-show={ fmt.Sprintf("[...text].length > %d", txguess.MaxTextLen*4/5) }
+					x-text={ fmt.Sprintf("[...text].length + ' / %d'", txguess.MaxTextLen) }
+					:class={ fmt.Sprintf("[...text].length > %d ? 'text-rose-300' : 'text-zinc-500'", txguess.MaxTextLen) }
+					class="-mt-1 text-right text-xs tabular-nums"
+				></p>
 				<p id={ QuickAddErrorID } role="status" class="text-sm text-amber-200/90 empty:hidden"></p>
 				<template x-if="skipped.length">
 					<div class="grid gap-1 rounded-2xl bg-amber-400/5 ring-1 ring-amber-400/20 px-4 py-3 text-sm">
