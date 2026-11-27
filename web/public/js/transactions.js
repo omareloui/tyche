@@ -1349,6 +1349,20 @@ document.addEventListener("alpine:init", () => {
       this.timer = setTimeout(() => (this.toast = null), 8000);
     },
 
+    dismiss() {
+      clearTimeout(this.timer);
+      this.toast = null;
+    },
+
+    // hold keeps the toast while it's being swiped, release gives it its
+    // time back.
+    hold() {
+      clearTimeout(this.timer);
+    },
+    release() {
+      if (this.toast) this.timer = setTimeout(() => (this.toast = null), 4000);
+    },
+
     // undo deletes what was added, through the delete's own undo when its
     // rows are in the list, else right away.
     async undo() {

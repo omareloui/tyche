@@ -1232,15 +1232,18 @@ templ boughtByDebt(tx *models.Transaction, def *models.Currency) {
 
 // txUndoToast offers to undo the deletes waiting to be sent, all of them;
 // its ring drains, with the seconds left in it, until they are (restarted by
-// each delete).
+// each delete). Dismissing it (×, or swiped away, toastSwipe) sends them now.
 templ txUndoToast() {
 	<div
 		x-cloak
 		x-show="$store.txs.toast"
 		x-transition.opacity.duration.150ms
+		x-data="toastSwipe"
+		x-bind="swipe"
+		@toast-dismiss="$store.txs.commit()"
 		role="status"
 		:class="($store.txSel.on || $store.txSel.notice) && 'mb-[calc(7rem+env(safe-area-inset-bottom))] md:mb-16'"
-		class="fixed z-60 bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 max-w-[calc(100vw-2rem)] pl-2 pr-1.5 py-1.5 rounded-full bg-zinc-800 ring-1 ring-zinc-700 shadow-xl shadow-black/50"
+		class="fixed z-60 bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-1 max-w-[calc(100vw-2rem)] pl-2 pr-1.5 py-1.5 touch-none select-none rounded-full bg-zinc-800 ring-1 ring-zinc-700 shadow-xl shadow-black/50"
 	>
 		<span aria-hidden="true" class="relative grid place-items-center shrink-0 size-8">
 			<template x-for="k in [$store.txs.toast?.key]" :key="k">
@@ -1251,12 +1254,21 @@ templ txUndoToast() {
 			</template>
 			<span class="text-sm font-semibold tabular-nums text-violet-300" x-text="$store.txs.left"></span>
 		</span>
-		<span class="truncate text-base" x-text="$store.txs.toast?.text"></span>
+		<span class="truncate ml-2 text-base" x-text="$store.txs.toast?.text"></span>
 		<button
 			type="button"
 			@click="$store.txs.undo()"
-			class="shrink-0 h-9 px-4 rounded-full font-semibold text-violet-300 cursor-pointer transition-colors hover:bg-white/5"
+			class="shrink-0 ml-1 h-9 px-4 rounded-full font-semibold text-violet-300 cursor-pointer transition-colors hover:bg-white/5"
 		>Undo</button>
+		<button
+			type="button"
+			@click="$store.txs.commit()"
+			title="Dismiss"
+			aria-label="Dismiss"
+			class="shrink-0 grid place-items-center size-9 rounded-full text-zinc-400 cursor-pointer transition-colors hover:bg-white/5 hover:text-zinc-200"
+		>
+			@icons.X("16")
+		</button>
 	</div>
 }
 

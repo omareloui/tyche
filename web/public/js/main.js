@@ -572,6 +572,69 @@ document.addEventListener("alpine:init", () => {
 // row by row with data-scrub-cols; touch-pan-y on it leaves vertical drags to
 // scrolling (cancelling the scrub).
 document.addEventListener("alpine:init", () => {
+  // toastSwipe swipes a toast away on touch screens: sideways or down past a
+  // threshold (or a flick) dismisses it, less springs it back. It tells its
+  // toast through events on it: toast-hold when a swipe starts (e.g. to stop
+  // its timer), toast-release when it springs back, toast-dismiss when gone.
+  Alpine.data("toastSwipe", () => ({
+    drag: null,
+
+    swipe: {
+      "@pointerdown"(e) {
+        if (e.pointerType === "mouse" || e.target.closest("button")) return;
+        this.drag = { id: e.pointerId, x: e.clientX, y: e.clientY, dx: 0, dy: 0, t: Date.now() };
+        this.$dispatch("toast-hold");
+      },
+      "@pointermove"(e) {
+        const d = this.drag;
+        if (!d || e.pointerId !== d.id) return;
+        d.dx = e.clientX - d.x;
+        d.dy = Math.max(0, e.clientY - d.y);
+        if (!d.moving && Math.hypot(d.dx, d.dy) < 6) return;
+        if (!d.moving) {
+          d.moving = true;
+          this.$el.setPointerCapture?.(e.pointerId);
+          this.$el.style.transition = "none";
+        }
+        const sideways = Math.abs(d.dx) > d.dy;
+        d.axis = sideways ? "x" : "y";
+        const off = sideways ? Math.abs(d.dx) : d.dy;
+        this.$el.style.transform = sideways ? `translateX(${d.dx}px)` : `translateY(${d.dy}px)`;
+        this.$el.style.opacity = String(Math.max(0.2, 1 - off / 220));
+      },
+      "@pointerup"(e) {
+        this.end(e);
+      },
+      "@pointercancel"(e) {
+        this.end(e, true);
+      },
+    },
+
+    end(e, cancel) {
+      const d = this.drag;
+      if (!d || e.pointerId !== d.id) return;
+      this.drag = null;
+      const el = this.$el;
+      if (!d.moving) return this.$dispatch("toast-release");
+      const off = d.axis === "x" ? Math.abs(d.dx) : d.dy;
+      const fast = off / Math.max(1, Date.now() - d.t) > 0.5;
+      el.style.transition = "transform 0.18s ease-out, opacity 0.18s ease-out";
+      if (!cancel && (off > 80 || (fast && off > 24))) {
+        el.style.transform = d.axis === "x" ? `translateX(${Math.sign(d.dx) * window.innerWidth}px)` : "translateY(150%)";
+        el.style.opacity = "0";
+        setTimeout(() => {
+          this.$dispatch("toast-dismiss");
+          el.style.transition = el.style.transform = el.style.opacity = "";
+        }, 180);
+        return;
+      }
+      el.style.transform = "";
+      el.style.opacity = "";
+      setTimeout(() => (el.style.transition = ""), 180);
+      this.$dispatch("toast-release");
+    },
+  }));
+
   Alpine.data("chartScrub", () => ({
     timer: null,
 
