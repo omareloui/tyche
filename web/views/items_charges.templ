@@ -47,6 +47,22 @@ func chargeKindsMax(ks []models.ChargeKindStat) float64 {
 	return top
 }
 
+// chargeMerchantsTop is the longest merchant bar: the most a merchant's
+// charges add up to, discounts left out (the bars only stack what's on top).
+func chargeMerchantsTop(ms []models.ChargeMerchantStat) float64 {
+	top := 0.0
+	for _, m := range ms {
+		sum := 0.0
+		for _, k := range m.Kinds {
+			if k.Total > 0 {
+				sum += k.Total
+			}
+		}
+		top = max(top, sum)
+	}
+	return top
+}
+
 // chargeKindsLine is the kinds in a line, e.g. "Service 12% · Tip 8%".
 func chargeKindsLine(ks []models.ChargeKindStat, def *models.Currency, n int) string {
 	parts := make([]string, 0, len(ks))
@@ -113,7 +129,7 @@ templ itemsCharges(d *ItemsData) {
 					for i, m := range c.Merchants {
 						if i < itemsChargesTop {
 							<li>
-								@chargeMerchantRow(m, d.Def, c.Merchants[0].Total)
+								@chargeMerchantRow(m, d.Def, chargeMerchantsTop(c.Merchants))
 							</li>
 						}
 					}
@@ -174,15 +190,32 @@ templ chargeMerchantRow(m models.ChargeMerchantStat, def *models.Currency, top f
 			if m.Merchant != nil {
 				@components.CounterpartyIcon(m.Merchant.Name, m.Merchant.Icon, m.Merchant.Color, "w-5 h-5 text-[10px]")
 			}
-			<span class="flex-1 min-w-0">
-				<span class="block truncate">{ name }</span>
-				<span class="block truncate text-xs text-zinc-500">{ chargeKindsLine(m.Kinds, def, 3) }</span>
-			</span>
+			<span class="flex-1 min-w-0 truncate">{ name }</span>
 			<span class="shrink-0 text-xs text-zinc-500 tabular-nums">{ fmt.Sprintf("×%d", m.Receipts) }</span>
 			<span class="sensitive shrink-0 tabular-nums">{ def.Format(m.Total) }</span>
 		</span>
-		<span class="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-			<span class="block h-full rounded-full bg-violet-400/70" style={ "width:" + barPct(math.Max(m.Total, 0), top) }></span>
+		<span class="flex h-1.5 gap-px rounded-full bg-zinc-800 overflow-hidden">
+			for _, k := range m.Kinds {
+				if k.Total > 0 {
+					<span
+						class="block h-full first:rounded-l-full last:rounded-r-full"
+						style={ fmt.Sprintf("width:%s;background-color:%s", barPct(k.Total, top), chargeKindColor(k.Kind)) }
+						title={ k.Kind.String() }
+					></span>
+				}
+			}
+		</span>
+		<span class="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-zinc-500">
+			for _, k := range m.Kinds {
+				<span class="inline-flex items-center gap-1.5 whitespace-nowrap">
+					<span class="size-1.5 shrink-0 rounded-full" style={ "background-color:" + chargeKindColor(k.Kind) }></span>
+					{ k.Kind.String() }
+					if k.HasRate() {
+						{ chargeRate(k.Rate) }
+					}
+					<span class={ "sensitive tabular-nums", templ.KV("text-emerald-300", k.Total < 0), templ.KV("text-zinc-300", k.Total >= 0) }>{ def.Format(k.Total) }</span>
+				</span>
+			}
 		</span>
 	</div>
 }
