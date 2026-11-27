@@ -175,8 +175,9 @@ func TestForeignInputs(t *testing.T) {
 	}
 
 	fd := parse(models.ExpenseTxKind, "usd", "100", "original_amount")
-	if fd.AccountIFD.Amount.Value != "5150.00" || fd.Foreign == nil || fd.Foreign.Fee != "150" {
-		t.Errorf("expense = %s, fee %+v, want 5150.00 with a 150 fee", fd.AccountIFD.Amount.Value, fd.Foreign)
+	// the amount is what was paid, the fee on top of it
+	if fd.AccountIFD.Amount.Value != "5000.00" || fd.Foreign == nil || fd.Foreign.Fee != "150" || !fd.Foreign.TakesFee {
+		t.Errorf("expense = %s, fee %+v, want 5000.00 + a 150 fee", fd.AccountIFD.Amount.Value, fd.Foreign)
 	}
 	if fd := parse(models.IncomeTxKind, "USD", "100", "kind"); fd.AccountIFD.Amount.Value != "5000.00" || fd.Foreign.Fee != "" {
 		t.Errorf("income = %s, fee %q, want 5000.00 without a fee", fd.AccountIFD.Amount.Value, fd.Foreign.Fee)
@@ -186,5 +187,54 @@ func TestForeignInputs(t *testing.T) {
 	}
 	if fd := parse(models.TransferTxKind, "USD", "100", "kind"); fd.Foreign != nil {
 		t.Errorf("transfers can't be foreign, got %+v", fd.Foreign)
+	}
+}
+
+func TestApplyForeignFee(t *testing.T) {
+	restore := fxrate.SetRates(map[string]map[string]float64{"usd": {"egp": 50}})
+	t.Cleanup(restore)
+	egp := models.Currency{String: "EGP", Symbol: "EGP"}
+	card := models.Account{ID: "card", Currency: egp, FxFeePercent: 3}
+	apply := func(kind models.TxKind, amount float64, vals url.Values) *models.Transaction {
+		t.Helper()
+		r := httptest.NewRequest("POST", "/transactions", strings.NewReader(vals.Encode()))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		if err := r.ParseForm(); err != nil {
+			t.Fatal(err)
+		}
+		tx := &models.Transaction{Kind: kind, Amount: amount, Account: card}
+		Handler{}.applyForeign(r, tx)
+		return tx
+	}
+	// a fee typed on a purchase in the account's currency goes on top
+	if tx := apply(models.ExpenseTxKind, 190, url.Values{"original_currency": {""}, "fx_fee": {"5.7"}}); tx.Amount != 195.7 || tx.FxFee != 5.7 || tx.Original != nil {
+		t.Errorf("local fee: amount %v fee %v original %+v", tx.Amount, tx.FxFee, tx.Original)
+	}
+	// none on an income
+	if tx := apply(models.IncomeTxKind, 190, url.Values{"original_currency": {""}, "fx_fee": {"5.7"}}); tx.Amount != 190 || tx.FxFee != 0 {
+		t.Errorf("income: amount %v fee %v", tx.Amount, tx.FxFee)
+	}
+	// foreign without an amount: converted, the account's fee on top
+	if tx := apply(models.ExpenseTxKind, 0, url.Values{"original_currency": {"USD"}, "original_amount": {"100"}, "fx_fee": {""}}); tx.Amount != 5150 || tx.FxFee != 150 {
+		t.Errorf("foreign: amount %v fee %v", tx.Amount, tx.FxFee)
+	}
+	// a fee cleared: nothing on top
+	if tx := apply(models.ExpenseTxKind, 190, url.Values{"original_currency": {""}, "fx_fee": {""}}); tx.Amount != 190 || tx.FxFee != 0 {
+		t.Errorf("no fee: amount %v fee %v", tx.Amount, tx.FxFee)
+	}
+}
+
+func TestApplyForeignFeePercent(t *testing.T) {
+	egp := models.Currency{String: "EGP", Symbol: "EGP"}
+	vals := url.Values{"original_currency": {""}, "fx_fee": {"3"}, "fx_fee_unit": {"pct"}}
+	r := httptest.NewRequest("POST", "/transactions", strings.NewReader(vals.Encode()))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if err := r.ParseForm(); err != nil {
+		t.Fatal(err)
+	}
+	tx := &models.Transaction{Kind: models.ExpenseTxKind, Amount: 190, Account: models.Account{Currency: egp}}
+	Handler{}.applyForeign(r, tx)
+	if tx.FxFee != 5.7 || tx.Amount != 195.7 {
+		t.Errorf("3%% of 190: fee %v, amount %v", tx.FxFee, tx.Amount)
 	}
 }

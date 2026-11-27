@@ -724,7 +724,8 @@ func (h Handler) getTxDeps(ctx context.Context) ([]models.Account, []models.TxKi
 func (h Handler) mapTransactionToFD(ctx context.Context, t *models.Transaction, err *errs.ValidationError) *views.TransactionFD {
 	fd := &views.TransactionFD{
 		TransactionAmountsAndKindFD: views.TransactionAmountsAndKindFD{
-			AccountIFD: amountIFD(t.Amount, &t.Account, form.FDInput{Value: t.Account.ID, Error: err.Errors.MsgFor("AccountID")},
+			// the fee has its own field, on top of the amount
+			AccountIFD: amountIFD(t.Amount-txFormFee(t), &t.Account, form.FDInput{Value: t.Account.ID, Error: err.Errors.MsgFor("AccountID")},
 				err.Errors.MsgFor("Amount")),
 			Kind: form.FDInput{Value: t.Kind.String(), Error: err.Errors.MsgFor("Kind")},
 		},

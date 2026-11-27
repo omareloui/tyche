@@ -604,8 +604,17 @@ templ csvPreview(data CSVImportData) {
 	@components.GlassCard("p-5 sm:p-6 grid gap-4") {
 		<div
 			class="grid gap-4"
-			x-data={ fmt.Sprintf("{count: %d}", counts[csvimport.RowNew]) }
-			@change="if ($event.target.name === 'line') count = $root.querySelectorAll('input[name=line]:checked').length"
+			x-data={ fmt.Sprintf(`{
+				count: %d,
+				picked() { return this.$root.querySelectorAll('input[name=line]:checked, input[name=update]:checked').length },
+				// a row is imported or updates its transaction, not both
+				pickOne(el) {
+					if (!el.checked) return
+					const other = el.closest('tr').querySelector(el.name === 'line' ? 'input[name=update]' : 'input[name=line]')
+					if (other) other.checked = false
+				},
+			}`, counts[csvimport.RowNew]) }
+			@change="if (['line', 'update'].includes($event.target.name)) { pickOne($event.target); count = picked() }"
 		>
 			<div class="flex flex-wrap items-center gap-2">
 				<h2 class="text-white font-semibold mr-auto">Rows</h2>
@@ -624,9 +633,9 @@ templ csvPreview(data CSVImportData) {
 				}
 			</div>
 			<div class="flex flex-wrap gap-2 text-sm">
-				<button type="button" class="txd-action" @click="$root.querySelectorAll('input[name=line]').forEach(i => i.checked = i.dataset.status === 'new'); count = $root.querySelectorAll('input[name=line]:checked').length">Pick the new ones</button>
-				<button type="button" class="txd-action" @click="$root.querySelectorAll('input[name=line]').forEach(i => i.checked = true); count = $root.querySelectorAll('input[name=line]:checked').length">Pick all</button>
-				<button type="button" class="txd-action" @click="$root.querySelectorAll('input[name=line]').forEach(i => i.checked = false); count = 0">Pick none</button>
+				<button type="button" class="txd-action" @click="$root.querySelectorAll('input[name=line]').forEach(i => i.checked = i.dataset.status === 'new'); count = picked()">Pick the new ones</button>
+				<button type="button" class="txd-action" @click="$root.querySelectorAll('input[name=update]').forEach(i => i.checked = false); $root.querySelectorAll('input[name=line]').forEach(i => i.checked = true); count = picked()">Pick all</button>
+				<button type="button" class="txd-action" @click="$root.querySelectorAll('input[name=line], input[name=update]').forEach(i => i.checked = false); count = 0">Pick none</button>
 			</div>
 			<div class="overflow-x-auto -mx-5 sm:mx-0">
 				<table class="min-w-full text-sm">
@@ -738,15 +747,21 @@ templ csvPreviewRow(acc *models.Account, pr CSVPreviewRow) {
 				case csvimport.RowNew:
 					<span class="chip bg-emerald-400/10 text-emerald-300">New</span>
 				case csvimport.RowDuplicate:
-					<a href={ csvTxURL(pr.Match.TxID) } target="_blank" class="chip bg-amber-400/10 text-amber-300 hover:bg-amber-400/20" title="A transaction already has this day (or the next) and amount">
-						Likely there
-						@icons.ExternalLink("12")
-					</a>
+					<div class="flex flex-wrap items-center gap-1.5">
+						<a href={ csvTxURL(pr.Match.TxID) } target="_blank" class="chip bg-amber-400/10 text-amber-300 hover:bg-amber-400/20" title="A transaction already has this day (or the next) and amount">
+							Likely there
+							@icons.ExternalLink("12")
+						</a>
+						@csvUpdateBox(pr)
+					</div>
 				case csvimport.RowMaybe:
-					<a href={ csvTxURL(pr.Match.TxID) } target="_blank" class="chip bg-amber-400/10 text-amber-200 hover:bg-amber-400/20" title="A transaction a few days apart (or paid in another currency, a little off) may be this row">
-						Maybe there
-						@icons.ExternalLink("12")
-					</a>
+					<div class="flex flex-wrap items-center gap-1.5">
+						<a href={ csvTxURL(pr.Match.TxID) } target="_blank" class="chip bg-amber-400/10 text-amber-200 hover:bg-amber-400/20" title="A transaction a few days apart (or paid in another currency, a little off) may be this row">
+							Maybe there
+							@icons.ExternalLink("12")
+						</a>
+						@csvUpdateBox(pr)
+					</div>
 				case csvimport.RowImported:
 					<a href={ csvTxURL(pr.Match.TxID) } target="_blank" class="chip hover:bg-zinc-700">
 						Imported before
@@ -879,6 +894,24 @@ func csvSampleRows(recs [][]string, m csvimport.Mapping) [][]string {
 		return recs[:n]
 	}
 	return recs
+}
+
+// csvUpdateBox has a likely / maybe duplicate's transaction take the row's
+// amount, fee and what it was paid in, instead of importing it (sent as
+// "update").
+templ csvUpdateBox(pr CSVPreviewRow) {
+	if pr.Tx != nil {
+		<label
+			class="group tx-extra-pill has-checked:bg-sky-400/15 has-checked:text-sky-200 has-checked:ring-sky-400/50"
+			title="Its transaction takes this row's amount, fee and currency; the rest stays as it is"
+		>
+			<input type="checkbox" name="update" value={ strconv.Itoa(pr.Row.Line) } class="sr-only"/>
+			@icons.Retry("12", &templ.Attributes{"class": "group-has-checked:hidden"})
+			@icons.Check("12", &templ.Attributes{"class": "hidden group-has-checked:block"})
+			<span class="group-has-checked:hidden">Update it</span>
+			<span class="hidden group-has-checked:inline">Will update</span>
+		</label>
+	}
 }
 
 // csvHistoricalNote tells the two ways to import the rows: as new

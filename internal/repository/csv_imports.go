@@ -214,6 +214,9 @@ func (r *Repository) GetCSVDupCandidates(ctx context.Context, accountID string, 
 type ImportedTx struct {
 	Tx   *models.Transaction
 	Hash string
+	// Target, when set, is the transaction the row updates (its amount, fee
+	// and what it was paid in, models.MergeImported) instead of a new one.
+	Target *models.Transaction
 }
 
 // ImportCSV saves the transactions of an import in one database transaction,
@@ -245,6 +248,12 @@ func (r *Repository) ImportCSV(ctx context.Context, imp *csvimport.Import, txs [
 				}
 			}
 			n++
+			if it.Target != nil {
+				if err := r.applyImportedWithTxn(ctx, qtx, it.Target, it.Tx, imp.ID, it.Hash); err != nil {
+					return err
+				}
+				continue
+			}
 			if err := r.createIngestedTransactionWithTxn(ctx, qtx, it.Tx); err != nil {
 				return err
 			}

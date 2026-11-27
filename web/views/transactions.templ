@@ -3,7 +3,6 @@ package views
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/slicesutils"
@@ -11,6 +10,7 @@ import (
 	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
 	"github.com/omareloui/tyche/web/views/layouts"
+	"math"
 	"strings"
 	"time"
 )
@@ -80,8 +80,12 @@ type TxForeignFD struct {
 	Currency        form.FDInput
 	Amount          form.FDInput
 	Fee             string
-	Hint            string
-	Currencies      []models.Currency
+	// TakesFee shows the fee input: a purchase's, on top of the amount.
+	TakesFee bool
+	// FeePct tells Fee is a percent of what was paid, not an amount.
+	FeePct     bool
+	Hint       string
+	Currencies []models.Currency
 }
 
 templ Transactions(
@@ -626,7 +630,6 @@ templ txSwipeHint() {
 		</button>
 	</p>
 }
-
 
 type txShortcut struct {
 	Keys []string
@@ -1441,41 +1444,148 @@ templ TransactionAmountsAndKindFormBody(
 // swaps only the amount and the hint, re-rendering the body would drop what
 // was typed since the request left.
 templ txForeignFields(fd *TxForeignFD, id string, onChange templ.Attributes) {
-	<div class="flex flex-wrap items-center justify-center gap-2 text-sm text-zinc-400">
-		<span>Paid in</span>
-		@form.Combobox(form.ComboboxProps{
-			Name: "original_currency", ID: id, Label: "Currency paid in",
-			Options: foreignCurrencyOptions(fd.Currencies, fd.AccountCurrency), Data: fd.Currency,
-			Nullable: true, NullLabel: foreignNullLabel(fd.AccountCurrency), Searchable: len(fd.Currencies) > 7, Chip: true,
-			InputAttrs: onChange,
-		})
-		if fd.Currency.Value != "" {
-			<input
-				id={ "original_amount-" + id }
-				type="text"
-				name="original_amount"
-				value={ fd.Amount.Value }
-				placeholder={ fd.Currency.Value + " 0.00" }
-				aria-label={ "Amount in " + fd.Currency.Value }
-				autocomplete="off"
-				inputmode="decimal"
-				x-mask:dynamic={ form.MoneyMask(fd.Currency.Value, 2) }
-				hx-post={ fmt.Sprintf("/tx-inputs/%s", id) }
-				hx-trigger="input changed delay:300ms, change[target.name=='scheduled_to'] from:closest form"
-				hx-target={ "#amount-" + id }
-				hx-select={ "#amount-" + id }
-				hx-select-oob={ "#tx-foreign-hint-" + id }
-				hx-swap="outerHTML"
-				class="input-field w-40! h-9! text-center tabular-nums"
-			/>
-		}
+	// Quiet pills until used: "Other currency" opens "Paid in", "Add fee" the
+	// purchase's fee; each open one has a × putting it away.
+	<div
+		data-foreign
+		x-data={ fmt.Sprintf("{ foreign: %t, fee: %t }", fd.Currency.Value != "", fd.Fee != "") }
+		class="grid justify-items-center gap-2 text-sm"
+	>
+		// the fee first, above the pills; swapped with the hint (out of band)
+		<div id={ "tx-fee-" + id } class="grid justify-items-center">
+			if fd.TakesFee {
+				// a card's foreign / cross-border fee, added to the amount
+				<div
+					x-show="fee"
+					x-data={ fmt.Sprintf(`{
+						pct: %t,
+						// bumped by any typing, the amount's included
+						tick: 0,
+						// what a percent comes to, of the form's amount
+						worth() {
+							this.tick
+							const amount = this.$el.closest('form')?.querySelector('[name=amount]')
+							const a = parseFloat((amount?.value || '').replace(/[^\d.]/g, ''))
+							const p = parseFloat((this.$refs.fee.value || '').replace(/[^\d.]/g, ''))
+							return a > 0 && p > 0 ? (a * p / 100).toFixed(2) : ''
+						},
+					}`, fd.FeePct) }
+					x-init="if ($refs.fee.value) fee = true"
+					@input.window="tick++"
+					x-cloak?={ fd.Fee == "" }
+					class="grid justify-items-center gap-1"
+				>
+					<div class="flex items-center gap-2 text-sm text-zinc-400">
+						<span>+ fee</span>
+						<input
+							type="text"
+							name="fx_fee"
+							x-ref="fee"
+							value={ fd.Fee }
+							placeholder="0.00"
+							aria-label="Fee added to the amount"
+							title="A card's foreign or cross-border fee, added to the amount"
+							autocomplete="off"
+							inputmode="decimal"
+							x-mask:dynamic="$money($input, '.', ',', 2)"
+							class="input-field w-24! h-9! text-center tabular-nums"
+						/>
+						<input type="hidden" name="fx_fee_unit" :value="pct ? 'pct' : ''"/>
+						<div role="group" aria-label="Fee in" class="inline-flex p-0.5 rounded-full bg-zinc-800/60 ring-1 ring-zinc-700/60 text-xs">
+							<button
+								type="button"
+								@click="pct = false"
+								:aria-pressed="!pct"
+								:class="!pct ? 'bg-zinc-100 text-zinc-900' : 'text-zinc-400 hover:text-white'"
+								class="h-6 px-2.5 rounded-full cursor-pointer transition-colors"
+							>{ fd.AccountCurrency }</button>
+							<button
+								type="button"
+								@click="pct = true"
+								:aria-pressed="pct"
+								:class="pct ? 'bg-zinc-100 text-zinc-900' : 'text-zinc-400 hover:text-white'"
+								class="h-6 px-2.5 rounded-full cursor-pointer transition-colors"
+							>%</button>
+						</div>
+						<button
+							type="button"
+							@click="fee = false; $refs.fee.value = ''; pct = false"
+							aria-label="No fee"
+							title="No fee"
+							class="tx-extra-x"
+						>
+							@icons.X("14")
+						</button>
+					</div>
+					<span x-show="pct && worth()" x-cloak class="text-xs text-zinc-500" x-text={ fmt.Sprintf("'= %s ' + worth()", fd.AccountCurrency) }></span>
+				</div>
+			}
+		</div>
+		<div x-show={ txPillsShown(fd) } class="flex flex-wrap justify-center gap-2">
+			<button type="button" x-show="!foreign" @click="foreign = true" class="tx-extra-pill">
+				@icons.Globe("13")
+				Other currency
+			</button>
+			if fd.TakesFee {
+				<button type="button" x-show="!fee" @click="fee = true; $nextTick(() => $root.querySelector('[name=fx_fee]')?.focus())" class="tx-extra-pill">
+					@icons.Plus("13")
+					Add fee
+				</button>
+			}
+		</div>
+		<div x-show="foreign" x-cloak?={ fd.Currency.Value == "" } class="flex flex-wrap items-center justify-center gap-2 text-zinc-400">
+			<span>Paid</span>
+			if fd.Currency.Value != "" {
+				<input
+					id={ "original_amount-" + id }
+					type="text"
+					name="original_amount"
+					value={ fd.Amount.Value }
+					placeholder="0.00"
+					aria-label={ "Amount in " + fd.Currency.Value }
+					autocomplete="off"
+					inputmode="decimal"
+					x-mask:dynamic="$money($input, '.', ',', 2)"
+					hx-post={ fmt.Sprintf("/tx-inputs/%s", id) }
+					hx-trigger="input changed delay:300ms, change[target.name=='scheduled_to'] from:closest form"
+					hx-target={ "#amount-" + id }
+					hx-select={ "#amount-" + id }
+					hx-select-oob={ "#tx-foreign-hint-" + id + ",#tx-fee-" + id }
+					hx-swap="outerHTML"
+					class="input-field w-28! h-9! text-center tabular-nums"
+				/>
+			}
+			@form.Combobox(form.ComboboxProps{
+				Name: "original_currency", ID: id, Label: "Currency paid in", Placeholder: "Currency",
+				Options: foreignCurrencyOptions(fd.Currencies, fd.AccountCurrency), Data: fd.Currency,
+				Nullable: true, NullLabel: foreignNullLabel(fd.AccountCurrency), Searchable: len(fd.Currencies) > 7, Chip: true,
+				InputAttrs: onChange,
+			})
+			<button
+				type="button"
+				@click="foreign = false; const i = $root.querySelector('input[name=original_currency]'); if (i.value) { i.value = ''; i.dispatchEvent(new Event('change', { bubbles: true })) }"
+				aria-label="Paid in the account's currency"
+				title="Paid in the account's currency"
+				class="tx-extra-x"
+			>
+				@icons.X("14")
+			</button>
+		</div>
+		<div id={ "tx-foreign-hint-" + id } class="grid justify-items-center gap-2 text-xs text-zinc-500">
+			if fd.Currency.Value != "" && fd.Hint != "" {
+				<span x-show="foreign">{ fd.Hint }</span>
+			}
+		</div>
 	</div>
-	<div id={ "tx-foreign-hint-" + id } class="-mt-1 text-xs text-zinc-500 text-center">
-		if fd.Currency.Value != "" {
-			<input type="hidden" name="fx_fee" value={ fd.Fee }/>
-			{ fd.Hint }
-		}
-	</div>
+}
+
+// txPillsShown is the Alpine expression showing the pills row: while one of
+// them is left to open.
+func txPillsShown(fd *TxForeignFD) string {
+	if fd.TakesFee {
+		return "!foreign || !fee"
+	}
+	return "!foreign"
 }
 
 // foreignCurrencyOptions are the currencies to pay in, by code, the

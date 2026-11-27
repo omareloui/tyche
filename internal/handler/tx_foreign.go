@@ -22,6 +22,10 @@ const (
 	originalCurrencyField = "original_currency"
 	originalAmountField   = "original_amount"
 	fxFeeField            = "fx_fee"
+	// fxFeeUnitField is fxFeeUnitPct when the fee is typed as a percent of
+	// what was paid, else it's an amount.
+	fxFeeUnitField = "fx_fee_unit"
+	fxFeeUnitPct   = "pct"
 )
 
 // foreignCurrency is the form's paid in currency, "" when it's acc's.
@@ -33,41 +37,53 @@ func foreignCurrency(r *http.Request, acc *models.Account) string {
 	return cur
 }
 
-// applyForeign sets what a transaction of the form was paid in, once its
-// account is resolved: nothing when the form has no "Paid in" field (other
-// forms), cleared when it's the account's currency or a kind that can't be
-// foreign. Without an amount typed it's worked out at the day's rate plus
-// the account's fee.
+// txFormFee is the fee the form shows apart from the amount: a purchase's.
+func txFormFee(t *models.Transaction) float64 {
+	if t.Kind.TakesFxFee() && t.FxFee > 0 && t.FxFee < t.Amount {
+		return t.FxFee
+	}
+	return 0
+}
+
+// applyForeign sets what a transaction of the form was paid in and its fee,
+// once its account is resolved: nothing when the form has no "Paid in" field
+// (other forms), cleared when it's the account's currency or a kind that
+// can't be foreign. The form's amount is what was paid, the fee (a
+// purchase's) on top of it: the transaction's amount is both. Without an
+// amount typed a foreign one is worked out at the day's rate, the fee being
+// the account's unless typed.
 func (h Handler) applyForeign(r *http.Request, tx *models.Transaction) {
 	if !r.Form.Has(originalCurrencyField) {
 		return
 	}
 	tx.Original, tx.FxFee = nil, 0
+	fee, _ := parseFloatIfExists(r.FormValue(fxFeeField))
+	feeTyped := strings.TrimSpace(r.FormValue(fxFeeField)) != ""
+	feePct := r.FormValue(fxFeeUnitField) == fxFeeUnitPct
+	defer func() {
+		if feePct && feeTyped {
+			// a percent of what was paid
+			fee = tx.Amount * min(fee, 100) / 100
+		}
+		if tx.Kind.TakesFxFee() && fee > 0 && tx.Amount > 0 {
+			tx.FxFee = tx.Account.Currency.Round(fee)
+			tx.Amount = tx.Account.Currency.Round(tx.Amount + tx.FxFee)
+		}
+	}()
+
 	cur := foreignCurrency(r, &tx.Account)
 	orig, _ := parseFloatIfExists(r.FormValue(originalAmountField))
-	if cur == "" && tx.Kind.TakesFxFee() && tx.Amount > 0 {
-		// a fee charged in the account's currency (a cross-border charge read
-		// off a statement) is kept
-		if fee, _ := parseFloatIfExists(r.FormValue(fxFeeField)); fee > 0 && fee < tx.Amount {
-			tx.FxFee = tx.Account.Currency.Round(fee)
-		}
-		return
-	}
 	if cur == "" || orig <= 0 || !tx.Kind.CanBeForeign() || tx.Account.Currency.IsMetal() {
 		return
 	}
 	tx.Original = &models.ForeignAmount{Amount: orig, Currency: cur}
-
 	if tx.Amount == 0 {
 		if rate := h.transferRate(r, cur, tx.Account.Currency.String); rate > 0 {
-			tx.Amount, tx.FxFee = models.ForeignCharge(orig, rate, &tx.Account, tx.Kind)
-		}
-		return
-	}
-	if tx.Kind.TakesFxFee() {
-		fee, _ := parseFloatIfExists(r.FormValue(fxFeeField))
-		if fee > 0 && fee < tx.Amount {
-			tx.FxFee = tx.Account.Currency.Round(fee)
+			total, accFee := models.ForeignCharge(orig, rate, &tx.Account, tx.Kind)
+			tx.Amount = total - accFee
+			if !feeTyped {
+				fee = accFee
+			}
 		}
 	}
 }
@@ -96,12 +112,10 @@ func (h Handler) txForeignFD(ctx context.Context, t *models.Transaction) *views.
 	if t.IsForeign() {
 		fd.Currency.Value = strings.ToUpper(t.Original.Currency)
 		fd.Amount.Value = formatFloatIfNonZero(t.Original.Amount)
-		fd.Fee = formatFloatIfNonZero(t.FxFee)
-		fd.Hint = foreignHint(t.OriginalRate(), t.FxFee, fd.Currency.Value, &t.Account)
-	} else if t.FxFee > 0 {
-		fd.Fee = formatFloatIfNonZero(t.FxFee)
-		fd.Hint = "Incl. " + t.ViewFxFee() + " foreign currency fee"
+		fd.Hint = foreignHint(t.OriginalRate(), 0, fd.Currency.Value, &t.Account)
 	}
+	fd.Fee = formatFloatIfNonZero(txFormFee(t))
+	fd.TakesFee = t.Kind.TakesFxFee()
 	fd.Currencies = h.foreignCurrencies(ctx, fd.Currency.Value)
 	return fd
 }
@@ -120,12 +134,13 @@ func (h Handler) parseTxForeignFD(r *http.Request, fd *views.TransactionAmountsA
 		Currency:        form.FDInput{Value: cur},
 		Amount:          form.FDInput{Value: r.FormValue(originalAmountField)},
 		Fee:             r.FormValue(fxFeeField),
+		FeePct:          r.FormValue(fxFeeUnitField) == fxFeeUnitPct,
+		TakesFee:        kind.TakesFxFee(),
+	}
+	if !kind.TakesFxFee() {
+		ffd.Fee = ""
 	}
 	if cur == "" {
-		// a fee in the account's currency stays until "Paid in" changes
-		if !kind.TakesFxFee() || triggered(originalCurrencyField) {
-			ffd.Fee = ""
-		}
 		return ffd
 	}
 	orig, _ := parseFloatIfExists(ffd.Amount.Value)
@@ -134,17 +149,15 @@ func (h Handler) parseTxForeignFD(r *http.Request, fd *views.TransactionAmountsA
 		ffd.Hint = fmt.Sprintf("No rate for %s to %s, type the amount charged", cur, acc.Currency.String)
 		return ffd
 	}
-	fee, _ := parseFloatIfExists(ffd.Fee)
+	// what was paid converted into the amount, the account's fee apart
 	if orig > 0 && triggered(originalAmountField, originalCurrencyField, "account_id", "kind") {
-		var total float64
-		total, fee = models.ForeignCharge(orig, rate, acc, kind)
-		fd.AccountIFD.Amount.Value = strconv.FormatFloat(total, 'f', 2, 64)
-		ffd.Fee = formatFloatIfNonZero(fee)
+		total, fee := models.ForeignCharge(orig, rate, acc, kind)
+		fd.AccountIFD.Amount.Value = strconv.FormatFloat(total-fee, 'f', 2, 64)
+		if kind.TakesFxFee() {
+			ffd.Fee, ffd.FeePct = formatFloatIfNonZero(fee), false
+		}
 	}
-	if !kind.TakesFxFee() {
-		fee, ffd.Fee = 0, ""
-	}
-	ffd.Hint = foreignHint(rate, fee, cur, acc)
+	ffd.Hint = foreignHint(rate, 0, cur, acc)
 	return ffd
 }
 

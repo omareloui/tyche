@@ -127,6 +127,8 @@ func New(h *handler.Handler) Router {
 	mux.Handle("PUT /transactions/{id}/transfer-pair", handle(h.LinkTransferPair))
 	mux.Handle("DELETE /transactions/{id}/transfer-pair", handle(h.UnlinkTransferPair))
 	mux.Handle("GET /transactions/{id}/recurrent-match", handle(h.GetRecurrentMatchPicker))
+	mux.Handle("GET /transactions/{id}/merge", handle(h.GetImportMergePicker))
+	mux.Handle("PUT /transactions/{id}/merge", handle(h.MergeImported, middleware.HTMXOnly))
 	mux.Handle("PUT /transactions/{id}/recurrent-match", handle(h.MatchRecurrentOccurrence))
 	mux.Handle("POST /receipts/scan/{id}", handle(h.ScanReceiptIntoForm, middleware.HTMXOnly))
 	mux.Handle("POST /receipts/estimate/{id}", handle(h.EstimateItemsAmount, middleware.HTMXOnly))

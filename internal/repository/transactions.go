@@ -788,6 +788,7 @@ func dbTransactionToTransaction(
 		LoanGoalID:     dbTx.LoanGoalID.String,
 		FromImport:     dbTx.ImportID.Valid,
 		ImportID:       dbTx.ImportID.String,
+		ImportHash:     dbTx.ImportHash.String,
 		Historical:     dbTx.Historical,
 		QuickAddID:     dbTx.QuickAddID.String,
 		ReturnUntil:    dayPtr(dbTx.ReturnUntil),

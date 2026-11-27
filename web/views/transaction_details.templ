@@ -682,6 +682,19 @@ templ txDetailsImport(d *models.TxDetails) {
 						<a href={ ImportTxsURL(d.Tx.ImportID) } class="text-sky-400 hover:underline">See its transactions</a>
 					</p>
 				}
+				if d.Tx.CanMergeImported() {
+					<button
+						type="button"
+						hx-get={ fmt.Sprintf("/transactions/%s/merge?from=details", d.Tx.ID) }
+						hx-target="#txd-panel"
+						hx-swap="innerHTML"
+						class="txd-action justify-self-start"
+						title="Already there (e.g. from an SMS)? Merge this row into it"
+					>
+						@icons.Merge("14")
+						Merge into an existing one…
+					</button>
+				}
 				if d.Tx.Historical {
 					<p class="flex items-center gap-1.5 text-xs text-zinc-400">
 						@icons.Clock("12")

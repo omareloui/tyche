@@ -793,8 +793,11 @@ func MatchDuplicates(rows []Row, existing []Existing, cur *models.Currency) []Ma
 			continue
 		}
 		best, bestDays := -1, DuplicateDays+1
+		amt := round(math.Abs(r.Amount))
+		// a statement's row carries the fee the SMS's transaction lacks
+		beforeFee := round(math.Abs(r.Amount) - r.FxFee)
 		for j, e := range existing {
-			if used[j] || e.Out != r.IsOut() || round(e.Moved) != round(math.Abs(r.Amount)) {
+			if used[j] || e.Out != r.IsOut() || (round(e.Moved) != amt && (r.FxFee <= 0 || round(e.Moved) != beforeFee)) {
 				continue
 			}
 			days := int(math.Abs(math.Round(e.Day.Sub(r.Date).Hours() / 24)))
@@ -822,7 +825,10 @@ func MatchDuplicates(rows []Row, existing []Existing, cur *models.Currency) []Ma
 				continue
 			}
 			off := math.Abs(round(e.Moved) - amt)
-			if off != 0 && (!e.Foreign || amt == 0 || off/amt > MaybeForeignShare) {
+			// either paid in another currency (its amount converted), or the
+			// row's fee missing from the transaction
+			foreign := e.Foreign || r.FxFee > 0 || r.OriginalCurrency != ""
+			if off != 0 && (!foreign || amt == 0 || off/amt > MaybeForeignShare) {
 				continue
 			}
 			days := int(math.Abs(math.Round(e.Day.Sub(r.Date).Hours() / 24)))

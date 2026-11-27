@@ -1427,6 +1427,10 @@ func getTransactionMenuItems(tx *models.Transaction) []templ.Component {
 		links = append(links,
 			txMenuItem("Match to scheduled…", "get", fmt.Sprintf("/transactions/%s/recurrent-match", tx.ID), icons.Repeat("16")))
 	}
+	if tx.CanMergeImported() {
+		links = append(links,
+			txMenuItem("Merge into…", "get", fmt.Sprintf("/transactions/%s/merge", tx.ID), icons.Merge("16")))
+	}
 
 	// Adjustments are signed, which the form can't edit; fix the balance
 	// again instead. Goals' and deleted accounts' transactions are locked.

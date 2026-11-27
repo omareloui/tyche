@@ -177,23 +177,43 @@ func (h *Handler) ImportCSV(w http.ResponseWriter, r *http.Request) (templ.Compo
 		return nil, resperr.New(http.StatusUnprocessableEntity, data.MappingErr)
 	}
 
-	picked := map[int]bool{}
-	for _, v := range r.PostForm["line"] {
-		if n, err := strconv.Atoi(v); err == nil {
-			picked[n] = true
+	lines := func(name string) map[int]bool {
+		set := map[int]bool{}
+		for _, v := range r.PostForm[name] {
+			if n, err := strconv.Atoi(v); err == nil {
+				set[n] = true
+			}
 		}
+		return set
 	}
+	// "update": a likely / maybe duplicate's transaction takes the row's
+	// amount, fee and what it was paid in, instead of a new one
+	picked, updates := lines("line"), lines("update")
 	historical := r.PostForm.Get("historical") != ""
 	var txs []repository.ImportedTx
 	for _, pr := range data.Rows {
-		if !picked[pr.Row.Line] || pr.Tx == nil || pr.Match.Status == csvimport.RowImported {
+		update := updates[pr.Row.Line] && pr.Match.TxID != "" &&
+			(pr.Match.Status == csvimport.RowDuplicate || pr.Match.Status == csvimport.RowMaybe)
+		if (!picked[pr.Row.Line] && !update) || pr.Tx == nil || pr.Match.Status == csvimport.RowImported {
 			continue
 		}
 		if err := pr.Tx.SanitizeAndValidate(h.sani, h.valid); err != nil {
 			return nil, resperr.New(http.StatusUnprocessableEntity, fmt.Sprintf("Row %d can't be imported.", pr.Row.Line))
 		}
-		pr.Tx.Historical = historical
-		txs = append(txs, repository.ImportedTx{Tx: pr.Tx, Hash: pr.Row.Hash})
+		it := repository.ImportedTx{Tx: pr.Tx, Hash: pr.Row.Hash}
+		if update {
+			target, err := h.repo.GetTransaction(r.Context(), pr.Match.TxID)
+			if err != nil {
+				return nil, err
+			}
+			if target.Kind.IsIncoming() != pr.Tx.Kind.IsIncoming() || target.FulfilledAt.IsZero() || target.BulkLock() != models.TxBulkLockNone {
+				return nil, resperr.New(http.StatusUnprocessableEntity, fmt.Sprintf("Row %d's transaction can't be updated, import it instead.", pr.Row.Line))
+			}
+			it.Target = target
+		} else {
+			pr.Tx.Historical = historical
+		}
+		txs = append(txs, it)
 	}
 	if len(txs) == 0 {
 		return nil, resperr.New(http.StatusUnprocessableEntity, "Pick the rows to import.")

@@ -310,6 +310,16 @@ input[type="number"] {
   @apply inline-flex items-center justify-center gap-2 h-11 px-5 rounded-xl text-zinc-300 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white;
 }
 
+/* The tx form's optional extras under the account (other currency, fee):
+   quiet pills until opened, a round × putting an open one away. */
+.tx-extra-pill {
+  @apply inline-flex items-center gap-1.5 h-7 px-3 rounded-full text-xs text-zinc-400 bg-zinc-800/50 ring-1 ring-zinc-700/60 cursor-pointer transition-colors hover:text-white hover:ring-zinc-500;
+}
+
+.tx-extra-x {
+  @apply grid place-items-center shrink-0 size-7 rounded-full text-zinc-500 cursor-pointer transition-colors hover:bg-white/10 hover:text-white;
+}
+
 .btn-primary:focus-visible,
 .btn-add:focus-visible,
 .btn-ghost:focus-visible {

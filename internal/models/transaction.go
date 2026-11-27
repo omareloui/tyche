@@ -39,6 +39,8 @@ type Transaction struct {
 	// FromImport tells it came from a CSV import (ImportID).
 	FromImport bool
 	ImportID   string
+	// ImportHash is its row's (csvimport.Row.Hash).
+	ImportHash string
 	// Historical is past data imported without moving the account's
 	// balance, which already holds it: applying / undoing it is a no-op.
 	Historical bool

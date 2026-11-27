@@ -13,6 +13,7 @@ import (
 
 	"github.com/omareloui/tyche/internal/config"
 	"github.com/omareloui/tyche/internal/handler"
+	"github.com/omareloui/tyche/internal/idgen"
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/repository"
 	"github.com/omareloui/tyche/internal/sanitizer"
@@ -401,5 +402,120 @@ func TestImportPageListsEveryFile(t *testing.T) {
 	}
 	if !strings.Contains(html, "Not imported") {
 		t.Error("the pending file isn't told apart")
+	}
+}
+
+// The Game Pass case: an SMS read E£ 190, the card's statement 195.7 with a
+// 5.7 fee.
+func TestImportMergeIntoSMS(t *testing.T) {
+	repo, ctx, _ := setupTenant(t)
+	day := tenantToday().AddDate(0, 0, -5)
+	h := handler.New(repo, valid.New(), sanitizer.New(), nil, nil, nil)
+	h.SetReceiptOCR(nil, config.ReceiptOCR{StatementImportsPerMonth: 5})
+	card := newTestAccount(t, repo, ctx, "Card", "EGP", models.AccKindCreditCard, -1000)
+
+	newSMS := func(amount float64) *models.Transaction {
+		t.Helper()
+		tx := &models.Transaction{ID: idgen.New(), Account: *card, Kind: models.ExpenseTxKind, Amount: amount,
+			Description: "MicroSoft GamePass", ScheduledTo: day.Add(12 * time.Hour), FulfilledAt: day.Add(12 * time.Hour)}
+		if err := repo.CreateTransaction(ctx, tx, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+		return tx
+	}
+	sms := newSMS(190)
+	other := newSMS(190) // a second one the preview path updates
+	assertBalance(t, ctx, repo, card.ID, -1380)
+
+	// 190 a row: merged with their 5.7 fee
+	h.SetStatementReader(&fakeStatements{result: &statementocr.Result{
+		IsStatement: true, Kind: statementocr.KindCard, Currency: "EGP",
+		Rows: []statementocr.Row{
+			{Date: day.Format(time.DateOnly), Description: "MICROSOFT PC GAME PASS", Debit: 190},
+			{Date: day.Format(time.DateOnly), Description: "MICROSOFT PC GAME PASS 2", Debit: 190},
+			{Date: day.Format(time.DateOnly), Description: "FOREIGN EXCHANGE FEES", Debit: 5.7, IsFxFee: true},
+			{Date: day.Format(time.DateOnly), Description: "FOREIGN EXCHANGE FEES", Debit: 5.7, IsFxFee: true},
+		},
+	}})
+	id, err := uploadImportFile(t, ctx, h, card.ID, "Nov.pdf", []byte("%PDF-1.7\n%%EOF"), url.Values{"ai_consent": {"1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// both rows read as the SMS' transactions (their amount before the fee)
+	html := csvPreview(t, ctx, h, id, pdfMappingForm(nil))
+	if n := strings.Count(html, `data-status="duplicate"`); n != 2 {
+		t.Fatalf("likely there = %d, want 2", n)
+	}
+
+	// row 2 imported as past data, row 3 updating its transaction
+	if _, err := callHandler(ctx, h.ImportCSV)(httptest.NewRecorder(), "POST", "/import/"+id, id,
+		pdfMappingForm(url.Values{"line": {"2"}, "update": {"3"}, "historical": {"1"}})); err != nil {
+		t.Fatal(err)
+	}
+	// row 3 updated one of the SMS' transactions: −5.7
+	assertBalance(t, ctx, repo, card.ID, -1385.7)
+	updated := 0
+	for _, tx := range []*models.Transaction{sms, other} {
+		got, err := repo.GetTransaction(ctx, tx.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Amount == 195.7 {
+			updated++
+			if got.FxFee != 5.7 || got.ImportID != id || got.Description != "MicroSoft GamePass" || got.Historical {
+				t.Errorf("updated = %+v", got)
+			}
+		}
+	}
+	if updated != 1 {
+		t.Fatalf("updated txs = %d, want 1", updated)
+	}
+
+	// the imported past row merged into the SMS' transaction left
+	ids, _, err := repo.GetFilteredTransactionIDs(ctx, models.TxFilter{ImportID: id}, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var imported *models.Transaction
+	for _, i := range ids {
+		tx, err := repo.GetTransaction(ctx, i)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tx.Historical {
+			imported = tx
+		}
+	}
+	if imported == nil || !imported.CanMergeImported() {
+		t.Fatalf("imported past row = %+v", imported)
+	}
+	cands, err := repo.GetImportMergeCandidates(ctx, imported)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cands) == 0 || cands[0].Amount != 190 || !models.ImportMergeLikely(imported, &cands[0]) {
+		t.Fatalf("candidates = %+v", cands)
+	}
+	if _, err := callHandler(ctx, h.MergeImported)(httptest.NewRecorder(), "PUT", "/transactions/"+imported.ID+"/merge", imported.ID,
+		url.Values{"target_id": {cands[0].ID}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.GetTransaction(ctx, imported.ID); err == nil {
+		t.Error("the imported transaction is still there")
+	}
+	got, err := repo.GetTransaction(ctx, cands[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Amount != 195.7 || got.FxFee != 5.7 || got.ImportID != id || got.Historical || got.Description != "MicroSoft GamePass" {
+		t.Errorf("merged = %+v", got)
+	}
+	// the past row never moved the balance, the merge adds its fee
+	assertBalance(t, ctx, repo, card.ID, -1391.4)
+
+	// opened again, both rows read as imported before
+	if html := csvPreview(t, ctx, h, id, pdfMappingForm(nil)); strings.Count(html, `data-status="imported"`) != 2 {
+		t.Error("the merged rows don't read as imported before")
 	}
 }
