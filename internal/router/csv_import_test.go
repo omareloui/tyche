@@ -166,7 +166,11 @@ func TestCSVImport(t *testing.T) {
 			t.Errorf("tx %s: review %v, import %v, fulfilled %v", tx.Description, tx.NeedsReview, tx.FromImport, tx.FulfilledAt)
 		}
 		if strings.Contains(tx.Description, "CRF") {
-			if tx.Counterparty == nil || tx.Counterparty.ID != cp.ID || tx.Amount != 1250.5 || tx.Kind != models.ExpenseTxKind {
+			t.Errorf("carrefour tx keeps the bank's text %q though its counterparty matched", tx.Description)
+		}
+		if tx.Amount == 1250.5 {
+			// the bank's text left out, the counterparty saying it
+			if tx.Counterparty == nil || tx.Counterparty.ID != cp.ID || tx.Kind != models.ExpenseTxKind || tx.Description != "" {
 				t.Errorf("carrefour tx = %+v", tx)
 			}
 			if food != nil && (tx.Category == nil || tx.Category.ID != food.ID) {

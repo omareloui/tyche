@@ -18,7 +18,8 @@ const minNameLen = 3
 // time of day in loc when it has one, else midnight UTC like a day picked in
 // a form) and flagged for review: an expense or an income by its sign, its
 // counterparty the one named by the row (else found in its description) with
-// that one's default category. Rows in another currency are converted at
+// that one's default category, the row's text its description only without
+// one. Rows in another currency are converted at
 // today's rate.
 func Build(row *Row, acc *models.Account, counterparties []models.Counterparty, loc *time.Location, fxRate smsingest.FxRateFunc) (*models.Transaction, error) {
 	kind := models.IncomeTxKind
@@ -69,14 +70,18 @@ func Build(row *Row, acc *models.Account, counterparties []models.Counterparty, 
 		tx.Category = cp.DefaultCategoryFor(kind)
 	}
 
-	var notes []string
-	if row.Counterparty != "" && cp == nil {
-		notes = append(notes, row.Counterparty)
+	// A matched counterparty says it all: the bank's text (e.g. "Uber
+	// Downtown", "POS PURCHASE CRF MAADI") is only kept without one.
+	if cp == nil {
+		var notes []string
+		if row.Counterparty != "" {
+			notes = append(notes, row.Counterparty)
+		}
+		if row.Description != "" {
+			notes = append(notes, row.Description)
+		}
+		tx.Description = strings.Join(notes, " · ")
 	}
-	if row.Description != "" {
-		notes = append(notes, row.Description)
-	}
-	tx.Description = strings.Join(notes, " · ")
 	return tx, nil
 }
 
