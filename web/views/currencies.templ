@@ -133,7 +133,7 @@ templ currenciesList(currencies []models.Currency, defaultCur *models.Currency, 
 	<div
 		x-data={ currenciesFilterData }
 		@keydown.slash.window="if (!$event.target.closest('input, textarea, select, [contenteditable]')) { $event.preventDefault(); $dispatch('search-open') }"
-		class="grid gap-8"
+		class="grid grid-cols-[minmax(0,1fr)] gap-8"
 	>
 		for _, cur := range currencies {
 			if cur.ID == defaultCur.ID {
@@ -254,11 +254,12 @@ func unitPrefix(cur *models.Currency) string {
 }
 
 templ currenciesToolbar() {
-	<div class="flex flex-wrap items-center gap-2">
+	// one row scrolling sideways, like the counterparties' filters
+	<div class="filter-scroll flex items-center gap-2">
 		@components.ExpandingSearch(components.SearchProps{
 			Placeholder: "Code or symbol", Label: "Search currencies",
 		})
-		<div role="group" aria-label="Currency kind" class="flex gap-1.5 overflow-x-auto">
+		<div role="group" aria-label="Currency kind" class="flex shrink-0 items-center gap-1.5">
 			@currencyKindPill("All", "")
 			@currencyKindPill("Fiat", currencyKindSlug(models.CurrencyKindFiat))
 			@currencyKindPill("Crypto", currencyKindSlug(models.CurrencyKindCrypto))
@@ -272,7 +273,7 @@ templ currencyKindPill(label, kind string) {
 		type="button"
 		@click={ fmt.Sprintf("kind = '%s'", kind) }
 		:aria-pressed={ fmt.Sprintf("kind === '%s'", kind) }
-		class="shrink-0 h-9 px-4 rounded-full border border-zinc-700 text-sm text-zinc-400 cursor-pointer transition-colors hover:text-white hover:border-zinc-500 aria-pressed:border-(--accent) aria-pressed:bg-(--accent)/12 aria-pressed:text-(--accent)"
+		class="inline-flex items-center h-8 px-3 rounded-full text-sm whitespace-nowrap bg-zinc-800 text-zinc-400 cursor-pointer transition-colors hover:text-zinc-200 aria-pressed:bg-zinc-200 aria-pressed:text-zinc-900"
 	>
 		{ label }
 	</button>
