@@ -19,6 +19,8 @@ type TxBulkEdit struct {
 	ClearCounterparty bool
 	// Date is the day to move them to, their time of day kept.
 	Date *time.Time
+	// Description replaces theirs, "" removing it.
+	Description *string
 	// Review marks them reviewed or sends them back to review.
 	Review TxBulkReview
 	// AddTags are tag names added (new ones created on saving), RemoveTags
@@ -43,6 +45,26 @@ func ParseTxBulkReview(s string) (TxBulkReview, bool) {
 		return r, true
 	}
 	return TxBulkReviewKeep, false
+}
+
+// TxBulkDescription is what a bulk edit does to the transactions'
+// descriptions.
+type TxBulkDescription string
+
+const (
+	TxBulkDescriptionKeep  TxBulkDescription = ""
+	TxBulkDescriptionSet   TxBulkDescription = "set"
+	TxBulkDescriptionClear TxBulkDescription = "clear"
+)
+
+// ParseTxBulkDescription is the description mode of a bulk edit form's
+// value, false when it's none of them.
+func ParseTxBulkDescription(s string) (TxBulkDescription, bool) {
+	switch d := TxBulkDescription(s); d {
+	case TxBulkDescriptionKeep, TxBulkDescriptionSet, TxBulkDescriptionClear:
+		return d, true
+	}
+	return TxBulkDescriptionKeep, false
 }
 
 // TxBulkSkip is why (part of) a bulk edit was left out of a transaction.
@@ -114,7 +136,7 @@ func DescribeBulkLocks(counts map[TxBulkLock]int) string {
 
 func (e *TxBulkEdit) IsZero() bool {
 	return e.Category == nil && !e.ClearCategory && e.Counterparty == nil &&
-		!e.ClearCounterparty && e.Date == nil && e.Review == TxBulkReviewKeep &&
+		!e.ClearCounterparty && e.Date == nil && e.Description == nil && e.Review == TxBulkReviewKeep &&
 		len(e.AddTags) == 0 && len(e.RemoveTags) == 0
 }
 
@@ -174,6 +196,10 @@ func (e *TxBulkEdit) Apply(tx *Transaction, today time.Time) (*Transaction, []Tx
 		} else {
 			out.Counterparty = e.Counterparty
 		}
+	}
+
+	if e.Description != nil {
+		out.Description = *e.Description
 	}
 
 	if e.Date != nil {

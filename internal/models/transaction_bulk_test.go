@@ -73,6 +73,24 @@ func TestTxBulkEditApply(t *testing.T) {
 	if got, skips := (&TxBulkEdit{Category: food}).Apply(locked, today); got != nil || !slices.Equal(skips, []TxBulkSkip{TxBulkSkipLocked}) {
 		t.Errorf("locked: got %v, %v", got, skips)
 	}
+	desc := "Groceries"
+	for _, k := range []TxKind{ExpenseTxKind, TransferTxKind} {
+		old := tx(k, true)
+		old.Description = "old"
+		if got, skips := (&TxBulkEdit{Description: &desc}).Apply(old, today); got.Description != desc || len(skips) > 0 || old.Description != "old" {
+			t.Errorf("description of %v = %q, skips %v", k, got.Description, skips)
+		}
+		empty := ""
+		if got, _ := (&TxBulkEdit{Description: &empty}).Apply(old, today); got.Description != "" {
+			t.Errorf("cleared description of %v = %q", k, got.Description)
+		}
+		if got, _ := (&TxBulkEdit{Category: food}).Apply(old, today); got.Description != "old" {
+			t.Errorf("kept description of %v = %q", k, got.Description)
+		}
+	}
+	if (&TxBulkEdit{Description: &desc}).IsZero() {
+		t.Errorf("description edit is zero")
+	}
 	if got, _ := (&TxBulkEdit{Category: food}).Apply(tx(AdjustmentTxKind, true), today); got != nil {
 		t.Errorf("adjustment edited")
 	}

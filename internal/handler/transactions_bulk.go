@@ -175,6 +175,8 @@ func (h Handler) BulkEditTransactions(w http.ResponseWriter, r *http.Request) (t
 		Counterparty: r.PostForm.Get("counterparty_id"),
 		Date:         strings.TrimSpace(r.PostForm.Get("scheduled_to")),
 		Review:       r.PostForm.Get("review"),
+		DescMode:     r.PostForm.Get("description_mode"),
+		Description:  strings.TrimSpace(r.PostForm.Get("description")),
 		AddTags:      r.PostForm.Get("add_tags"),
 		RemoveTags:   r.PostForm.Get("remove_tags"),
 	}
@@ -194,6 +196,19 @@ func (h Handler) BulkEditTransactions(w http.ResponseWriter, r *http.Request) (t
 		Review:     review,
 		AddTags:    models.ParseTagNames(fd.AddTags),
 		RemoveTags: models.ParseTagNames(fd.RemoveTags),
+	}
+	descMode, ok := models.ParseTxBulkDescription(fd.DescMode)
+	if !ok {
+		return answer("Invalid description.")
+	}
+	switch descMode {
+	case models.TxBulkDescriptionSet:
+		if fd.Description == "" {
+			return answer("Type the description, or pick Remove to clear it.")
+		}
+		edit.Description = &fd.Description
+	case models.TxBulkDescriptionClear:
+		edit.Description = new(string)
 	}
 	if msg := validateTagNames(edit.AddTags); msg != "" {
 		return answer(msg)

@@ -124,6 +124,30 @@ func TestTransactionsBulk(t *testing.T) {
 		t.Errorf("empty edit not refused: %s", body)
 	}
 
+	// One description for all, then removed; set without text is refused.
+	render(bulk(httptest.NewRecorder(), "POST", "/transactions/bulk-edit", "", url.Values{
+		"id": {e1.ID, e2.ID}, "description_mode": {"set"}, "description": {"  Weekly shop "},
+	}))
+	for _, id := range []string{e1.ID, e2.ID} {
+		if got := mustTx(t, repo.GetTransaction, ctx, id).Description; got != "Weekly shop" {
+			t.Errorf("description = %q, want Weekly shop", got)
+		}
+	}
+	if body := render(bulk(httptest.NewRecorder(), "POST", "/transactions/bulk-edit", "", url.Values{
+		"id": {e1.ID}, "description_mode": {"set"}, "description": {" "},
+	})); !strings.Contains(body, "Type the description") {
+		t.Errorf("empty description not refused: %s", body)
+	}
+	render(bulk(httptest.NewRecorder(), "POST", "/transactions/bulk-edit", "", url.Values{
+		"id": {e1.ID}, "description_mode": {"clear"},
+	}))
+	if got := mustTx(t, repo.GetTransaction, ctx, e1.ID).Description; got != "" {
+		t.Errorf("description = %q, want removed", got)
+	}
+	if got := mustTx(t, repo.GetTransaction, ctx, e2.ID).Description; got != "Weekly shop" {
+		t.Errorf("other description = %q, want kept", got)
+	}
+
 	// Sending back to review and marking reviewed, one or in bulk.
 	needsReview := func(id string) bool { return mustTx(t, repo.GetTransaction, ctx, id).NeedsReview }
 	render(callHandler(ctx, h.MarkTransactionNeedsReview)(httptest.NewRecorder(), "DELETE", "/transactions/"+e1.ID+"/reviewed", e1.ID, nil))
