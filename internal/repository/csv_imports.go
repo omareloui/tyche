@@ -36,6 +36,9 @@ func (r *Repository) CreateCSVImport(ctx context.Context, imp *csvimport.Import)
 	if err := q.CreateCSVImport(ctx, queries.CreateCSVImportParams{
 		ID: imp.ID, AccountID: imp.AccountID, FileName: imp.FileName, Content: imp.Content,
 		Mapping: mapping, RowCount: int64(imp.RowCount),
+		SourceKind: string(csvImportSource(imp.Source)),
+		SourceHash: sql.NullString{String: imp.SourceHash, Valid: imp.SourceHash != ""},
+		Warning:    imp.Warning,
 	}); err != nil {
 		logger.FromCtx(ctx).Error("creating csv import", zap.Error(err))
 		return err
@@ -54,16 +57,66 @@ func (r *Repository) GetCSVImport(ctx context.Context, id string) (*csvimport.Im
 	if err != nil {
 		return nil, err
 	}
+	return dbCSVImport(ctx, &row), nil
+}
+
+// GetCSVImportBySourceHash is the latest import of the PDF with this
+// sha256 still holding its rows, nil when there's none.
+func (r *Repository) GetCSVImportBySourceHash(ctx context.Context, hash string) (*csvimport.Import, error) {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	row, err := q.GetCSVImportBySourceHash(ctx, sql.NullString{String: hash, Valid: true})
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		logger.FromCtx(ctx).Error("getting a csv import by its source", zap.Error(err))
+		return nil, err
+	}
+	return dbCSVImport(ctx, &row), nil
+}
+
+// GetAccountFirstTrackedDay is the day of the account's first fulfilled
+// transaction moving its balance (past data aside), zero when there's none.
+func (r *Repository) GetAccountFirstTrackedDay(ctx context.Context, accountID string) (time.Time, error) {
+	_, q, err := r.dbFromCtx(ctx)
+	if err != nil {
+		return time.Time{}, err
+	}
+	day, err := q.GetAccountFirstTrackedDay(ctx, accountID)
+	if err != nil {
+		logger.FromCtx(ctx).Error("getting an account's first tracked day", zap.Error(err), zap.String("id", accountID))
+		return time.Time{}, err
+	}
+	t, err := time.Parse(time.DateOnly, day)
+	if err != nil {
+		return time.Time{}, nil
+	}
+	return t, nil
+}
+
+func dbCSVImport(ctx context.Context, row *queries.CsvImport) *csvimport.Import {
 	imp := &csvimport.Import{
 		ID: row.ID, AccountID: row.AccountID, FileName: row.FileName, Content: row.Content,
+		Source: csvImportSource(csvimport.Source(row.SourceKind)), SourceHash: row.SourceHash.String, Warning: row.Warning,
+		Kept: row.Content != nil,
 		Status: csvimport.ImportStatus(row.Status), RowCount: int(row.RowCount),
 		ImportedCount: int(row.ImportedCount), CreatedAt: row.CreatedAt, ImportedAt: row.ImportedAt.Time,
 		Mapping: csvimport.NewMapping(),
 	}
 	if err := json.Unmarshal(row.Mapping, &imp.Mapping); err != nil {
-		logger.FromCtx(ctx).Warn("reading a csv import's mapping", zap.Error(err), zap.String("id", id))
+		logger.FromCtx(ctx).Warn("reading a csv import's mapping", zap.Error(err), zap.String("id", row.ID))
 	}
-	return imp, nil
+	return imp
+}
+
+func csvImportSource(s csvimport.Source) csvimport.Source {
+	if s == csvimport.SourcePDF {
+		return s
+	}
+	return csvimport.SourceCSV
 }
 
 // ListCSVImports are the latest imports done, newest first.
@@ -81,6 +134,7 @@ func (r *Repository) ListCSVImports(ctx context.Context, limit int) ([]csvimport
 	for i, row := range rows {
 		res[i] = csvimport.Import{
 			ID: row.ID, AccountID: row.AccountID, AccountName: row.AccountName, FileName: row.FileName,
+			Source: csvImportSource(csvimport.Source(row.SourceKind)), Kept: row.Kept,
 			Status: csvimport.ImportStatus(row.Status), RowCount: int(row.RowCount),
 			ImportedCount: int(row.ImportedCount), CreatedAt: row.CreatedAt, ImportedAt: row.ImportedAt.Time,
 		}
@@ -132,8 +186,8 @@ func (r *Repository) GetCSVDupCandidates(ctx context.Context, accountID string, 
 	}
 	rows, err := q.GetCSVDupCandidates(ctx, queries.GetCSVDupCandidatesParams{
 		AccountID: sql.NullString{String: accountID, Valid: true},
-		Since:     since.AddDate(0, 0, -csvimport.DuplicateDays-1),
-		Until:     until.AddDate(0, 0, csvimport.DuplicateDays+2),
+		Since:     since.AddDate(0, 0, -csvimport.MaybeDays-1),
+		Until:     until.AddDate(0, 0, csvimport.MaybeDays+2),
 	})
 	if err != nil {
 		logger.FromCtx(ctx).Error("querying csv duplicate candidates", zap.Error(err))
@@ -143,18 +197,17 @@ func (r *Repository) GetCSVDupCandidates(ctx context.Context, accountID string, 
 	for i, row := range rows {
 		y, m, d := row.ScheduledTo.Date()
 		res[i] = csvimport.Existing{
-			ID:    row.ID,
-			Day:   time.Date(y, m, d, 0, 0, 0, 0, time.UTC),
-			Out:   row.Side == 1,
-			Moved: row.Moved,
-			Hash:  row.ImportHash,
+			ID:      row.ID,
+			Day:     time.Date(y, m, d, 0, 0, 0, 0, time.UTC),
+			Out:     row.Side == 1,
+			Moved:   row.Moved,
+			Hash:    row.ImportHash,
+			Foreign: row.PaidForeign,
 		}
 	}
 	return res, nil
 }
 
-// ErrCSVImported is importing a file already imported.
-var ErrCSVImported = errors.New("csv already imported")
 
 // ImportedTx is a transaction made from a CSV row, with the row's hash.
 type ImportedTx struct {
@@ -173,14 +226,24 @@ func (r *Repository) ImportCSV(ctx context.Context, imp *csvimport.Import, txs [
 		return err
 	}
 	return r.transact(ctx, func(qtx *queries.Queries) error {
-		cur, err := qtx.GetCSVImport(ctx, imp.ID)
-		if err != nil {
+		if _, err := qtx.GetCSVImport(ctx, imp.ID); err != nil {
 			return err
 		}
-		if csvimport.ImportStatus(cur.Status) != csvimport.ImportPending {
-			return ErrCSVImported
-		}
+		n := 0
 		for _, it := range txs {
+			// imported meanwhile (the form sent twice): not again
+			if it.Hash != "" {
+				found, err := qtx.ImportHashExists(ctx, queries.ImportHashExistsParams{
+					ImportHash: sql.NullString{String: it.Hash, Valid: true}, AccountID: it.Tx.Account.ID,
+				})
+				if err != nil {
+					return err
+				}
+				if found {
+					continue
+				}
+			}
+			n++
 			if err := r.createIngestedTransactionWithTxn(ctx, qtx, it.Tx); err != nil {
 				return err
 			}
@@ -194,7 +257,7 @@ func (r *Repository) ImportCSV(ctx context.Context, imp *csvimport.Import, txs [
 			}
 		}
 		if err := qtx.MarkCSVImportImported(ctx, queries.MarkCSVImportImportedParams{
-			ID: imp.ID, Mapping: mapping, ImportedCount: int64(len(txs)),
+			ID: imp.ID, Mapping: mapping, ImportedCount: int64(n),
 		}); err != nil {
 			l.Error("marking a csv import imported", zap.Error(err), zap.String("id", imp.ID))
 			return err
@@ -207,7 +270,7 @@ func (r *Repository) ImportCSV(ctx context.Context, imp *csvimport.Import, txs [
 				return err
 			}
 		}
-		l.Info("imported csv", zap.String("id", imp.ID), zap.Int("count", len(txs)))
+		l.Info("imported csv", zap.String("id", imp.ID), zap.Int("count", n))
 		return nil
 	})
 }

@@ -36,8 +36,12 @@ type Transaction struct {
 	NeedsReview bool
 	FromSMS     bool
 	SMSBody     string
-	// FromImport tells it came from a CSV import.
+	// FromImport tells it came from a CSV import (ImportID).
 	FromImport bool
+	ImportID   string
+	// Historical is past data imported without moving the account's
+	// balance, which already holds it: applying / undoing it is a no-op.
+	Historical bool
 	// MerchantGuessID is the AI merchant guess (MerchantGuess) giving an sms
 	// transaction its counterparty, only set when creating it.
 	MerchantGuessID string
@@ -45,7 +49,7 @@ type Transaction struct {
 	QuickAddID string
 	// QuickAddText is that quick add's text, loaded with the list.
 	QuickAddText string
-	CreatedAt  time.Time
+	CreatedAt    time.Time
 	// ReimbursesID is the expense this income pays back (part of).
 	ReimbursesID string
 	// Reimbursed is the total of the incomes reimbursing this expense.

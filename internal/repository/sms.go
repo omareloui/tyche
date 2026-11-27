@@ -199,9 +199,13 @@ func (r *Repository) SetSMSTemplateGuess(ctx context.Context, id string, g *mode
 // then being that one), else it's created; then paired with the other leg of
 // a transfer.
 func (r *Repository) createIngestedTransactionWithTxn(ctx context.Context, qtx *queries.Queries, tx *models.Transaction) error {
-	occ, err := r.mergeSMSIntoOccurrenceWithTxn(ctx, qtx, tx)
-	if err != nil {
-		return err
+	var occ *models.Transaction
+	var err error
+	// Past data never pays an occurrence: paying it would move the balance.
+	if !tx.Historical {
+		if occ, err = r.mergeSMSIntoOccurrenceWithTxn(ctx, qtx, tx); err != nil {
+			return err
+		}
 	}
 	if occ != nil {
 		// the occurrence keeps its own counterparty

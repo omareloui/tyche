@@ -55,6 +55,12 @@ func (h Handler) Transactions(w http.ResponseWriter, r *http.Request) (templ.Com
 			list.ItemName = it.Item.Name
 		}
 	}
+	if id := list.Filter.ImportID; id != "" {
+		list.ImportName = "Unknown import"
+		if imp, err := h.repo.GetCSVImport(r.Context(), id); err == nil {
+			list.ImportName = imp.FileName
+		}
+	}
 	if target == "tx-body" {
 		return views.TxBody(*list, accs, knds, cats, cps, gls), nil
 	}

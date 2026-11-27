@@ -1,6 +1,25 @@
 -- name: CreateCSVImport :exec
-INSERT INTO csv_imports (id, account_id, file_name, content, mapping, row_count)
-VALUES (sqlc.arg(id), sqlc.arg(account_id), sqlc.arg(file_name), sqlc.arg(content), sqlc.arg(mapping), sqlc.arg(row_count));
+INSERT INTO csv_imports (id, account_id, file_name, content, mapping, row_count, source_kind, source_hash, warning)
+VALUES (
+    sqlc.arg(id), sqlc.arg(account_id), sqlc.arg(file_name), sqlc.arg(content), sqlc.arg(mapping), sqlc.arg(row_count),
+    sqlc.arg(source_kind), sqlc.narg(source_hash), sqlc.arg(warning)
+);
+
+-- name: GetCSVImportBySourceHash :one
+-- The latest import of the same PDF still holding its rows.
+SELECT * FROM csv_imports
+WHERE source_hash = sqlc.arg(source_hash) AND content IS NOT NULL
+ORDER BY created_at DESC
+LIMIT 1;
+
+-- name: GetAccountFirstTrackedDay :one
+-- The day of the account's first fulfilled transaction moving its balance
+-- (past data aside), '' when there's none.
+SELECT CAST(COALESCE(MIN(SUBSTR(t.scheduled_to, 1, 10)), '') AS TEXT) AS day
+FROM transactions AS t
+WHERE (t.account_id = sqlc.arg(account_id) OR t.to_account_id = sqlc.arg(account_id))
+    AND t.fulfilled_at IS NOT NULL
+    AND NOT t.historical;
 
 -- name: GetCSVImport :one
 SELECT * FROM csv_imports WHERE id = sqlc.arg(id);
@@ -16,6 +35,8 @@ SELECT
     i.imported_count,
     i.created_at,
     i.imported_at,
+    i.source_kind,
+    CAST(i.content IS NOT NULL AS BOOLEAN) AS kept,
     a.name AS account_name
 FROM csv_imports AS i
 JOIN accounts AS a ON i.account_id = a.id
@@ -29,14 +50,22 @@ UPDATE csv_imports SET mapping = sqlc.arg(mapping) WHERE id = sqlc.arg(id);
 -- name: MarkCSVImportImported :exec
 UPDATE csv_imports
 SET status = 'imported',
-    content = NULL,
+    -- the file is kept: the import is opened again to import more of its
+    -- rows (and a PDF's read again reuses them)
     mapping = sqlc.arg(mapping),
-    imported_count = sqlc.arg(imported_count),
+    imported_count = imported_count + sqlc.arg(imported_count),
     imported_at = CURRENT_TIMESTAMP
 WHERE id = sqlc.arg(id);
 
 -- name: PurgePendingCSVImports :execrows
 DELETE FROM csv_imports WHERE status = 'pending' AND created_at < sqlc.arg(before);
+
+-- name: ImportHashExists :one
+-- Whether a transaction of the account has the row's hash (imported before).
+SELECT EXISTS (
+    SELECT 1 FROM transactions
+    WHERE import_hash = sqlc.arg(import_hash) AND account_id = sqlc.arg(account_id)
+) AS found;
 
 -- name: SetTransactionImport :exec
 UPDATE transactions
@@ -68,7 +97,11 @@ SELECT
         WHEN t.kind = 6 AND t.amount > 0 THEN 2 -- adjustment
         ELSE 1
     END AS INTEGER) AS side,
-    CAST(ABS(IIF(t.to_account_id = sqlc.arg(account_id), COALESCE(t.to_amount, t.amount), t.amount)) AS FLOAT) AS moved
+    CAST(ABS(IIF(t.to_account_id = sqlc.arg(account_id), COALESCE(t.to_amount, t.amount), t.amount)) AS FLOAT) AS moved,
+    -- paid in another currency, or the received side of a transfer across
+    -- currencies: its amount converted, the bank's may differ a little
+    CAST(COALESCE(t.original_currency, '') != ''
+        OR (t.to_account_id = sqlc.arg(account_id) AND t.to_amount IS NOT NULL AND t.to_amount != t.amount) AS BOOLEAN) AS paid_foreign
 FROM transactions AS t
 WHERE (t.account_id = sqlc.arg(account_id) OR t.to_account_id = sqlc.arg(account_id))
     AND t.fulfilled_at IS NOT NULL

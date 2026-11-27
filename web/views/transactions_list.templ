@@ -35,6 +35,8 @@ type TxListData struct {
 	// ItemName names the item filtered by (only on the page and the body's
 	// renders).
 	ItemName string
+	// ImportName names the import filtered by (its file), like ItemName.
+	ImportName string
 }
 
 // TxList is the whole list loaded so far: the review banner, upcoming
@@ -555,7 +557,9 @@ templ transaction(tx *models.Transaction, def *models.Currency) {
 					}
 				>{ v.amount }</p>
 				if tx.IsForeign() {
-					<p class="text-xs text-zinc-500" title={ txForeignTitle(tx) }>{ "Paid " + tx.Original.View() }</p>
+					<p class="text-xs text-zinc-500" title={ txForeignTitle(tx) }>{ tx.PaidView() }</p>
+				} else if tx.FxFee > 0 {
+					<p class="text-xs text-zinc-500">{ tx.PaidView() }</p>
 				}
 				{{ conv := txConverted(tx, def) }}
 				if conv != "" {
@@ -694,9 +698,15 @@ templ txChips(tx *models.Transaction, v *txView) {
 				</span>
 			}
 			if tx.FromImport {
-				<span class="chip" title="Imported from a CSV file">
+				<span class="chip" title="Imported from a file">
 					@icons.Upload("12")
-					CSV
+					Imported
+				</span>
+			}
+			if tx.Historical {
+				<span class="chip" title="Past data: not counted in the account's balance">
+					@icons.Clock("12")
+					Past
 				</span>
 			}
 			if tx.QuickAddID != "" && !tx.NeedsReview {

@@ -43,4 +43,9 @@ type TxDetails struct {
 	MerchantGuess *MerchantGuess
 	// QuickAddText is the text it was quick added from, "" when it wasn't.
 	QuickAddText string
+	// ImportFile is the file (CSV or PDF statement) it was imported from,
+	// "" when it wasn't; ImportPDF tells a PDF, ImportedAt when.
+	ImportFile string
+	ImportPDF  bool
+	ImportedAt time.Time
 }

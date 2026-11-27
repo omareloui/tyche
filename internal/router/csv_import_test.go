@@ -147,7 +147,7 @@ func TestCSVImport(t *testing.T) {
 	if _, err := callHandler(ctx, h.ImportCSV)(w, "POST", "/import/"+id, id, form); err != nil {
 		t.Fatal(err)
 	}
-	if loc := w.Header().Get("HX-Redirect"); !strings.Contains(loc, "source=import") {
+	if loc := w.Header().Get("HX-Redirect"); !strings.Contains(loc, "import="+id) {
 		t.Errorf("HX-Redirect = %q", loc)
 	}
 
@@ -183,9 +183,12 @@ func TestCSVImport(t *testing.T) {
 		t.Errorf("balance = %v, want %v", got.Amount, want)
 	}
 
-	// done: the import is gone
-	if _, err := callHandler(ctx, h.ImportCSV)(httptest.NewRecorder(), "POST", "/import/"+id, id, form); !isStatus(err, 404) {
-		t.Errorf("importing twice: err = %v, want a 404", err)
+	// done: opened again, its rows are imported before, not again
+	if html := csvPreview(t, ctx, h, id, csvMappingForm(nil)); strings.Count(html, `data-status="imported"`) != 4 {
+		t.Error("the import opened again doesn't tell its imported rows")
+	}
+	if _, err := callHandler(ctx, h.ImportCSV)(httptest.NewRecorder(), "POST", "/import/"+id, id, form); !isStatus(err, 422) {
+		t.Errorf("importing the same rows twice: err = %v, want a 422", err)
 	}
 
 	// the same file again: its rows were imported, the saved mapping is picked

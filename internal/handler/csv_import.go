@@ -21,11 +21,24 @@ import (
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/repository"
 	"github.com/omareloui/tyche/internal/resperr"
+	"github.com/omareloui/tyche/internal/statementocr"
 	"github.com/omareloui/tyche/web/views"
 )
 
 // csvImportsListed is how many past imports the import page lists.
 const csvImportsListed = 10
+
+// maxImportUpload is the largest file uploaded: a PDF statement's.
+const maxImportUpload = max(csvimport.MaxBytes, statementocr.MaxBytes)
+
+// importUploadErr tells an upload too big, else err.
+func importUploadErr(err error) error {
+	var tooBig *http.MaxBytesError
+	if errors.As(err, &tooBig) {
+		return resperr.New(http.StatusRequestEntityTooLarge, fmt.Sprintf("The file is too big (%d MB at most).", maxImportUpload>>20))
+	}
+	return err
+}
 
 var errCSVImportNotFound = resperr.New(http.StatusNotFound, "This import isn't there anymore, upload the file again.")
 
@@ -47,6 +60,7 @@ func (h *Handler) CSVImportPage(w http.ResponseWriter, r *http.Request) (templ.C
 		Accounts:  views.CSVImportAccounts(accs),
 		AccountID: r.URL.Query().Get("account"),
 		Past:      past,
+		PDF:       h.statements != nil,
 	}), nil
 }
 
@@ -54,9 +68,9 @@ func (h *Handler) CSVImportPage(w http.ResponseWriter, r *http.Request) (templ.C
 // (the one saved for the account's files with its header, else guessed), and
 // goes on to its mapping and preview.
 func (h *Handler) UploadCSV(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	r.Body = http.MaxBytesReader(w, r.Body, csvimport.MaxBytes+1<<20)
-	if err := r.ParseMultipartForm(csvimport.MaxBytes + 1<<20); err != nil {
-		return nil, uploadErr(err)
+	r.Body = http.MaxBytesReader(w, r.Body, maxImportUpload+1<<20)
+	if err := r.ParseMultipartForm(maxImportUpload + 1<<20); err != nil {
+		return nil, importUploadErr(err)
 	}
 	defer r.MultipartForm.RemoveAll()
 
@@ -67,12 +81,18 @@ func (h *Handler) UploadCSV(w http.ResponseWriter, r *http.Request) (templ.Compo
 
 	f, fh, err := r.FormFile("file")
 	if err != nil {
-		return nil, resperr.New(http.StatusUnprocessableEntity, "Choose a CSV file.")
+		return nil, resperr.New(http.StatusUnprocessableEntity, "Choose a CSV or PDF file.")
 	}
 	defer f.Close()
-	content, err := io.ReadAll(io.LimitReader(f, csvimport.MaxBytes+1))
+	content, err := io.ReadAll(io.LimitReader(f, maxImportUpload+1))
 	if err != nil {
-		return nil, uploadErr(err)
+		return nil, importUploadErr(err)
+	}
+	if statementocr.IsPDF(content) {
+		if len(content) > statementocr.MaxBytes {
+			return nil, resperr.New(http.StatusRequestEntityTooLarge, fmt.Sprintf("The PDF is over %d MB, split it.", statementocr.MaxBytes>>20))
+		}
+		return nil, h.uploadStatement(w, r, acc, fileBaseName(fh.Filename), content)
 	}
 	if len(content) > csvimport.MaxBytes {
 		return nil, resperr.New(http.StatusRequestEntityTooLarge, fmt.Sprintf("The file is over %d MB, split it.", csvimport.MaxBytes>>20))
@@ -103,7 +123,7 @@ func (h *Handler) UploadCSV(w http.ResponseWriter, r *http.Request) (templ.Compo
 
 // CSVImport is a pending import's mapping and preview.
 func (h *Handler) CSVImport(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	imp, acc, err := h.pendingCSVImport(r)
+	imp, acc, err := h.openCSVImport(r)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +140,7 @@ func (h *Handler) CSVImport(w http.ResponseWriter, r *http.Request) (templ.Compo
 
 // PreviewCSVImport answers the mapping and preview of a changed mapping.
 func (h *Handler) PreviewCSVImport(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	imp, acc, err := h.pendingCSVImport(r)
+	imp, acc, err := h.openCSVImport(r)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +163,7 @@ func (h *Handler) PreviewCSVImport(w http.ResponseWriter, r *http.Request) (temp
 // ImportCSV saves the picked rows of a pending import, read again with the
 // sent mapping, as transactions to review.
 func (h *Handler) ImportCSV(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	imp, acc, err := h.pendingCSVImport(r)
+	imp, acc, err := h.openCSVImport(r)
 	if err != nil {
 		return nil, err
 	}
@@ -165,6 +185,7 @@ func (h *Handler) ImportCSV(w http.ResponseWriter, r *http.Request) (templ.Compo
 			picked[n] = true
 		}
 	}
+	historical := r.PostForm.Get("historical") != ""
 	var txs []repository.ImportedTx
 	for _, pr := range data.Rows {
 		if !picked[pr.Row.Line] || pr.Tx == nil || pr.Match.Status == csvimport.RowImported {
@@ -173,6 +194,7 @@ func (h *Handler) ImportCSV(w http.ResponseWriter, r *http.Request) (templ.Compo
 		if err := pr.Tx.SanitizeAndValidate(h.sani, h.valid); err != nil {
 			return nil, resperr.New(http.StatusUnprocessableEntity, fmt.Sprintf("Row %d can't be imported.", pr.Row.Line))
 		}
+		pr.Tx.Historical = historical
 		txs = append(txs, repository.ImportedTx{Tx: pr.Tx, Hash: pr.Row.Hash})
 	}
 	if len(txs) == 0 {
@@ -182,20 +204,18 @@ func (h *Handler) ImportCSV(w http.ResponseWriter, r *http.Request) (templ.Compo
 	imp.Mapping = m
 	save := r.PostForm.Get("save_mapping") != ""
 	if err := h.repo.ImportCSV(r.Context(), imp, txs, save, csvimport.HeaderSig(m.Header(data.Records))); err != nil {
-		if errors.Is(err, repository.ErrCSVImported) {
-			return nil, errCSVImportNotFound
-		}
 		return nil, err
 	}
 	w.Header().Set("HX-Redirect", "/transactions?"+url.Values{
-		models.TxFilterSource: {string(models.TxSourceImport)},
+		models.TxFilterImport: {imp.ID},
 		models.TxFilterStatus: {string(models.TxStatusReview)},
 	}.Encode())
 	return nil, nil
 }
 
-// pendingCSVImport is the pending import {id} with its account.
-func (h *Handler) pendingCSVImport(r *http.Request) (*csvimport.Import, *models.Account, error) {
+// openCSVImport is the import {id} with its account: a pending one, or
+// one imported whose file is kept (to import more of its rows).
+func (h *Handler) openCSVImport(r *http.Request) (*csvimport.Import, *models.Account, error) {
 	imp, err := h.repo.GetCSVImport(r.Context(), r.PathValue("id"))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil, errCSVImportNotFound
@@ -203,7 +223,7 @@ func (h *Handler) pendingCSVImport(r *http.Request) (*csvimport.Import, *models.
 	if err != nil {
 		return nil, nil, err
 	}
-	if imp.Status != csvimport.ImportPending {
+	if imp.Content == nil {
 		return nil, nil, errCSVImportNotFound
 	}
 	acc, err := h.csvImportAccount(r.Context(), imp.AccountID)
@@ -236,6 +256,11 @@ func (h *Handler) csvImportData(ctx context.Context, imp *csvimport.Import, acc 
 		return data, nil
 	}
 	data.Records = recs
+	if imp.Source == csvimport.SourcePDF {
+		// the AI's rows have a fixed layout, whatever the form sent
+		preset := statementocr.PresetMapping()
+		data.Mapping = statementocr.PresetMappingFor(preset.Columns(recs))
+	}
 	data.Mapping.Delimiter = delim
 	if err := data.Mapping.Validate(data.Mapping.Columns(recs)); err != nil {
 		data.MappingErr = err.Error()
@@ -262,6 +287,16 @@ func (h *Handler) csvImportData(ctx context.Context, imp *csvimport.Import, acc 
 		}
 	}
 	matches := csvimport.MatchDuplicates(rows, existing, &acc.Currency)
+
+	// Past data is suggested when every row is before the account's first
+	// transaction moving its balance (none: when it has a balance, set
+	// without transactions).
+	first, err := h.repo.GetAccountFirstTrackedDay(ctx, acc.ID)
+	if err != nil {
+		return data, err
+	}
+	data.FirstTracked = first
+	data.Historical = !to.IsZero() && ((first.IsZero() && acc.Amount != 0) || (!first.IsZero() && to.Before(first)))
 
 	cps, err := h.repo.GetCounterparties(ctx)
 	if err != nil {
@@ -323,6 +358,9 @@ func (h *Handler) csvMappingFromForm(imp *csvimport.Import, v url.Values) csvimp
 	m.Description = col("description")
 	m.Counterparty = col("counterparty")
 	m.Currency = col("currency")
+	m.OriginalAmount = col("original_amount")
+	m.OriginalCurrency = col("original_currency")
+	m.FxFee = col("fx_fee")
 	m.DecimalComma = v.Get("decimal_comma") != ""
 	return m
 }

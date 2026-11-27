@@ -78,6 +78,12 @@ type Mapping struct {
 	Currency     int  `json:"currency"`
 	// DecimalComma reads 1.234,56 instead of 1,234.56.
 	DecimalComma bool `json:"decimal_comma"`
+	// OriginalAmount and OriginalCurrency are what a purchase was paid in
+	// when another currency (the amount being what the account moved), FxFee
+	// the account's fee part of the amount: a PDF statement's columns.
+	OriginalAmount   int `json:"original_amount"`
+	OriginalCurrency int `json:"original_currency"`
+	FxFee            int `json:"fx_fee"`
 }
 
 // NewMapping is a mapping without any column.
@@ -85,6 +91,7 @@ func NewMapping() Mapping {
 	return Mapping{
 		Delimiter: ",", Date: None, Time: None, Amount: None, Debit: None, Credit: None,
 		Negative: NegativeOut, Description: None, Counterparty: None, Currency: None,
+		OriginalAmount: None, OriginalCurrency: None, FxFee: None,
 		DateFormat: DateFormats[0],
 	}
 }
@@ -97,7 +104,7 @@ func (m *Mapping) Validate(columns int) error {
 	if m.SkipRows < 0 {
 		return errors.New("The rows to skip can't be negative.")
 	}
-	for _, c := range []int{m.Date, m.Time, m.Amount, m.Debit, m.Credit, m.Description, m.Counterparty, m.Currency} {
+	for _, c := range []int{m.Date, m.Time, m.Amount, m.Debit, m.Credit, m.Description, m.Counterparty, m.Currency, m.OriginalAmount, m.OriginalCurrency, m.FxFee} {
 		if c < None || c >= columns {
 			return errors.New("A picked column isn't in the file.")
 		}
@@ -573,6 +580,11 @@ type Row struct {
 	Counterparty string
 	// Currency is the amount's, upper case, "" for the account's.
 	Currency string
+	// OriginalAmount in OriginalCurrency (upper case) is what it was paid
+	// in, "" when the account's; FxFee the fee part of Amount, positive.
+	OriginalAmount   float64
+	OriginalCurrency string
+	FxFee            float64
 	// Hash tells the row imported before (see rowHashes).
 	Hash string
 	// Err is why it can't be imported, "" when it can.
@@ -638,6 +650,14 @@ func ParseRows(recs [][]string, m *Mapping, accountID string, today time.Time) [
 		if row.Currency != "" && (len(row.Currency) != 3 || !isLetters(row.Currency)) {
 			row.Currency = ""
 		}
+		if cur := strings.ToUpper(cell(r, m.OriginalCurrency)); len(cur) == 3 && isLetters(cur) {
+			if v, ok := ParseAmount(cell(r, m.OriginalAmount), m.DecimalComma); ok && v != 0 {
+				row.OriginalAmount, row.OriginalCurrency = math.Abs(v), cur
+			}
+		}
+		if v, ok := ParseAmount(cell(r, m.FxFee), m.DecimalComma); ok && v > 0 && v < math.Abs(row.Amount) {
+			row.FxFee = v
+		}
 		rows = append(rows, row)
 	}
 	rowHashes(rows, accountID)
@@ -695,7 +715,10 @@ const (
 	RowImported RowStatus = "imported"
 	// RowDuplicate: a transaction (e.g. from an SMS) likely is the row.
 	RowDuplicate RowStatus = "duplicate"
-	RowError     RowStatus = "error"
+	// RowMaybe: a transaction may be the row, a few days apart (statements
+	// post late) or, paid in another currency, by a slightly other amount.
+	RowMaybe RowStatus = "maybe"
+	RowError RowStatus = "error"
 )
 
 // Existing is a fulfilled transaction moving the account, as a row may
@@ -707,6 +730,9 @@ type Existing struct {
 	Out   bool
 	Moved float64
 	Hash  string
+	// Foreign tells it was paid in another currency than the account's (its
+	// amount converted, the bank's billed one may differ a little).
+	Foreign bool
 }
 
 // Match is a row's status and, for a duplicate or an imported one, the
@@ -718,6 +744,14 @@ type Match struct {
 
 // DuplicateDays is how far apart a row and a transaction it may be can be.
 const DuplicateDays = 1
+
+// MaybeDays is how far apart a row and a transaction it maybe is can be;
+// MaybeForeignShare how far apart their amounts when the transaction was
+// paid in another currency.
+const (
+	MaybeDays         = 3
+	MaybeForeignShare = 0.03
+)
 
 // MatchDuplicates tells each row's status: imported when a transaction
 // has its hash, else a duplicate of a transaction moving the account the
@@ -771,6 +805,37 @@ func MatchDuplicates(rows []Row, existing []Existing, cur *models.Currency) []Ma
 		if best >= 0 {
 			used[best] = true
 			res[i] = Match{Status: RowDuplicate, TxID: existing[best].ID}
+		}
+	}
+
+	// Then the ones a transaction maybe is: the same amount within
+	// MaybeDays, or, paid in another currency, within MaybeForeignShare.
+	for i := range rows {
+		r := &rows[i]
+		if res[i].Status != RowNew || (r.Currency != "" && cur != nil && !strings.EqualFold(r.Currency, cur.String)) {
+			continue
+		}
+		amt := round(math.Abs(r.Amount))
+		best, bestDays, bestOff := -1, MaybeDays+1, math.Inf(1)
+		for j, e := range existing {
+			if used[j] || e.Out != r.IsOut() {
+				continue
+			}
+			off := math.Abs(round(e.Moved) - amt)
+			if off != 0 && (!e.Foreign || amt == 0 || off/amt > MaybeForeignShare) {
+				continue
+			}
+			days := int(math.Abs(math.Round(e.Day.Sub(r.Date).Hours() / 24)))
+			if days > MaybeDays {
+				continue
+			}
+			if days < bestDays || (days == bestDays && off < bestOff) {
+				best, bestDays, bestOff = j, days, off
+			}
+		}
+		if best >= 0 {
+			used[best] = true
+			res[i] = Match{Status: RowMaybe, TxID: existing[best].ID}
 		}
 	}
 	return res

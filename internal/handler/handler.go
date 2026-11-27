@@ -14,6 +14,7 @@ import (
 	"github.com/omareloui/tyche/internal/smstemplates"
 	"github.com/omareloui/tyche/internal/splitguess"
 	"github.com/omareloui/tyche/internal/sqlguess"
+	"github.com/omareloui/tyche/internal/statementocr"
 	"github.com/omareloui/tyche/internal/taxguess"
 	"github.com/omareloui/tyche/internal/txguess"
 	"github.com/omareloui/tyche/internal/valid"
@@ -59,6 +60,8 @@ type Handler struct {
 	splitGuess splitguess.Guesser
 	// sqlGuess turns the console's questions into SQL, nil when off.
 	sqlGuess sqlguess.Guesser
+	// statements reads PDF bank statements into imports, nil when off.
+	statements statementocr.Reader
 }
 
 // SetReceiptOCR turns reading receipts on (a nil reader keeps it off).

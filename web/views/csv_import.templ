@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"time"
 
 	"github.com/omareloui/tyche/internal/csvimport"
 	"github.com/omareloui/tyche/internal/jwt"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/statementocr"
 	"github.com/omareloui/tyche/internal/tzctx"
 	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
 	"github.com/omareloui/tyche/web/views/layouts"
 )
@@ -21,6 +24,8 @@ type CSVImportPageData struct {
 	AccountID string
 	// Past are the latest imports done.
 	Past []csvimport.Import
+	// PDF tells PDF statements can be imported (read by the AI).
+	PDF bool
 }
 
 // CSVPreviewRow is a row of an import's preview: its status and the
@@ -40,6 +45,11 @@ type CSVImportData struct {
 	Records    [][]string
 	Rows       []CSVPreviewRow
 	MappingErr string
+	// Historical imports the rows as past data, not moving the balance:
+	// suggested when every row is before FirstTracked, the day of the
+	// account's first transaction moving it (zero when none).
+	Historical   bool
+	FirstTracked time.Time
 }
 
 // CanImportCSVInto tells whether a CSV file can be imported into the
@@ -68,7 +78,7 @@ func CSVImportURL(accountID string) templ.SafeURL {
 }
 
 templ CSVImportPage(claims *jwt.AccessClaims, balances []models.Balance, data CSVImportPageData) {
-	@layouts.WithTitle(claims, "Import CSV", balances) {
+	@layouts.WithTitle(claims, "Import transactions", balances) {
 		<div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
 			<div class="grid gap-6">
 				@csvUpload(data)
@@ -89,7 +99,14 @@ templ csvUpload(data CSVImportPageData) {
 			@icons.Upload("22", &templ.Attributes{"class": "shrink-0 mt-0.5 text-sky-400"})
 			<div class="grid gap-1">
 				<h2 class="text-white font-semibold">Import a bank export</h2>
-				<p class="text-base text-zinc-400">A CSV file of an account's transactions. You'll check its columns and rows before anything is saved.</p>
+				<p class="text-base text-zinc-400">
+					if data.PDF {
+						A CSV file or a PDF statement of an account's transactions.
+					} else {
+						A CSV file of an account's transactions.
+					}
+					You'll check its rows before anything is saved.
+				</p>
 			</div>
 		</div>
 		if len(data.Accounts) == 0 {
@@ -101,18 +118,16 @@ templ csvUpload(data CSVImportPageData) {
 				hx-target="#csv-upload-error"
 				hx-swap="innerHTML"
 				hx-disabled-elt="find button[type=submit]"
-				x-data={ importFormData() }
+				x-data={ csvUploadData() }
 				class="grid gap-4"
 			>
 				<div>
-					<label for="csv-account" class="input-label">Account</label>
-					<select id="csv-account" name="account_id" class="input-field" required>
-						for _, a := range data.Accounts {
-							<option value={ a.ID } selected?={ a.ID == data.AccountID || (data.AccountID == "" && a.IsDefault) }>
-								{ a.Name } ({ a.Currency.String })
-							</option>
-						}
-					</select>
+					<span class="input-label">Account</span>
+					@form.Combobox(form.ComboboxProps{
+						Name: "account_id", ID: "csv", Label: "Account", Placeholder: "Pick the account",
+						Options: csvAccountOptions(data.Accounts), Data: form.FDInput{Value: csvPickedAccount(data)},
+						Searchable: len(data.Accounts) > 6,
+					})
 				</div>
 				<label
 					for="csv-file"
@@ -127,7 +142,7 @@ templ csvUpload(data CSVImportPageData) {
 						x-ref="file"
 						type="file"
 						name="file"
-						accept=".csv,.tsv,.txt,text/csv,text/plain,text/tab-separated-values"
+						accept={ csvUploadAccept(data.PDF) }
 						class="sr-only"
 						@change="pick($el)"
 					/>
@@ -138,6 +153,10 @@ templ csvUpload(data CSVImportPageData) {
 							<p class="text-sm text-zinc-500">
 								A <span class="text-zinc-400">.csv</span> file, up to <span class="whitespace-nowrap">{ strconv.Itoa(csvimport.MaxBytes>>20) } MB</span>
 								and { strconv.Itoa(csvimport.MaxRows) } rows
+								if data.PDF {
+									, or a <span class="text-zinc-400">.pdf</span> statement up to <span class="whitespace-nowrap">{ strconv.Itoa(statementocr.MaxBytes>>20) } MB</span>
+									and { strconv.Itoa(statementocr.MaxPages) } pages
+								}
 							</p>
 						</div>
 					</template>
@@ -149,10 +168,24 @@ templ csvUpload(data CSVImportPageData) {
 						</div>
 					</template>
 				</label>
+				if data.PDF {
+					<label x-show="pdf" x-cloak class="flex gap-3 p-3 rounded-2xl bg-white/5 text-sm text-zinc-300 cursor-pointer">
+						<input type="checkbox" name="ai_consent" value="1" x-model="consent" class="mt-0.5 shrink-0"/>
+						<span>
+							Send the statement to Google's AI (Gemini) to read its transactions. All of it is sent: names, amounts,
+							descriptions and the account number. The PDF isn't kept, only the rows read.
+						</span>
+					</label>
+				}
 				<p id="csv-upload-error" class="text-sm text-red-400 empty:hidden"></p>
 				<div class="flex justify-end">
-					<button type="submit" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed max-sm:w-full" :disabled="!name">
-						Continue
+					<button type="submit" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed max-sm:w-full" :disabled="!name || (pdf && !consent)">
+						<span x-show="!pdf">Continue</span>
+						<span x-show="pdf" x-cloak class="flex items-center gap-2">
+							@icons.Sparkles("16", &templ.Attributes{"class": "in-[.htmx-request]:animate-pulse"})
+							<span class="in-[.htmx-request]:hidden">Read with AI</span>
+							<span class="hidden in-[.htmx-request]:inline">Reading the statement…</span>
+						</span>
 					</button>
 				</div>
 			</form>
@@ -166,13 +199,22 @@ templ csvPastImports(past []csvimport.Import) {
 		<ul class="grid divide-y divide-zinc-800">
 			for _, p := range past {
 				<li class="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">
-					<div class="grid flex-1 min-w-48">
-						<span class="truncate text-zinc-200">{ p.FileName }</span>
-						<span class="text-sm text-zinc-500">
-							{ p.AccountName } · { tzctx.In(ctx, p.ImportedAt).Format("Jan 2, 2006") }
-						</span>
-					</div>
-					<span class="text-sm text-zinc-400">{ strconv.Itoa(p.ImportedCount) } of { strconv.Itoa(p.RowCount) } rows</span>
+					if p.Kept {
+						<a
+							href={ templ.SafeURL("/import/" + url.PathEscape(p.ID)) }
+							class="group grid flex-1 min-w-48"
+							title="Open its rows: import the ones left, as new or past data"
+						>
+							@csvPastImportName(p)
+						</a>
+					} else {
+						<div class="grid flex-1 min-w-48" title="Imported before files were kept: upload it again to import more">
+							@csvPastImportName(p)
+						</div>
+					}
+					<a href={ ImportTxsURL(p.ID) } class="text-sm text-sky-400 hover:underline">
+						{ strconv.Itoa(p.ImportedCount) } of { strconv.Itoa(p.RowCount) } rows
+					</a>
 				</li>
 			}
 		</ul>
@@ -182,11 +224,24 @@ templ csvPastImports(past []csvimport.Import) {
 	}
 }
 
+templ csvPastImportName(p csvimport.Import) {
+	<span class="flex items-center gap-2 min-w-0">
+		<span class="truncate text-zinc-200 group-hover:text-white group-hover:underline underline-offset-2">{ p.FileName }</span>
+		if p.Source == csvimport.SourcePDF {
+			<span class="chip shrink-0">PDF</span>
+		}
+	</span>
+	<span class="text-sm text-zinc-500">
+		{ p.AccountName } · { tzctx.In(ctx, p.ImportedAt).Format("Jan 2, 2006") }
+	</span>
+}
+
 templ csvImportInfo() {
 	@securitySection("Duplicates", icons.CheckCheck("16")) {
 		<p class="text-sm text-zinc-600">
 			Rows imported before, and the ones a transaction already has (e.g. from an SMS: same day or the next, same amount), aren't picked.
-			You can still pick a duplicate.
+			Nor are the ones a transaction maybe is: the same amount up to 3 days apart, or a little off when it was paid in another
+			currency. You can still pick them.
 		</p>
 	}
 	@securitySection("Matching", icons.Link("16")) {
@@ -195,20 +250,40 @@ templ csvImportInfo() {
 			the two sides of a transfer between your accounts are paired.
 		</p>
 	}
+	@securitySection("Past data", icons.Clock("16")) {
+		<p class="text-sm text-zinc-600">
+			Importing history from before you tracked the account? Import it as past data: it shows in your lists, spending and charts
+			without changing the account's balance, which already holds it.
+		</p>
+	}
 	@securitySection("Review", icons.Check("16")) {
 		<p class="text-sm text-zinc-600">Imported transactions come to review, like the ones from SMS.</p>
 	}
 }
 
 templ CSVImport(claims *jwt.AccessClaims, balances []models.Balance, data CSVImportData) {
-	@layouts.WithTitle(claims, "Import CSV", balances) {
+	@layouts.WithTitle(claims, "Import transactions", balances) {
 		<div class="grid gap-6">
 			<p class="flex flex-wrap items-center gap-2 text-zinc-400">
 				<span class="truncate text-zinc-200">{ data.Import.FileName }</span>
+				if data.Import.Source == csvimport.SourcePDF {
+					<span class="chip">Read by AI</span>
+				}
 				@icons.ArrowRight("16", &templ.Attributes{"class": "shrink-0"})
 				<span class="text-zinc-200">{ data.Account.Name }</span>
 				<a href={ CSVImportURL(data.Account.ID) } class="ml-auto text-sm text-sky-400 hover:underline">Another file</a>
 			</p>
+			if data.Import.Status == csvimport.ImportDone {
+				<p class="flex flex-wrap items-center gap-x-3 gap-y-1 -mt-3 text-sm text-zinc-400">
+					<span>
+						{ strconv.Itoa(data.Import.ImportedCount) } of { strconv.Itoa(data.Import.RowCount) } rows imported
+						if !data.Import.ImportedAt.IsZero() {
+							· last on { tzctx.In(ctx, data.Import.ImportedAt).Format("Jan 2, 2006") }
+						}
+					</span>
+					<a href={ ImportTxsURL(data.Import.ID) } class="text-sky-400 hover:underline">See its transactions</a>
+				</p>
+			}
 			<form
 				id="csv-import"
 				hx-post={ fmt.Sprintf("/import/%s", data.Import.ID) }
@@ -228,7 +303,18 @@ templ CSVImport(claims *jwt.AccessClaims, balances []models.Balance, data CSVImp
 // CSVImportBody is the mapping (any change previews again) and the preview
 // of an import.
 templ CSVImportBody(data CSVImportData) {
-	@csvMapping(data)
+	if data.Import.Warning != "" {
+		<p class="flex gap-2 p-3 rounded-2xl bg-amber-400/10 text-sm text-amber-300">
+			@icons.Warning("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
+			{ data.Import.Warning }
+		</p>
+	}
+	if data.Import.Source == csvimport.SourcePDF {
+		// The AI's rows come with a fixed layout: nothing to map.
+		@csvPresetMapping(data.Mapping)
+	} else {
+		@csvMapping(data)
+	}
 	if data.MappingErr != "" {
 		<p class="flex gap-2 p-3 rounded-2xl bg-amber-400/10 text-sm text-amber-300">
 			@icons.Warning("16", &templ.Attributes{"class": "shrink-0 mt-0.5"})
@@ -255,12 +341,11 @@ templ csvMapping(data CSVImportData) {
 			<h2 class="text-white font-semibold">Columns</h2>
 			<div class="grid gap-4 sm:grid-cols-3">
 				<div>
-					<label for="csv-delimiter" class="input-label">Separator</label>
-					<select id="csv-delimiter" name="delimiter" class="input-field">
-						for _, d := range csvDelimiterOptions {
-							<option value={ d.name } selected?={ d.value == m.Delimiter }>{ d.label }</option>
-						}
-					</select>
+					<span class="input-label">Separator</span>
+					@form.Combobox(form.ComboboxProps{
+						Name: "delimiter", ID: "csv", Label: "Separator",
+						Options: csvDelimiterCombo(), Data: form.FDInput{Value: csvDelimiterName(m.Delimiter)},
+					})
 				</div>
 				<div>
 					<label for="csv-skip" class="input-label">Rows to skip</label>
@@ -274,12 +359,11 @@ templ csvMapping(data CSVImportData) {
 			<div class="grid gap-4 sm:grid-cols-3">
 				@csvColumnSelect("Date", "date", m.Date, cols, false)
 				<div>
-					<label for="csv-date-format" class="input-label">Date format</label>
-					<select id="csv-date-format" name="date_format" class="input-field">
-						for _, f := range csvimport.DateFormats {
-							<option value={ f } selected?={ f == m.DateFormat }>{ f }</option>
-						}
-					</select>
+					<span class="input-label">Date format</span>
+					@form.Combobox(form.ComboboxProps{
+						Name: "date_format", ID: "csv", Label: "Date format",
+						Options: csvDateFormatOptions(), Data: form.FDInput{Value: m.DateFormat},
+					})
 				</div>
 				@csvColumnSelect("Time", "time", m.Time, cols, true)
 			</div>
@@ -307,11 +391,15 @@ templ csvMapping(data CSVImportData) {
 					<div class="grid gap-4 sm:grid-cols-3">
 						@csvColumnSelect("Amount", "amount", m.Amount, cols, false)
 						<div>
-							<label for="csv-negative" class="input-label">A negative amount is</label>
-							<select id="csv-negative" name="negative" class="input-field">
-								<option value={ string(csvimport.NegativeOut) } selected?={ m.Negative != csvimport.NegativeIn }>Money out</option>
-								<option value={ string(csvimport.NegativeIn) } selected?={ m.Negative == csvimport.NegativeIn }>Money in</option>
-							</select>
+							<span class="input-label">A negative amount is</span>
+							@form.Combobox(form.ComboboxProps{
+								Name: "negative", ID: "csv", Label: "A negative amount is",
+								Options: []form.ComboOption{
+									{Value: string(csvimport.NegativeOut), Label: "Money out"},
+									{Value: string(csvimport.NegativeIn), Label: "Money in"},
+								},
+								Data: form.FDInput{Value: csvNegative(m.Negative)},
+							})
 						</div>
 					</div>
 				}
@@ -334,19 +422,12 @@ templ csvMapping(data CSVImportData) {
 
 templ csvColumnSelect(label, name string, selected int, cols []string, optional bool) {
 	<div>
-		<label for={ "csv-col-" + name } class="input-label">{ label }</label>
-		<select id={ "csv-col-" + name } name={ name } class="input-field">
-			<option value="" selected?={ selected == csvimport.None }>
-				if optional {
-					None
-				} else {
-					Pick a column
-				}
-			</option>
-			for i, c := range cols {
-				<option value={ strconv.Itoa(i) } selected?={ i == selected }>{ c }</option>
-			}
-		</select>
+		<span class="input-label">{ label }</span>
+		@form.Combobox(form.ComboboxProps{
+			Name: name, ID: "csv-col", Label: label, Placeholder: "Pick a column",
+			Options: csvColumnOptions(cols), Data: form.FDInput{Value: csvColumnValue(selected)},
+			Nullable: optional, Searchable: len(cols) > 8,
+		})
 	</div>
 }
 
@@ -393,6 +474,9 @@ templ csvPreview(data CSVImportData) {
 				if n := counts[csvimport.RowDuplicate]; n > 0 {
 					<span class="chip bg-amber-400/10 text-amber-300">{ strconv.Itoa(n) } likely there</span>
 				}
+				if n := counts[csvimport.RowMaybe]; n > 0 {
+					<span class="chip bg-amber-400/10 text-amber-200">{ strconv.Itoa(n) } maybe there</span>
+				}
 				if n := counts[csvimport.RowImported]; n > 0 {
 					<span class="chip">{ strconv.Itoa(n) } imported before</span>
 				}
@@ -424,14 +508,24 @@ templ csvPreview(data CSVImportData) {
 				</table>
 			</div>
 			<div class="flex flex-wrap items-center justify-end gap-4 pt-2 border-t border-zinc-800">
-				<label class="flex items-center gap-2 mr-auto text-sm text-zinc-300">
-					<input type="checkbox" name="save_mapping" value="1" checked/>
-					Remember these columns for { data.Account.Name }
-				</label>
+				@csvHistoricalNote(data)
+				if data.Import.Source != csvimport.SourcePDF {
+					<label class="flex items-center gap-2 mr-auto text-sm text-zinc-300">
+						<input type="checkbox" name="save_mapping" value="1" checked/>
+						Remember these columns for { data.Account.Name }
+					</label>
+				} else {
+					<span class="mr-auto"></span>
+				}
 				<p id="csv-import-error" class="basis-full text-sm text-red-400 text-right empty:hidden"></p>
-				<button type="submit" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed max-sm:w-full" :disabled="count === 0">
-					Import <span x-text="count"></span> <span x-text="count === 1 ? 'transaction' : 'transactions'"></span>
-				</button>
+				// the suggested way is the primary button, last
+				if data.Historical {
+					@csvImportButton(false, "btn-ghost")
+					@csvImportButton(true, "btn-primary")
+				} else {
+					@csvImportButton(true, "btn-ghost")
+					@csvImportButton(false, "btn-primary")
+				}
 			</div>
 		</div>
 	}
@@ -493,6 +587,9 @@ templ csvPreviewRow(acc *models.Account, pr CSVPreviewRow) {
 				if pr.Row.Currency != "" && pr.Row.Currency != acc.Currency.String {
 					<span class="block text-xs text-zinc-500">{ strconv.FormatFloat(pr.Row.Amount, 'f', -1, 64) } { pr.Row.Currency }</span>
 				}
+				if paid := pr.Tx.PaidView(); paid != "" {
+					<span class="block text-xs text-zinc-500">{ paid }</span>
+				}
 			} else if pr.Row.Amount != 0 {
 				{ strconv.FormatFloat(pr.Row.Amount, 'f', -1, 64) }
 			}
@@ -506,6 +603,11 @@ templ csvPreviewRow(acc *models.Account, pr CSVPreviewRow) {
 						Likely there
 						@icons.ExternalLink("12")
 					</a>
+				case csvimport.RowMaybe:
+					<a href={ csvTxURL(pr.Match.TxID) } target="_blank" class="chip bg-amber-400/10 text-amber-200 hover:bg-amber-400/20" title="A transaction a few days apart (or paid in another currency, a little off) may be this row">
+						Maybe there
+						@icons.ExternalLink("12")
+					</a>
 				case csvimport.RowImported:
 					<a href={ csvTxURL(pr.Match.TxID) } target="_blank" class="chip hover:bg-zinc-700">
 						Imported before
@@ -516,6 +618,81 @@ templ csvPreviewRow(acc *models.Account, pr CSVPreviewRow) {
 			}
 		</td>
 	</tr>
+}
+
+// csvAccountOptions are the accounts a file can be imported into.
+func csvAccountOptions(accs []models.Account) []form.ComboOption {
+	opts := make([]form.ComboOption, len(accs))
+	for i, a := range accs {
+		opts[i] = form.ComboOption{Value: a.ID, Label: a.Name + " (" + a.Currency.String + ")"}
+	}
+	return opts
+}
+
+// csvPickedAccount is the account picked first: ?account=, else the default
+// one, else the first.
+func csvPickedAccount(data CSVImportPageData) string {
+	for _, a := range data.Accounts {
+		if a.ID == data.AccountID {
+			return a.ID
+		}
+	}
+	for _, a := range data.Accounts {
+		if a.IsDefault {
+			return a.ID
+		}
+	}
+	if len(data.Accounts) > 0 {
+		return data.Accounts[0].ID
+	}
+	return ""
+}
+
+func csvDelimiterCombo() []form.ComboOption {
+	opts := make([]form.ComboOption, len(csvDelimiterOptions))
+	for i, d := range csvDelimiterOptions {
+		opts[i] = form.ComboOption{Value: d.name, Label: d.label}
+	}
+	return opts
+}
+
+func csvDelimiterName(delim string) string {
+	for _, d := range csvDelimiterOptions {
+		if d.value == delim {
+			return d.name
+		}
+	}
+	return ""
+}
+
+func csvDateFormatOptions() []form.ComboOption {
+	opts := make([]form.ComboOption, len(csvimport.DateFormats))
+	for i, f := range csvimport.DateFormats {
+		opts[i] = form.ComboOption{Value: f, Label: f}
+	}
+	return opts
+}
+
+func csvNegative(s csvimport.Sign) string {
+	if s == csvimport.NegativeIn {
+		return string(s)
+	}
+	return string(csvimport.NegativeOut)
+}
+
+func csvColumnOptions(cols []string) []form.ComboOption {
+	opts := make([]form.ComboOption, len(cols))
+	for i, c := range cols {
+		opts[i] = form.ComboOption{Value: strconv.Itoa(i), Label: c}
+	}
+	return opts
+}
+
+func csvColumnValue(c int) string {
+	if c == csvimport.None {
+		return ""
+	}
+	return strconv.Itoa(c)
 }
 
 var csvDelimiterOptions = []struct{ name, value, label string }{
@@ -563,6 +740,105 @@ func csvSampleRows(recs [][]string, m csvimport.Mapping) [][]string {
 		return recs[:n]
 	}
 	return recs
+}
+
+// csvHistoricalNote tells the two ways to import the rows: as new
+// transactions moving the balance, or as past data the balance already
+// holds.
+templ csvHistoricalNote(data CSVImportData) {
+	<div class="basis-full grid gap-1 p-3 rounded-2xl bg-white/5 text-xs text-zinc-400">
+		<p>
+			<span class="text-zinc-200">As new</span>: they move { data.Account.Name }'s balance, like ones you add.
+		</p>
+		<p>
+			<span class="text-zinc-200">As past data</span>: the balance stays { data.Account.Currency.Format(data.Account.Amount) }, already holding
+			them; they show in your lists, spending and charts.
+			if data.Historical {
+				Suggested, the rows being before
+				if !data.FirstTracked.IsZero() {
+					your first transaction in it ({ data.FirstTracked.Format("Jan 2, 2006") }).
+				} else {
+					any transaction in it.
+				}
+			}
+		</p>
+	</div>
+}
+
+// csvImportButton imports the picked rows, as past data when historical
+// (the clicked button's value is sent).
+templ csvImportButton(historical bool, class string) {
+	<button
+		type="submit"
+		if historical {
+			name="historical"
+			value="1"
+		}
+		class={ class, "disabled:opacity-40 disabled:cursor-not-allowed max-sm:w-full" }
+		:disabled="count === 0"
+	>
+		Import <span x-text="count"></span>
+		if historical {
+			as past data
+		} else {
+			as new
+		}
+	</button>
+}
+
+// csvPresetMapping replaces the mapping of a PDF statement's rows (a fixed
+// layout), its values sent like the mapping form's.
+templ csvPresetMapping(m csvimport.Mapping) {
+	<input type="hidden" name="delimiter" value="comma"/>
+	<input type="hidden" name="skip_rows" value={ strconv.Itoa(m.SkipRows) }/>
+	<input type="hidden" name="has_header" value="1"/>
+	<input type="hidden" name="date" value={ strconv.Itoa(m.Date) }/>
+	<input type="hidden" name="date_format" value={ m.DateFormat }/>
+	<input type="hidden" name="time" value={ strconv.Itoa(m.Time) }/>
+	<input type="hidden" name="amount_mode" value="split"/>
+	<input type="hidden" name="amount" value={ strconv.Itoa(m.Amount) }/>
+	<input type="hidden" name="debit" value={ strconv.Itoa(m.Debit) }/>
+	<input type="hidden" name="credit" value={ strconv.Itoa(m.Credit) }/>
+	<input type="hidden" name="description" value={ strconv.Itoa(m.Description) }/>
+	<input type="hidden" name="counterparty" value=""/>
+	<input type="hidden" name="currency" value=""/>
+	<input type="hidden" name="original_amount" value={ strconv.Itoa(m.OriginalAmount) }/>
+	<input type="hidden" name="original_currency" value={ strconv.Itoa(m.OriginalCurrency) }/>
+	<input type="hidden" name="fx_fee" value={ strconv.Itoa(m.FxFee) }/>
+}
+
+// ImportTxsURL lists the transactions of an import.
+func ImportTxsURL(id string) templ.SafeURL {
+	return templ.SafeURL("/transactions?" + models.TxFilterImport + "=" + url.QueryEscape(id))
+}
+
+// csvUploadAccept are the files the upload takes.
+func csvUploadAccept(pdf bool) string {
+	a := ".csv,.tsv,.txt,text/csv,text/plain,text/tab-separated-values"
+	if pdf {
+		a += ",.pdf,application/pdf"
+	}
+	return a
+}
+
+// csvUploadData is importFormData telling a PDF picked (it asks the consent
+// to send it to the AI).
+func csvUploadData() string {
+	return `{
+		name: '',
+		size: '',
+		pdf: false,
+		consent: false,
+		dragging: false,
+		pick(input) {
+			const f = input.files[0]
+			this.name = f ? f.name : ''
+			this.pdf = !!f && (f.type === 'application/pdf' || /\.pdf$/i.test(f.name))
+			if (!f) return
+			const mb = f.size / (1 << 20)
+			this.size = mb >= 1 ? mb.toFixed(1) + ' MB' : Math.max(1, Math.round(f.size / 1024)) + ' KB'
+		},
+	}`
 }
 
 // csvTxURL opens a transaction's details on the transactions page.

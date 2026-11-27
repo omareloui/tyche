@@ -45,6 +45,14 @@ func (h Handler) applyForeign(r *http.Request, tx *models.Transaction) {
 	tx.Original, tx.FxFee = nil, 0
 	cur := foreignCurrency(r, &tx.Account)
 	orig, _ := parseFloatIfExists(r.FormValue(originalAmountField))
+	if cur == "" && tx.Kind.TakesFxFee() && tx.Amount > 0 {
+		// a fee charged in the account's currency (a cross-border charge read
+		// off a statement) is kept
+		if fee, _ := parseFloatIfExists(r.FormValue(fxFeeField)); fee > 0 && fee < tx.Amount {
+			tx.FxFee = tx.Account.Currency.Round(fee)
+		}
+		return
+	}
 	if cur == "" || orig <= 0 || !tx.Kind.CanBeForeign() || tx.Account.Currency.IsMetal() {
 		return
 	}
@@ -90,6 +98,9 @@ func (h Handler) txForeignFD(ctx context.Context, t *models.Transaction) *views.
 		fd.Amount.Value = formatFloatIfNonZero(t.Original.Amount)
 		fd.Fee = formatFloatIfNonZero(t.FxFee)
 		fd.Hint = foreignHint(t.OriginalRate(), t.FxFee, fd.Currency.Value, &t.Account)
+	} else if t.FxFee > 0 {
+		fd.Fee = formatFloatIfNonZero(t.FxFee)
+		fd.Hint = "Incl. " + t.ViewFxFee() + " foreign currency fee"
 	}
 	fd.Currencies = h.foreignCurrencies(ctx, fd.Currency.Value)
 	return fd
@@ -111,7 +122,10 @@ func (h Handler) parseTxForeignFD(r *http.Request, fd *views.TransactionAmountsA
 		Fee:             r.FormValue(fxFeeField),
 	}
 	if cur == "" {
-		ffd.Fee = ""
+		// a fee in the account's currency stays until "Paid in" changes
+		if !kind.TakesFxFee() || triggered(originalCurrencyField) {
+			ffd.Fee = ""
+		}
 		return ffd
 	}
 	orig, _ := parseFloatIfExists(ffd.Amount.Value)

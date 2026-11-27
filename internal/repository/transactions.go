@@ -90,6 +90,7 @@ func (r *Repository) createTransactionWithTxn(qtx *queries.Queries, ctx context.
 		OriginalAmount:   originalAmountArg(tx),
 		OriginalCurrency: originalCurrencyArg(tx),
 		FxFee:            fxFeeArg(tx),
+		Historical:       tx.Historical,
 	}); err != nil {
 		l.Error("create transaction", zap.Error(err), zap.String("id", tx.ID))
 		return err
@@ -256,7 +257,7 @@ func (r *Repository) GetTransactionsSummary(ctx context.Context, f models.TxFilt
 	lp := txFilterParams(&f)
 	p := queries.GetTransactionsSummaryParams{
 		Q: lp.Q, Kind: lp.Kind, AccountID: lp.AccountID, CategoryID: lp.CategoryID,
-		CounterpartyID: lp.CounterpartyID, GoalID: lp.GoalID, ItemID: lp.ItemID, TagID: lp.TagID, NeedsReview: lp.NeedsReview,
+		CounterpartyID: lp.CounterpartyID, GoalID: lp.GoalID, ItemID: lp.ItemID, ImportID: lp.ImportID, TagID: lp.TagID, NeedsReview: lp.NeedsReview,
 		FromSms: lp.FromSms, FromImport: lp.FromImport, FromQuick: lp.FromQuick, HasReceipt: lp.HasReceipt, ForOthers: lp.ForOthers, HasNote: lp.HasNote, Foreign: lp.Foreign, Window: lp.Window, WindowToday: lp.WindowToday, FromDate: lp.FromDate, ToDate: lp.ToDate,
 		MinAmount: lp.MinAmount, MaxAmount: lp.MaxAmount,
 		TimeFrom: lp.TimeFrom, TimeTo: lp.TimeTo, TimeTz: lp.TimeTz,
@@ -331,6 +332,9 @@ func txFilterParams(f *models.TxFilter) queries.GetTransactionsParams {
 	}
 	if f.ItemID != "" {
 		p.ItemID = f.ItemID
+	}
+	if f.ImportID != "" {
+		p.ImportID = f.ImportID
 	}
 	if f.TagID != "" {
 		p.TagID = f.TagID
@@ -643,6 +647,8 @@ func (r *Repository) GetFilteredTransactionIDs(ctx context.Context, f models.TxF
 
 func (r *Repository) updateTransactionWithTxn(ctx context.Context, qtx *queries.Queries, oldTx *models.Transaction, tx *models.Transaction) error {
 	l := logger.FromCtx(ctx)
+	// Fixed at import: an edit never makes past data move the balance.
+	tx.Historical = oldTx.Historical
 
 	var catID, cpID, toAccID sql.NullString
 
@@ -781,6 +787,8 @@ func dbTransactionToTransaction(
 		RecurrentTxID:  dbTx.RecurrentID.String,
 		LoanGoalID:     dbTx.LoanGoalID.String,
 		FromImport:     dbTx.ImportID.Valid,
+		ImportID:       dbTx.ImportID.String,
+		Historical:     dbTx.Historical,
 		QuickAddID:     dbTx.QuickAddID.String,
 		ReturnUntil:    dayPtr(dbTx.ReturnUntil),
 		WarrantyUntil:  dayPtr(dbTx.WarrantyUntil),
@@ -963,8 +971,10 @@ func originalCurrencyArg(tx *models.Transaction) any {
 	return strings.ToUpper(tx.Original.Currency)
 }
 
+// fxFeeArg is the fee of a purchase, foreign or not (a card's cross-border
+// fee on a charge in its own currency, read off a statement).
 func fxFeeArg(tx *models.Transaction) any {
-	if tx.Original == nil || tx.Original.Currency == "" || tx.FxFee == 0 {
+	if tx.FxFee == 0 {
 		return nil
 	}
 	return tx.FxFee

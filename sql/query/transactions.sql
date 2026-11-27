@@ -18,7 +18,8 @@ INSERT INTO transactions (
     warranty_until,
     original_amount,
     original_currency,
-    fx_fee
+    fx_fee,
+    historical
 )
 VALUES (
     sqlc.arg(id),
@@ -41,7 +42,8 @@ VALUES (
     -- an expense's only.
     IIF(sqlc.arg(kind) = 1 OR sqlc.arg(kind) = 2 OR sqlc.arg(kind) = 5, sqlc.narg(original_amount), NULL),
     IIF(sqlc.arg(kind) = 1 OR sqlc.arg(kind) = 2 OR sqlc.arg(kind) = 5, sqlc.narg(original_currency), NULL),
-    IIF(sqlc.arg(kind) = 1, sqlc.narg(fx_fee), NULL)
+    IIF(sqlc.arg(kind) = 1, sqlc.narg(fx_fee), NULL),
+    sqlc.arg(historical)
 );
 
 -- name: GetTransactions :many
@@ -162,6 +164,7 @@ WHERE
     AND (sqlc.narg(item_id) IS NULL OR EXISTS (
         SELECT 1 FROM transaction_items AS fti WHERE fti.transaction_id = t.id AND fti.item_id = sqlc.narg(item_id)
     ))
+    AND (sqlc.narg(import_id) IS NULL OR t.import_id = sqlc.narg(import_id))
     AND (sqlc.narg(tag_id) IS NULL OR EXISTS (
         SELECT 1 FROM transaction_tags AS ftt WHERE ftt.transaction_id = t.id AND ftt.tag_id = sqlc.narg(tag_id)
     ))
@@ -296,6 +299,7 @@ WHERE
     AND (sqlc.narg(item_id) IS NULL OR EXISTS (
         SELECT 1 FROM transaction_items AS fti WHERE fti.transaction_id = t.id AND fti.item_id = sqlc.narg(item_id)
     ))
+    AND (sqlc.narg(import_id) IS NULL OR t.import_id = sqlc.narg(import_id))
     AND (sqlc.narg(tag_id) IS NULL OR EXISTS (
         SELECT 1 FROM transaction_tags AS ftt WHERE ftt.transaction_id = t.id AND ftt.tag_id = sqlc.narg(tag_id)
     ))

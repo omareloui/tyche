@@ -34,6 +34,7 @@ import (
 	"github.com/omareloui/tyche/internal/smstemplates"
 	"github.com/omareloui/tyche/internal/splitguess"
 	"github.com/omareloui/tyche/internal/sqlguess"
+	"github.com/omareloui/tyche/internal/statementocr"
 	"github.com/omareloui/tyche/internal/taxguess"
 	"github.com/omareloui/tyche/internal/txguess"
 	"github.com/omareloui/tyche/internal/valid"
@@ -108,6 +109,7 @@ func main() {
 		h.SetTxGuess(txguess.New(ocrCfg.APIKey, cmp.Or(ocrCfg.QuickModel, ocrCfg.Model), ocrCfg.ThinkingLevel))
 		h.SetSplitGuess(splitguess.New(ocrCfg.APIKey, ocrCfg.Model, ocrCfg.ThinkingLevel))
 		h.SetSQLGuess(sqlguess.New(ocrCfg.APIKey, ocrCfg.Model, ocrCfg.ThinkingLevel))
+		h.SetStatementReader(statementocr.New(ocrCfg.APIKey, ocrCfg.Model, ocrCfg.ThinkingLevel))
 	} else {
 		h.SetReceiptOCR(nil, ocrCfg)
 	}

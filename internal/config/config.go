@@ -130,6 +130,9 @@ type ReceiptOCR struct {
 	// AskQuestionsPerMonth is how many questions a tenant may have turned
 	// into SQL a calendar month (the console's Ask tab).
 	AskQuestionsPerMonth int
+	// StatementImportsPerMonth is how many PDF statements a tenant may have
+	// read into an import a calendar month.
+	StatementImportsPerMonth int
 }
 
 // Prices are the calls' prices.
@@ -140,26 +143,28 @@ func (c ReceiptOCR) Prices() gemini.Prices {
 // GetReceiptOCR reads the GEMINI_*, RECEIPT_SCANS_PER_MONTH,
 // SMS_GUESSES_PER_MONTH, COL_ESTIMATES_PER_MONTH, TAX_RULES_PER_MONTH,
 // VISA_RULES_PER_MONTH, MERCHANT_GUESSES_PER_MONTH, QUICK_ADDS_PER_MONTH,
-// SPLIT_GUESSES_PER_MONTH and ASK_QUESTIONS_PER_MONTH variables.
+// SPLIT_GUESSES_PER_MONTH, ASK_QUESTIONS_PER_MONTH and
+// STATEMENT_IMPORTS_PER_MONTH variables.
 func GetReceiptOCR() ReceiptOCR {
 	return ReceiptOCR{
-		APIKey:                  getEnvironmentValueWithDefault("GEMINI_API_KEY", ""),
-		Model:                   getEnvironmentValueWithDefault("GEMINI_MODEL", "gemini-3.8-flash"),
-		ThinkingLevel:           getEnvironmentValueWithDefault("GEMINI_THINKING_LEVEL", "LOW"),
-		InputPerM:               getEnvironmentFloatWithDefault("GEMINI_PRICE_INPUT_PER_M", 0.75),
-		OutputPerM:              getEnvironmentFloatWithDefault("GEMINI_PRICE_OUTPUT_PER_M", 3.75),
-		SearchPerK:              getEnvironmentFloatWithDefault("GEMINI_PRICE_SEARCH_PER_K", 14),
-		ScansPerMonth:           max(getEnvironmentIntWithDefault("RECEIPT_SCANS_PER_MONTH", 50), 0),
-		SMSGuessesPerMonth:      max(getEnvironmentIntWithDefault("SMS_GUESSES_PER_MONTH", 30), 0),
-		ColEstimatesPerMonth:    max(getEnvironmentIntWithDefault("COL_ESTIMATES_PER_MONTH", 20), 0),
-		TaxRulesPerMonth:        max(getEnvironmentIntWithDefault("TAX_RULES_PER_MONTH", 10), 0),
-		VisaRulesPerMonth:       max(getEnvironmentIntWithDefault("VISA_RULES_PER_MONTH", 10), 0),
-		MerchantModel:           getEnvironmentValueWithDefault("GEMINI_MERCHANT_MODEL", ""),
-		MerchantThinkingLevel:   getEnvironmentValueWithDefault("GEMINI_MERCHANT_THINKING_LEVEL", ""),
-		MerchantGuessesPerMonth: max(getEnvironmentIntWithDefault("MERCHANT_GUESSES_PER_MONTH", 100), 0),
-		QuickModel:              getEnvironmentValueWithDefault("GEMINI_QUICK_MODEL", ""),
-		QuickAddsPerMonth:       max(getEnvironmentIntWithDefault("QUICK_ADDS_PER_MONTH", 200), 0),
-		SplitGuessesPerMonth:    max(getEnvironmentIntWithDefault("SPLIT_GUESSES_PER_MONTH", 30), 0),
-		AskQuestionsPerMonth:    max(getEnvironmentIntWithDefault("ASK_QUESTIONS_PER_MONTH", 50), 0),
+		APIKey:                   getEnvironmentValueWithDefault("GEMINI_API_KEY", ""),
+		Model:                    getEnvironmentValueWithDefault("GEMINI_MODEL", "gemini-3.8-flash"),
+		ThinkingLevel:            getEnvironmentValueWithDefault("GEMINI_THINKING_LEVEL", "LOW"),
+		InputPerM:                getEnvironmentFloatWithDefault("GEMINI_PRICE_INPUT_PER_M", 0.75),
+		OutputPerM:               getEnvironmentFloatWithDefault("GEMINI_PRICE_OUTPUT_PER_M", 3.75),
+		SearchPerK:               getEnvironmentFloatWithDefault("GEMINI_PRICE_SEARCH_PER_K", 14),
+		ScansPerMonth:            max(getEnvironmentIntWithDefault("RECEIPT_SCANS_PER_MONTH", 50), 0),
+		SMSGuessesPerMonth:       max(getEnvironmentIntWithDefault("SMS_GUESSES_PER_MONTH", 30), 0),
+		ColEstimatesPerMonth:     max(getEnvironmentIntWithDefault("COL_ESTIMATES_PER_MONTH", 20), 0),
+		TaxRulesPerMonth:         max(getEnvironmentIntWithDefault("TAX_RULES_PER_MONTH", 10), 0),
+		VisaRulesPerMonth:        max(getEnvironmentIntWithDefault("VISA_RULES_PER_MONTH", 10), 0),
+		MerchantModel:            getEnvironmentValueWithDefault("GEMINI_MERCHANT_MODEL", ""),
+		MerchantThinkingLevel:    getEnvironmentValueWithDefault("GEMINI_MERCHANT_THINKING_LEVEL", ""),
+		MerchantGuessesPerMonth:  max(getEnvironmentIntWithDefault("MERCHANT_GUESSES_PER_MONTH", 100), 0),
+		QuickModel:               getEnvironmentValueWithDefault("GEMINI_QUICK_MODEL", ""),
+		QuickAddsPerMonth:        max(getEnvironmentIntWithDefault("QUICK_ADDS_PER_MONTH", 200), 0),
+		SplitGuessesPerMonth:     max(getEnvironmentIntWithDefault("SPLIT_GUESSES_PER_MONTH", 30), 0),
+		AskQuestionsPerMonth:     max(getEnvironmentIntWithDefault("ASK_QUESTIONS_PER_MONTH", 50), 0),
+		StatementImportsPerMonth: max(getEnvironmentIntWithDefault("STATEMENT_IMPORTS_PER_MONTH", 10), 0),
 	}
 }

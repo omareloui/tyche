@@ -48,6 +48,17 @@ func Build(row *Row, acc *models.Account, counterparties []models.Counterparty, 
 		FulfilledAt: at,
 		NeedsReview: true,
 	}
+	// A statement's row: the amount the account moved, what it was paid in
+	// and the fee part of it.
+	if row.Currency == "" {
+		if row.OriginalCurrency != "" && !strings.EqualFold(row.OriginalCurrency, acc.Currency.String) &&
+			kind.CanBeForeign() && !acc.Currency.IsMetal() {
+			tx.Original = &models.ForeignAmount{Amount: row.OriginalAmount, Currency: row.OriginalCurrency}
+		}
+		if row.FxFee > 0 && kind.TakesFxFee() && row.FxFee < tx.Amount {
+			tx.FxFee = acc.Currency.Round(row.FxFee)
+		}
+	}
 
 	cp := smsingest.MatchCounterparty(row.Counterparty, counterparties)
 	if cp == nil {

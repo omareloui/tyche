@@ -222,13 +222,23 @@ func TestMatchDuplicates(t *testing.T) {
 		{Line: 4, Date: day("2026-11-03"), Amount: 50, Hash: "h4"},
 		{Line: 5, Date: day("2026-11-05"), Amount: -70, Hash: "h5"},
 		{Line: 6, Err: "No date"},
+		// a card's billed amount of a purchase abroad, the SMS's converted
+		// one a little off
+		{Line: 7, Date: day("2026-11-10"), Amount: -341.49, Hash: "h7"},
+		// 4 days apart: not even maybe
+		{Line: 8, Date: day("2026-11-20"), Amount: -20, Hash: "h8"},
+		// a little off without a foreign currency: not it
+		{Line: 9, Date: day("2026-11-25"), Amount: -101, Hash: "h9"},
 	}
 	existing := []Existing{
 		{ID: "imported", Day: day("2026-11-01"), Out: true, Moved: 100, Hash: "h1"},
 		// an SMS the day after: one of the two same rows
 		{ID: "sms", Day: day("2026-11-03"), Out: true, Moved: 50},
-		// two days apart: not it
+		// two days apart: maybe it (statements post late)
 		{ID: "far", Day: day("2026-11-07"), Out: true, Moved: 70},
+		{ID: "abroad", Day: day("2026-11-09"), Out: true, Moved: 336.2, Foreign: true},
+		{ID: "too far", Day: day("2026-11-24"), Out: true, Moved: 20},
+		{ID: "off", Day: day("2026-11-25"), Out: true, Moved: 100},
 	}
 	got := MatchDuplicates(rows, existing, egp)
 	want := []Match{
@@ -236,8 +246,11 @@ func TestMatchDuplicates(t *testing.T) {
 		{Status: RowDuplicate, TxID: "sms"},
 		{Status: RowNew},
 		{Status: RowNew},
-		{Status: RowNew},
+		{Status: RowMaybe, TxID: "far"},
 		{Status: RowError},
+		{Status: RowMaybe, TxID: "abroad"},
+		{Status: RowNew},
+		{Status: RowNew},
 	}
 	for i := range want {
 		if got[i] != want[i] {

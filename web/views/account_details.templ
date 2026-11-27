@@ -160,7 +160,7 @@ templ accountDetailsActions(a *models.Account) {
 		if !a.IsArchive && CanImportCSVInto(a) {
 			<a href={ CSVImportURL(a.ID) } class="txd-action">
 				@icons.Upload("14")
-				Import CSV
+				Import transactions
 			</a>
 		}
 		if !a.IsArchive {

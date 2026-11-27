@@ -93,6 +93,7 @@ templ TxDetailsPanel(d *models.TxDetails, def *models.Currency) {
 			@txDetailsLinked(d, def)
 			@txDetailsSMS(d)
 			@txDetailsQuickAdd(d)
+			@txDetailsImport(d)
 			if len(d.RecurrentTxs) > 0 {
 				@txDetailsSection("Other occurrences") {
 					for _, rt := range d.RecurrentTxs {
@@ -328,6 +329,11 @@ templ txDetailsFields(d *models.TxDetails, v *txView) {
 				<span class={ "tabular-nums", templ.KV("sensitive", hide) }>{ tx.ViewAmount() }</span>
 				<span class="text-zinc-500">→</span>
 				<span class={ "tabular-nums", templ.KV("sensitive", hide) }>{ tx.ViewToAmount() }</span>
+			}
+		}
+		if !tx.IsForeign() && tx.FxFee > 0 {
+			@txDetailsRow("Fee", icons.Globe("15")) {
+				<span class="tabular-nums">{ "Incl. " + tx.ViewFxFee() + " foreign currency fee" }</span>
 			}
 		}
 		if tx.IsForeign() {
@@ -650,6 +656,38 @@ templ txDetailsQuickAdd(d *models.TxDetails) {
 					@icons.Zap("12")
 					Added from this text
 				</p>
+			</div>
+		}
+	}
+}
+
+// txDetailsImport is the file the transaction was imported from, linking
+// the import's transactions, and whether it moved the balance.
+templ txDetailsImport(d *models.TxDetails) {
+	if d.ImportFile != "" || d.Tx.Historical {
+		@txDetailsSection("Imported") {
+			<div class="txd-card grid gap-2">
+				if d.ImportFile != "" {
+					<a href={ ImportTxsURL(d.Tx.ImportID) } class="flex items-center gap-2 min-w-0 text-sm text-zinc-200 hover:text-white">
+						@icons.Upload("14", &templ.Attributes{"class": "shrink-0 text-zinc-400"})
+						<span class="truncate">{ d.ImportFile }</span>
+						if d.ImportPDF {
+							<span class="chip shrink-0">PDF</span>
+						}
+					</a>
+					<p class="text-xs text-zinc-500">
+						if !d.ImportedAt.IsZero() {
+							Imported { tzctx.In(ctx, d.ImportedAt).Format("Jan 2, 2006") } ·
+						}
+						<a href={ ImportTxsURL(d.Tx.ImportID) } class="text-sky-400 hover:underline">See its transactions</a>
+					</p>
+				}
+				if d.Tx.Historical {
+					<p class="flex items-center gap-1.5 text-xs text-zinc-400">
+						@icons.Clock("12")
+						Past data: not counted in { d.Tx.Account.Name }'s balance, which already held it.
+					</p>
+				}
 			</div>
 		}
 	}

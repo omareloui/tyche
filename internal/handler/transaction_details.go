@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/a-h/templ"
+	"github.com/omareloui/tyche/internal/csvimport"
 	"github.com/omareloui/tyche/internal/errs"
 	"github.com/omareloui/tyche/internal/logger"
 	"github.com/omareloui/tyche/internal/models"
@@ -64,6 +65,11 @@ func (h Handler) txDetails(ctx context.Context, id string) (*models.TxDetails, e
 	if d.Tx.QuickAddID != "" {
 		if d.QuickAddText, err = h.repo.GetTxQuickAddText(ctx, d.Tx.ID); err != nil {
 			return nil, err
+		}
+	}
+	if d.Tx.ImportID != "" {
+		if imp, err := h.repo.GetCSVImport(ctx, d.Tx.ImportID); err == nil {
+			d.ImportFile, d.ImportPDF, d.ImportedAt = imp.FileName, imp.Source == csvimport.SourcePDF, imp.ImportedAt
 		}
 	}
 	if d.Tx.Counterparty != nil && d.Tx.FromSMS {

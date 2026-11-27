@@ -46,6 +46,25 @@ func (t *Transaction) OriginalRate() float64 {
 	return (math.Abs(t.Amount) - t.FxFee) / math.Abs(t.Original.Amount)
 }
 
+// PaidView tells what it was paid and the fee on top, e.g. "Paid USD 6.36
+// + E£ 10.24 fee", or "Paid E£ 289.99 + E£ 8.69 fee" for a fee charged in
+// the account's currency; "" when neither foreign nor with a fee.
+func (t *Transaction) PaidView() string {
+	var paid string
+	switch {
+	case t.IsForeign():
+		paid = "Paid " + t.Original.View()
+	case t.FxFee > 0:
+		paid = "Paid " + t.Account.Currency.Format(math.Abs(t.Amount)-t.FxFee)
+	default:
+		return ""
+	}
+	if t.FxFee > 0 {
+		paid += " + " + t.ViewFxFee() + " fee"
+	}
+	return paid
+}
+
 // ViewFxFee is its foreign currency fee in its account's currency.
 func (t *Transaction) ViewFxFee() string {
 	return t.Account.Currency.Format(t.FxFee)

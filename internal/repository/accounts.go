@@ -364,6 +364,10 @@ func balanceFixDiff(ctx context.Context, qtx *queries.Queries, f models.BalanceF
 
 func (r *Repository) applyTxToAccountWithTxn(qtx *queries.Queries, ctx context.Context, tx *models.Transaction) error {
 	l := logger.FromCtx(ctx)
+	if tx.Historical {
+		// Past data: the balance already holds it.
+		return nil
+	}
 
 	if tx.Kind == models.TransferTxKind || tx.Kind == models.DebtTxKind {
 		if err := r.removeFromAccountWithTxn(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {
@@ -398,6 +402,9 @@ func (r *Repository) applyTxToAccountWithTxn(qtx *queries.Queries, ctx context.C
 
 func (r *Repository) undoTxToAccountWithTxn(qtx *queries.Queries, ctx context.Context, tx *models.Transaction) error {
 	l := logger.FromCtx(ctx)
+	if tx.Historical {
+		return nil
+	}
 	if tx.Kind == models.TransferTxKind || tx.Kind == models.DebtTxKind {
 		if err := r.addToAccountWithTxn(qtx, ctx, tx.Account.ID, tx.Amount); err != nil {
 			l.Error("undoing transfer: remove from account", zap.Error(err), zap.String("id", tx.ID))
