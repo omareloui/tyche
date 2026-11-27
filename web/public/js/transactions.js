@@ -1424,9 +1424,7 @@ document.addEventListener("alpine:init", () => {
     skipped: [],
     // busy while the text is being read (the submit shows a spinner).
     busy: false,
-    listening: false,
-    canDictate: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
-    rec: null,
+    ...dictation(),
 
     init() {
       // focused when the drawer opens
@@ -1468,6 +1466,39 @@ document.addEventListener("alpine:init", () => {
       document.addEventListener("htmx:afterSettle", flash, { once: true });
     },
 
+  }));
+
+  // splitDescribe is the split panel's "Describe the split" box
+  // (views.splitDescribe): Enter (or its button) sends the sentence,
+  // Shift+Enter is a new line; the mic adds what's said.
+  Alpine.data("splitDescribe", (text) => ({
+    text: text ?? "",
+    busy: false,
+    ...dictation(),
+
+    destroy() {
+      this.stopDictating();
+    },
+
+    send(e) {
+      if (e.shiftKey || e.isComposing) return;
+      e.preventDefault();
+      if (this.busy || !this.text.trim()) return;
+      this.stopDictating();
+      this.$refs.go.click();
+    },
+  }));
+});
+
+// dictation adds the speech recognition (where the browser has it) to an
+// Alpine component with a text: dictate() appends what's said to it, a
+// second call stops listening.
+function dictation() {
+  return {
+    listening: false,
+    canDictate: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
+    rec: null,
+
     dictate() {
       if (this.listening) return this.stopDictating();
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1501,8 +1532,8 @@ document.addEventListener("alpine:init", () => {
     stopDictating() {
       this.rec?.stop();
     },
-  }));
-});
+  };
+}
 
 // quickAddClose closes the quick add's drawer (its text cleared before, so
 // nothing is asked).

@@ -48,6 +48,14 @@ func (h Handler) splitAnswer(r *http.Request, s *models.TxSplit, msg views.TxSpl
 		logger.FromCtx(r.Context()).Error("fetching counterparties", zap.Error(err))
 		return nil, err
 	}
+	d, err := h.splitDescribe(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	if d != nil {
+		d.Text, d.Error = msg.DescribeText, msg.DescribeError
+	}
+	msg.Describe = d
 	if r.Header.Get("HX-Target") == txDetailsPanel {
 		return views.TxSplitPanel(s, cps, msg), nil
 	}
@@ -66,7 +74,8 @@ func (h Handler) GetTxSplit(w http.ResponseWriter, r *http.Request) (templ.Compo
 // SaveTxSplit saves the split as changed: the people (person, a new one
 // add_person, one to remove) and the items' shares (share_<item id>: ids, or
 // id:units for an item shared by its units) and the charges' split modes
-// (charge_<item id>: share or equal).
+// (charge_<item id>: share or equal). A sentence (describe) sets it with AI
+// instead (describeSplit).
 func (h Handler) SaveTxSplit(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
 	s, err := h.splittableTx(r)
 	if err != nil {
@@ -75,6 +84,9 @@ func (h Handler) SaveTxSplit(w http.ResponseWriter, r *http.Request) (templ.Comp
 	l := logger.FromCtx(r.Context())
 	if err := r.ParseForm(); err != nil {
 		return nil, resperr.New(http.StatusBadRequest, "Invalid form")
+	}
+	if r.Form.Has("describe") {
+		return h.describeSplit(r, s)
 	}
 
 	known := map[string]bool{}

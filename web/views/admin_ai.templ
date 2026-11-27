@@ -22,6 +22,7 @@ const (
 	vizMagenta  = "#c74f9b"
 	vizYellow   = "#c49a1b"
 	vizLime     = "#6f9f2a"
+	vizTeal     = "#2a9bb3"
 	vizCritical = "#d03b3b"
 )
 
@@ -40,6 +41,8 @@ func aiKindColor(k models.ScanKind) string {
 		return vizYellow
 	case models.ScanQuickAdd:
 		return vizLime
+	case models.ScanSplit:
+		return vizTeal
 	default:
 		return vizBlue
 	}

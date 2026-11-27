@@ -4,17 +4,66 @@ import (
 	"fmt"
 	"github.com/omareloui/tyche/internal/formatters"
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/splitguess"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
 	"net/url"
 	"slices"
 	"strconv"
+	"strings"
 )
 
-// TxSplitMsg is what the split panel tells after an action.
+// TxSplitMsg is what the split panel tells after an action, with its
+// "Describe the split" box (Describe, nil when off): DescribeText kept and
+// DescribeError told when a sentence couldn't be read.
 type TxSplitMsg struct {
 	Notice, Error string
+	Describe      *TxSplitDescribe
+	DescribeText  string
+	DescribeError string
+}
+
+// TxSplitDescribe is the split panel's "Describe the split" box: the
+// month's descriptions read by AI (calendar month, UTC) out of Limit, the
+// text kept and why it couldn't be read.
+type TxSplitDescribe struct {
+	Used, Limit int
+	Text, Error string
+}
+
+// SplitDescribedNotice tells what a description set: how many of the items,
+// the people added to the split (found among the user's people) and the
+// new ones.
+func SplitDescribedNotice(set, of int, added, created []string) string {
+	msg := fmt.Sprintf("Set %d of the %d items.", set, of)
+	if set == of {
+		msg = "Set every item."
+	}
+	if set < of {
+		msg += " The others stay as they were."
+	}
+	if len(added) > 0 {
+		msg += " Added " + joinNames(added) + " to the split."
+	}
+	if len(created) > 0 {
+		msg += " Added " + joinNames(created) + " to your people."
+	}
+	return msg + " Adjust anything below."
+}
+
+// hasSplitItems tells some lines are items (charges follow them).
+func hasSplitItems(items []models.TxItem) bool {
+	return slices.ContainsFunc(items, func(it models.TxItem) bool { return !it.Kind.IsCharge() })
+}
+
+func joinNames(names []string) string {
+	switch len(names) {
+	case 1:
+		return names[0]
+	default:
+		return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+	}
 }
 
 // SplitRequestedNotice tells how many incomes requesting the shares were
@@ -89,6 +138,9 @@ templ TxSplitPanel(s *models.TxSplit, cps []models.Counterparty, msg TxSplitMsg)
 			}
 			if msg.Notice != "" {
 				<p class="text-sm text-emerald-400" role="status">{ msg.Notice }</p>
+			}
+			if msg.Describe != nil && hasSplitItems(tx.Items) {
+				@splitDescribe(tx.ID, msg.Describe)
 			}
 			@txDetailsSection("People") {
 				<div class="flex flex-wrap items-center gap-2">
@@ -167,6 +219,88 @@ templ TxSplitPanel(s *models.TxSplit, cps []models.Counterparty, msg TxSplitMsg)
 			}
 		</footer>
 	</form>
+}
+
+// splitDescribe sets the split from a sentence ("Ahmed had the burger, Sara
+// and me shared the pizza, drinks for everyone"), typed or said (the mic,
+// where the browser has speech recognition): PUT with describe. The box is
+// outside the panel's form (its form attribute names none), so changing it
+// saves nothing.
+templ splitDescribe(txID string, d *TxSplitDescribe) {
+	{{ id := "split-describe-" + txID }}
+	{{ out := d.Used >= d.Limit }}
+	<div
+		x-data={ fmt.Sprintf("splitDescribe(%q)", d.Text) }
+		@htmx:before-request="busy = true"
+		@htmx:after-request="busy = false"
+		class="grid gap-2 rounded-2xl bg-violet-400/5 ring-1 ring-violet-400/15 px-4 py-3"
+	>
+		<label for={ id } class="flex items-center gap-1.5 text-sm text-zinc-300">
+			@icons.Sparkles("14", &templ.Attributes{"class": "shrink-0 text-violet-300"})
+			Describe the split
+		</label>
+		<div class="relative">
+			<textarea
+				id={ id }
+				name="describe"
+				form="split-describe-none"
+				rows="2"
+				maxlength={ strconv.Itoa(splitguess.MaxTextLen) }
+				x-model="text"
+				@keydown.enter="send($event)"
+				placeholder="Ahmed had the burger and fries, Sara and me shared the pizza, drinks for everyone"
+				autocomplete="off"
+				dir="auto"
+				class="input-field pr-12 transition-opacity"
+				:readonly="busy"
+				:class="busy && 'opacity-50'"
+			></textarea>
+			<button
+				type="button"
+				x-cloak
+				x-show="canDictate"
+				@click="dictate()"
+				:disabled="busy"
+				:aria-pressed="listening"
+				:title="listening ? 'Stop listening' : 'Say it'"
+				:class="listening ? 'bg-rose-500/20 text-rose-300 animate-pulse' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'"
+				class="absolute top-2 right-2 grid place-items-center size-8 rounded-full cursor-pointer transition-colors"
+			>
+				@icons.Mic("17")
+			</button>
+		</div>
+		<p
+			x-cloak
+			x-show={ fmt.Sprintf("[...text].length > %d", splitguess.MaxTextLen*4/5) }
+			x-text={ fmt.Sprintf("[...text].length + ' / %d'", splitguess.MaxTextLen) }
+			:class={ fmt.Sprintf("[...text].length > %d ? 'text-rose-300' : 'text-zinc-500'", splitguess.MaxTextLen) }
+			class="-mt-1 text-right text-xs tabular-nums"
+		></p>
+		if d.Error != "" {
+			<p class="text-sm text-amber-200/90" role="alert">{ d.Error }</p>
+		}
+		<div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+			<span class="text-xs text-zinc-500">
+				This month
+				<span class={ "tabular-nums", templ.KV("text-amber-300", out), templ.KV("text-zinc-300", !out) }>{ strconv.Itoa(d.Used) }</span>
+				{ fmt.Sprintf(" of %d", d.Limit) }
+			</span>
+			<button
+				type="button"
+				x-ref="go"
+				hx-put={ txSplitURL(txID) }
+				hx-include={ "#" + id }
+				hx-target="#txd-panel"
+				hx-swap="innerHTML"
+				hx-disabled-elt="this"
+				:disabled="busy || !text.trim()"
+				class="btn-ghost busy-swap"
+			>
+				@icons.Sparkles("16")
+				Set the split
+			</button>
+		</div>
+	</div>
 }
 
 func splitRequestConfirm(req []models.SplitShare) string {
@@ -258,7 +392,7 @@ templ splitCharge(it *models.TxItem, cur *models.Currency) {
 		<span class="min-w-0 truncate">
 			{ it.Label() }
 			if it.Included {
-				<span class="text-zinc-500"> · in the prices</span>
+				<span class="text-zinc-500">· in the prices</span>
 			}
 		</span>
 		<span class="ml-auto inline-flex items-center gap-3">

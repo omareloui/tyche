@@ -45,10 +45,12 @@ const (
 	ScanMerchant ScanKind = "merchant"
 	// ScanQuickAdd read a quick add's text into transactions.
 	ScanQuickAdd ScanKind = "quick"
+	// ScanSplit read who had what of a split bill from a sentence.
+	ScanSplit ScanKind = "split"
 )
 
 // ScanKinds are every kind of AI call, in the order shown.
-var ScanKinds = []ScanKind{ScanReceipt, ScanSMSGuess, ScanColEstimate, ScanTaxRules, ScanVisaRules, ScanMerchant, ScanQuickAdd}
+var ScanKinds = []ScanKind{ScanReceipt, ScanSMSGuess, ScanColEstimate, ScanTaxRules, ScanVisaRules, ScanMerchant, ScanQuickAdd, ScanSplit}
 
 // ParseScanKind is the kind named s, false when there is none.
 func ParseScanKind(s string) (ScanKind, bool) {
@@ -71,6 +73,8 @@ func (k ScanKind) Label() string {
 		return "Merchant matches"
 	case ScanQuickAdd:
 		return "Quick adds"
+	case ScanSplit:
+		return "Bill splits"
 	default:
 		return "Receipt scans"
 	}
@@ -138,7 +142,7 @@ type AIUsage struct {
 	AIUsageTotals
 	Last time.Time
 	// kinds is per ScanKinds (its length: grow it with them).
-	kinds [7]AIUsageTotals
+	kinds [8]AIUsageTotals
 }
 
 func (u *AIUsage) add(s *ReceiptScan) {
