@@ -119,6 +119,11 @@ type ReceiptOCR struct {
 	// MerchantGuessesPerMonth is how many merchant matching calls a tenant
 	// may make a calendar month.
 	MerchantGuessesPerMonth int
+	// QuickModel reads quick add's texts (a call per text), Model when empty.
+	QuickModel string
+	// QuickAddsPerMonth is how many quick add texts a tenant may have read
+	// a calendar month.
+	QuickAddsPerMonth int
 }
 
 // Prices are the calls' prices.
@@ -128,7 +133,8 @@ func (c ReceiptOCR) Prices() gemini.Prices {
 
 // GetReceiptOCR reads the GEMINI_*, RECEIPT_SCANS_PER_MONTH,
 // SMS_GUESSES_PER_MONTH, COL_ESTIMATES_PER_MONTH, TAX_RULES_PER_MONTH,
-// VISA_RULES_PER_MONTH and MERCHANT_GUESSES_PER_MONTH variables.
+// VISA_RULES_PER_MONTH, MERCHANT_GUESSES_PER_MONTH and QUICK_ADDS_PER_MONTH
+// variables.
 func GetReceiptOCR() ReceiptOCR {
 	return ReceiptOCR{
 		APIKey:                  getEnvironmentValueWithDefault("GEMINI_API_KEY", ""),
@@ -145,5 +151,7 @@ func GetReceiptOCR() ReceiptOCR {
 		MerchantModel:           getEnvironmentValueWithDefault("GEMINI_MERCHANT_MODEL", ""),
 		MerchantThinkingLevel:   getEnvironmentValueWithDefault("GEMINI_MERCHANT_THINKING_LEVEL", ""),
 		MerchantGuessesPerMonth: max(getEnvironmentIntWithDefault("MERCHANT_GUESSES_PER_MONTH", 100), 0),
+		QuickModel:              getEnvironmentValueWithDefault("GEMINI_QUICK_MODEL", ""),
+		QuickAddsPerMonth:       max(getEnvironmentIntWithDefault("QUICK_ADDS_PER_MONTH", 200), 0),
 	}
 }

@@ -522,9 +522,21 @@ document.addEventListener("alpine:init", () => {
   Alpine.data("txPage", () => ({
     // reviewOnly shows the review strips, when filtering by status=review.
     reviewOnly: false,
+    // quickAddOpen shows the quick add drawer (views.QuickAddDrawer).
+    quickAddOpen: false,
     activeFilters: 0,
     // lastG is when g was pressed, for gg.
     lastG: 0,
+
+    // quickAddFromURL opens the quick add for ?quick (the PWA's shortcut),
+    // dropped from the url so a reload doesn't open it again.
+    quickAddFromURL() {
+      const u = new URL(location.href);
+      if (!u.searchParams.has("quick")) return;
+      u.searchParams.delete("quick");
+      history.replaceState(history.state, "", u);
+      if (document.querySelector("[data-quick-add]")) this.quickAddOpen = true;
+    },
 
     // syncFilters counts the filters set in the form (the search apart, the
     // date and amount ranges once each).
@@ -606,7 +618,7 @@ document.addEventListener("alpine:init", () => {
         }
         return;
       }
-      if (this.openCreateForm || document.querySelector("[data-tx-details], #drawer [data-drawer]")) return;
+      if (this.openCreateForm || this.quickAddOpen || document.querySelector("[data-tx-details], #drawer [data-drawer]")) return;
       if (e.ctrlKey) {
         if (e.shiftKey || t.closest?.("input, textarea, select, [contenteditable], form, [role=listbox], [role=menu]")) return;
         if (!this.vimScroll(e.key, t)) return;
@@ -644,6 +656,10 @@ document.addEventListener("alpine:init", () => {
           break;
         case "n":
           this.openCreateForm = true;
+          break;
+        case "a":
+          if (!document.querySelector("[data-quick-add]")) return;
+          this.quickAddOpen = true;
           break;
         case "s": {
           const scan = document.querySelector("[data-receipt-quick]");
@@ -1316,4 +1332,147 @@ function txWindowDay(form, spec) {
     day = new Date(Date.UTC(y, m - 1 + n, Math.min(d, last)));
   }
   return day.toISOString().slice(0, 10);
+}
+
+// Quick add (views.QuickAddDrawer): a sentence read into transactions to
+// review (handler.QuickAdd), typed or said.
+document.addEventListener("alpine:init", () => {
+  // quickAdd is the toast of the last quick add: what it added, the ids
+  // Undo deletes (not the recurrent occurrences it paid) and Review.
+  Alpine.store("quickAdd", {
+    toast: null,
+    timer: null,
+
+    show({ created = 0, ids = [] }) {
+      clearTimeout(this.timer);
+      this.toast = { text: `Added ${created} to review`, ids };
+      this.timer = setTimeout(() => (this.toast = null), 8000);
+    },
+
+    // undo deletes what was added, through the delete's own undo when its
+    // rows are in the list, else right away.
+    async undo() {
+      const ids = this.toast?.ids ?? [];
+      clearTimeout(this.timer);
+      this.toast = null;
+      if (!ids.length) return;
+      const want = new Set(ids);
+      const rows = [...document.querySelectorAll("#tx-list [data-sel-ids], #tx-list [data-tx][data-id]")].filter((el) =>
+        txRowIds(el).some((id) => want.has(id)),
+      );
+      const found = new Set(rows.flatMap(txRowIds));
+      if (rows.length && ids.every((id) => found.has(id))) {
+        Alpine.store("txs").removeMany(rows);
+        return;
+      }
+      const { ok, error } = await txSend("POST", "/transactions/delete", { id: ids });
+      Alpine.store("txSel").notify(ok ? `Deleted ${ids.length} ${ids.length === 1 ? "transaction" : "transactions"}` : error);
+    },
+
+    // review narrows the list to the ones to review, like the page's own
+    // filters (txPage.filterBy), keeping the others set.
+    review() {
+      clearTimeout(this.timer);
+      this.toast = null;
+      closeTxDetails();
+      Alpine.store("txSel").clear();
+      const params = new URLSearchParams(location.search);
+      params.delete("tx");
+      params.set("status", "review");
+      const url = `/transactions?${params}`;
+      htmx
+        .ajax("GET", url, { target: "#tx-body", swap: "innerHTML show:window:top" })
+        .then(() => history.replaceState({ htmx: true }, "", url));
+    },
+  });
+
+  Alpine.data("quickAddForm", () => ({
+    text: "",
+    error: "",
+    // skipped is what the last quick add left out, with why.
+    skipped: [],
+    listening: false,
+    canDictate: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
+    rec: null,
+
+    init() {
+      // focused when the drawer opens
+      this.$watch("quickAddOpen", (open) => {
+        if (open) this.$nextTick(() => this.$refs.text?.focus());
+        else this.stopDictating();
+      });
+      this.onDone = (e) => this.done(e.detail ?? {});
+      document.addEventListener("tx-quick-done", this.onDone);
+    },
+
+    destroy() {
+      document.removeEventListener("tx-quick-done", this.onDone);
+      this.stopDictating();
+    },
+
+    // submit sends the text on Enter (Shift+Enter is a new line).
+    submit(e) {
+      if (e.shiftKey || e.isComposing) return;
+      e.preventDefault();
+      if (this.text.trim()) this.$root.requestSubmit();
+    },
+
+    // done keeps the text of what was left out (none: the drawer closes),
+    // shows the toast and flashes the new rows.
+    done(d) {
+      this.skipped = d.skipped ?? [];
+      this.text = this.skipped.map((s) => s.text).filter(Boolean).join(", ");
+      Alpine.store("quickAdd").show(d);
+      if (!this.skipped.length) quickAddClose(this.$root);
+      // HX-Trigger fires before the list is swapped
+      const ids = new Set(d.ids ?? []);
+      const flash = () => {
+        for (const el of document.querySelectorAll("#tx-list [data-tx][data-id]")) {
+          if (ids.has(el.dataset.id)) el.classList.add("tx-flash");
+        }
+      };
+      document.addEventListener("htmx:afterSettle", flash, { once: true });
+    },
+
+    dictate() {
+      if (this.listening) return this.stopDictating();
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) return;
+      const rec = new SR();
+      rec.lang = document.documentElement.lang || navigator.language || "en";
+      rec.interimResults = true;
+      rec.continuous = false;
+      const before = this.text.trim();
+      rec.onresult = (e) => {
+        const said = [...e.results].map((r) => r[0].transcript).join(" ").trim();
+        this.text = [before, said].filter(Boolean).join(before && said ? ", " : "");
+      };
+      rec.onerror = (e) => {
+        if (e.error === "not-allowed" || e.error === "service-not-allowed") this.canDictate = false;
+      };
+      rec.onend = () => {
+        this.listening = false;
+        this.rec = null;
+      };
+      this.rec = rec;
+      this.listening = true;
+      try {
+        rec.start();
+      } catch {
+        this.listening = false;
+        this.rec = null;
+      }
+    },
+
+    stopDictating() {
+      this.rec?.stop();
+    },
+  }));
+});
+
+// quickAddClose closes the quick add's drawer (its text cleared before, so
+// nothing is asked).
+function quickAddClose(form) {
+  const root = form.closest("[data-drawer]");
+  if (root) Alpine.$data(root).close();
 }

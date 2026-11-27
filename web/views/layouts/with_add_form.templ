@@ -26,7 +26,7 @@ templ WithCreateFormActions(
 		<div x-data="{openCreateForm:false}" x-init="createFormFromURL($data)">
 			@components.Container() {
 				@components.PageHeader(pageTitle) {
-					<div class="flex items-center gap-2">
+					<div class="flex shrink-0 items-center gap-1.5 sm:gap-2">
 						if actions != nil {
 							@actions
 						}

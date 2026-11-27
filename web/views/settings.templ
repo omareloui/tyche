@@ -34,6 +34,9 @@ type SettingsData struct {
 	// AIMerchantsUsed are the merchant matching calls made this calendar
 	// month (UTC) out of AIMerchantsLimit.
 	AIMerchantsUsed, AIMerchantsLimit int
+	// AIQuickUsed are the quick adds read by AI this calendar month (UTC)
+	// out of AIQuickLimit.
+	AIQuickUsed, AIQuickLimit int
 
 	// Currencies are the fiat ones, to pick the main currency from;
 	// ShownCurrencies the ones in use, for the salary.
@@ -68,6 +71,10 @@ type SettingsAccountFD struct {
 type SettingsAIFD struct {
 	// Merchants matches the sms' unknown merchants with AI.
 	Merchants form.FDInput
+	// Quick reads quick add's sentences with AI.
+	Quick form.FDInput
+	// MerchantsAvailable and QuickAvailable tell which are on the server.
+	MerchantsAvailable, QuickAvailable bool
 }
 
 // The settings cards, the ids they swap and are linked to by.
@@ -316,15 +323,31 @@ templ SettingsAccountCard(d *SettingsData) {
 templ SettingsAICard(d *SettingsData) {
 	@settingsCard(d, SettingsAI, "AI", "Features that send some of your data to Google's Gemini, each off until you turn it on.",
 		icons.Sparkles("18"), "bg-violet-400/10", nil) {
-		<div class="grid gap-2">
-			@form.Toggle("Match merchants with AI", "ai_merchants", "settings", nil, d.AI.Merchants, nil)
-			<p class="text-sm text-zinc-500">
-				When a bank SMS names a merchant you have none for (like "AMZN MKTP EG*4821"), the AI matches it to one of your
-				merchants or creates it with a clean name and a category. Only the merchant names and your expense categories' names
-				are sent: never people, amounts or the SMS. The transactions still come for review, and a wrong match is undone from them.
-			</p>
-			@aiQuota(d.AIMerchantsUsed, d.AIMerchantsLimit, "checks", "One check covers a batch of SMS with new merchants. Merchants it already matched cost nothing again.",
-				"Used up: until then, new merchants are named after the SMS, as without AI.")
+		<div class="grid gap-6">
+			if d.AI.MerchantsAvailable {
+				<div class="grid gap-2">
+					@form.Toggle("Match merchants with AI", "ai_merchants", "settings", nil, d.AI.Merchants, nil)
+					<p class="text-sm text-zinc-500">
+						When a bank SMS names a merchant you have none for (like "AMZN MKTP EG*4821"), the AI matches it to one of your
+						merchants or creates it with a clean name and a category. Only the merchant names and your expense categories' names
+						are sent: never people, amounts or the SMS. The transactions still come for review, and a wrong match is undone from them.
+					</p>
+					@aiQuota(d.AIMerchantsUsed, d.AIMerchantsLimit, "checks", "One check covers a batch of SMS with new merchants. Merchants it already matched cost nothing again.",
+						"Used up: until then, new merchants are named after the SMS, as without AI.")
+				</div>
+			}
+			if d.AI.QuickAvailable {
+				<div class="grid gap-2">
+					@form.Toggle("Quick add with AI", "ai_quick_add", "settings", nil, d.AI.Quick, nil)
+					<p class="text-sm text-zinc-500">
+						Type or say what you spent on the transactions page's Quick add ("coffee 85 cib yesterday, uber 120", "lent Ahmed 500")
+						and the AI turns it into transactions, added to review. What you type is sent, with your accounts', categories' and most
+						used counterparties' names (people included). Quick add only shows while this is on.
+					</p>
+					@aiQuota(d.AIQuickUsed, d.AIQuickLimit, "quick adds", "One per text read by AI. A plain amount, or a name and an amount, costs nothing.",
+						"Used up: until then, Quick add only reads an amount, or a name and an amount.")
+				</div>
+			}
 		</div>
 	}
 }

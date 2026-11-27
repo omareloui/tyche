@@ -295,9 +295,15 @@ input[type="number"] {
   @apply hidden sm:inline;
 }
 
-/* The transactions page's "Scan receipt", a label around its file input. */
+/* The transactions page's "Quick add" and "Scan receipt" (a label around
+   its file input): icons only until there's room for the labels by the
+   title and the add button. */
 .btn-scan {
-  @apply inline-flex shrink-0 items-center justify-center gap-1.5 size-10 rounded-full font-semibold text-amber-300 bg-amber-400/10 ring-1 ring-amber-400/30 cursor-pointer transition hover:bg-amber-400/20 active:scale-[.98] sm:w-auto sm:pl-3.5 sm:pr-4 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-amber-300;
+  @apply inline-flex shrink-0 items-center justify-center gap-1.5 size-10 rounded-full font-semibold text-amber-300 bg-amber-400/10 ring-1 ring-amber-400/30 cursor-pointer transition hover:bg-amber-400/20 active:scale-[.98] lg:w-auto lg:pl-3.5 lg:pr-4 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-amber-300;
+}
+
+.btn-scan-label {
+  @apply hidden lg:inline;
 }
 
 .btn-ghost {
@@ -914,6 +920,26 @@ input[type="number"] {
   }
   to {
     stroke-dashoffset: -100;
+  }
+}
+
+/* Rows a quick add just added (transactions.js). */
+.tx-flash {
+  animation: tx-flash 1.6s ease-out;
+}
+
+@keyframes tx-flash {
+  from {
+    background-color: color-mix(in oklab, var(--color-violet-400) 22%, transparent);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tx-flash {
+    animation: none;
   }
 }
 

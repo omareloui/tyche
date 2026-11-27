@@ -90,12 +90,14 @@ templ Transactions(
 	list TxListData,
 	fd *TransactionFD, accounts []models.Account,
 	knds []models.TxKind, cats []models.Category,
-	cps []models.Counterparty, gls []models.Goal, openTx string) {
+	cps []models.Counterparty, gls []models.Goal, openTx string, quick *QuickAddQuota) {
 	@layouts.WithCreateFormActions(claims, "Transactions", "New transaction", balances,
 		txCreateSlot(CreateTransactionForm(fd, accounts, knds, cats, cps, &claims.DefaultCurrency)),
-		txScanAction(fd.Receipt.Enabled)) {
+		txHeaderActions(fd.Receipt.Enabled, quick != nil)) {
 		<div
 			x-data="txPage"
+			x-init="quickAddFromURL()"
+			@quick-add-open.window="quickAddOpen = true"
 			@keydown.window="onKey($event)"
 			@click.capture="onSelectClick($event)"
 			@click="onClick($event)"
@@ -106,8 +108,12 @@ templ Transactions(
 			</div>
 			@txDetailsSlot(openTx)
 			@txUndoToast()
+			if quick != nil {
+				@QuickAddDrawer(quick)
+				@quickAddToast()
+			}
 			@txSelectionBar()
-			@txShortcutsDialog(fd.Receipt.Enabled)
+			@txShortcutsDialog(fd.Receipt.Enabled, quick != nil)
 		</div>
 	}
 }
@@ -357,6 +363,7 @@ templ txFilterBar(f *models.TxFilter, start models.MonthStart, accs []models.Acc
 				@txFilterCombo(models.TxFilterSource, "Source", string(f.Source), false, []form.ComboOption{
 					{Value: string(models.TxSourceSMS), Label: "From SMS", Leading: icons.Smartphone("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 					{Value: string(models.TxSourceImport), Label: "Imported (CSV)", Leading: icons.Upload("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
+					{Value: string(models.TxSourceQuick), Label: "Quick add", Leading: icons.Sparkles("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 					{Value: string(models.TxSourceManual), Label: "Added by hand", Leading: icons.Pencil("16", &templ.Attributes{"class": "shrink-0 text-zinc-400"})},
 				})
 			}
@@ -611,8 +618,12 @@ type txShortcut struct {
 	Desc string
 }
 
-// txScanShortcut is only listed with receipt scanning on.
-const txScanShortcut = "Scan a receipt"
+// txScanShortcut is only listed with receipt scanning on, txQuickShortcut
+// with quick add.
+const (
+	txScanShortcut  = "Scan a receipt"
+	txQuickShortcut = "Quick add from a sentence"
+)
 
 type txShortcutGroup struct {
 	Title string
@@ -644,6 +655,7 @@ var txShortcutGroups = []txShortcutGroup{
 	}},
 	{"Other", []txShortcut{
 		{[]string{"n"}, "New transaction"},
+		{[]string{"a"}, txQuickShortcut},
 		{[]string{"s"}, txScanShortcut},
 		{[]string{"?"}, "Show these shortcuts"},
 	}},
@@ -651,7 +663,7 @@ var txShortcutGroups = []txShortcutGroup{
 
 // txShortcutsDialog lists the keyboard shortcuts, opened with ? or from
 // txShortcuts' button.
-templ txShortcutsDialog(scan bool) {
+templ txShortcutsDialog(scan, quick bool) {
 	<dialog
 		id="tx-shortcuts"
 		aria-labelledby="tx-shortcuts-title"
@@ -682,7 +694,7 @@ templ txShortcutsDialog(scan bool) {
 						<h3 class="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">{ g.Title }</h3>
 						<dl class="grid gap-1.5 text-sm">
 							for _, it := range g.Items {
-								if it.Desc != txScanShortcut || scan {
+								if (it.Desc != txScanShortcut || scan) && (it.Desc != txQuickShortcut || quick) {
 									<div class="flex items-center justify-between gap-4">
 										<dt class="text-zinc-300">{ it.Desc }</dt>
 										<dd class="flex shrink-0 gap-1">

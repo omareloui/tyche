@@ -41,4 +41,6 @@ type TxDetails struct {
 	// MerchantGuess is the AI's match giving it its counterparty, nil when
 	// it wasn't.
 	MerchantGuess *MerchantGuess
+	// QuickAddText is the text it was quick added from, "" when it wasn't.
+	QuickAddText string
 }

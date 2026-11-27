@@ -327,7 +327,7 @@ templ txScanAction(on bool) {
 	if on {
 		<label class="btn-scan" title="Scan a receipt">
 			@icons.Sparkles("17")
-			<span class="btn-add-label">Scan receipt</span>
+			<span class="btn-scan-label">Scan receipt</span>
 			<input type="file" accept="image/*" class="sr-only" aria-label="Scan a receipt" data-receipt-quick @change="openCreateForm = true"/>
 		</label>
 	}

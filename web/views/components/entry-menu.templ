@@ -54,7 +54,7 @@ templ EntryMenuItem(label string, attrs templ.Attributes, opts ...EntryMenuItemO
 		}
 		<span class="flex-1">{ label }</span>
 		if o.shortcut != "" {
-			<kbd class="hidden [@media(pointer:fine)]:inline ml-4 min-w-5 px-1 rounded border border-white/10 text-center font-sans text-xs text-zinc-500">{ o.shortcut }</kbd>
+			<kbd class="hidden md:[@media(pointer:fine)]:inline ml-4 min-w-5 px-1 rounded border border-white/10 text-center font-sans text-xs text-zinc-500">{ o.shortcut }</kbd>
 		}
 	</button>
 }

@@ -68,25 +68,45 @@ func (h *Handler) settingsData(ctx context.Context) (*views.SettingsData, error)
 	if err != nil {
 		return nil, err
 	}
-	var aiUsed, aiLimit int
-	if h.merchantGuess != nil {
+	aiQuick, err := h.repo.GetAIQuickAdd(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var aiUsed, aiLimit, quickUsed, quickLimit int
+	if h.merchantGuess != nil || h.txGuess != nil {
 		tenantID, err := repository.TenantIDFromCtx(ctx)
 		if err != nil {
 			return nil, err
 		}
-		left, limit, err := h.repo.AICallsLeft(ctx, tenantID, models.ScanMerchant, h.ocrCfg.MerchantGuessesPerMonth, time.Now())
-		if err != nil {
-			return nil, err
+		if h.merchantGuess != nil {
+			left, limit, err := h.repo.AICallsLeft(ctx, tenantID, models.ScanMerchant, h.ocrCfg.MerchantGuessesPerMonth, time.Now())
+			if err != nil {
+				return nil, err
+			}
+			aiUsed, aiLimit = limit-left, limit
 		}
-		aiUsed, aiLimit = limit-left, limit
+		if h.txGuess != nil {
+			left, limit, err := h.repo.AICallsLeft(ctx, tenantID, models.ScanQuickAdd, h.ocrCfg.QuickAddsPerMonth, time.Now())
+			if err != nil {
+				return nil, err
+			}
+			quickUsed, quickLimit = limit-left, limit
+		}
 	}
 
 	d := &views.SettingsData{
 		Badge:            h.badges.Enabled(),
-		AIAvailable:      h.merchantGuess != nil,
+		AIAvailable:      h.merchantGuess != nil || h.txGuess != nil,
 		AIMerchantsUsed:  aiUsed,
 		AIMerchantsLimit: aiLimit,
-		AI:               views.SettingsAIFD{Merchants: form.FDInput{Value: formatBooleanIfNonZero(aiMerchants)}},
+		AIQuickUsed:      quickUsed,
+		AIQuickLimit:     quickLimit,
+		AI: views.SettingsAIFD{
+			Merchants:          form.FDInput{Value: formatBooleanIfNonZero(aiMerchants)},
+			Quick:              form.FDInput{Value: formatBooleanIfNonZero(aiQuick)},
+			MerchantsAvailable: h.merchantGuess != nil,
+			QuickAvailable:     h.txGuess != nil,
+		},
 		Profile: views.SettingsProfileFD{
 			FirstName: form.FDInput{Value: usr.FirstName},
 			LastName:  form.FDInput{Value: usr.LastName},
@@ -350,14 +370,24 @@ func parseBirthYear(s string, now time.Time) (int, bool) {
 
 // SetAISettings turns the AI features the user opts in to on or off.
 func (h *Handler) SetAISettings(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	if h.merchantGuess == nil {
+	if h.merchantGuess == nil && h.txGuess == nil {
 		return nil, errNoAI
 	}
-	on := r.FormValue("ai_merchants") == "on"
-	if err := h.repo.SetAIMerchants(r.Context(), on); err != nil {
-		return nil, err
+	// only the features shown are sent
+	if h.merchantGuess != nil {
+		on := r.FormValue("ai_merchants") == "on"
+		if err := h.repo.SetAIMerchants(r.Context(), on); err != nil {
+			return nil, err
+		}
+		logger.FromCtx(r.Context()).Info("set ai merchant matching", zap.Bool("on", on))
 	}
-	logger.FromCtx(r.Context()).Info("set ai merchant matching", zap.Bool("on", on))
+	if h.txGuess != nil {
+		on := r.FormValue("ai_quick_add") == "on"
+		if err := h.repo.SetAIQuickAdd(r.Context(), on); err != nil {
+			return nil, err
+		}
+		logger.FromCtx(r.Context()).Info("set ai quick add", zap.Bool("on", on))
+	}
 	return h.settingsSaved(w, r, views.SettingsAI, views.SettingsAICard)
 }
 

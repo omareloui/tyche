@@ -92,6 +92,7 @@ templ TxDetailsPanel(d *models.TxDetails, def *models.Currency) {
 			@txDetailsMonth(d, def)
 			@txDetailsLinked(d, def)
 			@txDetailsSMS(d)
+			@txDetailsQuickAdd(d)
 			if len(d.RecurrentTxs) > 0 {
 				@txDetailsSection("Other occurrences") {
 					for _, rt := range d.RecurrentTxs {
@@ -634,6 +635,21 @@ templ txDetailsSMS(d *models.TxDetails) {
 						}
 					</p>
 				}
+			</div>
+		}
+	}
+}
+
+// txDetailsQuickAdd is the text the transaction was quick added from.
+templ txDetailsQuickAdd(d *models.TxDetails) {
+	if d.QuickAddText != "" {
+		@txDetailsSection("Quick add") {
+			<div class="txd-card grid gap-2">
+				<p class="whitespace-pre-wrap break-words text-sm text-zinc-200">{ d.QuickAddText }</p>
+				<p class="flex items-center gap-1.5 text-xs text-zinc-500">
+					@icons.Zap("12")
+					Added from this text
+				</p>
 			</div>
 		}
 	}

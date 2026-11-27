@@ -33,6 +33,7 @@ import (
 	"github.com/omareloui/tyche/internal/smsguess"
 	"github.com/omareloui/tyche/internal/smstemplates"
 	"github.com/omareloui/tyche/internal/taxguess"
+	"github.com/omareloui/tyche/internal/txguess"
 	"github.com/omareloui/tyche/internal/valid"
 	"github.com/omareloui/tyche/internal/vault"
 	"github.com/omareloui/tyche/internal/visaguess"
@@ -102,6 +103,7 @@ func main() {
 		h.SetVisaGuess(visaguess.New(ocrCfg.APIKey, ocrCfg.Model, ocrCfg.ThinkingLevel))
 		// on every ingest with unknown merchants: a cheap model fits
 		h.SetMerchantGuess(merchantguess.New(ocrCfg.APIKey, cmp.Or(ocrCfg.MerchantModel, ocrCfg.Model), cmp.Or(ocrCfg.MerchantThinkingLevel, ocrCfg.ThinkingLevel)))
+		h.SetTxGuess(txguess.New(ocrCfg.APIKey, cmp.Or(ocrCfg.QuickModel, ocrCfg.Model), ocrCfg.ThinkingLevel))
 	} else {
 		h.SetReceiptOCR(nil, ocrCfg)
 	}

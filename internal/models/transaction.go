@@ -41,7 +41,11 @@ type Transaction struct {
 	// MerchantGuessID is the AI merchant guess (MerchantGuess) giving an sms
 	// transaction its counterparty, only set when creating it.
 	MerchantGuessID string
-	CreatedAt       time.Time
+	// QuickAddID is the quick add (a sentence) it was added from.
+	QuickAddID string
+	// QuickAddText is that quick add's text, loaded with the list.
+	QuickAddText string
+	CreatedAt  time.Time
 	// ReimbursesID is the expense this income pays back (part of).
 	ReimbursesID string
 	// Reimbursed is the total of the incomes reimbursing this expense.

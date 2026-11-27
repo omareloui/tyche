@@ -91,6 +91,9 @@ SELECT
     CAST(COALESCE((
         SELECT sm.body FROM sms_messages AS sm WHERE sm.transaction_id = t.id LIMIT 1
     ), '') AS TEXT) AS sms_body,
+    CAST(COALESCE((
+        SELECT qa.text FROM quick_adds AS qa WHERE qa.id = t.quick_add_id
+    ), '') AS TEXT) AS quick_add_text,
     CAST((
         SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id
     ) AS FLOAT) AS reimbursed
@@ -177,6 +180,7 @@ WHERE
         SELECT 1 FROM sms_messages AS sm WHERE sm.transaction_id = t.id
     ) = sqlc.narg(from_sms))
     AND (sqlc.narg(from_import) IS NULL OR (t.import_id IS NOT NULL) = sqlc.narg(from_import))
+    AND (sqlc.narg(from_quick) IS NULL OR (t.quick_add_id IS NOT NULL) = sqlc.narg(from_quick))
     AND (sqlc.narg(has_receipt) IS NULL OR EXISTS (
         SELECT 1 FROM receipts AS rc WHERE rc.transaction_id = t.id
     ) = sqlc.narg(has_receipt))
@@ -301,6 +305,7 @@ WHERE
         SELECT 1 FROM sms_messages AS sm WHERE sm.transaction_id = t.id
     ) = sqlc.narg(from_sms))
     AND (sqlc.narg(from_import) IS NULL OR (t.import_id IS NOT NULL) = sqlc.narg(from_import))
+    AND (sqlc.narg(from_quick) IS NULL OR (t.quick_add_id IS NOT NULL) = sqlc.narg(from_quick))
     AND (sqlc.narg(has_receipt) IS NULL OR EXISTS (
         SELECT 1 FROM receipts AS rc WHERE rc.transaction_id = t.id
     ) = sqlc.narg(has_receipt))
@@ -411,6 +416,9 @@ SELECT
     CAST(COALESCE((
         SELECT sm.body FROM sms_messages AS sm WHERE sm.transaction_id = t.id LIMIT 1
     ), '') AS TEXT) AS sms_body,
+    CAST(COALESCE((
+        SELECT qa.text FROM quick_adds AS qa WHERE qa.id = t.quick_add_id
+    ), '') AS TEXT) AS quick_add_text,
     CAST((
         SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id
     ) AS FLOAT) AS reimbursed
@@ -700,6 +708,9 @@ SELECT
     CAST(COALESCE((
         SELECT sm.body FROM sms_messages AS sm WHERE sm.transaction_id = t.id LIMIT 1
     ), '') AS TEXT) AS sms_body,
+    CAST(COALESCE((
+        SELECT qa.text FROM quick_adds AS qa WHERE qa.id = t.quick_add_id
+    ), '') AS TEXT) AS quick_add_text,
     CAST((
         SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id
     ) AS FLOAT) AS reimbursed
@@ -767,6 +778,9 @@ SELECT
     CAST(COALESCE((
         SELECT sm.body FROM sms_messages AS sm WHERE sm.transaction_id = t.id LIMIT 1
     ), '') AS TEXT) AS sms_body,
+    CAST(COALESCE((
+        SELECT qa.text FROM quick_adds AS qa WHERE qa.id = t.quick_add_id
+    ), '') AS TEXT) AS quick_add_text,
     CAST((
         SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id
     ) AS FLOAT) AS reimbursed
@@ -865,6 +879,9 @@ SELECT
     CAST(COALESCE((
         SELECT sm.body FROM sms_messages AS sm WHERE sm.transaction_id = t.id LIMIT 1
     ), '') AS TEXT) AS sms_body,
+    CAST(COALESCE((
+        SELECT qa.text FROM quick_adds AS qa WHERE qa.id = t.quick_add_id
+    ), '') AS TEXT) AS quick_add_text,
     CAST((
         SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id
     ) AS FLOAT) AS reimbursed
@@ -934,6 +951,9 @@ SELECT
     CAST(COALESCE((
         SELECT sm.body FROM sms_messages AS sm WHERE sm.transaction_id = t.id LIMIT 1
     ), '') AS TEXT) AS sms_body,
+    CAST(COALESCE((
+        SELECT qa.text FROM quick_adds AS qa WHERE qa.id = t.quick_add_id
+    ), '') AS TEXT) AS quick_add_text,
     CAST((
         SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id
     ) AS FLOAT) AS reimbursed
@@ -1053,6 +1073,9 @@ SELECT
     CAST(COALESCE((
         SELECT sm.body FROM sms_messages AS sm WHERE sm.transaction_id = t.id LIMIT 1
     ), '') AS TEXT) AS sms_body,
+    CAST(COALESCE((
+        SELECT qa.text FROM quick_adds AS qa WHERE qa.id = t.quick_add_id
+    ), '') AS TEXT) AS quick_add_text,
     CAST((
         SELECT TOTAL(rt.amount) FROM transactions AS rt WHERE rt.reimburses_id = t.id
     ) AS FLOAT) AS reimbursed

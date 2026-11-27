@@ -111,6 +111,7 @@ func New(h *handler.Handler) Router {
 	mux.Handle("POST /transactions/delete", handle(h.DeleteTransactions))
 	mux.Handle("POST /transactions/bulk-edit/form", handle(h.BulkEditTransactionsForm))
 	mux.Handle("POST /transactions/bulk-edit", handle(h.BulkEditTransactions))
+	mux.Handle("POST /transactions/quick", handle(h.QuickAdd, middleware.HTMXOnly))
 	mux.Handle("GET /transactions/{id}/reimburses", handle(h.GetReimbursePicker))
 	mux.Handle("PUT /transactions/{id}/reimburses", handle(h.LinkReimbursement))
 	mux.Handle("DELETE /transactions/{id}/reimburses", handle(h.UnlinkReimbursement))

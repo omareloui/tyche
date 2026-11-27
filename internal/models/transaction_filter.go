@@ -24,6 +24,8 @@ const (
 	TxSourceAny    TxSource = ""
 	TxSourceSMS    TxSource = "sms"
 	TxSourceImport TxSource = "import"
+	// TxSourceQuick are the quick added ones (from a sentence).
+	TxSourceQuick  TxSource = "quick"
 	TxSourceManual TxSource = "manual"
 )
 
@@ -150,7 +152,7 @@ func ParseTxFilter(v url.Values) TxFilter {
 		f.Status = s
 	}
 	switch s := TxSource(v.Get(TxFilterSource)); s {
-	case TxSourceSMS, TxSourceImport, TxSourceManual:
+	case TxSourceSMS, TxSourceImport, TxSourceQuick, TxSourceManual:
 		f.Source = s
 	}
 	switch s := TxReceipt(v.Get(TxFilterReceipt)); s {

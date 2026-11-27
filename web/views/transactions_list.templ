@@ -634,7 +634,7 @@ templ txTile(tx *models.Transaction, v *txView) {
 
 templ txChips(tx *models.Transaction, v *txView) {
 	{{ isRefund := tx.Kind == models.RefundTxKind }}
-	{{ hasChips := isRefund || tx.Category != nil || v.isScheduled || tx.FromSMS || tx.FromImport || tx.RecurrentTxID != "" || tx.Goal != nil || len(tx.Reimbursements) > 0 || len(tx.BoughtBy) > 0 || tx.ForOthers || tx.ItemsCount > 0 || tx.Receipt != nil || len(tx.Wishes) > 0 || tx.Note != "" || len(tx.Tags) > 0 }}
+	{{ hasChips := isRefund || tx.Category != nil || v.isScheduled || tx.FromSMS || tx.FromImport || tx.QuickAddID != "" || tx.RecurrentTxID != "" || tx.Goal != nil || len(tx.Reimbursements) > 0 || len(tx.BoughtBy) > 0 || tx.ForOthers || tx.ItemsCount > 0 || tx.Receipt != nil || len(tx.Wishes) > 0 || tx.Note != "" || len(tx.Tags) > 0 }}
 	if hasChips {
 		<div class="flex flex-wrap items-center gap-1.5 mt-1.5">
 			if isRefund {
@@ -684,7 +684,7 @@ templ txChips(tx *models.Transaction, v *txView) {
 				<span tabindex="0" class="group/popup relative chip bg-amber-400/10 text-amber-300 outline-none">
 					@icons.Message("12")
 					Needs review
-					@txSMSPopup(tx.SMSBody, "From SMS, needs review", txSalaryLike(ctx, tx))
+					@txReviewPopup(tx, txSalaryLike(ctx, tx))
 				</span>
 			} else if tx.FromSMS {
 				<span tabindex="0" class="group/popup relative chip outline-none">
@@ -697,6 +697,15 @@ templ txChips(tx *models.Transaction, v *txView) {
 				<span class="chip" title="Imported from a CSV file">
 					@icons.Upload("12")
 					CSV
+				</span>
+			}
+			if tx.QuickAddID != "" && !tx.NeedsReview {
+				<span tabindex="0" class="group/popup relative chip outline-none">
+					@icons.Zap("12")
+					Quick
+					if tx.QuickAddText != "" {
+						@txSMSPopup(tx.QuickAddText, "", txSalaryLike(ctx, tx))
+					}
 				</span>
 			}
 			if tx.Goal != nil {
@@ -862,6 +871,32 @@ templ TxReviewCategoryPicker(tx *models.Transaction, cats []models.Category) {
 
 // txSMSPopup shows the SMS a transaction was created from on hovering its
 // parent group, blurred with the balances when hide (it has the amount).
+// txReviewPopup tells why a transaction needs review: the SMS or the quick
+// add's text it came from, a CSV import, a recurring one paid by itself, or
+// sent back to review.
+templ txReviewPopup(tx *models.Transaction, hide bool) {
+	switch {
+		case tx.FromSMS:
+			@txSMSPopup(tx.SMSBody, "From SMS, needs review", hide)
+		case tx.QuickAddText != "":
+			@txSMSPopup(tx.QuickAddText, "Quick added, needs review", hide)
+		case tx.QuickAddID != "":
+			@txReviewHint("Quick added, needs review")
+		case tx.FromImport:
+			@txReviewHint("Imported from a CSV file, needs review")
+		case tx.RecurrentTxID != "":
+			@txReviewHint("A recurring one paid by itself, needs review")
+		default:
+			@txReviewHint("Sent to review: check it, then mark it reviewed")
+	}
+}
+
+templ txReviewHint(hint string) {
+	@components.HoverPopup("w-60 max-w-[80vw] px-3 py-2 text-xs text-amber-400") {
+		<p>{ hint }</p>
+	}
+}
+
 templ txSMSPopup(body, hint string, hide bool) {
 	@components.HoverPopup("w-72 max-w-[80vw] px-3 py-2 text-sm text-zinc-200") {
 		<p class={ "whitespace-pre-wrap break-words", templ.KV("sensitive", hide) }>{ body }</p>

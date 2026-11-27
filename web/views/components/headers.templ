@@ -8,8 +8,8 @@ templ MainHeader(text string) {
 
 // PageHeader is the page's title with its actions (children) on the right.
 templ PageHeader(text string) {
-	<div class="flex items-center justify-between gap-4 mb-6">
-		<h1 class="text-2xl sm:text-3xl font-bold font-(family-name:--font-biorhyme-expanded)">{ text }</h1>
+	<div class="flex items-center justify-between gap-3 sm:gap-4 mb-6">
+		<h1 class="min-w-0 text-2xl sm:text-3xl font-bold font-(family-name:--font-biorhyme-expanded)">{ text }</h1>
 		{ children... }
 	</div>
 }

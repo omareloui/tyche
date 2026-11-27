@@ -31,6 +31,11 @@
       "icons": [{ "src": "/favicons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
+      "name": "Quick add",
+      "url": "/transactions?quick",
+      "icons": [{ "src": "/favicons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
       "name": "Transactions",
       "url": "/transactions",
       "icons": [{ "src": "/favicons/icon-192.png", "sizes": "192x192", "type": "image/png" }]

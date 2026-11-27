@@ -1,0 +1,205 @@
+package views
+
+import (
+	"fmt"
+
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/form"
+	"github.com/omareloui/tyche/web/views/icons"
+)
+
+// QuickAddErrorID is the quick add's error slot (a 422 swapped in).
+const QuickAddErrorID = "quick-add-error"
+
+// QuickAddQuota is the user's quick adds read by AI this calendar month
+// (UTC) out of Limit.
+type QuickAddQuota struct {
+	Used, Limit int
+}
+
+const quickAddQuotaID = "quick-add-quota"
+
+// quickAddQuota tells the month's quick adds with AI against the limit.
+templ quickAddQuota(q *QuickAddQuota, oob bool) {
+	{{ out := q.Used >= q.Limit }}
+	<p
+		id={ quickAddQuotaID }
+		if oob {
+			hx-swap-oob="true"
+		}
+		class="flex flex-wrap items-center justify-between gap-x-3 text-xs text-zinc-500">
+		<span>
+			This month
+			<span class={ "tabular-nums", templ.KV("text-amber-300", out), templ.KV("text-zinc-300", !out) }>{ fmt.Sprint(q.Used) }</span>
+			{ fmt.Sprintf(" of %d with AI", q.Limit) }
+		</span>
+		if out {
+			<span class="text-amber-300">Until the 1st, only an amount or a name and an amount</span>
+		} else {
+			<span>An amount, or a name and an amount, is free</span>
+		}
+	</p>
+}
+
+// QuickAddQuotaOOB updates the quota after a quick add.
+templ QuickAddQuotaOOB(q *QuickAddQuota) {
+	@quickAddQuota(q, true)
+}
+
+// QuickAddBind shows the quick add drawer (txPage's).
+const QuickAddBind = "quickAddOpen"
+
+// txHeaderActions are the transactions page's actions by the add button:
+// Quick add and Scan receipt, in one menu when both are on (so the header
+// fits by the title at any width), else the one that is.
+templ txHeaderActions(scan, quick bool) {
+	switch {
+		case scan && quick:
+			<div
+				class="relative"
+				x-data="{ open: false }"
+				@click.outside="open = false"
+				@keydown.escape.stop="open = false"
+			>
+				<button
+					type="button"
+					class="btn-scan"
+					title="Quick add or scan a receipt"
+					aria-label="Quick actions"
+					aria-haspopup="menu"
+					:aria-expanded="open"
+					@click="open = !open"
+				>
+					@icons.Zap("17")
+				</button>
+				<div
+					x-cloak
+					x-show="open"
+					x-transition.origin.top.right.duration.100ms
+					role="menu"
+					class={ components.PopupSurface, "absolute top-full right-0 z-30 mt-2 grid gap-0.5 p-1.5 rounded-xl min-w-52" }
+				>
+					<button
+						type="button"
+						role="menuitem"
+						data-quick-add
+						class={ txHeaderMenuItem }
+						@click="open = false; $dispatch('quick-add-open')"
+					>
+						@icons.Zap("16", &templ.Attributes{"class": "shrink-0 text-amber-300"})
+						<span class="flex-1">Quick add</span>
+						<kbd class={ txHeaderMenuKbd }>a</kbd>
+					</button>
+					<label role="menuitem" tabindex="0" class={ txHeaderMenuItem } @keydown.enter.prevent="$el.querySelector('input').click()">
+						@icons.Sparkles("16", &templ.Attributes{"class": "shrink-0 text-amber-300"})
+						<span class="flex-1">Scan receipt</span>
+						<kbd class={ txHeaderMenuKbd }>s</kbd>
+						<input type="file" accept="image/*" class="sr-only" tabindex="-1" aria-label="Scan a receipt" data-receipt-quick @change="open = false; openCreateForm = true"/>
+					</label>
+				</div>
+			</div>
+		case quick:
+			<button type="button" class="btn-scan" title="Quick add from a sentence" aria-label="Quick add" data-quick-add @click="$dispatch('quick-add-open')">
+				@icons.Zap("17")
+			</button>
+		case scan:
+			@txScanAction(true)
+	}
+}
+
+const (
+	txHeaderMenuItem = "flex items-center gap-2.5 w-full px-2.5 py-1.5 rounded-md text-left text-base whitespace-nowrap text-zinc-200 cursor-pointer outline-none transition-colors hover:bg-white/8 hover:text-white focus-visible:bg-white/8 focus-visible:text-white"
+	txHeaderMenuKbd  = "hidden md:[@media(pointer:fine)]:inline ml-4 min-w-5 px-1 rounded border border-white/10 text-center font-sans text-xs text-zinc-500"
+)
+
+// QuickAddDrawer reads a sentence ("coffee 85 cib yesterday, uber 120")
+// into transactions to review, typed or said (the mic, where the browser
+// has speech recognition).
+templ QuickAddDrawer(quota *QuickAddQuota) {
+	@components.Drawer(components.DrawerProps{Label: "Quick add", Bind: QuickAddBind}) {
+		@form.DrawerForm(form.DrawerFormProps{
+			Title: "Quick add", Method: "post", URL: "/transactions/quick", Submit: "Add",
+			Target: "#tx-list", Swap: "outerHTML",
+			Attrs: templ.Attributes{
+				"x-data":              "quickAddForm",
+				"hx-disabled-elt":     "find button[type=submit]",
+				"@htmx:before-request": "error = ''",
+			},
+		}) {
+			<div class="grid gap-2">
+				<label for="quick-add-text" class="text-sm text-zinc-400">What did you spend, earn or move?</label>
+				<div class="relative">
+					<textarea
+						id="quick-add-text"
+						name="text"
+						rows="2"
+						maxlength="1000"
+						x-ref="text"
+						x-model="text"
+						@keydown.enter="submit($event)"
+						placeholder="coffee 85 cib yesterday, uber 120"
+						autocomplete="off"
+						dir="auto"
+						class="input-field pr-12"
+					></textarea>
+					<button
+						type="button"
+						x-cloak
+						x-show="canDictate"
+						@click="dictate()"
+						:aria-pressed="listening"
+						:title="listening ? 'Stop listening' : 'Say it'"
+						:class="listening ? 'bg-rose-500/20 text-rose-300 animate-pulse' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'"
+						class="absolute top-2 right-2 grid place-items-center size-8 rounded-full cursor-pointer transition-colors"
+					>
+						@icons.Mic("17")
+					</button>
+				</div>
+				<p id={ QuickAddErrorID } role="status" class="text-sm text-amber-200/90 empty:hidden"></p>
+				<template x-if="skipped.length">
+					<div class="grid gap-1 rounded-2xl bg-amber-400/5 ring-1 ring-amber-400/20 px-4 py-3 text-sm">
+						<p class="font-semibold text-amber-300">Left out</p>
+						<template x-for="s in skipped">
+							<p class="text-zinc-400">
+								<span x-show="s.text" class="text-zinc-200" x-text="'“' + s.text + '” '"></span>
+								<span x-text="s.reason"></span>
+							</p>
+						</template>
+					</div>
+				</template>
+				<p class="text-xs text-zinc-500">
+					One or more, by name, amount, account and day ("lent Ahmed 500", "salary 40k to hsbc"). They're added to review.
+				</p>
+				@quickAddQuota(quota, false)
+			</div>
+		}
+	}
+}
+
+// quickAddToast tells what a quick add added, offering to undo it or to
+// review it.
+templ quickAddToast() {
+	<div
+		x-cloak
+		x-show="$store.quickAdd.toast"
+		x-transition.opacity.duration.150ms
+		role="status"
+		class="fixed z-60 bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-1 max-w-[calc(100vw-2rem)] pl-4 pr-1.5 py-1.5 rounded-full bg-zinc-800/25 backdrop-blur-2xl backdrop-saturate-200 ring-1 ring-white/15 shadow-lg shadow-black/30"
+	>
+		<span class="flex items-center gap-2 truncate text-base">
+			@icons.Zap("16", &templ.Attributes{"class": "shrink-0 text-violet-300"})
+			<span class="truncate" x-text="$store.quickAdd.toast?.text"></span>
+		</span>
+		<button
+			type="button"
+			x-show="$store.quickAdd.toast?.ids.length"
+			@click="$store.quickAdd.undo()"
+			class="shrink-0 h-9 px-3 rounded-full font-semibold text-violet-300 cursor-pointer transition-colors hover:bg-white/5"
+		>Undo</button>
+		<button
+			type="button"
+			@click="$store.quickAdd.review()"
+			class="shrink-0 h-9 px-3 rounded-full font-semibold text-zinc-200 cursor-pointer transition-colors hover:bg-white/5"
+		>Review</button>
+	</div>
+}

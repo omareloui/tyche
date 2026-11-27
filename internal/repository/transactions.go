@@ -257,7 +257,7 @@ func (r *Repository) GetTransactionsSummary(ctx context.Context, f models.TxFilt
 	p := queries.GetTransactionsSummaryParams{
 		Q: lp.Q, Kind: lp.Kind, AccountID: lp.AccountID, CategoryID: lp.CategoryID,
 		CounterpartyID: lp.CounterpartyID, GoalID: lp.GoalID, ItemID: lp.ItemID, TagID: lp.TagID, NeedsReview: lp.NeedsReview,
-		FromSms: lp.FromSms, FromImport: lp.FromImport, HasReceipt: lp.HasReceipt, ForOthers: lp.ForOthers, HasNote: lp.HasNote, Foreign: lp.Foreign, Window: lp.Window, WindowToday: lp.WindowToday, FromDate: lp.FromDate, ToDate: lp.ToDate,
+		FromSms: lp.FromSms, FromImport: lp.FromImport, FromQuick: lp.FromQuick, HasReceipt: lp.HasReceipt, ForOthers: lp.ForOthers, HasNote: lp.HasNote, Foreign: lp.Foreign, Window: lp.Window, WindowToday: lp.WindowToday, FromDate: lp.FromDate, ToDate: lp.ToDate,
 		MinAmount: lp.MinAmount, MaxAmount: lp.MaxAmount,
 	}
 	switch f.Status {
@@ -335,9 +335,12 @@ func txFilterParams(f *models.TxFilter) queries.GetTransactionsParams {
 		p.FromSms = true
 	case models.TxSourceImport:
 		p.FromImport = true
+	case models.TxSourceQuick:
+		p.FromQuick = true
 	case models.TxSourceManual:
 		p.FromSms = false
 		p.FromImport = false
+		p.FromQuick = false
 	}
 	switch f.Receipt {
 	case models.TxReceiptWith:
@@ -763,6 +766,7 @@ func dbTransactionToTransaction(
 		RecurrentTxID:  dbTx.RecurrentID.String,
 		LoanGoalID:     dbTx.LoanGoalID.String,
 		FromImport:     dbTx.ImportID.Valid,
+		QuickAddID:     dbTx.QuickAddID.String,
 		ReturnUntil:    dayPtr(dbTx.ReturnUntil),
 		WarrantyUntil:  dayPtr(dbTx.WarrantyUntil),
 		ReturnedAt:     dayPtr(dbTx.ReturnedAt),
@@ -886,6 +890,7 @@ func dbTransactionRowToTransaction[T queries.GetTransactionRow | queries.GetTran
 		tx.ToAccount.Kind.Enum = models.AccKind(_dbTx.ToAccountKindEnum.Int64)
 	}
 	tx.SMSBody = _dbTx.SmsBody
+	tx.QuickAddText = _dbTx.QuickAddText
 	tx.FromSMS = tx.SMSBody != ""
 	tx.Reimbursed = _dbTx.Reimbursed
 	return tx

@@ -5,6 +5,10 @@ DELETE FROM transactions;
 -- name: ResetDeleteCSVImports :exec
 DELETE FROM csv_imports;
 
+-- The quick adds' texts go with their transactions.
+-- name: ResetDeleteQuickAdds :exec
+DELETE FROM quick_adds;
+
 -- name: ResetZeroAccountBalances :exec
 UPDATE accounts SET amount = 0;
 
@@ -67,6 +71,7 @@ SET
     work_hours_per_week = 40,
     birth_year = NULL,
     ai_merchants = FALSE,
+    ai_quick_add = FALSE,
     timezone = 'Africa/Cairo',
     default_account_id = NULL,
     default_currency_id = COALESCE(
