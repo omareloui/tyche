@@ -25,7 +25,8 @@ WHERE (t.account_id = sqlc.arg(account_id) OR t.to_account_id = sqlc.arg(account
 SELECT * FROM csv_imports WHERE id = sqlc.arg(id);
 
 -- name: ListCSVImports :many
--- The latest imports, the account's name for the list.
+-- Every file uploaded (imported or not yet), the latest first, the
+-- account's name for the list; lim -1 for all.
 SELECT
     i.id,
     i.account_id,
@@ -40,8 +41,7 @@ SELECT
     a.name AS account_name
 FROM csv_imports AS i
 JOIN accounts AS a ON i.account_id = a.id
-WHERE i.status = 'imported'
-ORDER BY i.imported_at DESC
+ORDER BY COALESCE(i.imported_at, i.created_at) DESC
 LIMIT sqlc.arg(lim);
 
 -- name: UpdateCSVImportMapping :exec

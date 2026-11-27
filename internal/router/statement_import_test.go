@@ -6,6 +6,7 @@ import (
 	"mime/multipart"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -370,4 +371,35 @@ func TestStatementImportForeignFees(t *testing.T) {
 		}
 	}
 	assertBalance(t, ctx, repo, card.ID, -175.10-341.49+945.48)
+}
+
+func TestImportPageListsEveryFile(t *testing.T) {
+	repo, ctx, _ := setupTenant(t)
+	h := handler.New(repo, valid.New(), sanitizer.New(), nil, nil, nil)
+	bank := newTestAccount(t, repo, ctx, "Bank", "EGP", models.AccKindBankAcc, 1000)
+	f := tenantToday().AddDate(0, 0, -3).Format("02/01/2006")
+	for i := range 12 {
+		id := uploadCSV(t, ctx, h, bank.ID, "Date,Description,Amount\n"+f+",ROW,-"+strconv.Itoa(i+1)+"\n")
+		if i < 11 {
+			if _, err := callHandler(ctx, h.ImportCSV)(httptest.NewRecorder(), "POST", "/import/"+id, id,
+				csvMappingForm(url.Values{"line": {"2"}})); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	c, err := callHandler(ctx, h.CSVImportPage)(httptest.NewRecorder(), "GET", "/import", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var b strings.Builder
+	if err := c.Render(ctx, &b); err != nil {
+		t.Fatal(err)
+	}
+	html := b.String()
+	if n := strings.Count(html, "data-import "); n != 12 {
+		t.Errorf("files listed = %d, want all 12", n)
+	}
+	if !strings.Contains(html, "Not imported") {
+		t.Error("the pending file isn't told apart")
+	}
 }

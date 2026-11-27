@@ -119,7 +119,8 @@ func csvImportSource(s csvimport.Source) csvimport.Source {
 	return csvimport.SourceCSV
 }
 
-// ListCSVImports are the latest imports done, newest first.
+// ListCSVImports are the files uploaded (imported or pending), the latest
+// first, at most limit (-1 for all).
 func (r *Repository) ListCSVImports(ctx context.Context, limit int) ([]csvimport.Import, error) {
 	_, q, err := r.dbFromCtx(ctx)
 	if err != nil {

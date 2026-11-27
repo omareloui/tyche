@@ -3,7 +3,9 @@ package views
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/omareloui/tyche/internal/csvimport"
@@ -193,34 +195,171 @@ templ csvUpload(data CSVImportPageData) {
 	}
 }
 
+// csvImportsFilterData searches (data-search: file and account names),
+// filters by account (data-account) and sorts (CSS order from data-time,
+// data-name / data-acc ranks, data-rows) the uploaded files.
+const csvImportsFilterData = `{
+	q: '',
+	sort: 'recent',
+	account: '',
+	init() {
+		try {
+			const saved = JSON.parse(localStorage.getItem('importsView') || '{}')
+			if (['recent', 'name', 'account', 'rows'].includes(saved.sort)) this.sort = saved.sort
+		} catch {}
+		this.$watch('sort', () => {
+			try { localStorage.setItem('importsView', JSON.stringify({sort: this.sort})) } catch {}
+		})
+	},
+	matches(el) {
+		const q = this.q.trim().toLowerCase()
+		return (!q || el.dataset.search.includes(q)) && (!this.account || el.dataset.account === this.account)
+	},
+	order(el) {
+		switch (this.sort) {
+		case 'name': return Number(el.dataset.name)
+		case 'account': return Number(el.dataset.acc)
+		case 'rows': return -Number(el.dataset.rows)
+		}
+		return -Number(el.dataset.time)
+	},
+	any() {
+		this.q
+		this.account
+		return [...this.$root.querySelectorAll('[data-import]')].some(el => this.matches(el))
+	},
+}`
+
+var csvImportsSorts = [][2]string{{"recent", "Recent"}, {"name", "Name"}, {"account", "Account"}, {"rows", "Most rows"}}
+
+// csvImportRanks are each import's place by file name and by account (then
+// newest), for the list's sorts.
+func csvImportRanks(past []csvimport.Import) (byName, byAccount map[string]int) {
+	sorted := slices.Clone(past)
+	byName, byAccount = map[string]int{}, map[string]int{}
+	slices.SortStableFunc(sorted, func(a, b csvimport.Import) int {
+		return strings.Compare(strings.ToLower(a.FileName), strings.ToLower(b.FileName))
+	})
+	for i, p := range sorted {
+		byName[p.ID] = i
+	}
+	slices.SortStableFunc(sorted, func(a, b csvimport.Import) int {
+		if c := strings.Compare(strings.ToLower(a.AccountName), strings.ToLower(b.AccountName)); c != 0 {
+			return c
+		}
+		return csvImportTime(b).Compare(csvImportTime(a))
+	})
+	for i, p := range sorted {
+		byAccount[p.ID] = i
+	}
+	return byName, byAccount
+}
+
+// csvImportTime is when an import was last imported, else uploaded.
+func csvImportTime(p csvimport.Import) time.Time {
+	if !p.ImportedAt.IsZero() {
+		return p.ImportedAt
+	}
+	return p.CreatedAt
+}
+
+// csvImportAccounts are the accounts files were uploaded into, by name.
+func csvImportAccounts(past []csvimport.Import) [][2]string {
+	var accs [][2]string
+	for _, p := range past {
+		if !slices.ContainsFunc(accs, func(a [2]string) bool { return a[0] == p.AccountID }) {
+			accs = append(accs, [2]string{p.AccountID, p.AccountName})
+		}
+	}
+	slices.SortFunc(accs, func(a, b [2]string) int { return strings.Compare(strings.ToLower(a[1]), strings.ToLower(b[1])) })
+	return accs
+}
+
+// csvPastImports lists every file uploaded, searched, filtered by account
+// and sorted in the browser.
 templ csvPastImports(past []csvimport.Import) {
+	{{ byName, byAccount := csvImportRanks(past) }}
+	{{ accs := csvImportAccounts(past) }}
 	@components.GlassCard("p-5 sm:p-6 grid gap-4") {
-		<h2 class="text-white font-semibold">Past imports</h2>
-		<ul class="grid divide-y divide-zinc-800">
-			for _, p := range past {
-				<li class="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">
-					if p.Kept {
-						<a
-							href={ templ.SafeURL("/import/" + url.PathEscape(p.ID)) }
-							class="group grid flex-1 min-w-48"
-							title="Open its rows: import the ones left, as new or past data"
-						>
-							@csvPastImportName(p)
-						</a>
-					} else {
-						<div class="grid flex-1 min-w-48" title="Imported before files were kept: upload it again to import more">
-							@csvPastImportName(p)
-						</div>
+		<div
+			x-data={ csvImportsFilterData }
+			@keydown.slash.window="if (!$event.target.closest('input, textarea, select, [contenteditable]')) { $event.preventDefault(); $dispatch('search-open') }"
+			class="grid gap-4"
+		>
+			<div class="flex flex-wrap items-center gap-2">
+				<h2 class="text-white font-semibold mr-auto">Uploaded files</h2>
+				<span class="text-sm text-zinc-500">{ strconv.Itoa(len(past)) }</span>
+			</div>
+			<div class="filter-scroll flex items-center gap-2" role="group" aria-label="Sort">
+				@components.ExpandingSearch(components.SearchProps{Placeholder: "File or account", Label: "Search the files"})
+				for _, s := range csvImportsSorts {
+					<button
+						type="button"
+						@click={ fmt.Sprintf("sort = '%s'", s[0]) }
+						:class={ fmt.Sprintf("sort === '%s' ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-800/60 text-zinc-400 hover:text-white'", s[0]) }
+						:aria-pressed={ fmt.Sprintf("sort === '%s'", s[0]) }
+						class="h-8 px-3 rounded-full text-sm font-medium whitespace-nowrap transition-colors cursor-pointer"
+					>{ s[1] }</button>
+				}
+			</div>
+			if len(accs) > 1 {
+				<div role="group" aria-label="Filter by account" class="filter-scroll flex items-center gap-1.5">
+					@icons.Wallet("14", &templ.Attributes{"class": "shrink-0 text-zinc-500 mr-0.5"})
+					for _, a := range accs {
+						<button
+							type="button"
+							@click={ fmt.Sprintf("account = account === '%s' ? '' : '%s'", a[0], a[0]) }
+							:aria-pressed={ fmt.Sprintf("account === '%s'", a[0]) }
+							:class={ fmt.Sprintf("account === '%s' ? 'bg-sky-400/20 text-sky-200 ring-1 ring-sky-400/50' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'", a[0]) }
+							class="h-7 px-2.5 rounded-full text-xs whitespace-nowrap cursor-pointer transition-colors"
+						>{ a[1] }</button>
 					}
-					<a href={ ImportTxsURL(p.ID) } class="text-sm text-sky-400 hover:underline">
-						{ strconv.Itoa(p.ImportedCount) } of { strconv.Itoa(p.RowCount) } rows
-					</a>
-				</li>
+				</div>
 			}
-		</ul>
-		<a href={ templ.SafeURL("/transactions?source=" + string(models.TxSourceImport)) } class="text-sm text-sky-400 hover:underline justify-self-start">
-			See the imported transactions
-		</a>
+			<ul class="flex flex-col gap-1">
+				for _, p := range past {
+					<li
+						data-import
+						data-search={ strings.ToLower(p.FileName + " " + p.AccountName) }
+						data-account={ p.AccountID }
+						data-time={ strconv.FormatInt(csvImportTime(p).Unix(), 10) }
+						data-name={ strconv.Itoa(byName[p.ID]) }
+						data-acc={ strconv.Itoa(byAccount[p.ID]) }
+						data-rows={ strconv.Itoa(p.RowCount) }
+						x-show="matches($el)"
+						:style="{order: order($el)}"
+						class="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 -mx-3 rounded-xl hover:bg-white/5"
+					>
+						if p.Kept {
+							<a
+								href={ templ.SafeURL("/import/" + url.PathEscape(p.ID)) }
+								class="group grid flex-1 min-w-48"
+								title="Open its rows: import the ones left, as new or past data"
+							>
+								@csvPastImportName(p)
+							</a>
+						} else {
+							<div class="grid flex-1 min-w-48" title="Imported before files were kept: upload it again to import more">
+								@csvPastImportName(p)
+							</div>
+						}
+						if p.Status == csvimport.ImportPending {
+							<span class="chip bg-amber-400/10 text-amber-300" title="Not imported yet: deleted a day after it was uploaded">
+								Not imported · { strconv.Itoa(p.RowCount) } rows
+							</span>
+						} else {
+							<a href={ ImportTxsURL(p.ID) } class="text-sm text-sky-400 hover:underline">
+								{ strconv.Itoa(p.ImportedCount) } of { strconv.Itoa(p.RowCount) } rows
+							</a>
+						}
+					</li>
+				}
+			</ul>
+			<p x-cloak x-show="(q.trim() || account) && !any()" class="py-6 text-center text-zinc-500">No files match</p>
+			<a href={ templ.SafeURL("/transactions?source=" + string(models.TxSourceImport)) } class="text-sm text-sky-400 hover:underline justify-self-start">
+				See the imported transactions
+			</a>
+		</div>
 	}
 }
 
@@ -232,7 +371,7 @@ templ csvPastImportName(p csvimport.Import) {
 		}
 	</span>
 	<span class="text-sm text-zinc-500">
-		{ p.AccountName } · { tzctx.In(ctx, p.ImportedAt).Format("Jan 2, 2006") }
+		{ p.AccountName } · { tzctx.In(ctx, csvImportTime(p)).Format("Jan 2, 2006") }
 	</span>
 }
 

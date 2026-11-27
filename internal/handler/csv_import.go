@@ -25,8 +25,6 @@ import (
 	"github.com/omareloui/tyche/web/views"
 )
 
-// csvImportsListed is how many past imports the import page lists.
-const csvImportsListed = 10
 
 // maxImportUpload is the largest file uploaded: a PDF statement's.
 const maxImportUpload = max(csvimport.MaxBytes, statementocr.MaxBytes)
@@ -52,7 +50,7 @@ func (h *Handler) CSVImportPage(w http.ResponseWriter, r *http.Request) (templ.C
 	if err != nil {
 		return nil, err
 	}
-	past, err := h.repo.ListCSVImports(r.Context(), csvImportsListed)
+	past, err := h.repo.ListCSVImports(r.Context(), -1)
 	if err != nil {
 		return nil, err
 	}
