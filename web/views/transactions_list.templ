@@ -391,7 +391,7 @@ func isOpen(open *bool, def bool) bool {
 // narrowing the list to it on click (out of the keyboard's way: j/k and Tab
 // go row to row).
 templ txMonthSection(m *txMonth, def *models.Currency) {
-	<section class="grid grid-cols-1 gap-5">
+	<section data-tx-month class="grid grid-cols-1 gap-5">
 		<header data-tx-month-head class="sticky top-16 z-10 -mx-2 px-2 py-2">
 			<div class="flex items-center justify-between gap-3 sm:gap-4 px-3 py-2.5 sm:px-4 sm:py-3 rounded-2xl bg-zinc-900/60 ring-1 ring-zinc-800 backdrop-blur-sm">
 				<div class="min-w-0">
@@ -427,7 +427,7 @@ templ txMonthSection(m *txMonth, def *models.Currency) {
 		</header>
 		for _, d := range m.Days {
 			// Hidden once all its transactions get deleted.
-			<section class="hidden has-[[data-tx]]:grid grid-cols-1 gap-2">
+			<section data-tx-day class="hidden has-[[data-tx]]:grid grid-cols-1 gap-2">
 				// Sticks under the month's header (--tx-month-h, transactions.js)
 				// while its day is in view.
 				<h3 class="sticky top-[calc(4rem+var(--tx-month-h,4.5rem))] z-[9] flex items-baseline justify-between gap-4 -mx-1 px-2 py-1 rounded-lg bg-zinc-950/80 backdrop-blur-sm text-sm">
@@ -484,6 +484,20 @@ func txRowAttrs(tx *models.Transaction, v *txView) templ.Attributes {
 	}
 	if tx.NeedsReview {
 		attrs["data-review"] = true
+	}
+	if v.isOverdue {
+		attrs["data-overdue"] = true
+	}
+	// What the keys showing only its category / counterparty / account
+	// (txPage's gc, *, ga) filter by; none for the ones without.
+	attrs["data-account"] = tx.Account.ID
+	attrs["data-category"] = models.TxFilterNone
+	if tx.Category != nil && tx.Category.ID != "" {
+		attrs["data-category"] = tx.Category.ID
+	}
+	attrs["data-counterparty"] = models.TxFilterNone
+	if tx.Counterparty != nil && tx.Counterparty.ID != "" {
+		attrs["data-counterparty"] = tx.Counterparty.ID
 	}
 	return attrs
 }
@@ -963,6 +977,7 @@ templ transferPair(out *models.Transaction, def *models.Currency) {
 	<div
 		id={ "tx-pair-" + out.ID }
 		data-sel-ids={ out.ID + " " + in.ID }
+		data-account={ out.Account.ID }
 		data-sel-top
 		data-label={ v.title }
 		hx-target="this"

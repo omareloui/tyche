@@ -422,6 +422,7 @@ templ txFilterBar(f *models.TxFilter, start models.MonthStart, accs []models.Acc
 				type="button"
 				x-cloak
 				x-show="activeFilters"
+				data-tx-clear-filters
 				hx-get={ txFilterURL(f.Without(txFilterKeysButQ()...)) }
 				hx-target="#tx-body"
 				hx-swap="innerHTML"
@@ -652,9 +653,16 @@ var txShortcutGroups = []txShortcutGroup{
 	{"Move around", []txShortcut{
 		{[]string{"j", "k"}, "Next, previous transaction"},
 		{[]string{"gg", "G"}, "First, last one"},
+		{[]string{"]r", "[r"}, "Next, previous to review"},
+		{[]string{"]o", "[o"}, "Next, previous overdue"},
+		{[]string{"]m", "[m"}, "Next, previous month"},
+		{[]string{"]d", "[d"}, "Next, previous day"},
+		{[]string{"H", "M", "L"}, "Top, middle, bottom of the screen"},
+		{[]string{"zz"}, "Center the focused one"},
 		{[]string{"^e", "^y"}, "Scroll a row down, up"},
 		{[]string{"^d", "^u"}, "Half a screen down, up"},
 		{[]string{"^f", "^b"}, "A screen down, up"},
+		{[]string{"5j"}, "A count repeats a move"},
 		{[]string{"/"}, "Search"},
 	}},
 	{"Act on the focused one", []txShortcut{
@@ -662,12 +670,28 @@ var txShortcutGroups = []txShortcutGroup{
 		{[]string{"e"}, "Edit"},
 		{[]string{"f"}, "Fulfill"},
 		{[]string{"r"}, "Mark reviewed, send to review"},
+		{[]string{"R"}, "Mark reviewed, go to the next"},
+		{[]string{"cc", "cp"}, "Change the category, counterparty"},
+		{[]string{"ca", "cd"}, "Change the account, date"},
+		{[]string{"t"}, "Add a tag"},
+		{[]string{"yy"}, "Duplicate"},
+		{[]string{"."}, "Repeat the last change"},
 		{[]string{"⌫"}, "Delete"},
+		{[]string{"u"}, "Undo the delete"},
+	}},
+	{"Show only", []txShortcut{
+		{[]string{"*"}, "Its counterparty"},
+		{[]string{"gc"}, "Its category"},
+		{[]string{"ga"}, "Its account"},
+		{[]string{"-"}, "Clear the filters"},
 	}},
 	{"Select", []txShortcut{
 		{[]string{"x"}, "Select, unselect"},
 		{[]string{"⇧x"}, "Select a range"},
+		{[]string{"V"}, "Select moving (j, k…)"},
 		{[]string{"space"}, "Toggle while selecting"},
+		{[]string{"e"}, "Edit the selected"},
+		{[]string{"r"}, "Mark the selected reviewed"},
 		{[]string{"⌫"}, "Delete the selected"},
 		{[]string{"Esc"}, "Stop selecting"},
 	}},

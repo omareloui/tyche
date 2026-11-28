@@ -212,6 +212,10 @@ document.addEventListener("alpine:init", () => {
     loaded: 0,
     // last is the row toggled last, where a shift-click range starts.
     last: null,
+    // visual is the row visual mode (V) started on, the rows from it to the
+    // focused one selected on top of base, the ones selected before.
+    visual: null,
+    base: {},
     notice: "",
     noticeTimer: null,
 
@@ -224,7 +228,34 @@ document.addEventListener("alpine:init", () => {
       this.sel = {};
       this.all = false;
       this.last = null;
+      this.visual = null;
       this.paint();
+    },
+
+    // startVisual selects from el on, as the focus moves (extendTo).
+    startVisual(el) {
+      if (!el?.id) return;
+      if (this.all) {
+        this.all = false;
+        this.selectLoaded();
+      }
+      this.on = true;
+      this.visual = el.id;
+      this.base = { ...this.sel };
+      this.extendTo(el);
+    },
+
+    // extendTo selects the rows from where visual mode started to el.
+    extendTo(el) {
+      if (!this.visual || !el?.id) return;
+      const rows = this.rows().filter((r) => txShown(r.querySelector("[data-tx-row]")));
+      const from = rows.findIndex((r) => r.id === this.visual);
+      const to = rows.indexOf(el);
+      if (from === -1 || to === -1) return;
+      this.sel = { ...this.base };
+      for (const r of rows.slice(Math.min(from, to), Math.max(from, to) + 1)) this.sel[r.id] = txRowIds(r);
+      this.last = el.id;
+      this.refresh();
     },
 
     // rows are the selectable rows loaded, nested ones (transfer sides,
@@ -320,6 +351,20 @@ document.addEventListener("alpine:init", () => {
     edit() {
       if (!this.count) return;
       htmx.ajax("POST", "/transactions/bulk-edit/form", { target: "#drawer", swap: "innerHTML", values: this.values() });
+    },
+
+    // review marks the selected reviewed, or sends them back to review when
+    // none of the loaded ones needs it, through the bulk edit (the locked
+    // ones left out; tx-bulk-done tells how many).
+    review() {
+      if (!this.count) return;
+      const rows = this.all ? this.rows(true) : this.rows().filter((r) => this.sel[r.id]);
+      const needs = rows.some((r) => r.hasAttribute("data-review") || r.querySelector("[data-review]"));
+      htmx.ajax("POST", "/transactions/bulk-edit", {
+        target: "#drawer",
+        swap: "innerHTML",
+        values: { ...this.values(), review: needs ? "reviewed" : "needs" },
+      });
     },
 
     // drop unselects the rows holding any of ids (e.g. the ones that can't
@@ -539,8 +584,13 @@ document.addEventListener("alpine:init", () => {
     // quickAddOpen shows the quick add drawer (views.QuickAddDrawer).
     quickAddOpen: false,
     activeFilters: 0,
-    // lastG is when g was pressed, for gg.
-    lastG: 0,
+    // pending is the first key of a two-key sequence (gg, ]r, cc…) waiting
+    // for the next one, typed at pendingAt; count a count typed before a
+    // key (5j), at countAt.
+    pending: "",
+    pendingAt: 0,
+    count: 0,
+    countAt: 0,
 
     // quickAddFromURL opens the quick add for ?quick (the PWA's shortcut),
     // dropped from the url so a reload doesn't open it again.
@@ -655,15 +705,46 @@ document.addEventListener("alpine:init", () => {
       }
       if (t.closest?.("input, textarea, select, [contenteditable], form, [role=listbox], [role=menu]")) return;
 
+      // Modifiers alone don't end a sequence (shift for R, G, *…).
+      if (TX_MODIFIER_KEYS.has(e.key)) return;
+
       // Edit forms are data-tx too, without an id.
       const row = t.closest?.("[data-tx][data-id]");
       const d = row?.dataset ?? {};
+      // The focused row's owner: its transaction, or a transfer pair's
+      // wrapper (no data-tx of its own).
+      const stop = t.closest?.("[data-tx-row]");
+      const owner = stop?.closest("[data-tx], [data-sel-ids]");
+      const sel = Alpine.store("txSel");
+      const now = Date.now();
 
-      // gg is the first row (a g, then another within a moment).
-      const gg = e.key === "g" && Date.now() - this.lastG < 600;
-      this.lastG = e.key === "g" && !gg ? Date.now() : 0;
+      // A count (5j, 3]r) waits for its key a moment.
+      if (/^[1-9]$/.test(e.key) || (e.key === "0" && this.count && now - this.countAt < TX_SEQ_MS)) {
+        this.count = now - this.countAt < TX_SEQ_MS ? Math.min(this.count * 10 + Number(e.key), 999) : Number(e.key);
+        this.countAt = now;
+        this.pending = "";
+        e.preventDefault();
+        return;
+      }
+      // A two-key sequence's first key waits for the next one a moment.
+      const seq = this.pending && now - this.pendingAt < TX_SEQ_MS ? this.pending + e.key : e.key;
+      this.pending = "";
+      if (seq.length === 1 && TX_SEQ_PREFIXES.has(seq)) {
+        this.pending = seq;
+        this.pendingAt = now;
+        if (this.count) this.countAt = now;
+        e.preventDefault();
+        return;
+      }
+      const n = this.count && now - this.countAt < TX_SEQ_MS ? this.count : 1;
+      this.count = 0;
+      // moves repeats a move n times, from where the focus goes each time.
+      const moves = (fn) => {
+        for (let i = 0; i < n; i++) if (!fn(document.activeElement)) break;
+      };
+      let moved = false;
 
-      switch (e.key) {
+      switch (seq) {
         case "?":
           this.toggleShortcuts();
           break;
@@ -685,45 +766,128 @@ document.addEventListener("alpine:init", () => {
           break;
         }
         case "j":
-          this.focusRow(t, 1);
-          break;
         case "k":
-          this.focusRow(t, -1);
+          moves((f) => this.focusRow(f, seq === "j" ? 1 : -1));
+          moved = true;
           break;
-        case "g":
-          if (!gg) return;
-          this.focusEdge(true);
-          break;
+        case "gg":
         case "G":
-          this.focusEdge(false);
+          this.focusEdge(seq === "gg");
+          moved = true;
           break;
+        case "]r":
+        case "[r":
+          moves((f) => this.focusMatch(f, seq[0] === "]" ? 1 : -1, txRowNeedsReview));
+          moved = true;
+          break;
+        case "]o":
+        case "[o":
+          moves((f) => this.focusMatch(f, seq[0] === "]" ? 1 : -1, txRowOverdue));
+          moved = true;
+          break;
+        case "]m":
+        case "[m":
+          moves((f) => this.focusGroup(f, seq[0] === "]" ? 1 : -1, TX_MONTHS));
+          moved = true;
+          break;
+        case "]d":
+        case "[d":
+          moves((f) => this.focusGroup(f, seq[0] === "]" ? 1 : -1, TX_DAYS));
+          moved = true;
+          break;
+        case "H":
+        case "M":
+        case "L":
+          this.focusInView(seq);
+          moved = true;
+          break;
+        case "zz": {
+          const el = t.closest?.(TX_STOPS);
+          if (!el) return;
+          el.scrollIntoView({ block: "center", behavior: "smooth" });
+          break;
+        }
         case "e":
+          if (sel.on && sel.count) {
+            sel.edit();
+            break;
+          }
           if (!row) return;
           this.openEdit(d.id);
           break;
         case "f":
           if (!("scheduled" in d)) return;
-          txRequest("PUT", txURL(d.id, "fulfill"), row);
+          this.act({ kind: "fulfill" }, row);
           break;
         case "r":
+          if (sel.on && sel.count) {
+            sel.review();
+            break;
+          }
           if (!row) return;
-          txRequest("review" in d ? "PUT" : "DELETE", txURL(d.id, "reviewed"), row);
+          this.act({ kind: "review", verb: "review" in d ? "PUT" : "DELETE" }, row);
+          break;
+        case "R":
+          this.act({ kind: "reviewNext" }, row, t);
+          break;
+        case ".":
+          if (!txLastAction) return;
+          this.act(txLastAction, row, t);
+          break;
+        case "cc":
+        case "cp":
+        case "ca":
+        case "cd":
+          if (!stop) return;
+          this.pickInDetails(stop.dataset.details, TX_PICK_KEYS[seq]);
+          break;
+        case "t":
+          if (!stop) return;
+          this.tagInDetails(stop.dataset.details);
+          break;
+        case "yy":
+          if (!row) return;
+          this.duplicate(d.id);
+          break;
+        case "u":
+          if (!this.undo()) return;
+          break;
+        case "*":
+        case "gc":
+        case "ga": {
+          const key = { "*": "counterparty", gc: "category", ga: "account" }[seq];
+          const v = owner?.dataset[key];
+          if (!v) return;
+          this.filterBy({ [key]: v });
+          break;
+        }
+        case "-": {
+          const clear = document.querySelector("[data-tx-clear-filters]");
+          if (!this.activeFilters || !clear) return;
+          clear.click();
+          break;
+        }
+        case "V":
+          if (sel.visual) sel.visual = null;
+          else sel.startVisual(t.closest?.("[data-sel-ids]"));
           break;
         case " ":
           // Space only selects while selecting, else it scrolls the page.
-          if (!Alpine.store("txSel").on) return;
+          if (!sel.on) return;
         // falls through
         case "x":
         case "X": {
           const wrap = t.closest?.("[data-sel-ids]");
           if (!wrap) return;
-          Alpine.store("txSel").toggle(wrap, e.shiftKey);
+          // Toggling by hand ends visual mode, keeping what it selected.
+          sel.visual = null;
+          sel.toggle(wrap, e.shiftKey);
           break;
         }
         case "Delete":
         case "Backspace":
-          if (Alpine.store("txSel").on) {
-            Alpine.store("txSel").remove();
+          if (sel.on) {
+            sel.remove();
             break;
           }
           if (!row) return;
@@ -734,6 +898,93 @@ document.addEventListener("alpine:init", () => {
           return;
       }
       e.preventDefault();
+      // Visual mode selects from where it started to the focused row.
+      if (moved && sel.visual) sel.extendTo(document.activeElement?.closest?.("[data-sel-ids]"));
+    },
+
+    // act does an action on a row and keeps it for "." to repeat: fulfill,
+    // review (its verb, so it marks reviewed again rather than toggling),
+    // reviewNext (R), a pick (a quick pick saved in the details, recorded
+    // by the htmx:configRequest listener).
+    act(action, row, from) {
+      const id = row?.dataset.id;
+      switch (action.kind) {
+        case "fulfill":
+          if (!row || !("scheduled" in row.dataset)) return;
+          txRequest("PUT", txURL(id, "fulfill"), row);
+          break;
+        case "review":
+          if (!row) return;
+          txRequest(action.verb, txURL(id, "reviewed"), row);
+          break;
+        case "reviewNext":
+          // Marked reviewed, the list re-renders: the next one is looked
+          // for once it has (from the row, refocused, or the top when the
+          // list dropped it).
+          if (row && "review" in row.dataset) {
+            txThen = () => this.focusMatch(document.activeElement, 1, txRowNeedsReview);
+            txRequest("PUT", txURL(id, "reviewed"), row);
+          } else {
+            this.focusMatch(from ?? document.activeElement, 1, txRowNeedsReview);
+          }
+          break;
+        case "pick":
+          if (!row) return;
+          // The answer is the details' panel, not open here: only the list
+          // (out of band) is taken.
+          htmx.ajax("PUT", `/transactions/${encodeURIComponent(id)}/pick/${action.field}`, {
+            source: row,
+            target: row,
+            swap: "none",
+            values: action.values,
+          });
+          break;
+        default:
+          return;
+      }
+      txLastAction = action;
+    },
+
+    // pickInDetails opens the transaction's details, then its quick pick
+    // of field (views.QuickPick), when it can change there.
+    async pickInDetails(id, field) {
+      if (!id) return;
+      await htmx.ajax("GET", txDetailsURL(id), { target: "#tx-details", swap: "innerHTML" });
+      const pick = await txWaitFor(`#pick-tx-${field}-${CSS.escape(id)}`);
+      if (pick?.matches("button")) pick.click();
+    },
+
+    // tagInDetails opens the transaction's details in its new tag input.
+    async tagInDetails(id) {
+      if (!id) return;
+      await htmx.ajax("GET", txDetailsURL(id), { target: "#tx-details", swap: "innerHTML" });
+      const input = await txWaitFor(`#txd-tags-${CSS.escape(id)} input[name=add]`);
+      input?.focus();
+    },
+
+    // duplicate opens the create form filled with the transaction, as its
+    // menu's Duplicate does.
+    duplicate(id) {
+      this.openCreateForm = true;
+      htmx.ajax("GET", txURL(id, "duplicate"), { target: "#tx-create", swap: "innerHTML" });
+    },
+
+    // undo takes back the deletes the toast offers to undo (focusing the
+    // first row back), else the last quick add. Reports if there was one.
+    undo() {
+      const txs = Alpine.store("txs");
+      if (txs.toast && txs.pending.length) {
+        const first = txs.pending[0].el;
+        txs.undo();
+        document.querySelector(`#${CSS.escape(first)} [data-tx-row]`)?.focus({ preventScroll: true });
+        return true;
+      }
+      const quick = Alpine.store("quickAdd");
+      if (quick.toast?.ids?.length) {
+        quick.undo();
+        return true;
+      }
+      return false;
     },
 
     // vimScroll scrolls the page as vim does for Ctrl+key: e/y a row, d/u
@@ -762,6 +1013,71 @@ document.addEventListener("alpine:init", () => {
       const next = by > 0 ? rows[0] : rows.at(-1);
       next?.focus({ preventScroll: true });
       return true;
+    },
+
+    // stopsFrom is the shown stops and the index to go on from, step away:
+    // the one holding from, else the nearest one in the direction (off the
+    // rows, e.g. a month's header), else before the first / after the last.
+    stopsFrom(from, step, stops) {
+      let i = stops.indexOf(from?.closest?.(TX_STOPS));
+      if (i !== -1) return i;
+      if (from instanceof Node && this.$root.contains(from) && from !== this.$root) {
+        const after = stops.findIndex((r) => from.compareDocumentPosition(r) & Node.DOCUMENT_POSITION_FOLLOWING);
+        return step > 0 ? (after === -1 ? stops.length : after) - 1 : after === -1 ? stops.length : after;
+      }
+      return step > 0 ? -1 : stops.length;
+    },
+
+    // focusMatch moves the focus to the next (step 1) or previous (-1) row
+    // matching (txRowNeedsReview, txRowOverdue), unfolding the upcoming
+    // section it's in. Reports if it moved.
+    focusMatch(from, step, match) {
+      const stops = [...this.$root.querySelectorAll(TX_STOPS)].filter(txReachable);
+      for (let j = this.stopsFrom(from, step, stops) + step; j >= 0 && j < stops.length; j += step) {
+        if (!match(stops[j])) continue;
+        txFocus(stops[j]);
+        return true;
+      }
+      return false;
+    },
+
+    // focusGroup moves the focus to the first row of the next group (a
+    // month, a day, an upcoming section), or back to the first of the
+    // current one, then of the one before. Reports if it moved.
+    focusGroup(from, step, groups) {
+      const firsts = [...this.$root.querySelectorAll(groups)]
+        .map((g) => [...g.querySelectorAll(TX_STOPS)].find(txShown))
+        .filter(Boolean);
+      const stops = [...this.$root.querySelectorAll(TX_STOPS)].filter(txShown);
+      const i = this.stopsFrom(from, step, stops);
+      const at = stops[i];
+      let next;
+      if (step > 0) {
+        next = firsts.find((f) => (at ? at.compareDocumentPosition(f) & Node.DOCUMENT_POSITION_FOLLOWING : i < 0));
+      } else {
+        next = firsts.findLast((f) => (at ? f !== at && f.compareDocumentPosition(at) & Node.DOCUMENT_POSITION_FOLLOWING : true));
+      }
+      if (!next) return false;
+      txFocus(next);
+      return true;
+    },
+
+    // focusInView focuses the top (H), middle (M) or bottom (L) row in view,
+    // under the sticky headers.
+    focusInView(which) {
+      const sticky = txStickyHeight();
+      const rows = [...this.$root.querySelectorAll(TX_STOPS)].filter(txShown).filter((el) => {
+        const r = el.getBoundingClientRect();
+        return r.top >= sticky && r.bottom <= window.innerHeight;
+      });
+      if (!rows.length) return;
+      let el = which === "H" ? rows[0] : rows.at(-1);
+      if (which === "M") {
+        const mid = (sticky + window.innerHeight) / 2;
+        const dist = (r) => Math.abs((r.getBoundingClientRect().top + r.getBoundingClientRect().bottom) / 2 - mid);
+        el = rows.reduce((a, b) => (dist(b) < dist(a) ? b : a));
+      }
+      el.focus({ preventScroll: true });
     },
 
     // focusEdge focuses the first row (the upcoming section's header when
@@ -1285,6 +1601,82 @@ function txNeighbor(el) {
   return rows[i + 1] ?? rows[i - 1] ?? null;
 }
 
+// The keys' timing and sequences (txPage.onKey): a count or a sequence's
+// first key waits TX_SEQ_MS for the next.
+const TX_SEQ_MS = 1000;
+const TX_SEQ_PREFIXES = new Set(["g", "]", "[", "z", "y", "c"]);
+const TX_MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock", "AltGraph"]);
+// TX_PICK_KEYS are the quick picks (views.QuickPick*) cc / cp / ca / cd open.
+const TX_PICK_KEYS = { cc: "category", cp: "counterparty", ca: "account", cd: "date" };
+// The list's groups ]m / [m and ]d / [d go between: months (days) and the
+// upcoming sections.
+const TX_MONTHS = "[data-tx-month], #tx-upcoming-later, #tx-upcoming";
+const TX_DAYS = "[data-tx-day], #tx-upcoming-later, #tx-upcoming";
+
+// txLastAction is what "." repeats (txPage.act).
+let txLastAction = null;
+
+// A quick pick saved (from the details) is what "." repeats then.
+document.addEventListener("htmx:configRequest", (e) => {
+  const m = e.detail.verb === "put" && e.detail.path.match(/^\/transactions\/[^/]+\/pick\/(\w+)$/);
+  if (!m) return;
+  const values = {};
+  for (const [k, v] of Object.entries(e.detail.parameters ?? {})) values[k] = v;
+  txLastAction = { kind: "pick", field: m[1], values };
+});
+
+// txWaitFor resolves with the element sel matches once it's there and
+// settled (htmx processed it, the drawer done focusing its own), null after
+// a couple of seconds.
+function txWaitFor(sel, ms = 2000) {
+  const end = Date.now() + ms;
+  return new Promise((resolve) => {
+    const look = () => {
+      const el = document.querySelector(sel);
+      if (el) setTimeout(() => resolve(el.isConnected ? el : document.querySelector(sel)), TX_SETTLE_MS);
+      else if (Date.now() > end) resolve(null);
+      else requestAnimationFrame(look);
+    };
+    look();
+  });
+}
+const TX_SETTLE_MS = 150;
+
+// txFocus focuses a row, unfolding the upcoming section it's in.
+function txFocus(el) {
+  for (let d = el.closest("details:not([open])"); d; d = d.parentElement?.closest("details:not([open])")) {
+    d.open = true;
+  }
+  el.focus({ preventScroll: true });
+  el.scrollIntoView({ block: "center", behavior: "smooth" });
+}
+
+// txReachable tells if a row shows, or would once the upcoming section
+// folding it opens (nothing else hiding it).
+function txReachable(el) {
+  if (txShown(el)) return true;
+  const folded = el.closest("details:not([open])");
+  if (!folded || folded.offsetParent === null) return false;
+  for (let n = el; n && n !== folded; n = n.parentElement) {
+    if (getComputedStyle(n).display === "none") return false;
+  }
+  return true;
+}
+
+// txRowOverdue reports if a row is of an overdue transaction.
+function txRowOverdue(row) {
+  return !!row.closest("[data-tx]")?.hasAttribute("data-overdue");
+}
+
+// txRowNeedsReview reports if a row (a TX_STOPS one) is of a transaction
+// needing review: its own, or a side of the transfer pair it heads.
+function txRowNeedsReview(row) {
+  const owner = row.closest("[data-tx], [data-sel-ids]");
+  if (!owner) return false;
+  if (owner.hasAttribute("data-review")) return true;
+  return owner.id.startsWith("tx-pair-") && !!owner.querySelector("[data-review]");
+}
+
 // txShown tells if a row (or the upcoming section's header) shows: not in a
 // hidden parent, nor in a folded details, whose content browsers may only
 // hide with content-visibility (so it still has an offsetParent).
@@ -1325,6 +1717,17 @@ document.addEventListener("htmx:afterSettle", () => {
   if (!txRefocusId) return;
   document.querySelector(`#tx-${txRefocusId} [data-tx-row]`)?.focus({ preventScroll: true });
   txRefocusId = null;
+});
+
+// txThen runs once the list re-rendered after an action (refocused),
+// e.g. R looking for the next one to review.
+let txThen = null;
+document.addEventListener("htmx:afterSettle", () => {
+  if (!txThen) return;
+  const fn = txThen;
+  txThen = null;
+  // After every settle of the answer (out of band ones too).
+  setTimeout(fn);
 });
 
 // txWindowDay is the day a return / warranty preset ("14d", "12m") ends on,
