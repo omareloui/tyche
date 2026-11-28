@@ -89,9 +89,13 @@ document.addEventListener("alpine:init", () => {
         const selected = visible.findIndex(
           (o) => o.dataset.value === this.$refs.input.value,
         );
+        const focus = () => (this.$refs.search ?? this.$refs.list).focus();
         this.$nextTick(() => {
-          (this.$refs.search ?? this.$refs.list).focus();
+          focus();
           this.setActive(Math.max(0, selected));
+          // Opened from another $nextTick (e.g. views.QuickPicker's x-init),
+          // this one runs before x-show shows the panel: focus once it does.
+          if (!this.$refs.panel.contains(document.activeElement)) requestAnimationFrame(focus);
         });
       },
 

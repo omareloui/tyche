@@ -18,6 +18,7 @@ import (
 	"github.com/omareloui/tyche/internal/models"
 	"github.com/omareloui/tyche/internal/resperr"
 	"github.com/omareloui/tyche/web/views"
+	"github.com/omareloui/tyche/web/views/form"
 	"go.uber.org/zap"
 )
 
@@ -101,9 +102,30 @@ const txSelDropEvent = "tx-sel-drop"
 // are dropped from the selection, the drawer telling which; when none can,
 // no drawer opens and the selection's notice tells it instead.
 func (h Handler) BulkEditTransactionsForm(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
-	txs, err := h.bulkTxs(r)
+	editable, locked, err := h.bulkEditable(w, r)
+	if err != nil || editable == 0 {
+		return templ.NopComponent, err
+	}
+	cats, cps, err := h.bulkEditDeps(r)
 	if err != nil {
 		return nil, err
+	}
+	accs, err := h.repo.GetAccounts(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	fd := &views.TxBulkEditFD{N: editable, Locked: locked, TagSuggestions: h.tagSuggestions(r.Context())}
+	return views.TxBulkEdit(fd, cats, cps, accs), nil
+}
+
+// bulkEditable is how many of the selection (bulkTxs) can be bulk edited
+// and the ones that can't (models.DescribeBulkLocks), dropped from the
+// selection; with none, the selection's notice tells why and nothing is
+// swapped.
+func (h Handler) bulkEditable(w http.ResponseWriter, r *http.Request) (int, string, error) {
+	txs, err := h.bulkTxs(r)
+	if err != nil {
+		return 0, "", err
 	}
 	locks := map[models.TxBulkLock]int{}
 	dropped := []string{}
@@ -123,18 +145,68 @@ func (h Handler) BulkEditTransactionsForm(w http.ResponseWriter, r *http.Request
 		setHXTriggerJSON(w, map[string]any{txSelDropEvent: map[string]any{
 			"ids": dropped, "message": "These can't be edited: " + locked + ".",
 		}})
-		return templ.NopComponent, nil
+		return 0, locked, nil
 	}
 	if len(dropped) > 0 {
 		setHXTriggerJSON(w, map[string]any{txSelDropEvent: map[string]any{"ids": dropped}})
 	}
+	return editable, locked, nil
+}
 
-	cats, cps, err := h.bulkEditDeps(r)
+// bulkNotice answers nothing, the selection's notice telling msg instead
+// (the selection bar's picks have no form to show it in).
+func bulkNotice(w http.ResponseWriter, msg string) (templ.Component, error) {
+	w.Header().Set("HX-Reswap", "none")
+	setHXTriggerJSON(w, map[string]any{txSelDropEvent: map[string]any{"message": msg}})
+	return templ.NopComponent, nil
+}
+
+// BulkEditPicker is the selection bar's picker of one field
+// (views.TxBulkPicker), set on them all on pick through
+// BulkEditTransactions. Like the form, it first drops the ones that can't
+// be edited.
+func (h Handler) BulkEditPicker(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	field := r.PathValue("field")
+	switch field {
+	case views.QuickPickCategory, views.QuickPickCounterparty, views.QuickPickAccount, views.QuickPickDate, views.TxBulkPickTags:
+	default:
+		return nil, errUnknownPick
+	}
+	editable, locked, err := h.bulkEditable(w, r)
+	if re := (*resperr.RespError)(nil); errors.As(err, &re) {
+		return bulkNotice(w, re.Message)
+	} else if err != nil || editable == 0 {
+		return templ.NopComponent, err
+	}
+	p := views.TxBulkPickerProps{Field: field, N: editable, Locked: locked}
+	ctx := r.Context()
+	switch field {
+	case views.QuickPickCategory:
+		p.Cats, err = h.repo.GetCategories(ctx)
+	case views.QuickPickCounterparty:
+		p.Cps, err = h.repo.GetCounterparties(ctx)
+	case views.QuickPickAccount:
+		p.Accs, err = h.repo.GetAccounts(ctx)
+	case views.TxBulkPickTags:
+		p.Tags = h.tagSuggestions(ctx)
+	}
 	if err != nil {
 		return nil, err
 	}
-	fd := &views.TxBulkEditFD{N: editable, Locked: locked, TagSuggestions: h.tagSuggestions(r.Context())}
-	return views.TxBulkEdit(fd, cats, cps), nil
+	return views.TxBulkPicker(p), nil
+}
+
+// BulkTagOption is a new tag name as the bulk tag picker's option
+// (form.ComboboxProps.CreateURL): saving the edit creates it.
+func (h Handler) BulkTagOption(w http.ResponseWriter, r *http.Request) (templ.Component, error) {
+	names := models.ParseTagNames(r.FormValue("name"))
+	if len(names) != 1 {
+		return nil, resperr.New(http.StatusUnprocessableEntity, "Type one tag's name.")
+	}
+	if msg := validateTagNames(names); msg != "" {
+		return nil, resperr.New(http.StatusUnprocessableEntity, msg)
+	}
+	return form.ComboOptionItem(form.ComboOption{Value: names[0], Label: names[0]}, false), nil
 }
 
 // setHXTriggerJSON sets the answer's HX-Trigger to events with details.
@@ -167,12 +239,17 @@ func (h Handler) BulkEditTransactions(w http.ResponseWriter, r *http.Request) (t
 	if err != nil {
 		return nil, err
 	}
+	accs, err := h.repo.GetAccounts(r.Context())
+	if err != nil {
+		return nil, err
+	}
 	if err := r.ParseForm(); err != nil {
 		return nil, resperr.New(http.StatusBadRequest, "Invalid form.")
 	}
 	fd := &views.TxBulkEditFD{
 		Category:     r.PostForm.Get("category_id"),
 		Counterparty: r.PostForm.Get("counterparty_id"),
+		Account:      r.PostForm.Get("account_id"),
 		Date:         strings.TrimSpace(r.PostForm.Get("scheduled_to")),
 		Review:       r.PostForm.Get("review"),
 		DescMode:     r.PostForm.Get("description_mode"),
@@ -183,9 +260,15 @@ func (h Handler) BulkEditTransactions(w http.ResponseWriter, r *http.Request) (t
 	fd.TagSuggestions = h.tagSuggestions(r.Context())
 	fd.N, _ = strconv.Atoi(r.PostForm.Get("n"))
 	fd.Locked = r.PostForm.Get("locked")
+	// A pick of the selection bar (views.TxBulkPicker) tells it in the
+	// selection's notice, keeping the picker open.
+	pick := r.PostForm.Get("pick") == "1"
 	answer := func(msg string) (templ.Component, error) {
+		if pick {
+			return bulkNotice(w, msg)
+		}
 		fd.Error = msg
-		return views.TxBulkEditForm(fd, cats, cps), nil
+		return views.TxBulkEditForm(fd, cats, cps, accs), nil
 	}
 
 	review, ok := models.ParseTxBulkReview(fd.Review)
@@ -235,6 +318,14 @@ func (h Handler) BulkEditTransactions(w http.ResponseWriter, r *http.Request) (t
 		}
 		edit.Counterparty = &cps[i]
 	}
+	if fd.Account != "" {
+		opts := views.TxBulkAccountOptions(accs)
+		i := slices.IndexFunc(opts, func(a models.Account) bool { return a.ID == fd.Account })
+		if i == -1 {
+			return answer("That account can't take them.")
+		}
+		edit.Account = &opts[i]
+	}
 	if fd.Date != "" {
 		d, err := time.Parse(time.DateOnly, fd.Date)
 		if err != nil {
@@ -257,7 +348,7 @@ func (h Handler) BulkEditTransactions(w http.ResponseWriter, r *http.Request) (t
 	news := make([]*models.Transaction, 0, len(olds))
 	var changed []*models.Transaction
 	skipped := 0
-	fulfilled := false
+	fulfilled, moved := false, false
 	for _, old := range olds {
 		// Told on opening the form (BulkEditTransactionsForm), left out
 		// silently, e.g. of all of the filter's.
@@ -274,6 +365,7 @@ func (h Handler) BulkEditTransactions(w http.ResponseWriter, r *http.Request) (t
 		news = append(news, tx)
 		changed = append(changed, old)
 		fulfilled = fulfilled || !old.FulfilledAt.IsZero()
+		moved = moved || tx.Account.ID != old.Account.ID
 	}
 	if err := h.repo.BulkUpdateTransactions(r.Context(), changed, news, edit.Review); err != nil {
 		l.Error("bulk updating transactions", zap.Error(err))
@@ -286,7 +378,7 @@ func (h Handler) BulkEditTransactions(w http.ResponseWriter, r *http.Request) (t
 		drawerSavedEvent: map[string]any{},
 		txBulkDoneEvent:  map[string]any{"updated": len(news), "skipped": skipped},
 	})
-	if fulfilled {
+	if fulfilled || moved {
 		if err := h.getAndRenderBalancesOOB(w, r); err != nil {
 			return nil, err
 		}

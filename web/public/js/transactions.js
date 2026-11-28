@@ -218,12 +218,16 @@ document.addEventListener("alpine:init", () => {
     base: {},
     notice: "",
     noticeTimer: null,
+    // picking is the field picked for them all from the bar
+    // (views.TxBulkPicker in #tx-sel-pick), "" when none is open.
+    picking: "",
 
     get count() {
       return this.all ? this.total : Object.keys(this.sel).length;
     },
 
     clear() {
+      this.closePick();
       this.on = false;
       this.sel = {};
       this.all = false;
@@ -351,6 +355,26 @@ document.addEventListener("alpine:init", () => {
     edit() {
       if (!this.count) return;
       htmx.ajax("POST", "/transactions/bulk-edit/form", { target: "#drawer", swap: "innerHTML", values: this.values() });
+    },
+
+    // pick opens the bar's picker of field (handler.BulkEditPicker) setting
+    // it on them all at once, which first drops the rows that can't be
+    // edited (tx-sel-drop), opening nothing when none can.
+    async pick(field) {
+      if (!this.count) return;
+      this.picking = field;
+      await htmx.ajax("POST", `/transactions/bulk-edit/pick/${field}`, {
+        target: "#tx-sel-pick",
+        swap: "innerHTML",
+        values: this.values(),
+      });
+      if (this.picking === field && !document.querySelector("#tx-sel-pick [data-bulk-pick]")) this.closePick();
+    },
+
+    closePick() {
+      this.picking = "";
+      const slot = document.getElementById("tx-sel-pick");
+      if (slot) slot.innerHTML = "";
     },
 
     // review marks the selected reviewed, or sends them back to review when
@@ -705,7 +729,9 @@ document.addEventListener("alpine:init", () => {
       }
       if (e.key === "Escape" && Alpine.store("txSel").on && !t.closest?.("input, textarea, select, [role=listbox], [role=menu]")) {
         e.preventDefault();
-        Alpine.store("txSel").clear();
+        // An open picker of the bar closes first.
+        if (Alpine.store("txSel").picking) Alpine.store("txSel").closePick();
+        else Alpine.store("txSel").clear();
         return;
       }
       if (e.key === "/" && !t.closest?.("input, textarea, select, [contenteditable]")) {
@@ -849,10 +875,19 @@ document.addEventListener("alpine:init", () => {
         case "cp":
         case "ca":
         case "cd":
+          // While selecting, for them all from the bar.
+          if (sel.on && sel.count) {
+            sel.pick(TX_PICK_KEYS[seq]);
+            break;
+          }
           if (!stop) return;
           this.pickInDetails(stop.dataset.details, TX_PICK_KEYS[seq]);
           break;
         case "t":
+          if (sel.on && sel.count) {
+            sel.pick("tags");
+            break;
+          }
           if (!stop) return;
           this.tagInDetails(stop.dataset.details);
           break;
@@ -1749,6 +1784,13 @@ document.addEventListener("htmx:beforeSwap", () => {
 });
 document.addEventListener("htmx:afterSettle", () => {
   if (!txRefocusId) return;
+  // Only when the swap took the focus away (the row replaced), not when
+  // something else took it since, e.g. the selection bar's picker search.
+  const a = document.activeElement;
+  if (a && a !== document.body && a.isConnected) {
+    txRefocusId = null;
+    return;
+  }
   document.querySelector(`#tx-${txRefocusId} [data-tx-row]`)?.focus({ preventScroll: true });
   txRefocusId = null;
 });

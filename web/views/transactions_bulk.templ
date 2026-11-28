@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/internal/slicesutils"
 	"github.com/omareloui/tyche/web/views/components"
 	"github.com/omareloui/tyche/web/views/form"
 	"github.com/omareloui/tyche/web/views/icons"
@@ -13,8 +14,8 @@ import (
 // fields keep what they have, models.TxFilterNone removes it.
 type TxBulkEditFD struct {
 	// N is how many rows are selected, for the title.
-	N                            int
-	Category, Counterparty, Date string
+	N                                     int
+	Category, Counterparty, Account, Date string
 	// Review is a models.TxBulkReview.
 	Review string
 	// DescMode is a models.TxBulkDescription, Description the one set.
@@ -30,15 +31,15 @@ type TxBulkEditFD struct {
 }
 
 // TxBulkEdit is the bulk edit form in a drawer.
-templ TxBulkEdit(fd *TxBulkEditFD, cats []models.Category, cps []models.Counterparty) {
+templ TxBulkEdit(fd *TxBulkEditFD, cats []models.Category, cps []models.Counterparty, accs []models.Account) {
 	@components.Drawer(components.DrawerProps{Label: "Edit transactions"}) {
-		@TxBulkEditForm(fd, cats, cps)
+		@TxBulkEditForm(fd, cats, cps, accs)
 	}
 }
 
 // TxBulkEditForm is TxBulkEdit's form alone, answered with what went wrong.
 // The selection goes along with it (txSelectionValues, transactions.js).
-templ TxBulkEditForm(fd *TxBulkEditFD, cats []models.Category, cps []models.Counterparty) {
+templ TxBulkEditForm(fd *TxBulkEditFD, cats []models.Category, cps []models.Counterparty, accs []models.Account) {
 	@form.DrawerForm(form.DrawerFormProps{
 		Title: txBulkTitle(fd.N), Method: "post", URL: "/transactions/bulk-edit",
 		Submit: "Apply",
@@ -55,7 +56,7 @@ templ TxBulkEditForm(fd *TxBulkEditFD, cats []models.Category, cps []models.Coun
 				<span>Left out, as they can't be edited: { fd.Locked }.</span>
 			</p>
 		}
-		<p class="text-sm text-zinc-500">Only what you pick changes, the rest stays as it is. Transactions it doesn't fit (e.g. a category of another kind, goals’) are skipped.</p>
+		<p class="text-sm text-zinc-500">Only what you pick changes, the rest stays as it is. Transactions it doesn't fit (e.g. a category of another kind, an account in another currency) are skipped.</p>
 		@form.Field("Category", "category_id", "bulk", icons.Tag("15"), "") {
 			@form.Combobox(form.ComboboxProps{
 				Name: "category_id", ID: "bulk", Label: "Category", Placeholder: "Keep as is",
@@ -68,6 +69,13 @@ templ TxBulkEditForm(fd *TxBulkEditFD, cats []models.Category, cps []models.Coun
 				Name: "counterparty_id", ID: "bulk", Label: "Counterparty", Placeholder: "Keep as is",
 				Options: append([]form.ComboOption{{Value: models.TxFilterNone, Label: "Remove the counterparty"}}, counterpartyComboOptions(cps, fd.Counterparty)...),
 				Data:    form.FDInput{Value: fd.Counterparty}, Nullable: true, NullLabel: "Keep as is", Searchable: true,
+			})
+		}
+		@form.Field("Move to account", "account_id", "bulk", icons.Wallet("15"), "") {
+			@form.Combobox(form.ComboboxProps{
+				Name: "account_id", ID: "bulk", Label: "Account", Placeholder: "Keep as is",
+				Options: form.AccountComboOptions(TxBulkAccountOptions(accs)),
+				Data:    form.FDInput{Value: fd.Account}, Nullable: true, NullLabel: "Keep as is", Searchable: true,
 			})
 		}
 		<div x-data={ fmt.Sprintf("{ descMode: '%s' }", txBulkDescMode(fd.DescMode)) } class="grid gap-2">
@@ -141,9 +149,14 @@ templ txSelectionBar() {
 		x-transition:enter-start="translate-y-4 opacity-0"
 		x-transition:leave="transition duration-150 ease-in"
 		x-transition:leave-end="translate-y-4 opacity-0"
-		class="fixed z-51 left-1/2 -translate-x-1/2 w-max max-w-[calc(100vw-1.5rem)] bottom-[calc(4.75rem+env(safe-area-inset-bottom))] md:bottom-6"
+		class="fixed z-51 inset-x-0 mx-auto w-max max-w-[calc(100vw-1.5rem)] bottom-[calc(4.75rem+env(safe-area-inset-bottom))] md:bottom-6"
 	>
-		<div class="grid gap-1 p-1.5 rounded-[1.75rem] bg-zinc-800/25 backdrop-blur-2xl backdrop-saturate-200 ring-1 ring-white/15 shadow-lg shadow-black/30">
+		// Centered without a transform, its frost on a layer of its own: a
+		// transform or backdrop-filter on an ancestor would be the containing
+		// block of the pickers' fixed panels (#tx-sel-pick), misplacing them,
+		// and the backdrop root their own frost blurs.
+		<div class="relative isolate grid gap-1 p-1.5">
+			<div aria-hidden="true" class="absolute inset-0 -z-10 rounded-[1.75rem] bg-zinc-800/25 backdrop-blur-2xl backdrop-saturate-200 ring-1 ring-white/15 shadow-lg shadow-black/30"></div>
 			// Errors of the bulk deletes land here, then show as the notice.
 			<div id="tx-sel-sink" hidden></div>
 			<p
@@ -153,6 +166,32 @@ templ txSelectionBar() {
 				role="status"
 				class="px-3 py-1.5 text-sm text-zinc-200"
 			></p>
+			<div id="tx-sel-pick" x-show="$store.txSel.on && $store.txSel.picking" @keyup.escape="$store.txSel.closePick()"></div>
+			<div
+				x-show="$store.txSel.on && $store.txSel.count && !$store.txSel.picking"
+				class="flex items-center gap-1 p-1 max-w-full overflow-x-auto [scrollbar-width:none]"
+			>
+				for _, pk := range txSelPicks {
+					<button
+						type="button"
+						@click={ fmt.Sprintf("$store.txSel.pick('%s')", pk.Field) }
+						title={ pk.Label + " of them all (" + pk.Key + ")" }
+						class="inline-flex shrink-0 items-center gap-1.5 h-8 px-3 rounded-full text-sm text-zinc-200 bg-white/5 ring-1 ring-white/10 cursor-pointer transition-colors hover:bg-white/12"
+					>
+						@txSelPickIcon(pk.Field)
+						{ pk.Label }
+					</button>
+				}
+				<button
+					type="button"
+					@click="$store.txSel.review()"
+					title="Mark them reviewed, or back to review when none needs it (r)"
+					class="inline-flex shrink-0 items-center gap-1.5 h-8 px-3 rounded-full text-sm text-zinc-200 bg-white/5 ring-1 ring-white/10 cursor-pointer transition-colors hover:bg-white/12"
+				>
+					@icons.Check("14")
+					Reviewed
+				</button>
+			</div>
 			<div x-show="$store.txSel.on" class="flex items-center gap-1">
 				<div class="min-w-0 md:min-w-40 pl-3 pr-2 leading-tight [text-shadow:0_1px_2px_rgb(0_0_0/0.5)]">
 					<p class="font-semibold tabular-nums truncate" x-text="$store.txSel.countText()"></p>
@@ -215,4 +254,162 @@ templ txSelTile(small bool) {
 			}
 		</span>
 	</div>
+}
+
+// TxBulkPickTags is the selection's quick pick adding a tag
+// (/transactions/bulk-edit/pick/{field}), next to QuickPick*'s.
+const TxBulkPickTags = "tags"
+
+// txBulkPickSlot is where the selection bar's quick picks open
+// (TxBulkPicker).
+const txBulkPickSlot = "tx-sel-pick"
+
+// TxBulkPickerProps is one field of the selected transactions picked from
+// the selection bar, saved through the bulk edit at once.
+type TxBulkPickerProps struct {
+	// Field is a QuickPick* or TxBulkPickTags.
+	Field string
+	// N is how many can be edited, Locked the ones left out (DescribeBulkLocks).
+	N      int
+	Locked string
+	Cats   []models.Category
+	Cps    []models.Counterparty
+	Accs   []models.Account
+	Tags   []string
+}
+
+// TxBulkAccountOptions are the accounts a bulk edit moves transactions to:
+// live, not archived, ones an expense or income can be in (the ones of
+// another currency than a transaction's skipped).
+func TxBulkAccountOptions(accs []models.Account) []models.Account {
+	return slicesutils.Filter(getTxAccs(accs, models.ExpenseTxKind, false), func(a models.Account) bool {
+		return !a.IsArchive && !a.IsDeleted() && !a.IsGoal()
+	})
+}
+
+func txBulkTagOptions(tags []string) []form.ComboOption {
+	opts := make([]form.ComboOption, len(tags))
+	for i, t := range tags {
+		opts[i] = form.ComboOption{Value: t, Label: t}
+	}
+	return opts
+}
+
+// txBulkPickAttrs post the picked value with the selection
+// (txSelectionValues) to the bulk edit, which answers the list.
+func txBulkPickAttrs() templ.Attributes {
+	return templ.Attributes{
+		"hx-post":    "/transactions/bulk-edit",
+		"hx-trigger": "change",
+		"hx-vals":    "js:{...txSelectionValues(), pick: '1'}",
+		"hx-target":  "#" + txBulkPickSlot,
+		"hx-swap":    "innerHTML",
+	}
+}
+
+func txBulkPickCombo(p TxBulkPickerProps) form.ComboboxProps {
+	cb := form.ComboboxProps{ID: "bulk-pick", Chip: true, Searchable: true, InputAttrs: txBulkPickAttrs()}
+	switch p.Field {
+	case QuickPickCategory:
+		cb.Name, cb.Label, cb.Placeholder = "category_id", "Category", "Pick a category"
+		cb.Options = append([]form.ComboOption{{Value: models.TxFilterNone, Label: "Remove the category"}}, categoryComboOptions(p.Cats)...)
+	case QuickPickCounterparty:
+		cb.Name, cb.Label, cb.Placeholder = "counterparty_id", "Counterparty", "Pick a counterparty"
+		cb.Options = append([]form.ComboOption{{Value: models.TxFilterNone, Label: "Remove the counterparty"}}, counterpartyComboOptions(p.Cps, "")...)
+		cb.CreateURL = "/counterparties/quick"
+	case QuickPickAccount:
+		cb.Name, cb.Label, cb.Placeholder = "account_id", "Account", "Move to an account"
+		cb.Options = form.AccountComboOptions(TxBulkAccountOptions(p.Accs))
+	case TxBulkPickTags:
+		cb.Name, cb.Label, cb.Placeholder = "add_tags", "Tag", "Add a tag"
+		cb.Options = txBulkTagOptions(p.Tags)
+		cb.CreateURL = "/transactions/bulk-edit/tag-option"
+	}
+	return cb
+}
+
+func txBulkPickLabel(field string) string {
+	switch field {
+	case QuickPickCategory:
+		return "Category"
+	case QuickPickCounterparty:
+		return "Counterparty"
+	case QuickPickAccount:
+		return "Move to"
+	case QuickPickDate:
+		return "Move to day"
+	}
+	return "Add tag"
+}
+
+// TxBulkPicker is a field of the selected transactions picked from the
+// selection bar (txSelectionBar's #tx-sel-pick), opened right away and
+// saved on pick; × closes it.
+templ TxBulkPicker(p TxBulkPickerProps) {
+	<div
+		data-bulk-pick={ p.Field }
+		class="flex items-center gap-2 px-2 pt-1 min-w-0"
+		if p.Field == QuickPickDate {
+			x-init="$nextTick(() => { loadDatePickers($el); $el.querySelector('input[data-datepicker]')?.click() })"
+		} else {
+			x-init="$nextTick(() => $el.querySelector('[x-ref=button]')?.click())"
+		}
+	>
+		<span class="shrink-0 text-xs font-semibold uppercase tracking-wide text-zinc-400">{ txBulkPickLabel(p.Field) }</span>
+		<div class="min-w-0 flex-1 max-w-64">
+			if p.Field == QuickPickDate {
+				<input
+					type="text"
+					name="scheduled_to"
+					aria-label="Day"
+					placeholder="Pick a day"
+					autocomplete="off"
+					readonly
+					data-datepicker
+					data-datepicker-change
+					{ txBulkPickAttrs()... }
+					class="combo-chip w-full cursor-pointer"
+				/>
+			} else {
+				@form.Combobox(txBulkPickCombo(p))
+			}
+		</div>
+		<button
+			type="button"
+			@click="$store.txSel.closePick()"
+			aria-label="Close"
+			title="Close (Esc)"
+			class="grid place-items-center shrink-0 w-8 h-8 rounded-full text-zinc-400 cursor-pointer hover:bg-white/10 hover:text-zinc-100"
+		>
+			@icons.X("15")
+		</button>
+	</div>
+	if p.Locked != "" {
+		<p class="px-3 pt-1 text-xs text-amber-200">Left out, as they can't be edited: { p.Locked }.</p>
+	}
+}
+
+// txSelPicks are the selection bar's quick picks, each opening TxBulkPicker
+// (the cc / cp / ca / cd / t keys too).
+var txSelPicks = []struct{ Field, Label, Key string }{
+	{QuickPickCategory, "Category", "cc"},
+	{QuickPickCounterparty, "Counterparty", "cp"},
+	{QuickPickAccount, "Account", "ca"},
+	{QuickPickDate, "Date", "cd"},
+	{TxBulkPickTags, "Tag", "t"},
+}
+
+templ txSelPickIcon(field string) {
+	switch field {
+	case QuickPickCategory:
+		@icons.Tag("14")
+	case QuickPickCounterparty:
+		@icons.User("14")
+	case QuickPickAccount:
+		@icons.Wallet("14")
+	case QuickPickDate:
+		@icons.Calendar("14")
+	default:
+		@icons.Plus("14")
+	}
 }

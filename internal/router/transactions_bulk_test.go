@@ -3,6 +3,7 @@ package router_test
 import (
 	"bytes"
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -208,6 +209,57 @@ func TestTransactionsBulk(t *testing.T) {
 	render(bulk(httptest.NewRecorder(), "POST", "/transactions/bulk-edit", "", url.Values{"id": {adj.ID}, "category_id": {food.ID}}))
 	if tx := mustTx(t, repo.GetTransaction, ctx, adj.ID); tx.Category != nil {
 		t.Errorf("adjustment edited: %+v", tx.Category)
+	}
+
+	// Moving them to another account of their currency, the balances moved.
+	wallet := newTestAccount(t, repo, ctx, "Wallet", "EGP", models.AccKindBankAcc, 0)
+	dollars := newTestAccount(t, repo, ctx, "Dollars", "USD", models.AccKindBankAcc, 0)
+	e3 := create(models.ExpenseTxKind, 30, nil, true)
+	w = httptest.NewRecorder()
+	render(bulk(w, "POST", "/transactions/bulk-edit", "", url.Values{"id": {e3.ID, i1.ID}, "account_id": {wallet.ID}}))
+	if got := w.Header().Get("HX-Trigger"); !strings.Contains(got, `"updated":2`) {
+		t.Errorf("HX-Trigger = %q, want 2 updated", got)
+	}
+	if acc := mustTx(t, repo.GetTransaction, ctx, e3.ID).Account; acc.ID != wallet.ID {
+		t.Errorf("e3 in %s, want the wallet", acc.Name)
+	}
+	if acc, err := repo.GetAccount(ctx, wallet.ID); err != nil || acc.Amount != 50-30 {
+		t.Errorf("wallet balance = %v (%v), want 20", acc.Amount, err)
+	}
+	w = httptest.NewRecorder()
+	render(bulk(w, "POST", "/transactions/bulk-edit", "", url.Values{"id": {e3.ID}, "account_id": {dollars.ID}}))
+	if got := w.Header().Get("HX-Trigger"); !strings.Contains(got, `"skipped":1`) {
+		t.Errorf("HX-Trigger = %q, want the other currency skipped", got)
+	}
+
+	// The selection bar's picks: errors go to the selection's notice.
+	w = httptest.NewRecorder()
+	render(bulk(w, "POST", "/transactions/bulk-edit", "", url.Values{"id": {e3.ID}, "pick": {"1"}, "account_id": {idgen.New()}}))
+	if w.Header().Get("HX-Reswap") != "none" || !strings.Contains(w.Header().Get("HX-Trigger"), "can't take them") {
+		t.Errorf("pick refusal: headers = %v", w.Header())
+	}
+	picker := func(field string, form url.Values) (*httptest.ResponseRecorder, string) {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest("POST", "/transactions/bulk-edit/pick/"+field, strings.NewReader(form.Encode())).WithContext(ctx)
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.SetPathValue("field", field)
+		return w, render(h.BulkEditPicker(w, r))
+	}
+	if _, body := picker("account", url.Values{"id": {e3.ID}}); !strings.Contains(body, "Wallet") || !strings.Contains(body, `name="account_id"`) {
+		t.Errorf("account picker: %s", body)
+	}
+	if _, body := picker("tags", url.Values{"id": {e3.ID}}); !strings.Contains(body, `name="add_tags"`) {
+		t.Errorf("tags picker: %s", body)
+	}
+	if w, _ := picker("category", url.Values{"id": {adj.ID}}); w.Header().Get("HX-Reswap") != "none" {
+		t.Errorf("picker of locked ones only: headers = %v", w.Header())
+	}
+	if _, err := h.BulkEditPicker(httptest.NewRecorder(), func() *http.Request {
+		r := httptest.NewRequest("POST", "/transactions/bulk-edit/pick/amount", nil).WithContext(ctx)
+		r.SetPathValue("field", "amount")
+		return r
+	}()); err == nil {
+		t.Error("unknown pick field not refused")
 	}
 }
 

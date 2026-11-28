@@ -17,6 +17,10 @@ type TxBulkEdit struct {
 	// Counterparty is set, ClearCounterparty removes it instead.
 	Counterparty      *Counterparty
 	ClearCounterparty bool
+	// Account moves them to it: the expenses, incomes and refunds in its
+	// currency (their amount, lines and reimbursements staying as they are),
+	// but transfer pairs' legs.
+	Account *Account
 	// Date is the day to move them to, their time of day kept.
 	Date *time.Time
 	// Description replaces theirs, "" removing it.
@@ -75,6 +79,7 @@ const (
 	TxBulkSkipCategory     TxBulkSkip = "category doesn't fit"
 	TxBulkSkipCounterparty TxBulkSkip = "takes no counterparty"
 	TxBulkSkipAhead        TxBulkSkip = "fulfilled can't be ahead"
+	TxBulkSkipAccount      TxBulkSkip = "can't move to the account"
 )
 
 // TxBulkLock is why a transaction can't be bulk edited at all, empty when
@@ -136,7 +141,7 @@ func DescribeBulkLocks(counts map[TxBulkLock]int) string {
 
 func (e *TxBulkEdit) IsZero() bool {
 	return e.Category == nil && !e.ClearCategory && e.Counterparty == nil &&
-		!e.ClearCounterparty && e.Date == nil && e.Description == nil && e.Review == TxBulkReviewKeep &&
+		!e.ClearCounterparty && e.Account == nil && e.Date == nil && e.Description == nil && e.Review == TxBulkReviewKeep &&
 		len(e.AddTags) == 0 && len(e.RemoveTags) == 0
 }
 
@@ -195,6 +200,15 @@ func (e *TxBulkEdit) Apply(tx *Transaction, today time.Time) (*Transaction, []Tx
 			skips = append(skips, TxBulkSkipCounterparty)
 		} else {
 			out.Counterparty = e.Counterparty
+		}
+	}
+
+	if e.Account != nil && e.Account.ID != tx.Account.ID {
+		if noRefs || tx.Kind == AdjustmentTxKind || tx.ToAccount != nil || tx.IsTransferLeg() ||
+			e.Account.Currency.ID != tx.Account.Currency.ID {
+			skips = append(skips, TxBulkSkipAccount)
+		} else {
+			out.Account = *e.Account
 		}
 	}
 

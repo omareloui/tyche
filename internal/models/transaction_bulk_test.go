@@ -96,6 +96,44 @@ func TestTxBulkEditApply(t *testing.T) {
 	}
 }
 
+func TestTxBulkEditAccount(t *testing.T) {
+	today := time.Date(2026, 11, 5, 0, 0, 0, 0, time.UTC)
+	egp, usd := Currency{ID: "egp"}, Currency{ID: "usd"}
+	to := &Account{ID: "to", Currency: egp}
+	tx := func(k TxKind, cur Currency) *Transaction {
+		return &Transaction{ID: "t", Kind: k, Account: Account{ID: "from", Currency: cur}, ScheduledTo: today}
+	}
+	leg := tx(ExpenseTxKind, egp)
+	leg.TransferPairID = "pair"
+	transfer := tx(TransferTxKind, egp)
+	transfer.ToAccount = &Account{ID: "other", Currency: egp}
+
+	tests := []struct {
+		name    string
+		tx      *Transaction
+		want    string
+		skipped bool
+	}{
+		{"expense", tx(ExpenseTxKind, egp), "to", false},
+		{"refund", tx(RefundTxKind, egp), "to", false},
+		{"other currency", tx(ExpenseTxKind, usd), "from", true},
+		{"transfer", transfer, "from", true},
+		{"pair leg", leg, "from", true},
+	}
+	for _, tt := range tests {
+		got, skips := (&TxBulkEdit{Account: to}).Apply(tt.tx, today)
+		if got.Account.ID != tt.want || (len(skips) > 0) != tt.skipped {
+			t.Errorf("%s: account %q, skips %v", tt.name, got.Account.ID, skips)
+		}
+		if tt.tx.Account.ID != "from" {
+			t.Errorf("%s: changed the original", tt.name)
+		}
+	}
+	if (&TxBulkEdit{Account: to}).IsZero() {
+		t.Errorf("account edit is zero")
+	}
+}
+
 func TestTxFilterNone(t *testing.T) {
 	f := ParseTxFilter(map[string][]string{TxFilterCategory: {TxFilterNone}})
 	if f.CategoryID != TxFilterNone || f.Values().Get(TxFilterCategory) != TxFilterNone {
