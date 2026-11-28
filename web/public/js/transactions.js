@@ -398,6 +398,17 @@ document.addEventListener("alpine:init", () => {
       this.notify(ok ? `Deleted ${n} transactions` : error);
     },
 
+    // markBusy shows the rows a bulk request acts on busy (main.css's busy
+    // rows) until it's answered, as it isn't sent from them: the selected
+    // ones, or the loaded ones when all of the filter's are.
+    markBusy(xhr) {
+      const rows = this.all ? this.rows(true) : this.rows().filter((r) => this.sel[r.id]);
+      for (const r of rows) r.classList.add("htmx-request");
+      xhr.addEventListener("loadend", () => {
+        for (const r of rows) r.classList.remove("htmx-request");
+      });
+    },
+
     notify(text) {
       this.notice = text;
       clearTimeout(this.noticeTimer);
@@ -1463,6 +1474,15 @@ document.addEventListener("htmx:beforeRequest", (e) => {
 
 document.addEventListener("htmx:beforeHistorySave", () => Alpine.store("txs")?.flush());
 
+// Bulk actions (txSel's review, the bulk edit's save, deleting all of the
+// filter's) show the rows they act on busy.
+document.addEventListener("htmx:beforeRequest", (e) => {
+  const { requestConfig: cfg, xhr } = e.detail;
+  if (!xhr || cfg?.verb !== "post" || !["/transactions/bulk-edit", "/transactions/delete"].includes(cfg.path)) return;
+  const sel = window.Alpine?.store("txSel");
+  if (sel?.on && sel.count) sel.markBusy(xhr);
+});
+
 // Re-rendering the list after changing a transaction keeps the older months
 // loaded by scrolling (see handler.loadedTxListData).
 document.addEventListener("htmx:configRequest", (e) => {
@@ -1958,3 +1978,95 @@ function quickAddClose(form) {
   const root = form.closest("[data-drawer]");
   if (root) Alpine.$data(root).close();
 }
+
+// Re-rendering the list after an action (the answer is the whole loaded list,
+// handler.hxRetargetTxList, or it out of band) swaps only what changed:
+// swapping and setting up every row held the page most of a second. Every
+// element of a list the server sends is stamped (data-src) with a hash of its
+// HTML as sent: a row (data-sel-top) or an element holding none ("l") of the
+// whole of it, an element holding rows ("c") of its own tag, attributes and
+// text, its children stamped in turn. The answer is then walked against the
+// page: same stamps are left alone (with what Alpine did to them), different
+// ones replaced; a container whose children no longer line up is replaced
+// whole. Stamped before Alpine starts on a page load, so the stamps are of
+// the server's HTML.
+function txHash(s) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193);
+  return (h >>> 0).toString(36);
+}
+
+function txStamp(el) {
+  if (el.matches("[data-sel-top]") || !el.querySelector("[data-sel-top]")) {
+    el.dataset.src = (el.matches("[data-sel-top]") ? "r" : "l") + txHash(el.outerHTML);
+    return;
+  }
+  let shell = el.tagName;
+  for (const a of el.attributes) if (a.name !== "hx-swap-oob" && a.name !== "data-src") shell += ` ${a.name}=${a.value}`;
+  for (const n of el.childNodes) if (n.nodeType === Node.TEXT_NODE) shell += n.data.trim();
+  el.dataset.src = "c" + txHash(shell);
+  for (const c of el.children) txStamp(c);
+}
+
+// txDiff lists the [page element, answer element] pairs to replace for d to
+// be n, false when d itself must be (not lined up).
+function txDiff(d, n, ops) {
+  const ds = d.dataset.src;
+  if (!ds || ds[0] !== "c" || ds !== n.dataset.src) return false;
+  // Elements Alpine added (x-if, x-for) aren't stamped: not the server's.
+  const dk = [...d.children].filter((c) => c.dataset.src);
+  const nk = [...n.children];
+  if (dk.length !== nk.length) return false;
+  dk.forEach((c, i) => {
+    const m = nk[i];
+    if (c.dataset.src === m.dataset.src && c.dataset.src[0] !== "c") return;
+    if (!txDiff(c, m, ops)) ops.push([c, m]);
+  });
+  return true;
+}
+
+if (document.getElementById("tx-list")) txStamp(document.getElementById("tx-list"));
+
+document.addEventListener("htmx:beforeSwap", (e) => {
+  const res = e.detail.serverResponse;
+  if (!e.detail.shouldSwap || typeof res !== "string" || !res.includes("data-sel-top")) return;
+  const tpl = document.createElement("template");
+  tpl.innerHTML = res;
+  // Stamped whatever is done with it (a page, the filters' tx-body, a chunk
+  // loaded by scrolling): what the page will hold.
+  for (const el of tpl.content.children) {
+    if (el.matches("[data-sel-top]") || el.querySelector("[data-sel-top]")) txStamp(el);
+  }
+  const next = tpl.content.getElementById("tx-list");
+  const cur = document.getElementById("tx-list");
+  const main = e.detail.target?.id === "tx-list";
+  const oob = next?.hasAttribute("hx-swap-oob");
+  const ops = [];
+  if (!next || !cur || !(main || oob) || (main && next.parentNode !== tpl.content) || !txDiff(cur, next, ops)) {
+    e.detail.serverResponse = tpl.innerHTML;
+    return;
+  }
+  next.remove();
+  for (const [d, n] of ops) {
+    d.replaceWith(n);
+    htmx.process(n);
+  }
+  // The rest of the answer (balances out of band) as usual, into a sink
+  // when the list was its target: swapped for a new one, so the settle
+  // events (refocus, txThen, the selection) still reach the document.
+  if (main) {
+    const fresh = document.createElement("div");
+    fresh.id = "tx-patch-sink";
+    fresh.hidden = true;
+    tpl.content.prepend(fresh);
+    let sink = document.getElementById("tx-patch-sink");
+    if (!sink) {
+      sink = document.createElement("div");
+      sink.id = "tx-patch-sink";
+      sink.hidden = true;
+      document.body.append(sink);
+    }
+    e.detail.target = sink;
+  }
+  e.detail.serverResponse = tpl.innerHTML;
+});

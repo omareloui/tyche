@@ -764,15 +764,16 @@ input[type="number"] {
   }
 }
 
-/* Busy rows: a transaction (or SMS) whose action is being sent dims, with a
-   spinner over its menu, at once: the answer re-renders the whole list, which
-   can hold the page a while after a quick request. The row's content dims,
-   not the row, so its spinner stays bright. */
-.htmx-request > [data-tx-row] > *,
+/* Busy rows: a transaction (or SMS) whose action is being sent dims, at
+   once: the answer can hold the page a moment after a quick request, and an
+   opacity transition on the rows didn't run before that (stuck at its
+   start). A transaction's tile (txSelTile) turns into a spinner, left
+   bright; an SMS gets one by its icon. */
+.htmx-request > [data-tx-row] > :not([data-sel-tile]),
 .htmx-request > .tx-review,
 [data-sms].htmx-request > * {
   opacity: 0.45;
-  transition: opacity 0.1s;
+  transition: none;
 }
 
 .htmx-request > :is([data-tx-row], .tx-review),
@@ -780,29 +781,31 @@ input[type="number"] {
   pointer-events: none;
 }
 
-.htmx-request > [data-tx-row]::after,
+.htmx-request > [data-tx-row] > [data-sel-tile] {
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+}
+
+.htmx-request > [data-tx-row] > [data-sel-tile] > * {
+  visibility: hidden;
+}
+
+.htmx-request > [data-tx-row] > [data-sel-tile]::after,
 [data-sms].htmx-request::after {
   content: "";
   position: absolute;
-  top: 50%;
-  right: 0.75rem;
+  inset: 0;
+  margin: auto;
   width: 1.25rem;
   height: 1.25rem;
-  margin-top: -0.625rem;
   border-radius: 9999px;
   border: 2px solid color-mix(in oklab, var(--accent) 25%, transparent);
   border-top-color: var(--accent);
-  opacity: 0;
-  animation:
-    spin 0.7s linear infinite,
-    busy-in 0.1s forwards;
+  animation: spin 0.7s linear infinite;
 }
 
 [data-sms].htmx-request::after {
-  top: auto;
-  bottom: 1.5rem;
-  right: auto;
-  left: 1.25rem;
+  inset: auto auto 1.5rem 1.25rem;
+  margin: 0;
 }
 
 /* A button whose request is being sent shows a spinner for its icon. */
@@ -819,12 +822,6 @@ input[type="number"] {
   border: 2px solid color-mix(in oklab, currentColor 25%, transparent);
   border-top-color: currentColor;
   animation: spin 0.7s linear infinite;
-}
-
-@keyframes busy-in {
-  to {
-    opacity: 1;
-  }
 }
 
 /* A row's tile turns into its selection check (txSelTile) while selecting
@@ -1069,10 +1066,9 @@ a.nav-pending {
     animation-duration: 2.5s;
   }
 
-  /* The spin slowed, not its fade in. */
-  .htmx-request > [data-tx-row]::after,
+  .htmx-request > [data-tx-row] > [data-sel-tile]::after,
   [data-sms].htmx-request::after {
-    animation-duration: 2.5s, 0.1s;
+    animation-duration: 2.5s;
   }
 
   .tx-undo-ring {
