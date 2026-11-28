@@ -676,6 +676,7 @@ var txShortcutGroups = []txShortcutGroup{
 		{[]string{"ca", "cd"}, "Change the account, date"},
 		{[]string{"t"}, "Add a tag"},
 		{[]string{"yy"}, "Duplicate"},
+		{[]string{"J"}, "Merge an imported one into another"},
 		{[]string{"."}, "Repeat the last change"},
 		{[]string{"⌫", "dd"}, "Delete"},
 		{[]string{"u"}, "Undo the delete"},
@@ -789,6 +790,7 @@ templ txDateFilter(f *models.TxFilter, start models.MonthStart) {
 		@click.outside="if (!$event.target.closest?.('.litepicker')) open = false"
 		@keydown.escape.stop="open = false; $refs.dateButton.focus()"
 		@change="syncLabel()"
+		@datepicker-picked="open = false"
 	>
 		<button
 			type="button"

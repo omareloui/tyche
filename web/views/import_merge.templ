@@ -2,95 +2,122 @@ package views
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/omareloui/tyche/internal/models"
+	"github.com/omareloui/tyche/web/views/components"
+	"github.com/omareloui/tyche/web/views/icons"
 )
 
 // ImportMergePicker merges an imported transaction into one already there
 // (e.g. its SMS'): the one picked takes its amount, fee and what it was paid
 // in, keeping the rest; the imported one goes. In its row, or the details'
-// panel (inDetails).
+// panel (inDetails), a page of the drawer like the split's.
 templ ImportMergePicker(tx *models.Transaction, cands []models.Transaction, errMsg string, inDetails bool) {
-	{{ v := newTxView(ctx, tx) }}
-	{{ from := "" }}
 	if inDetails {
-		{{ from = "?from=details" }}
-	}
-	<div
-		if inDetails {
+		{{ v := newTxView(ctx, tx) }}
+		{{ u := importMergeURL(tx.ID) + "?from=details" }}
+		<div
 			hx-target="#txd-panel"
 			hx-swap="innerHTML"
-			class="grid gap-3"
-		} else {
-			data-tx
-			hx-target="this"
-			hx-swap="outerHTML"
-			class="grid gap-3 px-4 py-3 rounded-2xl bg-zinc-700/20"
-		}
-	>
-		<div class="flex items-center justify-between gap-4">
-			<p>
-				Which transaction is <span class="font-semibold">{ v.title }</span>
-				<span class={ "tabular-nums", templ.KV("text-emerald-400", v.tone == txToneIn), templ.KV("sensitive", v.sensitive) }>{ v.amount }</span>?
-			</p>
-			if inDetails {
-				<button hx-get={ fmt.Sprintf("/transactions/%s/details", tx.ID) } class="cursor-pointer text-sm text-zinc-400 hover:text-zinc-200">Cancel</button>
-			} else {
-				<button hx-get={ fmt.Sprintf("/transactions/%s", tx.ID) } class="cursor-pointer text-sm text-zinc-400 hover:text-zinc-200">Cancel</button>
-			}
+			x-init={ fmt.Sprintf("show(%q, 'merge', 'details', %q)", tx.ID, u) }
+			class="drawer-panel flex flex-col flex-1 min-h-0"
+		>
+			<header class="flex items-center gap-3 px-5 sm:px-6 pt-5 pb-4">
+				<button type="button" @click="cancel()" aria-label="Back to the details" class="grid place-items-center shrink-0 w-9 h-9 -ml-2 rounded-full text-zinc-400 cursor-pointer transition-colors hover:bg-zinc-800 hover:text-white">
+					@icons.ArrowLeft("18")
+				</button>
+				<div class="flex-1 min-w-0">
+					<h2 class="text-lg font-bold leading-snug">Merge into…</h2>
+					<p class="text-sm text-zinc-400 truncate">
+						{ v.title } · <span class={ "tabular-nums", templ.KV("text-emerald-400", v.tone == txToneIn), templ.KV("sensitive", v.sensitive) }>{ v.amount }</span>
+					</p>
+				</div>
+				@components.DrawerClose()
+			</header>
+			<div
+				x-data="txPickList"
+				@keydown.window="key($event)"
+				class="flex-1 grid grid-cols-1 auto-rows-max content-start gap-4 px-5 sm:px-6 pb-6 overflow-y-auto overscroll-contain"
+			>
+				@importMergeBody(tx, cands, errMsg, "?from=details", false)
+			</div>
 		</div>
-		if errMsg != "" {
-			<p class="text-sm text-red-500">{ errMsg }</p>
-		}
-		if len(cands) == 0 {
-			<p class="text-sm text-zinc-400">
-				No transaction of { tx.Account.Name } moving the money the same way within a week of it.
-			</p>
-		} else {
-			<p class="text-sm text-zinc-500">
-				It takes this one's amount
-				if tx.FxFee > 0 {
-					, fee
-				}
-				if tx.IsForeign() {
-					and currency ({ tx.Original.View() })
-				}
-				and keeps the rest; this one goes.
-			</p>
-		}
-		<ul class="grid gap-2 max-h-96 overflow-y-auto">
-			for _, c := range cands {
-				{{ cv := newTxView(ctx, &c) }}
-				<li>
-					<button
-						hx-put={ fmt.Sprintf("/transactions/%s/merge%s", tx.ID, from) }
-						hx-vals={ fmt.Sprintf(`{"target_id": %q}`, c.ID) }
-						class="cursor-pointer w-full flex items-center gap-4 px-4 py-2 rounded-xl bg-zinc-700/30 text-left transition-colors hover:bg-zinc-600/40"
-					>
-						<div class="flex-1 min-w-0">
-							<p class="flex items-center gap-2 min-w-0">
-								<span class="truncate">{ cv.title }</span>
-								if models.ImportMergeLikely(tx, &c) {
-									<span class="chip shrink-0 bg-sky-400/10 text-sky-300">Likely</span>
-								}
-								if c.Historical {
-									<span class="chip shrink-0">Past</span>
-								}
-							</p>
-							<p class="text-xs text-zinc-400 truncate">
-								{ formatTxDay(c.ScheduledTo) }
-								if cv.time != "" {
-									· { cv.time }
-								}
-								if c.FromSMS {
-									· SMS
-								}
-							</p>
-						</div>
-						<p class={ "shrink-0 font-semibold tabular-nums", templ.KV("text-emerald-400", cv.tone == txToneIn), templ.KV("sensitive", cv.sensitive) }>{ cv.amount }</p>
-					</button>
-				</li>
+	} else {
+		{{ v := newTxView(ctx, tx) }}
+		<div data-tx hx-target="this" hx-swap="outerHTML" class="grid gap-3 px-4 py-3 rounded-2xl bg-zinc-700/20">
+			<div class="flex items-center justify-between gap-4">
+				<p>
+					Which transaction is <span class="font-semibold">{ v.title }</span>
+					<span class={ "tabular-nums", templ.KV("text-emerald-400", v.tone == txToneIn), templ.KV("sensitive", v.sensitive) }>{ v.amount }</span>?
+				</p>
+				<button hx-get={ fmt.Sprintf("/transactions/%s", tx.ID) } class="cursor-pointer text-sm text-zinc-400 hover:text-zinc-200">Cancel</button>
+			</div>
+			@importMergeBody(tx, cands, errMsg, "", true)
+		</div>
+	}
+}
+
+func importMergeURL(id string) string {
+	return fmt.Sprintf("/transactions/%s/merge", url.PathEscape(id))
+}
+
+// importMergeBody is the picker's explanation and candidates; from is the
+// query the picks are sent with, capped caps the list's height (in a row:
+// the drawer's panel scrolls by itself).
+templ importMergeBody(tx *models.Transaction, cands []models.Transaction, errMsg, from string, capped bool) {
+	if errMsg != "" {
+		<p class="text-sm text-red-500" role="alert">{ errMsg }</p>
+	}
+	if len(cands) == 0 {
+		<p class="text-sm text-zinc-400">
+			No transaction of { tx.Account.Name } moving the money the same way within a week of it.
+		</p>
+	} else {
+		<p class="text-sm text-zinc-500">
+			The one you pick takes this one's amount
+			if tx.FxFee > 0 {
+				, fee
 			}
-		</ul>
-	</div>
+			if tx.IsForeign() {
+				and currency ({ tx.Original.View() })
+			}
+			and keeps the rest; this one goes.
+		</p>
+	}
+	<ul class={ "grid gap-2", templ.KV("max-h-96 overflow-y-auto", capped) }>
+		for _, c := range cands {
+			{{ cv := newTxView(ctx, &c) }}
+			<li>
+				<button
+					data-pick
+					hx-put={ importMergeURL(tx.ID) + from }
+					hx-vals={ fmt.Sprintf(`{"target_id": %q}`, c.ID) }
+					class="cursor-pointer w-full flex items-center gap-4 px-4 py-2 rounded-xl bg-zinc-700/30 text-left transition-colors hover:bg-zinc-600/40 outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60 focus-visible:bg-zinc-600/40"
+				>
+					<div class="flex-1 min-w-0">
+						<p class="flex items-center gap-2 min-w-0">
+							<span class="truncate">{ cv.title }</span>
+							if models.ImportMergeLikely(tx, &c) {
+								<span class="chip shrink-0 bg-sky-400/10 text-sky-300">Likely</span>
+							}
+							if c.Historical {
+								<span class="chip shrink-0">Past</span>
+							}
+						</p>
+						<p class="text-xs text-zinc-400 truncate">
+							{ formatTxDay(c.ScheduledTo) }
+							if cv.time != "" {
+								· { cv.time }
+							}
+							if c.FromSMS {
+								· SMS
+							}
+						</p>
+					</div>
+					<p class={ "shrink-0 font-semibold tabular-nums", templ.KV("text-emerald-400", cv.tone == txToneIn), templ.KV("sensitive", cv.sensitive) }>{ cv.amount }</p>
+				</button>
+			</li>
+		}
+	</ul>
 }

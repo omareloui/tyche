@@ -961,6 +961,11 @@ document.addEventListener("alpine:init", () => {
           if (!row) return;
           this.duplicate(d.id);
           break;
+        case "J":
+          // As vim joins lines: an imported one into one already there.
+          if (!row || !("mergeable" in d)) return;
+          this.mergeInDetails(d.id);
+          break;
         case "u":
           if (!this.undo()) return;
           break;
@@ -1149,6 +1154,15 @@ document.addEventListener("alpine:init", () => {
       await htmx.ajax("GET", txDetailsURL(id), { target: "#tx-details", swap: "innerHTML" });
       const input = await txWaitFor(`#txd-tags-${CSS.escape(id)} input[name=add]`);
       input?.focus();
+    },
+
+    // mergeInDetails opens the transaction's details in the picker of the
+    // one to merge it into (views.ImportMergePicker), as the details'
+    // "Merge into an existing one…" does, Back going to the details.
+    async mergeInDetails(id) {
+      await htmx.ajax("GET", txDetailsURL(id), { target: "#tx-details", swap: "innerHTML" });
+      if (!(await txWaitFor("#txd-panel"))) return;
+      htmx.ajax("GET", `/transactions/${encodeURIComponent(id)}/merge?from=details`, { target: "#txd-panel", swap: "innerHTML" });
     },
 
     // duplicate opens the create form filled with the transaction, as its
@@ -1471,6 +1485,36 @@ document.addEventListener("alpine:init", () => {
       },
     };
   });
+
+  // txPickList moves between a drawer's picks ([data-pick], e.g. the
+  // import merge's candidates) with j / k (or the arrows), Enter picking
+  // the focused one; the first one focused on opening (not on touch
+  // screens). The page's keys (txPage.onKey) stay off while a drawer is open.
+  Alpine.data("txPickList", () => ({
+    init() {
+      if (!window.matchMedia("(hover: hover)").matches) return;
+      // After txDetails.show() focused the close button.
+      setTimeout(() => this.picks()[0]?.focus({ preventScroll: true }), 50);
+    },
+
+    picks() {
+      return [...this.$root.querySelectorAll("[data-pick]")].filter((b) => b.offsetParent !== null);
+    },
+
+    key(e) {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+      if (e.target.closest?.("input, textarea, select, [contenteditable], [role=listbox], [role=menu]")) return;
+      const step = { j: 1, ArrowDown: 1, k: -1, ArrowUp: -1 }[e.key];
+      if (!step) return;
+      const picks = this.picks();
+      if (!picks.length) return;
+      e.preventDefault();
+      const i = picks.indexOf(document.activeElement);
+      const next = i === -1 ? picks[step > 0 ? 0 : picks.length - 1] : picks[Math.max(0, Math.min(picks.length - 1, i + step))];
+      next.focus({ preventScroll: true });
+      next.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    },
+  }));
 
   // splitChips are who had an item of a split bill (views.splitItem):
   // picking everyone unpicks the others, picking someone unpicks everyone.

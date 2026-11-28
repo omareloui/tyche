@@ -38,10 +38,13 @@ function loadRangePicker(el) {
   const from = box.querySelector("input[name=from]");
   const to = box.querySelector("input[name=to]");
   const mode = el.dataset.datepickerMode || "range";
+  // A pick (not a mode switch) also tells the popover holding it to close
+  // (txDateFilter's datepicker-picked).
   const set = (a, b) => {
     from.value = a;
     to.value = b;
     from.dispatchEvent(new Event("change", { bubbles: true }));
+    el.dispatchEvent(new CustomEvent("datepicker-picked", { bubbles: true }));
   };
   const day = (d) => d.format("YYYY-MM-DD");
   let picker;

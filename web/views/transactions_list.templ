@@ -488,6 +488,10 @@ func txRowAttrs(tx *models.Transaction, v *txView) templ.Attributes {
 	if v.isOverdue {
 		attrs["data-overdue"] = true
 	}
+	// An imported one merging into one already there (txPage's J).
+	if tx.CanMergeImported() {
+		attrs["data-mergeable"] = true
+	}
 	// What the keys showing only its category / counterparty / account
 	// (txPage's gc, gp, ga) filter by; none for the ones without.
 	attrs["data-account"] = tx.Account.ID
@@ -1444,7 +1448,8 @@ func getTransactionMenuItems(tx *models.Transaction) []templ.Component {
 	}
 	if tx.CanMergeImported() {
 		links = append(links,
-			txMenuItem("Merge into…", "get", fmt.Sprintf("/transactions/%s/merge", tx.ID), icons.Merge("16")))
+			txMenuItem("Merge into…", "get", fmt.Sprintf("/transactions/%s/merge", tx.ID), icons.Merge("16"),
+				components.WithEntryMenuItemShortcut("J")))
 	}
 
 	// Adjustments are signed, which the form can't edit; fix the balance

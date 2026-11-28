@@ -3,6 +3,8 @@ package models
 import (
 	"errors"
 	"math"
+	"slices"
+	"strings"
 	"time"
 )
 
@@ -53,10 +55,32 @@ func ValidateImportMerge(imported, target *Transaction) error {
 // MergeImported is target taking what the statement knows best from
 // imported: the amount the account moved, its fee and what it was paid in;
 // the rest (day, counterparty, category, notes, past data or not) stays
-// target's. Lines and tags are left alone (nil).
+// target's, but what target lacks and imported has (a description, a
+// counterparty, a category of its kind, a note) is taken, and imported's
+// tags are added. Lines stay target's (nil).
 func MergeImported(imported, target *Transaction) *Transaction {
 	merged := *target
 	merged.Items, merged.Tags, merged.ReceiptID = nil, nil, ""
+	if strings.TrimSpace(merged.Description) == "" {
+		merged.Description = imported.Description
+	}
+	if strings.TrimSpace(merged.Note) == "" {
+		merged.Note = imported.Note
+	}
+	if (merged.Counterparty == nil || merged.Counterparty.ID == "") && imported.Counterparty != nil && imported.Counterparty.ID != "" {
+		cp := *imported.Counterparty
+		merged.Counterparty = &cp
+	}
+	// Its category fits target when both take the same kind of category
+	// (an expense's fits a refund).
+	if (merged.Category == nil || merged.Category.ID == "") && imported.Category != nil && imported.Category.ID != "" &&
+		imported.Kind.CategoryKind() == target.Kind.CategoryKind() {
+		c := *imported.Category
+		merged.Category = &c
+	}
+	if tags := mergeTags(target.Tags, imported.Tags); tags != nil {
+		merged.Tags = tags
+	}
 	merged.Amount = imported.Amount
 	merged.FxFee, merged.Original = 0, nil
 	if target.Kind.TakesFxFee() && imported.FxFee > 0 && imported.FxFee < imported.Amount {
@@ -79,4 +103,21 @@ func ImportMergeLikely(imported, target *Transaction) bool {
 	a, b := math.Abs(imported.Amount), math.Abs(target.Amount)
 	return RoundCents(a) == RoundCents(b) || RoundCents(a-imported.FxFee) == RoundCents(b) ||
 		(a > 0 && math.Abs(a-b)/a <= 0.03)
+}
+
+// mergeTags is target's tags plus the ones of imported it lacks (by id, else
+// name in any case), nil when imported adds none (leaving target's alone).
+func mergeTags(target, imported []Tag) []Tag {
+	var add []Tag
+	for _, t := range imported {
+		if !slices.ContainsFunc(target, func(o Tag) bool {
+			return (t.ID != "" && o.ID == t.ID) || strings.EqualFold(o.Name, t.Name)
+		}) {
+			add = append(add, t)
+		}
+	}
+	if len(add) == 0 {
+		return nil
+	}
+	return append(slices.Clone(target), add...)
 }
