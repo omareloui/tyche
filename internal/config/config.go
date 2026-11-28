@@ -165,6 +165,6 @@ func GetReceiptOCR() ReceiptOCR {
 		QuickAddsPerMonth:        max(getEnvironmentIntWithDefault("QUICK_ADDS_PER_MONTH", 200), 0),
 		SplitGuessesPerMonth:     max(getEnvironmentIntWithDefault("SPLIT_GUESSES_PER_MONTH", 30), 0),
 		AskQuestionsPerMonth:     max(getEnvironmentIntWithDefault("ASK_QUESTIONS_PER_MONTH", 50), 0),
-		StatementImportsPerMonth: max(getEnvironmentIntWithDefault("STATEMENT_IMPORTS_PER_MONTH", 10), 0),
+		StatementImportsPerMonth: max(getEnvironmentIntWithDefault("STATEMENT_IMPORTS_PER_MONTH", 5), 0),
 	}
 }
