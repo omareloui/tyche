@@ -872,6 +872,19 @@ document.addEventListener("alpine:init", () => {
           if (sel.visual) sel.visual = null;
           else sel.startVisual(t.closest?.("[data-sel-ids]"));
           break;
+        case "o": {
+          // As vim's: the other end of the visual selection, the focused row
+          // becoming where it started, the rows selected the same.
+          if (!sel.visual) return;
+          const cur = t.closest?.("[data-sel-ids]");
+          const start = document.getElementById(sel.visual);
+          const stop = start && [...start.querySelectorAll(TX_STOPS)].find((s) => s.closest("[data-sel-ids]") === start);
+          if (!cur?.id || !stop) return;
+          sel.visual = cur.id;
+          stop.focus({ preventScroll: true });
+          stop.scrollIntoView({ block: "center", behavior: "smooth" });
+          break;
+        }
         case " ":
           // Space only selects while selecting, else it scrolls the page.
           if (!sel.on) return;
