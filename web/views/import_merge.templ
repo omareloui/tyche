@@ -2,6 +2,7 @@ package views
 
 import (
 	"fmt"
+	"math"
 	"net/url"
 
 	"github.com/omareloui/tyche/internal/models"
@@ -85,10 +86,10 @@ templ importMergeBody(tx *models.Transaction, cands []models.Transaction, errMsg
 			and keeps the rest; this one goes.
 		</p>
 	}
-	<ul class={ "grid gap-2", templ.KV("max-h-96 overflow-y-auto", capped) }>
+	<ul class={ "grid grid-cols-1 gap-2 min-w-0", templ.KV("max-h-96 overflow-y-auto", capped) }>
 		for _, c := range cands {
 			{{ cv := newTxView(ctx, &c) }}
-			<li>
+			<li class="min-w-0">
 				<button
 					data-pick
 					hx-put={ importMergeURL(tx.ID) + from }
@@ -115,9 +116,45 @@ templ importMergeBody(tx *models.Transaction, cands []models.Transaction, errMsg
 							}
 						</p>
 					</div>
-					<p class={ "shrink-0 font-semibold tabular-nums", templ.KV("text-emerald-400", cv.tone == txToneIn), templ.KV("sensitive", cv.sensitive) }>{ cv.amount }</p>
+					<div class="shrink-0 text-right">
+						<p class={ "font-semibold tabular-nums", templ.KV("text-emerald-400", cv.tone == txToneIn), templ.KV("sensitive", cv.sensitive) }>{ cv.amount }</p>
+						<p class="text-xs text-zinc-400 tabular-nums">
+							{ importMergeDays(tx, &c) } ·
+							if d := importMergeAmountDelta(tx, &c); d == "" {
+								same amount
+							} else {
+								<span class={ templ.KV("sensitive", cv.sensitive) }>{ d }</span>
+							}
+						</p>
+					</div>
 				</button>
 			</li>
 		}
 	</ul>
+}
+
+// importMergeDays is how many days the candidate is from the imported tx:
+// "same day", "+2d" (after it) or "−1d" (before it).
+func importMergeDays(tx, c *models.Transaction) string {
+	d := int(math.Round(dateOf(c.ScheduledTo).Sub(dateOf(tx.ScheduledTo)).Hours() / 24))
+	switch {
+	case d == 0:
+		return "same day"
+	case d > 0:
+		return fmt.Sprintf("+%dd", d)
+	}
+	return fmt.Sprintf("−%dd", -d)
+}
+
+// importMergeAmountDelta is how much more (+) or less (−) the candidate
+// moved than the imported tx, in the account's currency; "" when the same.
+func importMergeAmountDelta(tx, c *models.Transaction) string {
+	d := models.RoundCents(math.Abs(c.Amount) - math.Abs(tx.Amount))
+	switch {
+	case d == 0:
+		return ""
+	case d > 0:
+		return "+" + c.Account.Currency.Format(d)
+	}
+	return "−" + c.Account.Currency.Format(-d)
 }
