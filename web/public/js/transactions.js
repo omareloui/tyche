@@ -212,7 +212,7 @@ document.addEventListener("alpine:init", () => {
     loaded: 0,
     // last is the row toggled last, where a shift-click range starts.
     last: null,
-    // visual is the row visual mode (V) started on, the rows from it to the
+    // visual is the row visual mode (v) started on, the rows from it to the
     // focused one selected on top of base, the ones selected before.
     visual: null,
     base: {},
@@ -867,6 +867,7 @@ document.addEventListener("alpine:init", () => {
           clear.click();
           break;
         }
+        case "v":
         case "V":
           if (sel.visual) sel.visual = null;
           else sel.startVisual(t.closest?.("[data-sel-ids]"));
