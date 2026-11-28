@@ -286,7 +286,8 @@ func (r *Repository) ImportCSV(ctx context.Context, imp *csvimport.Import, txs [
 }
 
 // purgePendingCSVImports deletes the files uploaded but not imported after
-// csvImportPendingAge.
+// csvImportPendingAge, keeping the latest read of each PDF statement (the
+// cache of its rows).
 func purgePendingCSVImports(ctx context.Context, q *queries.Queries, now time.Time) {
 	n, err := q.PurgePendingCSVImports(ctx, now.Add(-csvImportPendingAge).UTC())
 	if err != nil {

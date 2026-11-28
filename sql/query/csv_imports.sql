@@ -58,7 +58,21 @@ SET status = 'imported',
 WHERE id = sqlc.arg(id);
 
 -- name: PurgePendingCSVImports :execrows
-DELETE FROM csv_imports WHERE status = 'pending' AND created_at < sqlc.arg(before);
+-- The files uploaded but not imported before `before`, but the latest read
+-- of each PDF: its rows are what reading the same PDF again reuses, without
+-- another AI call (one imported, or a newer one, holds them already).
+DELETE FROM csv_imports
+WHERE csv_imports.status = 'pending' AND csv_imports.created_at < sqlc.arg(before)
+    AND NOT (
+        csv_imports.source_kind = 'pdf' AND csv_imports.source_hash IS NOT NULL AND csv_imports.content IS NOT NULL
+        AND NOT EXISTS (
+            SELECT 1 FROM csv_imports AS other
+            WHERE other.source_hash = csv_imports.source_hash
+                AND other.content IS NOT NULL
+                AND other.id != csv_imports.id
+                AND (other.status = 'imported' OR other.id > csv_imports.id)
+        )
+    );
 
 -- name: ImportHashExists :one
 -- Whether a transaction of the account has the row's hash (imported before).
