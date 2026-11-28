@@ -677,8 +677,14 @@ var txShortcutGroups = []txShortcutGroup{
 		{[]string{"t"}, "Add a tag"},
 		{[]string{"yy"}, "Duplicate"},
 		{[]string{"."}, "Repeat the last change"},
-		{[]string{"⌫"}, "Delete"},
+		{[]string{"⌫", "dd"}, "Delete"},
 		{[]string{"u"}, "Undo the delete"},
+	}},
+	{"A whole day, month", []txShortcut{
+		{[]string{"vid", "vim"}, "Select the day, month"},
+		{[]string{"rid", "rim"}, "Mark them reviewed"},
+		{[]string{"did", "dim"}, "Delete them"},
+		{[]string{"vad", "rad"}, "a works as i"},
 	}},
 	{"Show only", []txShortcut{
 		{[]string{"gp"}, "Its counterparty"},
@@ -697,7 +703,7 @@ var txShortcutGroups = []txShortcutGroup{
 		{[]string{"cc", "cp"}, "Set their category, counterparty"},
 		{[]string{"ca", "cd"}, "Move them to an account, a day"},
 		{[]string{"t"}, "Tag them"},
-		{[]string{"⌫"}, "Delete the selected"},
+		{[]string{"⌫", "d"}, "Delete the selected"},
 		{[]string{"Esc"}, "Stop selecting"},
 	}},
 	{"Other", []txShortcut{

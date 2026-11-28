@@ -377,17 +377,41 @@ document.addEventListener("alpine:init", () => {
       if (slot) slot.innerHTML = "";
     },
 
+    // selectRows selects rows (a day's, a month's: vid, vim), in place of
+    // what visual mode had selected from where it started, ending it.
+    selectRows(els) {
+      if (!els.length) return;
+      if (this.all) {
+        this.all = false;
+        this.selectLoaded();
+      }
+      this.on = true;
+      if (this.visual) {
+        this.sel = { ...this.base };
+        this.visual = null;
+      }
+      for (const r of els) this.sel[r.id] = txRowIds(r);
+      this.last = els.at(-1).id;
+      this.refresh();
+    },
+
     // review marks the selected reviewed, or sends them back to review when
     // none of the loaded ones needs it, through the bulk edit (the locked
     // ones left out; tx-bulk-done tells how many).
     review() {
       if (!this.count) return;
       const rows = this.all ? this.rows(true) : this.rows().filter((r) => this.sel[r.id]);
+      this.reviewRows(rows, this.values());
+    },
+
+    // reviewRows marks rows reviewed (sent as values, their ids by default),
+    // or back to review when none of them needs it.
+    reviewRows(rows, values = { id: [...new Set(rows.flatMap(txRowIds))] }) {
       const needs = rows.some((r) => r.hasAttribute("data-review") || r.querySelector("[data-review]"));
       htmx.ajax("POST", "/transactions/bulk-edit", {
         target: "#drawer",
         swap: "innerHTML",
-        values: { ...this.values(), review: needs ? "reviewed" : "needs" },
+        values: { ...values, review: needs ? "reviewed" : "needs" },
       });
     },
 
@@ -624,6 +648,11 @@ document.addEventListener("alpine:init", () => {
     // key (5j), at countAt.
     pending: "",
     pendingAt: 0,
+    // pendingTimer runs an operator key waiting for its object (r, a in
+    // visual mode) on its own when nothing follows (TX_OP_MS); noWait is
+    // the key run so, not waiting again.
+    pendingTimer: null,
+    noWait: "",
     count: 0,
     countAt: 0,
     // jumps is vim's jump list: the rows (their wrappers' ids) the focus
@@ -772,13 +801,35 @@ document.addEventListener("alpine:init", () => {
         e.preventDefault();
         return;
       }
-      // A two-key sequence's first key waits for the next one a moment.
-      const seq = this.pending && now - this.pendingAt < TX_SEQ_MS ? this.pending + e.key : e.key;
+      // A sequence's first keys wait for the next one a moment.
+      const waiting = this.pending && now - this.pendingAt < TX_SEQ_MS ? this.pending : "";
+      clearTimeout(this.pendingTimer);
       this.pending = "";
-      if (seq.length === 1 && TX_SEQ_PREFIXES.has(seq)) {
+      let seq = waiting + e.key;
+      // An operator not followed by an object (rj) does its own thing first.
+      if (TX_OP_FALLBACK.has(waiting) && !this.isPrefix(seq, sel) && !TX_OBJECT_SEQ.test(seq)) {
+        this.runAlone(waiting, t);
+        seq = e.key;
+      }
+      if (this.noWait !== seq && this.isPrefix(seq, sel)) {
         this.pending = seq;
         this.pendingAt = now;
         if (this.count) this.countAt = now;
+        if (TX_OP_FALLBACK.has(seq)) {
+          this.pendingTimer = setTimeout(() => {
+            if (this.pending !== seq) return;
+            this.pending = "";
+            this.runAlone(seq, t);
+          }, TX_OP_MS);
+        }
+        e.preventDefault();
+        return;
+      }
+      // An operator on a day or a month: rid, dam, id / am in visual mode.
+      const obj = TX_OBJECT_SEQ.exec(seq);
+      if (obj && (obj[1] || sel.visual)) {
+        this.count = 0;
+        if (!this.onObject(obj[1] || "v", TX_OBJECTS[obj[2]], t)) return;
         e.preventDefault();
         return;
       }
@@ -959,6 +1010,16 @@ document.addEventListener("alpine:init", () => {
           sel.toggle(wrap, e.shiftKey);
           break;
         }
+        case "d":
+          // Only reached while selecting (else d waits for dd, did…).
+          if (!sel.on || !sel.count) return;
+          sel.remove();
+          break;
+        case "dd":
+          if (!row) return;
+          this.focusRow(t, 1) || this.focusRow(t, -1);
+          Alpine.store("txs").remove(row);
+          break;
         case "Delete":
         case "Backspace":
           if (sel.on) {
@@ -975,6 +1036,59 @@ document.addEventListener("alpine:init", () => {
       e.preventDefault();
       // Visual mode selects from where it started to the focused row.
       if (moved && sel.visual) sel.extendTo(document.activeElement?.closest?.("[data-sel-ids]"));
+    },
+
+    // isPrefix reports if seq waits for more keys: a two-key sequence's
+    // first, an operator (d, r) and its i / a, i / a alone in visual mode.
+    // While rows are selected d and r act on them at once, as vim's visual
+    // mode does.
+    isPrefix(seq, sel) {
+      if (TX_SEQ_PREFIXES.has(seq) || (!!sel.visual && /^[ia]$/.test(seq))) return true;
+      if (sel.on && sel.count) return false;
+      return seq === "d" || seq === "r" || /^[dr][ia]$/.test(seq);
+    },
+
+    // runAlone runs an operator key waiting for its object as if typed on
+    // its own (r reviews, a quick adds).
+    runAlone(key, target) {
+      this.noWait = key;
+      try {
+        this.onKey({ key, target, shiftKey: false, ctrlKey: false, metaKey: false, altKey: false, preventDefault() {} });
+      } finally {
+        this.noWait = "";
+      }
+    },
+
+    // onObject does op on the rows of the group (TX_DAYS, TX_MONTHS) holding
+    // from: selects them (v), deletes them with one undo (d) or marks them
+    // reviewed, back to review when none needs it (r). Reports if it did.
+    onObject(op, groups, from) {
+      const group = from?.closest?.(groups);
+      if (!group || !this.$root.contains(group)) return false;
+      const sel = Alpine.store("txSel");
+      const rows = sel.rows(true).filter((r) => group.contains(r));
+      if (!rows.length) return false;
+      switch (op) {
+        case "v":
+          sel.selectRows(rows);
+          break;
+        case "r":
+          sel.reviewRows(rows);
+          break;
+        case "d": {
+          // The focus goes on past the group, its rows all going.
+          const stops = [...this.$root.querySelectorAll(TX_STOPS)].filter((s) => txShown(s) && !group.contains(s));
+          const next =
+            stops.find((s) => group.compareDocumentPosition(s) & Node.DOCUMENT_POSITION_FOLLOWING) ??
+            stops.findLast((s) => group.compareDocumentPosition(s) & Node.DOCUMENT_POSITION_PRECEDING);
+          Alpine.store("txs").removeMany(rows);
+          next?.focus({ preventScroll: true });
+          break;
+        }
+        default:
+          return false;
+      }
+      return true;
     },
 
     // act does an action on a row and keeps it for "." to repeat: fulfill,
@@ -1749,14 +1863,21 @@ function txNeighbor(el) {
 const TX_SEQ_MS = 1000;
 const TX_SEQ_PREFIXES = new Set(["g", "]", "[", "z", "y", "c"]);
 const TX_MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock", "AltGraph"]);
-// TX_PICK_KEYS are the quick picks (views.QuickPick*) cc / cp / ca / cd open.
 // TX_JUMPS_MAX is how many rows the jump list (Ctrl+o / Ctrl+i) keeps.
 const TX_JUMPS_MAX = 100;
+// TX_PICK_KEYS are the quick picks (views.QuickPick*) cc / cp / ca / cd open.
 const TX_PICK_KEYS = { cc: "category", cp: "counterparty", ca: "account", cd: "date" };
 // The list's groups ]m / [m and ]d / [d go between: months (days) and the
 // upcoming sections.
 const TX_MONTHS = "[data-tx-month], #tx-upcoming-later, #tx-upcoming";
 const TX_DAYS = "[data-tx-day], #tx-upcoming-later, #tx-upcoming";
+// Operators on a day or a month (txPage.onObject): [op](i|a)(d|m), op d
+// (delete) or r (review), none in visual mode (select). r and, in visual
+// mode, a wait TX_OP_MS for an object before doing their own thing.
+const TX_OBJECT_SEQ = /^([dr]?)[ia]([dm])$/;
+const TX_OBJECTS = { d: TX_DAYS, m: TX_MONTHS };
+const TX_OP_FALLBACK = new Set(["r", "a"]);
+const TX_OP_MS = 500;
 
 // txLastAction is what "." repeats (txPage.act).
 let txLastAction = null;
