@@ -1,7 +1,6 @@
 package components
 
 import (
-	"slices"
 	"strings"
 
 	"github.com/omareloui/tyche/internal/jwt"
@@ -17,38 +16,61 @@ type navLink struct {
 	Icon  func(size string, attrs ...*templ.Attributes) templ.Component
 }
 
-// primaryNav are always in sight, moreNav are behind "More". The phone's
-// bottom bar takes mobileNav, primaryNav's first ones in the same order, and
-// puts the rest under "More".
+// navSection is a titled group of links in a menu.
+type navSection struct {
+	Title string
+	Links []navLink
+}
+
+// primaryNav are always in sight on wide screens, the phone's bottom bar
+// takes mobileNav (the same pages, shorter labels). Every other page is under
+// "More", grouped in moreSections; admin pages are in the avatar menu.
 var (
 	primaryNav = []navLink{
 		{"/", "Home", icons.Home},
 		{"/transactions", "Transactions", icons.ArrowUpDown},
 		{"/accounts", "Accounts", icons.Bank},
 		{"/goals", "Goals", icons.Target},
-		{"/recurrent-tx", "Recurring", icons.Repeat},
-	}
-	moreNav = []navLink{
-		{"/categories", "Categories", icons.Tag},
-		{"/counterparties", "Counterparties", icons.Users},
-		{"/items", "Items", icons.Basket},
-		{"/tags", "Tags", icons.Hash},
-		{"/currencies", "Currencies", icons.Coins},
-		{"/sms", "SMS", icons.Message},
-		{"/tools", "Tools", icons.Calculator},
-	}
-	// adminNav are appended to moreNav for the users in ADMIN_TENANT_IDS.
-	adminNav = []navLink{
-		{"/admin/fx-rates", "FX Rates", icons.Sparkles},
-		{"/admin/tenants", "Tenants", icons.Users},
-		{"/admin/ai", "AI usage", icons.Bot},
-		{"/admin/logs", "Logs", icons.StickyNote},
 	}
 	mobileNav = []navLink{
 		{"/", "Home", icons.Home},
 		{"/transactions", "Activity", icons.ArrowUpDown},
 		{"/accounts", "Accounts", icons.Bank},
 		{"/goals", "Goals", icons.Target},
+	}
+	moreSections = []navSection{
+		{"Plan", []navLink{
+			{"/recurrent-tx", "Recurring", icons.Repeat},
+			{"/categories", "Categories", icons.Tag},
+			{"/tags", "Tags", icons.Hash},
+		}},
+		{"Directory", []navLink{
+			{"/counterparties", "Counterparties", icons.Users},
+			{"/items", "Items", icons.Basket},
+		}},
+		{"Inputs", []navLink{
+			{"/sms", "SMS", icons.Message},
+			{"/import", "Import", icons.Upload},
+			{"/currencies", "Currencies", icons.Coins},
+		}},
+		{"Explore", []navLink{
+			{"/recap", "Month recap", icons.Calendar},
+			{"/tools", "Tools", icons.Calculator},
+			{"/console", "SQL console", icons.Database},
+		}},
+	}
+	accountNav = []navLink{
+		{"/settings", "Settings", icons.Settings},
+		{"/security", "Security", icons.ShieldCheck},
+		{"/backup", "Backup", icons.Download},
+		{"/reset", "Reset account", icons.RotateCcw},
+	}
+	// adminNav are shown in the avatar menu to the users in ADMIN_TENANT_IDS.
+	adminNav = []navLink{
+		{"/admin/fx-rates", "FX Rates", icons.Sparkles},
+		{"/admin/tenants", "Tenants", icons.Users},
+		{"/admin/ai", "AI usage", icons.Bot},
+		{"/admin/logs", "Logs", icons.StickyNote},
 	}
 )
 
@@ -61,13 +83,13 @@ templ Navbar(claims *jwt.AccessClaims, balances []models.Balance) {
 		<div aria-hidden="true" class="absolute inset-0 -z-10 border-b border-zinc-800/60 bg-zinc-950/75 backdrop-blur-xl"></div>
 		@Container() {
 			<div class="flex items-center gap-3 h-16">
-				<a href="/" class="shrink-0 mr-2 text-2xl font-bold font-(family-name:--font-biorhyme-expanded)">tyche</a>
+				<a href="/" class="shrink-0 mr-2 text-xl md:text-2xl font-bold font-(family-name:--font-biorhyme-expanded)">tyche</a>
 				if claims != nil {
 					<nav aria-label="Main" class="hidden md:flex items-center gap-1">
 						for _, l := range primaryNav {
 							@navPill(l, isActive(path, l.Href))
 						}
-						@navMore(path, moreNavFor(claims))
+						@navMore(path, moreSections)
 					</nav>
 					<div class="flex items-center gap-2 ml-auto">
 						if len(balances) > 0 {
@@ -94,7 +116,7 @@ templ Navbar(claims *jwt.AccessClaims, balances []models.Balance) {
 		}
 	</header>
 	if claims != nil {
-		@mobileTabBar(path, sheetNav(claims))
+		@mobileTabBar(path, moreSections)
 	}
 }
 
@@ -117,8 +139,8 @@ templ navPill(l navLink, active bool) {
 	</a>
 }
 
-templ navMore(path string, links []navLink) {
-	{{ active := activeIn(path, links) }}
+templ navMore(path string, sections []navSection) {
+	{{ active := activeIn(path, flatten(sections)) }}
 	<div class="relative" x-data="{open: false}" @click.outside="open = false" @keydown.escape.window="open = false">
 		<button
 			type="button"
@@ -138,11 +160,11 @@ templ navMore(path string, links []navLink) {
 			x-cloak
 			x-show="open"
 			x-transition.scale.origin.top.left
-			class="absolute left-0 top-full mt-2 w-56"
+			class="absolute left-0 top-full mt-2 w-60"
 		>
-			@Popup("p-1.5 grid gap-0.5") {
-				for _, l := range links {
-					@menuLink(l, isActive(path, l.Href))
+			@Popup("p-1.5 grid gap-0.5 max-h-[calc(100dvh-5rem)] overflow-y-auto") {
+				for _, sec := range sections {
+					@menuSection(path, sec)
 				}
 			}
 		</div>
@@ -166,6 +188,14 @@ templ menuLink(l navLink, active bool) {
 	</a>
 }
 
+// menuSection is a titled group of menuLinks.
+templ menuSection(path string, sec navSection) {
+	<p class="px-3 pt-2.5 pb-1 text-[11px] font-medium uppercase tracking-wider text-zinc-500">{ sec.Title }</p>
+	for _, l := range sec.Links {
+		@menuLink(l, isActive(path, l.Href))
+	}
+}
+
 templ navUser(claims *jwt.AccessClaims) {
 	<div class="relative" x-data="{open: false}" @click.outside="open = false" @keydown.escape.window="open = false">
 		<button
@@ -183,7 +213,7 @@ templ navUser(claims *jwt.AccessClaims) {
 			x-transition.scale.origin.top.right
 			class="absolute right-0 top-full mt-2 w-64"
 		>
-			@Popup("p-1.5") {
+			@Popup("p-1.5 max-h-[calc(100dvh-5rem)] overflow-y-auto") {
 				<div class="flex items-center gap-3 px-3 py-2.5">
 					@avatar(claims, "w-10 h-10 text-sm")
 					<div class="min-w-0">
@@ -193,48 +223,12 @@ templ navUser(claims *jwt.AccessClaims) {
 				</div>
 				@TenantID(models.TenantID(claims.OAuthProvider, claims.OAuthID), "px-3 pb-2")
 				<div class="my-1 h-px bg-white/10"></div>
-				<a
-					href="/settings"
-					class="flex items-center gap-3 h-10 px-3 rounded-md text-[15px] text-zinc-300 transition-colors hover:bg-white/5 hover:text-white"
-				>
-					@icons.Settings("18", &templ.Attributes{"class": "shrink-0 text-zinc-400"})
-					Settings
-				</a>
-				<a
-					href="/security"
-					class="flex items-center gap-3 h-10 px-3 rounded-md text-[15px] text-zinc-300 transition-colors hover:bg-white/5 hover:text-white"
-				>
-					@icons.ShieldCheck("18", &templ.Attributes{"class": "shrink-0 text-zinc-400"})
-					Security
-				</a>
-				<a
-					href="/import"
-					class="flex items-center gap-3 h-10 px-3 rounded-md text-[15px] text-zinc-300 transition-colors hover:bg-white/5 hover:text-white"
-				>
-					@icons.Upload("18", &templ.Attributes{"class": "shrink-0 text-zinc-400"})
-					Import transactions
-				</a>
-				<a
-					href="/backup"
-					class="flex items-center gap-3 h-10 px-3 rounded-md text-[15px] text-zinc-300 transition-colors hover:bg-white/5 hover:text-white"
-				>
-					@icons.Download("18", &templ.Attributes{"class": "shrink-0 text-zinc-400"})
-					Backup
-				</a>
-				<a
-					href="/console"
-					class="flex items-center gap-3 h-10 px-3 rounded-md text-[15px] text-zinc-300 transition-colors hover:bg-white/5 hover:text-white"
-				>
-					@icons.Database("18", &templ.Attributes{"class": "shrink-0 text-zinc-400"})
-					SQL console
-				</a>
-				<a
-					href="/reset"
-					class="flex items-center gap-3 h-10 px-3 rounded-md text-[15px] text-zinc-300 transition-colors hover:bg-white/5 hover:text-white"
-				>
-					@icons.RotateCcw("18", &templ.Attributes{"class": "shrink-0 text-zinc-400"})
-					Reset account
-				</a>
+				{{ path := reqpath.From(ctx) }}
+				@menuSection(path, navSection{"Account", accountNav})
+				if claims.IsAdmin() {
+					@menuSection(path, navSection{"Admin", adminNav})
+				}
+				<div class="my-1 h-px bg-white/10"></div>
 				// Only while the browser offers to install the PWA (installApp, main.js).
 				<button
 					type="button"
@@ -308,8 +302,8 @@ templ avatar(claims *jwt.AccessClaims, class string) {
 
 // mobileTabBar is the phone's bottom navigation, with the rest of the pages
 // in a sheet.
-templ mobileTabBar(path string, sheet []navLink) {
-	{{ moreActive := activeIn(path, sheet) != nil }}
+templ mobileTabBar(path string, sections []navSection) {
+	{{ moreActive := activeIn(path, flatten(sections)) != nil }}
 	<nav
 		hx-boost="true"
 		aria-label="Main"
@@ -333,14 +327,17 @@ templ mobileTabBar(path string, sheet []navLink) {
 			x-transition:leave="transition ease-in duration-150"
 			x-transition:leave-start="translate-y-0"
 			x-transition:leave-end="translate-y-full"
-			class="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl bg-zinc-900 ring-1 ring-zinc-800 px-4 pt-3 pb-[calc(6rem+env(safe-area-inset-bottom))]"
+			class="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl bg-zinc-900 ring-1 ring-zinc-800 px-4 pt-3 pb-[calc(6rem+env(safe-area-inset-bottom))] max-h-[85dvh] overflow-y-auto"
 		>
-			<div class="mx-auto mb-3 h-1 w-10 rounded-full bg-zinc-700"></div>
-			<div class="grid grid-cols-3 gap-2">
-				for _, l := range sheet {
-					@sheetLink(l, isActive(path, l.Href))
-				}
-			</div>
+			<div class="mx-auto mb-1 h-1 w-10 rounded-full bg-zinc-700"></div>
+			for _, sec := range sections {
+				<p class="px-1 pt-3 pb-2 text-[11px] font-medium uppercase tracking-wider text-zinc-500">{ sec.Title }</p>
+				<div class="grid grid-cols-3 gap-2">
+					for _, l := range sec.Links {
+						@sheetLink(l, isActive(path, l.Href))
+					}
+				</div>
+			}
 		</div>
 		<div data-bottom-nav class="fixed inset-x-0 bottom-0 z-50 border-t border-zinc-800/60 bg-zinc-950/85 backdrop-blur-xl pb-[env(safe-area-inset-bottom)]">
 			<div class="grid grid-cols-5 h-16">
@@ -431,17 +428,12 @@ func activeIn(path string, links []navLink) *navLink {
 	return nil
 }
 
-// sheetNav are the pages in the phone's "More" sheet: what the bottom bar
-// lacks.
-func sheetNav(claims *jwt.AccessClaims) []navLink {
-	return slices.Concat(primaryNav[len(mobileNav):], moreNavFor(claims))
-}
-
-func moreNavFor(claims *jwt.AccessClaims) []navLink {
-	if claims.IsAdmin() {
-		return slices.Concat(moreNav, adminNav)
+func flatten(sections []navSection) []navLink {
+	var links []navLink
+	for _, sec := range sections {
+		links = append(links, sec.Links...)
 	}
-	return moreNav
+	return links
 }
 
 func initials(claims *jwt.AccessClaims) string {
