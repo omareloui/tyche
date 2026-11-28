@@ -489,7 +489,7 @@ func txRowAttrs(tx *models.Transaction, v *txView) templ.Attributes {
 		attrs["data-overdue"] = true
 	}
 	// What the keys showing only its category / counterparty / account
-	// (txPage's gc, *, ga) filter by; none for the ones without.
+	// (txPage's gc, gp, ga) filter by; none for the ones without.
 	attrs["data-account"] = tx.Account.ID
 	attrs["data-category"] = models.TxFilterNone
 	if tx.Category != nil && tx.Category.ID != "" {

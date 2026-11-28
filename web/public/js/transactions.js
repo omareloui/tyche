@@ -863,10 +863,10 @@ document.addEventListener("alpine:init", () => {
         case "u":
           if (!this.undo()) return;
           break;
-        case "*":
+        case "gp":
         case "gc":
         case "ga": {
-          const key = { "*": "counterparty", gc: "category", ga: "account" }[seq];
+          const key = { gp: "counterparty", gc: "category", ga: "account" }[seq];
           const v = owner?.dataset[key];
           if (!v) return;
           this.filterBy({ [key]: v });
