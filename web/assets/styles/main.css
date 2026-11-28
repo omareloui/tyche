@@ -765,12 +765,19 @@ input[type="number"] {
 }
 
 /* Busy rows: a transaction (or SMS) whose action is being sent dims, with a
-   spinner over its menu; delayed so quick answers don't flash it. */
-.htmx-request > :is([data-tx-row], .tx-review),
+   spinner over its menu, at once: the answer re-renders the whole list, which
+   can hold the page a while after a quick request. The row's content dims,
+   not the row, so its spinner stays bright. */
+.htmx-request > [data-tx-row] > *,
+.htmx-request > .tx-review,
 [data-sms].htmx-request > * {
-  opacity: 0.5;
+  opacity: 0.45;
+  transition: opacity 0.1s;
+}
+
+.htmx-request > :is([data-tx-row], .tx-review),
+[data-sms].htmx-request {
   pointer-events: none;
-  transition: opacity 0.15s 0.12s;
 }
 
 .htmx-request > [data-tx-row]::after,
@@ -788,7 +795,7 @@ input[type="number"] {
   opacity: 0;
   animation:
     spin 0.7s linear infinite,
-    busy-in 0.15s 0.12s forwards;
+    busy-in 0.1s forwards;
 }
 
 [data-sms].htmx-request::after {
@@ -1058,10 +1065,14 @@ a.nav-pending {
   }
 
   .nav-spinner,
-  .busy-swap.htmx-request::before,
+  .busy-swap.htmx-request::before {
+    animation-duration: 2.5s;
+  }
+
+  /* The spin slowed, not its fade in. */
   .htmx-request > [data-tx-row]::after,
   [data-sms].htmx-request::after {
-    animation-duration: 2.5s;
+    animation-duration: 2.5s, 0.1s;
   }
 
   .tx-undo-ring {
