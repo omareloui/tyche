@@ -626,6 +626,11 @@ document.addEventListener("alpine:init", () => {
     pendingAt: 0,
     count: 0,
     countAt: 0,
+    // jumps is vim's jump list: the rows (their wrappers' ids) the focus
+    // jumped from (gg, G, ]r, ]m, H…), oldest first; jumpAt where Ctrl+o /
+    // Ctrl+i are in it (jumps.length = past the newest).
+    jumps: [],
+    jumpAt: 0,
 
     // quickAddFromURL opens the quick add for ?quick (the PWA's shortcut),
     // dropped from the url so a reload doesn't open it again.
@@ -723,7 +728,11 @@ document.addEventListener("alpine:init", () => {
       if (this.openCreateForm || this.quickAddOpen || document.querySelector("[data-tx-details], #drawer [data-drawer]")) return;
       if (e.ctrlKey) {
         if (e.shiftKey || t.closest?.("input, textarea, select, [contenteditable], form, [role=listbox], [role=menu]")) return;
-        if (!this.vimScroll(e.key, t)) return;
+        if (e.key === "o" || e.key === "i") {
+          // Prevented either way: Ctrl+o would open a file.
+          const sel = Alpine.store("txSel");
+          if (this.jump(e.key === "o" ? -1 : 1, t) && sel.visual) sel.extendTo(document.activeElement?.closest?.("[data-sel-ids]"));
+        } else if (!this.vimScroll(e.key, t)) return;
         e.preventDefault();
         return;
       }
@@ -809,32 +818,38 @@ document.addEventListener("alpine:init", () => {
           break;
         case "gg":
         case "G":
+          this.markJump(t);
           this.focusEdge(seq === "gg");
           moved = true;
           break;
         case "]r":
         case "[r":
+          this.markJump(t);
           moves((f) => this.focusMatch(f, seq[0] === "]" ? 1 : -1, txRowNeedsReview));
           moved = true;
           break;
         case "]o":
         case "[o":
+          this.markJump(t);
           moves((f) => this.focusMatch(f, seq[0] === "]" ? 1 : -1, txRowOverdue));
           moved = true;
           break;
         case "]m":
         case "[m":
+          this.markJump(t);
           moves((f) => this.focusGroup(f, seq[0] === "]" ? 1 : -1, TX_MONTHS));
           moved = true;
           break;
         case "]d":
         case "[d":
+          this.markJump(t);
           moves((f) => this.focusGroup(f, seq[0] === "]" ? 1 : -1, TX_DAYS));
           moved = true;
           break;
         case "H":
         case "M":
         case "L":
+          this.markJump(t);
           this.focusInView(seq);
           moved = true;
           break;
@@ -1042,6 +1057,65 @@ document.addEventListener("alpine:init", () => {
       const quick = Alpine.store("quickAdd");
       if (quick.toast?.ids?.length) {
         quick.undo();
+        return true;
+      }
+      return false;
+    },
+
+    // jumpKey is what the jump list keeps of the row holding el: its
+    // wrapper's id (a transaction's, the upcoming section's), as the list's
+    // rows get swapped.
+    jumpKey(el) {
+      const stop = el?.closest?.(TX_STOPS);
+      if (!stop || !this.$root.contains(stop)) return null;
+      return stop.closest("[id]")?.id ?? null;
+    },
+
+    // jumpStop is the row a jump list key stands for, null once gone.
+    jumpStop(key) {
+      const wrap = document.getElementById(key);
+      if (!wrap || !this.$root.contains(wrap)) return null;
+      if (wrap.matches(TX_STOPS)) return wrap;
+      return [...wrap.querySelectorAll(TX_STOPS)].find((s) => s.closest("[id]") === wrap) ?? null;
+    },
+
+    // markJump records the row the focus is about to jump from, as vim
+    // does: once (an older entry of it dropped), as the newest, Ctrl+o
+    // going back from there.
+    markJump(from) {
+      const key = this.jumpKey(from);
+      if (!key) return;
+      this.jumps = this.jumps.filter((k) => k !== key);
+      this.jumps.push(key);
+      if (this.jumps.length > TX_JUMPS_MAX) this.jumps.shift();
+      this.jumpAt = this.jumps.length;
+    },
+
+    // jump goes back (Ctrl+o, step -1) or forward again (Ctrl+i, 1) in the
+    // jump list, skipping (and dropping) the rows no longer in the list.
+    // Going back from the newest keeps where the focus is first, for Ctrl+i
+    // to come back to.
+    jump(step, from) {
+      if (step < 0 && this.jumpAt >= this.jumps.length) {
+        const key = this.jumpKey(from);
+        if (key) {
+          this.jumps = this.jumps.filter((k) => k !== key);
+          this.jumps.push(key);
+          this.jumpAt = this.jumps.length - 1;
+        }
+      }
+      const cur = this.jumpKey(from);
+      for (let i = this.jumpAt + step; i >= 0 && i < this.jumps.length; i += step) {
+        const key = this.jumps[i];
+        if (key === cur) continue;
+        const stop = this.jumpStop(key);
+        if (!stop || !txReachable(stop)) {
+          this.jumps.splice(i, 1);
+          if (step > 0) i--;
+          continue;
+        }
+        this.jumpAt = i;
+        txFocus(stop);
         return true;
       }
       return false;
@@ -1676,6 +1750,8 @@ const TX_SEQ_MS = 1000;
 const TX_SEQ_PREFIXES = new Set(["g", "]", "[", "z", "y", "c"]);
 const TX_MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock", "AltGraph"]);
 // TX_PICK_KEYS are the quick picks (views.QuickPick*) cc / cp / ca / cd open.
+// TX_JUMPS_MAX is how many rows the jump list (Ctrl+o / Ctrl+i) keeps.
+const TX_JUMPS_MAX = 100;
 const TX_PICK_KEYS = { cc: "category", cp: "counterparty", ca: "account", cd: "date" };
 // The list's groups ]m / [m and ]d / [d go between: months (days) and the
 // upcoming sections.
